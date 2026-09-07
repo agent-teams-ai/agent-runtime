@@ -1,3 +1,4 @@
+import { types as nodeUtilTypes } from "node:util";
 import { isNodeDispatchProxy } from "../adapters/node-dispatch-proxy.js";
 
 import type { DispatchAuthorityOperations } from
@@ -41,9 +42,27 @@ export const exactOwnerMethods = <Name extends string>(
   return Object.freeze(methods);
 };
 
-export const ownerPromise = async <T>(value: T | Promise<T>): Promise<T> => {
-  if (isNodeDispatchProxy(value) || !(value instanceof Promise)) {return invalidBoundary();}
-  return value;
+const nativePromisePrototype = Promise.prototype;
+const nativePromiseThen = Promise.prototype.then;
+const nativePromiseConstructor = Promise;
+
+// Only ordinary local-realm native promises are supported. Subclasses and
+// cross-realm promises require adoption hooks and are deliberately rejected.
+// Inspect descriptors only, before await can read constructor or then. Keep this
+// synchronous: an async return would introduce another then-assimilation step.
+export const ownerPromise = <T>(value: T | Promise<T>): Promise<T> => {
+  if (isNodeDispatchProxy(value) || !nodeUtilTypes.isPromise(value) ||
+      Object.getPrototypeOf(value) !== nativePromisePrototype ||
+      Object.getOwnPropertyDescriptor(value, "then") !== undefined ||
+      Object.getOwnPropertyDescriptor(value, "constructor") !== undefined ||
+      Object.getPrototypeOf(nativePromisePrototype) !== Object.prototype ||
+      Object.getPrototypeOf(Object.prototype) !== null) {return invalidBoundary();}
+  const then = Object.getOwnPropertyDescriptor(nativePromisePrototype, "then");
+  const constructor = Object.getOwnPropertyDescriptor(nativePromisePrototype, "constructor");
+  if (then === undefined || !("value" in then) || then.value !== nativePromiseThen ||
+      constructor === undefined || !("value" in constructor) ||
+      constructor.value !== nativePromiseConstructor) {return invalidBoundary();}
+  return value as Promise<T>;
 };
 
 export const createNodeDispatchAuthorityOperations = (

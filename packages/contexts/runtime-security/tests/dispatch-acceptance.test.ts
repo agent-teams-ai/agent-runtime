@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
 import { createDispatchAcceptanceFeature, createNodeSha256DispatchDigest } from '../dist/composition.js';
 import type { DispatchAcceptanceDecision, DispatchAcceptancePolicy, DispatchAcceptanceIntent,
   DispatchAcceptanceStore } from '../dist/composition.js';
@@ -253,16 +254,46 @@ test('hostile policy and publication record accessors never run', async () => {
 
 for (const target of ['policy.read', 'decisions.read', 'decisions.retain',
   'repository.observe', 'repository.readAuthority', 'repository.replaceAuthority'] as const) {
-  for (const kind of ['then accessor', 'proxy'] as const) {
+  for (const kind of ['then accessor', 'proxy', 'fake brand', 'fake brand then getter',
+    'native then getter', 'native then override', 'own constructor getter',
+    'derived then getter', 'derived constructor getter', 'proxy prototype',
+    'cross-realm', 'subclass'] as const) {
     test(`${target} rejects an owner ${kind} before promise assimilation`, async () => {
       const f = await fixture();
       let invoked = 0; let calls = 0;
-      const hostile = kind === 'then accessor' ? {
-        get then() {invoked += 1; throw new Error('hostile then');},
-      } : new Proxy(Promise.resolve(undefined), {
-        get() {invoked += 1; throw new Error('hostile get');},
-        getPrototypeOf() {invoked += 1; throw new Error('hostile prototype');},
-      });
+      const getter = () => {invoked += 1; return () => Promise.resolve(rule);};
+      let hostile: unknown;
+      // Intentionally malformed adoption hooks; no native prototype is mutated.
+      /* oxlint-disable unicorn/no-thenable, eslint/no-extend-native */
+      switch (kind) {
+        case 'then accessor': hostile = Object.defineProperty({}, 'then', { get: getter }); break;
+        case 'fake brand': hostile = Object.create(Promise.prototype); break;
+        case 'fake brand then getter':
+          hostile = Object.defineProperty(Object.create(Promise.prototype), 'then', { get: getter }); break;
+        case 'native then getter':
+          hostile = Object.defineProperty(Promise.resolve(rule), 'then', { get: getter }); break;
+        case 'native then override':
+          hostile = Object.defineProperty(Promise.resolve(rule), 'then', { value: getter }); break;
+        case 'own constructor getter':
+          hostile = Object.defineProperty(Promise.resolve(rule), 'constructor', { get: getter }); break;
+        case 'derived then getter':
+        case 'derived constructor getter': {
+          const prototype = Object.create(Promise.prototype);
+          Object.defineProperty(prototype, kind === 'derived then getter' ? 'then' : 'constructor',
+            { get: getter });
+          hostile = Object.setPrototypeOf(Promise.resolve(rule), prototype); break;
+        }
+        case 'proxy prototype':
+          hostile = Object.setPrototypeOf(Promise.resolve(rule), new Proxy(Promise.prototype, {
+            get: getter, getPrototypeOf: getter,
+          })); break;
+        case 'cross-realm': hostile = runInNewContext('Promise.resolve(undefined)'); break;
+        case 'subclass': hostile = new (class extends Promise<void> {})(resolve => resolve()); break;
+        case 'proxy': hostile = new Proxy(Promise.resolve(), {
+          get: getter, getPrototypeOf: getter,
+        }); break;
+      }
+      /* oxlint-enable unicorn/no-thenable, eslint/no-extend-native */
       const [owner, method] = target.split('.') as
         ['policy' | 'decisions' | 'repository', string];
       const deps = { ...f.deps, [owner]: { ...f.deps[owner],
