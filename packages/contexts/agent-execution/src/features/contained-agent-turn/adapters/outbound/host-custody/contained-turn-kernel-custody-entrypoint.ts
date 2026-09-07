@@ -8,7 +8,10 @@ export {
   createHostHttpEgressSession,
   type HostHttpEgressSessionDependencies,
 } from "./egress/host-http-egress-session.js";
-export { nativeHttpRequestProfile, type NativeHttpRequestProfileId } from "./egress/native-http-request-profile.js";
+export { createNativeHttpEgressRoute, nativeHttpRequestProfile,
+  type NativeHttpRequestProfileId } from "./egress/native-http-request-profile.js";
+export { NodeTlsHttpEgressError, NodeTlsHttpEgressTransport,
+  type NodeTlsHttpEgressTransportOptions } from "./egress/node-tls-http-egress-transport.js";
 export type { HttpEgressRouteFirstWrite,
   HttpEgressRouteFirstWriteReservation } from "./egress/http-egress-ports.js";
 export type { ContainedTurnHostPostClaimPreparation } from "./contained-turn-kernel-custody-contracts.js";

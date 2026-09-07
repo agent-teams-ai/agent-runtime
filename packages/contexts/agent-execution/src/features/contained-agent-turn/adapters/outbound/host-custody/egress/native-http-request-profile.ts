@@ -70,6 +70,16 @@ const route = (profile: NativeHttpRequestProfile, receipt: string) => {
     forwardedRequestHeaderNames: profile.forwardedRequestHeaderNames, credentialFieldNames: profile.credentialFieldNames});
 };
 
+/** The Host catalog's own route for one profile id, so the outer composition can
+ * project a Provider Access endorsement without restating the wire contract.
+ * No inference from an origin host, no registration, no fallback: an id this
+ * catalog does not carry is refused. */
+export const createNativeHttpEgressRoute = (id: unknown, receipt: string) => {
+  const profile = nativeHttpRequestProfile(id);
+  if (profile === undefined) {throw new TypeError("invalid native HTTP route profile");}
+  return route(profile, receipt);
+};
+
 export const createCodexChatGptHttpRoute = (receipt: string) => route(chatgpt, receipt);
 export const createCodexApiKeyHttpRoute = (receipt: string) => route(codexApiKey, receipt);
 export const createClaudeAuthorizationHttpRoute = (receipt: string) => route(claudeAuthorization, receipt);
