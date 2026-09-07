@@ -384,11 +384,14 @@ implementation qualified and everything else remains open:
   been installed in it, no live credentialed turn has run, and no composition
   root can mint the required capability beside a live broker session while the
   `ids`, `resolver` and `evidence` broker session ports have no production
-  owner. The Claude path is neither promoted nor separately refused: it has no
-  broker seam, and today it fails closed only because its tuple is absent from
-  the registry rather than through an explicit typed `unsupported`. A route
-  reference, authority digest, canary receipt, or provider manifest is identity
-  or implementation evidence, not proof of enforced egress. Deployment
+  owner. The Claude path is refused explicitly rather than promoted: the product
+  entrypoint fails it closed with the same `route-enforcement-unqualified`
+  reason and a `claude-broker-seam-absent` detail before it establishes either
+  fact, because the Claude adapter has no broker seam that could open, hold or
+  release an enforced route. That refusal does not depend on the registry and is
+  not lifted by one; it is removed only together with the seam it stands for. A
+  route reference, authority digest, canary receipt, or provider manifest is
+  identity or implementation evidence, not proof of enforced egress. Deployment
   qualification of this target additionally requires kernel-installed route
   evidence on a Linux x64 root host with the pinned tool digests, a live
   credentialed turn, and explicit qualification-registry and readiness
