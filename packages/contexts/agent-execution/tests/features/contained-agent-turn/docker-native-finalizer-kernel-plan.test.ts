@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import {imageLock} from "../../fixtures/docker-image-init-fixture.ts";
 import {registerHooks} from "node:module";
 import test from "node:test";
 import {connectionFixture} from "./support/docker-codex-kernel-fixture.ts";
@@ -13,7 +14,7 @@ import {isIssuedCodexAppServerLaunchPlan} from "../../../dist/features/contained
 // docker-native-finalizer.test.ts; this probe grants no synthetic custody proof.
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "./docker-linux-post-claim-preparation.js" && context.parentURL?.endsWith("docker-codex-host-kernel-owner.js")) {
+    if (specifier === "./docker-linux-post-claim-preparation.js" && /docker-codex-host-kernel-owner\.(?:js|ts)$/u.test(context.parentURL ?? "")) {
       return {url: "synthetic:docker-native-plan-join", shortCircuit: true};
     }
     return next(specifier, context);
@@ -37,7 +38,7 @@ test("component evidence: kernel retains the original finalizer receiver, callba
   let selections = 0; let finishes = 0;
   const seen: unknown[] = [];
   const options = {
-    cleanupMilliseconds: 100, hostBootId: "host-boot:docker", hostInstanceId: "host-instance:docker",
+    imageInitLock: imageLock(), cleanupMilliseconds: 100, hostBootId: "host-boot:docker", hostInstanceId: "host-instance:docker",
     platformTarget: f.options.platformTarget, effectCustody: f.options.effectCustody,
     launchRecords: {async resolve() {return {boundary: f.options.boundary, executablePath: f.options.plan.executablePath,
       privateRootPath: f.options.plan.privateRootPath, tmpDir: f.options.plan.tmpDir,

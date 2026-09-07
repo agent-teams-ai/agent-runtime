@@ -107,6 +107,8 @@ export type DockerLinuxPreparedExecution<Io extends DockerLinuxPreparedProviderI
   launch: Launched; providerIo: Io; plan: CodexAppServerLaunchPlan;
 }>;
 export type DockerLinuxClaimedJoin<Io extends DockerLinuxPreparedProviderIo> = Readonly<{
+  captureHost?(): Promise<Readonly<{create: DockerHostCustodyContainerCreateInput; hostLifecycleGenerationSha256: string}>>;
+  beforeLaunch?(input: Readonly<{identity: EngineIdentity; policy: EnginePolicy}>): Promise<NonNullable<LaunchInput["imageInit"]>>;
   prepareProviderIo(input: Readonly<{claimed: Claimed; launch: Launched; init: InitOptions}>): Io;
   finishClaimed(input: Readonly<{claimed: Claimed; launch: Launched; providerIo: Io;
     http: DockerHostHttpResources; routeFirstWrite: DockerLinuxOperationRouteFirstWrite}>):
@@ -133,6 +135,8 @@ export const createDockerLinuxPostClaimOwner = <Io extends DockerLinuxPreparedPr
   }
   return createPreparationOwner(dependencies, Object.freeze({
     prepareProviderIo: join.prepareProviderIo.bind(join), finishClaimed: join.finishClaimed.bind(join),
+    ...(join.captureHost === undefined ? {} : {captureHost: join.captureHost.bind(join)}),
+    ...(join.beforeLaunch === undefined ? {} : {beforeLaunch: join.beforeLaunch.bind(join)}),
   }));
 };
 
@@ -343,7 +347,11 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
       const owner: LaunchInput["owner"] = Object.freeze({tenantId: proof.tenantId, projectId: proof.projectId,
         operationId: proof.operationId, attemptId: proof.attemptId, custodyId: proof.custodyId,
         hostInstanceId: proof.hostInstanceId, hostBootId: proof.hostBootId});
-      const create = dependencies.create;
+      assertOpen();
+      const host = await join?.captureHost?.();
+      assertOpen();
+      const create = host?.create ?? dependencies.create;
+      const hostLifecycleGenerationSha256 = host?.hostLifecycleGenerationSha256 ?? dependencies.hostLifecycleGenerationSha256;
       const identity = await dependencies.engineIdentity(call(deadlines.engineIdentityMs));
       const {subject, policy, claim, network} = prepareOperationNetwork(dependencies, resources, {proof, owner, create, identity});
 
@@ -374,9 +382,11 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
 
       stage = "launch";
       const launchCall = call(deadlines.launchMs);
+      const imageInit = await join?.beforeLaunch?.({identity, policy});
+      assertOpen();
       resources.launchKey = subject.attempt;
       resources.launchAttempted = true;
-      resources.launched = await resources.lifecycle.launch({call: launchCall, create, owner, lifetime: {
+      resources.launched = await resources.lifecycle.launch({call: launchCall, create, owner, ...(imageInit === undefined ? {} : {imageInit}), lifetime: {
         admission: {signal: AbortSignal.any([input.signal, admissionAbort.signal]), deadlineEpochMs: admissionDeadline},
         observation: {signal: observationAbort.signal, deadlineEpochMs: observationDeadline,
           isActive: () => !observationAbort.signal.aborted && Date.now() < observationDeadline},
@@ -386,9 +396,9 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
 
       stage = "listener";
       const reservation = new DockerCustodyHttpReservation({lifecycle: resources.lifecycle, launch: resources.launched,
-        hostLifecycleGenerationSha256: dependencies.hostLifecycleGenerationSha256, claimed: input});
+        hostLifecycleGenerationSha256, claimed: input});
       resources.product = createDockerHostHttpResources({host: reservation, network, allocated: resources.allocated,
-        hostLifecycleGenerationSha256: dependencies.hostLifecycleGenerationSha256});
+        hostLifecycleGenerationSha256});
       const listener = await resources.product.prepare(resources.journal, input, dependencies.resources);
       if (listener.kind !== "prepared" || resources.product.listener === undefined) {
         throw new TypeError("Host HTTP listener preparation is unproven");

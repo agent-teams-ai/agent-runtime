@@ -235,7 +235,7 @@ for (const step of ["engine-identity", "resource-journal", "create", "start", "h
       // Release is not admission: a cut caller still gets its resources released,
       // and only what cannot be proven absent stays quarantined.
       assert.ok(f.network.state.calls.includes("POST /v1.47/networks/create"));
-      assert.equal(result.kind, step === "host-handshake" || step === "start" ? "unsupported" : "quarantined");
+      assert.equal(result.kind, "unsupported");
     }
   });
 }
@@ -415,13 +415,14 @@ test("late launch acknowledgement after cleanup timeout remains owned", async t 
   assert.deepEqual(j.counts(), {opens: 0, finishes: 0});
 });
 
-test("lost launch acknowledgement retains quarantine and never retries launch", async t => {
+test("lost start acknowledgement joins retained create authority cleanup without retrying launch", async t => {
   const j = await joinedFixture(t); const {f} = j;
   const start = f.engine.start.bind(f.engine);
   t.mock.method(f.engine, "start", async (...args) => {await start(...args); throw new Error("lost start acknowledgement");});
   const owner = createDockerLinuxPostClaimOwner(f.dependencies, j.join);
-  assert.equal((await owner.preparation.prepareClaimed(f.claimed)).kind, "quarantined");
-  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 5000}), {kind: "quarantined"});
+  assert.equal((await owner.preparation.prepareClaimed(f.claimed)).kind, "unsupported");
+  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 5000}), {kind: "released"});
+  assert.equal(f.events.filter(e => e === "remove").length, 1);
   assert.equal((await owner.preparation.prepareClaimed(f.claimed)).kind, "unsupported");
   assert.equal(f.events.filter(e => e === "create").length, 1);
   assert.equal(f.events.includes("route-release"), false);

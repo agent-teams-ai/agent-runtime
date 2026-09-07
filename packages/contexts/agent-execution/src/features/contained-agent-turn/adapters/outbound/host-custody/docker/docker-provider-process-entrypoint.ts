@@ -26,3 +26,5 @@ export type {DockerImageInitOwner, DockerImageInitWitness, DockerImageInitHostBi
 export {DOCKER_CUSTODY_NODE_PATH, DOCKER_CUSTODY_BOOTSTRAP_PATH, DOCKER_CUSTODY_INIT_ARGUMENTS} from "./engine/docker-engine-composition.js";
 export type {DockerImageInitLock} from "./engine/docker-engine-composition.js";
 export {parseDockerImageReference} from "./engine/docker-engine-composition.js";
+
+export {NodeUnixSocketDockerEngine, snapshotDockerImageInitLock} from "./engine/docker-engine-composition.js";

@@ -60,7 +60,8 @@ test("private Docker owner construction is synchronous and inert; provider use c
   owner.dispose(); owner.dispose();
 });
 
-test("actual kernel custody refuses missing native finalizer before Docker allocation and fences a second start", async t => {
+for (const missing of ["finalizer", "image"] as const) {
+test(`actual kernel custody refuses missing ${missing} before Docker allocation and fences a second start`, async t => {
   const f = await connectionFixture(); t.after(() => f.contain());
   let allocations = 0; let executions = 0;
   const owner = createDockerCodexHostKernelOwner({cleanupMilliseconds: 100,
@@ -86,3 +87,4 @@ test("actual kernel custody refuses missing native finalizer before Docker alloc
   await assert.rejects(owner.custody.start(start));
   assert.equal(allocations, 0);
 });
+}

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
-  NodeHostPrivateRootOwner, type HostPrivateRootOwner,
+  NodeHostPrivateRootOwner, type HostPrivateRootOwner, type HostPrivateRootBinding,
 } from "../adapters/outbound/filesystem/host-private-root-owner.js";
 import { custodyDataRecord } from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import type { DockerKernelReservationCleanup } from "./docker-kernel-host-custody.js";
@@ -17,6 +17,13 @@ export interface HostPrivateRootCaptureOptions {
   readonly custodyRef: string;
 }
 
+const retainedRoots = new WeakMap<HostPrivateRootOwner, {binding?: HostPrivateRootBinding}>();
+/** Read only factory-retained capture; structural owners cannot publish root evidence. */
+export const retainedHostPrivateRootBinding = (owner: HostPrivateRootOwner): HostPrivateRootBinding | undefined => {
+  const retained = retainedRoots.get(owner);
+  if (retained === undefined) {throw new TypeError("Private root owner was not issued by Host composition");}
+  return retained.binding;
+};
 const apply = Reflect.apply;
 const identity = (value: string): string => {
   if (typeof value !== "string" || value.length === 0 || value.length > 1024 || value.includes("\0")) {
@@ -80,8 +87,13 @@ export const createHostPrivateRootOwnerFactory = (input: Readonly<{
           if (result.kind !== "released") {throw new Error("Private Host cleanup owner has unresolved quiescence debt");}
         },
       }));
-      const capability = Object.freeze({capture: owner.capture.bind(owner), revalidate: owner.revalidate.bind(owner),
+      const retained: {binding?: HostPrivateRootBinding} = {};
+      let capture: Promise<HostPrivateRootBinding> | undefined;
+      const capability = Object.freeze({capture() {
+        return capture ??= owner.capture().then(binding => {retained.binding = binding; return binding;});
+      }, revalidate: owner.revalidate.bind(owner),
         snapshot: owner.snapshot.bind(owner), quarantineAndDelete: owner.quarantineAndDelete.bind(owner)});
+      retainedRoots.set(capability, retained);
       owners.set(reservation.custodyRef, capability);
       return capability;
     },

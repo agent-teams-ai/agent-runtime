@@ -39,6 +39,12 @@ const hostBinding = (value: DockerImageInitHostBinding): DockerImageInitHostBind
   return bound as unknown as DockerImageInitHostBinding;
 };
 const verify = NodeUnixSocketDockerEngine.prototype.verifyCreatedImageInit;
+const owners = new WeakSet<DockerImageInitOwner>();
+/** Recognize only the frozen capability issued here, without reading caller methods. */
+export const retainDockerImageInitOwner = (owner: DockerImageInitOwner): DockerImageInitOwner => {
+  if (!owners.has(owner)) {throw new DockerEngineError("authority-conflict");}
+  return owner;
+};
 
 /** Private Pure DI constructor. Selection is copied synchronously before any Engine observation.
  * This capability proves an image/init sample, not provider execution, Host-generation
@@ -55,7 +61,7 @@ export const createDockerImageInitOwner = (input: {
   const lock = snapshotDockerImageInitLock(construction.lock as DockerImageInitLock);
   const host = hostBinding(construction.host as DockerImageInitHostBinding);
   const issued = new WeakMap<DockerImageInitWitness, {authority: DockerContainerAuthority; digest: string}>();
-  return Object.freeze({
+  const owner: DockerImageInitOwner = Object.freeze({
     async verifyCreated(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<DockerImageInitWitness> {
       const bound = validateAuthorityShape(authority);
       const deadline = snapshotDockerEngineCall(call);
@@ -81,4 +87,6 @@ export const createDockerImageInitOwner = (input: {
       }
     },
   });
+  owners.add(owner);
+  return owner;
 };
