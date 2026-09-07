@@ -1,7 +1,7 @@
-import { containedTurnProviderAccessSnapshotDigest, containedTurnScopeDigest, type ContainedTurnScope } from "../domain/contained-turn-authority.js";
+import { createContainedTurnAcceptedAuthorityHandoff, prepareContainedTurnAcceptedSubject } from "./contained-turn-accepted-authority.js";
+import type { ContainedTurnScope } from "../domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
 import {
-  completeContainedTurnDispatchGrantSubject,
   containedTurnDispatchClaimBindingDigest,
   containedTurnDispatchGrantRequestId,
   containedTurnGrantSettlementRequestId,
@@ -97,6 +97,16 @@ export const claimContainedTurnWithConsumedGrants = async (
   subject: ContainedTurnDispatchGrantSubject,
   hostCustodyProof: Extract<Awaited<ReturnType<ContainedTurnKernelDependencies["custody"]["open"]>>["hostCustodyProof"], { readonly kind: "host_custody" }>,
 ): Promise<ClaimContainedTurnWithConsumedGrantsOutcome> => {
+  let accepted: ReturnType<typeof createContainedTurnAcceptedAuthorityHandoff>;
+  try {
+    accepted = createContainedTurnAcceptedAuthorityHandoff(operation, trustedScope, subject);
+  } catch {
+    // No owner was called; retain the existing retirement and cleanup path.
+    return Object.freeze({
+      kind: "unavailable", consumedGrantReceipts: Object.freeze({}),
+      consumedGrantRequestIds: Object.freeze({}), consumptionEvidenceIds: Object.freeze({}),
+    });
+  }
   const providerAccessConsume = dependencies.providerAccess.consumeForDispatch;
   const runtimeSecurityConsume = dependencies.security.consumeForDispatch;
   const claim = dependencies.operationStore.claimPreparedDispatch;
@@ -104,8 +114,8 @@ export const claimContainedTurnWithConsumedGrants = async (
     "provider_access", subject,
   );
   const [providerAccessResult, runtimeSecurityResult] = await Promise.allSettled([
-    providerAccessConsume.call(dependencies.providerAccess, { grantRequestId: providerAccessGrantRequestId, subject }),
-    runtimeSecurityConsume.call(dependencies.security, { subject }),
+    providerAccessConsume.call(dependencies.providerAccess, { accepted, grantRequestId: providerAccessGrantRequestId, subject }),
+    runtimeSecurityConsume.call(dependencies.security, { accepted, subject }),
   ]);
   const providerAccess = providerAccessResult.status === "fulfilled"
     ? providerAccessResult.value : undefined;
@@ -230,35 +240,13 @@ export const claimPreparedContainedTurn = async (input: Readonly<{
 }>): Promise<ClaimPreparedContainedTurnOutcome> => {
   const { custody, dependencies, operation, preparation, preparationToken, trustedScope } = input;
   if (operation.workspaceId === undefined) {return { kind: "stopped", operation };}
-  const providerAccess = operation.providerAccessSnapshot;
-  const providerBindingDigest = containedTurnProviderAccessSnapshotDigest(providerAccess);
-  const subject: ContainedTurnDispatchGrantSubject = completeContainedTurnDispatchGrantSubject(Object.freeze({
-    attemptId: preparation.attemptId, custodyId: preparation.custodyId, effectId: operation.effectId,
-    executionGenerationId: preparation.executionGenerationId, hostBootId: custody.hostBootId,
-    hostInstanceId: custody.hostInstanceId, operationCutoffRevision: operation.operationCutoff.revision,
-    operationId: operation.operationId, preparationToken, provider: operation.adapterSnapshot.provider,
-    providerAccessExpectation: Object.freeze({
-      acceptedAuthorityDigest: operation.acceptedAuthorityVectorDigest, accessRef: providerAccess.accessRef,
-      authorityHeadDigest: providerAccess.ownerAuthorityDigest, bindingDigest: providerBindingDigest,
-      bindingRevision: providerAccess.revision, credentialBindingDigest: providerAccess.credentialBindingDigest,
-      credentialBindingRef: providerAccess.credentialBindingRef, credentialGeneration: providerAccess.credentialGeneration,
-      providerAccountRef: providerAccess.providerAccountRef, providerRouteRef: providerAccess.providerRouteRef,
-    }),
-    purpose: "contained_turn_provider_start_v1",
-    runtimeSecurityExpectation: Object.freeze({
-      acceptedAuthorityDigest: operation.acceptedAuthorityVector.securityDecisionDigest,
-      authorityGeneration: operation.acceptedAuthorityVector.operationAuthorityRevision,
-      authorityHeadDigest: operation.acceptedAuthorityVector.securityDecisionDigest,
-      authorityRevision: operation.acceptedAuthorityVector.securityAuthorityRevision,
-      constraintsDigest: digestContainedTurnCanonicalValue({
-        adapterSnapshot: operation.adapterSnapshot, capabilityManifest: operation.capabilityManifest,
-        intentMode: operation.intent.mode,
-      } as never),
-      containmentPolicyDigest: operation.acceptedAuthorityVector.containmentPolicyDigest,
-      providerBindingDigest, providerId: operation.adapterSnapshot.provider,
-    }),
-    scope: trustedScope, scopeDigest: containedTurnScopeDigest(trustedScope), workspaceId: operation.workspaceId,
-  }));
+  const subject = prepareContainedTurnAcceptedSubject(
+    { ...operation, workspaceId: operation.workspaceId }, trustedScope, {
+      attemptId: preparation.attemptId, custodyId: preparation.custodyId,
+      executionGenerationId: preparation.executionGenerationId,
+      hostBootId: custody.hostBootId, hostInstanceId: custody.hostInstanceId, preparationToken,
+    },
+  );
   const claim = await claimContainedTurnWithConsumedGrants(
     dependencies, operation, trustedScope, subject, custody.hostCustodyProof,
   );

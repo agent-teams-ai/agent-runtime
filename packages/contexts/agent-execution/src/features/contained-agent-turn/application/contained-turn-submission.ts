@@ -1,3 +1,4 @@
+import { containedTurnAcceptanceConstraintsDigestV1 } from "./contained-turn-acceptance-digests.js";
 import {
   containedTurnAuthorityVectorDigest,
   containedTurnCommandFingerprint,
@@ -201,13 +202,19 @@ export const submitContainedTurn = async (
       status: "observed",
     };
   }
+  const constraintsDigest = containedTurnAcceptanceConstraintsDigestV1({
+    adapterSnapshot: adapter, capabilityManifest: manifest, intent: input.intent,
+  });
   const [access, security] = await Promise.all([
     dependencies.providerAccess.resolveForAcceptance({
+      operationId: identity.operationId,
       intent: input.intent,
       provider: adapter.provider,
       scope: input.scope,
     }),
     dependencies.security.authorizeForAcceptance({
+      operationId: identity.operationId,
+      constraintsDigest,
       intent: input.intent,
       provider: adapter.provider,
       scope: input.scope,
