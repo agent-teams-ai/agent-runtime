@@ -3,6 +3,8 @@ export type {DockerProviderProcessInput} from "./docker-provider-process-bridge.
 export {DockerHostCustodyLifecycle, dockerProviderProcessMountFacts} from "./docker-host-custody-lifecycle.js";
 export {captureDockerHttpResourceRecord, subscribeDockerHttpAbort, DockerHttpNetworkResources, dockerHttpOperationNetworkRecipe} from "./docker-http-network-resources.js";
 export type {DockerHttpNetworkResourceInput} from "./docker-http-network-resources.js";
-export {sameDockerAuthority} from "./docker-host-custody-lifecycle-guards.js";
+export {dockerHostCustodyAttemptKey, sameDockerAuthority} from "./docker-host-custody-lifecycle-guards.js";
+export type {DockerHostCustodyContainerCreateInput} from "./docker-host-custody-lifecycle-guards.js";
+export type {DockerCustodyAttemptKey, DockerCustodyOwnerIdentity} from "./journal/docker-custody-journal-types.js";
 export type {LaunchedDockerCustody} from "./docker-lifecycle-issued-launch.js";
 export {awaitNetworkCleanupWork} from "./engine/docker-engine-composition.js";
