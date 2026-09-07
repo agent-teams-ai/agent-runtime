@@ -82,6 +82,7 @@ export function verifyAdoption(profile, evidence) {
     assert.ok(artifact && digest(artifact.bytes) === pkg.archiveSha256, 'package archive drift');
   }
   assert.ok(Object.keys(profile.enforcement.commands).length, 'commands missing');
+  assert.ok(Object.values(profile.enforcement.commands).includes('node scripts/architecture/check-get-modular-adoption.mjs'), 'canonical adoption checker missing');
   for (const [name, command] of Object.entries(profile.enforcement.commands)) {
     assert.equal(scripts[name], command, `command drift: ${name}`);
     assert.ok(!/[|;\n]/.test(command) && !command.includes('allow-diagnostics'), 'nonblocking command');
