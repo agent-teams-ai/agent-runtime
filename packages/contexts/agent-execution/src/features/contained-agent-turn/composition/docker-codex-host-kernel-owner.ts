@@ -1,5 +1,6 @@
 import {createCodexDockerPathProjection, CodexAppServerCurrentKernelAdapter} from "../adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
 import {randomUUID} from "node:crypto";
+import {types} from "node:util";
 import {custodyDataRecord, sameHostCustodyBinding, ContainedTurnKernelCustodyAdapter, type ContainedTurnKernelCustodyAttemptOwner,
   type ContainedTurnKernelWorkspaceOwner} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import {DockerKernelHostCustody} from "./docker-kernel-host-custody.js";
@@ -17,6 +18,8 @@ import {createDockerLinuxPostClaimOwner, type DockerLinuxPostClaimDependencies, 
 type Prepare = Parameters<ContainedTurnKernelCustodyAttemptOwner["prepare"]>[0];
 type Kernel = Prepare["kernel"];
 type FinalizeInput = Parameters<DockerLinuxClaimedJoin<PreparedDockerProviderIo>["finishClaimed"]>[0];
+const apply = Reflect.apply;
+const isProxy = types.isProxy;
 export interface CreateDockerCodexHostKernelOwnerOptions {
   readonly hostBootId: string;
   readonly hostInstanceId: string;
@@ -51,7 +54,10 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
   const data = custodyDataRecord(value);
   const options = Object.freeze({...data, platformTarget: Object.freeze({...custodyDataRecord(data.platformTarget)})});
   if (options.platformTarget.platform !== "linux") {throw new TypeError("Docker requires Linux");}
-  const finishClaimed = options.finishClaimed?.bind(value);
+  const finishClaimed = options.finishClaimed;
+  if (finishClaimed !== undefined && (typeof finishClaimed !== "function" || isProxy(finishClaimed))) {
+    throw new TypeError("Docker native finalizer must be a callable data property");
+  }
   const records = new Map<string, Retained>();
   const raw = new DockerKernelHostCustody(options.cleanupMilliseconds);
   let disposed = false;
@@ -117,7 +123,7 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
         return providerIo;
       },
       async finishClaimed(input) {
-        const result = await finishClaimed({...input, record: retained.record, originalPlan: retained.originalPlan});
+        const result = await apply(finishClaimed, value, [{...input, record: retained.record, originalPlan: retained.originalPlan}]);
         if (!isCodexNativeBrokerLaunchPlan(result.plan)) {throw new TypeError("Docker native broker finalization unavailable");}
         const process = retained.process!;
         const paths = createCodexDockerPathProjection(dockerProviderProcessMountFacts(input.launch), retained.record.boundary);

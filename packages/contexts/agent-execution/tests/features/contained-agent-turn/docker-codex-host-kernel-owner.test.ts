@@ -8,6 +8,44 @@ import {containedTurnIdentity as id} from "../../../dist/features/contained-agen
 import {containedTurnOperationCutoffRevision} from "../../../dist/features/contained-agent-turn/domain/contained-turn-output-authority.js";
 
 const unused = () => {throw new Error("unexpected construction effect");};
+const inertOptions = (): CreateDockerCodexHostKernelOwnerOptions => ({
+  cleanupMilliseconds: 100, hostBootId: "host-boot:docker", hostInstanceId: "host-instance:docker",
+  platformTarget: {platform: "linux", architecture: "x64"}, workspaceOwner: {withLaunchAuthority: unused},
+  launchRecords: {resolve: unused}, effectCustody: {admit: unused}, preparation: unused,
+});
+
+for (const property of ["bind", "name", "length"] as const) {
+  test(`real Docker owner construction does not read frozen finalizer ${property}`, t => {
+    let reads = 0; let calls = 0;
+    const finishClaimed = () => {calls += 1; throw new Error("unexpected finalization");};
+    Object.defineProperty(finishClaimed, property, {get() {
+      reads += 1; throw new Error(`unexpected ${property} read`);
+    }});
+    Object.freeze(finishClaimed);
+    const owner = createDockerCodexHostKernelOwner({...inertOptions(), finishClaimed});
+    t.after(() => owner.dispose());
+    assert.equal(Object.isFrozen(finishClaimed), true);
+    assert.equal(reads, 0); assert.equal(calls, 0);
+    assert.deepEqual(Object.keys(owner).toSorted(), ["custody", "dispose", "provider"]);
+  });
+}
+
+test("real Docker owner rejects malformed finalizers without getters, proxy traps or calls", () => {
+  let effects = 0;
+  const effect = () => {effects += 1; throw new Error("unexpected finalizer effect");};
+  const revoked = Proxy.revocable(unused, {}); revoked.revoke();
+  const malformed: unknown[] = [null, false, 0, "callback", {}, {bind: effect},
+    Object.freeze({get bind() {return effect();}}),
+    new Proxy(unused, {get: effect, getOwnPropertyDescriptor: effect, getPrototypeOf: effect, apply: effect}),
+    revoked.proxy];
+  for (const finishClaimed of malformed) {
+    assert.throws(() => createDockerCodexHostKernelOwner({...inertOptions(), finishClaimed} as never), TypeError);
+    assert.equal(effects, 0);
+  }
+  assert.throws(() => createDockerCodexHostKernelOwner({...inertOptions(), get finishClaimed() {return effect();}}), TypeError);
+  assert.equal(effects, 0);
+});
+
 test("private Docker owner construction is synchronous and inert; provider use cannot bypass claimed preparation", async () => {
   const options = {cleanupMilliseconds: 100, hostBootId: "host-boot:docker", hostInstanceId: "host-instance:docker",
     platformTarget: {platform: "linux", architecture: "x64"}, workspaceOwner: {withLaunchAuthority: unused},

@@ -32,7 +32,7 @@ const hooks = registerHooks({
 const {createDockerCodexHostKernelOwner} = await import("../../../dist/features/contained-agent-turn/composition/docker-codex-host-kernel-owner.js");
 hooks.deregister();
 
-test("component evidence: kernel privately retains the original finalizable plan before resource selection", async t => {
+test("component evidence: kernel retains the original finalizer receiver, callback and finalizable plan", async t => {
   const f = await connectionFixture(); t.after(() => f.contain());
   let selections = 0; let finishes = 0;
   const seen: unknown[] = [];
@@ -53,6 +53,12 @@ test("component evidence: kernel privately retains the original finalizable plan
     },
   };
   const owner = createDockerCodexHostKernelOwner(options as never); t.after(() => owner.dispose());
+  assert.equal(selections, 0); assert.equal(finishes, 0);
+  let mutationReads = 0;
+  const mutation = () => {mutationReads += 1; throw new Error("mutated invocation property");};
+  for (const property of ["bind", "call", "apply", "name", "length"]) {
+    Object.defineProperty(options.finishClaimed, property, {get: mutation});
+  }
   // Replacing the original method cannot redirect the retained callback.
   options.finishClaimed = () => {throw new Error("mutated callback");};
   const open = {...f.options.attempt, intentMode: f.options.attempt.intent.mode,
@@ -64,7 +70,14 @@ test("component evidence: kernel privately retains the original finalizable plan
     workspaceId: open.workspaceId, intentMode: open.intentMode,
     committedDispatchProof: committedDispatchProofFixture(open, opened),
     async execute() {throw new Error("no provider effect in wiring probe");}};
-  assert.equal((await owner.custody.start(start)).kind, "indeterminate");
+  const originalApply = Reflect.apply;
+  let result;
+  try {
+    Reflect.apply = mutation;
+    result = await owner.custody.start(start);
+  } finally {Reflect.apply = originalApply;}
+  assert.equal(result.kind, "indeterminate");
+  assert.equal(mutationReads, 0);
   assert.equal(selections, 1); assert.equal(finishes, 1);
   assert.ok(isIssuedCodexAppServerLaunchPlan(seen[0]));
   const plan = seen[0]; const recipe = hostLaunchFinalizationRecipe(plan);
