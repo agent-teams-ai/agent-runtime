@@ -47,7 +47,7 @@ function increment(counter, value) {
 }
 
 test("committed frozen authority preserves all evidence bytes", async () => {
-  assert.equal(await verifyFrozenDocumentBytes(repositoryRoot), 37);
+  assert.equal(await verifyFrozenDocumentBytes(repositoryRoot), 38);
 });
 
 test("accepted ADR-0014 is reachable from both canonical documentation indexes", async () => {
@@ -73,14 +73,14 @@ test("accepted ADR-0014 is reachable from both canonical documentation indexes",
 test("catalog authority has the reviewed type and lifecycle census", async () => {
   const sidecar = await readFile(join(repositoryRoot, "docs/document-metadata.yaml"), "utf8");
   const sidecarBlocks = sidecar.split(/^  (?=docs\/)/mu).slice(1);
-  assert.equal(sidecarBlocks.length, 37);
+  assert.equal(sidecarBlocks.length, 38);
   const metadata = sidecarBlocks.map((block) => scalarMetadata(block, 4));
   for (const path of inlineMetadataPaths) {
     metadata.push(scalarMetadata(await readFile(join(repositoryRoot, path), "utf8"), 0));
   }
 
-  assert.equal(metadata.length, 54);
-  assert.equal(new Set(metadata.map((entry) => entry.id)).size, 54);
+  assert.equal(metadata.length, 55);
+  assert.equal(new Set(metadata.map((entry) => entry.id)).size, 55);
   const types = new Map();
   const statuses = new Map();
   for (const entry of metadata) {
@@ -89,14 +89,14 @@ test("catalog authority has the reviewed type and lifecycle census", async () =>
   }
   assert.deepEqual(Object.fromEntries(types), {
     adr: 11,
-    evidence: 32,
+    evidence: 33,
     index: 3,
     architecture: 7,
     "qualification-plan": 1
   });
   assert.deepEqual(Object.fromEntries(statuses), {
     accepted: 15,
-    "evidence-reference": 31,
+    "evidence-reference": 32,
     superseded: 1,
     active: 5,
     proposed: 2
@@ -106,7 +106,7 @@ test("catalog authority has the reviewed type and lifecycle census", async () =>
 test("frozen authority rejects an incomplete path set", async () => {
   assert.throws(
     () => readFrozenDigestAuthority("contract: foundation.document-metadata-sidecar/v1\ndocuments: {}\n"),
-    (error) => error instanceof FrozenDocumentError && /must contain 37 paths/u.test(error.message)
+    (error) => error instanceof FrozenDocumentError && /must contain 38 paths/u.test(error.message)
   );
 });
 
