@@ -49,6 +49,21 @@ test("the composed session record is exactly the broker's dependency set", async
   assert.ok(Object.isFrozen(session));
 });
 
+test("the optional route first-write port is carried through, and only that one", async () => {
+  const {bound} = await authorities();
+  const routeFirstWrite = {reserve: () => ({consume: () => true})};
+  const session = composeContainedTurnHttpEgressSession(bound,
+    {...ports(), routeFirstWrite} as unknown as ContainedTurnHttpEgressBrokerPorts);
+  assert.deepEqual(Object.keys(session).toSorted(), [...PORTS, ...AUTHORITIES, "routeFirstWrite"].toSorted());
+  assert.equal((session as {routeFirstWrite?: unknown}).routeFirstWrite, routeFirstWrite);
+  // The optional member widens the accepted set by exactly one known name.
+  assert.throws(() => composeContainedTurnHttpEgressSession(bound,
+    {...ports(), routeFirstWrite, extra: 1} as unknown as ContainedTurnHttpEgressBrokerPorts));
+  const {journal: _missing, ...incomplete} = ports();
+  assert.throws(() => composeContainedTurnHttpEgressSession(bound,
+    {...incomplete, routeFirstWrite} as unknown as ContainedTurnHttpEgressBrokerPorts));
+});
+
 test("a port set that is not exact fails closed before the broker sees it", async () => {
   const {bound} = await authorities();
   const {journal: _missing, ...incomplete} = ports();

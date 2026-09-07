@@ -25,6 +25,11 @@ export type ContainedTurnHttpEgressAuthorities =
  * and `evidence` have no production owner anywhere in this repository yet: they
  * must come from the trusted composition root that owns them, and this module
  * deliberately fabricates none of them.
+ *
+ * `routeFirstWrite` is the one optional member: it exists only when an installed
+ * exclusive route lease published its first-write authority for this operation.
+ * Supplying nothing leaves the broker without a kernel cut of its own, which is
+ * an honest absence rather than a silently unenforced turn.
  */
 export type ContainedTurnHttpEgressBrokerPorts =
   Omit<HostHttpEgressSessionDependencies, typeof AUTHORITY_KEYS[number]>;
@@ -67,8 +72,10 @@ export const composeContainedTurnHttpEgressSession = (
   const supplied = Reflect.ownKeys(ports);
   const expected: readonly string[] = ["identity", "ids", "providerAccessSnapshot", "route",
     "localAuthorityCut", "journal", "resolver", "transport", "clock", "evidence"];
-  if (supplied.length !== expected.length ||
+  const optional: readonly string[] = ["routeFirstWrite"];
+  if (supplied.length < expected.length || supplied.length > expected.length + optional.length ||
       expected.some(key => !Object.hasOwn(ports, key)) ||
+      supplied.some(key => typeof key !== "string" || !expected.includes(key) && !optional.includes(key)) ||
       Object.values(Object.getOwnPropertyDescriptors(ports))
         .some(descriptor => !("value" in descriptor) || !descriptor.enumerable)) {throw invalid();}
   for (const key of AUTHORITY_KEYS) {
