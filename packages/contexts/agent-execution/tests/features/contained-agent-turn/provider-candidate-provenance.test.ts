@@ -12,9 +12,9 @@ test("candidate receipt binds a disposable clean build, HEAD, dependencies and c
   const executed = await fixture.executeBuild();
   assert.equal(executed.freshBuild, 1);
   const envelope = await fixture.authority.createProviderCandidateEvidenceEnvelope(evidenceInput(fixture, execution));
-  assert.equal(envelope.schemaVersion, 3);
+  assert.equal(envelope.schemaVersion, 4);
   assert.equal(envelope.networkRouteEnforcement, "unqualified");
-  assert.equal(envelope.buildIdentity.profile, "qualified-offline-clean-build/v2");
+  assert.equal(envelope.buildIdentity.profile, "qualified-offline-clean-build/v3");
   for (const key of ["receiptDigest", "treeDigest", "sourceTreeDigest", "packageClosureDigest", "commandDigest", "dependenciesDigest", "nodeDigest", "compilerDigest", "toolchainQualificationDigest"]) {
     assert.match(envelope.buildIdentity[key], /^sha256:[a-f0-9]{64}$/u);
   }

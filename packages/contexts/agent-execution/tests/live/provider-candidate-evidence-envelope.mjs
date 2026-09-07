@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { sha256 } from "./provider-candidate-build-tree.mjs";
 import { sourceSnapshot, sourceFileDigest } from "./provider-candidate-source.mjs";
 import { executedBuildIdentity, installedClosureDigest, verifyCleanBuild } from "./provider-candidate-clean-build.mjs";
-import { trustedToolchainQualification } from "./provider-candidate-toolchain.mjs";
+import { matchTrustedToolchain, trustedToolchainQualification } from "./provider-candidate-toolchain.mjs";
 import {
   record, choice, exactDigest, safeTuple, safePackageIdentity,
   safeObservations, validateCompletion, evidenceDigest,
@@ -51,7 +51,7 @@ export const resolveCanaryExecutionProvenance = async (value, trustedBuildQualif
     canary: Object.freeze({id: canaryId, sourceDigest: canaryDigest}),
     provider, sourceSha,
   });
-  executionAuthorities.set(execution, Object.freeze({root: source.root, canarySourceUrl, authorityDigest}));
+  executionAuthorities.set(execution, Object.freeze({root: source.root, canarySourceUrl, authorityDigest, qualification}));
   return execution;
 };
 
@@ -60,6 +60,7 @@ export const revalidateCanaryExecutionProvenance = async execution => {
   if (authority === undefined) {throw new TypeError("verified canary execution provenance is required");}
   try {
     const source = await sourceSnapshot(import.meta.url, execution.sourceSha);
+    await matchTrustedToolchain(source, authority.qualification, execution.build);
     if (source.treeDigest !== execution.build.sourceTreeDigest ||
         sourceFileDigest(source, import.meta.url) !== authority.authorityDigest ||
         sourceFileDigest(source, authority.canarySourceUrl) !== execution.canary.sourceDigest ||
@@ -109,9 +110,15 @@ export const createProviderCandidateEvidenceEnvelope = async value => {
     throw new TypeError("canary execution provenance does not match provider and canary");
   }
   return Object.freeze({
-    schemaVersion: 3,
+    schemaVersion: 4,
     binaryIdentity: Object.freeze({digest: binaryDigest, revisionDigest: exactDigest(sha256(input.binaryRevision))}),
     buildIdentity: Object.freeze({
+      ...(execution.build.nativeQualificationDigest === undefined ? {} : {
+        nativeQualificationDigest: exactDigest(execution.build.nativeQualificationDigest),
+        nativeRecipeDigest: exactDigest(execution.build.nativeRecipeDigest),
+        nativeEnvironmentDigest: exactDigest(execution.build.nativeEnvironmentDigest),
+        nativeOutputDigest: exactDigest(execution.build.nativeOutputDigest),
+      }),
       bytes: execution.build.bytes, files: execution.build.files,
       treeDigest: exactDigest(execution.build.treeDigest),
       sourceTreeDigest: exactDigest(execution.build.sourceTreeDigest),

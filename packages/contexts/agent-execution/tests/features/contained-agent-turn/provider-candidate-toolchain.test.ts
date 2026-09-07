@@ -99,7 +99,7 @@ test("independently pinned fixture tools produce deterministic receipt and canon
   assert.doesNotMatch(JSON.stringify(envelope), /\/tmp\/|node_modules|bin\/tsc|node-only/u);
 });
 
-test("Node qualification cannot authorize the unqualified native compiler and headers", {skip: process.platform !== "linux"}, async t => {
+test("Node qualification cannot authorize the unqualified native compiler and headers", {skip: !["linux", "darwin"].includes(process.platform)}, async t => {
   const fixture = await sourceFixture(t);
   const native = join(fixture.root, "packages/platform/filesystem-custody/native");
   await mkdir(native);

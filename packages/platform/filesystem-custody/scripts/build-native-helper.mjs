@@ -1,8 +1,37 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, normalize, resolve } from "node:path";
 
-if (process.platform === "linux" || process.platform === "darwin") {
+// Qualified mode is a closed positional protocol from private build composition.
+// It never discovers tools/headers or inherits caller compiler/loader variables.
+const qualified = process.argv.slice(2);
+if (qualified.length) {
+  const [mode, recipe, compiler, linker, resources, headers, sysroot, deployment] = qualified;
+  const linux = recipe === "linux-x64-clang-shared/v1";
+  if (qualified.length !== 8 || mode !== "--qualified" ||
+      !["linux-x64-clang-shared/v1", "darwin-arm64-clang-bundle/v1"].includes(recipe) ||
+      process.platform !== (linux ? "linux" : "darwin") || process.arch !== (linux ? "x64" : "arm64") ||
+      [compiler, linker, resources, headers, sysroot].some(path =>
+        typeof path !== "string" || path.length > 512 || !isAbsolute(path) || normalize(path) !== path ||
+        path === "/" || /[\0\r\n]/u.test(path)) ||
+      (linux ? deployment !== "none" : !/^[0-9]{1,2}\.[0-9]{1,2}$/u.test(deployment)) ||
+      !/^(?:0|[1-9][0-9]{0,10})$/u.test(process.env.SOURCE_DATE_EPOCH ?? "")) {
+    throw new Error("complete qualified native recipe inputs required");
+  }
+  mkdirSync("dist", {recursive: true});
+  const result = spawnSync(compiler, [
+    "-O2", "-Wall", "-Wextra", "-Werror", "-fPIC", "-nostdinc",
+    `--ld-path=${linker}`, "-resource-dir", resources, `--sysroot=${sysroot}`,
+    "-isystem", resolve(resources, "include"), "-isystem", resolve(sysroot, "usr/include"),
+    `-I${headers}`,
+    ...(linux ? ["--target=x86_64-unknown-linux-gnu", "-shared"] :
+      ["--target=arm64-apple-darwin", "-arch", "arm64", `-mmacosx-version-min=${deployment}`,
+        "-bundle", "-undefined", "dynamic_lookup"]),
+    "native/rename-no-replace.c", "-o", "dist/rename-no-replace.node",
+  ], {stdio: "inherit", env: {LC_ALL: "C", TZ: "UTC", SOURCE_DATE_EPOCH: process.env.SOURCE_DATE_EPOCH}});
+  if (result.error !== undefined) {throw result.error;}
+  if (result.status !== 0) {process.exit(result.status ?? 1);}
+} else if (process.platform === "linux" || process.platform === "darwin") {
   const includeDirectory = [
     resolve(dirname(process.execPath), "../include/node"),
     "/usr/local/include/node",

@@ -5,6 +5,8 @@ import { digestTree, sha256 } from "./provider-candidate-build-tree.mjs";
 import { buildEnvironment, execFileAsync } from "./provider-candidate-source.mjs";
 import { matchTrustedToolchain, trustedToolchainQualification } from "./provider-candidate-toolchain.mjs";
 
+import { matchNativeOutput, nativeInvocation } from "./provider-candidate-native-build.mjs";
+
 const PACKAGES = Object.freeze([
   "packages/platform/filesystem-custody",
   "packages/contexts/agent-execution",
@@ -73,19 +75,22 @@ export const verifyCleanBuild = async (snapshot, qualification) => {
   const packageClosureDigest = sha256(JSON.stringify(packageFiles.map(path => [path, sha256(snapshot.files.get(path).bytes)])));
   // Match external expected bytes BEFORE any installed compiler/helper executes.
   const toolchain = await matchTrustedToolchain(snapshot, qualification, {dependenciesDigest, packageClosureDigest});
+  if (qualification.native) {await matchNativeOutput(join(snapshot.root, PACKAGES[0]), qualification.native);}
   const executed = await executedBuildIdentity(snapshot.root);
+  const native = qualification.native && nativeInvocation(qualification.native);
   const nodeDigest = sha256(await readFile(process.execPath));
   const root = await mkdtemp(join(tmpdir(), "ar-provider-clean-build-"));
   try {
     await copyBuildSources(snapshot, root);
     for (const [index, command] of COMMANDS.entries()) {
       try {
-        await execFileAsync(process.execPath, command.slice(1), {
+        await execFileAsync(process.execPath, index === 1 && native ? native.args : command.slice(1), {
           cwd: index === 1 ? join(root, PACKAGES[0]) : root,
-          env: buildEnvironment, timeout: 120_000, maxBuffer: 1024 ** 2,
+          env: native ? native.environment : buildEnvironment, timeout: 120_000, maxBuffer: 1024 ** 2,
         });
       } catch {throw new Error("trusted offline clean build failed");}
       if (index === 1) {
+        if (qualification.native) {await matchNativeOutput(join(root, PACKAGES[0]), qualification.native);}
         const clean = await digestTree(join(root, PACKAGES[0], "dist"));
         const actual = await digestTree(join(snapshot.root, PACKAGES[0], "dist"));
         if (clean.treeDigest !== actual.treeDigest) {throw new Error("executed dependency build differs from clean build");}
@@ -98,12 +103,13 @@ export const verifyCleanBuild = async (snapshot, qualification) => {
         nodeDigest !== sha256(await readFile(process.execPath))) {
       throw new Error("build inputs changed during clean build verification");
     }
+    await matchTrustedToolchain(snapshot, qualification, {dependenciesDigest, packageClosureDigest});
     return Object.freeze({
       ...executed, ...toolchain, dependenciesDigest, packageClosureDigest,
       sourceTreeDigest: snapshot.treeDigest,
-      commandDigest: sha256(JSON.stringify({commands: COMMANDS, workingDirectories: [".", PACKAGES[0], "."], environment: buildEnvironment})),
+      commandDigest: sha256(JSON.stringify({commands: COMMANDS, workingDirectories: [".", PACKAGES[0], "."], environment: native ? native.environment : buildEnvironment, nativeInvocation: native || null})),
       nodeDigest,
-      profile: "qualified-offline-clean-build/v2",
+      profile: "qualified-offline-clean-build/v3",
     });
   } finally {await rm(root, {recursive: true, force: true});}
 };

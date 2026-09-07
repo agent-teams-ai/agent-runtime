@@ -1,3 +1,5 @@
+import { pathToFileURL } from "node:url";
+import { trustedToolchainQualification } from "./provider-candidate-toolchain.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { lstat, mkdir, readFile, realpath, rmdir, stat, statfs, writeFile } from "node:fs/promises";
@@ -6,12 +8,9 @@ import { isAbsolute, join, relative } from "node:path";
 import {
   createProviderCandidateEvidenceEnvelope,
   resolveCanaryExecutionProvenance,
+  revalidateCanaryExecutionProvenance,
 } from "./provider-candidate-evidence-envelope.mjs";
-import {
-  requireContainedTurnLiveCanaryAuthorities,
-  createDisposableContainedTurnCanaryRuntime,
-  submitContainedTurnLiveCanary,
-} from "./contained-turn-live-canary-lifecycle.mjs";
+
 
 import { observeCustodyReservation, observeProviderCandidateCompletion } from "./provider-candidate-observation.mjs";
 import { createCandidateRunObservation } from "./provider-candidate-run-observation.mjs";
@@ -89,7 +88,7 @@ const cgroupV2Factory = delegatedRoot => Object.freeze({
   },
 });
 
-const resolveCandidateExecution = () => {
+const resolveCandidateExecution = trustedBuildQualification => {
   const canaryId = "claude-contained-turn-live-canary/v1";
   return resolveCanaryExecutionProvenance(Object.freeze({
     buildRootUrl: new URL("../../dist/", import.meta.url).href,
@@ -97,7 +96,7 @@ const resolveCandidateExecution = () => {
     canarySourceUrl: import.meta.url,
     claimedSourceSha: requiredEnvironment("AR_SOURCE_SHA"),
     provider: "claude-agent-sdk-current-kernel",
-  }));
+  }), trustedBuildQualification);
 };
 
 const loadCandidateBuild = async () => {
@@ -143,20 +142,13 @@ const createPlatformCustody = async (platformTarget, launchPlans, candidateBuild
   throw new Error("unsupported Claude canary Host Custody target");
 };
 
-/** The invoking deployment's own Provider Access owner and Runtime Security
- * dispatch authority. Nothing in this repository produces them yet, so it stays
- * undefined and the authority gate below refuses. */
-const canaryProviderAuthorities = undefined;
-
-const run = async () => {
-  // Resolve authority before inspecting credential paths, allocating custody,
-  // or connecting to PG. The gate now binds real Provider Access and Runtime
-  // Security owners, and this checkout has no producer for them, so the call
-  // still refuses with route-enforcement-unqualified rather than minting a
-  // synthetic grant receipt for the canary.
+const run = async (executionProvenance, canaryProviderAuthorities, runObservation, state) => {
+  const { requireContainedTurnLiveCanaryAuthorities, createDisposableContainedTurnCanaryRuntime,
+    submitContainedTurnLiveCanary } = await import("./contained-turn-live-canary-lifecycle.mjs");
+  // Provider Access and Runtime Security gates still precede credentials,
+  // custody, database access and provider start.
   const authorities = requireContainedTurnLiveCanaryAuthorities(canaryProviderAuthorities);
   const platformTarget = exactPlatformTarget();
-  const executionProvenance = await resolveCandidateExecution();
   const candidateBuild = await loadCandidateBuild();
   const { query: claudeQuery } = await import("@anthropic-ai/claude-agent-sdk");
   const {
@@ -164,7 +156,7 @@ const run = async () => {
     createClaudeCurrentKernelOwner, selectClaudeAgentSdkPlatformTuple,
   } = candidateBuild;
   const tuple = selectClaudeAgentSdkPlatformTuple(platformTarget.platform, platformTarget.architecture);
-  candidateEvidence = prepareCandidateEvidence(tuple, executionProvenance);
+  state.candidateEvidence = prepareCandidateEvidence(tuple, executionProvenance);
   const canaryRoot = await realpath(requiredEnvironment("AR_CLAUDE_CANARY_ROOT"));
   const workspaceRef = await realpath(requiredEnvironment("AR_CLAUDE_CANARY_WORKSPACE"));
   const privateRootPath = await realpath(requiredEnvironment("AR_CLAUDE_CANARY_PRIVATE_ROOT"));
@@ -270,29 +262,30 @@ const run = async () => {
   }
 };
 
-const completedEvidence = async () => {
-  await run();
-  return createProviderCandidateEvidenceEnvelope(Object.freeze({
-    ...candidateEvidence,
-    ...runObservation.evidence("provider-completed"),
-  }));
+// Inert private callable with separately trusted data; no environment loader.
+export const runCanary = async (trustedBuildQualification, canaryProviderAuthorities) => {
+  const qualification = trustedToolchainQualification(trustedBuildQualification);
+  const executionProvenance = await resolveCandidateExecution(qualification);
+  await revalidateCanaryExecutionProvenance(executionProvenance);
+  const state = {};
+  const runObservation = createCandidateRunObservation();
+  try {
+    await run(executionProvenance, canaryProviderAuthorities, runObservation, state);
+    return await createProviderCandidateEvidenceEnvelope(Object.freeze({
+      ...state.candidateEvidence, ...runObservation.evidence("provider-completed"),
+    }));
+  } catch (error) {
+    if (state.candidateEvidence === undefined) {throw error;}
+    return createProviderCandidateEvidenceEnvelope(Object.freeze({
+      ...state.candidateEvidence, ...runObservation.evidence("failed"),
+    }));
+  }
 };
 
-let candidateEvidence;
-const runObservation = createCandidateRunObservation();
-try {
-  process.stdout.write(`${JSON.stringify(await completedEvidence())}\n`);
-} catch (error) {
-  if (candidateEvidence === undefined) {
-    process.stderr.write(`invalid Claude canary invocation (${error?.reason === "route-enforcement-unqualified" ? "route-enforcement-unqualified" : "canary-invocation-rejected"})\n`);
-  } else {
-    try {
-      process.stdout.write(`${JSON.stringify(await createProviderCandidateEvidenceEnvelope(Object.freeze({
-        ...candidateEvidence, ...runObservation.evidence("failed"),
-      })))}\n`);
-    } catch {
-      process.stderr.write(`invalid Claude canary evidence (canary-evidence-rejected)\n`);
-    }
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {process.stdout.write(`${JSON.stringify(await runCanary())}\n`);}
+  catch {
+    process.stderr.write("invalid canary invocation (separate trusted composition required)\n");
+    process.exitCode = 1;
   }
-  process.exitCode = 1;
 }
