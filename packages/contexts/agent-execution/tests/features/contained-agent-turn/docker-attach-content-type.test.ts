@@ -73,7 +73,7 @@ for (const type of mediaTypes) {
       try {
         current.socket.end(bytes);
         await assert.rejects(async () => {
-          for await (const bytes of channel.output) {void bytes;}
+          for await (const chunk of channel.output) {void chunk;}
         }, {code});
       } finally {await channel.close();}
       assert.equal(current.releases, 1);
