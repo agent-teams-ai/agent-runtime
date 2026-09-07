@@ -168,7 +168,12 @@ Included:
   workspace;
 - durable PostgreSQL-backed operation, command, effect, output, and receipt
   records for the hosted path;
-- streaming observations with bounded backpressure and cursor continuity;
+- streaming observations with bounded backpressure and cursor continuity,
+  except the Codex App Server admission path, which accepts each turn as a
+  whole-turn buffered unit rather than incremental per-item streaming with
+  backpressure; Claude Agent SDK admission remains incremental. This is an
+  accepted provider-specific admission design, not an unmet streaming
+  requirement;
 - cancellation request, process-tree stop, complete drain, and honest ambiguous
   state;
 - deterministic result manifest and content-addressed artifact capture;
