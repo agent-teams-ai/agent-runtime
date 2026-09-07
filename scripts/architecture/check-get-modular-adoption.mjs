@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, realpath, stat } from 'node:fs/promises';
+import { resolve, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv';
 
@@ -20,7 +21,7 @@ export function validateProfile(profile) {
     return { status: 'pending', pending: profile.pending };
   }
   assert.equal(profile.pending.length, 0, 'active profile has pending evidence');
-  assert.ok(profile.standard.commit && profile.standard.sha256, 'missing immutable standard pin');
+  assert.ok(profile.standard.commit && profile.standard.sha256 && profile.standard.evidencePath, 'missing immutable standard pin');
   assert.ok(profile.authority.path, 'missing accepted authority');
   assert.ok(profile.productionRoots.length && profile.boundaries.length, 'missing activation census');
   equalSet(profile.packages.map(p => p.name), ['@get-modular/core', '@get-modular/assembly'], 'exact package pair');
@@ -41,7 +42,8 @@ export function verifyAdoption(profile, evidence) {
   assert.ok(standard.bytes.includes(profile.standard.decision), 'central ADR reference missing');
   assert.ok(decisions.some(d => d.id === profile.authority.id && d.path === profile.authority.path), 'accepted ADR missing');
   const get = path => { assert.ok(files.has(path), `stale or missing path: ${path}`); return files.get(path); };
-  assert.ok(get(profile.authority.path).includes('architecture/get-modular/consumer-profile.json'), 'authority reciprocal profile link missing');
+  const authority = get(profile.authority.path);
+  assert.ok(authority.includes('architecture/get-modular/consumer-profile.json'), 'authority reciprocal profile link missing');
   assert.equal(digest(get(profile.fms.profile)), profile.fms.sha256, 'FMS profile changed');
   const fms = JSON.parse(get(profile.fms.profile));
   assert.equal(fms.status, 'active', 'FMS activation changed');
@@ -87,10 +89,81 @@ export function verifyAdoption(profile, evidence) {
     reviewRequired: ['new relationships inside existing boundaries', 'new capabilities inside existing source paths', 'semantic ownership'] };
 }
 
+async function readPackageArtifact(pkg, embedded, lock, bytes) {
+  assert.equal(embedded.dependencies?.[pkg.name], pkg.version, `exact manifest version drift: ${pkg.name}`);
+  const locked = lock.importers?.['packages/apps/embedded-runtime']?.dependencies?.[pkg.name];
+  assert.equal(locked?.specifier, pkg.version, `lock specifier drift: ${pkg.name}`);
+  assert.equal(locked?.version, pkg.version, `lock version drift: ${pkg.name}`);
+  const integrity = lock.packages?.[`${pkg.name}@${pkg.version}`]?.resolution?.integrity;
+  const match = /^(sha256|sha512)-([A-Za-z0-9+/]+=*)$/.exec(integrity ?? '');
+  assert.ok(match, `registry archive integrity missing: ${pkg.name}`);
+  const archive = await bytes(pkg.archivePath);
+  assert.equal(createHash(match[1]).update(archive).digest('base64'), match[2], `lock archive integrity drift: ${pkg.name}`);
+  return { name: pkg.name, version: pkg.version, bytes: archive };
+}
+
+/** Self-contained offline loader. The accepted profile retains adoption-time Git
+ * provenance; routine checks verify retained bytes, not the remote commit object.
+ * Foundation owns ADR immutable digest validation and source policy parsing.
+ */
+export async function checkAdoption(root) {
+  const consumerRoot = await realpath(root);
+  const local = async path => {
+    assert.ok(typeof path === 'string' && !isAbsolute(path) && !path.split('/').includes('..'), 'unsafe evidence path');
+    const full = await realpath(resolve(consumerRoot, path));
+    const rel = relative(consumerRoot, full);
+    assert.ok(rel !== '..' && !rel.startsWith('../') && !isAbsolute(rel), 'evidence escapes consumer checkout');
+    return full;
+  };
+  const bytes = async path => readFile(await local(path));
+  const json = async path => JSON.parse(await bytes(path));
+  const profile = await json('architecture/get-modular/consumer-profile.json');
+  const status = validateProfile(profile);
+  if (status.status === 'pending') { return status; }
+  const { loadCapabilityConfig } = await import('../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/contract/config.js');
+  const { readAcceptedArchitectureDecisionEvidence } = await import('../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/governance-architecture-decisions/module.js');
+  const { loadStrictYamlFile } = await import('../../node_modules/@agent-teams/engineering-foundation/dist/strict-yaml.js');
+  const policy = await loadCapabilityConfig(consumerRoot, 'architecture/foundation/source-dependencies.yaml');
+  const accepted = await readAcceptedArchitectureDecisionEvidence({ consumerRoot,
+    configPath: 'architecture/foundation/governance-architecture-decisions.yaml',
+    baselinePath: 'architecture/decisions/accepted-decisions.json' });
+  const registry = await json('architecture/decisions/accepted-decisions.json');
+  const decisions = registry.decisions.filter(d => accepted.acceptedDecisionIds.includes(d.id) && accepted.acceptedDecisionPaths.includes(d.path));
+  const manifest = await json('package.json');
+  const importer = 'packages/apps/embedded-runtime';
+  const embedded = await json(`${importer}/package.json`);
+  const lock = await loadStrictYamlFile(consumerRoot, 'pnpm-lock.yaml', 'consumer-adoption-lock');
+  const artifacts = await Promise.all(profile.packages.map(pkg => readPackageArtifact(pkg, embedded, lock, bytes)));
+  const paths = new Set([profile.authority.path, profile.fms.profile]);
+  for (const boundary of profile.boundaries) {
+    for (const path of boundary.roots) { await stat(await local(path)); }
+    boundary.entrypoints.forEach(path => paths.add(path));
+    boundary.relationships.forEach(edge => paths.add(edge.from));
+  }
+  profile.productionRoots.forEach(path => paths.add(path));
+  for (const composition of profile.compositions) {
+    [composition.entrypoint, composition.declarations, composition.profile, composition.factories, ...composition.tests].forEach(path => paths.add(path));
+  }
+  for (const exception of profile.exceptions) {
+    exception.paths.forEach(path => paths.add(path)); paths.add(exception.authority);
+  }
+  for (const command of Object.values(profile.enforcement.commands)) {
+    const script = command.match(/^node (?:--test )?(scripts\/[^ ]+\.mjs)$/)?.[1];
+    if (script) { paths.add(script); }
+  }
+  const files = new Map();
+  for (const path of paths) {
+    const full = await local(path);
+    if ((await stat(full)).isFile()) { files.set(path, await readFile(full, 'utf8')); }
+  }
+  return verifyAdoption(profile, { policy, files, scripts: manifest.scripts, decisions, artifacts,
+    standard: { commit: profile.standard.commit, bytes: (await bytes(profile.standard.evidencePath)).toString('utf8') } });
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const profile = JSON.parse(await readFile(new URL('../../architecture/get-modular/consumer-profile.json', import.meta.url)));
-  const result = validateProfile(profile);
+  assert.ok(process.argv.length === 2 || (process.argv.length === 4 && process.argv[2] === '--consumer'), 'usage: check-get-modular-adoption.mjs [--consumer path]');
+  const root = process.argv[3] ?? fileURLToPath(new URL('../../', import.meta.url));
+  const result = await checkAdoption(root);
   console.log(JSON.stringify(result));
-  // Metadata validation is deliberately not an active adoption gate.
-  if (result.status !== 'pending') {throw new Error('Active gate requires finalized local pin/artifact evidence loader; metadata alone is not adoption evidence');}
+  if (result.status !== 'verified-metadata') { process.exitCode = 1; }
 }

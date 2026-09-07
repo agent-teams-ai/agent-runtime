@@ -15,7 +15,8 @@
     "anchor": "consumer-module-standard",
     "decision": "ADR-0026",
     "commit": null,
-    "sha256": null
+    "sha256": null,
+    "evidencePath": null
   },
   "authority": {
     "id": "ADR-0015",

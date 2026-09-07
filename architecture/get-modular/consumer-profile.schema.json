@@ -24,14 +24,15 @@
     "standard": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["repository", "path", "anchor", "decision", "commit", "sha256"],
+      "required": ["repository", "path", "anchor", "decision", "commit", "sha256", "evidencePath"],
       "properties": {
         "repository": {"const": "agent-teams-ai/get-modular"},
         "path": {"const": "docs/architecture/common-assembly.md"},
         "anchor": {"const": "consumer-module-standard"},
         "decision": {"const": "ADR-0026"},
         "commit": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40}$"},
-        "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+        "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "evidencePath": {"type": ["string", "null"], "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"}
       }
     },
     "authority": {
@@ -124,11 +125,12 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "version", "archiveSha256"],
+        "required": ["name", "version", "archiveSha256", "archivePath"],
         "properties": {
           "name": {"enum": ["@get-modular/core", "@get-modular/assembly"]},
           "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
-          "archiveSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          "archiveSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "archivePath": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"}
         }
       },
       "uniqueItems": true
