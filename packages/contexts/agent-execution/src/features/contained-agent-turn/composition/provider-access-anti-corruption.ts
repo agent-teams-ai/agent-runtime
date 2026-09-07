@@ -1,4 +1,4 @@
-import { ownerValue } from "./authority-owner-boundary.js";
+import { ownerOutputValue } from "./authority-owner-boundary.js";
 import { acceptedProviderPreparation, reverseProviderBinding } from "./accepted-authority-anti-corruption.js";
 import type { ContainedTurnProviderAccessPort } from "../application/ports/outbound/contained-turn-ports.js";
 import {
@@ -305,9 +305,9 @@ const providerAccessPort = (owner: CapturedOwner, publish?: (input: Parameters<C
       purpose: CONTAINED_TURN_OWNER_DISPATCH_PURPOSE, requestDigest: subject.providerAccessRequest.requestDigest, scope,
     });
     try {
-      let outcome = await ownerValue(publish === undefined ? owner.consumeForDispatch(request) : publish(input, request));
+      let outcome = await ownerOutputValue(publish === undefined ? owner.consumeForDispatch(request) : publish(input, request));
       if (outcome.kind === "indeterminate") {
-        outcome = await ownerValue(owner.observeDispatchConsumption({
+        outcome = await ownerOutputValue(owner.observeDispatchConsumption({
           grantRequestId: request.grantRequestId, provider: request.provider,
           requestDigest: request.requestDigest, scope,
         }));
@@ -348,7 +348,7 @@ const providerAccessPort = (owner: CapturedOwner, publish?: (input: Parameters<C
         expectedBinding: receipt.authorityFacts, operationId: receipt.operationId, provider: receipt.provider,
         scope: receipt.scope, settlementRequestId: input.settlementRequestId,
       });
-      const outcome = await ownerValue(owner.settleDispatchConsumption(request));
+      const outcome = await ownerOutputValue(owner.settleDispatchConsumption(request));
       return settlementMatches(outcome, request) ? { kind: "settled" } :
         { evidenceId: grantEvidenceId("settle", { input, outcome }), kind: "indeterminate" };
     } catch {return { evidenceId: boundaryFailureEvidenceId("settle", input), kind: "indeterminate" };}
@@ -356,7 +356,7 @@ const providerAccessPort = (owner: CapturedOwner, publish?: (input: Parameters<C
   async resolveForAcceptance(input: Readonly<{ intent: ContainedTurnIntent; provider: ContainedTurnProvider; scope: ContainedTurnScope }>) {
     const request = Object.freeze({ provider: input.provider, scope: input.scope });
     try {
-      const outcome = await ownerValue(owner.resolve(request));
+      const outcome = await ownerOutputValue(owner.resolve(request));
       if (outcome.evidence.purpose !== "acceptance") {return { evidenceId: evidenceId(outcome.evidence, "acceptance"), kind: "indeterminate", reason: "authority_unknown" };}
       if (outcome.kind === "resolved") {exactFrozenDataRecord(outcome, ["kind", "binding", "evidence"]); const binding = snapshot(outcome.binding, outcome.evidence); if (binding.provider !== input.provider || binding.tenantId !== input.scope.tenantId || binding.projectId !== input.scope.projectId) {throw new TypeError("PA current selector mismatch");} return { acceptanceProofId: proofId(outcome.evidence, "acceptance"), acceptanceResolutionDigest: resolutionDigest(binding, outcome.evidence, "acceptance"), kind: "resolved", snapshot: binding };}
       if (outcome.reason === "revoked" || outcome.reason === "not_found") {return { kind: "prevented", preventionProofId: proofId(outcome.evidence, "acceptance"), reason: "access_denied" };}
@@ -369,7 +369,7 @@ const providerAccessPort = (owner: CapturedOwner, publish?: (input: Parameters<C
     const outerBinding: OuterBinding = reverseProviderBinding(input.acceptedSnapshot);
     const request = Object.freeze({ binding: outerBinding, provider: input.acceptedSnapshot.provider, scope: input.scope });
     try {
-      const outcome = await ownerValue(owner.revalidate(request));
+      const outcome = await ownerOutputValue(owner.revalidate(request));
       if (outcome.evidence.purpose !== "dispatch") {return { evidenceId: evidenceId(outcome.evidence, "dispatch"), kind: "indeterminate", reason: "authority_unknown" };}
       if (outcome.kind === "valid") {exactFrozenDataRecord(outcome, ["kind", "binding", "evidence"]); const binding = snapshot(outcome.binding, outcome.evidence); if (containedTurnProviderAccessSnapshotDigest(binding) !== containedTurnProviderAccessSnapshotDigest(input.acceptedSnapshot)) {throw new TypeError("PA current binding changed");} return { dispatchProofId: proofId(outcome.evidence, "dispatch"), dispatchResolutionDigest: resolutionDigest(binding, outcome.evidence, "dispatch"), kind: "current", snapshot: binding };}
       if (outcome.reason === "revoked" || outcome.reason.endsWith("_changed") || outcome.reason === "credential_rotated" || outcome.reason === "revision_changed") {return { kind: "prevented", preventionProofId: proofId(outcome.evidence, "dispatch"), reason: "access_revoked" };}

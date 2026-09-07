@@ -24,6 +24,7 @@ const trustedArrayFrom = Array.from;
 const trustedArrayIsArray = Array.isArray;
 const trustedArrayPrototype = Array.prototype;
 const trustedFreeze = Object.freeze;
+const trustedIsFrozen = Object.isFrozen;
 const trustedFromEntries = Object.fromEntries;
 const trustedGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
 const trustedGetOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
@@ -40,7 +41,7 @@ const PORT_VALUE_MAXIMUM_PROPERTIES = 16_384;
 
 type PortScalar = boolean | number | string | null;
 type PortValue = PortScalar | readonly PortValue[] | { readonly [key: string]: PortValue };
-type PortCloneState = { readonly seen: WeakSet<object>; nodes: number; properties: number };
+type PortCloneState = { readonly preserveFrozen: boolean; readonly seen: WeakSet<object>; nodes: number; properties: number };
 
 const readBoundedContainedTurnDescriptors = (
   candidate: object,
@@ -127,14 +128,21 @@ const cloneContainedTurnPortEntry = (
   }
   state.seen.add(candidate);
   const descriptors = readBoundedContainedTurnDescriptors(candidate, state);
-  return trustedArrayIsArray(candidate)
+  const output = trustedArrayIsArray(candidate)
     ? cloneContainedTurnPortArray(candidate, descriptors, depth, state)
     : cloneContainedTurnPortRecord(candidate, descriptors, depth, state);
+  return state.preserveFrozen && trustedIsFrozen(candidate) ? trustedFreeze(output) : output;
 };
 
 /** Rejects Proxy exotica before reflection and reads every caller property once. */
 export const cloneContainedTurnPortValue = <Value>(value: Value): Value => {
-  const state: PortCloneState = { seen: new TrustedWeakSet<object>(), nodes: 0, properties: 0 };
+  const state: PortCloneState = { preserveFrozen: false, seen: new TrustedWeakSet<object>(), nodes: 0, properties: 0 };
+  return cloneContainedTurnPortEntry(value, 0, state) as Value;
+};
+
+/** Detach owner data without upgrading mutable records to frozen authority. */
+export const cloneContainedTurnOwnerOutput = <Value>(value: Value): Value => {
+  const state: PortCloneState = { preserveFrozen: true, seen: new TrustedWeakSet<object>(), nodes: 0, properties: 0 };
   return cloneContainedTurnPortEntry(value, 0, state) as Value;
 };
 
