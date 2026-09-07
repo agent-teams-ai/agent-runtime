@@ -1,3 +1,4 @@
+export { containedTurnAcceptanceIntentDigestV1 } from "./contained-turn-acceptance-digests.js";
 import type {
   ContainedTurnIntent,
   ContainedTurnProvider,

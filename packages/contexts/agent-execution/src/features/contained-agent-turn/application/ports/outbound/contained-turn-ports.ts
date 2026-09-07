@@ -1,3 +1,4 @@
+export type { ContainedTurnAcceptedAuthorityHandoff } from "../../contained-turn-accepted-authority.js";
 import type { ContainedTurnScope } from "../../../domain/contained-turn-authority.js";
 import type {
   ContainedTurnEvidenceId,

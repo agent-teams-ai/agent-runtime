@@ -133,7 +133,7 @@ const cloneContainedTurnPortEntry = (
 };
 
 /** Rejects Proxy exotica before reflection and reads every caller property once. */
-const cloneContainedTurnPortValue = <Value>(value: Value): Value => {
+export const cloneContainedTurnPortValue = <Value>(value: Value): Value => {
   const state: PortCloneState = { seen: new TrustedWeakSet<object>(), nodes: 0, properties: 0 };
   return cloneContainedTurnPortEntry(value, 0, state) as Value;
 };

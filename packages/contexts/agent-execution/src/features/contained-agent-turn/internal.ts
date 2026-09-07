@@ -113,3 +113,5 @@ export {
 } from "./composition/contained-turn-route-enforcement-capability.js";
 
 export {createDockerCodexHostKernelOwner, type CreateDockerCodexHostKernelOwnerOptions} from "./composition/docker-codex-host-kernel-owner.js";
+export { createContainedTurnOperationProviderAccessPort, type OuterContainedTurnProviderAccessOperation } from "./composition/provider-access-anti-corruption.js";
+export { createContainedTurnSecurityAcceptancePort, type OuterContainedTurnSecurityAcceptance, type ContainedTurnSecurityAcceptanceProfile } from "./composition/runtime-security-acceptance-anti-corruption.js";
