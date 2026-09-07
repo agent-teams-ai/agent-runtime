@@ -25,12 +25,6 @@ export const prepareContainedTurnAcceptedSubject = (
   trustedScope: ContainedTurnScope,
   subject: Pick<ContainedTurnDispatchGrantSubject, "attemptId" | "custodyId" | "executionGenerationId" | "hostBootId" | "hostInstanceId" | "preparationToken">,
 ): ContainedTurnDispatchGrantSubject => {
-  validateContainedTurnIdentity("attempt", subject.attemptId);
-  validateContainedTurnIdentity("custody", subject.custodyId);
-  validateContainedTurnIdentity("execution_generation", subject.executionGenerationId);
-  validateContainedTurnIdentity("host_boot", subject.hostBootId);
-  validateContainedTurnIdentity("host_instance", subject.hostInstanceId);
-  validateContainedTurnIdentity("preparation", subject.preparationToken);
   const providerAccess = operation.providerAccessSnapshot;
   const providerBindingDigest = containedTurnProviderAccessSnapshotDigest(providerAccess);
   return completeContainedTurnDispatchGrantSubject(Object.freeze({
@@ -65,6 +59,14 @@ export const createContainedTurnAcceptedAuthorityHandoff = (
   trustedScope: ContainedTurnScope,
   subject: ContainedTurnDispatchGrantSubject,
 ): ContainedTurnAcceptedAuthorityHandoff => {
+  // Validate inside the caught handoff path so malformed custody still retires
+  // through the existing preparation authority before any owner consumes.
+  validateContainedTurnIdentity("attempt", subject.attemptId);
+  validateContainedTurnIdentity("custody", subject.custodyId);
+  validateContainedTurnIdentity("execution_generation", subject.executionGenerationId);
+  validateContainedTurnIdentity("host_boot", subject.hostBootId);
+  validateContainedTurnIdentity("host_instance", subject.hostInstanceId);
+  validateContainedTurnIdentity("preparation", subject.preparationToken);
   validateContainedTurnOperation(operation);
   containedTurnOwnerStoreAuthority(operation, trustedScope);
   const acceptanceProof = operation.proofs.find(proof => proof.kind === "acceptance");

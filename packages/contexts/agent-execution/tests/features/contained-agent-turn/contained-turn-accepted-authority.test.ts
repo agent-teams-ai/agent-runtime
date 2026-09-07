@@ -161,3 +161,61 @@ test("proof, vector, scope, provider and both request substitutions fail before 
   }
   assert.equal(consumes, 0);
 });
+
+for (const field of ["hostBootId", "hostInstanceId"] as const) {
+  test(`malformed custody ${field} retires the submission reservation without consuming or retrying`, async () => {
+    const fixture = createDependencies();
+    const { dependencies } = fixture;
+    let consumes = 0;
+    let retirements = 0;
+    let preparations = 0;
+    let cleanup: Awaited<ReturnType<typeof dependencies.operationStore.recordDispatchPreparationCleanup>> | undefined;
+    const configured = {
+      ...dependencies,
+      operationStore: {
+        ...dependencies.operationStore,
+        prepareDispatch: async (...args: Parameters<typeof dependencies.operationStore.prepareDispatch>) => {
+          preparations++;
+          return dependencies.operationStore.prepareDispatch(...args);
+        },
+        retireDispatchPreparation: async (...args: Parameters<typeof dependencies.operationStore.retireDispatchPreparation>) => {
+          retirements++;
+          const result = await dependencies.operationStore.retireDispatchPreparation(...args);
+          assert.equal(result.kind, "retired");
+          return result;
+        },
+        recordDispatchPreparationCleanup: async (...args: Parameters<typeof dependencies.operationStore.recordDispatchPreparationCleanup>) => {
+          cleanup = await dependencies.operationStore.recordDispatchPreparationCleanup(...args);
+          return cleanup;
+        },
+      },
+      custody: {
+        ...dependencies.custody,
+        open: async (...args: Parameters<typeof dependencies.custody.open>) => ({
+          ...await dependencies.custody.open(...args), [field]: "invalid-boot",
+        }),
+      },
+      providerAccess: { ...dependencies.providerAccess, consumeForDispatch: async () => { consumes++; throw new Error("must not consume"); } },
+      security: { ...dependencies.security, consumeForDispatch: async () => { consumes++; throw new Error("must not consume"); } },
+    };
+    assert.equal((await submitContainedTurn(configured, input)).status, "observed");
+    assert.equal(cleanup?.kind, "cleanup_pending");
+    assert.ok(cleanup?.kind === "cleanup_pending");
+    assert.equal(cleanup.custodyReleased, true);
+    // Preserve unresolved owner obligations; a local validation failure is not
+    // an owner settlement or a durable no-consumption proof.
+    assert.equal(cleanup.providerAccessNotConsumed, false);
+    assert.equal(cleanup.runtimeSecurityNotConsumed, false);
+    assert.equal(fixture.current()?.dispatch.kind, "unclaimed");
+    assert.equal(fixture.current()?.reconciliation.kind, "required");
+    assert.equal(consumes, 0);
+    assert.equal(retirements, 1);
+    assert.equal(preparations, 1);
+    assert.equal(fixture.openedCustodies.length, 1);
+    assert.equal(fixture.custodyReleases.length, 1);
+    assert.equal(fixture.custodyReleases[0]?.custodyId, cleanup?.custodyId);
+    assert.equal(fixture.custodyReleases[0]?.attemptId, cleanup?.attemptId);
+    assert.equal(fixture.providerCalls.value, 0);
+    assert.equal(fixture.custodyStartInputs.length, 0);
+  });
+}
