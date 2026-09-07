@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { lstat, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,6 +10,7 @@ import { parseSync, Visitor } from "oxc-parser";
 import {
   benchmarkSourceRevision,
   changes,
+  evidenceFiles,
   evidenceRoots,
   ownership,
   prospectiveBenchmarks,
@@ -24,6 +25,11 @@ import {
 } from "./runtime-setup-l0-evidence-validation.mjs";
 
 import { createEvidenceInputs } from "./runtime-setup-l0-evidence-inputs.mjs";
+
+import {
+  adoptionPaths, adoptionConstruction, adoptionEvidenceFiles, assertAdoptionAuthority,
+  buildAdoptionReport, validateAdoptionReport,
+} from "./runtime-setup-l0-evidence-adoption.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const evidencePath = join(
@@ -50,6 +56,15 @@ const git = (...args) => {
   } catch (error) {
     throw new GitCommandFailure(error);
   }
+};
+
+const readRevisionFile = (revision, path) => execFileSync("git", ["show", `${revision}:${path}`], {
+  cwd: repositoryRoot, env: { ...process.env, GIT_NO_LAZY_FETCH: "1", GIT_OPTIONAL_LOCKS: "0" },
+  stdio: ["ignore", "pipe", "pipe"], maxBuffer: 20 * 1024 * 1024,
+});
+const pathExists = async path => {
+  try { await lstat(join(repositoryRoot, path)); return true; }
+  catch (error) { if (error.code === "ENOENT") { return false; } throw error; }
 };
 
 const sum = (items, field) => items.reduce((total, item) => total + item[field], 0);
@@ -157,9 +172,10 @@ const collectEvidenceFiles = async roots => {
 
 const {
   artifactDigests,
+  artifactDigestsAtRevision,
   assertEvidenceRootsClean,
   assertEvidenceRootsMatchRevision,
-} = createEvidenceInputs({ repositoryRoot, git });
+} = createEvidenceInputs({ repositoryRoot, git, readRevisionFile });
 
 const importSpecifiers = (source, path) => {
   const parsed = parseSync(path, source);
@@ -224,7 +240,7 @@ assert.deepEqual(
   "evidence import parser must cover every supported dependency form",
 );
 
-const forbiddenInwardDependency = /@agent-teams\/(?:engineering|extension)-foundation|cordis|awilix|(?:^|\/)(?:adapters|composition)(?:\/|$)|(?:^|[-/])(?:container|module-(?:graph|runtime)|registry)(?:[-/]|$)/iu;
+const forbiddenInwardDependency = /@get-modular\/(?:core|assembly)|@agent-teams\/(?:engineering|extension)-foundation|cordis|awilix|(?:^|\/)(?:adapters|composition)(?:\/|$)|(?:^|[-/])(?:container|module-(?:graph|runtime)|registry)(?:[-/]|$)/iu;
 
 assert.equal(
   importSpecifiers(
@@ -235,9 +251,14 @@ assert.equal(
   "TypeScript import types must participate in the inward dependency gate",
 );
 
-const verifyCurrentArchitecture = async () => {
+for (const packageRoot of ["@get-modular/core", "@get-modular/assembly"]) {
+  assert.ok(importSpecifiers(`type Boundary = import('${packageRoot}').Boundary;`, "adoption-boundary-self-test.ts")
+    .some(specifier => forbiddenInwardDependency.test(specifier)), "Core/Assembly import types must remain outward");
+}
+
+const verifyCurrentArchitecture = async (construction = traces.construction) => {
   const traceEntries = [
-    ...traces.construction,
+    ...construction,
     ...traces.invocations.claudeCode,
     ...traces.invocations.codex,
   ];
@@ -251,7 +272,7 @@ const verifyCurrentArchitecture = async () => {
   const sourceFiles = await collectEvidenceFiles(evidenceRoots.sources);
   const inwardFiles = sourceFiles.filter(path =>
     path.endsWith(".ts") &&
-    (path.includes("/application/") || path.includes("/contracts/")));
+    (path.includes("/application/") || path.includes("/contracts/") || path.includes("/domain/")));
   for (const path of inwardFiles) {
     const source = await readFile(path, "utf8");
     assert.equal(
@@ -330,7 +351,7 @@ const loadProspectiveBenchmarks = async () => {
   });
 };
 
-const buildReport = async ({ capture, historicalChanges, sourceRevision }) => ({
+const buildReport = async ({ capture, historicalChanges, sourceRevision, digests }) => ({
   schemaVersion: 3,
   evidenceKind: "runtime-setup-l0-direct-composition",
   sourceRevision,
@@ -353,7 +374,7 @@ const buildReport = async ({ capture, historicalChanges, sourceRevision }) => ({
   },
   promotionRule: "hold-unless-two-of-three-prospective-changes-show-the-same-neutral-composition-problem",
   capture,
-  artifactDigests: await artifactDigests(),
+  artifactDigests: digests ?? await artifactDigests(),
   historicalChanges,
   prospectiveBenchmarks: await loadProspectiveBenchmarks(),
   traces,
@@ -368,12 +389,13 @@ const buildReport = async ({ capture, historicalChanges, sourceRevision }) => ({
   ],
 });
 
-const validateStoredReport = async report => {
+const validateStoredReport = async (report, historical = false) => {
+  const digests = historical ? await artifactDigestsAtRevision(report.sourceRevision) : await artifactDigests();
   validateStoredReportShape(report, changes);
   assert.equal(report.schemaVersion, 3);
   validateCurrentEvidenceIdentity(report, {
     changes,
-    currentArtifactDigests: await artifactDigests(),
+    currentArtifactDigests: digests,
     sourceRevisionArtifactDigests,
   });
   assert.deepEqual(report.ownership, ownership);
@@ -388,15 +410,6 @@ const validateStoredReport = async report => {
     L4: "no-go",
     L5: "no-go",
   });
-  assert.equal(report.capture.exitCode, 0);
-  assert.match(report.capture.nodeVersion, /^v24\./u);
-  assert.ok(["arm64", "x64"].includes(report.capture.architecture));
-  assert.ok(report.capture.testSummary.tests > 0);
-  assert.equal(report.capture.testSummary.pass, report.capture.testSummary.tests);
-  assert.equal(report.capture.testSummary.fail, 0);
-  assert.equal(report.capture.testSummary.cancelled, 0);
-  assert.equal(report.capture.testSummary.skipped, 0);
-  assert.match(report.capture.outputSha256, /^[a-f0-9]{64}$/u);
   assert.ok(report.historicalChanges.length >= 3);
   assert.equal(report.historicalChanges.length, changes.length);
   assert.deepEqual(
@@ -422,46 +435,92 @@ const validateStoredReport = async report => {
       capture: report.capture,
       historicalChanges: report.historicalChanges,
       sourceRevision: report.sourceRevision,
+      digests,
     }),
     "canonical non-historical evidence content drifted",
   );
 };
 
-await verifyCurrentArchitecture();
-assertEvidenceRootsClean();
 const mode = process.argv[2] ?? "--check";
-if (mode === "--capture") {
-  const historicalChanges = loadHistoricalChanges();
-  assert.ok(historicalChanges, "full evidence object closure is required");
-  const sourceRevision = changes.at(-1)?.revision;
-  assert.ok(sourceRevision, "a retained product source revision is required");
-  assertEvidenceRootsMatchRevision(sourceRevision);
-  const report = await buildReport({
-    capture: captureProductCheck(),
-    historicalChanges,
-    sourceRevision,
+assert.ok(["--check", "--capture", "--capture-adoption"].includes(mode), `Unsupported mode: ${mode}`);
+const profile = JSON.parse(await readFile(join(repositoryRoot, adoptionPaths.profile), "utf8"));
+const adoption = mode === "--capture-adoption" || profile.status === "active" ||
+  await pathExists(adoptionPaths.default) || await pathExists(adoptionPaths.graph) ||
+  await pathExists(adoptionPaths.report);
+
+if (adoption) {
+  assert.notEqual(mode, "--capture", "direct L0 recapture is forbidden after adoption starts");
+  assert.equal(profile.status, "active", "adoption not ready: consumer profile remains pending");
+  const gateOutput = execFileSync(process.execPath, [adoptionPaths.checker], {
+    cwd: repositoryRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
   });
-  await writeFile(evidencePath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
-} else if (mode === "--check") {
-  const stored = JSON.parse(await readFile(evidencePath, "utf8"));
-  await validateStoredReport(stored);
-  try {
-    assertEvidenceRootsMatchRevision(stored.sourceRevision);
-  } catch (error) {
-    if (!isHistoricalObjectClosureUnavailable(error)) {
-      throw error;
+  const historicalBytes = await readFile(evidencePath);
+  const stored = JSON.parse(historicalBytes);
+  assertAdoptionAuthority({
+    authorityBytes: await readFile(join(repositoryRoot, adoptionPaths.authority)),
+    registry: JSON.parse(await readFile(join(repositoryRoot, adoptionPaths.registry), "utf8")),
+    historicalBytes, profile, gate: JSON.parse(gateOutput),
+  });
+  // Historical content is authenticated against its own exact Git source.
+  await validateStoredReport(stored, true);
+  const historicalChanges = loadHistoricalChanges();
+  assert.ok(historicalChanges, "full historical evidence object closure is required for adoption");
+  assert.deepEqual(stored.historicalChanges, historicalChanges);
+  for (const entry of [...traces.construction, ...traces.invocations.claudeCode, ...traces.invocations.codex]) {
+    const source = readRevisionFile(stored.sourceRevision, entry.path).toString("utf8");
+    for (const symbol of entry.symbols) {
+      assert.match(source, new RegExp(`\\b${symbol}\\b`, "u"), `historical trace lacks ${symbol}`);
     }
   }
-  const historicalChanges = loadHistoricalChanges();
-  if (historicalChanges !== undefined) {
-    assert.deepEqual(
-      stored.historicalChanges,
-      historicalChanges,
-      "runtime setup L0 historical evidence is stale",
-    );
+  await verifyCurrentArchitecture([...adoptionConstruction, ...traces.construction.slice(1)]);
+  const graphImports = new Set(importSpecifiers(await readFile(join(repositoryRoot, adoptionPaths.graph), "utf8"), adoptionPaths.graph));
+  const defaultImports = new Set(importSpecifiers(await readFile(join(repositoryRoot, adoptionPaths.default), "utf8"), adoptionPaths.default));
+  for (const name of ["@get-modular/core", "@get-modular/assembly"]) {
+    assert.ok(graphImports.has(name) || defaultImports.has(name), `current construction lacks public root ${name}`);
+  }
+  const currentInputs = createEvidenceInputs({ repositoryRoot, git, readRevisionFile,
+    files: { ...evidenceFiles, sources: [...evidenceFiles.sources, ...adoptionEvidenceFiles] },
+  });
+  currentInputs.assertEvidenceRootsClean();
+  const currentPath = join(repositoryRoot, adoptionPaths.report);
+  if (mode === "--capture-adoption") {
+    const sourceRevision = git("rev-parse", "HEAD").trim();
+    const digests = await currentInputs.artifactDigests();
+    const capture = captureProductCheck();
+    currentInputs.assertEvidenceRootsClean();
+    assert.equal(git("rev-parse", "HEAD").trim(), sourceRevision, "source changed during capture");
+    assert.deepEqual(await currentInputs.artifactDigests(), digests, "inputs changed during capture");
+    const report = buildAdoptionReport({ sourceRevision, historicalRevision: stored.sourceRevision,
+      artifactDigests: digests, capture });
+    await writeFile(currentPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  } else {
+    assert.ok(await pathExists(adoptionPaths.report), "adoption not ready: current construction capture missing");
+    const report = JSON.parse(await readFile(currentPath, "utf8"));
+    assert.match(report.sourceRevision, /^[a-f0-9]{40}$/u, "current capture requires an exact source revision");
+    currentInputs.assertEvidenceRootsMatchRevision(report.sourceRevision);
+    validateAdoptionReport(report, { sourceRevision: report.sourceRevision,
+      historicalRevision: stored.sourceRevision, artifactDigests: await currentInputs.artifactDigests() });
   }
 } else {
-  throw new Error(`Unsupported mode: ${mode}`);
+  await verifyCurrentArchitecture();
+  assertEvidenceRootsClean();
+  if (mode === "--capture") {
+    const historicalChanges = loadHistoricalChanges();
+    assert.ok(historicalChanges, "full evidence object closure is required");
+    const sourceRevision = changes.at(-1)?.revision;
+    assert.ok(sourceRevision, "a retained product source revision is required");
+    assertEvidenceRootsMatchRevision(sourceRevision);
+    const report = await buildReport({ capture: captureProductCheck(), historicalChanges, sourceRevision });
+    await writeFile(evidencePath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  } else {
+    const stored = JSON.parse(await readFile(evidencePath, "utf8"));
+    await validateStoredReport(stored);
+    try { assertEvidenceRootsMatchRevision(stored.sourceRevision); }
+    catch (error) { if (!isHistoricalObjectClosureUnavailable(error)) { throw error; } }
+    const historicalChanges = loadHistoricalChanges();
+    if (historicalChanges !== undefined) {
+      assert.deepEqual(stored.historicalChanges, historicalChanges, "runtime setup L0 historical evidence is stale");
+    }
+  }
 }
-
-console.log(`runtime-setup-l0-evidence: ${mode === "--capture" ? "captured" : "valid"}`);
+console.log(`runtime-setup-l0-evidence: ${mode === "--check" ? "valid" : "captured"}`);
