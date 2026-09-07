@@ -10,13 +10,21 @@ const preparationFor = (owner: InstanceType<typeof DockerCustodyHttpReservation>
 
 test("inert facade binds an actual issued lifecycle launch without opening a resource or acquiring provider IO", async t => {
   const f = await fixture(t); const calls = [...f.calls];
+  // From allocation onwards the retained network owns exactly one cutoff
+  // subscription on the post-claim signal. The facade must still add none.
+  const claimedAbortListeners = getEventListeners(f.signal.signal, "abort").length;
+  assert.equal(claimedAbortListeners, 1);
   const owner = f.createOwner(); const preparation = preparationFor(owner);
   assert.equal(preparationFor(owner), preparation); assert.ok(Object.isFrozen(preparation));
   assert.ok(Object.isFrozen(preparation.binding)); assert.ok(Object.isFrozen(preparation.binding.attempt));
-  assert.equal(getEventListeners(f.signal.signal, "abort").length, 0);
+  assert.equal(getEventListeners(f.signal.signal, "abort").length, claimedAbortListeners);
   assert.equal(getEventListeners(owner.signal, "abort").length, 0);
   assert.equal(owner.pending, undefined); assert.equal(owner.signal.aborted, false);
-  assert.deepEqual(f.calls, calls); assert.deepEqual(f.network.state.calls, []);
+  assert.deepEqual(f.calls, calls); assert.deepEqual(f.network.state.calls, f.networkCalls);
+  // The operation network exists before init_ready: its name had to reach
+  // NetworkMode at create time, so allocation cannot wait for a running container.
+  assert.equal(f.v4State().network.phase, 2);
+  assert.equal(f.allocated.networkName, f.networkOwner.networkName);
   assert.deepEqual(f.lifecycle.observeLaunch(f.launched).journal.state, "init_ready");
   // Successful claim proves construction left the original provider capability unused.
   assert.equal(claimDockerProviderProcessLaunch(f.launched).authority, f.launched.authority);
@@ -106,7 +114,7 @@ for (const mode of ["preabort", "cutoff", "containment"] as const) {
     assert.throws(() => preparation.acquire(f.handoff));
     assert.throws(() => preparation.acquire(f.handoff));
     assert.equal(owner.signal.aborted, true); assert.equal(owner.pending, undefined);
-    assert.deepEqual(f.network.state.calls, []); await containing;
+    assert.deepEqual(f.network.state.calls, f.networkCalls); await containing;
   });
 }
 

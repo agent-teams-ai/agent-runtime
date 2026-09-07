@@ -18,7 +18,10 @@ type WireCall = Parameters<Client["buffered"]>[0];
 
 /** Synthetic external Engine IO only. No Unix socket, native namespace, provider,
  * filesystem preparation or host network is used by this fixture. */
-export const networkFixture = (subjectOverride: Partial<typeof template> = {}) => {
+export const networkFixture = (subjectOverride: Partial<typeof template> = {}, gateway = "172.30.0.1") => {
+  // The bridge address is whatever the daemon assigned; nothing may assume it.
+  const [octetA, octetB] = gateway.split(".");
+  const subnet = `${octetA}.${octetB}.0.0/16`; const containerAddress = `${octetA}.${octetB}.0.2`;
   const policy = basePolicy("/tmp/ar69-r276-synthetic-network");
   const info = {ID: "synthetic-network-daemon", ServerVersion: "29.6.1", Driver: "overlay2", CgroupDriver: "systemd", CgroupVersion: "2"};
   const endpoint = {canonicalSocketPath: policy.socketPath, daemonBootGenerationSha256: DAEMON_BOOT, hostBootGenerationSha256: HOST_BOOT};
@@ -49,7 +52,7 @@ export const networkFixture = (subjectOverride: Partial<typeof template> = {}) =
     State: {Dead: false, Error: "", ExitCode: 0, FinishedAt: "0001-01-01T00:00:00Z", OOMKilled: false,
       Paused: false, Pid: 42, Restarting: false, Running: true, StartedAt: "2026-01-01T00:00:00Z", Status: "running"},
     NetworkSettings: {Networks: {[recipe.name]: {NetworkID: networkId, EndpointID: endpointId,
-      IPAddress: "172.30.0.2", IPPrefixLen: 16, GlobalIPv6Address: ""}}}};
+      IPAddress: containerAddress, IPPrefixLen: 16, GlobalIPv6Address: ""}}}};
   const state = {
     network: undefined as any, containerPresent: false, containerRaw,
     createFault: "" as "" | "lost" | "lost-before" | "malformed" | "conflict",
@@ -66,7 +69,7 @@ export const networkFixture = (subjectOverride: Partial<typeof template> = {}) =
       if (state.createFault === "lost-before") {throw new Error("synthetic lost create before effect");}
       const requested = JSON.parse(Buffer.from(input.body!).toString());
       state.network = {...requested, Id: networkId, Scope: "local", Containers: {},
-        IPAM: {Driver: "default", Options: null, Config: [{Subnet: "172.30.0.0/16", Gateway: "172.30.0.1"}]}};
+        IPAM: {Driver: "default", Options: null, Config: [{Subnet: subnet, Gateway: gateway}]}};
       if (state.createFault === "lost") {throw new Error("synthetic lost create after effect");}
       return response(201, state.createFault === "malformed" ? {Id: "malformed"} : {Id: networkId, Warning: ""});
     }
@@ -108,9 +111,9 @@ export const networkFixture = (subjectOverride: Partial<typeof template> = {}) =
   const attach = () => {
     state.containerPresent = true;
     state.network.Containers = {[container.containerId]: {Name: "descriptive-only", EndpointID: endpointId,
-      IPv4Address: "172.30.0.2/16", IPv6Address: "", MacAddress: "02:42:ac:1e:00:02"}};
+      IPv4Address: `${containerAddress}/16`, IPv6Address: "", MacAddress: "02:42:ac:1e:00:02"}};
   };
   const resourceInput = {subject, engine: {policy: operationPolicy, client}, cleanupMilliseconds: 5_000};
-  return {state, input, subject, current, endpoint, container, networkId, attach, resourceInput,
+  return {state, input, subject, current, endpoint, container, networkId, attach, resourceInput, gateway,
     open: () => new DockerOperationNetwork(input), resources: () => new DockerHttpNetworkResources(resourceInput)};
 };

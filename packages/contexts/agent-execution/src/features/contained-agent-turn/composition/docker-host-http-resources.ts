@@ -1,33 +1,48 @@
 import {DockerCustodyHttpReservation} from "./docker-custody-http-reservation.js";
-import { captureDockerHttpResourceRecord as data, subscribeDockerHttpAbort as addAbortListener, DockerHttpNetworkResources, type DockerHttpNetworkResourceInput } from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
+import { captureDockerHttpResourceRecord as data, subscribeDockerHttpAbort as addAbortListener } from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import { createV4HostHttpListenerLifecycle } from "./v4-host-http-listener-lifecycle.js";
+import type { DockerOperationNetworkAllocation, DockerOperationNetworkOwner } from "./docker-operation-network-owner.js";
 
 type Preparation = NonNullable<ReturnType<typeof DockerCustodyHttpReservation.httpPreparation>>;
 type Handoff = Parameters<Preparation["acquire"]>[0];
 type Resources = Parameters<Preparation["prepareResources"]>[1];
-type Journal = Parameters<DockerHttpNetworkResources["prepare"]>[0];
+type Journal = Parameters<typeof createV4HostHttpListenerLifecycle>[0]["v4"];
+/** The listener recipe is built from the observed gateway, never from a guess. */
+export type DockerHostHttpListenerResources = Omit<Resources, "listener" | "listenerLifecycle"> &
+  Readonly<{listenerFor: (host: string) => Resources["listener"]}>;
 const {httpPreparation} = DockerCustodyHttpReservation;
 
 
-/** Private post-claim assembly. Native listener/accepted-connection/TLS/local-cut
- * implementations stay under Host custody; Engine operations stay under Docker.
- * The V4 reader can join this opaque network reader with the retained Host
- * projector. This factory supplies no synthetic listener/route/socket evidence,
- * resolver, receipt supplier, launch finalizer or provider execution permission. */
+/** Private post-claim assembly of the listener and its session slots. Native
+ * listener/accepted-connection/TLS/local-cut implementations stay under Host
+ * custody; Engine operations stay under Docker. The operation network is NOT
+ * allocated here: it is already owned and observed by the network owner, whose
+ * name had to reach `NetworkMode` before the container existed. This factory
+ * supplies no synthetic listener/route/socket evidence, resolver, receipt
+ * supplier, launch finalizer or provider execution permission. */
 export const createDockerHostHttpResources = (input: Readonly<{
-  host: unknown; network: DockerHttpNetworkResourceInput; hostLifecycleGenerationSha256: string;
+  host: unknown; network: DockerOperationNetworkOwner; allocated: DockerOperationNetworkAllocation;
+  hostLifecycleGenerationSha256: string;
 }>) => {
   input = data(input);
   const host = httpPreparation(input.host);
   if (host === undefined) {throw new TypeError("Host HTTP resource preparation unavailable");}
   const expectedGeneration = input.hostLifecycleGenerationSha256;
   if (expectedGeneration !== host.binding.hostLifecycleGenerationSha256) {throw new TypeError("Host generation changed");}
-  const network = new DockerHttpNetworkResources(input.network);
+  const network = input.network;
   const subject = network.subject;
   if (subject.imageDigest !== host.binding.imageDigest ||
     (Object.keys(host.binding.attempt) as Array<keyof typeof subject.attempt>)
       .some(key => subject.attempt[key] !== host.binding.attempt[key])) {
     throw new TypeError("Docker HTTP network launch binding conflicts");
+  }
+  // The gateway is the network owner's observation, not a caller assertion. A
+  // structural copy of the allocation cannot redirect the listener address.
+  const allocated = data(input.allocated);
+  const retained = network.allocation;
+  if (retained === undefined || allocated.networkName !== retained.networkName ||
+    allocated.gateway !== retained.gateway || retained.networkName !== network.networkName) {
+    throw new TypeError("Docker HTTP operation network allocation is unproven");
   }
   let entered = false;
   let sealListener: (() => void) | undefined;
@@ -51,9 +66,10 @@ export const createDockerHostHttpResources = (input: Readonly<{
   });
   return Object.freeze({
     networkName: network.networkName,
-    observationOwner: Object.freeze({readObservation: (token: object) => network.readObservation(token)}),
+    gateway: retained.gateway,
+    observationOwner: network.observationOwner,
     cutoff,
-    async prepare(journal: Journal, handoff: Handoff, resources: Omit<Resources, "listenerLifecycle">, deadlineEpochMs: number) {
+    async prepare(journal: Journal, handoff: Handoff, resources: DockerHostHttpListenerResources) {
       if (entered) {throw new TypeError("Host HTTP resource preparation already entered");}
       entered = true;
       try {
@@ -69,31 +85,35 @@ export const createDockerHostHttpResources = (input: Readonly<{
         // Snapshot the cut method before the first await; mutating the caller's
         // resource bag must not redirect cutoff away from the retained listener.
         resources = data(resources);
-        const recipe = data(resources.listener);
-        const listener = Object.freeze({open: recipe.open.bind(resources.listener), close: recipe.close.bind(resources.listener),
-          sealAdmission: recipe.sealAdmission.bind(resources.listener), observe: recipe.observe.bind(resources.listener)});
+        // The recipe is produced now, from the observed gateway. No listener
+        // address can be chosen before the Engine assigned the bridge address.
+        const supplied = resources.listenerFor(retained.gateway);
+        const recipe = data(supplied);
+        const listener = Object.freeze({open: recipe.open.bind(supplied), close: recipe.close.bind(supplied),
+          sealAdmission: recipe.sealAdmission.bind(supplied), observe: recipe.observe.bind(supplied)});
         sealListener = listener.sealAdmission;
         const consumption = data(resources.consumption);
         const localCut = data(resources.localCut);
         const clock = data(localCut.clock);
-        const fixedResources = {...resources, listener,
+        const {listenerFor: _listenerFor, ...rest} = resources;
+        const fixedResources = {...rest, listener,
           consumption: Object.freeze({prepare: consumption.prepare.bind(resources.consumption)}),
           // Retain callbacks, never receiver state: time must keep advancing on
           // the borrowed Host clock even when it stores controlTime on `this`.
           localCut: {...localCut, clock: Object.freeze({read: clock.read.bind(localCut.clock),
             within: clock.within.bind(localCut.clock)}), expectedClock: data(localCut.expectedClock)}};
         lifetimeAbort = addAbortListener(lifetime.signal, cutoff);
-        const prepared = await network.prepare(journal, current, {signal: lifetime.signal, deadlineEpochMs});
         if (lifetime.signal.aborted || network.signal.aborted) {throw new TypeError("Host resource admission closed");}
         const result = await host.prepareResources(lifetime, {...fixedResources,
           listenerLifecycle: createV4HostHttpListenerLifecycle({v4: journal, subject})});
-        if (result.kind !== "prepared" || result.address.address !== prepared.gateway || lifetime.signal.aborted || network.signal.aborted) {
+        if (result.kind !== "prepared" || result.address.address !== retained.gateway ||
+          lifetime.signal.aborted || network.signal.aborted) {
           throw new TypeError("Host listener preparation is unproven");
         }
         return result;
       } catch (error) {cutoff(); throw error;}
     },
-    observeContainer: (...args: Parameters<DockerHttpNetworkResources["observeContainer"]>) => network.observeContainer(...args),
+    observeContainer: (...args: Parameters<DockerOperationNetworkOwner["observeContainer"]>) => network.observeContainer(...args),
     cleanupResources: (deadlineEpochMs: number) => {cutoff(); return host.cleanup(deadlineEpochMs);},
     cleanupNetwork: () => {cutoff(); return network.cleanupNetwork();},
   });

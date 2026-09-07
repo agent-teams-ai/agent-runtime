@@ -7,6 +7,11 @@ import {ids, openInput} from "./current-provider-owner-fixture.ts";
 import {DockerHostCustodyLifecycle} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-host-custody-lifecycle.js";
 import {DockerCustodyJournal} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/docker-custody-journal.js";
 import {DockerCustodyHttpReservation} from "../../../../dist/features/contained-agent-turn/composition/docker-custody-http-reservation.js";
+import {createDockerOperationNetworkOwner} from "../../../../dist/features/contained-agent-turn/composition/docker-operation-network-owner.js";
+import {HostHttpEgressV4Journal} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-journal.js";
+import {v4Decode, v4Hash} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-codec.js";
+import {v4Replay} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-replay.js";
+import {MemoryV4Storage} from "../../../fixtures/host-http-egress-v4-fixture.ts";
 import {decodeInspection} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-codec.js";
 import {dockerCustodyOwnerIdentitySha256} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/docker-custody-journal-codec.js";
 import type {DockerEngineIdentity, DockerEnginePort} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.js";
@@ -19,8 +24,8 @@ export const tick = (): Promise<void> => new Promise(resolve => {setImmediate(re
  * attach channel. No provider session, filesystem, socket or physical proof.
  * The explicit trusted caller below supplies a synthetic committed handoff;
  * it is not evidence of a database COMMIT or full Host composition. */
-export const fixture = async (t: TestContext) => {
-  const template = networkFixture().subject;
+export const fixture = async (t: TestContext, gateway?: string) => {
+  const template = networkFixture(undefined, gateway).subject;
   const input = openInput(ids("codex", "docker-http"), "codex", {provider: "codex", adapterRevision: "adapter:test",
     binaryRevision: "binary:test", capabilityManifestRevision: "manifest:test"});
   // Pass only proof fields; the launch/Engine binding remains a distinct record.
@@ -30,7 +35,7 @@ export const fixture = async (t: TestContext) => {
       attemptId: template.attempt.attemptId, custodyId: template.attempt.custodyId, effectId: template.effectId,
       workspaceId: template.workspaceId, executionGenerationId: template.executionGenerationId} as never);
   const network = networkFixture({...template, committedClaimSha256: proof.proofDigest.slice(7),
-    acceptedAuthoritySha256: proof.acceptedAuthorityVectorDigest.slice(7)});
+    acceptedAuthoritySha256: proof.acceptedAuthorityVectorDigest.slice(7)}, gateway);
   const subject = network.subject;
   const engineIdentity: DockerEngineIdentity = {...subject.attempt, cgroupDriver: "systemd", cgroupVersion: "2",
     storageDriver: "overlay2", engineVersion: "29.6.1"};
@@ -69,16 +74,26 @@ export const fixture = async (t: TestContext) => {
   };
   const storage = new MemoryStorage();
   const lifecycle = new DockerHostCustodyLifecycle(engine, new DockerCustodyJournal(storage), {async proveEmpty() {return "empty";}});
+  const signal = new AbortController();
+  const handoff = {committedDispatchProof: proof, underlyingCustodyRef: `urn:agent-runtime:docker-host-reservation:${"b".repeat(64)}`, signal: signal.signal};
+  // The operation network is allocated from the committed claim alone, before the
+  // container that must already carry its name in NetworkMode is ever created.
+  const networkOwner = createDockerOperationNetworkOwner(network.resourceInput);
+  const v4Storage = new MemoryV4Storage();
+  const v4 = new HostHttpEgressV4Journal(v4Storage, subject, networkOwner.observationOwner);
+  await v4.prepare(`command:${v4Hash("open-operation-network")}`);
+  const allocated = await networkOwner.allocate(v4, network.current, {signal: signal.signal, deadlineEpochMs: Date.now() + 5_000});
+  const networkCalls = Object.freeze([...network.state.calls]);
   const launchCall = engineCall();
   const {tenantId, projectId, operationId, attemptId, custodyId, hostInstanceId, hostBootId} = subject.attempt;
   const launched = await lifecycle.launch({owner: {tenantId, projectId, operationId, attemptId, custodyId, hostInstanceId, hostBootId}, call: launchCall,
     create: {...createInput("/synthetic/docker-http-no-files"), imageDigest: subject.imageDigest,
       launchFingerprintSha256: subject.attempt.launchFingerprintSha256, operationNonceSha256: subject.attempt.operationNonceSha256}});
-  const signal = new AbortController();
-  const handoff = {committedDispatchProof: proof, underlyingCustodyRef: `urn:agent-runtime:docker-host-reservation:${"b".repeat(64)}`, signal: signal.signal};
   const reservationInput = {lifecycle, launch: launched, hostLifecycleGenerationSha256: generation, claimed: handoff};
   const createOwner = () => new DockerCustodyHttpReservation(reservationInput);
   const contain = () => lifecycle.contain({...launched, call: engineCall()});
   t.after(async () => {signal.abort(); await contain(); assert.equal(state.writes, 0);});
-  return {network, proof, handoff, signal, lifecycle, launched, launchCall, reservationInput, createOwner, contain, calls, state};
+  const v4State = () => v4Replay(v4Decode(v4Storage.journal!), subject);
+  return {network, networkOwner, networkCalls, allocated, v4, v4Storage, v4State, proof, handoff, signal, lifecycle, launched,
+    launchCall, reservationInput, createOwner, contain, calls, state};
 };
