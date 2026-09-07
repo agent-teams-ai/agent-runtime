@@ -102,6 +102,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "CONTAINED_TURN_POSTGRES_MIGRATION_TIMEOUTS",
       "CONTAINED_TURN_POSTGRES_SCHEMA_VERSION",
       "CONTAINED_TURN_POSTGRES_TIMEOUT_DEFAULTS",
+      "CONTAINED_TURN_ROUTE_QUALIFICATION_DIMENSIONS",
       "DarwinCooperativeProcessCustody",
       "NodeProviderProcessCustody",
       "NodeTlsHttpEgressError",
@@ -114,6 +115,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "createCodexCurrentKernelOwner",
       "createContainedTurnFeature",
       "createContainedTurnProviderAccessPort",
+      "createContainedTurnRouteEnforcement",
       "createContainedTurnRuntimeSecurityPort",
       "createDockerLinuxExclusiveRouteAdmission",
       "createDockerLinuxPostClaimPreparation",
@@ -125,6 +127,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "createRuntimeInstallationDiscoveryFeature",
       // Embedded Runtime consumes this value; NativeHttpRequestProfileId is type-only.
       "nativeHttpRequestProfile",
+      "readContainedTurnRouteEnforcementTarget",
       "recoverContainedTurnCommittedGrantSettlements",
       "recoverContainedTurnDispatchPreparations",
       "rollbackContainedTurnPostgresSchemaV4",

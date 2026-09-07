@@ -103,3 +103,11 @@ export {
   createDockerLinuxExclusiveRouteAdmission,
   type DockerLinuxExclusiveRouteAdmissionInput,
 } from "./composition/docker-linux-exclusive-route-admission.js";
+export {
+  CONTAINED_TURN_ROUTE_QUALIFICATION_DIMENSIONS,
+  createContainedTurnRouteEnforcement,
+  readContainedTurnRouteEnforcementTarget,
+  type ContainedTurnRouteEnforcementCapability,
+  type ContainedTurnRouteEnforcementInput,
+  type ContainedTurnRouteQualificationTarget,
+} from "./composition/contained-turn-route-enforcement-capability.js";
