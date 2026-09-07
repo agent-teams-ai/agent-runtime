@@ -158,6 +158,22 @@ export interface HttpEgressEvidence { digest(parts: readonly Uint8Array[]): stri
 export interface HostHttpBoundaryIds { fresh(): Readonly<{materializationAuthorizationId: string;
   runtimeAuthorizationId: string; boundaryUseId: string; connectionAttemptId: string; streamId: string}> }
 
+/**
+ * Adapter-internal broker port, not an eighth ADR-0012 contained-turn port and
+ * never a caller capability. An installed exclusive route lease reserves one
+ * first-write authority per inbound request and consumes it synchronously,
+ * adjacent to the application-byte emission and after every signed HTTP
+ * authorization. Absence means no route owner is wired into this session, so
+ * the broker enforces no kernel cut of its own and says so instead of implying
+ * one. The lease is the only authority here: it may refuse a reservation and it
+ * may refuse the consumption it already issued.
+ */
+export interface HttpEgressRouteFirstWriteReservation { consume(): boolean }
+export interface HttpEgressRouteFirstWrite {
+  /** Refuses by throwing, including for a requestId this lease already reserved. */
+  reserve(requestId: string): HttpEgressRouteFirstWriteReservation;
+}
+
 export type HttpEgressBrokerPorts = Readonly<{
   identity: Readonly<{operationId: string; attemptId: string; custodyId: string; hostBootId: string;
     liveProcessSessionIdentity: object}>; guard: HostHttpAdmissionGuard; ids: HostHttpBoundaryIds;
@@ -167,4 +183,5 @@ export type HttpEgressBrokerPorts = Readonly<{
   localAuthorityCut: HostHttpLocalAuthorityCut; journal: HostHttpConsumptionJournal;
   resolver: HttpEgressTrustedResolver; transport: HttpEgressUpstreamTransport;
   clock: HttpEgressClock; evidence: HttpEgressEvidence;
+  routeFirstWrite?: HttpEgressRouteFirstWrite;
 }>;

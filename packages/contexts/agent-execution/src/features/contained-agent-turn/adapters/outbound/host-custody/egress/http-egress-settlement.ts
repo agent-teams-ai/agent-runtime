@@ -1,8 +1,8 @@
 import type {HttpEgressAnomalyCode, HttpEgressClosureState, HttpEgressOperation, HttpEgressOutcome,
   HttpEgressReceipt} from "./http-egress-contracts.js";
 import type {HostHttpAdmissionLease} from "./host-http-admission-guard.js";
-import type {HostHttpGrant, HttpEgressBrokerPorts, HttpEgressTransportAttempt, HttpEgressTransportSession,
-  HttpEgressTransportBinding} from "./http-egress-ports.js";
+import type {HostHttpGrant, HttpEgressBrokerPorts, HttpEgressRouteFirstWriteReservation, HttpEgressTransportAttempt,
+  HttpEgressTransportSession, HttpEgressTransportBinding} from "./http-egress-ports.js";
 import type {PreparedHttpRequestCustodyV1} from "./prepared-http-request-v1.js";
 import {createHttpDispatchBoundary} from "./http-dispatch-boundary.js";
 import {observeHttpDispatch} from "./http-dispatch-observation.js";
@@ -118,6 +118,16 @@ export const settleHttpEgressDispatch = async (input: Readonly<{ports: HttpEgres
   };
   if (!current()) {state.outcome = operation.signal?.aborted ? "cancelled" : "denied"; state.anomalyCode = boundaryAnomaly;
     return closeAndRecordHttpEgress(ports, operation, state, attempt);}
+  // Reserved immediately before the boundary, because the lease itself bounds how
+  // long a reservation stays usable. A refusal denies the attempt outright: a
+  // wired route owner that cannot admit this request must not be dispatched past.
+  let routeFirstWrite: HttpEgressRouteFirstWriteReservation | undefined;
+  if (ports.routeFirstWrite !== undefined) {
+    try {const reserved = ports.routeFirstWrite.reserve(operation.expectedRequest.requestId);
+      if (typeof reserved?.consume === "function") {routeFirstWrite = reserved;}} catch { /* refused below */ }
+    if (routeFirstWrite === undefined) {state.outcome = "denied"; state.anomalyCode = "final_denied";
+      return closeAndRecordHttpEgress(ports, operation, state, attempt);}
+  }
   const boundary = createHttpDispatchBoundary(prepared, () => {
     // Journal I/O may block synchronously. Observe current authority/time before
     // consuming, then again after it returns, with no await before emission.
@@ -125,6 +135,10 @@ export const settleHttpEgressDispatch = async (input: Readonly<{ports: HttpEgres
     boundaryAnomaly = "final_denied";
     if (ports.journal.consume(grant.payload.consumption.journalKey,
       grant.payload.consumption.requestFingerprint) !== "consumed" || !current()) {return false;}
+    // The installed kernel route cut is the last gate before the bytes leave.
+    // The transport emits on return with no await in between, so the lease is
+    // consumed here and nowhere earlier; a refusal sends no byte at all.
+    if (routeFirstWrite !== undefined && !routeFirstWrite.consume()) {return false;}
     state.firstByteState = "uncertain"; return true;
   });
   let dispatched: Awaited<ReturnType<HttpEgressTransportSession["dispatch"]>>;

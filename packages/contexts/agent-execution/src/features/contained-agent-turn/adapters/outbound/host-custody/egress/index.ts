@@ -10,6 +10,8 @@ export type {
   HttpEgressBrokerPorts,
   HttpEgressClock,
   HttpEgressEvidence,
+  HttpEgressRouteFirstWrite,
+  HttpEgressRouteFirstWriteReservation,
   HttpEgressTrustedResolver,
   HttpEgressUpstreamTransport,
 } from "./http-egress-ports.js";
