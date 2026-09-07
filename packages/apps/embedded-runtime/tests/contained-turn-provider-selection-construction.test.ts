@@ -277,9 +277,9 @@ test("cleanup failure publishes only a fixed private bounded diagnostic", () => 
   assert.equal(error.name, "ContainedTurnConstructionCleanupError");
   assert.equal(error.message, "Contained turn construction cleanup failed");
   assert.equal(error.stack, undefined);
-  assert.equal("cause" in error, false);
+  assert.equal((error as { cause: unknown }).cause, primary);
   assert.equal("errors" in error, false);
-  assert.deepEqual(Reflect.ownKeys(error).toSorted(), ["code", "message", "name"]);
+  assert.deepEqual(Reflect.ownKeys(error).toSorted(), ["cause", "code", "message", "name"]);
   assert.doesNotMatch(`${error.name}:${error.message}:${error.stack ?? ""}:${JSON.stringify(error)}`,
     /primary-secret|cleanup-secret/u);
   assert.deepEqual(probe.calls, {claude: 1, codex: 0, dispose: 1, feature: 1});
@@ -431,9 +431,9 @@ test("Host construction plus owner-cleanup failure is redacted", () => {
   assert.equal(error.name, "ContainedTurnConstructionCleanupError");
   assert.equal(error.message, "Contained turn construction cleanup failed");
   assert.equal(error.stack, undefined);
-  assert.equal("cause" in error, false);
+  assert.equal((error as { cause: unknown }).cause, primary);
   assert.equal("errors" in error, false);
-  assert.deepEqual(Reflect.ownKeys(error).toSorted(), ["code", "message", "name"]);
+  assert.deepEqual(Reflect.ownKeys(error).toSorted(), ["cause", "code", "message", "name"]);
   assert.doesNotMatch(`${error.name}:${error.message}:${error.stack ?? ""}:${JSON.stringify(error)}`,
     /host-construction-(primary|cleanup)-secret/u);
 });

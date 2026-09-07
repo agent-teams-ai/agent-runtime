@@ -1,8 +1,8 @@
 export class ContainedTurnConstructionCleanupError extends Error {
   public readonly code = "contained_turn_construction_cleanup_failed";
 
-  public constructor() {
-    super("Contained turn construction cleanup failed");
+  public constructor(options: { cause: unknown }) {
+    super("Contained turn construction cleanup failed", { cause: options.cause });
     this.name = "ContainedTurnConstructionCleanupError";
     delete this.stack;
     Object.freeze(this);
@@ -28,8 +28,10 @@ export const disposeAfterContainedTurnConstructionFailure = (
     dispose();
   } catch {
     // Both failures are untrusted and may contain credentials or provider paths.
-    // Keep the fixed cleanup-stage diagnostic; do not retain raw cause or stack.
-    throw new ContainedTurnConstructionCleanupError();
+    // Keep the fixed cleanup-stage diagnostic; do not retain the raw cleanup
+    // failure or stack, but preserve `primary` as `cause` so the failure that
+    // triggered cleanup is not fully swallowed.
+    throw new ContainedTurnConstructionCleanupError({ cause: primary });
   }
   throw primary;
 };
