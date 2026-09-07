@@ -45,6 +45,7 @@ export const createDockerHostHttpResources = (input: Readonly<{
     throw new TypeError("Docker HTTP operation network allocation is unproven");
   }
   let entered = false;
+  let listenerReadback: Readonly<{observe: () => unknown}> | undefined;
   let sealListener: (() => void) | undefined;
   let lifetimeAbort: ReturnType<typeof addAbortListener> | undefined;
   const cutListener = () => {
@@ -67,6 +68,10 @@ export const createDockerHostHttpResources = (input: Readonly<{
   return Object.freeze({
     networkName: network.networkName,
     gateway: retained.gateway,
+    /** The retained recipe's own point-in-time readback, available only once the
+     * listener was actually handed out. It is the listener observation owner's
+     * physical source; this composition never reports endpoint facts itself. */
+    get listener(): Readonly<{observe: () => unknown}> | undefined {return listenerReadback;},
     observationOwner: network.observationOwner,
     cutoff,
     async prepare(journal: Journal, handoff: Handoff, resources: DockerHostHttpListenerResources) {
@@ -92,6 +97,7 @@ export const createDockerHostHttpResources = (input: Readonly<{
         const listener = Object.freeze({open: recipe.open.bind(supplied), close: recipe.close.bind(supplied),
           sealAdmission: recipe.sealAdmission.bind(supplied), observe: recipe.observe.bind(supplied)});
         sealListener = listener.sealAdmission;
+        listenerReadback = Object.freeze({observe: listener.observe});
         const consumption = data(resources.consumption);
         const localCut = data(resources.localCut);
         const clock = data(localCut.clock);

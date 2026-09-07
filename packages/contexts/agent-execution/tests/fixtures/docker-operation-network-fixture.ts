@@ -113,7 +113,12 @@ export const networkFixture = (subjectOverride: Partial<typeof template> = {}, g
     state.network.Containers = {[container.containerId]: {Name: "descriptive-only", EndpointID: endpointId,
       IPv4Address: `${containerAddress}/16`, IPv6Address: "", MacAddress: "02:42:ac:1e:00:02"}};
   };
+  /** The daemon drops a removed container's endpoint from the network it joined. */
+  const detach = () => {
+    state.containerPresent = false;
+    if (state.network !== undefined) {state.network.Containers = {};}
+  };
   const resourceInput = {subject, engine: {policy: operationPolicy, client}, cleanupMilliseconds: 5_000};
-  return {state, input, subject, current, endpoint, container, networkId, attach, resourceInput, gateway,
+  return {state, input, subject, current, endpoint, container, networkId, attach, detach, resourceInput, gateway,
     open: () => new DockerOperationNetwork(input), resources: () => new DockerHttpNetworkResources(resourceInput)};
 };

@@ -145,14 +145,19 @@ export const createDockerHostHttpEgressObservers = (input: DockerHostHttpEgressO
         observed.closeRequested !== false) {throw rejected();}
       await publish("listener_allocated", {listener: subject.listenerHandle, ...endpoint}, observed);
     },
-    /** Local admission closure only: the retained cut signal and the sealed
-     * listener recipe. It is never container, socket or kernel-route closure. */
-    async observeCutoff(signal: AbortSignal, listener: DockerHttpListenerReadback): Promise<void> {
-      const observed = readback(listener);
+    /** Local admission closure only: the retained cut signal and, when a listener
+     * endpoint was actually handed out, its own sealed readback. `null` states
+     * that this subject never obtained a listener recipe — a fact the trusted
+     * composition owns, exactly as it owns the launched container authority it
+     * hands to the network owner. It is never container, socket or kernel-route
+     * closure, and never evidence about another Host's admission. */
+    async observeCutoff(signal: AbortSignal, listener: DockerHttpListenerReadback | null): Promise<void> {
+      const observed = listener === null ? undefined : readback(listener);
       if (!(signal instanceof AbortSignal) || types.isProxy(signal) || !signal.aborted ||
-        observed.admissionSealed !== true) {throw rejected();}
+        (observed !== undefined && observed.admissionSealed !== true)) {throw rejected();}
       await record("cutoff");
-      await publish("cutoff_observed", {cutoff: subject.routeHandle, admissionSealed: true}, observed);
+      await publish("cutoff_observed", {cutoff: subject.routeHandle, listener: observed !== undefined},
+        observed ?? {listener: "never-created"});
     },
     /** Exact historical absence of this container, proven by the lifecycle's own
      * removal owner. A token it does not recognise mints nothing. */

@@ -61,24 +61,76 @@ test("the network is allocated before the container and the listener binds the o
   assert.notEqual(result.kind, "prepared");
 });
 
-test("membership stays unpublished while no owner can observe the listener", async t => {
+test("a refused route leaves an acknowledged intent, so the release stays uncertain", async t => {
   const f = await postClaimFixture(t);
   const preparation = createDockerLinuxPostClaimPreparation(f.dependencies);
   const result = await preparation.prepareClaimed(f.claimed);
-  // container_attached requires listener_allocated, and this revision has no
-  // listener observation owner, so the resource ledger stops at listener_intent.
-  assert.deepEqual(kinds(f.v4Storage.journal),
-    ["opened", "network_intent", "network_allocated", "listener_intent", "uncertain"]);
+  // The joined observation owners carry the ledger through membership, and the
+  // release runs in the reverse of allocation once the route is refused.
+  assert.deepEqual(kinds(f.v4Storage.journal), ["opened", "network_intent", "network_allocated",
+    "listener_intent", "listener_allocated", "container_attached", "route_intent",
+    "cutoff", "cutoff_observed", "container_absent", "listener_release", "listener_absent",
+    "network_release", "network_absent"]);
   const ledger = v4Replay(v4Decode(f.v4Storage.journal!), f.subject);
-  assert.equal(ledger.container, null);
-  assert.equal(ledger.listener.phase, 1);
-  assert.equal(ledger.reconcileRequired, true);
-  // The route owner is never consulted for a container that never joined.
-  assert.equal(f.routeAdmissions.length, 0);
-  // The container is contained, the network keeps its retained ownership.
+  assert.notEqual(ledger.container, null);
+  assert.equal(ledger.listener.phase, 4);
+  assert.equal(ledger.network.phase, 4);
+  assert.equal(ledger.containerAbsent, true);
+  assert.equal(f.routeAdmissions.length, 1);
   assert.ok(f.events.includes("remove"));
-  assert.equal(ledger.network.phase, 2);
+  // An acknowledged route intent whose installation was never observed may have
+  // left a kernel table behind, so a clean refusal cannot be claimed.
   assert.equal(result.kind, "quarantined");
+  assert.equal(f.events.includes("provider-exec"), false);
+});
+
+test("the container joins the network only after the listener endpoint is published", async t => {
+  const f = await postClaimFixture(t);
+  const preparation = createDockerLinuxPostClaimPreparation(f.dependencies);
+  await preparation.prepareClaimed(f.claimed);
+  const setup = kinds(f.v4Storage.journal);
+  assert.ok(setup.indexOf("listener_allocated") < setup.indexOf("container_attached"));
+  assert.ok(setup.indexOf("container_attached") < setup.indexOf("route_intent"));
+  // The listener endpoint is the recipe's own readback, not a caller assertion.
+  assert.equal(f.physical.opens, 1);
+  const admitted = f.routeAdmissions[0] as {endpoint: {address: string; port: number}};
+  assert.deepEqual(admitted.endpoint, {address: f.network.gateway, port: 43_129});
+});
+
+test("an installed exclusive route is the only thing that prepares the turn", async t => {
+  const f = await postClaimFixture(t);
+  f.route.lease = f.syntheticLease();
+  const preparation = createDockerLinuxPostClaimPreparation(f.dependencies);
+  const result = await preparation.prepareClaimed(f.claimed);
+  assert.deepEqual(result, {kind: "prepared"});
+  assert.deepEqual(kinds(f.v4Storage.journal), ["opened", "network_intent", "network_allocated",
+    "listener_intent", "listener_allocated", "container_attached", "route_intent", "route_installed"]);
+  const ledger = v4Replay(v4Decode(f.v4Storage.journal!), f.subject);
+  assert.equal(ledger.route.phase, 2);
+  assert.equal(ledger.reconcileRequired, false);
+  // A prepared turn keeps every resource it owns: nothing is released here.
+  assert.equal(f.events.includes("remove"), false);
+  assert.equal(f.events.includes("route-release"), false);
+  assert.equal(ledger.network.phase, 2);
+});
+
+test("the route lease releases its namespace only after the container is gone", async t => {
+  const f = await postClaimFixture(t);
+  f.route.lease = f.syntheticLease();
+  f.hooks["route-admission"] = () => {f.controller.abort();};
+  const preparation = createDockerLinuxPostClaimPreparation(f.dependencies);
+  const result = await preparation.prepareClaimed(f.claimed);
+  assert.notEqual(result.kind, "prepared");
+  const order = f.events.filter(event => ["remove", "route-release"].includes(event));
+  assert.deepEqual(order, ["remove", "route-release"]);
+});
+
+test("a quarantined route release keeps the whole preparation quarantined", async t => {
+  const f = await postClaimFixture(t);
+  f.route.release = "quarantined";
+  const preparation = createDockerLinuxPostClaimPreparation(f.dependencies);
+  assert.deepEqual(await preparation.prepareClaimed(f.claimed), {kind: "quarantined"});
+  assert.ok(f.events.includes("route-release"));
 });
 
 for (const [fault, expected] of [["identity", {kind: "unsupported", reason: "network"}],
@@ -93,18 +145,41 @@ for (const [fault, expected] of [["identity", {kind: "unsupported", reason: "net
   });
 }
 
-for (const fault of ["launch", "listener"] as const) {
-  test(`a ${fault} failure after allocation retains the network it cannot prove absent`, async t => {
-    const f = await postClaimFixture(t);
-    f.faults[fault] = true;
-    const preparation = createDockerLinuxPostClaimPreparation(f.dependencies);
-    const result = await preparation.prepareClaimed(f.claimed);
-    assert.equal(result.kind, "quarantined");
-    assert.ok(f.network.state.calls.includes("POST /v1.47/networks/create"));
-    assert.equal(f.routeAdmissions.length, 0);
-    assert.equal(f.events.includes("provider-exec"), false);
-  });
-}
+test("a launch failure retains the network it cannot prove absent", async t => {
+  const f = await postClaimFixture(t);
+  f.faults.launch = true;
+  const preparation = createDockerLinuxPostClaimPreparation(f.dependencies);
+  // The container was created but never handed back an authority, so there is
+  // no handle to contain and nothing can prove this attempt left no residue.
+  assert.deepEqual(await preparation.prepareClaimed(f.claimed), {kind: "quarantined"});
+  assert.ok(f.network.state.calls.includes("POST /v1.47/networks/create"));
+  assert.equal(f.routeAdmissions.length, 0);
+  assert.equal(f.events.includes("provider-exec"), false);
+});
+
+test("a listener failure releases everything it allocated and refuses cleanly", async t => {
+  const f = await postClaimFixture(t);
+  f.faults.listener = true;
+  const preparation = createDockerLinuxPostClaimPreparation(f.dependencies);
+  // Nothing was routed and every effect was proven released, so this is the
+  // typed refusal the custody contract asks for, not retained ownership.
+  assert.deepEqual(await preparation.prepareClaimed(f.claimed), {kind: "unsupported", reason: "broker"});
+  assert.ok(f.network.state.calls.includes("POST /v1.47/networks/create"));
+  const ledger = v4Replay(v4Decode(f.v4Storage.journal!), f.subject);
+  assert.equal(ledger.network.phase, 4);
+  assert.equal(ledger.listener.phase, 4);
+  assert.equal(f.routeAdmissions.length, 0);
+  assert.equal(f.events.includes("provider-exec"), false);
+});
+
+test("an unremovable network keeps its ownership instead of refusing cleanly", async t => {
+  const f = await postClaimFixture(t);
+  f.faults.listener = true;
+  f.network.state.removeFault = "lost-before";
+  const preparation = createDockerLinuxPostClaimPreparation(f.dependencies);
+  assert.deepEqual(await preparation.prepareClaimed(f.claimed), {kind: "quarantined"});
+  assert.notEqual(v4Replay(v4Decode(f.v4Storage.journal!), f.subject).network.phase, 4);
+});
 
 for (const step of ["engine-identity", "resource-journal", "create", "start", "host-handshake"] as const) {
   test(`a cut off at ${step} stops preparation and leaves nothing prepared`, async t => {
@@ -120,10 +195,10 @@ for (const step of ["engine-identity", "resource-journal", "create", "start", "h
       assert.equal(f.physical.opens, 0);
       assert.deepEqual(result, {kind: "unsupported", reason: step === "engine-identity" ? "network" : "journal"});
     } else {
-      // Past the first Engine effect nothing can be reported as a clean refusal:
-      // the network stays retained until an owner can prove it absent.
-      assert.equal(result.kind, "quarantined");
+      // Release is not admission: a cut caller still gets its resources released,
+      // and only what cannot be proven absent stays quarantined.
       assert.ok(f.network.state.calls.includes("POST /v1.47/networks/create"));
+      assert.equal(result.kind, step === "host-handshake" ? "unsupported" : "quarantined");
     }
   });
 }

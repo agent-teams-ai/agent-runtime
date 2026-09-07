@@ -2,8 +2,10 @@ import { DockerCustodyHttpReservation } from "./docker-custody-http-reservation.
 import { createDockerHostHttpResources, type DockerHostHttpListenerResources } from "./docker-host-http-resources.js";
 import { createDockerOperationNetworkOwner, type DockerOperationNetworkAllocation } from "./docker-operation-network-owner.js";
 import type { ContainedTurnHostPostClaimPreparation } from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
-import { dockerHostCustodyAttemptKey, dockerHttpOperationNetworkRecipe, DockerHostCustodyLifecycle,
+import { createDockerHostHttpEgressObservers, dockerHostCustodyAttemptKey, dockerHttpOperationNetworkRecipe,
+  joinHostHttpEgressV4Observers, DockerHostCustodyLifecycle,
   type DockerHttpNetworkResourceInput, type DockerHostCustodyContainerCreateInput,
+  type LinuxExclusiveRouteEndpoint, type LinuxExclusiveRouteOwner,
 } from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 
 type Preparation = ContainedTurnHostPostClaimPreparation;
@@ -20,19 +22,25 @@ type EngineClient = DockerHttpNetworkResourceInput["engine"]["client"];
 type Subject = DockerHttpNetworkResourceInput["subject"];
 type ResourceJournal = Parameters<ReturnType<typeof createDockerHostHttpResources>["prepare"]>[0];
 type ObservationOwner = ReturnType<typeof createDockerOperationNetworkOwner>["observationOwner"];
+type Observers = ReturnType<typeof createDockerHostHttpEgressObservers>;
 
-/** Step 8 of the route-enforcement plan. The Linux exclusive route owner is not
- * joined here: this seam can therefore report only its own absence, and no
- * caller-supplied double can widen that result into route-enforcement evidence.
- * When `openNodeLinuxExclusiveRoute` is wired, this port gains an "installed"
- * outcome and only then can `prepareClaimed` return prepared. */
+/** The last admission gate before provider execution. Only an installed exclusive
+ * route lease admits the operation; every other outcome refuses it. The lease
+ * owner keeps its own namespace custody, so release is a second method here and
+ * never a claim the orchestration can make on its behalf. */
 export interface DockerLinuxOperationRouteAdmission {
   admit(input: Readonly<{
     authority: Launched["authority"];
-    endpoint: Readonly<{address: string; port: number}>;
+    endpoint: LinuxExclusiveRouteEndpoint;
     signal: AbortSignal;
     deadlineEpochMs: number;
-  }>): Promise<Readonly<{kind: "unsupported"; reason: "owner"}>>;
+    lifetimeMs: number;
+  }>): Promise<
+    | Readonly<{kind: "installed"; owner: LinuxExclusiveRouteOwner}>
+    | Readonly<{kind: "unsupported"; reason: "owner"}>>;
+  /** Called only after the exact container was proven absent. "none" means no
+   * namespace or pinned tool was ever opened for this attempt. */
+  releaseAfterContainerRemoval(): Promise<"closed" | "quarantined" | "none">;
 }
 
 /** Operation-fixed subject facts owned by the trusted composition root: private
@@ -45,7 +53,10 @@ export type DockerLinuxPostClaimSubjectFacts = Readonly<{
 
 export type DockerLinuxPostClaimDeadlines = Readonly<{
   engineIdentityMs: number; allocationMs: number; launchMs: number;
-  membershipMs: number; cleanupMs: number;
+  membershipMs: number; cleanupMs: number; routeMs: number;
+  /** Remaining authoritative operation lease handed to the route owner, which
+   * spends its own preparation time out of it and never restarts it. */
+  routeLifetimeMs: number;
 }>;
 
 export type DockerLinuxPostClaimDependencies = Readonly<{
@@ -71,13 +82,15 @@ export type DockerLinuxPostClaimDependencies = Readonly<{
   routeAdmission?: DockerLinuxOperationRouteAdmission;
 }>;
 
-type Stage = "owner" | "subject" | "journal" | "network" | "launch" | "listener" | "membership" | "init" | "route";
+type Stage = "owner" | "subject" | "lifecycle" | "journal" | "network" | "launch" | "listener"
+  | "membership" | "init" | "route";
 const REASONS: Readonly<Record<Stage, UnsupportedReason>> = Object.freeze({
   owner: "owner", route: "owner", subject: "network", network: "network", membership: "network",
-  journal: "journal", launch: "broker", listener: "broker", init: "broker",
+  journal: "journal", lifecycle: "broker", launch: "broker", listener: "broker", init: "broker",
 });
 const unsupported = (reason: UnsupportedReason): Outcome => Object.freeze({kind: "unsupported" as const, reason});
 const quarantined = (): Outcome => Object.freeze({kind: "quarantined" as const});
+const prepared = (): Outcome => Object.freeze({kind: "prepared" as const});
 
 /**
  * Production post-claim preparation for the Docker/Linux Codex route.
@@ -85,15 +98,14 @@ const quarantined = (): Outcome => Object.freeze({kind: "quarantined" as const})
  * It orchestrates the order the V4 ledger already encodes: the operation network
  * is allocated from the committed dispatch proof alone, its name reaches
  * `NetworkMode` at create time, the listener binds the gateway Docker assigned,
- * the container joins that network, and the authenticated init handshake
- * completes before any provider execution is possible.
+ * the container joins that network, the authenticated init handshake completes,
+ * and only an installed exclusive route admits provider execution.
  *
- * Nothing here can return prepared yet: step 8, the Linux exclusive route owner,
- * has no implementation on this revision. A missing route admission owner is
- * refused before allocation, as the custody contract requires, so the default
- * production wiring performs no Engine effect at all. Once an effect exists and
- * its release cannot be proven, this owner reports quarantined and keeps
- * ownership rather than claiming a clean teardown.
+ * A missing route admission owner is refused before allocation, as the custody
+ * contract requires, so a wiring without one performs no Engine effect at all.
+ * After the first effect the release order is the reverse of allocation, and
+ * anything this owner cannot prove released leaves it quarantined with its
+ * ownership retained rather than claiming a clean teardown.
  */
 export const createDockerLinuxPostClaimPreparation = (
   dependencies: DockerLinuxPostClaimDependencies,
@@ -110,39 +122,69 @@ export const createDockerLinuxPostClaimPreparation = (
 
     const call = (milliseconds: number): EngineCall =>
       Object.freeze({signal: input.signal, deadlineEpochMs: Date.now() + milliseconds});
+    // Release is not admission: an irreversible caller cutoff must not stop the
+    // Engine and journal work that proves these resources actually went away.
+    const cleanupCall = (): EngineCall =>
+      Object.freeze({signal: new AbortController().signal, deadlineEpochMs: Date.now() + deadlines.cleanupMs});
     let stage: Stage = "subject";
     let network: ReturnType<typeof createDockerOperationNetworkOwner> | undefined;
+    let observers: Observers | undefined;
+    let journal: ResourceJournal | undefined;
     let allocated: DockerOperationNetworkAllocation | undefined;
     let networkAttempted = false;
     let lifecycle: DockerHostCustodyLifecycle | undefined;
     let launched: Launched | undefined;
     let launchAttempted = false;
+    let routeAttempted = false;
+    let routeInstalled = false;
     let product: ReturnType<typeof createDockerHostHttpResources> | undefined;
 
-    /** Release in the reverse of allocation: listener and session, then the
-     * container, then the network. Anything this cannot prove absent keeps its
+    /** Release in the reverse of allocation, in the order the ledger encodes:
+     * local admission is cut and observed, the exact container is contained and
+     * proven absent, the route lease releases its namespace, then the listener
+     * endpoint, then the operation network. Anything this cannot prove keeps its
      * ownership and quarantines instead of reporting a clean refusal. */
+    const proveCutoff = async (): Promise<boolean> => {
+      let proven = true;
+      try {product?.cutoff();} catch {proven = false;}
+      try {network?.cutoff();} catch {proven = false;}
+      if (network === undefined || observers === undefined || journal === undefined) {return proven;}
+      return observers.observeCutoff(network.signal, product?.listener ?? null).then(() => proven, () => false);
+    };
+    const proveContainerAbsent = async (): Promise<boolean> => {
+      if (!launchAttempted) {return true;}
+      // A launch that never returned an authority leaves no handle to contain;
+      // its fate belongs to the lifecycle's own fencing, not to a claim here.
+      if (launched === undefined || lifecycle === undefined || observers === undefined) {return false;}
+      const token = await lifecycle.removalObservation
+        .containAndObserve({authority: launched.authority, key: launched.key, call: cleanupCall()})
+        .then(issued => issued ?? null, () => null);
+      if (token === null) {return false;}
+      return observers.observeContainerAbsent(token).then(() => true, () => false);
+    };
+    const proveListenerAbsent = async (): Promise<boolean> => {
+      if (product === undefined) {return true;}
+      const released = await product.cleanupResources(Date.now() + deadlines.cleanupMs).catch(() => false);
+      const readback = product.listener;
+      if (!released || readback === undefined || observers === undefined) {return false;}
+      return observers.observeListenerAbsent(readback).then(() => true, () => false);
+    };
     const settle = async (reason: UnsupportedReason): Promise<Outcome> => {
-      let indeterminate = false;
-      try {product?.cutoff();} catch {indeterminate = true;}
-      try {network?.cutoff();} catch {indeterminate = true;}
-      if (product !== undefined) {
-        const released = await product.cleanupResources(Date.now() + deadlines.cleanupMs).catch(() => false);
-        if (!released) {indeterminate = true;}
+      // An acknowledged route intent without an observed installation may still
+      // have left a kernel table behind; that is uncertainty, not a refusal.
+      let proven = !routeAttempted || routeInstalled;
+      proven = await proveCutoff() && proven;
+      proven = await proveContainerAbsent() && proven;
+      if (routeAttempted) {
+        const released = await routeAdmission.releaseAfterContainerRemoval().catch(() => "quarantined" as const);
+        proven = released !== "quarantined" && proven;
       }
-      if (launchAttempted) {
-        // A launch that never returned an authority leaves no handle to contain;
-        // its fate belongs to the lifecycle's own fencing, not to a claim here.
-        const contained = launched === undefined || lifecycle === undefined ? null : await lifecycle
-          .contain({authority: launched.authority, key: launched.key, call: call(deadlines.cleanupMs)})
-          .catch(() => null);
-        if (contained?.kind !== "closed") {indeterminate = true;}
-      }
+      proven = await proveListenerAbsent() && proven;
       if (networkAttempted) {
         const removed = await network?.cleanupNetwork().catch(() => "unknown" as const);
-        if (removed !== "absent") {indeterminate = true;}
+        proven = removed === "absent" && proven;
       }
-      return indeterminate ? quarantined() : unsupported(reason);
+      return proven ? unsupported(reason) : quarantined();
     };
 
     // Irreversible caller cutoff is honored between every step, so a cut signal
@@ -177,8 +219,20 @@ export const createDockerLinuxPostClaimPreparation = (
 
       assertOpen();
 
+      // Construction performs no effect, and the removal observation owner it
+      // holds is the only issuer of this attempt's exact container absence.
+      stage = "lifecycle";
+      lifecycle = dependencies.openLifecycle(policy);
+      observers = createDockerHostHttpEgressObservers({subject, removal: lifecycle.removalObservation});
+
+      assertOpen();
+
+      // The ledger accepts exactly one observation owner, so the network/Engine
+      // owner and the Host-side issuers are joined before it is opened.
       stage = "journal";
-      const journal = await dependencies.openResourceJournal({subject, observer: network.observationOwner});
+      journal = await dependencies.openResourceJournal({subject,
+        observer: joinHostHttpEgressV4Observers([network.observationOwner, observers.observationOwner])});
+      observers.bind(journal);
 
       assertOpen();
 
@@ -189,7 +243,6 @@ export const createDockerLinuxPostClaimPreparation = (
       assertOpen();
 
       stage = "launch";
-      lifecycle = dependencies.openLifecycle(policy);
       const launchCall = call(deadlines.launchMs);
       launchAttempted = true;
       launched = await lifecycle.launch({call: launchCall, create, owner});
@@ -201,8 +254,13 @@ export const createDockerLinuxPostClaimPreparation = (
         hostLifecycleGenerationSha256: dependencies.hostLifecycleGenerationSha256, claimed: input});
       product = createDockerHostHttpResources({host: reservation, network, allocated,
         hostLifecycleGenerationSha256: dependencies.hostLifecycleGenerationSha256});
-      const prepared = await product.prepare(journal, input, dependencies.resources);
-      if (prepared.kind !== "prepared") {throw new TypeError("Host HTTP listener preparation is unproven");}
+      const listener = await product.prepare(journal, input, dependencies.resources);
+      if (listener.kind !== "prepared" || product.listener === undefined) {
+        throw new TypeError("Host HTTP listener preparation is unproven");
+      }
+      // The endpoint the kernel actually bound is published by its own retained
+      // recipe; only then may the container be observed as a network member.
+      await observers.observeListener(product.listener, listener.address);
       assertOpen();
 
       // The authenticated handshake runs over the retained attach channel, not
@@ -213,21 +271,25 @@ export const createDockerLinuxPostClaimPreparation = (
       if (ready.kind !== "ready") {throw new TypeError("Docker authenticated init readiness is unproven");}
       assertOpen();
 
-      // Known gap on this revision: the V4 replay admits container_attached only
-      // after listener_allocated, and no owner in this repository issues a
-      // listener observation, so membership cannot be published yet. The step is
-      // kept in place, and its refusal keeps the operation fail-closed.
       stage = "membership";
       await product.observeContainer(launched.authority, call(deadlines.membershipMs));
       assertOpen();
 
-      stage = "route";
       // The route owner is the last admission gate before provider execution.
-      // Its current outcome is refusal, so no unrouted container can proceed.
-      const admitted = await routeAdmission.admit({authority: launched.authority,
-        endpoint: Object.freeze({address: prepared.address.address, port: prepared.address.port}),
-        signal: input.signal, deadlineEpochMs: Date.now() + deadlines.membershipMs});
-      return await settle(admitted.reason);
+      // A fresh acknowledged intent is recorded first: it is the only permission
+      // to attempt the kernel effect, and an unobserved attempt stays uncertain.
+      stage = "route";
+      const endpoint = Object.freeze({address: listener.address.address, port: listener.address.port});
+      await observers.recordRouteIntent();
+      routeAttempted = true;
+      const admitted = await routeAdmission.admit({authority: launched.authority, endpoint,
+        signal: input.signal, deadlineEpochMs: Date.now() + deadlines.routeMs,
+        lifetimeMs: deadlines.routeLifetimeMs});
+      if (admitted.kind !== "installed") {return await settle(admitted.reason);}
+      await observers.observeRouteInstalled(admitted.owner, endpoint);
+      routeInstalled = true;
+      assertOpen();
+      return prepared();
     } catch {
       return await settle(REASONS[stage]);
     }
