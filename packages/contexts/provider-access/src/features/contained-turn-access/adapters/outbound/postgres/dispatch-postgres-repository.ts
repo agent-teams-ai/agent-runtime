@@ -109,8 +109,8 @@ export const createPostgresDispatchConsumptionRepository = (pool: Materializatio
         finally {open = false;}
       });
     },
-    async observeGrantRequest(raw: Parameters<DispatchConsumptionRepository["observeGrantRequest"]>[0]) {
-      const input = detachedDispatchData("dispatch observation", raw) as typeof raw;
+    async observeGrantRequest(observation: Parameters<DispatchConsumptionRepository["observeGrantRequest"]>[0]) {
+      const input = detachedDispatchData("dispatch observation", observation) as typeof observation;
       const selector = selectorSnapshot({grantRequestId: input.grantRequestId, provider: input.provider, scope: input.scope, kind: "consume"});
       if (selector.kind !== "consume") {throw new Error("Invalid PA observation selector");}
       const owner = ownerSnapshot({provider: selector.provider, scope: selector.scope});

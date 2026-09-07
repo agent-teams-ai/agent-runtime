@@ -20,12 +20,12 @@ export interface DispatchHeadPublicationResult { readonly headVersion: number; r
 // Status changes retain the one-use identity. New authority requires a strictly
 // newer binding revision; an old digest can never be republished as fresh use.
 type AuthorityBinding = ReturnType<typeof materializationProjection>;
+const authorityIdentity = <T extends AuthorityBinding>(binding: T) => {
+  const {availability: _availability, revocation: _revocation, ...rest} = binding; return rest;
+};
 const validateAuthorityAdvance = <T extends AuthorityBinding>(previous: T, next: T, sameIdentity: boolean): void => {
   if (sameIdentity) {
-    const identity = (binding: T) => {
-      const {availability: _availability, revocation: _revocation, ...rest} = binding; return rest;
-    };
-    if (canonicalJson(identity(previous)) !== canonicalJson(identity(next)) ||
+    if (canonicalJson(authorityIdentity(previous)) !== canonicalJson(authorityIdentity(next)) ||
       (previous.revocation === "revoked" && next.revocation !== "revoked") ||
       (previous.availability === "unavailable" && next.availability !== "unavailable")) {
       throw new Error("PA dispatch authority identity cannot be rebound or revived");

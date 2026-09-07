@@ -20,3 +20,6 @@ export type { DispatchPostgresOwner } from "./adapters/outbound/postgres/dispatc
 export { createPostgresCredentialRenderingOwner } from "./composition/postgres-credential-rendering-owner.js";
 export type { MaterializationPostgresPool, MaterializationPostgresTimeouts } from "./adapters/outbound/postgres/materialization-postgres-transactions.js";
 export type { CredentialRenderingSelection, CredentialGenerationAcquisition } from "./adapters/outbound/credential-rendering-contracts.js";
+export { createPostgresOperationDispatchConsumption } from "./composition/postgres-operation-dispatch-consumption.js";
+export { createPostgresCurrentProviderAccess } from "./composition/postgres-current-provider-access.js";
+export type { PaAcceptedPreparation, PaDispatchIssuanceSelection } from "./adapters/outbound/dispatch-operation-contracts.js";

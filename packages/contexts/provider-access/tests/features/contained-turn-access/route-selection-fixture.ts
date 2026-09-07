@@ -40,7 +40,7 @@ export const harness = async (input = selection()) => {
   const routeDigest = await routeSelectionSchemaDigest();
   const state = {binding: structuredClone(input.binding) as unknown, headVersion: "1", rows: [] as Row[], migrated: true,
     schemaBad: false, insertCount: 1 as number | null, unavailable: false, duplicateHead: false};
-  const calls: {sql: string; values?: unknown[]}[] = [];
+  const calls: {sql: string; values?: unknown[] | undefined}[] = [];
   const releases: boolean[] = [];
   let connects = 0;
   let tail = Promise.resolve();

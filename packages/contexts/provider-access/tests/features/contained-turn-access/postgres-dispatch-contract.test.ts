@@ -17,15 +17,18 @@ const materializationSchema = {version: 1, digest: await materializationPostgres
 const harness = (options: {absent?: boolean; loseCommit?: boolean; badSchema?: boolean; badOwner?: boolean; divergentMaterialization?: boolean; failGrant?: boolean; materialVersion?: string; materialBinding?: unknown} = {}) => {
   const calls: {sql: string; values?: unknown[]}[] = []; const releases: boolean[] = [];
   let consumption: unknown; let grant: unknown; let settlement: unknown;
+  const lockedRows = (sql: string) => {
+    return sql.includes("materialization_owner") ?
+        {rows: [{head_version: options.materialVersion ?? "0", binding: options.materialBinding ?? (options.absent ? null : {...materializationProjection(head), revocation: options.divergentMaterialization ? "revoked" : "active"})}], rowCount: 1} :
+        {rows: [{owner: options.badOwner ? {...owner, provider: "claude"} : owner, version: options.absent ? "0" : "1", control_time: "100", head: options.absent ? null : head}], rowCount: 1};
+  };
   return {calls, releases, pool: {async connect() {return {
     async query(sql: string, values?: unknown[]) {
       calls.push({sql, values});
       if (sql === "COMMIT" && options.loseCommit) {throw new Error("ack lost");}
       if (sql.includes("FROM provider_access.dispatch_schema")) {return {rows: [{...dispatchSchema, version: options.badSchema ? 9 : 1}], rowCount: 1};}
       if (sql.includes("FROM provider_access.materialization_schema")) {return {rows: [materializationSchema], rowCount: 1};}
-      if (sql.includes("FOR UPDATE")) {return sql.includes("materialization_owner") ?
-        {rows: [{head_version: options.materialVersion ?? "0", binding: options.materialBinding ?? (options.absent ? null : {...materializationProjection(head), revocation: options.divergentMaterialization ? "revoked" : "active"})}], rowCount: 1} :
-        {rows: [{owner: options.badOwner ? {...owner, provider: "claude"} : owner, version: options.absent ? "0" : "1", control_time: "100", head: options.absent ? null : head}], rowCount: 1};}
+      if (sql.includes("FOR UPDATE")) {return lockedRows(sql);}
       if (sql.includes("RETURNING control_time")) {return {rows: [{control_time: "100"}], rowCount: 1};}
       if (sql.startsWith("SELECT record FROM provider_access.dispatch_consumption") || sql.startsWith("SELECT c.record")) {return {rows: consumption ? [{record: consumption}] : [], rowCount: consumption ? 1 : 0};}
       if (sql.startsWith("SELECT record FROM provider_access.dispatch_grant") || sql.startsWith("SELECT g.record")) {return {rows: grant ? [{record: grant}] : [], rowCount: grant ? 1 : 0};}

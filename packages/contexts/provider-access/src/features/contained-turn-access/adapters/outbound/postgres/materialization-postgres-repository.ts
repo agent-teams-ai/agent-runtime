@@ -17,7 +17,7 @@ const selectorSnapshot = (value: MaterializationAuthorizationRequestSelector): M
   const {requestDigest: _digest, ...selector} = snapshotAuthorizationOwnerSelector({...input, requestDigest: "database:selector"});
   return Object.freeze(selector);
 };
-const bindingSnapshot = (value: unknown): MaterializationAuthorizationBinding => {
+export const bindingSnapshot = (value: unknown): MaterializationAuthorizationBinding => {
   const binding = detachedDispatchData("PA database binding", value) as Record<string, unknown>;
   const {authorizationRequestId: _id, requestDigest: _digest, purpose: _purpose, schemaVersion: _schema, ...result} =
     snapshotAuthorizationCommand({...binding, authorizationRequestId: "database:binding", requestDigest: "database:binding",

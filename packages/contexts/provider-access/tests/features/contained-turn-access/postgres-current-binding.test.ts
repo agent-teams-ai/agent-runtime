@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createPostgresCurrentProviderAccess } from "../../../dist/composition.js";
 import { createPostgresCredentialRenderingOwner } from "../../../dist/features/contained-turn-access/composition/postgres-credential-rendering-owner.js";
 import { materializationPostgresSchemaDigest } from "../../../dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-schema.js";
 import { renderingFixture } from "./credential-rendering-test-fixture.ts";
@@ -10,7 +11,7 @@ const harness = () => {
   const current: {binding: unknown; rows?: Record<string, unknown>[]; fail: boolean; badSchema: boolean} = {
     binding: structuredClone(fixture.selection.binding), fail: false, badSchema: false,
   };
-  const calls: {sql: string; values?: unknown[]}[] = [];
+  const calls: {sql: string; values?: unknown[] | undefined}[] = [];
   let connects = 0;
   const pool = {async connect() {
     connects++;
@@ -31,7 +32,9 @@ const harness = () => {
   const owner = createPostgresCredentialRenderingOwner(pool, fixture.selection, fixture.acquisition);
   const input = {provider: fixture.selection.binding.provider,
     scope: {tenantId: fixture.selection.binding.tenantId, projectId: fixture.selection.binding.projectId}};
-  return {fixture, current, calls, connects: () => connects, owner, input};
+  const shared = createPostgresCurrentProviderAccess(pool, {provider: input.provider, tenantId: input.scope.tenantId,
+    projectId: input.scope.projectId, scopeDigest: fixture.selection.binding.scopeDigest});
+  return {fixture, current, calls, connects: () => connects, owner, input, shared};
 };
 
 test("PA resolve reads current durable binding without creating heads or authorizations", async t => {
@@ -114,4 +117,21 @@ test("schema drift, database outage and disposal cannot return cached PA authori
   assert.equal(result.kind, "unavailable");
   if (result.kind === "unavailable") {assert.equal(result.reason, "indeterminate");}
   assert.equal(h.connects(), before);
+});
+
+test("shared current resolver survives disposing an operation rendering owner and observes independent revocation", async t => {
+  const h = harness(); t.after(h.shared.dispose);
+  assert.equal(h.connects(), 0);
+  h.owner.owner.dispose();
+  const first = await h.shared.providerAccess.resolve.execute(h.input);
+  assert.equal(first.kind, "resolved");
+  if (first.kind !== "resolved") {throw new Error("Expected independent resolver");}
+  assert.equal(first.evidence.bindingAuthorityDigest, h.fixture.selection.binding.credentialBindingDigest);
+  h.current.binding = {...h.fixture.selection.binding, revocation: "revoked"};
+  const result = await h.shared.providerAccess.revalidate.execute({...h.input, binding: first.binding});
+  assert.equal(result.kind, "rejected");
+  assert.equal(h.calls.some(call => /INSERT|UPDATE|DELETE|CREATE/u.test(call.sql)), false);
+  h.shared.dispose();
+  const closed = await h.shared.providerAccess.resolve.execute(h.input);
+  assert.equal(closed.kind, "unavailable");
 });

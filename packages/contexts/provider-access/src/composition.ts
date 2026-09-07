@@ -17,3 +17,5 @@ export { createPostgresDispatchConsumption, type DispatchHeadPublication, type D
   type DispatchPostgresOwner } from "./features/contained-turn-access/internal.js";
 export { createPostgresCredentialRenderingOwner, type MaterializationPostgresPool, type MaterializationPostgresTimeouts,
   type CredentialRenderingSelection, type CredentialGenerationAcquisition } from "./features/contained-turn-access/internal.js";
+export { createPostgresOperationDispatchConsumption, createPostgresCurrentProviderAccess,
+  type PaAcceptedPreparation, type PaDispatchIssuanceSelection } from "./features/contained-turn-access/internal.js";
