@@ -111,7 +111,7 @@ export interface ContainedTurnSubmissionCoordinator {
   ): Promise<SubmitRuntimeContainedTurnOutcome>;
 }
 
-class ContainedTurnSubmissionCustody {
+class ContainedTurnSubmissionCompletion {
   readonly #dependencies: ContainedTurnSubmissionOwnerDependencies;
   readonly #ownerCall: object;
   readonly #reject: (reason: unknown) => void;
@@ -355,7 +355,7 @@ export const createContainedTurnSubmissionCoordinator = (
     });
     inFlightByIdentity.set(identity, acceptance);
 
-    const ownerCompletion = new ContainedTurnSubmissionCustody(
+    const ownerCompletion = new ContainedTurnSubmissionCompletion(
       Object.freeze({ ...dependencies, scope }),
       identity.ownerCall,
       resolveAcceptance,
