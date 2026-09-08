@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import {DockerHttpNetworkResources} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-network-resources.js";
 import {postClaimFixture} from "./support/docker-linux-post-claim-fixture.ts";
 import {createDockerLinuxPostClaimPreparation} from "../../../dist/features/contained-agent-turn/composition/docker-linux-post-claim-preparation.js";
 import {createDockerLinuxPostClaimPreparation as packedFactory} from "../../../dist/composition.js";
@@ -463,4 +464,155 @@ test("post-claim launch retains immutable admission and independent bounded obse
   await owner.cleanup({deadlineEpochMs: Date.now() + 5000});
   assert.equal(observation.signal.aborted, true);
   assert.equal(observation.isActive(), false);
+});
+
+// These tests use the retained production owners over the synthetic Engine.
+test("failed cleanup recovers with fresh observations and concurrent retries share one flight", async t => {
+  const j = await joinedFixture(t); const {f} = j;
+  const launch = f.lifecycle.launch.bind(f.lifecycle);
+  let lifetime: Parameters<typeof launch>[0]["lifetime"] | undefined;
+  f.lifecycle.launch = async input => {lifetime = input.lifetime; return launch(input);};
+  const owner = createDockerLinuxPostClaimOwner(f.dependencies, {...j.join, async finishClaimed() {
+    f.network.state.inspectFault = true;
+    throw new Error("finalization failed before network cleanup could observe closure");
+  }});
+  assert.deepEqual(await owner.preparation.prepareClaimed(f.claimed), {kind: "quarantined"});
+  assert.ok(lifetime);
+  const originalDeadline = lifetime.observation.deadlineEpochMs;
+  assert.equal(lifetime.admission.signal.aborted, true);
+  assert.equal(lifetime.observation.signal.aborted, false);
+  assert.equal(lifetime.observation.isActive(), true);
+  assert.notEqual(f.network.state.network, undefined);
+  const before = f.network.state.calls.length;
+  f.network.state.inspectFault = false;
+  const entered = deferred(); const release = deferred();
+  let observations = 0;
+  f.network.state.before = async label => {
+    if (label.startsWith("GET /v1.47/networks/")) {
+      observations += 1;
+      if (observations === 1) {entered.resolve(); await release.promise;}
+    }
+  };
+  const first = owner.cleanup({deadlineEpochMs: Date.now() + 5000});
+  await entered.promise;
+  const second = owner.cleanup({deadlineEpochMs: Date.now() + 5000});
+  await new Promise<void>(resolve => {setImmediate(resolve);});
+  assert.equal(observations, 1);
+  assert.throws(() => owner.takePrepared(f.claimed));
+  assert.deepEqual(await owner.preparation.prepareClaimed(f.claimed), {kind: "unsupported", reason: "owner"});
+  release.resolve();
+  assert.deepEqual(await Promise.all([first, second]), [{kind: "released"}, {kind: "released"}]);
+  assert.ok(f.network.state.calls.length > before);
+  assert.equal(f.network.state.network, undefined);
+  assert.equal(v4Replay(v4Decode(f.v4Storage.journal!), f.subject).network.phase, 4);
+  assert.equal(lifetime.observation.deadlineEpochMs, originalDeadline);
+  assert.equal(lifetime.observation.signal.aborted, true);
+  assert.equal(f.events.filter(event => event === "create").length, 1);
+  assert.equal(f.events.filter(event => event === "remove").length, 1);
+  assert.equal(f.events.filter(event => event === "route-release").length, 1);
+  assert.equal(f.physical.closes, 1);
+  assert.equal(f.network.state.calls.filter(call => call.startsWith("DELETE ")).length, 1);
+  const completedCalls = [...f.network.state.calls];
+  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 5000}), {kind: "released"});
+  assert.deepEqual(f.network.state.calls, completedCalls);
+});
+
+test("allocated beforeLaunch failure releases through actual V2 no-creation and exact network deletion", async t => {
+  const f = await postClaimFixture(t);
+  const cleanup = DockerHttpNetworkResources.prototype.cleanupNetwork;
+  let attempts = 0; let launchPreparations = 0; let lateEffects = 0;
+  t.mock.method(DockerHttpNetworkResources.prototype, "cleanupNetwork", function (this: DockerHttpNetworkResources) {
+    attempts += 1;
+    return cleanup.call(this);
+  });
+  const forbidden = (): never => {
+    lateEffects += 1;
+    throw new Error("provider IO and finalization are unreachable");
+  };
+  const owner = createDockerLinuxPostClaimOwner(f.dependencies, {
+    async beforeLaunch() {
+      launchPreparations += 1;
+      assert.notEqual(f.network.state.network, undefined);
+      throw new Error("image preparation failed after allocation");
+    },
+    prepareProviderIo: forbidden,
+    finishClaimed: forbidden,
+  });
+  assert.deepEqual(await owner.preparation.prepareClaimed(f.claimed), {kind: "unsupported", reason: "broker"});
+  assert.equal(attempts, 1);
+  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 5000}), {kind: "released"});
+  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 5000}), {kind: "released"});
+  assert.equal(attempts, 1);
+  const closure = await f.custodyJournal.lookup(f.subject.attempt);
+  assert.equal(closure.state, "closed");
+  assert.equal(closure.sequence, 1);
+  assert.equal(closure.authoritySha256, null);
+  const ledger = v4Replay(v4Decode(f.v4Storage.journal!), f.subject);
+  assert.equal(ledger.containerAbsent, true);
+  assert.equal(ledger.container, null);
+  assert.equal(ledger.network.phase, 4);
+  assert.equal(kinds(f.v4Storage.journal).includes("network_release"), true);
+  assert.deepEqual(f.network.state.calls.filter(call => call.startsWith("DELETE ")),
+    [`DELETE /v1.47/networks/${f.network.networkId}`]);
+  assert.equal(f.network.state.network, undefined);
+  assert.equal(launchPreparations, 1);
+  assert.equal(lateEffects, 0);
+  assert.equal(f.events.includes("create"), false);
+  assert.equal(f.routeAdmissions.length, 0);
+  assert.equal(f.physical.opens, 0);
+  assert.throws(() => owner.takePrepared(f.claimed));
+});
+
+test("invalid and expired cleanup waiters schedule no new cleanup effects and permanently cut admission", async t => {
+  const j = await joinedFixture(t); const {f} = j;
+  const owner = createDockerLinuxPostClaimOwner(f.dependencies, j.join);
+  assert.deepEqual(await owner.preparation.prepareClaimed(f.claimed), {kind: "prepared"});
+  const calls = [...f.network.state.calls];
+  const events = [...f.events];
+  for (const deadlineEpochMs of [NaN, Infinity, 1.5, Date.now() - 1]) {
+    assert.deepEqual(await owner.cleanup({deadlineEpochMs}), {kind: "quarantined"});
+    await new Promise<void>(resolve => {setImmediate(resolve);});
+    assert.deepEqual(f.network.state.calls, calls);
+    assert.deepEqual(f.events, events);
+    assert.equal(f.physical.closes, 0);
+  }
+  assert.throws(() => owner.takePrepared(f.claimed));
+  assert.deepEqual(await owner.preparation.prepareClaimed(f.claimed), {kind: "unsupported", reason: "owner"});
+  assert.deepEqual(await owner.cleanup({deadlineEpochMs: Date.now() + 5000}), {kind: "released"});
+  assert.equal(f.events.filter(event => event === "create").length, 1);
+});
+
+test("cleanup before entry permanently forbids allocation even with an invalid deadline", async t => {
+  const j = await joinedFixture(t); const {f} = j;
+  const owner = createDockerLinuxPostClaimOwner(f.dependencies, j.join);
+  assert.deepEqual(await owner.cleanup({deadlineEpochMs: NaN}), {kind: "quarantined"});
+  assert.deepEqual(await owner.preparation.prepareClaimed(f.claimed), {kind: "unsupported", reason: "owner"});
+  assert.deepEqual(f.events, []);
+  assert.deepEqual(f.network.state.calls, []);
+  assert.deepEqual(j.counts(), {opens: 0, finishes: 0});
+});
+
+test("failed cleanup cannot renew its original observation lifetime", async t => {
+  const j = await joinedFixture(t); const {f} = j;
+  const launch = f.lifecycle.launch.bind(f.lifecycle);
+  let lifetime: Parameters<typeof launch>[0]["lifetime"] | undefined;
+  f.lifecycle.launch = async input => {lifetime = input.lifetime; return launch(input);};
+  const owner = createDockerLinuxPostClaimOwner(f.dependencies, {...j.join, async finishClaimed() {
+    f.network.state.inspectFault = true;
+    throw new Error("retain failed cleanup");
+  }});
+  assert.deepEqual(await owner.preparation.prepareClaimed(f.claimed), {kind: "quarantined"});
+  assert.ok(lifetime);
+  const deadline = lifetime.observation.deadlineEpochMs;
+  assert.equal(lifetime.observation.signal.aborted, false);
+  const calls = [...f.network.state.calls];
+  const events = [...f.events];
+  f.network.state.inspectFault = false;
+  t.mock.method(Date, "now", () => deadline);
+  assert.equal(lifetime.observation.isActive(), false);
+  assert.deepEqual(await owner.cleanup({deadlineEpochMs: deadline + 5000}), {kind: "quarantined"});
+  assert.deepEqual(f.network.state.calls, calls);
+  assert.deepEqual(f.events, events);
+  assert.equal(lifetime.observation.deadlineEpochMs, deadline);
+  assert.notEqual(f.network.state.network, undefined);
 });

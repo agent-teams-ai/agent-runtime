@@ -1,4 +1,6 @@
 import type { DockerContainerAuthority, DockerEngineCall, DockerEnginePort } from "./engine/docker-engine-port.js";
+import type {createDockerNoCreationObservationOwner, DockerNoCreationInput,
+  DockerNoCreationObservation} from "./docker-no-creation-observation-owner.js";
 import { assertDockerAuthorityBinding, assertDockerEngineBinding, sameDockerAuthority } from "./docker-host-custody-lifecycle-guards.js";
 import { canonicalDockerCustodyJson, dockerCustodyAuthoritySha256, validateDockerCustodyAttemptKey } from "./journal/docker-custody-journal-codec.js";
 import type { DockerCustodyAttemptKey, DockerCustodyJournalRecord } from "./journal/docker-custody-journal-types.js";
@@ -28,10 +30,18 @@ type Contain = (input: DockerHostCustodyContainmentInput) => Promise<Readonly<{
  * This proves historical absence of this full container/daemon/boot generation;
  * it does not prove listener/socket closure or confer dispatch authority.
  */
-export const createDockerRemovalObservationOwner = (engine: Pick<DockerEnginePort, "inspect">, contain: Contain) => {
+export const createDockerRemovalObservationOwner = (engine: Pick<DockerEnginePort, "inspect">, contain: Contain,
+  noCreation?: ReturnType<typeof createDockerNoCreationObservationOwner>) => {
   const inspect = engine.inspect.bind(engine);
   const observations = new WeakMap<object, DockerRemovalObservation>();
   return Object.freeze({
+    /** Only the lifecycle's sealed, durable no-create path can issue this token. */
+    async observeNoCreation(input: DockerNoCreationInput): Promise<object | undefined> {
+      return noCreation?.observeNoCreation(input);
+    },
+    readNoCreationObservation(token: object): DockerNoCreationObservation | undefined {
+      return noCreation?.readNoCreationObservation(token);
+    },
     async containAndObserve(input: DockerHostCustodyContainmentInput): Promise<object | undefined> {
       try {
         const key = validateDockerCustodyAttemptKey(input.key);
