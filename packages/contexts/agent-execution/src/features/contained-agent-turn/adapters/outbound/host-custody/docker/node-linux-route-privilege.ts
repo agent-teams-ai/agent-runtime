@@ -5,10 +5,7 @@ const reject = (): never => {throw new Error("Linux route Host privilege unavail
 // must carry these through both nsenter and nft, hence inheritable + ambient.
 const required = (1n << 2n) | (1n << 12n) | (1n << 19n) | (1n << 21n);
 
-/** Private parser, never an admission port: production reads its own procfs. */
-export const assertLinuxRoutePrivilegeStatus = (status: string, uid: number, gid: number): void => {
-  if (!Number.isSafeInteger(uid) || uid < 0 || !Number.isSafeInteger(gid) || gid < 0 || (uid > 0 && gid === 0) ||
-      status.length > 16384) {reject();}
+const readStatusFields = (status: string): Map<string, string> => {
   const fields = new Map<string, string>();
   for (const line of status.trimEnd().split("\n")) {
     const match = /^([A-Za-z_][A-Za-z_0-9]*):[ \t]*(.*)$/u.exec(line);
@@ -16,6 +13,14 @@ export const assertLinuxRoutePrivilegeStatus = (status: string, uid: number, gid
     if (fields.has(match[1]!)) {reject();}
     fields.set(match[1]!, match[2]!);
   }
+  return fields;
+};
+
+/** Private parser, never an admission port: production reads its own procfs. */
+export const assertLinuxRoutePrivilegeStatus = (status: string, uid: number, gid: number): void => {
+  if (!Number.isSafeInteger(uid) || uid < 0 || !Number.isSafeInteger(gid) || gid < 0 || (uid > 0 && gid === 0) ||
+      status.length > 16384) {reject();}
+  const fields = readStatusFields(status);
   for (const [name, expected] of [["Uid", uid], ["Gid", gid]] as const) {
     const value = fields.get(name) ?? "";
     if (!/^\d+[ \t]+\d+[ \t]+\d+[ \t]+\d+$/u.test(value) ||
@@ -49,6 +54,10 @@ const readProc = (path: string, uid: number, gid: number): string => {
   } finally {closeSync(fd);}
 };
 
+const sameProcessIdentity = (uid: number, gid: number): boolean =>
+  process.getuid?.() === uid && process.geteuid?.() === uid &&
+  process.getgid?.() === gid && process.getegid?.() === gid;
+
 export const assertNodeLinuxRoutePrivilege = (): void => {
   const uid = process.getuid?.();
   const gid = process.getgid?.();
@@ -59,6 +68,5 @@ export const assertNodeLinuxRoutePrivilege = (): void => {
     if (!/^\s*0\s+0\s+4294967295\s*$/u.test(readProc(`/proc/self/${name}`, uid!, gid!))) {reject();}
   }
   assertLinuxRoutePrivilegeStatus(readProc("/proc/self/status", uid!, gid!), uid!, gid!);
-  if (process.getuid?.() !== uid || process.geteuid?.() !== uid ||
-      process.getgid?.() !== gid || process.getegid?.() !== gid) {reject();}
+  if (!sameProcessIdentity(uid!, gid!)) {reject();}
 };
