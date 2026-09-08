@@ -212,6 +212,25 @@ test("uses only an external frozen private projection while tools remain workspa
   }), /disjoint/u);
 });
 
+test("rejects nested private roots and workspaces with double-dot-prefixed names", () => {
+  const roots = {configRoot: join(privateRoot, "config"), homeRoot: join(privateRoot, "home"),
+    tempRoot: join(privateRoot, "tmp")};
+  for (const key of ["configRoot", "homeRoot", "tempRoot"] as const) {
+    assert.throws(() => createClaudeAgentSdkPrivateProjection({
+      ...roots, [key]: join(workspaceRef, "..private"),
+      projectionRef: "projection:nested-private", workspaceRef,
+    }), /disjoint/u);
+    assert.throws(() => createClaudeAgentSdkPrivateProjection({
+      ...roots, projectionRef: "projection:nested-workspace",
+      workspaceRef: join(roots[key], "..workspace"),
+    }), /disjoint/u);
+  }
+  assert.doesNotThrow(() => createClaudeAgentSdkPrivateProjection({
+    configRoot: `${workspaceRef}-config`, homeRoot: `${workspaceRef}-home`,
+    tempRoot: `${workspaceRef}-tmp`, projectionRef: "projection:disjoint-siblings", workspaceRef,
+  }));
+});
+
 test("rejects forward and reverse symlink aliases between private roots and the workspace", async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-claude-alias-"));
   t.after(async () => {
