@@ -1,3 +1,4 @@
+import { KernelOpenAttempts, type KernelOpenAttempt } from "./contained-turn-kernel-custody-open-attempts.js";
 import { containedTurnIdentity } from "../../../domain/contained-turn-identities.js";
 import type { ContainedTurnProof } from "../../../domain/contained-turn-proofs.js";
 import type {
@@ -50,12 +51,6 @@ export type {
   ContainedTurnKernelCustodyAttemptOwner,
   ContainedTurnKernelWorkspaceOwner,
 } from "./contained-turn-kernel-custody-contracts.js";
-interface KernelOpenAttempt {
-  readonly input: KernelOpenInput;
-  closed: boolean;
-  acquisitionPossible: boolean;
-  failedBeforeAcquisition: boolean;
-}
 type StartInput = Parameters<ContainedTurnKernelCustodyPort["start"]>[0];
 type StartProof = Extract<ContainedTurnProof, { readonly kind: "provider_process_start" }>;
 type NoStartProof = Extract<ContainedTurnProof, { readonly kind: "provider_process_no_start" }>;
@@ -83,7 +78,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
   readonly #attemptOwner: ContainedTurnKernelCustodyAttemptOwner;
   readonly #workspaceOwner: ContainedTurnKernelWorkspaceOwner;
   readonly #monotonicNow: () => number;
-  readonly #openAttempts = new Map<string, KernelOpenAttempt>();
+  readonly #openAttempts = new KernelOpenAttempts();
   readonly #reservations = new Map<string, KernelReservation>();
   readonly #startObservationAfterMs: number;
   public constructor(
@@ -119,43 +114,8 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
       }
       return this.#openOutcome(existing);
     }
-    // Keep failed identities fenced for this owner lifetime: absence is not proof,
-    // and a duplicate call must never race preparation or resurrect acquisition.
-    if (this.#openAttempts.has(input.custodyId) || [...this.#openAttempts.values()].some(
-      prior => prior.input.attemptId === input.attemptId && prior.input.operationId === input.operationId,
-    )) {
-      throw new TypeError("Host Custody kernel open attempt is already consumed");
-    }
-    input = Object.freeze({ ...input, adapterSnapshot: Object.freeze({ ...input.adapterSnapshot }),
-      providerAccessSnapshot: Object.freeze({ ...input.providerAccessSnapshot }) });
-    const attempt: KernelOpenAttempt = {
-      input, closed: false, acquisitionPossible: false, failedBeforeAcquisition: false,
-    };
-    this.#openAttempts.set(input.custodyId, attempt);
-    let scoped: ReturnType<ContainedTurnKernelCustodyPort["open"]> | undefined;
-    try {
-      return await this.#workspaceOwner.withLaunchAuthority({
-        attemptId: input.attemptId, operationId: input.operationId, workspaceId: input.workspaceId,
-      }, authority => {
-        if (attempt.closed || scoped !== undefined) {
-          throw new TypeError("Host Custody workspace authority is already consumed");
-        }
-        scoped = this.#openScoped(input, authority, attempt);
-        return scoped;
-      });
-    } catch (error) {
-      attempt.closed = true;
-      // A workspace owner can reject while its callback is still preparing.
-      // Fence raw acquisition and wait for preparation before retiring its record.
-      await scoped?.catch(() => {});
-      if (!attempt.acquisitionPossible) {
-        this.#attemptOwner.retire(input);
-        attempt.failedBeforeAcquisition = true;
-      }
-      throw error;
-    } finally {
-      attempt.closed = true;
-    }
+    return this.#openAttempts.open(input, this.#workspaceOwner, this.#attemptOwner,
+      (snapshot, authority, attempt) => this.#openScoped(snapshot, authority, attempt));
   }
   async #openScoped(
     input: KernelOpenInput,
@@ -524,7 +484,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
   public async releaseReservation(
     input: Parameters<ContainedTurnKernelCustodyPort["releaseReservation"]>[0],
   ): Promise<void> {
-    if (this.#failedBeforeAcquisition(input) !== undefined) {return;}
+    if (this.#openAttempts.failedBeforeAcquisition(input) !== undefined) {return;}
     const reservation = this.#reservation(input);
     if (reservation.workspaceId !== input.workspaceId) {
       throw new TypeError("Host Custody reservation workspace identity conflict");
@@ -550,7 +510,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
   public async releaseRetiredReservation(
     input: Parameters<ContainedTurnKernelCustodyPort["releaseRetiredReservation"]>[0],
   ): ReturnType<ContainedTurnKernelCustodyPort["releaseRetiredReservation"]> {
-    const failed = this.#failedBeforeAcquisition(input.cleanupPermit);
+    const failed = this.#openAttempts.failedBeforeAcquisition(input.cleanupPermit);
     if (failed !== undefined && failed.input.preparationToken === input.cleanupPermit.preparationToken &&
         failed.input.operationRevision === input.cleanupPermit.preparedOperationRevision &&
         failed.input.operationCutoffRevision === input.cleanupPermit.operationCutoffRevision) {
@@ -628,14 +588,6 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
       })),
       kind: "indeterminate",
     });
-  }
-  #failedBeforeAcquisition(
-    input: Readonly<{ attemptId: string; custodyId: string; operationId: string; workspaceId: string }>,
-  ): KernelOpenAttempt | undefined {
-    const attempt = this.#openAttempts.get(input.custodyId);
-    return attempt?.failedBeforeAcquisition === true && attempt.input.attemptId === input.attemptId &&
-      attempt.input.operationId === input.operationId &&
-      attempt.input.workspaceId === input.workspaceId ? attempt : undefined;
   }
   #reservation(
     input: Readonly<{ readonly attemptId: string; readonly custodyId: string; readonly operationId: string }>,
