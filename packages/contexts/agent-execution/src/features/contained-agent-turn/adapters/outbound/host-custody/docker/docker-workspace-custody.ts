@@ -18,6 +18,16 @@ const SYSTEM_MOUNTS = new Set(["/", "/workspace", "/agent-private", "/tmp", "/de
   "/proc/interrupts", "/proc/kcore", "/proc/keys", "/proc/latency_stats", "/proc/timer_list", "/proc/timer_stats", "/proc/sched_debug",
   "/proc/scsi", "/sys/firmware", "/sys/devices/virtual/powercap"]);
 const within = (child: string, parent: string) => child === parent || child.startsWith(`${parent === "/" ? "" : parent}/`);
+const isSelectedInitMount = (parts: readonly string[], separator: number): boolean => {
+  const init = parts[3] === INIT_SOURCE && parts[4] === INIT_PATH;
+  if (!init && (parts[3] === INIT_SOURCE || parts[4] === INIT_PATH)) {throw residueFault();}
+  const optional = parts.slice(6, separator);
+  const options = parts[5]?.split(",") ?? [];
+  if (init && (!options.includes("ro") || options.includes("rw") ||
+    new Set(options).size !== options.length ||
+    !(optional.length === 0 || optional.length === 1 && /^master:[1-9]\d*$/u.test(optional[0]!)))) {throw residueFault();}
+  return init;
+};
 const parseMounts = (text: string): Mount[] => {
   const lines = text.trimEnd().split("\n");
   if (lines.length > 128) {throw residueFault();}
@@ -25,13 +35,8 @@ const parseMounts = (text: string): Mount[] => {
   const paths = new Set<string>(); const ids = new Set<string>();
   for (const line of lines) {
     const parts = line.split(" "); const separator = parts.indexOf("-");
-    const init = parts[3] === INIT_SOURCE && parts[4] === INIT_PATH;
-    if (!init && (parts[3] === INIT_SOURCE || parts[4] === INIT_PATH)) {throw residueFault();}
+    const init = isSelectedInitMount(parts, separator);
     const optional = parts.slice(6, separator);
-    const options = parts[5]?.split(",") ?? [];
-    if (init && (!options.includes("ro") || options.includes("rw") ||
-      new Set(options).size !== options.length ||
-      !(optional.length === 0 || optional.length === 1 && /^master:[1-9]\d*$/u.test(optional[0]!)))) {throw residueFault();}
     if (separator < 6 || parts.length !== separator + 4 || !/^\d+$/u.test(parts[0]!) ||
       !/^\d+:\d+$/u.test(parts[2]!) || !parts[3]!.startsWith("/") || line.includes("\\") ||
       (!init && !SYSTEM_MOUNTS.has(parts[4]!)) || paths.has(parts[4]!) || ids.has(parts[0]!) ||
