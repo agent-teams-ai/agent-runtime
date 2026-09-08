@@ -27,7 +27,9 @@ class MemoryServer extends EventEmitter {
 // its native dependencies without granting this resource fixture any I/O.
 const forbidConnection = (): never => {throw new Error("network connections forbidden in resource fixture");};
 function ForbiddenSocket(): never {return forbidConnection();}
-modules.set("node:net", {Server: MemoryServer, Socket: ForbiddenSocket, createConnection: forbidConnection,
+// The base fixture already imported the listener and net module. Isolate both
+// module identities so this fixture cannot reuse its cached native dependencies.
+modules.set("resource-net", {Server: MemoryServer, Socket: ForbiddenSocket, createConnection: forbidConnection,
   isIPv4: (value: string) => value === "10.203.0.1"});
 const forbidFilesystem = async (): Promise<never> => {throw new Error("filesystem access forbidden in resource fixture");};
 // The base fixture's fs/promises module is already cached. Keep its memory
@@ -58,6 +60,9 @@ modules.set("./host-http-consumption-storage.js", {
   },
 });
 const lockHook = registerHooks({resolve(specifier, context, next) {
+  if (specifier === "node:net") {
+    return {url: "native-finalization-fixture:resource-net", shortCircuit: true};
+  }
   if (specifier === "node:fs/promises") {
     return {url: "native-finalization-fixture:resource-fs-promises", shortCircuit: true};
   }
@@ -67,7 +72,7 @@ const lockHook = registerHooks({resolve(specifier, context, next) {
   return next(specifier, context);
 }});
 after(() => lockHook.deregister());
-const {createNodeHostHttpListener} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-host-http-listener.js");
+const {createNodeHostHttpListener} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-host-http-listener.js?resource-fixture");
 const {createNodeHostHttpConsumptionJournal} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-host-http-consumption-journal.js");
 export const {createV4HostHttpListenerLifecycle} = await import("../../../dist/features/contained-agent-turn/composition/v4-host-http-listener-lifecycle.js");
 const {HostHttpEgressV4Journal} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-journal.js");

@@ -245,6 +245,8 @@ test("normal settlement retains accepted work and endpoint without hard cutoff",
   }, f.cutoff);
   const socket = f.server.connection();
   const settlement = f.recipe.settleAccepted();
+  f.server.emit("drop");
+  assert.equal(listener.observe().sockets.droppedWithoutSocket, 1);
   assert.equal(f.recipe.settleAccepted(), settlement);
   assert.equal(f.cutoff.signal.aborted, false); assert.equal(socket.destroyed, false);
   assert.equal(f.server.closeCalls, 0);

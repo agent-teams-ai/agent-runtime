@@ -212,7 +212,10 @@ class ListenerCustody {
     this.#ready.resolve();
   };
   readonly #failed = (): void => {this.sealAdmission();};
-  readonly #dropped = (): void => {this.#droppedWithoutSocket += 1; this.#failed();};
+  readonly #dropped = (): void => {
+    this.#droppedWithoutSocket += 1;
+    if (!this.#draining) {this.#failed();}
+  };
   readonly #aborted = (): void => {this.sealAdmission();};
   readonly #onClose = (): void => {
     if (!this.#bindPending && this.#server?.listening === false) {
