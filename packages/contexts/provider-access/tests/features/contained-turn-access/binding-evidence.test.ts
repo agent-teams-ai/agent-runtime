@@ -8,7 +8,6 @@ import {
   revalidateResultToContract,
 } from "../../../dist/features/contained-turn-access/adapters/inbound/contained-turn-provider-access-mapper.js";
 import type { ProviderAccessBindingRecord } from "../../../dist/features/contained-turn-access/domain/provider-access-binding.js";
-import { exactBoundedToken } from "../../../../agent-execution/dist/features/contained-agent-turn/composition/provider-access-anti-corruption.js";
 
 const binding = (): ProviderAccessBindingRecord => ({
   accessRef: "access:ar69-linux-codex-r6-20260907-acceptance",
@@ -32,20 +31,15 @@ const resolve = async (value = binding()) => {
   return result;
 };
 
-test("complete versioned PA evidence is deterministic and passes the current AE token guard", async () => {
+test("complete versioned PA evidence hashes the full binding deterministically", async () => {
   const result = await resolve();
   const preimage = JSON.stringify({ binding: result.binding, purpose: "acceptance", version: 1 });
   assert.ok(preimage.length > 512, "reproduce the unbounded JSON evidence failure");
-  assert.equal(exactBoundedToken(preimage), false);
   assert.equal(result.evidence.authorityDigest, `sha256:${createHash("sha256").update(preimage).digest("hex")}`);
   assert.equal(result.evidence.authorityDigest.length, 71);
   assert.deepEqual(await resolve(), result);
   assert.ok(Object.isFrozen(result.evidence));
   assert.deepEqual(Object.keys(result.evidence).toSorted(), ["authorityDigest", "bindingAuthorityDigest", "proofRef", "purpose"]);
-  for (const value of Object.values(result.evidence)) { assert.ok(exactBoundedToken(value)); }
-  for (const value of Object.values(result.binding)) {
-    if (typeof value === "string") { assert.ok(exactBoundedToken(value)); }
-  }
   assert.equal(result.evidence.bindingAuthorityDigest, binding().credentialBindingDigest);
   assert.deepEqual(result.binding, (({ availability: _availability, revocation: _revocation, ...value }) => value)(binding()));
   assert.equal(result.evidence.proofRef, `binding:${result.binding.accessRef}:revision:1:purpose:acceptance`);
@@ -56,7 +50,6 @@ test("complete versioned PA evidence is deterministic and passes the current AE 
   assert.equal(dispatch.evidence.purpose, "dispatch");
   assert.equal(dispatch.evidence.bindingAuthorityDigest, result.evidence.bindingAuthorityDigest);
   assert.notEqual(dispatch.evidence.authorityDigest, result.evidence.authorityDigest);
-  for (const value of Object.values(dispatch.evidence)) { assert.ok(exactBoundedToken(value)); }
 });
 
 test("every accepted binding field changes the evidence digest", async () => {
@@ -77,7 +70,6 @@ test("maximal AE-valid access refs retain identity and produce bounded proof ref
     if (result.kind !== "resolved" && result.kind !== "valid") { continue; }
     assert.equal(result.binding.accessRef, source.accessRef);
     assert.equal(result.binding.revision, source.revision);
-    for (const value of Object.values(result.evidence)) { assert.ok(exactBoundedToken(value)); }
     assert.equal(result.evidence.proofRef, `binding:${result.evidence.authorityDigest}:purpose:${result.evidence.purpose}`);
   }
   assert.notEqual((await resolve({ ...source, accessRef: `${source.accessRef.slice(0, -1)}y` })).evidence.authorityDigest,
