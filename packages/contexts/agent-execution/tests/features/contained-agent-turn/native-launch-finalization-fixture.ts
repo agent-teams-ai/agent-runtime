@@ -3,11 +3,12 @@ import { constants, readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { dirname } from "node:path";
 import { after } from "node:test";
+import { modules } from "./native-launch-finalization-modules.ts";
+export { modules };
 
 // Read only the pinned fixture catalog. Product filesystem/process operations
 // use in-memory observations before importing any reservation or provider code.
 const catalog = readFileSync(new URL("../../fixtures/codex-native-broker-0.153.4/models.json", import.meta.url));
-export const modules = new Map<string, Record<string, unknown>>();
 const slot = Symbol.for("ar69-r205-native-launch-finalization-fixture");
 Reflect.set(globalThis, slot, modules);
 const hooks = registerHooks({
