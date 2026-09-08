@@ -12,7 +12,8 @@ const unknown = async () => ({kind: "indeterminate" as const,
 
 // Real SQL and filesystem owners; synthetic custody deliberately cannot prove finality.
 export const createPostgresCurrentAuthorityFixture = async (pool: Pool, scope: {projectId: string; tenantId: string},
-  afterReservation?: () => Promise<void>) => {
+  afterReservation?: () => Promise<void>,
+  afterClaim?: (operation: Awaited<ReturnType<PostgresContainedTurnOperationStore["read"]>>) => Promise<void>) => {
   const layout = await createSyntheticFilesystemLayout();
   try {
     const workspace = await createNodeContainedTurnWorkspace(layout.workspaceOptions);
@@ -60,6 +61,7 @@ export const createPostgresCurrentAuthorityFixture = async (pool: Pool, scope: {
         const operation = await durable.read({operationId: input.operationId, scope});
         assert.ok(operation && operation.dispatch.kind === "claimed");
         assert.ok(operation.hostBootId && operation.hostInstanceId);
+        await afterClaim?.(operation);
         counts.starts++;
         const proof = {kind: "provider_process_start" as const, proofId: identity("proof", `proof:start:${input.custodyId}`),
           binding: {attemptId: input.attemptId, authorityVectorDigest: operation.acceptedAuthorityVectorDigest,

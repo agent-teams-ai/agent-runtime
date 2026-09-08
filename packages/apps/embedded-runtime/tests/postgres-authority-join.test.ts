@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createContainedTurnOperationProviderAccessPort, createContainedTurnSecurityAcceptancePort } from "../../../contexts/agent-execution/dist/composition.js";
-import { createPostgresCurrentProviderAccess, createPostgresOperationDispatchConsumption } from "../../../contexts/provider-access/dist/composition.js";
+import { createContainedTurnOperationProviderAccessPort, createContainedTurnSecurityAcceptancePort, createContainedTurnFeature, nativeHttpRequestProfile } from "../../../contexts/agent-execution/dist/composition.js";
+import { createPostgresRouteSelectionOwner, createPostgresCurrentProviderAccess, createPostgresOperationDispatchConsumption } from "../../../contexts/provider-access/dist/composition.js";
 import { createPostgresMaterializationRepository } from "../../../contexts/provider-access/dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.js";
 import { issuanceFixture, fixtureHash } from "../../../contexts/provider-access/tests/features/contained-turn-access/operation-dispatch-test-fixture.ts";
 import { validateDisposablePostgresUrl } from "../../../contexts/provider-access/tests/features/contained-turn-access/postgres-materialization-url.fixtures.ts";
@@ -15,6 +15,10 @@ import {applyContainedTurnPostgresSchema} from "../../../contexts/agent-executio
 import type {OwnerSubmitOutcome, OwnerObservationOutcome} from "../dist/composition/contained-turn-composition-types.js";
 import {containedTurnIdentity} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 import {createPostgresCurrentAuthorityFixture} from "./support/postgres-current-authority-fixture.ts";
+
+import {selection as routeSelection} from "../../../contexts/provider-access/tests/features/contained-turn-access/route-selection-fixture.ts";
+import {postgresDeploymentSelection} from "./support/postgres-deployment-selection-fixture.ts";
+import {captureContainedTurnCurrentAuthority, snapshotContainedTurnAuthority} from "../dist/composition/contained-turn-current-authority.js";
 
 const databaseUrl = process.env.AE_ACL_POSTGRES_DISPOSABLE_URL;
 // A skip only checks loading/type definitions. Orchestrator owns execution on a new disposable database.
@@ -63,19 +67,52 @@ test("joined AE feature with actual PostgreSQL PA current/v2 and RS acceptance/p
   assert.deepEqual(await reconstructed.consumeForDispatch(a.handoff), historical);
   // Exercise the current product composition with actual AE acceptance and final claim.
   // The provider/custody boundary is explicitly synthetic and returns unknown, never live success.
+  const routeOwner = createPostgresRouteSelectionOwner(pool, {...routeSelection(), binding: issuance.binding,
+    descriptor: nativeHttpRequestProfile("codex-chatgpt-responses/v1")!});
+  t.after(routeOwner.dispose);
+  await routeOwner.control.migrate();
+  await routeOwner.control.endorse(1);
+  const otherKey = {scope: {...scope, scopeDigest: issuance.binding.scopeDigest}, providerId: "codex",
+    operationId: a.handoff.subject.operationId,
+    authorityGeneration: a.handoff.subject.runtimeSecurityExpectation.authorityGeneration};
+  assert.equal((await repository.readAuthority(otherKey)).authority!.operationId, otherKey.operationId);
   const currentRuns = [];
   for (const id of ["current-pg-A", "current-pg-B"]) {
-    const harness = await createPostgresCurrentAuthorityFixture(pool, scope);
+    let deployment!: ReturnType<typeof postgresDeploymentSelection>;
+    let revokedChecks = 0;
+    const harness = await createPostgresCurrentAuthorityFixture(pool, scope, undefined, async operation => {
+      const {kernel, acknowledged, create} = await deployment.checkClaim(operation);
+      // Revoke a genuinely published head through the RS owner, then replay
+      // the historical consumptions into a fresh acknowledgement join.
+      const key = {scope: {...scope, scopeDigest: issuance.binding.scopeDigest}, providerId: "codex",
+        operationId: acknowledged.subject.operationId,
+        authorityGeneration: acknowledged.subject.runtimeSecurityExpectation.authorityGeneration};
+      await repository.revokeAuthority(key, "1");
+      assert.equal((await repository.readAuthority(key)).authority!.revoked, true);
+      const revoked = create();
+      const ports = revoked.bind({providerAccess, security});
+      assert.equal((await ports.providerAccess.consumeForDispatch({...acknowledged, grantRequestId: acknowledged.subject.providerAccessRequest.grantRequestId})).kind, "consumed");
+      assert.equal((await ports.security.consumeForDispatch(acknowledged)).kind, "consumed");
+      assert.throws(() => revoked.take(kernel), /acknowledged/u);
+      revokedChecks++;
+    });
     t.after(harness.cleanup);
     const dependencies = {...harness.dependencies, authority: "current" as const,
       providerAccess: Object.freeze({...current.providerAccess, dispatchConsumption: pa.dispatchConsumption}),
       security: Object.freeze({acceptance: owner, profile: Object.freeze({policyRevision: rule.policyRevision})})};
-    const feature = createContainedTurnFeatureFromProviderAccess(dependencies);
+    const captured = snapshotContainedTurnAuthority(dependencies);
+    assert.equal(captured.selection.authority, "current");
+    assert.ok(captured.selection.authority === "current");
+    deployment = postgresDeploymentSelection(captureContainedTurnCurrentAuthority(captured.selection, captured.providerAccess),
+      {runtimeSecurity: repository, providerAccess: routeOwner}, otherKey);
+    const feature = createContainedTurnFeature(Object.freeze({...harness.dependencies, ...deployment.ports}));
     const request = {commandId: `command:${id}`, expectedProvider: "codex", scope, intent};
     const result = await feature.submit.execute(request) as OwnerSubmitOutcome;
     assert.equal(result.status, "observed");
     assert.ok(result.status === "observed");
     assert.equal(result.turn.status, "reconcile_required");
+    assert.equal(deployment.checks, 1, "deployment selection assertions ran after the durable claim");
+    assert.equal(revokedChecks, 1, "revoked current head remained unavailable despite historical receipts");
     assert.deepEqual([harness.counts.provider, harness.counts.starts, harness.counts.boundaries], [1, 1, 0]);
     const rebuiltStore = harness.rebuildStore();
     const persisted = await rebuiltStore.durable.read({operationId: containedTurnIdentity("operation", result.turn.operationId), scope});
