@@ -158,3 +158,18 @@ test("Node consumption subject must match actual claimed journal handoff before 
   }
   assert.deepEqual(f.events, ["select"]);
 });
+
+test("optional deployment decorator is inert and requires the committed resource subject", async () => {
+  const f = fixture();
+  const ordinary = f.factory();
+  assert.equal(ordinary.recipe(input).preparation.resources.decorateListener, undefined);
+  assert.equal(await ordinary.releaseAfterHostCleanup(call()), "released");
+  let invoked = false;
+  const owner = createLinuxCodexNodeRecipe({hostBootId: "boot-1", hostInstanceId: "host-1",
+    select: () => ({...f.selection, decorateListener(listener) {invoked = true; return listener;}})});
+  const selected = owner.recipe(input);
+  assert.equal(invoked, false);
+  assert.throws(() => selected.preparation.resources.decorateListener!({} as never), /subject unavailable/u);
+  assert.equal(invoked, false);
+  assert.equal(await owner.releaseAfterHostCleanup(call()), "released");
+});

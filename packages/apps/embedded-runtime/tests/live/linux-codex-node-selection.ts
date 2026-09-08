@@ -41,6 +41,7 @@ export interface LinuxCodexNodeSelectionPins {
     maximumLifetimeMs: number}>;
   readonly deadlines: Omit<Selection["deadlines"], "routeLifetimeMs">;
   readonly initTimeouts: Readonly<{readyTimeoutMs: number; acknowledgementTimeoutMs: number}>;
+  readonly decorateListener?: Selection["decorateListener"];
   readonly connection: Omit<Selection["connection"], "limits"> & Readonly<{
     limits: Omit<Selection["connection"]["limits"], "deadline" | "closureDeadline">}>;
   /** REQUIRED READBACK: kernel+record omit scope digest, Host IDs and execution
@@ -202,6 +203,7 @@ export const createLinuxCodexNodeSelection = (inputPins: LinuxCodexNodeSelection
       image: lock, policy: p.enginePolicy, configuration, privateRoot: d.privateRoot, workspace: d.workspace,
       intentMode: k.intentMode}));
     return {
+      ...(p.decorateListener === undefined ? {} : {decorateListener: p.decorateListener}),
       node: {enginePolicy: p.enginePolicy, ...p.tools,
         custodyJournalRoot: d.custody.path, resourceJournalRoot: d.resource.path},
       create: {imageDigest: lock.imageReference, entrypoint: "/ar-custody-node",

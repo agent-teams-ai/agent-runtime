@@ -1,6 +1,6 @@
 import {strict as assert} from "node:assert";
 import {test} from "node:test";
-import {LinuxCodexLiveAdminSetupError, setupLinuxCodexLiveAdmin} from "./linux-codex-live-admin.ts";
+import {LinuxCodexLiveAdminSetupError, setupLinuxCodexLiveAdmin, snapshotLinuxCodexLiveAdminRoute} from "./linux-codex-live-admin.ts";
 
 // Invalid administration never reaches a Pool or runtime owner. These are
 // malformed-input tests, not mocked PA/RS/custody authority or live tests.
@@ -57,4 +57,18 @@ test("approval snapshot failure erases transferred arrays despite producer slot 
   );
   assert.deepEqual([...token, ...accountId], [0, 0, 0, 0]);
   assert.deepEqual([...replacement], [69]);
+});
+
+test("route snapshot preserves native cancellation while isolating mutable data", () => {
+  const controller = new AbortController();
+  const data = {operationAbortSignal: controller.signal, descriptor: {recipeRevision: "before"}};
+  const captured = snapshotLinuxCodexLiveAdminRoute(data as never);
+  data.descriptor.recipeRevision = "after";
+  assert.equal(captured.operationAbortSignal, controller.signal);
+  assert.equal((captured.descriptor as unknown as {recipeRevision: string}).recipeRevision, "before");
+  let cancelled = false;
+  captured.operationAbortSignal.addEventListener("abort", () => {cancelled = true;}, {once: true});
+  controller.abort();
+  assert.equal(cancelled, true);
+  assert.equal(captured.operationAbortSignal.aborted, true);
 });

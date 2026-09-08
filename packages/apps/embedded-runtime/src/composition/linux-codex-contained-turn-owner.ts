@@ -39,7 +39,8 @@ export interface LinuxCodexContainedTurnResources {
     preparation: Omit<DockerLinuxPostClaimDependencies, "resources" | "routeAdmission" | "publishRouteFirstWrite"> & Readonly<{
       workspaceBackingTreeOwnership?: NonNullable<ReturnType<DockerOptions["preparation"]>["workspaceBackingTreeOwnership"]>;
       resources: Omit<DockerLinuxPostClaimDependencies["resources"], "accept" | "listenerFor" | "consumption"> &
-        Readonly<{consumption: NodeDockerConsumptionRecipe}>;
+        Readonly<{consumption: NodeDockerConsumptionRecipe;
+          decorateListener?: (listener: ReturnType<typeof createNodeHostHttpListener>) => ReturnType<typeof createNodeHostHttpListener>}>;
     }>;
     route: DockerLinuxExclusiveRouteAdmissionInput;
     currentAuthority: ContainedTurnCurrentEgressOwnersInput;
@@ -76,7 +77,7 @@ const joinedHttpResources = (
   verifier: Parameters<typeof joinLinuxCodexSignerConsumption>[1],
 ): Readonly<{resources: DockerLinuxPostClaimDependencies["resources"]; settle(): Promise<void>; isSettled(): boolean}> => {
   const {broker, connection} = selected;
-  const httpResources = selected.preparation.resources;
+  const {decorateListener, ...httpResources} = selected.preparation.resources;
   let address: string | undefined;
   let retainedListener: ReturnType<typeof createNodeHostHttpListener> | undefined;
   let requestDebt = false;
@@ -86,9 +87,10 @@ const joinedHttpResources = (
       const listener = createNodeHostHttpListener({host, deadline: connection.limits.deadline,
         closureDeadline: connection.limits.closureDeadline}, broker.clock);
       if (retainedListener !== undefined) {throw new TypeError("Docker HTTP listener already selected");}
-      retainedListener = listener;
-      return Object.freeze({...listener, async open(...args: Parameters<typeof listener.open>) {
-        const opened = await listener.open(...args);
+      const decorated = decorateListener === undefined ? listener : decorateListener(listener);
+      retainedListener = decorated;
+      return Object.freeze({...decorated, async open(...args: Parameters<typeof listener.open>) {
+        const opened = await decorated.open(...args);
         address = `${opened.address.address}:${opened.address.port}`;
         return opened;
       }});

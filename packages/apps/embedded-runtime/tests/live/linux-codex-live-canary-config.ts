@@ -37,7 +37,6 @@ import {setupLinuxCodexLiveAdmin, type LinuxCodexLiveAdminApproval,
 type Configuration = LinuxCodexLiveAdminConfiguration;
 type Approval = LinuxCodexLiveAdminApproval;
 const revision = "linux-codex-marker-canary:v1";
-const sourceRevision = "121084f22be022044d68570c4c1c100242b432d5";
 const runtimeMs = 180_000;
 const cleanupMs = 30_000;
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
@@ -66,6 +65,8 @@ export interface LinuxCodexCanaryApproval {
  * bytes, not paths to discover. Root owns the disposable parent and database.
  */
 export interface LinuxCodexCanaryHostPins {
+  readonly firewall?: Configuration["firewall"];
+  readonly sourceRevision: string;
   readonly hostBootId: string;
   readonly hostInstanceId: string;
   readonly testParent: string;
@@ -141,6 +142,7 @@ const createCapabilities = (): Configuration["capabilities"] => {
 
 const validateCanaryFacts = (a: LinuxCodexCanaryApproval, p: LinuxCodexCanaryHostPins) => {
   if (process.platform !== "linux" || process.arch !== "x64" ||
+      !/^[a-f0-9]{40}$/u.test(p.sourceRevision) ||
       a.approvedIntent !== "write-one-marker-and-return-it/v1" ||
       ![a.testId, a.deploymentId, a.deploymentIncarnation].every(value =>
         /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/u.test(value) && !value.includes("..")) ||
@@ -166,7 +168,8 @@ export const createLinuxCodexLiveCanaryConfiguration = (
   approved: LinuxCodexCanaryApproval, host: LinuxCodexCanaryHostPins,
 ) => {
   const a = structuredClone(approved);
-  const p = structuredClone(host);
+  const {firewall, ...hostData} = host;
+  const p = structuredClone(hostData);
   validateCanaryFacts(a, p);
   const imageInitLock = snapshotDockerImageInitLock(p.imageInitLock);
   if (imageInitLock.imageReference !== "sha256:fd7c07360e32ff352fcb761da8eaba479d000a6945afe3c6483de3cdef08377e" ||
@@ -195,7 +198,7 @@ export const createLinuxCodexLiveCanaryConfiguration = (
       `${a.marker} followed by a newline. Do not read or modify other files. Return exactly ${a.marker} as your final response.`};
   const constraintsDigest = containedTurnAcceptanceConstraintsDigestV1({adapterSnapshot, capabilityManifest, intent});
   const administrativeDigest = currentEgressDigest({purpose: revision, approved: a,
-    sourceRevision, hostBootId: p.hostBootId, hostInstanceId: p.hostInstanceId, testParent: p.testParent,
+    sourceRevision: p.sourceRevision, hostBootId: p.hostBootId, hostInstanceId: p.hostInstanceId, testParent: p.testParent,
     enginePolicy, tools: p.tools, imageInitLock, observerSha256: p.observerSha256,
     native: {ownerUid: p.native.ownerUid, ownerGid: p.native.ownerGid, catalogSha256: sha256(p.native.catalogSource)},
     tlsPolicyDigest, constraintsDigest, start, deadline});
@@ -248,7 +251,8 @@ export const createLinuxCodexLiveCanaryConfiguration = (
   const hostCustody = new NodeProviderProcessCustody({hostLifecycleGeneration: a.deploymentIncarnation,
     monotonicNow: () => performance.now(), launchPlans: {async resolve() {}}});
   const configuration: Configuration = {
-    sourceRevision, hostBootId: p.hostBootId, hostInstanceId: p.hostInstanceId,
+    ...(firewall === undefined ? {} : {firewall}),
+    sourceRevision: p.sourceRevision, hostBootId: p.hostBootId, hostInstanceId: p.hostInstanceId,
     authorityRevision: policyRevision, capabilityManifestRevision: capabilityManifest.manifestRevision,
     testParent: p.testParent, executablePath: "/ar-provider/provider-entrypoint",
     credentialDeadlineMonotonic: performance.now() + deadline - clock.now() - 1_000, authorityReadTimeoutMs: 5_000,

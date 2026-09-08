@@ -30,6 +30,7 @@ export interface LinuxCodexLiveAdminApproval {
 }
 
 export interface LinuxCodexLiveAdminConfiguration {
+  readonly firewall?: LinuxCodexLivePins["firewall"];
   readonly sourceRevision: string;
   readonly hostBootId: string;
   readonly hostInstanceId: string;
@@ -84,6 +85,12 @@ export class LinuxCodexLiveAdminSetupError extends Error {
     this.cleanup = cleanup;
   }
 }
+
+/** Snapshot route data while borrowing the native cancellation capability. */
+export const snapshotLinuxCodexLiveAdminRoute = (route: LinuxCodexLivePins["route"]): LinuxCodexLivePins["route"] => {
+  const {operationAbortSignal, ...data} = route;
+  return {...structuredClone(data), operationAbortSignal};
+};
 
 const validateApproval = (approval: LinuxCodexLiveAdminApproval,
   issuance: LinuxCodexLivePins["issuance"], route: LinuxCodexLivePins["route"]) => {
@@ -221,7 +228,7 @@ export const setupLinuxCodexLiveAdmin = async (
     const approval = structuredClone(approved);
     const {binding, submission, dispatchPolicy} = approval;
     const issuance = structuredClone({...config.issuance, binding});
-    const route = structuredClone({...config.route, binding});
+    const route = snapshotLinuxCodexLiveAdminRoute({...config.route, binding});
     const policyRead = config.policy.read.bind(config.policy);
     const lifetime = {...config.node.lifetime};
     const credentialDeadline = config.credentialDeadlineMonotonic;
@@ -240,6 +247,7 @@ export const setupLinuxCodexLiveAdmin = async (
       route, hostBootId: config.hostBootId, capabilityManifestRevision: config.capabilityManifestRevision,
       enginePolicy, tools: config.node.tools});
     const pins: LinuxCodexLivePins = {
+      ...(config.firewall === undefined ? {} : {firewall: config.firewall}),
       sourceRevision: config.sourceRevision, authorityRevision: config.authorityRevision,
       hostBootId: config.hostBootId, hostInstanceId: config.hostInstanceId,
       issuance, route, policyRevision: dispatchPolicy.policyRevision,

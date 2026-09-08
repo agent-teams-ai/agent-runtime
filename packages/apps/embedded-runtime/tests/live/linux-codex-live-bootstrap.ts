@@ -28,6 +28,8 @@ import type {LinuxCodexDeploymentInfrastructure} from "../../dist/composition/li
 import {createLinuxCodexNodeSelection, type LinuxCodexNodeSelectionPins} from "./linux-codex-node-selection.ts";
 import {createLinuxCodexPaRenderingFactory, type LinuxCodexOwnedPaMaterial} from "./linux-codex-pa-rendering.ts";
 
+import {createLinuxCodexLiveFirewallWiring, type LinuxCodexLiveFirewallPins} from "./linux-codex-live-firewall-wiring.ts";
+
 type Pool = ConstructorParameters<typeof PostgresContainedTurnOperationStore>[0]["pool"];
 type Host = ReturnType<typeof createHostCustodiedAgentRuntimeHost>;
 type Selection = Parameters<typeof createPostgresOperationDispatchConsumption>[1];
@@ -60,7 +62,9 @@ export interface LinuxCodexLivePins {
   readonly routeEnforcement: NonNullable<HostCustodiedAgentRuntimeHostDependencies["containedTurn"]["routeEnforcement"]>;
   /** Borrowed concrete host owner; retained until this assembly reports released. */
   readonly hostCustody: HostCustodiedAgentRuntimeHostDependencies["containedTurn"]["hostCustody"];
-  readonly node: Omit<LinuxCodexNodeSelectionPins, "readAcknowledged">;
+  readonly node: Omit<LinuxCodexNodeSelectionPins, "readAcknowledged" | "decorateListener">;
+  /** Explicit authorization for the exact temporary disposable-host rule. */
+  readonly firewall?: LinuxCodexLiveFirewallPins;
   readonly deployment: Omit<LinuxCodexDeploymentInfrastructure,
     "pool" | "recipe" | "currentAuthority" | "sourceRevision" | "createProviderAccess">;
   /** Owned secret material remains in this input's lifetime, never in diagnostics.
@@ -199,6 +203,7 @@ export const setupLinuxCodexLiveBootstrap = async (pool: Pool, pins: LinuxCodexL
     const artifacts = await createNodeContainedTurnArtifacts(pins.artifacts);
     node = createLinuxCodexNodeRecipe({hostBootId: pins.hostBootId,
       hostInstanceId: pins.hostInstanceId, select: createLinuxCodexNodeSelection({...pins.node,
+      ...(pins.firewall === undefined ? {} : {decorateListener: createLinuxCodexLiveFirewallWiring(pins.firewall)}),
         readAcknowledged(input) {
           const value = acknowledgedSelections.get(input.kernel.custodyId);
           acknowledgedSelections.delete(input.kernel.custodyId);

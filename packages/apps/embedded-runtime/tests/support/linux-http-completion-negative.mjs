@@ -83,7 +83,7 @@ mock.module(new URL(`${composition}contained-turn-http-egress-authorities.js`, i
 const {createLinuxCodexContainedTurnOwner} = await import(
   `${composition}linux-codex-contained-turn-owner.js`);
 
-async function fixture(t) {
+async function fixture(t, decorateListener) {
   const state = {
     events: [], providerResult: deferred(), receipt: deferred(),
     settleEntered: deferred(),
@@ -101,7 +101,7 @@ async function fixture(t) {
     preparation: {
       subjectFacts: {scopeSha256: "a".repeat(64)},
       engineIdentity() {}, openLifecycle() {}, openResourceJournal() {},
-      resources: {consumption: {prepare() {}}},
+      resources: {consumption: {prepare() {}}, ...(decorateListener === undefined ? {} : {decorateListener})},
     },
     route: {binding: {...kernel}, engine: {inspect() {}}, nsenter: {}, nft: {}},
     currentAuthority: {operation: {scope, providerId: "codex"}},
@@ -183,4 +183,25 @@ test("HTTP completion negative joins", {concurrency: false}, async parent => {
       await assert.rejects(f.owner.custody[method]({custodyId: "custody:test"}), /settlement is unproven/);
     }
   });
+});
+
+
+test("deployment listener admission and cleanup stay on the retained decorated recipe", async t => {
+  const entered = deferred(); const allow = deferred(); const events = [];
+  let published = false;
+  const pending = fixture(t, listener => ({...listener,
+    async open(...args) {
+      const opened = await listener.open(...args);
+      events.push("bound"); entered.resolve(); await allow.promise;
+      events.push("admitted"); return opened;
+    },
+    async settleAccepted() {events.push("settle"); return listener.settleAccepted();},
+    async close() {events.push("close"); return listener.close();},
+  })).then(value => {published = true; return value;});
+  await entered.promise; assert.equal(published, false); assert.deepEqual(events, ["bound"]);
+  allow.resolve(); const f = await pending;
+  f.receipt.resolve({outcome: "completed"});
+  f.providerResult.resolve({kind: "completed", outcome: "succeeded"});
+  await f.execution; await f.listener.close();
+  assert.deepEqual(events, ["bound", "admitted", "settle", "close"]);
 });

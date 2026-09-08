@@ -677,3 +677,23 @@ test("joined consumption failure after route installation leaves finalizer unuse
   assert.deepEqual(j.counts(), {opens: 1, finishes: 0});
   assert.ok(f.events.includes("remove")); assert.equal(f.physical.closes, 1);
 });
+
+test("uncertain deployment listener cleanup prevents operation network release", async t => {
+  const f = await postClaimFixture(t);
+  const resources = f.dependencies.resources;
+  const preparation = createDockerLinuxPostClaimPreparation({...f.dependencies,
+    resources: {...resources, listenerFor(host) {
+      const listener = resources.listenerFor(host);
+      return {...listener, async close() {
+        await listener.close();
+        // A deployment prerequisite still owns cleanup debt after native close.
+        return {state: "unknown" as const};
+      }};
+    }},
+  });
+  assert.notEqual((await preparation.prepareClaimed(f.claimed)).kind, "prepared");
+  assert.ok(f.physical.closes > 0);
+  assert.equal(f.network.state.calls.some(call => call.startsWith("DELETE ")), false);
+  assert.notEqual(f.network.state.network, undefined);
+  assert.equal(kinds(f.v4Storage.journal).includes("network_release"), false);
+});

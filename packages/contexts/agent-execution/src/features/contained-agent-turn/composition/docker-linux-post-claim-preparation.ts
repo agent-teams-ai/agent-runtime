@@ -329,8 +329,10 @@ const createResourceCleanup = (
     if (resources.routeAttempted && containerAbsent) {
       proven = await releaseRoute() && proven;
     }
-    proven = await proveListenerAbsent() && proven;
+    const listenerAbsent = await proveListenerAbsent();
+    proven = listenerAbsent && proven;
     if (resources.networkAttempted) {
+      if (!listenerAbsent) {return false;}
       if (Date.now() >= observationDeadline) {return false;}
       const removed = await resources.network?.cleanupNetwork().catch(() => "unknown" as const);
       proven = removed === "absent" && proven;

@@ -51,8 +51,8 @@ test("constructor is inert, snapshots scope, and digest hashes concatenated byte
   mutable.tenantId = "changed";
   assert.equal(fake.calls.length, 0);
   const parts = [new Uint8Array([0, 255]), new Uint8Array([128, 10])];
-  assert.equal(owner.digest(parts), createHash("sha256").update(Buffer.concat(parts)).digest("hex"));
-  assert.equal(owner.digest([]), createHash("sha256").digest("hex"));
+  assert.equal(owner.digest(parts), `sha256:${createHash("sha256").update(Buffer.concat(parts)).digest("hex")}`);
+  assert.equal(owner.digest([]), `sha256:${createHash("sha256").digest("hex")}`);
   assert.equal(await owner.record(receipt()), "recorded");
   assert.equal(JSON.parse([...fake.rows.keys()][0]!)[0], scope.tenantId);
 });

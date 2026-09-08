@@ -60,7 +60,8 @@ export class PostgresHttpEgressEvidence implements HttpEgressEvidence {
   public digest(parts: readonly Uint8Array[]): string {
     const hash = createHash("sha256");
     for (const part of parts) {hash.update(part);}
-    return hash.digest("hex");
+    // Request projections cross into RS before signing and use its algorithm-tagged digest contract.
+    return `sha256:${hash.digest("hex")}`;
   }
   public async record(input: HttpEgressReceipt): Promise<"recorded" | "conflict" | "unknown"> {
     const {receipt, canonical} = canonicalHttpEvidenceReceipt(input);

@@ -267,3 +267,19 @@ for (const cancelled of [false, true]) {
     assert.equal(f.servers[0]!.closeCalls, 1);
   });
 }
+
+test("unknown deployment close retains the same listener and original release intent for retry", async () => {
+  const f = await fixture();
+  let closes = 0;
+  const original = f.resourceInput.listener;
+  const listener = {...original, async close() {
+    closes++;
+    const result = await original.close();
+    return closes === 1 ? {state: "unknown" as const} : result;
+  }};
+  assert.equal((await f.preparation.prepareResources(f.lifetime, {...f.resourceInput, listener})).kind, "prepared");
+  burn(f); await f.authorizeRelease();
+  await f.release(); assert.equal(closes, 1);
+  await f.release(); assert.equal(closes, 2);
+  assert.equal(f.records().filter(kind => kind === "listener_release").length, 1);
+});

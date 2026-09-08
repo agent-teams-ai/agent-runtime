@@ -81,6 +81,7 @@ export class NodeCustodyHttpResources {
   #journalRetired = false;
   #listenerCleanup: Promise<void> | undefined;
   #listenerClosed = false;
+  #listenerReleaseRecorded = false;
   #cleanup: Promise<boolean> | undefined;
 
   public constructor(reservation: HostCustodyHttpResourceOwner, controller: AbortController) {
@@ -212,11 +213,14 @@ export class NodeCustodyHttpResources {
       // Conflict/missing observations retain the endpoint. A later cleanup may
       // try again after the EXISTING observer records cutoff/socket/exact removal.
       const input = this.#input!;
-      let recorded;
-      try {
-        recorded = await input.listenerLifecycle.recordRelease();
-      } catch {return false;}
-      if (recorded.kind !== "recorded") {this.#uncertain = true; return false;}
+      if (!this.#listenerReleaseRecorded) {
+        let recorded;
+        try {
+          recorded = await input.listenerLifecycle.recordRelease();
+        } catch {return false;}
+        if (recorded.kind !== "recorded") {this.#uncertain = true; return false;}
+        this.#listenerReleaseRecorded = true;
+      }
       const completion = Promise.withResolvers<void>();
       this.#listenerCleanup = completion.promise;
       try {
@@ -225,6 +229,8 @@ export class NodeCustodyHttpResources {
       } catch {this.#uncertain = true; completion.resolve();}
     }
     await this.#listenerCleanup;
+    // Unknown closure keeps the same recipe reachable for a later bounded retry.
+    if (!this.#listenerClosed) {this.#listenerCleanup = undefined;}
     return !this.#uncertain && !this.#binding && (!this.#listenerOwned || this.#listenerClosed) &&
       (this.#journal === undefined || this.#journalRetired);
   }

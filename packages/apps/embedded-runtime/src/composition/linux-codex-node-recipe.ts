@@ -7,6 +7,7 @@ type Recipe = LinuxCodexDeploymentInfrastructure["recipe"];
 type Selected = ReturnType<Recipe>;
 type Input = Parameters<Recipe>[0];
 type Preparation = Selected["preparation"];
+type Listener = Parameters<NonNullable<Preparation["resources"]["decorateListener"]>>[0];
 type NodeOwner = ReturnType<typeof createNodeDockerDeploymentRecipe>;
 
 export interface LinuxCodexNodeRecipeSelection {
@@ -20,6 +21,11 @@ export interface LinuxCodexNodeRecipeSelection {
   readonly consumptionSubject: Readonly<{tenantId: string; projectId: string; executionGenerationId: string}>;
   readonly localCut: Preparation["resources"]["localCut"];
   readonly connection: Selected["connection"];
+  /** Private deployment wrapper; constructed before open, retained through cleanup.
+   * Subject is the independently constructed committed operation, not readback. */
+  readonly decorateListener?: (listener: Listener,
+    subject: Parameters<Preparation["openResourceJournal"]>[0]["subject"]) =>
+      Listener;
   readonly consumption: Omit<NodeDockerDeploymentRecipeInput["consumption"], "readEnvelope">;
   /** Native file custody remains a separate deployment owner. */
   readonly nativeFileOptions: Omit<DeferredCodexNativeBrokerFilesOptions, "boundary">;
@@ -62,6 +68,8 @@ export const createLinuxCodexNodeRecipe = (options: Readonly<{
     retained.set(kernel.custodyId, node);
     const nativeFiles = createDeferredCodexNativeBrokerFiles({...selected.nativeFileOptions, boundary: input.record.boundary});
     const init = selected.initOptions;
+    let resourceSubject: Parameters<Preparation["openResourceJournal"]>[0]["subject"] | undefined;
+    const decorate = selected.decorateListener?.bind(selected);
     const preparation: Preparation = Object.freeze({...node.preparation,
       workspaceBackingTreeOwnership: Object.freeze({...selected.workspaceBackingTreeOwnership}),
       openResourceJournal(request: Parameters<Preparation["openResourceJournal"]>[0]) {
@@ -70,6 +78,7 @@ export const createLinuxCodexNodeRecipe = (options: Readonly<{
             request.subject.scopeSha256 !== subjectFacts.scopeSha256) {
           throw new TypeError("Linux Codex consumption subject conflicts with claimed handoff");
         }
+        if (decorate !== undefined) {resourceSubject = structuredClone(request.subject);}
         return node.preparation.openResourceJournal(request);
       },
       create: Object.freeze({entrypoint: selected.create.entrypoint, imageDigest: selected.create.imageDigest,
@@ -90,7 +99,10 @@ export const createLinuxCodexNodeRecipe = (options: Readonly<{
       // The real private-root capture replaces this slot before launch. It is
       // deliberately invalid as a generation observation on its own.
       hostLifecycleGenerationSha256: "",
-      resources: Object.freeze({localCut: Object.freeze({...selected.localCut,
+      resources: Object.freeze({...(decorate === undefined ? {} : {decorateListener(listener: Listener) {
+        if (resourceSubject === undefined) {throw new TypeError("Operation resource subject unavailable");}
+        return decorate(listener, resourceSubject);
+      }}), localCut: Object.freeze({...selected.localCut,
         expectedClock: Object.freeze({...selected.localCut.expectedClock}),
         clock: Object.freeze({read: selected.localCut.clock.read.bind(selected.localCut.clock),
           within: selected.localCut.clock.within.bind(selected.localCut.clock)})}), consumption: node.consumption}),
