@@ -5,11 +5,12 @@ import {join} from 'node:path';
 import {publicFixture} from './linux-codex-driver-test-fixture.mjs';
 import {createLiveNativeStartCollector} from './linux-codex-live-native-start.ts';
 
-test('driver persists projected native start before returning unknown with no operation ID', async t => {
+for (const phase of ['install', 'process-input-tmpdir', 'bridge-open']) {
+test(`driver persists projected ${phase} before returning unknown with no operation ID`, async t => {
   const f = await publicFixture(t);
   const collector = createLiveNativeStartCollector();
-  const diagnostic = {phase: 'install', lastCompleted: 'ingress-open', failingPhase: 'install',
-    cutoff: false, errorCode: 'native-start-rejected'};
+  const diagnostic = {phase, lastCompleted: phase === 'install' ? 'ingress-open' : 'return', failingPhase: phase,
+    cutoff: false, errorCode: phase === 'install' ? 'native-start-rejected' : 'unknown'};
   const recipe = collector.wrap({recipe() {return {nativeFiles: {snapshot() {
     return {nativeStart: diagnostic, get credentials() {throw new Error('never read');}};
   }}};}});
@@ -28,3 +29,4 @@ test('driver persists projected native start before returning unknown with no op
   const evidence = JSON.parse(readFileSync(join(directory, records[0]), 'utf8'));
   assert.deepEqual(evidence.value, {custodyId: 'custody:driver', nativeStart: diagnostic});
 });
+}

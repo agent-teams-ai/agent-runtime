@@ -1,3 +1,4 @@
+import {recordNativeStart} from "./docker-native-start-diagnostic.js";
 import {DockerConsumptionObservations} from "./docker-consumption-observations.js";
 import {isIssuedCodexAppServerLaunchPlan, type CodexAppServerLaunchPlan} from "../adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
 import { DockerCustodyHttpReservation } from "./docker-custody-http-reservation.js";
@@ -567,9 +568,16 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
       if (join !== undefined) {
         const final = await join.finishClaimed(Object.freeze({claimed: input, launch: resources.launched,
           providerIo: providerIo!, http: resources.product, routeFirstWrite}));
+        recordNativeStart(final.plan, "begin", "plan-publication");
+        try {
         assertOpen();
         if (!isIssuedCodexAppServerLaunchPlan(final.plan)) {throw new TypeError("Docker final plan is not issued");}
         execution = Object.freeze({launch: resources.launched, providerIo: providerIo!, plan: final.plan});
+        assertOpen();
+        const result = prepared();
+        recordNativeStart(final.plan, "complete");
+        return result;
+        } catch (error) {recordNativeStart(final.plan, "fail"); throw error;}
       } else {dependencies.publishRouteFirstWrite?.(routeFirstWrite);}
       assertOpen();
       return prepared();

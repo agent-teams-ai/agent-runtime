@@ -1,3 +1,4 @@
+import {linkNativeStartDiagnostic, nativeStartStep, recordNativeStart} from "./docker-native-start-diagnostic.js";
 import {createDockerCodexEffectCustodyOwner} from "./docker-codex-effect-custody-owner.js";
 import type {DeferredCodexNativeBrokerFiles} from "./deferred-codex-native-broker-files.js";
 import {createHostPrivateRootOwnerFactory} from "./host-private-root-owner.js";
@@ -69,6 +70,9 @@ const createProvider = (records: Map<string, Retained>, options: CreateDockerCod
   const provider: ContainedTurnKernelProviderPort = Object.freeze({adapterSnapshot: selection.adapterSnapshot,
     manifest: selection.manifest, async execute(input: Parameters<ContainedTurnKernelProviderPort["execute"]>[0]) {
     const retained = records.get(input.custodyId);
+    const diagnosticKey = retained?.nativeFiles;
+    if (diagnosticKey !== undefined) {recordNativeStart(diagnosticKey, "begin", "prepared-handoff");}
+    try {
     if (isDisposed() || retained === undefined || retained.used || retained.owner === undefined || retained.claimed === undefined ||
       retained.process === undefined || retained.effectOwner === undefined || retained.kernel.operationId !== input.operationId || retained.kernel.attemptId !== input.attemptId ||
       retained.kernel.effectId !== input.effectId || retained.kernel.workspaceId !== input.workspaceId ||
@@ -81,7 +85,15 @@ const createProvider = (records: Map<string, Retained>, options: CreateDockerCod
       credentialOutputInventory: retained.record.credentialOutputInventory, effectCustody: retained.effectOwner.authority,
       plan: prepared.plan, platformTarget: options.platformTarget, process: retained.process});
     retained.provider = owner;
+    if (diagnosticKey !== undefined) {
+      recordNativeStart(diagnosticKey, "begin", "prepared-handoff");
+      recordNativeStart(diagnosticKey, "complete");
+    }
     return owner.provider.execute(input);
+    } catch (error) {
+      if (diagnosticKey !== undefined) {recordNativeStart(diagnosticKey, "fail");}
+      throw error;
+    }
   }});
   return provider;
 };
@@ -160,6 +172,7 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
       }
       const backingTreeOwnership = Object.freeze({...selected.workspaceBackingTreeOwnership});
       const nativeFiles = captureNativeFiles(filesOwner);
+      linkNativeStartDiagnostic(nativeFiles, filesOwner);
       retained.nativeFiles = nativeFiles;
       const subscription = hostHttpAbortOperations.subscribe(claimed.signal, () => {retained.effectOwner?.cutoff(); nativeFiles.cutoff();});
       retained.removeAbort = () => hostHttpAbortOperations.remove(subscription);
@@ -209,11 +222,18 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
         },
         async finishClaimed(input) {
           const result = await apply(finishClaimed, value, [{...input, record: retained.record, originalPlan: retained.originalPlan}]);
-          if (!isCodexNativeBrokerLaunchPlan(result.plan)) {throw new TypeError("Docker native broker finalization unavailable");}
+          nativeStartStep(nativeFiles, "native-plan-recognition", () => {
+            if (!isCodexNativeBrokerLaunchPlan(result.plan)) {throw new TypeError("Docker native broker finalization unavailable");}
+          });
+          linkNativeStartDiagnostic(result.plan, nativeFiles);
           const process = retained.process!;
-          const paths = createCodexDockerPathProjection(dockerProviderProcessMountFacts(input.launch), retained.record.boundary);
-          const actual = captureDockerCodexProcessInput(process, result.plan, paths, claimed.signal, () => !disposed);
-          raw.reservation(claimed.underlyingCustodyRef).evidence.finalize(result.plan, actual.exec);
+          linkNativeStartDiagnostic(process, nativeFiles);
+          const paths = nativeStartStep(nativeFiles, "mount-path-projection", () =>
+            createCodexDockerPathProjection(dockerProviderProcessMountFacts(input.launch), retained.record.boundary));
+          const actual = nativeStartStep(nativeFiles, "process-input-projection", () =>
+            captureDockerCodexProcessInput(process, result.plan, paths, claimed.signal, () => !disposed));
+          nativeStartStep(nativeFiles, "reservation-evidence-finalize", () =>
+            raw.reservation(claimed.underlyingCustodyRef).evidence.finalize(result.plan, actual.exec));
           return result;
         },
       });

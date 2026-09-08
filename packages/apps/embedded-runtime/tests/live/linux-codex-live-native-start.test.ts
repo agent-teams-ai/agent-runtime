@@ -78,3 +78,20 @@ test("retention is bounded and release leaves only immutable projected evidence"
   assert.equal(Object.isFrozen(collector.collect()[0]!.nativeStart), true);
   assert.equal(reads, finalReads);
 });
+
+for (const phase of ["native-plan-recognition", "mount-path-projection", "process-input-projection",
+  "process-input-tmpdir", "process-input-executable", "reservation-evidence-finalize",
+  "plan-publication", "prepared-handoff", "plan-root-validation", "bridge-open"] as const) {
+  test(`existing collector emits post-finalizer ${phase} and only allowlisted category`, async () => {
+    const nativeStart = {phase, lastCompleted: "return", failingPhase: phase, cutoff: true, errorCode: "unknown"};
+    const collector = createLiveNativeStartCollector();
+    const recipe = collector.wrap({recipe() {return {nativeFiles: {snapshot() {return {nativeStart};}}};}} as never);
+    recipe({kernel: {custodyId: "custody:post-finalizer"}} as never);
+    const failure = new Error("synthetic-secret");
+    await assert.rejects(collector.settle(async () => {throw failure;}), error => error === failure);
+    assert.deepEqual(collector.collect(), [{custodyId: "custody:post-finalizer", nativeStart}]);
+    assert.equal(projectLiveNativeStart({nativeStart: {...nativeStart, errorCode: "ESECRET"}}), undefined);
+    assert.equal(projectLiveNativeStart({nativeStart: {...nativeStart, failingPhase: "SECRET"}}), undefined);
+    assert.equal(projectLiveNativeStart({nativeStart: {...nativeStart, lastCompleted: "SECRET"}}), undefined);
+  });
+}

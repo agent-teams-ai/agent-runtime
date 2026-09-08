@@ -1,3 +1,4 @@
+import {linkNativeStartDiagnostic, nativeStartStep, recordNativeStart} from "./docker-native-start-diagnostic.js";
 import {createCodexDockerPathProjection, codexDockerProjectionSource, projectCodexDockerExecutable,
   projectCodexDockerPrivatePath, type CodexDockerPathProjection,
   CodexAppServerCurrentKernelAdapter, type CodexAppServerKernelAttemptFactory}
@@ -53,7 +54,7 @@ const captureOptions = (input: CreateDockerCodexCurrentKernelOwnerOptions): Crea
   const init = inert(process.init);
   const authority = inert(init.authority);
   const attempt = inert(options.attempt);
-  return Object.freeze({...options, platformTarget: inert(options.platformTarget),
+  const captured = Object.freeze({...options, platformTarget: inert(options.platformTarget),
     attempt: Object.freeze({...attempt, adapterSnapshot: inert(attempt.adapterSnapshot),
       intent: inert(attempt.intent), providerAccessSnapshot: inert(attempt.providerAccessSnapshot)}),
     process: Object.freeze({...process, call: inert(process.call), exec: inert(process.exec),
@@ -62,14 +63,17 @@ const captureOptions = (input: CreateDockerCodexCurrentKernelOwnerOptions): Crea
         ...(process.preparedIo !== undefined || init.isObservationActive === undefined ? {} : {isObservationActive: init.isObservationActive.bind(process.init)})}),
     }),
   });
+  linkNativeStartDiagnostic(captured.process, options.process);
+  return captured;
 };
 
 export const captureDockerCodexProcessInput = (input: DockerProviderProcessInput, plan: CodexAppServerLaunchPlan,
   paths: CodexDockerPathProjection, admissionSignal: AbortSignal, isAdmitted: () => boolean): DockerProviderProcessInput => {
+  return nativeStartStep(input, "process-input-projection", () => {
   const init = input.init;
   const isCurrentGeneration = init.isCurrentGeneration.bind(init);
   const environment = {...plan.environment, HOME: paths.codexHome, CODEX_HOME: paths.codexHome,
-    TMPDIR: projectCodexDockerPrivatePath(paths, plan.tmpDir)};
+    TMPDIR: nativeStartStep(input, "process-input-tmpdir", () => projectCodexDockerPrivatePath(paths, plan.tmpDir), "process-input-projection")};
   return Object.freeze({
     ...(input.preparedIo === undefined ? {} : {preparedIo: input.preparedIo}),
     launch: input.launch, // Never copy or fabricate the actual lifecycle capability.
@@ -77,7 +81,7 @@ export const captureDockerCodexProcessInput = (input: DockerProviderProcessInput
     expected: Object.freeze({...input.expected, authority: Object.freeze({...input.expected.authority})}),
     exec: Object.freeze({gid: input.exec.gid, uid: input.exec.uid, requestId: input.exec.requestId,
       wallDeadlineUnixMs: input.exec.wallDeadlineUnixMs, executableSha256: plan.executableSha256,
-      argv: Object.freeze([projectCodexDockerExecutable(paths, plan.executablePath), ...plan.arguments]),
+      argv: Object.freeze([nativeStartStep(input, "process-input-executable", () => projectCodexDockerExecutable(paths, plan.executablePath), "process-input-projection"), ...plan.arguments]),
       environment: Object.freeze(Object.entries(environment).map(([name, value]) => Object.freeze({name, value}))),
     }),
     init: input.preparedIo !== undefined ? init : Object.freeze({acknowledgementTimeoutMs: init.acknowledgementTimeoutMs, readyTimeoutMs: init.readyTimeoutMs,
@@ -88,6 +92,7 @@ export const captureDockerCodexProcessInput = (input: DockerProviderProcessInput
       ...(init.signal === undefined ? {} : {signal: init.signal}),
       ...(init.monotonicNow === undefined ? {} : {monotonicNow: init.monotonicNow.bind(init)}),
     }),
+  });
   });
 };
 
@@ -133,6 +138,7 @@ export const createDockerCodexCurrentKernelOwner = (
   options: CreateDockerCodexCurrentKernelOwnerOptions,
 ): DockerCodexCurrentKernelOwner => {
   options = captureOptions(options);
+  const diagnosticKey = options.process;
   assertBinding(options);
   const expectedAttempt = attemptDigest(options.attempt);
   const kernelCustodyId = options.attempt.custodyId;
@@ -176,28 +182,39 @@ export const createDockerCodexCurrentKernelOwner = (
   };
   const attempts: CodexAppServerKernelAttemptFactory = Object.freeze({
     async prepare(input: AttemptInput) {
+      nativeStartStep(diagnosticKey, "prepared-handoff", () => {
       assertOpen();
       if (prepared || attemptDigest(input) !== expectedAttempt) {throw new TypeError("Docker Codex attempt is unavailable");}
       prepared = true; // Fence before returning or awaiting any asynchronous effect.
+      });
       let created = false;
       return Object.freeze({
         async createProcess(isCancellationRequested: () => Promise<boolean>) {
+          recordNativeStart(diagnosticKey, "begin", "plan-root-validation");
+          try {
           if (created) {throw new TypeError("Docker Codex prepared attempt is one-use");}
           created = true;
           assertOpen();
           if (await isCancellationRequested()) {throw new TypeError("Docker Codex start is cancelled");}
           assertOpen();
-          validateCodexAppServerLaunchPlanRoots(plan);
-          const opened = await registry.open(processInput);
-          abandonPublication = takeDockerProviderProcessAbandonment(opened);
+          nativeStartStep(diagnosticKey, "plan-root-validation", () => validateCodexAppServerLaunchPlanRoots(plan));
+          } catch (error) {recordNativeStart(diagnosticKey, "fail"); throw error;}
+          recordNativeStart(diagnosticKey, "begin", "bridge-open");
+          let opened: Awaited<ReturnType<typeof registry.open>>;
+          try {
+            opened = await registry.open(processInput);
+            abandonPublication = takeDockerProviderProcessAbandonment(opened);
+          } catch (error) {recordNativeStart(diagnosticKey, "fail"); throw error;}
           try {
             // Keep abandonment through the final await and creator handoff.
             // The first protocol iterator, not registry.open(), transfers custody.
             if (await isCancellationRequested()) {throw new TypeError("Docker Codex start is cancelled");}
             assertOpen();
-            return Object.freeze({custody: Object.freeze({custodyRef: opened.custodyRef}),
+            const result = Object.freeze({custody: Object.freeze({custodyRef: opened.custodyRef}),
               kernelCustodyId, provider: protocol, workspaceRef: plan.workspaceRef});
-          } catch (error) {abandonPublication(); throw error;}
+            recordNativeStart(diagnosticKey, "complete");
+            return result;
+          } catch (error) {recordNativeStart(diagnosticKey, "fail"); abandonPublication(); throw error;}
         },
       });
     },

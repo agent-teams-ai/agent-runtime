@@ -25,6 +25,16 @@ const hooks = registerHooks({
     return {format: "module", shortCircuit: true, source: `
       export const createDockerLinuxPostClaimOwner = (_dependencies, join) => ({
         preparation: {async prepareClaimed(claimed) {
+          const probe = _dependencies.postFinalizerProbe;
+          if (probe !== undefined) {
+            // The test lifecycle is deliberately not concrete Linux residue custody.
+            try {_dependencies.openLifecycle({});} catch (error) {probe.lifecycleRefused(error);}
+            // The actual IO hook retains its process before the unattached evidence
+            // owner refuses. This probe never manufactures successful custody.
+            try {join.prepareProviderIo({launch: probe.launch, init: probe.init});}
+            catch (error) {probe.refused(error);}
+            return await join.finishClaimed({claimed, launch: probe.badMount ? {...probe.launch} : probe.launch});
+          }
           await join.finishClaimed({claimed});
           throw new Error("synthetic probe must refuse");
         }}, cutoff() {}, async cleanup() {return {kind: "quarantined"};}
@@ -91,3 +101,54 @@ test("component evidence: kernel retains the original finalizer receiver, callba
   assert.equal(recipe.providerAccess.credentialGeneration, open.providerAccessSnapshot.credentialGeneration);
   await assert.rejects(owner.custody.start(start)); assert.equal(finishes, 1);
 });
+
+import {nativeStartDiagnostic, retainNativeStartDiagnostic} from "../../../src/features/contained-agent-turn/composition/docker-native-start-diagnostic.ts";
+import {brokerFixture} from "../../fixtures/codex-native-broker-0.153.4/fixture.ts";
+
+for (const fault of ["native-plan-recognition", "mount-path-projection", "reservation-evidence-finalize"] as const) {
+  test(`actual Host post-finalizer wrapper attributes ${fault} before cutoff`, async t => {
+    const f = await connectionFixture(brokerFixture(t)); t.after(() => f.contain());
+    let finishes = 0; let ioRefusals = 0; let ioFailure: unknown; let lifecycleFailure: unknown;
+    const files = {bindRoot() {}, install() {}, async quiesce() {}, snapshot() {return {};}, cutoff() {recorder.cutoff();}};
+    const recorder = retainNativeStartDiagnostic(files);
+    const options = {
+      imageInitLock: imageLock(), cleanupMilliseconds: 100, hostBootId: "host-boot:docker", hostInstanceId: "host-instance:docker",
+      platformTarget: f.options.platformTarget,
+      launchRecords: {async resolve() {return {boundary: f.options.boundary, executablePath: f.options.plan.executablePath,
+        privateRootPath: f.options.plan.privateRootPath, tmpDir: f.options.plan.tmpDir,
+        credentialOutputInventory: f.options.credentialOutputInventory};}},
+      workspaceOwner: {async withLaunchAuthority(_input: unknown, consume: (authority: never) => unknown) {
+        return withWorkspaceAuthority(f.options.plan.workspaceRef, f.options.attempt.operationId, consume);
+      }},
+      preparation() {return {deadlines: {routeLifetimeMs: 1000}, enginePolicy: {user: "1000:1000"},
+        workspaceBackingTreeOwnership: {kind: "exclusive-host-owned-disposable-tree", evidenceRef: "urn:synthetic:diagnostic-wiring"},
+        nativeFiles: files, openLifecycle() {return f.lifecycle;}, postFinalizerProbe: {launch: f.options.process.launch, init: f.options.process.init,
+          badMount: fault === "mount-path-projection", lifecycleRefused(error: unknown) {lifecycleFailure = error;}, refused(error: unknown) {
+            ioFailure = error; ioRefusals++;
+          }}};},
+      async finishClaimed() {
+        finishes++; recorder.begin("return"); recorder.complete();
+        return {plan: fault === "native-plan-recognition" ? {...f.options.plan} : f.options.plan};
+      },
+    };
+    const owner = createDockerCodexHostKernelOwner(options as never); t.after(() => owner.dispose());
+    const open = {...f.options.attempt, intentMode: f.options.attempt.intent.mode,
+      commandId: id("command", "command:diagnostic"), preparationToken: id("preparation", "preparation:diagnostic"),
+      operationCutoffRevision: containedTurnOperationCutoffRevision(0), operationRevision: 1};
+    const opened = await owner.custody.open(open);
+    const start = {attemptId: open.attemptId, custodyId: open.custodyId, operationId: open.operationId,
+      workspaceId: open.workspaceId, intentMode: open.intentMode, committedDispatchProof: committedDispatchProofFixture(open, opened),
+      async execute() {throw new Error("probe must never admit execution");}};
+    assert.equal((await owner.custody.start(start)).kind, "indeterminate");
+    assert.ok(lifecycleFailure instanceof TypeError);
+    assert.match(lifecycleFailure.message, /concrete Linux residue owner/u);
+    assert.ok(ioFailure instanceof TypeError);
+    assert.match(ioFailure.message, /Docker provider IO attachment unavailable/u);
+    assert.equal(finishes, 1); assert.equal(ioRefusals, 1);
+    assert.deepEqual(nativeStartDiagnostic(files), {phase: fault, failingPhase: fault, cutoff: true, errorCode: "unknown",
+      lastCompleted: fault === "native-plan-recognition" ? "return" :
+        fault === "mount-path-projection" ? "native-plan-recognition" : "process-input-projection"});
+    await assert.rejects(owner.custody.start(start));
+    assert.equal(finishes, 1); assert.equal(f.events.includes("provider-exec"), false);
+  });
+}

@@ -4,7 +4,9 @@ import type {LinuxCodexDeploymentInfrastructure} from "../../src/composition/lin
 type Recipe = LinuxCodexDeploymentInfrastructure["recipe"];
 const phases = ["preflight", "recipe-create", "ingress-open", "install", "after-install",
   "files-prepare-validate", "after-files", "recipe-build", "recipe-validate", "bind-session",
-  "return-validate", "return"] as const;
+  "return-validate", "return", "native-plan-recognition", "mount-path-projection",
+  "process-input-projection", "process-input-tmpdir", "process-input-executable",
+  "reservation-evidence-finalize", "plan-publication", "prepared-handoff", "plan-root-validation", "bridge-open"] as const;
 // Read only named own data fields; never enumerate or invoke diagnostic accessors.
 const field = (value: unknown, key: string): unknown => {
   if (value === null || typeof value !== "object" || types.isProxy(value)) {return undefined;}
@@ -19,7 +21,7 @@ export const projectLiveNativeStart = (snapshot: unknown) => {
     typeof v === "string" && phases.some(p => p === v);
   if (!validPhase(phase) || !(lastCompleted === null || validPhase(lastCompleted)) ||
       !(failingPhase === null || validPhase(failingPhase)) || typeof cutoff !== "boolean" ||
-      !(errorCode === null || errorCode === "native-start-rejected")) {return;}
+      !(errorCode === null || errorCode === "native-start-rejected" || errorCode === "unknown")) {return;}
   return Object.freeze({phase, lastCompleted, failingPhase, cutoff, errorCode});
 };
 
