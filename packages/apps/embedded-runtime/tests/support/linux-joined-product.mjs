@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {mkdtemp, realpath, readFile, writeFile, rm} from "node:fs/promises";
+import {mkdtemp, realpath, lstat, readFile, writeFile, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {createHash} from "node:crypto";
@@ -28,22 +28,23 @@ const hash = value => createHash("sha256").update(value).digest("hex");
 // Explicit integration entrypoint inside a new outer Linux netns. External
 // Docker, authority repositories and provider peer are synthetic. No live E2E claim.
 test("public RuntimeAccessHandle joins Docker custody, current authorities and native broker", {timeout: 90000}, async t => {
-  const network = await openJoinedNetwork();
-  const root = await realpath(await mkdtemp(join(tmpdir(), "ar69-joined-product-")));
+  let network; let root; let current; let docker; let nativeHome; let host; let nativeRecipe; let peer; let brokerObservations;
+  t.after(async () => {
+    const failures = [];
+    for (const cleanup of [() => host?.dispose(), () => docker?.dispose(), () => network?.dispose(),
+      () => current?.dispose(), () => root === undefined ? undefined : rm(root, {recursive: true, force: true})]) {
+      try {await cleanup();} catch (error) {failures.push(error);}
+    }
+    if (failures.length) {throw new AggregateError(failures, "joined cleanup failed");}
+  });
+  network = await openJoinedNetwork();
+  root = await mkdtemp(join(tmpdir(), "ar69-joined-product-"));
+  root = await realpath(root);
   const physicalBoot = (await readFile("/proc/sys/kernel/random/boot_id", "utf8")).trim();
   const legacy = new DeterministicCurrentOwnerHost();
   const composed = await createCompositionInput(legacy, root, {workspaceRef: join(root, "workspaces", "operation"),
     privateRootPath: join(root, "private", "operation"), bindingDigest: `sha256:${hash("joined-synthetic-credential-binding")}`});
   const events = [];
-  let current; let docker; let nativeHome; let host; let nativeRecipe; let peer; let brokerObservations;
-  t.after(async () => {
-    const failures = [];
-    for (const cleanup of [() => host?.dispose(), () => docker?.dispose(), () => network.dispose(),
-      () => current?.dispose(), () => rm(root, {recursive: true, force: true})]) {
-      try {await cleanup();} catch (error) {failures.push(error);}
-    }
-    if (failures.length) {throw new AggregateError(failures, "joined cleanup failed");}
-  });
   const originalOwner = composed.input.selectedProvider.owner;
   const launchRecords = {async resolve(input) {
     const record = await originalOwner.launchRecords.resolve(input);
@@ -145,5 +146,17 @@ test("public RuntimeAccessHandle joins Docker custody, current authorities and n
   await peer?.verify();
   assert.equal(observed?.turn?.status, "succeeded");
   assert.ok(events.includes("broker-response"));
+  assert.equal(brokerObservations.receipts.length, 1);
+  const receipt = brokerObservations.receipts[0];
+  assert.equal(receipt.outcome, "completed");
+  assert.equal(receipt.anomalyCode, "none");
+  assert.equal(receipt.attemptCount, 1);
+  assert.equal(receipt.firstByteState, "sent");
+  assert.equal(receipt.inboundClosure, "closed");
+  assert.equal(receipt.upstreamClosure, "closed");
+  for (const key of ["provisionalAuthorizationReceiptDigest", "finalAuthorizationReceiptDigest", "materializationReceiptDigest"]) {
+    assert.match(receipt[key], /^sha256:[a-f0-9]{64}$/u);
+  }
+  await assert.rejects(lstat(join(root, "private", "operation")), {code: "ENOENT"});
   assert.deepEqual(observed.turn.output, [{cursor: 0, kind: "assistant", text: "bounded synthetic output"}]);
 });

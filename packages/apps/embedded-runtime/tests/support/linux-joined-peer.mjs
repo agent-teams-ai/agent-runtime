@@ -46,7 +46,7 @@ export const installJoinedPeer = ({docker, network, boundary, recipe, events}) =
         version: "0.153.4", "user-agent": "synthetic-codex/0.153.4", originator: "codex_cli_rs", "content-length": String(Buffer.byteLength(body)), connection: "close"}});
     assert.equal(result.error, undefined, `broker transport failed: ${result.code ?? "no-code"}`);
     assert.equal(result.status, 200, "broker must accept before peer completion");
-    assert.ok(result.text.length > 0, "broker response must be consumed"); events.push("broker-response");
+    assert.equal(result.text, "data:\n\n", "exact synthetic upstream body must be consumed"); events.push("broker-response");
     const turn = "turn:joined"; const item = "item:joined"; const text = "bounded synthetic output";
     emit({id: request.id, result: {turn: generatedTurn(turn, "inProgress")}});
     emit({method: "turn/started", params: {threadId: "thread:test", turn: generatedTurn(turn, "inProgress")}});
