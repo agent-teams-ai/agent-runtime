@@ -109,7 +109,15 @@ export const createLinuxCodexDeploymentResources = (infrastructure: LinuxCodexDe
         throw new TypeError("Linux Codex acknowledged Host binding mismatch");
       }
       const policy = infrastructure.currentPolicy(acknowledged);
-      const recipe = infrastructure.recipe(input);
+      const suppliedRecipe = infrastructure.recipe(input);
+      if (suppliedRecipe === null || typeof suppliedRecipe !== "object" || types.isProxy(suppliedRecipe)) {
+        throw new TypeError("Linux Codex deployment recipe unavailable");
+      }
+      const recipeFields = Object.getOwnPropertyDescriptors(suppliedRecipe);
+      if (Object.values(recipeFields).some(field => !("value" in field))) {
+        throw new TypeError("Linux Codex deployment recipe accessor unavailable");
+      }
+      const recipe = Object.freeze(Object.defineProperties({}, recipeFields)) as ReturnType<LinuxCodexDeploymentInfrastructure["recipe"]>;
       const route = bindContainedTurnRouteEnforcement(routeEnforcement, acknowledged.binding, recipe);
       const scope = Object.freeze({...subject.scope, scopeDigest: subject.scopeDigest, operationId: subject.operationId});
       const ids = new NodeHttpEgressBoundaryIds();
@@ -118,7 +126,7 @@ export const createLinuxCodexDeploymentResources = (infrastructure: LinuxCodexDe
         tenantId: scope.tenantId, projectId: scope.projectId, deploymentId: infrastructure.deploymentId,
       });
       const transport = createContainedTurnHttpUpstreamTransport(infrastructure.transport);
-      const selection = {preparation: recipe.preparation, route,
+      const selection = {preparation: route.preparation, route,
         nativeFiles: recipe.nativeFiles, connection: recipe.connection,
         currentAuthority: Object.freeze({...policy, ...infrastructure.currentAuthority, acceptedDispatch: acknowledged.acceptedDispatch,
           operation: Object.freeze({scope, providerId: "codex", authorityGeneration: acknowledged.acceptedDispatch.authority!.authorityGeneration,

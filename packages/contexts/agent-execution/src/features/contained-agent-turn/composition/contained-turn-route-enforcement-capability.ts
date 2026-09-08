@@ -1,9 +1,8 @@
 import {nodeDockerRoutePolicy, selectNodeDockerRoute} from "./node-docker-route-provenance.js";
-import type {DockerLinuxPostClaimDependencies} from "./docker-linux-post-claim-preparation.js";
+import type {DockerLinuxOperationRouteAdmission, DockerLinuxPostClaimDependencies} from "./docker-linux-post-claim-preparation.js";
 import {custodyDataRecord} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import { createDockerLinuxExclusiveRouteAdmission,
   type DockerLinuxExclusiveRouteAdmissionInput } from "./docker-linux-exclusive-route-admission.js";
-import type { DockerLinuxOperationRouteAdmission } from "./docker-linux-post-claim-preparation.js";
 
 /** The eight qualification-registry target dimensions, in registry order. */
 export const CONTAINED_TURN_ROUTE_QUALIFICATION_DIMENSIONS = Object.freeze([
@@ -112,15 +111,27 @@ export const readContainedTurnRouteEnforcementTarget = (
 ): ContainedTurnRouteQualificationTarget | undefined =>
   value !== null && typeof value === "object" ? minted.get(value)?.target : undefined;
 
+type Recipe = Parameters<typeof selectNodeDockerRoute>[0];
+
 /** Bind a fresh operation to the original nominal deployment owner. No target or
  * replacement engine/tools are accepted here. An exact issued Node recipe may
  * supply its operation inspector after policy, pins and subject are joined.
+ * When a recipe is supplied, preparation is the immutable snapshot checked by
+ * provenance and must be used for execution. The capability gains no fields.
  * PA, Host and closure facts must match that owner; only operation identities may change. This allocates no route.
  */
-export const bindContainedTurnRouteEnforcement = (
+export function bindContainedTurnRouteEnforcement<P extends Recipe["preparation"]>(
+  capability: ContainedTurnRouteEnforcementCapability, bindingInput: Binding,
+  recipe: Readonly<{route: Recipe["route"]; preparation: P}>,
+): DockerLinuxExclusiveRouteAdmissionInput & Readonly<{preparation: P}>;
+export function bindContainedTurnRouteEnforcement(
+  capability: ContainedTurnRouteEnforcementCapability, bindingInput: Binding,
+  recipe?: Recipe,
+): DockerLinuxExclusiveRouteAdmissionInput;
+export function bindContainedTurnRouteEnforcement(
   capability: ContainedTurnRouteEnforcementCapability, bindingInput: Binding,
   recipe?: Parameters<typeof selectNodeDockerRoute>[0],
-): DockerLinuxExclusiveRouteAdmissionInput => {
+): DockerLinuxExclusiveRouteAdmissionInput {
   const owner = minted.get(capability);
   if (owner === undefined) {throw invalidTarget();}
   const binding = snapshotBinding(bindingInput);
@@ -132,7 +143,8 @@ export const bindContainedTurnRouteEnforcement = (
   if (recipe !== undefined && owner.policy === undefined) {throw invalidTarget();}
   const selected = recipe === undefined ? undefined :
     selectNodeDockerRoute(recipe, binding, owner.policy!, owner.route);
-  const route = Object.freeze({...owner.route, binding, engine: selected?.engine ?? owner.route.engine});
+  const route = Object.freeze({...owner.route, binding, engine: selected?.engine ?? owner.route.engine,
+    ...(selected === undefined ? {} : {preparation: selected.preparation})});
   const admission = createDockerLinuxExclusiveRouteAdmission(route);
   selectedAdmissions.set(route, selected === undefined ? admission : Object.freeze({
     async admit(request: Parameters<DockerLinuxOperationRouteAdmission["admit"]>[0]) {
@@ -148,7 +160,7 @@ export const bindContainedTurnRouteEnforcement = (
     releaseAfterContainerRemoval: admission.releaseAfterContainerRemoval,
   }));
   return route;
-};
+}
 
 /** Resolve only the exact selected route, never a structural copy or Proxy. */
 export const readContainedTurnSelectedRouteAdmission = (
