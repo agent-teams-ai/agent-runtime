@@ -30,6 +30,18 @@ const fixed = (value: unknown, prefix: string): string => {
   if (typeof value !== "string" || !value.startsWith(`${prefix}:`)) { throw new HostHttpEgressV4Error("conflict"); }
   v4Digest(value.slice(prefix.length + 1)); return value;
 };
+/** Product identities are opaque bounded IDs, not bare SHA256 values. The
+ * PostgreSQL owner emits e.g. operation:sha256:<digest>; Host incarnations and
+ * external tenant/project IDs have their own opaque suffixes. Preserve exact
+ * bytes: normalizing them would change the committed claim's owner binding.
+ * This is the same character/length envelope as the V2 custody attempt key. */
+const productIdentity = (value: unknown, prefix?: string): string => {
+  if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$/u.test(value) ||
+      prefix !== undefined && (!value.startsWith(`${prefix}:`) || value.length === prefix.length + 1)) {
+    throw new HostHttpEgressV4Error("conflict");
+  }
+  return value;
+};
 const imageDigest = (value: unknown): string => {
   const parsed = parseDockerImageReference(value);
   if (parsed === undefined) {throw new HostHttpEgressV4Error("conflict");}
@@ -40,13 +52,14 @@ export const v4Subject = (value: unknown): HostHttpEgressV4Subject => {
     "acceptedAuthoritySha256", "committedClaimSha256", "observerSha256", "imageDigest",
     "networkHandle", "listenerHandle", "routeHandle"]);
   const attempt = validateDockerCustodyAttemptKey(value.attempt);
-  // V4 requires disjoint fixed namespaces even though the V2 reader accepts older IDs.
+  // Internal product IDs retain disjoint namespaces; external scope IDs stay opaque.
   for (const [key, prefix] of Object.entries({ operationId: "operation", attemptId: "attempt", custodyId: "custody",
-    hostInstanceId: "host-instance", hostBootId: "host-boot", tenantId: "tenant", projectId: "project" })) {
-    fixed(attempt[key as keyof typeof attempt], prefix);
+    hostInstanceId: "host-instance", hostBootId: "host-boot" })) {
+    productIdentity(attempt[key as keyof typeof attempt], prefix);
   }
-  return Object.freeze({ attempt, effectId: fixed(value.effectId, "effect"), workspaceId: fixed(value.workspaceId, "workspace"),
-    executionGenerationId: fixed(value.executionGenerationId, "execution-generation"), scopeSha256: v4Digest(value.scopeSha256),
+  productIdentity(attempt.tenantId); productIdentity(attempt.projectId);
+  return Object.freeze({ attempt, effectId: productIdentity(value.effectId, "effect"), workspaceId: productIdentity(value.workspaceId, "workspace"),
+    executionGenerationId: productIdentity(value.executionGenerationId, "execution-generation"), scopeSha256: v4Digest(value.scopeSha256),
     acceptedAuthoritySha256: v4Digest(value.acceptedAuthoritySha256), committedClaimSha256: v4Digest(value.committedClaimSha256),
     observerSha256: v4Digest(value.observerSha256), imageDigest: imageDigest(value.imageDigest),
     networkHandle: fixed(value.networkHandle, "network"), listenerHandle: fixed(value.listenerHandle, "listener"),
