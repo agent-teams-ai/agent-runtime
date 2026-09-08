@@ -64,6 +64,8 @@ const forgetLiveHandles = (live: LiveCustody): void => {
   delete live.stdout;
   live.launchAuthority?.close();
   delete live.launchAuthority;
+  live.privateRootCleanupAuthority?.close();
+  delete live.privateRootCleanupAuthority;
   delete live.residueAuthority;
 };
 

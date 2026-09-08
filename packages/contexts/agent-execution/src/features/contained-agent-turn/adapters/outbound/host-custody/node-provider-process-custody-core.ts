@@ -39,7 +39,7 @@ import {
 } from "./node-provider-process-custody-open.js";
 import { assertPrivateReservationReplay, privateReservationIdentity, snapshotPrivateReservationReplayInput, replayCustody } from "./node-provider-process-custody-replay.js";
 import { releaseHostCustody } from "./host-custody-release.js";
-import { quarantinePrivateRootForReconciliation } from "./host-custody-private-root.js";
+import { quarantinePrivateRootForReconciliation, retainPrivateRootCleanupAuthority } from "./host-custody-private-root.js";
 import {
   assertRetainedWorkspaceAuthority,
   assertReservedWorkspaceAuthority,
@@ -310,7 +310,10 @@ export class NodeProviderProcessCustodyCore implements
         this.#byAttempt.delete(live.attemptId);
         this.#byRef.delete(live.custodyRef);
       },
-      residueAuthorityFactory: this.#residueAuthorityFactory,
+      residueAuthorityFactory: {create: custodyRef => {
+        retainPrivateRootCleanupAuthority(live);
+        return this.#residueAuthorityFactory.create(custodyRef);
+      }},
       expectedContainmentProfile: this.#runtimeProfile.containmentProfile,
       ...(requiredSpawnMode === undefined ? {} : { requiredSpawnMode }),
       resolveOpening,

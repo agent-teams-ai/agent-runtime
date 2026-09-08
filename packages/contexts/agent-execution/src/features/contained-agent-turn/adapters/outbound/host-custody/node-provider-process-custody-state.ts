@@ -67,6 +67,7 @@ export interface LiveCustody {
   guardianNoStartAcknowledged?: boolean;
   guardianStartErrorCode?: HostCustodyStartCode;
   launchAuthority?: VerifiedLaunchDescriptors;
+  privateRootCleanupAuthority?: { readonly descriptor: number; close(): void };
   identity: HostCustodyProcessIdentityEvidence;
   identityProof?: Promise<HostCustodyProcessIdentityProof | undefined>;
   opening: Promise<void>;
