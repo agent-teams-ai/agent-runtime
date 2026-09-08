@@ -66,7 +66,7 @@ export const createLinuxCodexNodeRecipe = (options: Readonly<{
       executionGenerationId: selected.consumptionSubject.executionGenerationId});
     const node = createNodeDockerDeploymentRecipe({...selected.node,
       routeSubject: {operationId: kernel.operationId, attemptId: kernel.attemptId, custodyId: kernel.custodyId,
-        executionGenerationId: kernel.executionGenerationId, authorityVectorDigest: kernel.authorityVectorDigest, hostBootId},
+        executionGenerationId: expected.executionGenerationId, authorityVectorDigest: kernel.authorityVectorDigest, hostBootId},
       consumption: bindLinuxCodexNodeConsumption(selected.consumption, {...expected, scopeDigest: `sha256:${subjectFacts.scopeSha256}`})});
     retained.set(kernel.custodyId, node);
     const nativeFiles = createDeferredCodexNativeBrokerFiles({...selected.nativeFileOptions, boundary: input.record.boundary});

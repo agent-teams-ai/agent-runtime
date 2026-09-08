@@ -3,10 +3,13 @@ import {test} from "node:test";
 import {createLinuxCodexNodeRecipe, type LinuxCodexNodeRecipeSelection} from "../dist/composition/linux-codex-node-recipe.js";
 import {bindLinuxCodexNodeConsumption} from "../dist/composition/linux-codex-node-recipe-consumption.js";
 import type {LinuxCodexDeploymentInfrastructure} from "../dist/composition/linux-codex-deployment.js";
+import {createContainedTurnRouteEnforcement, bindContainedTurnRouteEnforcement,
+  readContainedTurnSelectedRouteAdmission} from "@agent-teams/agent-execution/composition";
 import {policy, createInput, call} from "../../../contexts/agent-execution/tests/fixtures/docker-engine-test-fixture.ts";
 
 type Input = Parameters<LinuxCodexDeploymentInfrastructure["recipe"]>[0];
-const input = {kernel: {operationId: "operation-1", attemptId: "attempt-1", custodyId: "custody-1"},
+const input = {kernel: {operationId: "operation-1", attemptId: "attempt-1", custodyId: "custody-1",
+  authorityVectorDigest: "authority-1"},
   record: {privateRootPath: "/synthetic/private/operation", boundary: {workspaceRef: "/synthetic/workspaces/operation"}}} as Input;
 
 // Synthetic selection facts only. No daemon, provider, native file installation,
@@ -172,4 +175,39 @@ test("optional deployment decorator is inert and requires the committed resource
   assert.throws(() => selected.preparation.resources.decorateListener!({} as never), /subject unavailable/u);
   assert.equal(invoked, false);
   assert.equal(await owner.releaseAfterHostCleanup(call()), "released");
+});
+
+// Exercise the APP factory as well as the AE factory: the kernel handoff has no
+// executionGenerationId. The acknowledged selection supplies that association.
+test("Node recipe nominal route joins the acknowledged generation without a kernel generation field", async () => {
+  const f = fixture(); const owner = f.factory();
+  assert.equal(Object.hasOwn(input.kernel, "executionGenerationId"), false);
+  const selected = owner.recipe(input);
+  const target = {provider: "codex", providerAdapter: "adapter:test", binaryClosure: "binary:test",
+    platform: "linux-x64", credentialRoute: "route:test", storageTopology: "storage:test",
+    transportTopology: "transport:test", failureDomain: "host:test"};
+  const binding = {tenantId: "tenant-1", projectId: "project-1", scopeDigest: `sha256:${"c".repeat(64)}`,
+    operationId: input.kernel.operationId, attemptId: input.kernel.attemptId, custodyId: input.kernel.custodyId,
+    executionGenerationId: "execution-1", authorityVectorDigest: input.kernel.authorityVectorDigest,
+    hostBootId: "boot-1", sourceRevision: "source:test", binaryRevision: target.binaryClosure,
+    adapterRevision: target.providerAdapter, capabilityManifestRevision: "manifest:test",
+    providerRouteRef: "route:test", providerAccountRef: "account:test", accessRef: "access:test",
+    routeRevision: "revision:1", bindingRevision: 1, credentialBindingRef: "credential:test",
+    credentialBindingDigest: "opaque:test", credentialGeneration: 1};
+  const capability = createContainedTurnRouteEnforcement({qualificationTarget: target, binding,
+    enginePolicy: f.selection.node.enginePolicy, nsenter: f.selection.node.nsenter, nft: f.selection.node.nft,
+    engine: {inspect: async () => {throw new Error("unexpected deployment inspector IO");}}});
+  try {
+    assert.throws(() => bindContainedTurnRouteEnforcement(capability,
+      {...binding, executionGenerationId: "foreign"}, selected), /provenance mismatch/u);
+    assert.throws(() => bindContainedTurnRouteEnforcement(capability, binding,
+      {...selected, route: {...selected.route}}), /provenance mismatch/u);
+    const route = bindContainedTurnRouteEnforcement(capability, binding, selected);
+    assert.equal(route.engine, selected.route.engine);
+    assert.ok(readContainedTurnSelectedRouteAdmission(route));
+    assert.equal(readContainedTurnSelectedRouteAdmission({...route}), undefined);
+    assert.throws(() => bindContainedTurnRouteEnforcement(capability, binding, selected), /provenance mismatch/u);
+  } finally {
+    assert.equal(await owner.releaseAfterHostCleanup(call()), "released");
+  }
 });
