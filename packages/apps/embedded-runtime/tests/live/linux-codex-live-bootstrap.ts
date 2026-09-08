@@ -25,6 +25,8 @@ import {createLinuxCodexNodeRecipe} from "../../dist/composition/linux-codex-nod
 import {ContainedTurnConstructionCleanupError, ContainedTurnOwnerDisposalError} from
   "../../dist/composition/contained-turn-construction-failure.js";
 import type {LinuxCodexDeploymentInfrastructure} from "../../dist/composition/linux-codex-deployment.js";
+import {createLinuxCodexNodeSelection, type LinuxCodexNodeSelectionPins} from "./linux-codex-node-selection.ts";
+import {createLinuxCodexPaRenderingFactory, type LinuxCodexOwnedPaMaterial} from "./linux-codex-pa-rendering.ts";
 
 type Pool = ConstructorParameters<typeof PostgresContainedTurnOperationStore>[0]["pool"];
 type Host = ReturnType<typeof createHostCustodiedAgentRuntimeHost>;
@@ -60,7 +62,7 @@ export interface LinuxCodexLivePins {
   readonly hostCustody: HostCustodiedAgentRuntimeHostDependencies["containedTurn"]["hostCustody"];
   /** Required dependency under separate development. No constant admission fallback. */
   readonly effectCustody: CreateCodexCurrentKernelOwnerOptions["effectCustody"];
-  readonly node: Parameters<typeof createLinuxCodexNodeRecipe>[0]["select"];
+  readonly node: Omit<LinuxCodexNodeSelectionPins, "readAcknowledged">;
   readonly deployment: Omit<LinuxCodexDeploymentInfrastructure,
     "pool" | "recipe" | "currentAuthority" | "sourceRevision" | "createProviderAccess">;
   /** Owned secret material remains in this input's lifetime, never in diagnostics.
@@ -68,7 +70,7 @@ export interface LinuxCodexLivePins {
    * acknowledged operation, abort signal, deadline and independently pinned material.
    */
   readonly credentials: Readonly<{
-    createProviderAccess: LinuxCodexDeploymentInfrastructure["createProviderAccess"];
+    takeOwnedMaterial(operationId: string): LinuxCodexOwnedPaMaterial;
     inventory: LaunchRecord["credentialOutputInventory"];
   }>;
   /** Independently allocated private directories and executable pins per attempt.
@@ -128,6 +130,8 @@ export const setupLinuxCodexLiveBootstrap = async (pool: Pool, pins: LinuxCodexL
     throw new TypeError("Pinned Linux configuration and concrete effect custody are required");
   }
   const actions: Dispose[] = [];
+  const selectCurrentPolicy = pins.deployment.currentPolicy.bind(pins.deployment);
+  const acknowledgedSelections = new Map<string, NonNullable<ReturnType<LinuxCodexNodeSelectionPins["readAcknowledged"]>>>();
   let host: Host | undefined;
   let node: Recipe | undefined;
   let closing = false;
@@ -137,6 +141,7 @@ export const setupLinuxCodexLiveBootstrap = async (pool: Pool, pins: LinuxCodexL
   let cleanupInFlight: Promise<"released" | "pending"> | undefined;
   const cleanup = (call: Parameters<Recipe["releaseAfterHostCleanup"]>[0]): Promise<"released" | "pending"> => {
     closing = true;
+    acknowledgedSelections.clear();
     if (cleanupInFlight !== undefined) {return cleanupInFlight;}
     cleanupInFlight = (async () => {
       try {
@@ -196,7 +201,13 @@ export const setupLinuxCodexLiveBootstrap = async (pool: Pool, pins: LinuxCodexL
     actions.push(workspace.dispose);
     const artifacts = await createNodeContainedTurnArtifacts(pins.artifacts);
     node = createLinuxCodexNodeRecipe({hostBootId: pins.hostBootId,
-      hostInstanceId: pins.hostInstanceId, select: pins.node});
+      hostInstanceId: pins.hostInstanceId, select: createLinuxCodexNodeSelection({...pins.node,
+        readAcknowledged(input) {
+          const value = acknowledgedSelections.get(input.kernel.custodyId);
+          acknowledgedSelections.delete(input.kernel.custodyId);
+          return value;
+        },
+      })});
     const launchRecords: Launch = Object.freeze({async resolve(input: LaunchInput) {
       if (closing) {return;}
       const inventory = pins.credentials.inventory;
@@ -226,7 +237,19 @@ export const setupLinuxCodexLiveBootstrap = async (pool: Pool, pins: LinuxCodexL
         })}),
         linuxCodexDeployment: {...pins.deployment, sourceRevision: pins.sourceRevision,
           pool, recipe: node.recipe,
-          createProviderAccess: pins.credentials.createProviderAccess,
+          createProviderAccess: createLinuxCodexPaRenderingFactory(pool,
+            pins.credentials.takeOwnedMaterial.bind(pins.credentials)),
+          currentPolicy(acknowledged) {
+            const policy = selectCurrentPolicy(acknowledged);
+            if (closing || acknowledgedSelections.has(acknowledged.input.subject.custodyId)) {
+              throw new TypeError("Live acknowledged selection unavailable");
+            }
+            acknowledgedSelections.set(acknowledged.input.subject.custodyId, structuredClone({
+              subject: acknowledged.input.subject,
+              acceptedAuthorityVectorDigest: acknowledged.input.accepted.acceptedAuthorityVectorDigest,
+            }));
+            return policy;
+          },
           currentAuthority: {runtimeSecurity: repository, providerAccess: route}},
       },
     });
