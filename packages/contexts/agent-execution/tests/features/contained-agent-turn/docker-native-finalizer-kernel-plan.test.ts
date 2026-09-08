@@ -13,14 +13,33 @@ import {isIssuedCodexAppServerLaunchPlan} from "../../../dist/features/contained
 // Component wiring evidence: capture the private finalizer call at the post-claim
 // boundary without invoking Engine allocation. Native/HTTP integration runs in
 // docker-native-finalizer.test.ts; this probe grants no synthetic custody proof.
+let constructorUrl: string;
 const hooks = registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "./docker-linux-post-claim-preparation.js" && /docker-codex-host-kernel-owner\.(?:js|ts)$/u.test(context.parentURL ?? "")) {
       return {url: "synthetic:docker-native-plan-join", shortCircuit: true};
     }
+    if (specifier === "./docker-codex-current-kernel-owner.js" && /docker-codex-host-kernel-owner\.(?:js|ts)$/u.test(context.parentURL ?? "")) {
+      constructorUrl = next(specifier, context).url;
+      return {url: "synthetic:host-constructor-observer", shortCircuit: true};
+    }
     return next(specifier, context);
   },
   load(url, context, next) {
+    if (/docker-codex-host-kernel-owner\.(?:js|ts)$/u.test(url)) {
+      const loaded = next(url, context);
+      return {...loaded, source: `${loaded.source}\nexport {createProvider as hostProviderProbe};`};
+    }
+    if (url === "synthetic:host-constructor-observer") {
+      const actual = constructorUrl;
+      return {format: "module", shortCircuit: true, source: `
+        export * from ${JSON.stringify(actual)};
+        import {createDockerCodexCurrentKernelOwner as create} from ${JSON.stringify(actual)};
+        export let constructorFailure;
+        export const createDockerCodexCurrentKernelOwner = options => {
+          try {return create(options);} catch (error) {constructorFailure = error; throw error;}
+        };`};
+    }
     if (url !== "synthetic:docker-native-plan-join") {return next(url, context);}
     return {format: "module", shortCircuit: true, source: `
       export const createDockerLinuxPostClaimOwner = (_dependencies, join) => ({
@@ -41,7 +60,17 @@ const hooks = registerHooks({
       });`};
   },
 });
-const {createDockerCodexHostKernelOwner} = await import("../../../dist/features/contained-agent-turn/composition/docker-codex-host-kernel-owner.js");
+// Expose the actual private wrapper only in this test module graph. The observer
+// delegates to the real constructor and retains its rejection solely for identity checks.
+const hostModule = await import("../../../dist/features/contained-agent-turn/composition/docker-codex-host-kernel-owner.js");
+const {createDockerCodexHostKernelOwner} = hostModule;
+const {hostProviderProbe} = hostModule as typeof hostModule & {
+  hostProviderProbe(records: Map<string, unknown>, options: unknown, isDisposed: () => boolean): {
+    execute(input: unknown): Promise<unknown>;
+  };
+};
+const observerUrl = "synthetic:host-constructor-observer";
+const constructorObserver = await import(observerUrl);
 hooks.deregister();
 
 test("component evidence: kernel retains the original finalizer receiver, callback and finalizable plan", {skip: process.platform !== "linux"}, async t => {
@@ -102,7 +131,7 @@ test("component evidence: kernel retains the original finalizer receiver, callba
   await assert.rejects(owner.custody.start(start)); assert.equal(finishes, 1);
 });
 
-import {nativeStartDiagnostic, retainNativeStartDiagnostic} from "../../../src/features/contained-agent-turn/composition/docker-native-start-diagnostic.ts";
+import {nativeStartDiagnostic, retainNativeStartDiagnostic, linkNativeStartDiagnostic, nativeStartStep, recordNativeStart} from "../../../src/features/contained-agent-turn/composition/docker-native-start-diagnostic.ts";
 import {brokerFixture} from "../../fixtures/codex-native-broker-0.153.4/fixture.ts";
 
 for (const fault of ["native-plan-recognition", "mount-path-projection", "reservation-evidence-finalize"] as const) {
@@ -150,5 +179,39 @@ for (const fault of ["native-plan-recognition", "mount-path-projection", "reserv
         fault === "mount-path-projection" ? "native-plan-recognition" : "process-input-projection"});
     await assert.rejects(owner.custody.start(start));
     assert.equal(finishes, 1); assert.equal(f.events.includes("provider-exec"), false);
+  });
+}
+
+for (const earlierFailure of [false, true]) {
+  test(`actual Host constructor inventory rejection preserves throw and first failure: ${earlierFailure}`, async t => {
+    const f = await connectionFixture(); t.after(() => f.contain());
+    const files = {}; const recorder = retainNativeStartDiagnostic(files);
+    recorder.begin("return"); recorder.complete();
+    linkNativeStartDiagnostic(f.options.process, files);
+    if (earlierFailure) {
+      nativeStartStep(files, "process-input-tmpdir", () => {});
+      recordNativeStart(files, "begin", "process-input-executable");
+      recordNativeStart(files, "fail");
+    }
+    const first = nativeStartDiagnostic(files);
+    let takes = 0;
+    const retained = {kernel: {...f.input, intentMode: f.input.intent.mode},
+      nativeFiles: files, used: false, claimed: {}, process: f.options.process,
+      effectOwner: {authority: f.options.effectCustody},
+      record: {boundary: f.options.boundary, credentialOutputInventory: {}},
+      owner: {takePrepared() {takes++; return {plan: f.options.plan};}}};
+    const provider = hostProviderProbe(new Map([[f.input.custodyId, retained]]),
+      {platformTarget: f.options.platformTarget}, () => false);
+    await assert.rejects(provider.execute(f.input), error => {
+      assert.equal(error, constructorObserver.constructorFailure);
+      assert.ok(error instanceof TypeError);
+      assert.match(error.message, /credential output inventory must have an exact bounded shape/u);
+      return true;
+    });
+    assert.equal(takes, 1);
+    assert.deepEqual(nativeStartDiagnostic(files), earlierFailure ? first : {
+      phase: "prepared-handoff", failingPhase: "prepared-handoff", lastCompleted: "process-input-projection",
+      cutoff: false, errorCode: "unknown"});
+    assert.equal(f.events.includes("provider-exec"), false);
   });
 }

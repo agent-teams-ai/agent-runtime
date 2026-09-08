@@ -89,6 +89,7 @@ const createProvider = (records: Map<string, Retained>, options: CreateDockerCod
     recordHandoff(diagnosticKey, "complete");
     return owner.provider.execute(input);
     } catch (error) {
+      recordHandoff(diagnosticKey, "begin");
       recordHandoff(diagnosticKey, "fail");
       throw error;
     }
