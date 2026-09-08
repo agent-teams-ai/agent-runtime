@@ -117,6 +117,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "createClaudeCurrentKernelOwner",
       "createCodexAppServerPermissionBoundary",
       "createCodexCurrentKernelOwner",
+      "createCodexNativeBrokerFileInstaller",
       "createContainedTurnFeature",
       "createContainedTurnOperationProviderAccessPort",
       "createContainedTurnProviderAccessPort",

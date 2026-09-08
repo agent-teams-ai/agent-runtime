@@ -95,3 +95,6 @@ export {createNodeDockerDeploymentRecipe, type NodeDockerDeploymentRecipeInput} 
 
 export {bindContainedTurnRouteEnforcement, readContainedTurnSelectedRouteAdmission}
   from "./features/contained-agent-turn/internal.js";
+
+export {createCodexNativeBrokerFileInstaller, type CodexNativeBrokerFileInstaller,
+  type CodexNativeBrokerFileInstallerOptions, type CodexNativeBrokerFileInstallerSnapshot} from "./features/contained-agent-turn/internal.js";

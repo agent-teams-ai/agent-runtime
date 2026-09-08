@@ -315,3 +315,6 @@ export {renderCodexNativeBrokerConfig} from "./codex-native-broker-recipe.js";
 
 export {createCodexNativeBrokerRecipe, type CodexNativeBrokerRecipe} from "./codex-native-broker-recipe.js";
 export {prepareCodexNativeBrokerFiles} from "./codex-native-broker-files.js";
+
+export {codexNativeBrokerBoundary,
+  CODEX_NATIVE_CATALOG_BYTES, CODEX_NATIVE_CATALOG_SHA256} from "./codex-native-broker-recipe.js";

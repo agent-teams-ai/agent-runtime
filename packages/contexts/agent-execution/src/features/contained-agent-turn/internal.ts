@@ -131,3 +131,6 @@ export {createNodeDockerDeploymentRecipe, type NodeDockerDeploymentRecipeInput}
 
 export {bindContainedTurnRouteEnforcement, readContainedTurnSelectedRouteAdmission}
   from "./composition/contained-turn-route-enforcement-capability.js";
+
+export {createCodexNativeBrokerFileInstaller, type CodexNativeBrokerFileInstaller,
+  type CodexNativeBrokerFileInstallerOptions, type CodexNativeBrokerFileInstallerSnapshot} from "./composition/codex-native-broker-file-installer.js";
