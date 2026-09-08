@@ -4,7 +4,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {test} from "node:test";
 import {decodeBytes} from "./run-linux-codex-live-canary.mjs";
-import {NodeTlsHttpEgressTransport} from "../../../../contexts/agent-execution/dist/composition.js";
+import {createContainedTurnSecurityAcceptancePort, NodeTlsHttpEgressTransport} from "../../../../contexts/agent-execution/dist/composition.js";
 import {captureLinuxCodexDeploymentData} from "../../dist/composition/linux-codex-deployment-authority.js";
 import {bindContainedTurnCapabilityAuthority} from "../../dist/composition/contained-turn-authority-capability.js";
 import {NodeUnixSocketDockerEngine} from
@@ -19,7 +19,7 @@ import {createLinuxCodexLiveCanaryConfiguration} from "./linux-codex-live-canary
 
 // Constructor-only regression. Synthetic pins are not measured deployment facts;
 // no setup, credentials, daemon observation, provider or network operations.
-test("actual canary constructs Host access authority and engine while preserving RS policy and environment guards",
+test("actual canary constructs RS acceptance port, Host access authority and engine while preserving guards",
   {skip: process.platform !== "linux" || process.arch !== "x64"}, async () => {
     const parent = await realpath(await mkdtemp(join(tmpdir(), "ar69-canary-engine-env-")));
     try {
@@ -80,7 +80,8 @@ test("actual canary constructs Host access authority and engine while preserving
       assert.equal(new NodeTlsHttpEgressTransport(snapshot).tlsPolicyDigest, originalDigest);
       assert.deepEqual(configuration.deployment.transport.certificateAuthorities, [SYNTHETIC_LOOPBACK_CA]);
       const policyRevision = approval.dispatchPolicy.policyRevision;
-      assert.match(policyRevision, /^linux-codex-marker-canary:v1:[a-f0-9]{64}$/u);
+      assert.match(policyRevision, /^security-authority:linux-codex-marker-canary:v1:[a-f0-9]{64}$/u);
+      assert.equal(policyRevision.length, 112);
       assert.equal(approval.intentAuthority.authorityRevision, policyRevision);
       assert.equal(approval.egressRule.policyRef, policyRevision);
       assert.equal(approval.egressRule.revision, policyRevision);
@@ -89,8 +90,24 @@ test("actual canary constructs Host access authority and engine while preserving
         intentDigest: approval.dispatchPolicy.intentDigest, policyRevision,
       }), approval.dispatchPolicy);
       assert.equal(configuration.authorityRevision,
-        `runtime-access-authority:linux-codex-marker-canary-v1-${policyRevision.slice("linux-codex-marker-canary:v1:".length)}`);
+        `runtime-access-authority:linux-codex-marker-canary-v1-${policyRevision.slice("security-authority:linux-codex-marker-canary:v1:".length)}`);
       assert.equal(configuration.authorityRevision.length, 118);
+      let securityCalls = 0;
+      const noSecurityIO = async () => {securityCalls += 1; throw new Error("Unexpected security owner invocation");};
+      const securityOwner = {evaluateForAcceptance: noSecurityIO, publishAndConsumeForDispatch: noSecurityIO,
+        observeDispatchConsumption: noSecurityIO, settleDispatchConsumption: noSecurityIO};
+      // Same immutable profile selected by the live driver from dispatchPolicy.
+      const security = createContainedTurnSecurityAcceptancePort(securityOwner, Object.freeze({policyRevision}));
+      assert.equal(typeof security.authorizeForAcceptance, "function");
+      assert.equal(typeof security.consumeForDispatch, "function");
+      for (const invalidRevision of [policyRevision.slice("security-authority:".length),
+        configuration.authorityRevision, `security-authority:${"a".repeat(512)}`,
+        `${policyRevision}\n`, `${policyRevision}\u007f`]) {
+        assert.throws(() => createContainedTurnSecurityAcceptancePort(securityOwner,
+          Object.freeze({policyRevision: invalidRevision})),
+        {name: "TypeError", message: "invalid trusted policy revision"});
+      }
+      assert.equal(securityCalls, 0);
       let featureCalls = 0;
       const execute = async () => {featureCalls += 1; throw new Error("Unexpected feature invocation");};
       const feature = {cancel: {execute}, observe: {execute}, submit: {execute}};

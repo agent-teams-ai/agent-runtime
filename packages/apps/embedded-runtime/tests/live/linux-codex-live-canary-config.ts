@@ -215,7 +215,10 @@ export const createLinuxCodexLiveCanaryConfiguration = (
     enginePolicy, tools: p.tools, imageInitLock, observerSha256: p.observerSha256,
     native: {ownerUid: p.native.ownerUid, ownerGid: p.native.ownerGid, catalogSha256: sha256(p.native.catalogSource)},
     tlsPolicyDigest, constraintsDigest, start, deadline});
-  const policyRevision = `${revision}:${administrativeDigest.slice(7)}`;
+  // RS trusted profiles require the security authority/revision namespace. The
+  // fixed ASCII prefix plus all 64 digest hex characters is 112 characters,
+  // within exactBoundedToken's 512-character limit and free of control bytes.
+  const policyRevision = `security-authority:${revision}:${administrativeDigest.slice(7)}`;
   // Host access authority has its own revision domain, independent of RS policy.
   const authorityRevision = `runtime-access-authority:linux-codex-marker-canary-v1-${administrativeDigest.slice(7)}`;
   const scope = {tenantId: a.binding.tenantId, projectId: a.binding.projectId, scopeDigest: a.binding.scopeDigest};
