@@ -38,7 +38,7 @@ test("public RuntimeAccessHandle joins Docker custody, current authorities and n
     if (failures.length) {throw new AggregateError(failures, "joined cleanup failed");}
   });
   network = await openJoinedNetwork();
-  root = await mkdtemp(join(tmpdir(), "ar69-joined-product-"));
+  root = await mkdtemp(join(process.env.AR69_JOINED_TEST_PARENT ?? tmpdir(), "ar69-joined-product-"));
   root = await realpath(root);
   const physicalBoot = (await readFile("/proc/sys/kernel/random/boot_id", "utf8")).trim();
   const legacy = new DeterministicCurrentOwnerHost();
