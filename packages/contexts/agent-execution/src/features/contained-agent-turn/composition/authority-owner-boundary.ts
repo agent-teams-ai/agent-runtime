@@ -1,4 +1,4 @@
-import { cloneContainedTurnPortValue } from "./preparation-scope-anti-corruption.js";
+import { cloneContainedTurnPortValue, cloneContainedTurnOwnerOutput } from "./preparation-scope-anti-corruption.js";
 import { detachAndFreezeContainedTurnValue } from "../domain/contained-turn-record.js";
 
 const types = process.getBuiltinModule("node:util").types;
@@ -18,3 +18,6 @@ const ownerPromise = <T>(value: Promise<T>): Promise<T> => {
 };
 export const authorityValue = <T>(value: T): T => detachAndFreezeContainedTurnValue(cloneContainedTurnPortValue(value));
 export const ownerValue = async <T>(value: Promise<T>): Promise<T> => authorityValue(await ownerPromise(value));
+
+/** PA validates original freeze guarantees on detached, descriptor-safe data. */
+export const ownerOutputValue = async <T>(value: Promise<T>): Promise<T> => cloneContainedTurnOwnerOutput(await ownerPromise(value));

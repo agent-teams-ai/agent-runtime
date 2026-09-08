@@ -38,10 +38,10 @@ test("Provider Access ACL preserves owner evidence and binds the exact snapshot 
   let dispatchedBinding: typeof binding | undefined;
   const port = createContainedTurnProviderAccessPort(Object.freeze({
     dispatchConsumptionV1: unusedDispatch,
-    resolve: Object.freeze({ async execute() { return { binding, evidence: evidence("acceptance"), kind: "resolved" as const }; } }),
+    resolve: Object.freeze({ async execute() { return Object.freeze({ binding, evidence: evidence("acceptance"), kind: "resolved" as const }); } }),
     revalidate: Object.freeze({ async execute(input) {
       dispatchedBinding = input.binding as typeof binding;
-      return { binding, evidence: evidence("dispatch"), kind: "valid" as const };
+      return Object.freeze({ binding, evidence: evidence("dispatch"), kind: "valid" as const });
     } }),
   }));
 
@@ -75,8 +75,8 @@ test("Provider Access ACL preserves owner evidence and binds the exact snapshot 
 test("Provider Access ACL maps owner rejection evidence without exposing owner reasons", async () => {
   const port = createContainedTurnProviderAccessPort(Object.freeze({
     dispatchConsumptionV1: unusedDispatch,
-    resolve: Object.freeze({ async execute() { return { evidence: evidence("acceptance"), kind: "unavailable" as const, reason: "revoked" }; } }),
-    revalidate: Object.freeze({ async execute() { return { evidence: evidence("dispatch"), kind: "rejected" as const, reason: "revoked" }; } }),
+    resolve: Object.freeze({ async execute() { return Object.freeze({ evidence: evidence("acceptance"), kind: "unavailable" as const, reason: "revoked" }); } }),
+    revalidate: Object.freeze({ async execute() { return Object.freeze({ evidence: evidence("dispatch"), kind: "rejected" as const, reason: "revoked" }); } }),
   }));
   const outcome = await port.resolveForAcceptance({
     operationId: containedTurnIdentity("operation", "operation:one"),
@@ -96,18 +96,18 @@ test("Provider Access ambiguous consumption is observed once and settled without
   const acceptedScope = subject.scope;
   const scopeDigest = subject.scopeDigest;
   const calls: string[] = [];
-  const ownerReceipt = {
+  const ownerReceipt = Object.freeze({
     ...subject.providerAccessExpectation, authorityHeadDigestAtConsumption: subject.providerAccessExpectation.authorityHeadDigest,
     claimBeforeControlTime: 100, claimBindingDigest: subject.providerAccessRequest.claimBindingDigest,
     consumedAtControlTime: 50, consumptionDigest: "provider-consumption:one",
     grantRequestId: subject.providerAccessRequest.grantRequestId, opaqueOwnerEvidenceRef: "provider-evidence:one",
     operationId: subject.operationId, provider: subject.provider, purpose: "contained-turn.provider-dispatch/v1" as const,
-    requestDigest: subject.providerAccessRequest.requestDigest, scope: { ...acceptedScope, scopeDigest },
-  };
+    requestDigest: subject.providerAccessRequest.requestDigest, scope: Object.freeze({ ...acceptedScope, scopeDigest }),
+  });
   const port = createContainedTurnProviderAccessPort(Object.freeze({
     dispatchConsumptionV1: Object.freeze({
       async consumeForDispatch() {calls.push("consume"); return { kind: "indeterminate" as const };},
-      async observeDispatchConsumption() {calls.push("observe"); return { kind: "consumed" as const, receipt: ownerReceipt };},
+      async observeDispatchConsumption() {calls.push("observe"); return Object.freeze({ kind: "consumed" as const, receipt: ownerReceipt });},
       async settleDispatchConsumption(input) {
         calls.push(`settle:${input.disposition}`);
         return Object.freeze({

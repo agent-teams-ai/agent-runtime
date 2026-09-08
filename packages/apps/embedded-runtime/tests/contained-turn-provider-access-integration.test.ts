@@ -82,7 +82,7 @@ test("real Route C owner resolves, revalidates, observes ambiguous consumption, 
   let hideFirstConsumption = true;
   let hostileDispatchPhase:
     "consume" | "crossed-settle" | "malformed-settle" | "none" | "observe" | "prevented" |
-    "primitive" | "sealed-settle" | "settle" = "none";
+    "primitive" | "sealed-settle" | "settle" | "sealed-scope" | "crossed-scope" | "sealed-prevention" = "none";
   const dispatchSecret = "provider-dispatch-output-secret";
   const owner = Object.freeze({
     dispatchConsumptionV1: Object.freeze({
@@ -97,7 +97,20 @@ test("real Route C owner resolves, revalidates, observes ambiguous consumption, 
           return Object.freeze({kind: "prevented" as const, prevention: Object.freeze({})}) as never;
         }
         if (hostileDispatchPhase === "primitive") {return null as never;}
+        if (hostileDispatchPhase === "sealed-prevention") {
+          return Object.seal({kind: "prevented" as const, prevention: Object.freeze({
+            grantRequestId: input.grantRequestId, requestDigest: input.requestDigest, scope: input.scope,
+            observedAtControlTime: 50, opaqueOwnerEvidenceRef: "evidence:prevented", reason: "already_consumed",
+          })});
+        }
         const outcome = await harness.access.consumeForDispatch(input);
+        if (hostileDispatchPhase === "sealed-scope" || hostileDispatchPhase === "crossed-scope") {
+          assert.equal(outcome.kind, "consumed");
+          if (outcome.kind !== "consumed") {throw new Error("expected real consumed fixture");}
+          const receiptScope = hostileDispatchPhase === "sealed-scope"
+            ? Object.seal({...outcome.receipt.scope}) : Object.freeze({...outcome.receipt.scope, tenantId: "tenant:foreign"});
+          return Object.freeze({kind: "consumed" as const, receipt: Object.freeze({...outcome.receipt, scope: receiptScope})});
+        }
         if (hideFirstConsumption) { hideFirstConsumption = false; return Object.freeze({ kind: "indeterminate" as const }); }
         return outcome;
       },
@@ -184,6 +197,11 @@ test("real Route C owner resolves, revalidates, observes ambiguous consumption, 
   });
   assert.equal(settlement.kind, "settled");
   assert.equal(harness.control.observeOwnerState({ provider: "codex", scopeDigest }), "claim_committed");
+  for (const phase of ["sealed-scope", "crossed-scope", "sealed-prevention"] as const) {
+    hostileDispatchPhase = phase;
+    assert.equal((await port.consumeForDispatch({grantRequestId: subject.providerAccessRequest.grantRequestId, subject})).kind,
+      "indeterminate", phase);
+  }
   hostileDispatchPhase = "consume";
   const malformedConsumption = await port.consumeForDispatch({
     grantRequestId: subject.providerAccessRequest.grantRequestId, subject,
@@ -529,3 +547,38 @@ test("missing dispatch fails before seven-port factory reads or handle publicati
   assert.equal(downstreamReads, 0);
   assert.equal(published, undefined);
 });
+
+for (const phase of ["resolve", "revalidate"] as const) {
+  for (const shape of ["frozen", "mutable-envelope", "sealed-envelope", "sealed-evidence", "wrong-kind"] as const) {
+    test(`PA ${phase} prevention requires original immutable data: ${shape}`, async () => {
+      const active = staticOwner();
+      const accepted = await createContainedTurnProviderAccessPort(active).resolveForAcceptance({
+        intent: {mode: "analysis", prompt: "test"}, provider: "codex", scope,
+      });
+      assert.equal(accepted.kind, "resolved");
+      if (accepted.kind !== "resolved") {throw new Error("missing active fixture");}
+      const revoked = createStaticContainedTurnProviderAccessFeature([{...record, kind: "binding" as const, revocation: "revoked"}]);
+      const transform = (outcome: object) => {
+        const value = outcome as {kind: string; evidence: object};
+        if (shape === "mutable-envelope") {return {...value};}
+        if (shape === "sealed-envelope") {return Object.seal({...value});}
+        if (shape === "sealed-evidence") {return Object.freeze({...value, evidence: Object.seal({...value.evidence})});}
+        if (shape === "wrong-kind") {return Object.freeze({...value, kind: "untrusted"});}
+        return outcome;
+      };
+      const owner = Object.freeze({...active,
+        resolve: Object.freeze({async execute(input: Parameters<typeof active.resolve.execute>[0]) {
+          return transform(await revoked.resolve.execute(input)) as never;
+        }}),
+        revalidate: Object.freeze({async execute(input: Parameters<typeof active.revalidate.execute>[0]) {
+          return transform(await revoked.revalidate.execute(input)) as never;
+        }}),
+      });
+      const port = createContainedTurnProviderAccessPort(owner);
+      const outcome = phase === "resolve"
+        ? await port.resolveForAcceptance({intent: {mode: "analysis", prompt: "test"}, provider: "codex", scope})
+        : await port.revalidateForDispatch({acceptedSnapshot: accepted.snapshot, operationId: "operation:test", scope});
+      assert.equal(outcome.kind, shape === "frozen" ? "prevented" : "indeterminate");
+    });
+  }
+}
