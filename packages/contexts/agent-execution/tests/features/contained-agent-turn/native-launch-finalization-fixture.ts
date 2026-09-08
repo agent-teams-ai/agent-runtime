@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { LiveCustody } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-state.js";
 import { constants, readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { dirname } from "node:path";
@@ -125,6 +126,22 @@ modules.set("./node-provider-process-custody-spawn-acknowledgement.js", {
   },
 });
 modules.set("./host-custody-private-root.js", {
+  retainPrivateRootCleanupAuthority(live: LiveCustody) {
+    if (live.privateRootCleanupAuthority !== undefined) {return live.privateRootCleanupAuthority.descriptor;}
+    assert.equal(live.spawnStatus, "never-started");
+    const root = live.privatePaths?.root;
+    assert.ok(root);
+    const observed = stats(root.path, {bigint: true});
+    assert.equal(observed.isDirectory(), true);
+    for (const key of ["dev", "ino", "mode", "uid", "ctimeNs"] as const) {assert.equal(observed[key], root[key]);}
+    const descriptor = nextDescriptor++;
+    descriptors.set(descriptor, root.path);
+    let closed = false;
+    live.privateRootCleanupAuthority = Object.freeze({descriptor,
+      close() {if (!closed) {close(descriptor); closed = true;}},
+    });
+    return descriptor;
+  },
   quarantinePrivateRoot: () => true, quarantinePrivateRootForReconciliation: () => true,
 });
 export const host = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.js");
