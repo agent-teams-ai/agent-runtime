@@ -110,6 +110,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "NodeTlsHttpEgressError",
       "NodeTlsHttpEgressTransport",
       "PostgresContainedTurnOperationStore",
+      "PostgresHttpEgressEvidence",
       "applyContainedTurnPostgresSchema",
       "containedTurnPreventionDigest",
       "createClaudeCurrentKernelOwner",
@@ -134,6 +135,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "createNodeHostHttpListener",
       "createRuntimeInstallationDiscoveryFeature",
       "hostHttpAbortOperations",
+      "initializePostgresHttpEgressEvidence",
       // Embedded Runtime consumes this value; NativeHttpRequestProfileId is type-only.
       "nativeHttpRequestProfile",
       "readContainedTurnRouteEnforcementTarget",

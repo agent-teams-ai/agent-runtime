@@ -83,6 +83,7 @@ export type {
 } from "./domain/contained-turn-intent-guard.js";
 export { containedTurnPreventionDigest } from "./domain/contained-turn-intent-guard.js";
 export { createNativeHttpEgressRoute, nativeHttpRequestProfile, NodeHttpEgressBoundaryIds,
+  PostgresHttpEgressEvidence, initializePostgresHttpEgressEvidence, type PostgresHttpEgressEvidenceScope,
   NodeHttpEgressTrustedResolver, type NodeHttpEgressTrustedResolverOptions, NodeTlsHttpEgressError,
   NodeTlsHttpEgressTransport, type NodeTlsHttpEgressTransportOptions, type HttpEgressRouteFirstWrite,
   type HttpEgressRouteFirstWriteReservation, type NativeHttpRequestProfileId,

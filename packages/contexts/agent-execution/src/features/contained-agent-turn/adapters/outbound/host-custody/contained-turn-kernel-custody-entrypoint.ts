@@ -30,3 +30,5 @@ export {retainFinalizationHttpResources} from "./host-launch-finalization-valida
 export {createNodeHostHttpListener} from "./egress/node-host-http-listener.js";
 export {createNodeHostHttpConnection} from "./egress/node-host-http-connection.js";
 export {NodeHttpEgressTrustedResolver, type NodeHttpEgressTrustedResolverOptions} from "./egress/node-http-egress-trusted-resolver.js";
+
+export {PostgresHttpEgressEvidence, initializePostgresHttpEgressEvidence, type PostgresHttpEgressEvidenceScope} from "./egress/postgres-http-egress-evidence.js";

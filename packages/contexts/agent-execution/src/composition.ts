@@ -38,6 +38,7 @@ export {
   CONTAINED_TURN_ROUTE_QUALIFICATION_DIMENSIONS,
   NodeTlsHttpEgressError,
   NodeHttpEgressBoundaryIds,
+  PostgresHttpEgressEvidence, initializePostgresHttpEgressEvidence, type PostgresHttpEgressEvidenceScope,
   NodeHttpEgressTrustedResolver, type NodeHttpEgressTrustedResolverOptions,
   NodeTlsHttpEgressTransport,
   type NodeTlsHttpEgressTransportOptions,
