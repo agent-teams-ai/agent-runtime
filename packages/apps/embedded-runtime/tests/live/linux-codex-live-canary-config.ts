@@ -172,10 +172,10 @@ export const createLinuxCodexLiveCanaryConfiguration = (
   const p = structuredClone(hostData);
   validateCanaryFacts(a, p);
   const imageInitLock = snapshotDockerImageInitLock(p.imageInitLock);
-  if (imageInitLock.imageReference !== "sha256:fd7c07360e32ff352fcb761da8eaba479d000a6945afe3c6483de3cdef08377e" ||
+  if (imageInitLock.imageReference !== "sha256:8db55f3551afd7c1032bb8dba936caefd4d5c8f2fb4b5f21af19da1fb7345979" ||
       imageInitLock.architecture !== "amd64" ||
-      imageInitLock.bootstrap.sha256 !== "92613f001548cffbf723a5dec562c2fe18f25a6fff8ccb4c7acaaa8a8169a077" ||
-      imageInitLock.bootstrap.size !== 85490 ||
+      imageInitLock.bootstrap.sha256 !== "e54bf7263a01b3ccc48a0b401a48eb14be60ce27520edd2bd865d04e3f04674c" ||
+      imageInitLock.bootstrap.size !== 85430 ||
       imageInitLock.interpreter.sha256 !== "41a74efb34cbde5c7632cdac0cf8bd1a14d0b8d73dc1e82755014d9a9ce70f5c") {
     throw new TypeError("Approved canary image/init closure mismatch");
   }

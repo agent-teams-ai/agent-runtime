@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import {test as nodeTest} from 'node:test';
 const test = process.platform === 'linux' ? nodeTest : nodeTest.skip;
-import {existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, renameSync, symlinkSync, linkSync, truncateSync} from 'node:fs';
+import fs, {existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, renameSync, symlinkSync, linkSync, truncateSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {join, basename} from 'node:path';
+import {syncBuiltinESMExports} from 'node:module';
 import {collectLinuxCodexLiveEvidence} from './linux-codex-live-evidence.mjs';
 import {encodeContainedTurnArtifactManifest, computeContainedTurnArtifactTreeDigest} from '../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-manifest.js';
 import {createHash} from 'node:crypto';
@@ -20,8 +21,8 @@ const nativeAvailable = existsSync(new URL('dist/rename-no-replace.node', platfo
   existsSync(new URL('src/rename-no-replace.node', platform));
 
 async function fixture(t, {path = approval.markerFile, content = approval.marker + '\n',
-  output = [{cursor: 0, kind: 'assistant', text: approval.marker}], realStore = true} = {}) {
-  const root = mkdtempSync(join(tmpdir(), 'linux-codex-live-evidence-'));
+  output = [{cursor: 0, kind: 'assistant', text: approval.marker}], realStore = true, parent = tmpdir()} = {}) {
+  const root = mkdtempSync(join(parent, 'linux-codex-live-evidence-'));
   t.after(() => rmSync(root, {recursive: true, force: true}));
   const roots = {};
   for (const [key, relative] of Object.entries({blobs: 'artifacts/blobs', manifests: 'artifacts/manifests',
@@ -32,13 +33,13 @@ async function fixture(t, {path = approval.markerFile, content = approval.marker
   const store = createContainedTurnArtifactStore({roots, limits: {
     maxDepth: 8, maxEntries: 4096, maxFileBytes: 8 * 1024 * 1024, maxTotalBytes: 64 * 1024 * 1024,
   }});
-  const put = async (domain, bytes) => {
-    const digest = hash(bytes);
-    if (realStore) {await store.writeContentAddressed(domain, digest, bytes);}
+  const put = async (domain, payload) => {
+    const digest = hash(payload);
+    if (realStore) {await store.writeContentAddressed(domain, digest, payload);}
     else {
       // Explicit adversarial fixture construction; never called by the real-store acceptance test.
       const directory = join(root, 'artifacts', domain === 'blob' ? 'blobs' : 'manifests', digest.slice(0, 2));
-      mkdirSync(directory, {recursive: true, mode: 0o700}); writeFileSync(join(directory, digest), bytes);
+      mkdirSync(directory, {recursive: true, mode: 0o700}); writeFileSync(join(directory, digest), payload);
     }
     return digest;
   };
@@ -46,8 +47,8 @@ async function fixture(t, {path = approval.markerFile, content = approval.marker
   const entries = path === null ? [] : [{kind: 'file', path, mode: 0o600, size: bytes.length, digest: await put('blob', bytes)}];
   const projected = [];
   for (const item of output) {
-    const bytes = Buffer.from(item.text);
-    projected.push({cursor: item.cursor, kind: item.kind, size: bytes.length, digest: await put('blob', bytes)});
+    const outputBytes = Buffer.from(item.text);
+    projected.push({cursor: item.cursor, kind: item.kind, size: outputBytes.length, digest: await put('blob', outputBytes)});
   }
   const manifest = {schemaVersion: 3, operationId, ...scope, entries, output: projected,
     treeDigest: computeContainedTurnArtifactTreeDigest(entries)};
@@ -177,4 +178,23 @@ test('no writes or cleanup and deterministic records', async t => {
   assert.deepEqual(f.collect(), first);
   assert.deepEqual(readFileSync(f.manifestPath), before);
   assert.ok(existsSync(f.root));
+});
+
+test('unrelated parent entries do not invalidate retained artifact identities', async t => {
+  const parent = mkdtempSync(join(tmpdir(), 'ar69-evidence-parent-'));
+  t.after(() => rmSync(parent, {recursive: true, force: true}));
+  const f = await fixture(t, {realStore: false, parent});
+  const original = fs.lstatSync;
+  let changed = false;
+  t.mock.method(fs, 'lstatSync', (path, ...args) => {
+    if (!changed && String(path).endsWith('/' + basename(parent))) {
+      changed = true;
+      mkdirSync(join(parent, 'unrelated-owned-entry'));
+    }
+    return original(path, ...args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => {t.mock.restoreAll(); syncBuiltinESMExports();});
+  assert.equal(f.collect().markerObserved, true);
+  assert.equal(changed, true);
 });

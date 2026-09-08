@@ -74,6 +74,17 @@ function readBounded(fd, maximum) {
     return bytes.subarray(0, length).toString('utf8');
   } finally {bytes.fill(0);}
 }
+function readCredentialFields(credentialFd, closeCredential) {
+  const stat = fstatSync(credentialFd);
+  if (!stat.isFIFO() && !stat.isSocket()) {fail();}
+  let fields;
+  try {fields = JSON.parse(readBounded(credentialFd, 40_000));} finally {closeCredential();}
+  if (Object.keys(fields).toSorted().join(',') !== 'accountId,token' ||
+      ![fields.token, fields.accountId].every(v => typeof v === 'string' && v.length &&
+        Buffer.byteLength(v) <= 16384 && !/[\r\n\0]/u.test(v))) {fail();}
+  return fields;
+}
+
 function privateDirectory(path, empty = false) {
   const stat = lstatSync(path);
   if (!stat.isDirectory() || realpathSync(path) !== path || stat.uid !== process.getuid() ||
@@ -88,6 +99,26 @@ function durableCreate(path, value) {
   try {writeFileSync(fd, JSON.stringify(value) + '\n'); fsyncSync(fd);} finally {closeSync(fd);}
   syncDirectory(dirname(path));
 }
+function prepareAttempt(config) {
+  const repository = fileURLToPath(new URL('../../../../../', import.meta.url));
+  const actualSourceSHA = execFileSync('git', ['-C', repository, 'rev-parse', 'HEAD'],
+    {encoding: 'utf8', timeout: 5000, maxBuffer: 1024}).trim();
+  if (actualSourceSHA !== config.hostPins.sourceRevision ||
+      execFileSync("git", ["-C", repository, "status", "--porcelain", "--untracked-files=no"],
+        {encoding: "utf8", timeout: 5000, maxBuffer: 4096}).trim()) {fail();}
+  privateDirectory(config.hostPins.testParent, true);
+  privateDirectory(dirname(config.evidenceDirectory));
+  mkdirSync(config.evidenceDirectory, {mode: 0o700}); // Exclusive run, never reuse evidence.
+  syncDirectory(dirname(config.evidenceDirectory));
+  privateDirectory(config.evidenceDirectory, true);
+  durableCreate(join(config.evidenceDirectory, 'attempt.json'), {actualSourceSHA,
+    commandId: config.approval.commandId, testId: config.approval.testId,
+    databaseName: new URL(config.databaseUrl).pathname.slice(1),
+    testParent: config.hostPins.testParent, state: 'consumed-before-setup-no-retry',
+    driverSHA256: digest(readFileSync(fileURLToPath(import.meta.url)))});
+  return actualSourceSHA;
+}
+
 const identity = text => text;
 export function createRedactor(fields) {
   const secrets = Object.values(fields).flatMap(v => [v, JSON.stringify(v).slice(1, -1),
@@ -185,33 +216,12 @@ export function createLinuxCodexLiveCanaryDriver(configuration, credentialFd) {
       if (credentialOpen) {credentialOpen = false; try {closeSync(credentialFd);} catch { /* Invalid FD. */ }}
     };
     try {
-      const repository = fileURLToPath(new URL('../../../../../', import.meta.url));
-      const actualSourceSHA = execFileSync('git', ['-C', repository, 'rev-parse', 'HEAD'],
-        {encoding: 'utf8', timeout: 5000, maxBuffer: 1024}).trim();
-      if (actualSourceSHA !== config.hostPins.sourceRevision ||
-          execFileSync("git", ["-C", repository, "status", "--porcelain", "--untracked-files=no"],
-            {encoding: "utf8", timeout: 5000, maxBuffer: 4096}).trim()) {fail();}
-      privateDirectory(config.hostPins.testParent, true);
-      privateDirectory(dirname(config.evidenceDirectory));
-      mkdirSync(config.evidenceDirectory, {mode: 0o700}); // Exclusive run, never reuse evidence.
-      syncDirectory(dirname(config.evidenceDirectory));
-      privateDirectory(config.evidenceDirectory, true);
-      durableCreate(join(config.evidenceDirectory, 'attempt.json'), {actualSourceSHA,
-        commandId: config.approval.commandId, testId: config.approval.testId,
-        databaseName: new URL(config.databaseUrl).pathname.slice(1),
-        testParent: config.hostPins.testParent, state: 'consumed-before-setup-no-retry',
-        driverSHA256: digest(readFileSync(fileURLToPath(import.meta.url)))});
+      const actualSourceSHA = prepareAttempt(config);
       reportReady = true;
       report('report', {actualSourceSHA, usage, liveExecution: 'not-yet-observed'});
       let credentials, transferred = false;
       try {
-        const stat = fstatSync(credentialFd);
-        if (!stat.isFIFO() && !stat.isSocket()) {fail();}
-        let fields;
-        try {fields = JSON.parse(readBounded(credentialFd, 40_000));} finally {closeCredential();}
-        if (Object.keys(fields).toSorted().join(',') !== 'accountId,token' ||
-            ![fields.token, fields.accountId].every(v => typeof v === 'string' && v.length &&
-              Buffer.byteLength(v) <= 16384 && !/[\r\n\0]/u.test(v))) {fail();}
+        let fields = readCredentialFields(credentialFd, closeCredential);
         redact = createRedactor(fields);
         credentials = {token: new Uint8Array(Buffer.from(fields.token)), accountId: new Uint8Array(Buffer.from(fields.accountId))};
         fields = undefined;

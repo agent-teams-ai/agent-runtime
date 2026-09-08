@@ -167,7 +167,7 @@ async function publicFixture(t, status = 'unknown') {
     async observe() {events.push('observe'); const value = turn(); values.push(value); return value;},
     async cancel() {events.push('cancel'); const value = turn(); values.push(value); return value;},
     async cleanup() {events.push('cleanup'); return 'released';}};
-  globalThis.__ar69DriverFixture = {live, events, collect(input) {
+  globalThis.ar69DriverFixture = {live, events, collect(input) {
     assert.equal(input.root, live.directory);
     assert.equal(input.approval.markerFile, 'marker.txt');
     assert.equal(input.operationId, 'operation:synthetic');
@@ -179,9 +179,9 @@ async function publicFixture(t, status = 'unknown') {
     return {markerObserved: state.markerObserved, records: [{kind: 'receipt', value: {synthetic: true}}]};
   }};
   const sources = {
-    pg: 'export class Pool {on() {} async end() {globalThis.__ar69DriverFixture.events.push("pool-end");}}',
-    './linux-codex-live-canary-config.ts': 'export async function setupLinuxCodexLiveCanary() {globalThis.__ar69DriverFixture.events.push("setup"); return globalThis.__ar69DriverFixture.live;}',
-    './linux-codex-live-evidence.mjs': 'export function collectLinuxCodexLiveEvidence(input) {return globalThis.__ar69DriverFixture.collect(input);}',
+    pg: 'export class Pool {on() {} async end() {globalThis.ar69DriverFixture.events.push("pool-end");}}',
+    './linux-codex-live-canary-config.ts': 'export async function setupLinuxCodexLiveCanary() {globalThis.ar69DriverFixture.events.push("setup"); return globalThis.ar69DriverFixture.live;}',
+    './linux-codex-live-evidence.mjs': 'export function collectLinuxCodexLiveEvidence(input) {return globalThis.ar69DriverFixture.collect(input);}',
   };
   const hooks = registerHooks({resolve(specifier, context, next) {
     return sources[specifier] ? {url: `ar69-fixture:${specifier}`, shortCircuit: true} : next(specifier, context);
@@ -206,7 +206,7 @@ async function publicFixture(t, status = 'unknown') {
   syncBuiltinESMExports();
   t.after(() => {
     hooks.deregister(); t.mock.restoreAll(); syncBuiltinESMExports();
-    delete globalThis.__ar69DriverFixture;
+    delete globalThis.ar69DriverFixture;
     rmSync(root, {recursive: true, force: true});
   });
   return {driver: createLinuxCodexLiveCanaryDriver(config(root), credential), events, state, root, credential, originalStat, live};

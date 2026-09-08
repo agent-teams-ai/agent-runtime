@@ -9,18 +9,21 @@ const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const requireEvidence = condition => {if (!condition) {throw new Error('Invalid or incomplete live artifact evidence');}};
 const same = (a, b) => ['dev', 'ino', 'mode', 'size', 'mtimeNs', 'ctimeNs', 'nlink'].every(key => a[key] === b[key]);
 
+const sameIdentity = (a, b) => ['dev', 'ino', 'mode', 'uid', 'gid'].every(key => a[key] === b[key]);
+
+const child = (fd, name) => `/proc/self/fd/${fd}/${name}`;
+
 // Linux descriptor-relative walks pin every ancestor. Only the deliberate /proc
 // descriptor bridge is followed; no directory entry supplied by the store is.
 function reader(root) {
   const handles = [], bindings = [], directories = new Map();
   let bytesRead = 0, entriesRead = 0;
-  const child = (fd, name) => `/proc/self/fd/${fd}/${name}`;
-  function directory(path, parent) {
+  function directory(path, parent, identityOnly = false) {
     const fd = openSync(path, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
     handles.push(fd);
     const stat = fstatSync(fd, {bigint: true});
     requireEvidence(stat.isDirectory() && (!parent || stat.dev === parent.dev));
-    bindings.push({path, fd, stat});
+    bindings.push({path, fd, stat, identityOnly});
     return fd;
   }
   function dir(relative) {
@@ -39,10 +42,10 @@ function reader(root) {
   try {
     requireEvidence(process.platform === 'linux' && isAbsolute(root) && resolve(root) === root && root !== '/' &&
       root.length <= 4096 && root.split('/').length <= 64);
-    let fd = directory('/');
-    for (const part of root.slice(1).split('/')) {fd = directory(child(fd, part));}
+    let fd = directory('/', undefined, true);
+    for (const part of root.slice(1).split('/')) {fd = directory(child(fd, part), undefined, true);}
     directories.set('', fd);
-  } catch (error) {for (const fd of handles.reverse()) {closeSync(fd);} throw error;}
+  } catch (error) {for (const fd of handles.toReversed()) {closeSync(fd);} throw error;}
   return {
     names(relative, pattern, limit) {
       const fd = dir(relative), stream = opendirSync(`/proc/self/fd/${fd}`), names = [];
@@ -52,7 +55,7 @@ function reader(root) {
           names.push(entry.name);
         }
       } finally {stream.closeSync();}
-      return names.sort();
+      return names.toSorted();
     },
     read(relative, maxBytes) {
       const parts = relative.split('/'), name = parts.pop();
@@ -79,16 +82,36 @@ function reader(root) {
       } finally {closeSync(fd);}
     },
     verify() {
-      for (const {path, fd, stat} of bindings) {
-        requireEvidence(same(stat, lstatSync(path, {bigint: true})));
-        if (fd !== undefined) {requireEvidence(same(stat, fstatSync(fd, {bigint: true})));}
+      for (const {path, fd, stat, identityOnly} of bindings) {
+        requireEvidence((identityOnly ? sameIdentity : same)(stat, lstatSync(path, {bigint: true})));
+        if (fd !== undefined) {requireEvidence((identityOnly ? sameIdentity : same)(stat, fstatSync(fd, {bigint: true})));}
       }
     },
-    close() {for (const fd of handles.reverse()) {closeSync(fd);}},
+    close() {for (const fd of handles.toReversed()) {closeSync(fd);}},
   };
 }
 
-function verifyManifest(fs, manifestDigest, operationId, approval, turn, records) {
+function matchMarker(manifest, blobs, {approval, turn, resultRef, manifestDigest}) {
+  const file = manifest.entries.find(item => item.kind === 'file' && item.path === approval.markerFile);
+  const fileMatches = !!file && blobs.get(file.digest).equals(Buffer.from(`${approval.marker}\n`));
+  // The Codex adapter emits canonical assistant text only at terminal turn
+  // completion. Match the entire sealed output against the retained public view,
+  // then require the entire assistant response, never tool/diagnostic substrings.
+  const linked = turn?.status === 'succeeded' && turn.provider === 'codex' && turn.resultRef === resultRef &&
+    turn.artifactManifestRef === `urn:agent-runtime:artifact-manifest:${manifestDigest}`;
+  const outputMatches = linked && Array.isArray(turn.output) && turn.output.length === manifest.output.length &&
+    manifest.output.every((item, index) => {
+      const actual = turn.output[index];
+      return actual?.cursor === item.cursor && actual.kind === item.kind && typeof actual.text === 'string' && actual.text.length <= item.size &&
+        blobs.get(item.digest).equals(Buffer.from(actual.text));
+    });
+  const assistant = manifest.output.filter(item => item.kind === 'assistant');
+  const finalMatches = outputMatches && assistant.length > 0 &&
+    Buffer.concat(assistant.map(item => blobs.get(item.digest))).equals(Buffer.from(approval.marker));
+  return {fileMatches, finalMatches};
+}
+
+function verifyManifest(fs, manifestDigest, {operationId, approval, turn, records}) {
   const relativePath = `artifacts/manifests/${manifestDigest.slice(0, 2)}/${manifestDigest}`;
   const encoded = fs.read(relativePath, 32 * 1024 * 1024);
   requireEvidence(digest(encoded) === manifestDigest);
@@ -96,7 +119,7 @@ function verifyManifest(fs, manifestDigest, operationId, approval, turn, records
   if (manifest.operationId !== operationId) {return false;}
   const blobs = new Map();
   let projectedBytes = encoded.length;
-  for (const item of [...manifest.entries.filter(item => item.kind === 'file'), ...manifest.output]) {
+  for (const item of [...manifest.entries.filter(entry => entry.kind === 'file'), ...manifest.output]) {
     projectedBytes += item.size;
     requireEvidence(item.size <= 8 * 1024 * 1024 && projectedBytes <= 32 * 1024 * 1024);
     if (!blobs.has(item.digest)) {
@@ -125,25 +148,26 @@ function verifyManifest(fs, manifestDigest, operationId, approval, turn, records
   records.push({kind: 'artifact-receipt', value: {relativePath, manifestDigest, record: manifest}},
     {kind: 'artifact-receipt', value: {relativePath: `artifacts/results/${workspaceName}.json`, record: publication}},
     {kind: 'artifact-receipt', value: {relativePath: `workspaces/seals/${workspaceName}.json`, record: seal}});
-  const file = manifest.entries.find(item => item.kind === 'file' && item.path === approval.markerFile);
-  const fileMatches = !!file && blobs.get(file.digest).equals(Buffer.from(`${approval.marker}\n`));
-  // The Codex adapter emits canonical assistant text only at terminal turn
-  // completion. Match the entire sealed output against the retained public view,
-  // then require the entire assistant response, never tool/diagnostic substrings.
-  const linked = turn?.status === 'succeeded' && turn.provider === 'codex' && turn.resultRef === resultRef &&
-    turn.artifactManifestRef === `urn:agent-runtime:artifact-manifest:${manifestDigest}`;
-  const outputMatches = linked && Array.isArray(turn.output) && turn.output.length === manifest.output.length &&
-    manifest.output.every((item, index) => {
-      const actual = turn.output[index];
-      return actual?.cursor === item.cursor && actual.kind === item.kind && typeof actual.text === 'string' && actual.text.length <= item.size &&
-        blobs.get(item.digest).equals(Buffer.from(actual.text));
-    });
-  const assistant = manifest.output.filter(item => item.kind === 'assistant');
-  const finalMatches = outputMatches && assistant.length > 0 &&
-    Buffer.concat(assistant.map(item => blobs.get(item.digest))).equals(Buffer.from(approval.marker));
+  const {fileMatches, finalMatches} = matchMarker(manifest, blobs, {approval, turn, resultRef, manifestDigest});
   records.push({kind: 'marker-evidence', value: {operationId, manifestDigest, markerFile: approval.markerFile,
     fileMatches, finalMatches: !!finalMatches}});
   return fileMatches && !!finalMatches;
+}
+
+function validateCollection(approval, operationId, observations) {
+  requireEvidence(typeof operationId === 'string' && operationId.length > 0 && operationId.length <= 1024 &&
+    /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}\.txt$/u.test(approval?.markerFile) &&
+    /^[A-Za-z0-9_-]{1,128}$/u.test(approval?.marker) && Array.isArray(observations) && observations.length <= 4096);
+}
+
+function latestTurn(observations, operationId) {
+  let turn;
+  for (const value of observations) {
+    if (value?.status !== 'observed' || value.turn?.operationId !== operationId) {continue;}
+    requireEvidence(Number.isSafeInteger(value.turn.revision) && value.turn.revision >= 0);
+    if (!turn || value.turn.revision >= turn.revision) {turn = value.turn;}
+  }
+  return turn;
 }
 
 /** Synchronous, read-only collection; the lifecycle owner retains observations,
@@ -152,21 +176,14 @@ export function collectLinuxCodexLiveEvidence({root, approval, operationId, obse
   const records = [];
   let fs;
   try {
-    requireEvidence(typeof operationId === 'string' && operationId.length > 0 && operationId.length <= 1024 &&
-      /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}\.txt$/u.test(approval?.markerFile) &&
-      /^[A-Za-z0-9_-]{1,128}$/u.test(approval?.marker) && Array.isArray(observations) && observations.length <= 4096);
-    let turn;
-    for (const value of observations) {
-      if (value?.status !== 'observed' || value.turn?.operationId !== operationId) {continue;}
-      requireEvidence(Number.isSafeInteger(value.turn.revision) && value.turn.revision >= 0);
-      if (!turn || value.turn.revision >= turn.revision) {turn = value.turn;}
-    }
+    validateCollection(approval, operationId, observations);
+    const turn = latestTurn(observations, operationId);
     fs = reader(root);
     let markerObserved = false;
     for (const shard of fs.names('artifacts/manifests', /^[a-f0-9]{2}$/u, 256)) {
       for (const name of fs.names(`artifacts/manifests/${shard}`, /^[a-f0-9]{64}$/u, 4096)) {
         requireEvidence(name.startsWith(shard));
-        markerObserved = verifyManifest(fs, name, operationId, approval, turn, records) || markerObserved;
+        markerObserved = verifyManifest(fs, name, {operationId, approval, turn, records}) || markerObserved;
       }
     }
     fs.verify();
