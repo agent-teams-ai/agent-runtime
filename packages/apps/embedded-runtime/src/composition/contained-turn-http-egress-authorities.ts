@@ -25,9 +25,9 @@ export type ContainedTurnHttpEgressAuthorities =
  * `createContainedTurnHttpEgressRoute` projects the first two from a Provider
  * Access endorsement and `createContainedTurnHttpUpstreamTransport` binds the
  * implemented Node TLS adapter, but the trusted root decides when to use them,
- * so they arrive here as ordinary supplied ports. `ids`, `resolver` and
- * `evidence` have no production owner anywhere in this repository: they must
- * come from whoever owns them, and this module fabricates none of them.
+ * so they arrive here as ordinary supplied ports. The private Linux deployment
+ * assembly supplies `ids`, `resolver` and `evidence` using the Node identity/DNS
+ * and PostgreSQL receipt owners, with methods bound into plain broker ports.
  *
  * `routeFirstWrite` is the one optional member: it exists only when an installed
  * exclusive route lease published its first-write authority for this operation.

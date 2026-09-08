@@ -68,7 +68,7 @@ export const createContainedTurnHttpEgressRoute = async (input: Readonly<{
  * resource bounds come from trusted deployment composition, exactly like the
  * route owner's tool pins: this factory reads no environment and no canary
  * report. The adapter still has no DNS, retry, redirect, pooling or resumption
- * facility, so the resolver port remains a separate, still unowned dependency.
+ * facility, so the private deployment assembly supplies the separate Node resolver port.
  */
 export const createContainedTurnHttpUpstreamTransport = (
   options: NodeTlsHttpEgressTransportOptions,

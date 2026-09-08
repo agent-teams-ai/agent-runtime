@@ -121,6 +121,8 @@ boundaries:
         - core.agent-execution.contained-turn
       packages:
         - "@agent-teams/filesystem-custody"
+        # Host-owned durable HTTP receipts borrow a PostgreSQL pool.
+        - pg
       builtins:
         - node:buffer
         - node:child_process

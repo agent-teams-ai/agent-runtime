@@ -1,3 +1,4 @@
+import {createLinuxCodexDeploymentResources, type LinuxCodexDeploymentInfrastructure} from "./linux-codex-deployment.js";
 import { createLinuxCodexContainedTurnOwner, type LinuxCodexContainedTurnResources }
   from "./linux-codex-contained-turn-owner.js";
 import {
@@ -65,6 +66,8 @@ export type HostCustodiedContainedTurnDependencies =
   readonly routeEnforcement?: ContainedTurnRouteEnforcementCapability;
   /** Trusted private deployment composition only; never read from workspace configuration. */
   readonly linuxCodex?: LinuxCodexContainedTurnResources;
+  /** Production infrastructure for the private acknowledged resource assembly. */
+  readonly linuxCodexDeployment?: LinuxCodexDeploymentInfrastructure;
 };
 
 export interface HostCustodiedContainedTurnComposition {
@@ -376,6 +379,30 @@ export const composeQualifiedHostCustodiedContainedTurn = (
   return composeHostCustodiedContainedTurn(dependencies, ownerFactories, featureFactory);
 };
 
+/** Private deployment entrypoint. Uses the same product qualification gate and
+ * current authority root; it does not export a new application capability. */
+const createLinuxCodexDeployment = (
+  dependencies: Omit<Extract<HostCustodiedContainedTurnDependencies, {authority: "current"}>, "linuxCodex" | "linuxCodexDeployment">,
+  infrastructure: LinuxCodexDeploymentInfrastructure,
+) => {
+  const {selection: provider} = snapshotContainedTurnProviderSelection(dependencies);
+  if (provider.kind !== "codex" || provider.owner.platformTarget.platform !== "linux") {
+    throw new TypeError("Linux Codex deployment requires Linux Codex owners");
+  }
+  const deployment = createLinuxCodexDeploymentResources(infrastructure, provider.owner);
+  return composeQualifiedHostCustodiedContainedTurn(dependencies, Object.freeze({
+    claude: createClaudeCurrentKernelOwner,
+    codex: (options: Parameters<typeof createLinuxCodexContainedTurnOwner>[0]) => createLinuxCodexContainedTurnOwner(options, deployment.resources),
+  }), input => {
+    const {selection, providerAccess} = snapshotContainedTurnAuthority(input);
+    if (selection.authority !== "current") {throw new TypeError("Linux Codex deployment requires current authority");}
+    const ports = deployment.bindAuthority(captureContainedTurnCurrentAuthority(selection, providerAccess));
+    return createContainedTurnFeature(Object.freeze({operationStore: input.operationStore, ...ports,
+      workspace: input.workspace, artifacts: input.artifacts, custody: input.custody, provider: input.provider,
+    }) satisfies ContainedTurnFeatureDependencies);
+  }, PRODUCT_QUALIFICATION_REGISTRY);
+};
+
 /**
  * Product/default composition. The Claude path is refused outright while its
  * adapter has no broker seam, and never reaches the two facts. The Codex path
@@ -386,17 +413,29 @@ export const composeQualifiedHostCustodiedContainedTurn = (
  */
 export const createHostCustodiedContainedTurn = (
   dependencies: HostCustodiedContainedTurnDependencies,
-): HostCustodiedContainedTurnComposition => composeQualifiedHostCustodiedContainedTurn(
-  dependencies,
-  Object.freeze({
-    claude: createClaudeCurrentKernelOwner,
-    codex: (options: CreateCodexCurrentKernelOwnerOptions) => {
-      if (options.platformTarget.platform !== "linux") {return createCodexCurrentKernelOwner(options);}
-      const descriptor = trustedGetOwnPropertyDescriptor(dependencies, "linuxCodex");
-      return createLinuxCodexContainedTurnOwner(options,
-        descriptor !== undefined && "value" in descriptor ? descriptor.value as LinuxCodexContainedTurnResources : undefined);
-    },
-  }),
-  createContainedTurnFeatureFromProviderAccess,
-  PRODUCT_QUALIFICATION_REGISTRY,
-);
+): HostCustodiedContainedTurnComposition => {
+  const deployment = dependencies !== null && typeof dependencies === "object" && !trustedIsProxy(dependencies)
+    ? trustedGetOwnPropertyDescriptor(dependencies, "linuxCodexDeployment") : undefined;
+  if (deployment !== undefined) {
+    if (!("value" in deployment) || trustedGetOwnPropertyDescriptor(dependencies, "linuxCodex") !== undefined) {
+      throw new TypeError("Linux Codex deployment selection is ambiguous");
+    }
+    const {selection} = snapshotContainedTurnAuthority(dependencies);
+    if (selection.authority !== "current") {throw new TypeError("Linux Codex deployment requires current authority");}
+    return createLinuxCodexDeployment(dependencies as Extract<HostCustodiedContainedTurnDependencies, {authority: "current"}>, deployment.value);
+  }
+  return composeQualifiedHostCustodiedContainedTurn(
+    dependencies,
+    Object.freeze({
+      claude: createClaudeCurrentKernelOwner,
+      codex: (options: CreateCodexCurrentKernelOwnerOptions) => {
+        if (options.platformTarget.platform !== "linux") {return createCodexCurrentKernelOwner(options);}
+        const descriptor = trustedGetOwnPropertyDescriptor(dependencies, "linuxCodex");
+        return createLinuxCodexContainedTurnOwner(options,
+          descriptor !== undefined && "value" in descriptor ? descriptor.value as LinuxCodexContainedTurnResources : undefined);
+      },
+    }),
+    createContainedTurnFeatureFromProviderAccess,
+    PRODUCT_QUALIFICATION_REGISTRY,
+  );
+};
