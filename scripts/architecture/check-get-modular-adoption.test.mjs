@@ -173,16 +173,16 @@ for (const fault of [null, 'workspace-range', 'catalog-specifier', 'catalog-vers
     const f = await diskFixture(t);
     const catalog = Object.fromEntries(f.profile.packages.map(p => [p.name, p.version]));
     f.lock.catalogs = { default: Object.fromEntries(f.profile.packages.map(p => [p.name, { specifier: p.version, version: p.version }])) };
-    for (const p of f.profile.packages) f.lock.importers['packages/apps/embedded-runtime'].dependencies[p.name].specifier = 'catalog:';
-    if (fault === 'workspace-range') catalog['@get-modular/core'] = '^0.1.0';
-    if (fault === 'catalog-specifier') f.lock.catalogs.default['@get-modular/core'].specifier = '^0.1.0';
-    if (fault === 'catalog-version') f.lock.catalogs.default['@get-modular/core'].version = '0.2.0';
-    if (fault === 'importer-specifier') f.lock.importers['packages/apps/embedded-runtime'].dependencies['@get-modular/core'].specifier = '0.1.0';
+    for (const p of f.profile.packages) {f.lock.importers['packages/apps/embedded-runtime'].dependencies[p.name].specifier = 'catalog:';}
+    if (fault === 'workspace-range') {catalog['@get-modular/core'] = '^0.1.0';}
+    if (fault === 'catalog-specifier') {f.lock.catalogs.default['@get-modular/core'].specifier = '^0.1.0';}
+    if (fault === 'catalog-version') {f.lock.catalogs.default['@get-modular/core'].version = '0.2.0';}
+    if (fault === 'importer-specifier') {f.lock.importers['packages/apps/embedded-runtime'].dependencies['@get-modular/core'].specifier = '0.1.0';}
     await f.write('pnpm-workspace.yaml', { packages: ['packages/test'], catalog });
     await f.write('pnpm-lock.yaml', f.lock);
     await f.write('packages/apps/embedded-runtime/package.json', { dependencies: Object.fromEntries(f.profile.packages.map(p => [p.name, 'catalog:'])) });
-    if (fault) await assert.rejects(checkAdoption(f.root), /(?:catalog|lock specifier).*drift/);
-    else assert.equal((await checkAdoption(f.root)).status, 'verified');
+    if (fault) {await assert.rejects(checkAdoption(f.root), /(?:catalog|lock specifier).*drift/);}
+    else {assert.equal((await checkAdoption(f.root)).status, 'verified');}
   });
 }
 

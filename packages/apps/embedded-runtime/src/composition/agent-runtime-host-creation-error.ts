@@ -61,23 +61,35 @@ export const assemblyErrorCodes = {
 
 export type RuntimeSetupModuleId = (typeof runtimeSetupDeclarations)[number]["moduleId"];
 
+interface CreationErrorDetails {
+  readonly cancellationObserved?: boolean | undefined;
+  readonly cleanupFailed?: boolean;
+  readonly diagnostics?: readonly string[];
+  readonly cause?: unknown;
+  readonly cleanupCauses?: readonly unknown[];
+  readonly moduleId?: RuntimeSetupModuleId | undefined;
+}
+
 export class AgentRuntimeHostCreationError extends Error {
   readonly #privateCause: unknown;
-  readonly #cleanupCause: unknown;
+  readonly #cleanupCauses: readonly unknown[];
+  readonly cancellationObserved: boolean;
+  readonly cleanupFailed: boolean;
+  readonly diagnostics: readonly string[];
+  readonly moduleId: RuntimeSetupModuleId | undefined;
   constructor(
     readonly code: AgentRuntimeHostCreationErrorCode,
     readonly phase: AgentRuntimeHostCreationPhase,
-    readonly cancellationObserved = false,
-    readonly cleanupFailed = false,
-    readonly diagnostics: readonly string[] = [],
-    cause?: unknown,
-    cleanupCause?: unknown,
-    readonly moduleId?: RuntimeSetupModuleId,
+    details: CreationErrorDetails = {},
   ) {
     super(`Agent Runtime Host creation failed: ${code}`);
     this.name = "AgentRuntimeHostCreationError";
-    this.#privateCause = cause;
-    this.#cleanupCause = cleanupCause;
+    this.cancellationObserved = details.cancellationObserved ?? false;
+    this.cleanupFailed = details.cleanupFailed ?? false;
+    this.diagnostics = details.diagnostics ?? [];
+    this.moduleId = details.moduleId;
+    this.#privateCause = details.cause;
+    this.#cleanupCauses = details.cleanupCauses ?? [];
   }
   toJSON() {
     return { name: this.name, code: this.code, phase: this.phase,
@@ -85,7 +97,10 @@ export class AgentRuntimeHostCreationError extends Error {
       diagnostics: this.diagnostics, moduleId: this.moduleId };
   }
   withCleanupFailure(cause: unknown): AgentRuntimeHostCreationError {
-    return new AgentRuntimeHostCreationError(this.code, this.phase, this.cancellationObserved,
-      true, this.diagnostics, this.#privateCause, cause, this.moduleId);
+    return new AgentRuntimeHostCreationError(this.code, this.phase, {
+      cancellationObserved: this.cancellationObserved, cleanupFailed: true,
+      diagnostics: this.diagnostics, cause: this.#privateCause,
+      cleanupCauses: [...this.#cleanupCauses, cause], moduleId: this.moduleId,
+    });
   }
 }

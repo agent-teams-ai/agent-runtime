@@ -13,7 +13,7 @@ registerPassiveSetupScenarios("Assembly", () => createDefaultAgentRuntimeHost())
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
   let reject!: (cause: unknown) => void;
-  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+  const promise = new Promise<T>((_resolve, _reject) => { resolve = _resolve; reject = _reject; });
   return { promise, resolve, reject };
 };
 
@@ -119,13 +119,13 @@ for (const settlement of ["fulfill", "reject", "opaque-undefined"] as const) {
         host: (dependencies) => { hostCalls += 1; return factories.host(dependencies); },
       };
     });
-    void result.then(() => { settled = true; }, () => { settled = true; });
+    void result.then(() => { settled = true; return; }, () => { settled = true; return; });
     await entered.promise;
     controller.abort("secret reason");
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => { setImmediate(resolve); });
     assert.equal(settled, false);
-    if (settlement === "reject") release.reject("secret failure");
-    else release.resolve(settlement === "opaque-undefined" ? undefined as never : value!);
+    if (settlement === "reject") {release.reject("secret failure");}
+    else {release.resolve(settlement === "opaque-undefined" ? undefined as never : value!);}
     await assert.rejects(result, (error: unknown) => {
       assert.ok(error instanceof AgentRuntimeHostCreationError);
       assert.equal(error.code, settlement === "reject" ? "factory_failed" : "cancelled");
@@ -190,7 +190,7 @@ for (const fault of ["missing-handle", "extra-handle", "duplicate-handle", "miss
     let productCalls = 0;
     const composition = await compileComposition({ declarations: runtimeSetupDeclarations, profile: runtimeSetupProfile });
     assert.equal(composition.ok, true);
-    if (!composition.ok) return;
+    if (!composition.ok) {return;}
     const factories = createRuntimeSetupFactories(process.platform);
     const bindings = bindRuntimeSetup({ ...factories,
       security: async () => { productCalls += 1; return factories.security(); },
@@ -267,7 +267,7 @@ for (const aborted of [false, true]) {
       observeOutcome: (outcome) => {
         observed = true;
         assert.equal(outcome.status, "failed");
-        if (outcome.status !== "failed") return;
+        if (outcome.status !== "failed") {return;}
         assert.equal(outcome.code, "assembly.run.invalid-product");
         assert.equal(outcome.returned?.product, returned);
         assert.equal(outcome.returned?.implementationId, "agent-runtime/runtime-host");
@@ -276,10 +276,10 @@ for (const aborted of [false, true]) {
         assert.equal(outcome.cancellation !== undefined, aborted);
       },
     });
-    void result.then(() => { settled = true; }, () => { settled = true; });
+    void result.then(() => { settled = true; return; }, () => { settled = true; return; });
     await entered.promise;
-    if (aborted) controller.abort("secret cancellation");
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    if (aborted) {controller.abort("secret cancellation");}
+    await new Promise<void>((resolve) => { setImmediate(resolve); });
     assert.equal(settled, false);
     assert.equal(disposed, 0);
     release.resolve();
@@ -349,7 +349,7 @@ test("abort after actual Assembly success but before caller handoff disposes the
   }, { observeOutcome: (outcome) => {
     observed = true;
     assert.equal(outcome.status, "succeeded");
-    if (outcome.status !== "succeeded") return;
+    if (outcome.status !== "succeeded") {return;}
     assert.equal(outcome.created.length, 7);
     assert.equal(outcome.created.at(-1)?.instance, outcome.roots.host);
     controller.abort();
@@ -382,11 +382,11 @@ test("factory owns and awaits release of a resource acquired before rejection", 
     assert.equal(resource.acquired, true);
     assert.equal(resource.released, true);
     assert.equal(outcome.status, "failed");
-    if (outcome.status !== "failed") return;
+    if (outcome.status !== "failed") {return;}
     assert.equal(outcome.returned, undefined);
     assert.ok(outcome.created.every((entry) => entry.implementationId !== "agent-runtime/setup-security"));
   } });
-  void result.then(() => { settled = true; }, () => { settled = true; });
+  void result.then(() => { settled = true; return; }, () => { settled = true; return; });
   await entered.promise;
   assert.equal(settled, false);
   assert.equal(resource.released, false);
@@ -421,7 +421,7 @@ for (const concurrent of [false, true]) {
     const rejected = assert.rejects(failing, (error: unknown) => error instanceof AgentRuntimeHostCreationError && error.code === "factory_failed");
     await entered.promise;
     const succeeding = concurrent ? await create(1) : undefined;
-    if (concurrent) assert.deepEqual(disposed, [0, 0]);
+    if (concurrent) {assert.deepEqual(disposed, [0, 0]);}
     release.resolve();
     await rejected;
     const host = await (succeeding ?? create(1));
@@ -439,7 +439,7 @@ for (const fault of ["missing-binding", "wrong-implementation", "capability", "c
   test(`consumer preflight rejects changed ${fault} with no materialization`, async () => {
     const composition = await compileComposition({ declarations: runtimeSetupDeclarations, profile: runtimeSetupProfile });
     assert.equal(composition.ok, true);
-    if (!composition.ok) return;
+    if (!composition.ok) {return;}
     let calls = 0;
     const fail = (): never => { calls += 1; throw new Error("preflight must not materialize"); };
     const bindings = bindRuntimeSetup({ security: fail, discovery: fail, codexConfiguration: fail,
@@ -457,7 +457,7 @@ for (const fault of ["missing-binding", "wrong-implementation", "capability", "c
           }),
         selections: fault === "wrong-implementation" ? composition.plan.selections.map((selection, index) => index === 0
           ? { ...selection, implementationId: "agent-runtime/unknown" } : selection) : composition.plan.selections,
-        dependencyOrder: fault === "order" ? [...composition.plan.dependencyOrder].reverse() : composition.plan.dependencyOrder,
+        dependencyOrder: fault === "order" ? composition.plan.dependencyOrder.toReversed() : composition.plan.dependencyOrder,
       },
     };
     const result = await bindings.assembly.prepare({ composition: changed, factories: bindings.factories, roots: bindings.roots });

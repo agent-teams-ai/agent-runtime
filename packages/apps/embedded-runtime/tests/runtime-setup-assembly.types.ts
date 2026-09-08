@@ -1,8 +1,8 @@
 import { assemblyFor } from "@get-modular/assembly";
 import { defineModule } from "@get-modular/core";
-import { createDefaultAgentRuntimeHost, type AgentRuntimeHost } from "../dist/composition.js";
+import { createDefaultAgentRuntimeHost, type AgentRuntimeHost,
 // @ts-expect-error Internal attempt injection is not part of the package composition entrypoint.
-import { createRuntimeSetupAttempt } from "../dist/composition.js";
+createRuntimeSetupAttempt } from "../dist/composition.js";
 void createRuntimeSetupAttempt;
 import { bindRuntimeSetup, createRuntimeSetupFactories, runtimeSetupDeclarations,
   type RuntimeSetupCapabilities } from "../dist/composition/runtime-setup-assembly.js";

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -213,5 +213,51 @@ export const registerPassiveSetupScenarios = (
     const malformedClaude = await access.claudeCodeSetup.inspect();
     assert.ok(malformedClaude.status === "partial" || malformedClaude.status === "observed");
     assert.ok(malformedClaude.sourceObservations.some(source => source.status === "malformed"));
+
+    // Ordinary authorized files reach the real readers, which reject their size.
+    await Promise.all([
+      writeFile(join(root, "home", ".codex", "config.toml"), Buffer.alloc(128 * 1024 + 1, 0x20)),
+      writeFile(join(root, "home", ".claude", "settings.json"), Buffer.alloc(128 * 1024 + 1, 0x20)),
+    ]);
+    const [largeCodex, largeClaude] = await Promise.all([access.codexSetup.inspect({}), access.claudeCodeSetup.inspect()]);
+    assert.ok(largeCodex.status === "partial");
+    assert.ok(largeClaude.status === "partial");
+    const largeCodexSource = largeCodex.sources.find(source => source.status === "unreadable");
+    assert.ok(largeCodexSource);
+    assert.ok(largeCodex.diagnostics.some(item => item.code === "config_too_large" && item.subject === largeCodexSource.sourceRef));
+    const largeClaudeSource = largeClaude.sourceObservations.find(source => source.role === "user" && source.status === "unreadable");
+    assert.ok(largeClaudeSource);
+    assert.ok(largeClaude.diagnostics.some(item => item.code === "config_too_large" && item.safeRef === largeClaudeSource.sourceRef));
+    assert.ok(largeCodex.sources.some(source => source.status === "unreadable"));
+    assert.ok(largeClaude.sourceObservations.some(source => source.status === "unreadable"));
+    assert.deepEqual(largeCodex.settings, []);
+    assert.deepEqual(largeClaude.observedPortableIntent, []);
+    assertFrozen(largeCodex);
+    assertFrozen(largeClaude);
+    assert.ok(!JSON.stringify({ largeCodex, largeClaude }).includes(root));
+    assert.deepEqual(await access.codexSetup.inspect({}), largeCodex);
+    assert.deepEqual(await access.claudeCodeSetup.inspect(), largeClaude);
+
+    // Execute-bit rejection belongs to the observer, including when run as root.
+    await Promise.all([
+      writeFile(join(root, "home", ".codex", "config.toml"), "model = 'reference-model'\n"),
+      writeFile(join(root, "home", ".claude", "settings.json"), '{"model":"sonnet"}'),
+      chmod(join(root, "home", "bin", "codex"), 0o644),
+      chmod(join(root, "home", "bin", "claude"), 0o644),
+    ]);
+    const [invalidCodex, invalidClaude] = await Promise.all([access.codexSetup.inspect({}), access.claudeCodeSetup.inspect()]);
+    assert.ok(invalidCodex.status === "partial");
+    assert.ok(invalidClaude.status === "partial");
+    assert.ok(invalidCodex.diagnostics.some(item => item.code === "candidate_invalid"));
+    assert.ok(invalidClaude.diagnostics.some(item => item.code === "candidate_invalid"));
+    assert.deepEqual(invalidCodex.installations, []);
+    assert.deepEqual(invalidClaude.installations, []);
+    assert.equal(invalidCodex.settings.find(setting => setting.key === "model")?.value, "reference-model");
+    assert.ok(invalidClaude.observedPortableIntent.some(intent => intent.key === "model"));
+    assertFrozen(invalidCodex);
+    assertFrozen(invalidClaude);
+    assert.ok(!JSON.stringify({ invalidCodex, invalidClaude }).includes(root));
+    assert.deepEqual(await access.codexSetup.inspect({}), invalidCodex);
+    assert.deepEqual(await access.claudeCodeSetup.inspect(), invalidClaude);
   });
 };

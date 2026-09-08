@@ -196,7 +196,7 @@ export function bindRuntimeSetup(factories: RuntimeSetupFactories, captureHost: 
       },
     });
     captureHost(host);
-    if (completeRoot !== undefined) return await completeRoot({ instance: host, capabilities: {} });
+    if (completeRoot !== undefined) {return await completeRoot({ instance: host, capabilities: {} });}
     return { instance: host, capabilities: {} };
   });
   return { assembly, factories: [setupSecurity, installationDiscovery, codexConfiguration, claudeConfiguration, codexPlanner, claudePlanner, runtimeHost], roots: { host: runtimeHost } };

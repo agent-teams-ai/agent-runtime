@@ -32,7 +32,7 @@ export async function createRuntimeSetupAttempt(
     return failure;
   };
   const checkCancellation = () => {
-    if (signal?.aborted) throw failureForAttempt("cancelled", phase, true);
+    if (signal?.aborted) { throw failureForAttempt("cancelled", phase, { cancellationObserved: true }); }
   };
   try {
     signal = options?.signal;
@@ -40,35 +40,31 @@ export async function createRuntimeSetupAttempt(
     checkCancellation();
     phase = "compile";
     const composition = await compileComposition({ declarations: runtimeSetupDeclarations, profile: runtimeSetupProfile });
-    if (!composition.ok) throw failureForAttempt("invalid_composition", phase,
-      signal?.aborted, false, projectDiagnostics(composition.diagnostics));
+    if (!composition.ok) { throw failureForAttempt("invalid_composition", phase, {
+      cancellationObserved: signal?.aborted, diagnostics: projectDiagnostics(composition.diagnostics) }); }
     checkCancellation();
     phase = "bind";
     const bindings = bindRuntimeSetup(factoriesForAttempt(platform), (host) => { ownedHost = host; }, checkpoints.completeRoot);
     phase = "prepare";
     const preparation = await bindings.assembly.prepare({ composition, factories: bindings.factories, roots: bindings.roots });
-    if (preparation.status === "failed") throw failureForAttempt(
-      assemblyErrorCodes[preparation.error.code] ?? "invalid_composition", phase, signal?.aborted,
-      false, projectDiagnostics(preparation.diagnostics), preparation.error.cause);
+    if (preparation.status === "failed") { throw failureForAttempt(
+      assemblyErrorCodes[preparation.error.code] ?? "invalid_composition", phase, { cancellationObserved: signal?.aborted,
+      diagnostics: projectDiagnostics(preparation.diagnostics), cause: preparation.error.cause }); }
     checkCancellation();
     phase = "run";
     const outcome = await preparation.prepared.run(signal === undefined ? {} : { signal });
     checkpoints.observeOutcome?.(outcome);
-    if (outcome.status === "failed") throw failureForAttempt(
-      assemblyErrorCodes[outcome.code] ?? "internal_failure", phase,
-      outcome.cancellation !== undefined || signal?.aborted === true, false, [], outcome.cause, undefined,
-      runtimeSetupDeclarations.find(({ implementationId }) => implementationId === outcome.implementationId)?.moduleId);
-    if (outcome.status === "cancelled") throw failureForAttempt("cancelled", phase, true);
+    assertSuccessfulOutcome(outcome, signal, failureForAttempt);
     phase = "handoff";
     checkCancellation();
-    if (outcome.roots.host !== ownedHost) throw failureForAttempt("internal_failure", phase);
+    if (outcome.roots.host !== ownedHost) { throw failureForAttempt("internal_failure", phase); }
     const host = outcome.roots.host;
     ownedHost = undefined;
     return host;
   } catch (cause) {
     let failure = ownedFailures.get(cause) ?? new AgentRuntimeHostCreationError(
       phase === "options" ? "invalid_options" : phase === "bind" ? "invalid_composition" : "internal_failure",
-      phase, signal?.aborted, false, [], cause);
+      phase, { cancellationObserved: signal?.aborted, cause });
     if (ownedHost !== undefined) {
       const host = ownedHost;
       ownedHost = undefined;
@@ -76,4 +72,20 @@ export async function createRuntimeSetupAttempt(
     }
     throw failure;
   }
+}
+
+type RuntimeSetupOutcome = AssemblyOutcome<ReturnType<typeof bindRuntimeSetup>["roots"]>;
+function assertSuccessfulOutcome(
+  outcome: RuntimeSetupOutcome,
+  signal: AbortSignal | undefined,
+  failure: (...args: ConstructorParameters<typeof AgentRuntimeHostCreationError>) => AgentRuntimeHostCreationError,
+): asserts outcome is Extract<RuntimeSetupOutcome, { status: "succeeded" }> {
+  if (outcome.status === "failed") {
+    throw failure(assemblyErrorCodes[outcome.code] ?? "internal_failure", "run", {
+      cancellationObserved: outcome.cancellation !== undefined || signal?.aborted === true,
+      cause: outcome.cause,
+      moduleId: runtimeSetupDeclarations.find(({ implementationId }) => implementationId === outcome.implementationId)?.moduleId,
+    });
+  }
+  if (outcome.status === "cancelled") { throw failure("cancelled", "run", { cancellationObserved: true }); }
 }

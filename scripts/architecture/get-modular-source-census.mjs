@@ -7,10 +7,10 @@ import { buildObservedSourceGraph } from '../../node_modules/@agent-teams/engine
 import { createSourceDependenciesCapability } from '../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/module.js';
 
 const within = (path, root) => path === root || path.startsWith(`${root}/`);
-const unique = values => [...new Set(values)].sort();
+const unique = values => [...new Set(values)].toSorted();
 const feature = path => path.match(/^(.*\/src\/features\/[^/]+)(?:\/|$)/)?.[1] ?? null;
 function boundaryFor(path, boundaries) {
-  const matches = boundaries.flatMap(boundary => boundary.roots.filter(root => within(path, root)).map(root => ({ boundary, length: root.length }))).sort((a, b) => b.length - a.length);
+  const matches = boundaries.flatMap(boundary => boundary.roots.filter(root => within(path, root)).map(root => ({ boundary, length: root.length }))).toSorted((a, b) => b.length - a.length);
   assert.ok(matches.length, `unclassified production source: ${path}`);
   assert.ok(!matches[1] || matches[0].length !== matches[1].length || matches[0].boundary.id === matches[1].boundary.id, `ambiguous production boundary: ${path}`);
   return matches[0].boundary;
@@ -23,11 +23,11 @@ export async function readSourceCensus(root, policy) {
   const inventory = await new PnpmWorkspaceInventoryReader().read(root, policy.workspaceManifestPath);
   const packages = inventory.packages.filter(pkg => pkg.rootPath.startsWith('packages/'));
   // Discover all conventional production roots independently of governedRoots.
-  const productionRoots = packages.map(pkg => `${pkg.rootPath}/src`).sort();
+  const productionRoots = packages.map(pkg => `${pkg.rootPath}/src`).toSorted();
   const files = await new FilesystemSourceTreeReader().read(root, productionRoots);
   const parser = new OxcSourceDependencyParser();
   const classifiedFiles = files.map(file => ({ ...file, boundary: boundaryFor(file.path, policy.boundaries),
-    workspacePackage: packages.filter(pkg => within(file.path, pkg.rootPath)).sort((a, b) => b.rootPath.length - a.rootPath.length)[0], parsed: parser.parse(file) }));
+    workspacePackage: packages.filter(pkg => within(file.path, pkg.rootPath)).toSorted((a, b) => b.rootPath.length - a.rootPath.length)[0], parsed: parser.parse(file) }));
   const graph = buildObservedSourceGraph({ inventory, allSourceFiles: files, classifiedFiles, resolver: new NodeSourceDependencyResolver() });
   assert.equal(graph.parseFailures.length, 0, 'source census parse failure');
   const relationships = Object.fromEntries(policy.boundaries.map(b => [b.id, []]));
@@ -44,15 +44,15 @@ export async function readSourceCensus(root, policy) {
       // exports or wrappers around an existing entrypoint from the census.
       const publicSurface = (feature(edge.fromPath) === null || feature(target.path) === null)
         && (entrypoints.has(edge.fromPath) || entrypoints.has(target.path));
-      if (edge.fromBoundaryId === target.targetBoundaryId && feature(edge.fromPath) === feature(target.path) && !compositionSeam && !publicSurface) continue;
+      if (edge.fromBoundaryId === target.targetBoundaryId && feature(edge.fromPath) === feature(target.path) && !compositionSeam && !publicSurface) {continue;}
       to = target.path;
     } else if (target.kind === 'workspace-package' || target.kind === 'self-workspace-package') {
       to = edge.specifier;
-    } else continue; // Builtins and fixed external libraries remain Foundation policy, not legacy module edges.
+    } else {continue;} // Builtins and fixed external libraries remain Foundation policy, not legacy module edges.
     relationships[edge.fromBoundaryId].push({ from: edge.fromPath, to, mode: edge.mode });
   }
-  for (const id of Object.keys(relationships)) relationships[id] = unique(relationships[id].map(edge => JSON.stringify(edge))).map(edge => JSON.parse(edge));
-  return { productionRoots, packageRoots: packages.map(pkg => ({ name: pkg.name, root: pkg.rootPath })).sort((a, b) => a.root.localeCompare(b.root)),
+  for (const id of Object.keys(relationships)) {relationships[id] = unique(relationships[id].map(edge => JSON.stringify(edge))).map(edge => JSON.parse(edge));}
+  return { productionRoots, packageRoots: packages.map(pkg => ({ name: pkg.name, root: pkg.rootPath })).toSorted((a, b) => a.root.localeCompare(b.root)),
     featureRoots: unique(files.map(file => feature(file.path)).filter(Boolean)), relationships };
 }
 
@@ -61,11 +61,12 @@ export async function requireSourceDiagnostics(root) {
   assert.equal(report.outcome, 'passed', `source diagnostics failed: ${JSON.stringify(report)}`);
 }
 
+const identity = value => JSON.stringify(typeof value === 'string' ? value : Object.fromEntries(Object.entries(value).toSorted(([a], [b]) => a.localeCompare(b))));
+
 export function verifySourceCensus(profile, census) {
-  const identity = value => JSON.stringify(typeof value === 'string' ? value : Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))));
   const equal = (actual, expected, label) => assert.deepEqual(unique(actual.map(identity)), unique(expected.map(identity)), label);
   equal(census.productionRoots, profile.productionRoots, 'live production roots drift');
   equal(census.packageRoots, profile.sourceCensus.packageRoots, 'live package census drift');
   equal(census.featureRoots, profile.sourceCensus.featureRoots, 'live feature census drift');
-  for (const boundary of profile.boundaries) equal(census.relationships[boundary.id] ?? [], boundary.relationships, `live relationships drift: ${boundary.id}`);
+  for (const boundary of profile.boundaries) {equal(census.relationships[boundary.id] ?? [], boundary.relationships, `live relationships drift: ${boundary.id}`);}
 }
