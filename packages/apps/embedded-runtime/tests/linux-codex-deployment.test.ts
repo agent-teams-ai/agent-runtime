@@ -155,7 +155,7 @@ test("simulation: selection needs both acknowledgements before any recipe and bi
     const {beginOpen} = selected.broker.transport;
     assert.throws(() => beginOpen({originHost: "bad host", originPort: 443, selectedAddress: "bad address", sni: "bad", alpn: "http/1.1"}));
     const {record, digest: hash} = selected.broker.evidence;
-    assert.equal(hash([Buffer.from("abc")]), createHash("sha256").update("abc").digest("hex"));
+    assert.equal(hash([Buffer.from("abc")]), `sha256:${createHash("sha256").update("abc").digest("hex")}`);
     const receipt = {schema: "agent-runtime.host-http-egress-receipt/v1" as const, operationId: t.kernel.operationId,
       attemptId: t.kernel.attemptId, requestId: "request-1", ...initialHttpEgressState()};
     assert.throws(() => record({...receipt, attemptId: "foreign"}), /binding/u);
