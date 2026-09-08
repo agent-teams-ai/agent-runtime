@@ -25,6 +25,11 @@ test("installed managed target bootstrap, receipt and refusals remain TEST-only"
   const cleanupRoot = join(allocation, "cleanup");
   const authority = { retainedRoot, mutableTargetRoot: consumerRoot, cleanupRoots: [consumerRoot, cleanupRoot] };
   const captures = [];
+  // Node's test runner isolates this file in its own process. The disposable
+  // repository must not inherit the host Actions repository identity. Public
+  // managed APIs have no environment port; restore exactly these keys on exit.
+  const hostIdentity = Object.fromEntries(["GITHUB_REPOSITORY_ID", "GITHUB_REPOSITORY"]
+    .map(key => [key, process.env[key]]));
   const retain = async (name, value) => {
     const bytes = Buffer.from(`${JSON.stringify(value)}\n`);
     const expected = digest(bytes);
@@ -34,6 +39,7 @@ test("installed managed target bootstrap, receipt and refusals remain TEST-only"
     captures.push(capture);
   };
   try {
+    for (const key of Object.keys(hostIdentity)) {delete process.env[key];}
     for (const root of [consumerRoot, retainedRoot, cleanupRoot]) {await mkdir(root);}
     execFileSync("git", ["init", "--quiet", consumerRoot]);
     const lockfileBytes = await read("pnpm-lock.yaml");
@@ -113,5 +119,11 @@ test("installed managed target bootstrap, receipt and refusals remain TEST-only"
     assert.deepEqual(await snapshot(), modified);
     await retain("results.json", { authority: "TEST-only", applied, current, repeated, stale, unknown });
     assert.equal(captures.length, 3);
-  } finally {await rm(allocation, { recursive: true, force: true });}
+  } finally {
+    for (const [key, value] of Object.entries(hostIdentity)) {
+      if (value === undefined) {delete process.env[key];}
+      else {process.env[key] = value;}
+    }
+    await rm(allocation, { recursive: true, force: true });
+  }
 });
