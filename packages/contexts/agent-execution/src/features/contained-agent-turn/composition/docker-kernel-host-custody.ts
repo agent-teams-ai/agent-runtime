@@ -96,6 +96,14 @@ export class DockerKernelHostCustody implements ContainedTurnHostCustodyPort {
     record.containmentStarted = true;
     record.containment = Promise.resolve().then(async () => {
       try {
+        if (record.cleanup === undefined) {
+          // Preparation installs cleanup before acquiring physical resources. The
+          // synchronous containmentStarted fence prevents any later installation.
+          // Retire only this unstarted reservation's descriptor, joining its reads;
+          // descriptor closure is not evidence of physical containment or release.
+          await record.workspace.close();
+          return this.unproven(record.custodyRef);
+        }
         if (!record.resourcesReleased) {
           const result = await record.cleanup?.cleanup({deadlineEpochMs: Date.now() + this.cleanupMilliseconds});
           record.resourcesReleased = result?.kind === "released";

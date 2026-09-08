@@ -12,7 +12,7 @@ interface Mount {id: string; device: string; root: string; path: string; options
 const SYSTEM_MOUNTS = new Set(["/", "/workspace", "/agent-private", "/tmp", "/dev", "/dev/pts", "/dev/shm", "/dev/mqueue",
   "/proc", "/sys", "/sys/fs/cgroup", "/etc/hosts", "/etc/hostname", "/etc/resolv.conf",
   "/proc/acpi", "/proc/asound", "/proc/bus", "/proc/fs", "/proc/irq", "/proc/sys", "/proc/sysrq-trigger",
-  "/proc/kcore", "/proc/keys", "/proc/latency_stats", "/proc/timer_list", "/proc/timer_stats", "/proc/sched_debug",
+  "/proc/interrupts", "/proc/kcore", "/proc/keys", "/proc/latency_stats", "/proc/timer_list", "/proc/timer_stats", "/proc/sched_debug",
   "/proc/scsi", "/sys/firmware", "/sys/devices/virtual/powercap"]);
 const within = (child: string, parent: string) => child === parent || child.startsWith(`${parent === "/" ? "" : parent}/`);
 const parseMounts = (text: string): Mount[] => {

@@ -61,3 +61,12 @@ test("pinned capture retains roots and detects namespace replacement around read
   await scope.close();
   assert.equal(io.handles.size, 0);
 });
+
+// Docker masks this kernel file on the supported Linux host; its source must
+// still be disjoint from either owned bind root.
+test("Docker masked interrupts mount is allowed without admitting owned-root aliases", () => {
+  const masked = table + "22 1 0:7 /null /proc/interrupts rw - tmpfs tmpfs rw\n";
+  assert.doesNotThrow(() => validateDockerWorkspaceMounts(masked, workspace, privateRoot, false));
+  assert.throws(() => validateDockerWorkspaceMounts(
+    table + "22 1 0:5 /owned/workspace /proc/interrupts ro - ext4 disk rw\n", workspace, privateRoot, false));
+});
