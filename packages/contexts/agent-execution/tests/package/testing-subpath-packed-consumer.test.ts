@@ -104,6 +104,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "CONTAINED_TURN_POSTGRES_TIMEOUT_DEFAULTS",
       "CONTAINED_TURN_ROUTE_QUALIFICATION_DIMENSIONS",
       "DarwinCooperativeProcessCustody",
+      "NodeHttpEgressBoundaryIds",
       "NodeProviderProcessCustody",
       "NodeTlsHttpEgressError",
       "NodeTlsHttpEgressTransport",

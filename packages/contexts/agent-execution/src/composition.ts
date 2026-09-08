@@ -37,6 +37,7 @@ export {
   readContainedTurnRouteEnforcementTarget,
   CONTAINED_TURN_ROUTE_QUALIFICATION_DIMENSIONS,
   NodeTlsHttpEgressError,
+  NodeHttpEgressBoundaryIds,
   NodeTlsHttpEgressTransport,
   type NodeTlsHttpEgressTransportOptions,
   type HttpEgressRouteFirstWrite,

@@ -10,6 +10,7 @@ export {
 } from "./egress/host-http-egress-session.js";
 export { createNativeHttpEgressRoute, nativeHttpRequestProfile,
   type NativeHttpRequestProfileId } from "./egress/native-http-request-profile.js";
+export { NodeHttpEgressBoundaryIds } from "./egress/node-http-egress-boundary-ids.js";
 export { NodeTlsHttpEgressError, NodeTlsHttpEgressTransport,
   type NodeTlsHttpEgressTransportOptions } from "./egress/node-tls-http-egress-transport.js";
 export type { HttpEgressRouteFirstWrite,
