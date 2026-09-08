@@ -3,6 +3,7 @@ import {mkdtemp, realpath, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {test} from "node:test";
+import {bindContainedTurnCapabilityAuthority} from "../../dist/composition/contained-turn-authority-capability.js";
 import {NodeUnixSocketDockerEngine} from
   "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-composition.js";
 import {DockerEngineError} from
@@ -15,14 +16,14 @@ import {createLinuxCodexLiveCanaryConfiguration} from "./linux-codex-live-canary
 
 // Constructor-only regression. Synthetic pins are not measured deployment facts;
 // no setup, credentials, daemon observation, provider or network operations.
-test("actual canary policy constructs the engine and preserves every reserved environment guard",
+test("actual canary constructs Host access authority and engine while preserving RS policy and environment guards",
   {skip: process.platform !== "linux" || process.arch !== "x64"}, async () => {
     const parent = await realpath(await mkdtemp(join(tmpdir(), "ar69-canary-engine-env-")));
     try {
       const {workspaceSourceRoot: _workspace, privateRootSourceRoot: _private,
         allowedEnvironmentKeys: _environment, cpuNanoCpus: _cpu, memoryBytes: _memory,
         pidsLimit: _pids, tmpfsBytes: _tmpfs, writableLayerBytes: _layer, ...enginePolicy} = policy(parent);
-      const {configuration} = createLinuxCodexLiveCanaryConfiguration({
+      const {approval, configuration} = createLinuxCodexLiveCanaryConfiguration({
         approvedIntent: "write-one-marker-and-return-it/v1", testId: "engine-env",
         commandId: "command:engine-env", deploymentId: "deployment:synthetic",
         deploymentIncarnation: "incarnation:synthetic", markerFile: "marker.txt", marker: "synthetic",
@@ -50,6 +51,26 @@ test("actual canary policy constructs the engine and preserves every reserved en
         native: {catalogSource: Buffer.from("{}"), ownerUid: 1000, ownerGid: 1000},
         observerSha256: "c".repeat(64), certificateAuthorities: [SYNTHETIC_LOOPBACK_CA],
       });
+      const policyRevision = approval.dispatchPolicy.policyRevision;
+      assert.match(policyRevision, /^linux-codex-marker-canary:v1:[a-f0-9]{64}$/u);
+      assert.equal(approval.intentAuthority.authorityRevision, policyRevision);
+      assert.equal(approval.egressRule.policyRef, policyRevision);
+      assert.equal(approval.egressRule.revision, policyRevision);
+      assert.deepEqual(await configuration.policy.read({
+        scope: approval.dispatchPolicy.scope, providerId: approval.dispatchPolicy.providerId,
+        intentDigest: approval.dispatchPolicy.intentDigest, policyRevision,
+      }), approval.dispatchPolicy);
+      assert.equal(configuration.authorityRevision,
+        `runtime-access-authority:linux-codex-marker-canary-v1-${policyRevision.slice("linux-codex-marker-canary:v1:".length)}`);
+      assert.equal(configuration.authorityRevision.length, 118);
+      let featureCalls = 0;
+      const execute = async () => {featureCalls += 1; throw new Error("Unexpected feature invocation");};
+      const feature = {cancel: {execute}, observe: {execute}, submit: {execute}};
+      const bound = bindContainedTurnCapabilityAuthority(feature, configuration.authorityRevision);
+      assert.equal(bound.authorityRevision, configuration.authorityRevision);
+      assert.throws(() => bindContainedTurnCapabilityAuthority(feature, policyRevision),
+        {name: "TypeError", message: "Contained-turn access authority is invalid"});
+      assert.equal(featureCalls, 0);
       const directories = await allocateLinuxCodexLiveAdminDirectories(configuration.testParent);
       const fullPolicy = {...configuration.node.enginePolicy, ...directories.engineRoots};
       let engineCalls = 0;

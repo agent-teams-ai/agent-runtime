@@ -205,6 +205,8 @@ export const createLinuxCodexLiveCanaryConfiguration = (
     native: {ownerUid: p.native.ownerUid, ownerGid: p.native.ownerGid, catalogSha256: sha256(p.native.catalogSource)},
     tlsPolicyDigest, constraintsDigest, start, deadline});
   const policyRevision = `${revision}:${administrativeDigest.slice(7)}`;
+  // Host access authority has its own revision domain, independent of RS policy.
+  const authorityRevision = `runtime-access-authority:linux-codex-marker-canary-v1-${administrativeDigest.slice(7)}`;
   const scope = {tenantId: a.binding.tenantId, projectId: a.binding.projectId, scopeDigest: a.binding.scopeDigest};
   const dispatchPolicy: Approval["dispatchPolicy"] = {
     scope, providerId: "codex", intentDigest: containedTurnAcceptanceIntentDigestV1(intent), policyRevision,
@@ -255,7 +257,7 @@ export const createLinuxCodexLiveCanaryConfiguration = (
   const configuration: Configuration = {
     ...(firewall === undefined ? {} : {firewall}),
     sourceRevision: p.sourceRevision, hostBootId: p.hostBootId, hostInstanceId: p.hostInstanceId,
-    authorityRevision: policyRevision, capabilityManifestRevision: capabilityManifest.manifestRevision,
+    authorityRevision, capabilityManifestRevision: capabilityManifest.manifestRevision,
     testParent: p.testParent, executablePath: "/ar-provider/provider-entrypoint",
     credentialDeadlineMonotonic: performance.now() + deadline - clock.now() - 1_000, authorityReadTimeoutMs: 5_000,
     issuance: {issuanceRef: `${revision}:${a.testId}`, materializationHeadVersion: 1,
