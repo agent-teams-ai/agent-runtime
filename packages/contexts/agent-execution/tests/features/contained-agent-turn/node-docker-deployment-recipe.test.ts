@@ -57,13 +57,13 @@ async function fixture(t: TestContext) {
     assert.equal(journal.evidence().reconcileRequired, true);
     // Later endpoint observations have prerequisites. Keep the valid prefix
     // when removing an earlier proof instead of inventing impossible evidence.
-    if (missing === "cutoff_observed") return;
+    if (missing === "cutoff_observed") {return;}
     await observe("cutoff_observed");
-    if (missing === "container_absent") return;
+    if (missing === "container_absent") {return;}
     await observe("container_absent"); await intent("listener_release");
-    if (missing === "listener_absent") return;
+    if (missing === "listener_absent") {return;}
     await observe("listener_absent"); await intent("network_release");
-    if (missing !== "network_absent") await observe("network_absent");
+    if (missing !== "network_absent") {await observe("network_absent");}
   }
   return {recipe, journal, storage, closes, partial, observe, references, tombstonePath};
 }
