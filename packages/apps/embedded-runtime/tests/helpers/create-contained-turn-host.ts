@@ -1,6 +1,6 @@
+import { createAgentRuntimeHost as createBoundHost } from "../../dist/composition/agent-runtime-host.js";
 import {
   bindContainedTurnCapabilityAuthority,
-  createAgentRuntimeHost as createBoundHost,
   type AgentRuntimeHostDependencies,
   type ContainedTurnCapabilityBundle,
 } from "../../dist/composition.js";
