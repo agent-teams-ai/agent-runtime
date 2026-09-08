@@ -1,3 +1,5 @@
+import {NodeDockerCustodyJournalStorage, HostHttpEgressV4Journal}
+  from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {mkdir, mkdtemp, rm} from "node:fs/promises";
@@ -31,7 +33,7 @@ test("construction is inert; lifecycle, V4 and consumption cannot run out of ord
   const owner = createNodeDockerDeploymentRecipe(selected);
   assert.throws(() => owner.preparation.openLifecycle(policy("/synthetic/does-not-exist")), /order conflict/u);
   assert.throws(() => owner.preparation.openResourceJournal({subject, observer: {readObservation() {throw new Error("Unexpected observation before journal open");}}}), /order conflict/u);
-  assert.throws(() => owner.consumption.prepare(), /order conflict/u);
+  assert.throws(() => owner.consumption.prepare({} as never), /order conflict/u);
   assert.throws(() => owner.route.engine.inspect({} as never, call()), /selected lifecycle/u);
   assert.equal(await owner.releaseAfterHostCleanup(call()), "released");
   assert.throws(() => owner.preparation.engineIdentity(call()), /admission closed/u);
@@ -85,3 +87,28 @@ test("cleanup timeout retains its flight and fences late identity publication", 
   else {assert.equal(joined, "released");}
   assert.throws(() => owner.preparation.openLifecycle(policy("/synthetic/unopened")), /admission closed/u);
 });
+
+for (const field of ["selectedDockerAuthorityDigest", "networkNamespaceIdentity", "cgroupIdentity", "listenerIdentity", "signerIdentity"] as const) {
+  test(`Node recipe captures the reader receiver once and rejects changed ${field}`, async t => {
+    t.mock.method(NodeUnixSocketDockerEngine.prototype, "identity", async () => identity);
+    t.mock.method(NodeDockerCustodyJournalStorage, "open", async () => ({}));
+    t.mock.method(HostHttpEgressV4Journal.prototype, "prepare", async () => ({kind: "fresh"}));
+    const references = {selectedDockerAuthorityDigest: `sha256:${"a".repeat(64)}`, networkNamespaceIdentity: "netns:1:2",
+      cgroupIdentity: "cgroup:3:4", listenerIdentity: "listener:ipv4:172.30.0.1:43129", signerIdentity: `sha256:${"b".repeat(64)}`};
+    let reads = 0;
+    const selected = options("/synthetic/consumption-reference-test");
+    const consumption = {...selected.consumption, readEnvelope(actual: typeof references) {
+      assert.equal(this, consumption); assert.deepEqual(actual, references); assert.ok(Object.isFrozen(actual)); reads++;
+      return {...actual, [field]: "changed"} as never;
+    }};
+    const owner = createNodeDockerDeploymentRecipe({...selected, consumption});
+    consumption.readEnvelope = () => {throw new Error("replaced reader");};
+    await owner.preparation.engineIdentity(call());
+    owner.preparation.openLifecycle({...selected.enginePolicy, allowedNetworkName: "ar-test-consumption"});
+    await owner.preparation.openResourceJournal({subject, observer: {readObservation() {throw new Error("unexpected pre-open observation");}}});
+    assert.throws(() => owner.consumption.prepare(references), /observation reference changed/u);
+    assert.equal(reads, 1);
+    assert.throws(() => owner.consumption.prepare(references), /order conflict/u);
+    assert.equal(reads, 1);
+  });
+}

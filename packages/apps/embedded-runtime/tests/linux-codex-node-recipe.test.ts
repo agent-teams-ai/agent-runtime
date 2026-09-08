@@ -28,11 +28,9 @@ const fixture = () => {
       clock: {read: () => ({authorityId: "clock-1", epoch: "epoch-1", controlTime: 1}),
         within: async (_deadline, operation) => operation()}},
     connection: {limits: {deadline: 1000, closureDeadline: 2000}} as LinuxCodexNodeRecipeSelection["connection"],
+    consumption: {directory: {path: "/synthetic/consumption", device: "1", inode: "1"}},
     remainingOwners: {
       nativeFiles: {async install() {assert.equal(this, selection.remainingOwners!.nativeFiles); events.push("native-install");}},
-      consumption: {directory: {path: "/synthetic/consumption", device: "1", inode: "1"}, readEnvelope() {
-        events.push("read-envelope"); throw new Error("No launched identity in this synthetic test");
-      }},
     },
   };
   const factory = () => createLinuxCodexNodeRecipe({hostBootId: "boot-1", hostInstanceId: "host-1",
@@ -81,32 +79,28 @@ test("missing production joins refuse before Engine or native resource preparati
   const f = fixture();
   const {remainingOwners: _owners, ...unavailable} = f.selection;
   const owner = createLinuxCodexNodeRecipe({hostBootId: "boot-1", hostInstanceId: "host-1", select: () => unavailable});
-  assert.throws(() => owner.recipe(input), /native-file installation and observed consumption-envelope owners/u);
+  assert.throws(() => owner.recipe(input), /native-file installation owner/u);
   assert.deepEqual(f.events, []);
   assert.equal(await owner.releaseAfterHostCleanup(call()), "released");
 });
 
-test("consumption observations are deferred, retain their receiver and reject cross-operation envelopes", () => {
+test("consumption binder joins observed references and rejects changed subject fields", () => {
   const expected = {operationId: "operation-1", attemptId: "attempt-1", custodyId: "custody-1", tenantId: "tenant-1",
     projectId: "project-1", scopeDigest: `sha256:${"c".repeat(64)}`, hostBootId: "boot-1", hostInstanceId: "host-1",
     executionGenerationId: "execution-1"};
-  const envelope = {...expected, selectedDockerAuthorityDigest: "synthetic-authority", networkNamespaceIdentity: "synthetic-namespace",
-    cgroupIdentity: "synthetic-cgroup", listenerIdentity: "synthetic-listener", signerIdentity: "synthetic-signer"};
-  let reads = 0;
-  const observation = {directory: {path: "/synthetic/consumption", device: "1", inode: "1"},
-    readEnvelope() {assert.equal(this, observation); reads++; return envelope;}};
-  const bound = bindLinuxCodexNodeConsumption(observation, expected);
-  assert.equal(reads, 0);
-  assert.deepEqual(bound.readEnvelope(), envelope);
-  for (const key of Object.keys(expected) as Array<keyof typeof expected>) {
-    const original = envelope[key]; envelope[key] = "wrong-binding";
-    assert.throws(() => bound.readEnvelope(), /binding mismatch/u);
-    envelope[key] = original;
+  const references = {selectedDockerAuthorityDigest: `sha256:${"a".repeat(64)}`, networkNamespaceIdentity: "netns:1:2",
+    cgroupIdentity: "cgroup:3:4", listenerIdentity: "listener:ipv4:172.30.0.1:43129", signerIdentity: `sha256:${"b".repeat(64)}`};
+  const storage = {directory: {path: "/synthetic/consumption", device: "1", inode: "1"}};
+  const bound = bindLinuxCodexNodeConsumption(storage, expected);
+  const envelope = bound.readEnvelope(references);
+  assert.deepEqual(envelope, {...expected, ...references});
+  assert.ok(Object.isFrozen(envelope));
+  for (const key of Object.keys(expected)) {
+    assert.throws(() => bound.readEnvelope({...references, [key]: "wrong-binding"}), /binding mismatch/u);
   }
-  observation.directory.path = "/replaced";
-  expected.operationId = "mutated-after-selection";
+  storage.directory.path = "/replaced"; expected.operationId = "changed";
   assert.equal(bound.directory.path, "/synthetic/consumption");
-  assert.equal(bound.readEnvelope().operationId, "operation-1");
+  assert.equal(bound.readEnvelope(references).operationId, "operation-1");
 });
 
 test("a reentrant selection cannot construct a second owner or reopen closed admission", async () => {
@@ -147,4 +141,20 @@ test("init selection freezes identity while captured methods observe their origi
   assert.equal(captured.monotonicNow!.bind(captured)(), 42);
   await captured.onOutput!({} as never); await captured.onRootExit!({} as never); await captured.onDrainComplete!({} as never);
   assert.equal(await owner.releaseAfterHostCleanup(call()), "released");
+});
+
+test("Node consumption subject must match actual claimed journal handoff before journal IO", () => {
+  const f = fixture(); const prepared = f.factory().recipe(input).preparation;
+  const attempt = {tenantId: "tenant-1", projectId: "project-1", operationId: "operation-1", attemptId: "attempt-1",
+    custodyId: "custody-1", hostBootId: "boot-1", hostInstanceId: "host-1"};
+  const subject = {attempt, executionGenerationId: "execution-1", scopeSha256: "c".repeat(64)};
+  for (const key of Object.keys(attempt)) {
+    assert.throws(() => prepared.openResourceJournal({subject: {...subject, attempt: {...attempt, [key]: "foreign"}}} as never),
+      /conflicts with claimed handoff/u);
+  }
+  for (const key of ["executionGenerationId", "scopeSha256"]) {
+    assert.throws(() => prepared.openResourceJournal({subject: {...subject, [key]: "foreign"}} as never),
+      /conflicts with claimed handoff/u);
+  }
+  assert.deepEqual(f.events, ["select"]);
 });

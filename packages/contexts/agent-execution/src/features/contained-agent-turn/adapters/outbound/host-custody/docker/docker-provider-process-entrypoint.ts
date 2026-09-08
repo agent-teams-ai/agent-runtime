@@ -10,13 +10,13 @@ export type {LaunchedDockerCustody} from "./docker-lifecycle-issued-launch.js";
 export {awaitNetworkCleanupWork} from "./engine/docker-engine-composition.js";
 export {createDockerHostHttpEgressObservers, joinHostHttpEgressV4Observers} from "./host-http-egress-v4-observers.js";
 export type {DockerHostHttpEgressObserverInput, DockerHttpListenerReadback} from "./host-http-egress-v4-observers.js";
-export {openNodeLinuxExclusiveRoute, LinuxExclusiveRouteOpeningError} from "./node-linux-exclusive-route.js";
+export {readNodeLinuxRouteNamespace, openNodeLinuxExclusiveRoute, LinuxExclusiveRouteOpeningError} from "./node-linux-exclusive-route.js";
 export type {LinuxRouteToolPin} from "./node-linux-exclusive-route.js";
 export type {LinuxExclusiveRouteBinding, LinuxExclusiveRouteOwner} from "./linux-exclusive-route-owner.js";
 export type {LinuxExclusiveRouteEndpoint} from "./linux-exclusive-route-policy.js";
 export type {DockerHostCustodyLifetime, DockerContainedTurnInitSession} from "./docker-contained-turn-host-custody.js";
 
-export {isConcreteLinuxDockerLifecycle, createNodeLinuxDockerResidueCustody} from "./node-linux-docker-residue-custody.js";
+export {readNodeLinuxDockerCgroup, isConcreteLinuxDockerLifecycle, createNodeLinuxDockerResidueCustody} from "./node-linux-docker-residue-custody.js";
 
 export {canonicalJsonSha256} from "./engine/docker-engine-composition.js";
 

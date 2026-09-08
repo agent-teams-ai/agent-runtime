@@ -1,3 +1,4 @@
+import {DockerConsumptionObservations} from "../../../../dist/features/contained-agent-turn/composition/docker-consumption-observations.js";
 import assert from "node:assert/strict";
 import type {TestContext} from "node:test";
 import {networkFixture} from "../../../fixtures/docker-operation-network-fixture.ts";
@@ -129,6 +130,17 @@ export const postClaimFixture = async (t: TestContext, gateway?: string) => {
   /** Cut-off and fault injection points, keyed by the step they belong to. */
   const hooks: Record<string, (() => void) | undefined> = {};
   const record = (name: string): void => {events.push(name); hooks[name]?.();};
+  // Only this projection is doubled. Dedicated owner tests validate FD provenance;
+  // this fixture asserts the join order without claiming to own Linux objects.
+  t.mock.method(DockerConsumptionObservations, "read", async (owner, launch, lease, endpoint, call) => {
+    record("consumption-observations");
+    assert.equal(owner, lifecycle); assert.equal(lease, route.lease);
+    assert.equal(owner.observeLaunch(launch).authority.containerId, network.container.containerId);
+    assert.deepEqual(endpoint, {address: network.gateway, port: 43129});
+    assert.equal(call.signal.aborted, false);
+    return {selectedDockerAuthorityDigest: `sha256:${launch.journal.authoritySha256}`,
+      networkNamespaceIdentity: "netns:1:2", cgroupIdentity: "cgroup:3:4"};
+  });
   const state = {running: false, removed: false, attached: false, initReady: true};
   const faults = {identity: false, journal: false, launch: false, listener: false};
   const engine = syntheticEngine({record, faults, state, network, engineIdentity});
@@ -151,7 +163,7 @@ export const postClaimFixture = async (t: TestContext, gateway?: string) => {
   const listener = {
     observe() {return {...readback, sockets: {...readback.sockets}, uncertainty: [...readback.uncertainty]};},
     async open() {
-      physical.opens += 1;
+      physical.opens += 1; record("listener-open");
       if (faults.listener) {throw new Error("synthetic listener failure");}
       readback.openState = "published"; readback.listenerState = "open";
       return {address: {address: physical.recipes.at(-1)!, family: "IPv4", port: 43_129},
@@ -190,7 +202,7 @@ export const postClaimFixture = async (t: TestContext, gateway?: string) => {
     },
     resources: {
       listenerFor: (bindHost: string) => {physical.recipes.push(bindHost); return listener as never;},
-      consumption: {async prepare() {physical.consumption += 1;
+      consumption: {async prepare() {physical.consumption += 1; record("consumption-prepare");
         return {kind: "ready", journal: {}, quarantine() {}, async retire() {return "retired";}};}},
       accept: async () => {},
       localCut: {expectedClock: {authorityId: "synthetic-clock", epoch: "1"},

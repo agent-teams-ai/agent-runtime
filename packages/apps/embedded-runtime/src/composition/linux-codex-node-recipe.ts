@@ -19,19 +19,13 @@ export interface LinuxCodexNodeRecipeSelection {
   readonly consumptionSubject: Readonly<{tenantId: string; projectId: string; executionGenerationId: string}>;
   readonly localCut: Preparation["resources"]["localCut"];
   readonly connection: Selected["connection"];
-  /** Missing production joins at c57e746: the native renderer has a verifier but
-   * no installer retaining partial-file debt; consumption storage has no owner
-   * joining the actual launched Docker/listener identities into its envelope.
-   * Absence refuses selection before any Engine/filesystem effect. These are
-   * exact existing contracts, never qualified by a callback's mere presence. */
-  readonly remainingOwners?: Readonly<{
-    nativeFiles: Selected["nativeFiles"];
-    consumption: NodeDockerDeploymentRecipeInput["consumption"];
-  }>;
+  readonly consumption: Omit<NodeDockerDeploymentRecipeInput["consumption"], "readEnvelope">;
+  /** Native file custody remains a separate deployment owner. */
+  readonly remainingOwners?: Readonly<{nativeFiles: Selected["nativeFiles"]}>;
 }
 
 /** Private app recipe for infrastructure.recipe. select supplies approved facts,
- * directory pins and the two still-missing owner joins, never an already-built
+ * directory pins and native file custody, never an already-built
  * recipe. The AE factory constructs Engine identity, concrete Linux lifecycle,
  * V4/consumption journals and route inspection. The existing Host constructs
  * private-root custody, operation network, listener, route lease and finalizer.
@@ -54,8 +48,8 @@ export const createLinuxCodexNodeRecipe = (options: Readonly<{
     const selected = select(input);
     if (closed) {throw new TypeError("Linux Codex Node recipe admission closed during selection");}
     const owners = selected.remainingOwners;
-    if (typeof owners?.nativeFiles?.install !== "function" || typeof owners.consumption?.readEnvelope !== "function") {
-      throw new TypeError("Linux Codex Node recipe requires native-file installation and observed consumption-envelope owners");
+    if (typeof owners?.nativeFiles?.install !== "function") {
+      throw new TypeError("Linux Codex Node recipe requires native-file installation owner");
     }
     const kernel = input.kernel;
     const subjectFacts = Object.freeze({...selected.subjectFacts});
@@ -64,11 +58,19 @@ export const createLinuxCodexNodeRecipe = (options: Readonly<{
       tenantId: selected.consumptionSubject.tenantId, projectId: selected.consumptionSubject.projectId,
       executionGenerationId: selected.consumptionSubject.executionGenerationId});
     const node = createNodeDockerDeploymentRecipe({...selected.node,
-      consumption: bindLinuxCodexNodeConsumption(owners.consumption, {...expected, scopeDigest: `sha256:${subjectFacts.scopeSha256}`})});
+      consumption: bindLinuxCodexNodeConsumption(selected.consumption, {...expected, scopeDigest: `sha256:${subjectFacts.scopeSha256}`})});
     retained.set(kernel.custodyId, node);
     const nativeFiles = Object.freeze({install: owners.nativeFiles.install.bind(owners.nativeFiles)});
     const init = selected.initOptions;
     const preparation: Preparation = Object.freeze({...node.preparation,
+      openResourceJournal(request: Parameters<Preparation["openResourceJournal"]>[0]) {
+        const actual = {...request.subject.attempt, executionGenerationId: request.subject.executionGenerationId};
+        if ((Object.keys(expected) as Array<keyof typeof expected>).some(key => actual[key] !== expected[key]) ||
+            request.subject.scopeSha256 !== subjectFacts.scopeSha256) {
+          throw new TypeError("Linux Codex consumption subject conflicts with claimed handoff");
+        }
+        return node.preparation.openResourceJournal(request);
+      },
       create: Object.freeze({entrypoint: selected.create.entrypoint, imageDigest: selected.create.imageDigest,
         launchFingerprintSha256: selected.create.launchFingerprintSha256,
         operationNonceSha256: selected.create.operationNonceSha256, workspaceWritable: selected.create.workspaceWritable,

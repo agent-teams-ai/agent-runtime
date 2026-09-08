@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {test} from "node:test";
-import {composeLinuxDockerResidueCustody, createNodeLinuxDockerResidueCustody} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/node-linux-docker-residue-custody.js";
+import {readNodeLinuxDockerCgroup, composeLinuxDockerResidueCustody, createNodeLinuxDockerResidueCustody} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/node-linux-docker-residue-custody.js";
 import {DockerCustodyJournal} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/docker-custody-journal.js";
 import {engineCall, digest, createInput} from "./support/docker-host-custody-lifecycle-fixture.ts";
 import {initOptions, installSyntheticInit, providerExec} from "./support/docker-claim-init-fixture.ts";
@@ -402,3 +402,33 @@ test("P1 overlapping sibling inspection is retryable without poisoning process p
   assert.equal((await f.contain(first)).kind, "closed");
   assert.equal(f.io.handles.size, 0);
 });
+
+test("cgroup readback projects retained leaf facts and rejects foreign or released custody", async t => {
+  const f = await residueFixture(t);
+  const launched = await f.launch();
+  const facts = f.io.node(f.leafPath(launched.authority)).facts;
+  assert.equal(await readNodeLinuxDockerCgroup(f.lifecycle, launched, engineCall()), `cgroup:${facts.dev}:${facts.ino}`);
+  await assert.rejects(readNodeLinuxDockerCgroup(f.lifecycle, {...launched}, engineCall()));
+  await assert.rejects(readNodeLinuxDockerCgroup({} as never, launched, engineCall()));
+  const foreign = composeLinuxDockerResidueCustody({policy: f.selectedPolicy, journalStorage: f.storage}, f.engine, f.io);
+  await assert.rejects(readNodeLinuxDockerCgroup(foreign.lifecycle, launched, engineCall()));
+  assert.equal((await f.contain(launched)).kind, "closed");
+  await assert.rejects(readNodeLinuxDockerCgroup(f.lifecycle, launched, engineCall()));
+});
+
+for (const fault of ["membership", "process"] as const) {
+  test(`cgroup readback revalidates ${fault} and retains cleanup after failure`, async t => {
+    const f = await residueFixture(t); const launched = await f.launch();
+    if (fault === "membership") {f.io.node(`${f.leafPath(launched.authority)}/cgroup.procs`).contents = "99999\n";}
+    else {
+      const proc = [...f.io.nodes.values()].find(node => /\/proc\/[0-9]+\/stat$/u.test(node.path))!;
+      proc.contents = "changed process";
+    }
+    await assert.rejects(readNodeLinuxDockerCgroup(f.lifecycle, launched, engineCall()));
+    assert.ok(f.io.handles.size > 0);
+    await assert.rejects(readNodeLinuxDockerCgroup(f.lifecycle, launched, engineCall()));
+    assert.equal(await f.disposeResidue(engineCall()), "released");
+    assert.equal(f.io.handles.size, 0);
+    await assert.rejects(readNodeLinuxDockerCgroup(f.lifecycle, launched, engineCall()));
+  });
+}

@@ -14,6 +14,13 @@ type Policy = Parameters<Dependencies["openLifecycle"]>[0];
 type Residue = ReturnType<typeof createNodeLinuxDockerResidueCustody>;
 type Consumption = Parameters<typeof createNodeHostHttpConsumptionJournal>[0];
 
+export type NodeDockerConsumptionReferences = Pick<Consumption["envelope"],
+  "selectedDockerAuthorityDigest" | "networkNamespaceIdentity" | "cgroupIdentity" | "listenerIdentity" | "signerIdentity">;
+export type DockerHttpConsumptionReferences = Omit<NodeDockerConsumptionReferences, "signerIdentity">;
+export type NodeDockerConsumptionRecipe = Readonly<{
+  prepare(references: NodeDockerConsumptionReferences): ReturnType<Dependencies["resources"]["consumption"]["prepare"]>;
+}>;
+
   const contains = (parent: string, child: string) => {
     const path = relative(parent, child);
     return path === "" || path !== ".." && !path.startsWith("../") && !isAbsolute(path);
@@ -27,15 +34,19 @@ export interface NodeDockerDeploymentRecipeInput {
   readonly resourceJournalRoot: string;
   readonly nsenter: DockerLinuxExclusiveRouteAdmissionInput["nsenter"];
   readonly nft: DockerLinuxExclusiveRouteAdmissionInput["nft"];
-  /** The directory pin is external Host storage. The retained observation
-   * owner must read the ACTUAL launched authority/listener identities at prepare,
-   * not predict them at recipe selection. No such production join exists at
-   * this revision; deployment must supply it before enabling this recipe. */
+  /** Host storage and the bound subject reader; observations arrive after route admission. */
   readonly consumption: Readonly<{
     directory: Consumption["directory"];
     limits?: Consumption["limits"];
-    readEnvelope(): Consumption["envelope"];
+    readEnvelope(references: NodeDockerConsumptionReferences): Consumption["envelope"];
   }>;
+}
+
+export interface NodeDockerDeploymentRecipe {
+  readonly preparation: Pick<Dependencies, "enginePolicy" | "engineIdentity" | "openLifecycle" | "openResourceJournal">;
+  readonly route: Omit<DockerLinuxExclusiveRouteAdmissionInput, "binding">;
+  readonly consumption: NodeDockerConsumptionRecipe;
+  releaseAfterHostCleanup(call: Call): Promise<"released" | "pending">;
 }
 
 /** One operation's concrete production owners. Construction does no I/O.
@@ -43,7 +54,7 @@ export interface NodeDockerDeploymentRecipeInput {
  * observation issuer. No transport, residue proof or journal implementation is
  * injectable here. The Host still owns allocation and reverse-order cleanup.
  */
-export const createNodeDockerDeploymentRecipe = (input: NodeDockerDeploymentRecipeInput) => {
+export const createNodeDockerDeploymentRecipe = (input: NodeDockerDeploymentRecipeInput): NodeDockerDeploymentRecipe => {
   // This engine is used ONLY for /info. It must not select an operation network
   // before the Engine identity needed to derive that network has been observed.
   // The existing Engine constructor validates a full create policy even for
@@ -126,11 +137,18 @@ export const createNodeDockerDeploymentRecipe = (input: NodeDockerDeploymentReci
       return routeEngine.inspect(...args);
     }}),
   });
-  const consumption: Dependencies["resources"]["consumption"] = Object.freeze({prepare() {
+  const consumption: NodeDockerConsumptionRecipe = Object.freeze({prepare(references: NodeDockerConsumptionReferences) {
     assertOpen();
     if (!published || consumptionEntered) {throw new TypeError("Docker consumption preparation order conflict");}
     consumptionEntered = true;
-    const recipe = createNodeHostHttpConsumptionJournal({directory: consumptionDirectory, envelope: readEnvelope(),
+    const captured = Object.freeze({...references});
+    const envelope = Object.freeze({...readEnvelope(captured)});
+    for (const key of ["selectedDockerAuthorityDigest", "networkNamespaceIdentity", "cgroupIdentity", "listenerIdentity", "signerIdentity"] as const) {
+      if (typeof captured[key] !== "string" || envelope[key] !== captured[key]) {
+        throw new TypeError("Docker consumption observation reference changed");
+      }
+    }
+    const recipe = createNodeHostHttpConsumptionJournal({directory: consumptionDirectory, envelope,
       ...(consumptionLimits === undefined ? {} : {limits: consumptionLimits})});
     assertOpen();
     consumptionSettled = false;

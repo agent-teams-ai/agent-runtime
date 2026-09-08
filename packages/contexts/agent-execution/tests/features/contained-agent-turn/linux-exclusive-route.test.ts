@@ -9,7 +9,7 @@ import { linuxExclusiveRouteRules, linuxExclusiveRouteReadback, linuxExclusiveRo
   "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-policy.js";
 import { installLinuxExclusiveRoute, type LinuxExclusiveRouteBinding } from
   "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-owner.js";
-import { openNodeLinuxExclusiveRoute, LinuxExclusiveRouteOpeningError } from
+import { readNodeLinuxRouteNamespace, openNodeLinuxExclusiveRoute, LinuxExclusiveRouteOpeningError } from
   "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/node-linux-exclusive-route.js";
 
 const endpoint = {address: "172.30.0.1", port: 18443};
@@ -439,7 +439,7 @@ const nodeFixture = (t: TestContext, options: {replaceTools?: boolean; drift?: "
   let hashed = false;
   const pin = (path: string) => ({path, sha256: createHash("sha256").update(files.get(path)!).digest("hex")});
   const nsenter = pin("/synthetic/nsenter"); const nft = pin("/synthetic/nft");
-  const namespaceIdentity = {dev: 4, ino: 100};
+  const namespaceIdentity = {dev: 4n, ino: 9007199254740993n};
   t.after(() => {t.mock.restoreAll(); syncBuiltinESMExports();});
   t.mock.method(process, "geteuid", () => 0);
   t.mock.method(performance, "now", timer.now);
@@ -467,10 +467,10 @@ const nodeFixture = (t: TestContext, options: {replaceTools?: boolean; drift?: "
     assert.equal(typeof fd, "number"); hashed = true; return descriptors.get(fd)!.bytes;
   });
   t.mock.method(fs, "statSync", (path: string) => {
-    if (path === "/proc/self/ns/net") {return {dev: 4, ino: 1};}
+    if (path === "/proc/self/ns/net") {return {dev: 4n, ino: 1n};}
     assert.equal(path, "/proc/321/ns/net");
-    return {...namespaceIdentity, ...(options.drift === "inode" ? {ino: 101} : {}),
-      ...(options.drift === "device" ? {dev: 5} : {})};
+    return {...namespaceIdentity, ...(options.drift === "inode" ? {ino: 101n} : {}),
+      ...(options.drift === "device" ? {dev: 5n} : {})};
   });
   t.mock.method(fs, "closeSync", (fd: number) => {
     closed.push(fd); assert.ok(descriptors.has(fd));
@@ -514,7 +514,7 @@ const nodeFixture = (t: TestContext, options: {replaceTools?: boolean; drift?: "
         startedAt: inspections > 1 && options.drift === "start" ? "different" : "start:1"},
       resources: {seccompProfileSha256: linuxExclusiveRouteSeccomp().sha256}, engine: {cgroupVersion: "2"}} as any;
   }};
-  return {...state, closed, invocations, descriptors, timer, unrefs: () => unrefs,
+  return {...state, authority, closed, invocations, descriptors, timer, unrefs: () => unrefs,
     open: () => openNodeLinuxExclusiveRoute({authority, binding, endpoint, engine, lifetimeMs: 10_000, nsenter, nft}),
     remove: () => {removed = true;}, failNextTool: (code: string) => {toolFailure = code;}};
 };
@@ -654,4 +654,22 @@ test("Node preparation crossing the lease publishes cleanup only and never creat
   assert.deepEqual(f.closed, []);
   f.remove(); assert.equal(await error.releaseAfterContainerRemoval(), "quarantined");
   assert.deepEqual(f.closed, [42, 41, 40]);
+});
+
+test("production namespace readback is exact, owner-bound and unavailable after release", nodeOnly, async t => {
+  const f = nodeFixture(t); const owner = await f.open();
+  assert.equal(readNodeLinuxRouteNamespace(owner, f.authority, endpoint), "netns:4:9007199254740993");
+  assert.throws(() => readNodeLinuxRouteNamespace({...owner}, f.authority, endpoint));
+  assert.throws(() => readNodeLinuxRouteNamespace(owner, {...f.authority, containerId: "foreign"}, endpoint));
+  assert.throws(() => readNodeLinuxRouteNamespace(owner, f.authority, {...endpoint, port: endpoint.port + 1}));
+  f.remove(); assert.equal(await owner.releaseAfterContainerRemoval(), "closed");
+  assert.throws(() => readNodeLinuxRouteNamespace(owner, f.authority, endpoint));
+});
+
+test("failed production installation exposes cleanup only, never a namespace readback", nodeOnly, async t => {
+  const f = nodeFixture(t, {scheduleFailure: true});
+  const failure = await f.open().catch(error => error);
+  assert.ok(failure instanceof LinuxExclusiveRouteOpeningError);
+  assert.throws(() => readNodeLinuxRouteNamespace(failure as never, f.authority, endpoint));
+  f.remove(); await failure.releaseAfterContainerRemoval();
 });

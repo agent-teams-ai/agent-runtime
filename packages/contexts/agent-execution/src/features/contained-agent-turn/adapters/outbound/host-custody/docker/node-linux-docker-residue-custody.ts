@@ -1,4 +1,4 @@
-import {createDockerHostCustodyLifecycle, type DockerHostCustodyCompositionDependencies,
+import {createDockerHostCustodyLifecycle, type DockerHostCustodyCompositionDependencies, type DockerHostCustodyLifecycle,
   type DockerHostCustodyResiduePort} from "./docker-host-custody-lifecycle.js";
 import {sameDockerAuthority, isInactiveDockerObservation} from "./docker-host-custody-lifecycle-guards.js";
 import {validateAuthorityShape, snapshotDockerEnginePolicy, NodeUnixSocketDockerEngine}
@@ -11,9 +11,20 @@ import {compareResidueTrees, openResidueTree, pinResidueProcess, requireLeafMemb
   scanResidueTree, verifyResidueProcess, type ResidueProcess, type ResidueTree} from "./linux-docker-residue-kernel.js";
 import {recursivePopulation, residueFault, residueLeaf, residueParent, sameResidueEngine} from "./linux-docker-residue-parsers.js";
 
-const concreteLifecycles = new WeakSet<object>();
+type Launched = Parameters<DockerHostCustodyLifecycle["observeLaunch"]>[0];
+const concreteLifecycles = new WeakMap<DockerHostCustodyLifecycle, LinuxDockerResidueOwner>();
+export const readNodeLinuxDockerCgroup = async (lifecycle: DockerHostCustodyLifecycle,
+  launch: Launched, call: DockerEngineCall): Promise<string> => {
+  const owner = concreteLifecycles.get(lifecycle);
+  if (owner === undefined) {throw residueFault();}
+  const observed = lifecycle.observeLaunch(launch);
+  if (observed.retired || observed.removal !== null || observed.recursiveEmpty !== null || observed.terminal !== null) {
+    throw residueFault();
+  }
+  return owner.readCgroup(observed.authority, call);
+};
 /** Provenance readback only; no caller-supplied empty callback qualifies. */
-export const isConcreteLinuxDockerLifecycle = (lifecycle: object): boolean => concreteLifecycles.has(lifecycle);
+export const isConcreteLinuxDockerLifecycle = (lifecycle: object): boolean => concreteLifecycles.has(lifecycle as DockerHostCustodyLifecycle);
 
 type Present = Extract<DockerContainerObservation, {existence: "present"}>;
 interface RetainedResidue {
@@ -181,6 +192,23 @@ class LinuxDockerResidueOwner implements DockerHostCustodyResiduePort {
     await this.confirm(scope, record, call);
   }
 
+  public readCgroup(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<string> {
+    return this.run(call, async scope => {
+      const record = this.record(authority);
+      try {
+        const actual = await this.engine.inspect(authority, call);
+        scope.check();
+        this.assertObservation(authority, actual);
+        if (actual.existence !== "present" || !actual.state.running || !sameResidueEngine(record.engine, actual.engine)) {
+          throw residueFault();
+        }
+        await this.validateRunning(scope, record, actual, call);
+        scope.check();
+        return `cgroup:${record.leaf!.facts.dev}:${record.leaf!.facts.ino}`;
+      } catch (error) {record.faulted = true; throw error;}
+    });
+  }
+
   public async inspect(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<DockerContainerObservation> {
     const actual = await this.engine.inspect(authority, call);
     this.assertObservation(authority, actual);
@@ -309,7 +337,7 @@ export const composeLinuxDockerResidueCustody = (
   });
   const lifecycle = createDockerHostCustodyLifecycle({engine: decorated, residue: owner, journalStorage: input.journalStorage,
     ...(input.journalLimits === undefined ? {} : {journalLimits: input.journalLimits})});
-  concreteLifecycles.add(lifecycle);
+  concreteLifecycles.set(lifecycle, owner);
   return Object.freeze({
     lifecycle,
     // Local residue FD disposal only; this does not stop a container, close the

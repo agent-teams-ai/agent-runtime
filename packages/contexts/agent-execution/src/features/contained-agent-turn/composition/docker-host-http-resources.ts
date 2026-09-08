@@ -1,3 +1,4 @@
+import type {DockerHttpConsumptionReferences} from "./node-docker-deployment-recipe.js";
 import {DockerCustodyHttpReservation} from "./docker-custody-http-reservation.js";
 import { captureDockerHttpResourceRecord as data, subscribeDockerHttpAbort as addAbortListener } from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import { createV4HostHttpListenerLifecycle } from "./v4-host-http-listener-lifecycle.js";
@@ -8,8 +9,9 @@ type Handoff = Parameters<Preparation["acquire"]>[0];
 type Resources = Parameters<Preparation["prepareResources"]>[1];
 type Journal = Parameters<typeof createV4HostHttpListenerLifecycle>[0]["v4"];
 /** The listener recipe is built from the observed gateway, never from a guess. */
-export type DockerHostHttpListenerResources = Omit<Resources, "listener" | "listenerLifecycle"> &
-  Readonly<{listenerFor: (host: string) => Resources["listener"]}>;
+export type DockerHostHttpListenerResources = Omit<Resources, "listener" | "listenerLifecycle" | "consumption"> &
+  Readonly<{listenerFor: (host: string) => Resources["listener"];
+    consumption: Readonly<{prepare(references: DockerHttpConsumptionReferences): ReturnType<Resources["consumption"]["prepare"]>}>}>;
 export type DockerHostHttpResources = ReturnType<typeof createDockerHostHttpResources>;
 const {httpPreparation} = DockerCustodyHttpReservation;
 
@@ -100,7 +102,9 @@ export const createDockerHostHttpResources = (input: Readonly<{
       sessionEntered = true;
       return host.bindSession(lifetime, dependencies);
     },
-    async prepare(journal: Journal, handoff: Handoff, resources: DockerHostHttpListenerResources) {
+    async prepare(journal: Journal, handoff: Handoff, resources: DockerHostHttpListenerResources,
+      afterListenerOpened: (address: Awaited<ReturnType<Resources["listener"]["open"]>>["address"]) =>
+        Promise<Omit<DockerHttpConsumptionReferences, "listenerIdentity">>) {
       if (entered) {throw new TypeError("Host HTTP resource preparation already entered");}
       entered = true;
       try {
@@ -121,16 +125,35 @@ export const createDockerHostHttpResources = (input: Readonly<{
         // address can be chosen before the Engine assigned the bridge address.
         const supplied = resources.listenerFor(retained.gateway);
         const recipe = data(supplied);
-        const listener = Object.freeze({open: recipe.open.bind(supplied), close: recipe.close.bind(supplied),
+        let references: DockerHttpConsumptionReferences | undefined;
+        const open = recipe.open.bind(supplied);
+        const listener = Object.freeze({async open(...args: Parameters<typeof open>) {
+          const opened = await open(...args);
+          const address = Object.freeze({...opened.address});
+          if (address.address !== retained.gateway || address.family !== "IPv4" ||
+              !Number.isInteger(address.port) || address.port < 1 || address.port > 65535 ||
+              cut || lifetime.signal.aborted || network.signal.aborted) {
+            throw new TypeError("Host listener preparation is unproven");
+          }
+          const observed = await afterListenerOpened(address);
+          if (cut || lifetime.signal.aborted || network.signal.aborted) {throw new TypeError("Host resource admission closed");}
+          references = Object.freeze({...observed,
+            listenerIdentity: `listener:ipv4:${address.address}:${address.port}`});
+          return opened;
+        }, close: recipe.close.bind(supplied),
           sealAdmission: recipe.sealAdmission.bind(supplied), observe: recipe.observe.bind(supplied)});
         sealListener = listener.sealAdmission;
         listenerReadback = Object.freeze({observe: listener.observe});
         const consumption = data(resources.consumption);
+        const prepareConsumption = consumption.prepare.bind(resources.consumption);
         const localCut = data(resources.localCut);
         const clock = data(localCut.clock);
         const {listenerFor: _listenerFor, ...rest} = resources;
         const fixedResources = {...rest, listener,
-          consumption: Object.freeze({prepare: consumption.prepare.bind(resources.consumption)}),
+          consumption: Object.freeze({prepare() {
+            if (references === undefined) {throw new TypeError("Docker consumption observations unavailable");}
+            return prepareConsumption(references);
+          }}),
           // Retain callbacks, never receiver state: time must keep advancing on
           // the borrowed Host clock even when it stores controlTime on `this`.
           localCut: {...localCut, clock: Object.freeze({read: clock.read.bind(localCut.clock),

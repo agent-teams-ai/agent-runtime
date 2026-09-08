@@ -1,3 +1,4 @@
+import {joinLinuxCodexSignerConsumption} from "./linux-codex-node-recipe-consumption.js";
 import { randomUUID } from "node:crypto";
 import { types } from "node:util";
 import {
@@ -5,7 +6,7 @@ import {
   readContainedTurnSelectedRouteAdmission, createDockerLinuxExclusiveRouteAdmission, createNodeHostHttpConnection, createNodeHostHttpListener, hostHttpAbortOperations,
   type CreateCodexCurrentKernelOwnerOptions, type CodexCurrentKernelOwner, type CreateDockerCodexHostKernelOwnerOptions,
   type DockerCodexNativeBrokerFinalizerInput, type DockerLinuxExclusiveRouteAdmissionInput,
-  type DockerLinuxPostClaimDependencies,
+  type DockerLinuxPostClaimDependencies, type NodeDockerConsumptionRecipe,
 } from "@agent-teams/agent-execution/composition";
 import { createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate } from "@agent-teams/runtime-security/composition";
 import { createContainedTurnCurrentEgressOwners, type ContainedTurnCurrentEgressOwnersInput }
@@ -29,7 +30,8 @@ export interface LinuxCodexContainedTurnResources {
   select(input: Parameters<DockerOptions["preparation"]>[0]): Readonly<{
     dispose?(): void;
     preparation: Omit<DockerLinuxPostClaimDependencies, "resources" | "routeAdmission" | "publishRouteFirstWrite"> & Readonly<{
-      resources: Omit<DockerLinuxPostClaimDependencies["resources"], "accept" | "listenerFor">;
+      resources: Omit<DockerLinuxPostClaimDependencies["resources"], "accept" | "listenerFor" | "consumption"> &
+        Readonly<{consumption: NodeDockerConsumptionRecipe}>;
     }>;
     route: DockerLinuxExclusiveRouteAdmissionInput;
     currentAuthority: ContainedTurnCurrentEgressOwnersInput;
@@ -63,6 +65,7 @@ const joinedHttpResources = (
   selected: OperationSelection,
   kernel: Parameters<DockerOptions["preparation"]>[0]["kernel"],
   finalizer: Finalizer,
+  verifier: Parameters<typeof joinLinuxCodexSignerConsumption>[1],
 ): Readonly<{resources: DockerLinuxPostClaimDependencies["resources"]; settle(): Promise<void>; isSettled(): boolean}> => {
   const {broker, connection} = selected;
   const httpResources = selected.preparation.resources;
@@ -70,6 +73,7 @@ const joinedHttpResources = (
   let retainedListener: ReturnType<typeof createNodeHostHttpListener> | undefined;
   let requestDebt = false;
   const resources: DockerLinuxPostClaimDependencies["resources"] = Object.freeze({...httpResources,
+    consumption: joinLinuxCodexSignerConsumption(httpResources.consumption, verifier),
     listenerFor(host: string) {
       const listener = createNodeHostHttpListener({host, deadline: connection.limits.deadline,
         closureDeadline: connection.limits.closureDeadline}, broker.clock);
@@ -146,7 +150,10 @@ const validateOperationSelection = (
     return missing("route-admission-binding");
   }
   if (currentInput.operation.scope.operationId !== kernel.operationId ||
-      currentInput.operation.providerId !== "codex") {return missing("current-authority-binding");}
+      currentInput.operation.providerId !== "codex" ||
+      currentInput.operation.scope.scopeDigest !== `sha256:${preparation.subjectFacts?.scopeSha256}`) {
+    return missing("current-authority-binding");
+  }
   for (const key of ["ids", "resolver", "evidence"] as const) {
     data(broker[key], `broker-${key}`);
   }
@@ -193,7 +200,8 @@ export const createLinuxCodexContainedTurnOwner = (
           method: "POST", path: "/backend-api/codex/responses", host: "unbound"}}, broker.clock);
         const finalizer = createDockerCodexNativeBrokerFinalizer({session, nativeFiles: selected.nativeFiles,
           routeAdmission: readContainedTurnSelectedRouteAdmission(selected.route) ?? createDockerLinuxExclusiveRouteAdmission(route)});
-        const http = joinedHttpResources({...selected, broker, connection}, input.kernel, finalizer);
+        const http = joinedHttpResources({...selected, broker, connection}, input.kernel, finalizer,
+          signer.hostEgressVerifierV2);
         const ownedSigner = signer; const ownedAuthorities = authorities; const ownedCurrent = current;
         retained.set(input.kernel.custodyId, Object.freeze({finalizer, settle: http.settle, isSettled: http.isSettled, dispose() {
           try {finalizer.cutoff();} finally {

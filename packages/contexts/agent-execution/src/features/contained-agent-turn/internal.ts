@@ -126,7 +126,7 @@ export {
 
 export {createNodeHostHttpListener, createNodeHostHttpConnection, hostHttpAbortOperations}
   from "./adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
-export {createNodeDockerDeploymentRecipe, type NodeDockerDeploymentRecipeInput}
+export {createNodeDockerDeploymentRecipe, type NodeDockerConsumptionReferences, type DockerHttpConsumptionReferences, type NodeDockerConsumptionRecipe, type NodeDockerDeploymentRecipe, type NodeDockerDeploymentRecipeInput}
   from "./composition/node-docker-deployment-recipe.js";
 
 export {bindContainedTurnRouteEnforcement, readContainedTurnSelectedRouteAdmission}

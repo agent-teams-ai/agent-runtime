@@ -37,7 +37,7 @@ test("composition is inert and opens no Host resource for a foreign handoff", as
   assert.equal(product.gateway, host.allocated.gateway);
   assert.equal(product.observationOwner.readObservation({kind: "listener_allocated"}), undefined);
   await assert.rejects(product.prepare(host.v4 as never, {...host.handoff, underlyingCustodyRef: "foreign-reservation"},
-    {} as never));
+    {} as never, async () => {throw new Error("foreign callback");}));
   assert.deepEqual(host.network.state.calls, host.networkCalls);
 });
 
@@ -87,8 +87,11 @@ const preparedFixture = async (t: TestContext, address?: string, gateway?: strin
       clock: {read: () => ({authorityId: "synthetic-clock", epoch: "1", controlTime: 1}),
         within: async (_deadline: number, action: () => Promise<unknown>) => action()}, operationDeadline: 20_000},
   };
-  return {host, owner, preparation, handoff, network, product, storage, journal, physical, resources,
-    prepare: () => product.prepare(journal as never, handoff as never, resources as never)};
+  const callback = {async afterListenerOpened() {
+    return {selectedDockerAuthorityDigest: `sha256:${"a".repeat(64)}`, networkNamespaceIdentity: "netns:1:2", cgroupIdentity: "cgroup:3:4"};
+  }};
+  return {host, owner, preparation, handoff, network, product, storage, journal, physical, resources, callback,
+    prepare: () => product.prepare(journal as never, handoff as never, resources as never, callback.afterListenerOpened)};
 };
 
 test("actual Docker facade prepares the shared Host resources without inventing V4 observations", async t => {
@@ -221,3 +224,55 @@ test("ingress and session use the one acquired lifetime with strict one-use fenc
   assert.throws(() => f.product.openIngress(), /admission is closed/u);
   assert.throws(() => f.product.bindSession({} as never), /admission is closed/u);
 });
+
+test("consumption waits for post-open observations and captures its original receiver", async t => {
+  const f = await preparedFixture(t); const gate = deferred(); const entered = deferred();
+  f.callback.afterListenerOpened = async () => {entered.resolve(); await gate.promise;
+    return {selectedDockerAuthorityDigest: `sha256:${"a".repeat(64)}`, networkNamespaceIdentity: "netns:1:2", cgroupIdentity: "cgroup:3:4"};};
+  const consumption = {async prepare(references: unknown) {
+    assert.equal(this, consumption);
+    assert.deepEqual(references, {selectedDockerAuthorityDigest: `sha256:${"a".repeat(64)}`,
+      networkNamespaceIdentity: "netns:1:2", cgroupIdentity: "cgroup:3:4",
+      listenerIdentity: `listener:ipv4:${f.host.allocated.gateway}:43129`});
+    f.physical.consumption++;
+    return {kind: "ready", journal: {}, quarantine() {}, async retire() {return "retired";}};
+  }};
+  f.resources.consumption = consumption as never;
+  const pending = f.prepare(); await entered.promise;
+  assert.equal(f.physical.opens, 1); assert.equal(f.physical.consumption, 0);
+  consumption.prepare = async () => {throw new Error("replaced callback");};
+  gate.resolve(); assert.equal((await pending).kind, "prepared");
+  assert.equal(f.physical.consumption, 1);
+});
+
+for (const failure of ["reject", "cancel"] as const) {
+  test(`post-open callback ${failure} unwinds without self-cleanup deadlock and closes retained listener`, {timeout: 5000}, async t => {
+    const f = await preparedFixture(t);
+    const {NodeCustodyHttpResources} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/node-custody-http-resources.js");
+    const original = NodeCustodyHttpResources.prototype.prepare;
+    let releaseAllowed = false;
+    // The fixture has no container-absence issuer. Double only its release gate
+    // to test retained listener custody independently of V4 proof collection.
+    t.mock.method(NodeCustodyHttpResources.prototype, "prepare", function (this: InstanceType<typeof NodeCustodyHttpResources>,
+      lifetime: Parameters<typeof original>[0], input: Parameters<typeof original>[1]) {
+      return original.call(this, lifetime, {...input, listenerLifecycle: {bind(value) {
+        const bound = input.listenerLifecycle.bind(value);
+        return {...bound, async recordRelease() {
+          if (!releaseAllowed) {throw new Error("synthetic missing release proof");}
+          return {kind: "recorded" as const};
+        }};
+      }}});
+    });
+    f.callback.afterListenerOpened = async () => {
+      if (failure === "cancel") {f.host.signal.abort();}
+      throw new Error("post-open callback failed");
+    };
+    await assert.rejects(f.prepare());
+    assert.equal(f.physical.opens, 1); assert.equal(f.physical.consumption, 0);
+    assert.equal(await f.product.cleanupResources(Date.now() + 1000), false);
+    assert.equal(f.physical.closes, 0);
+    releaseAllowed = true;
+    await f.product.cleanupResources(Date.now() + 1000);
+    assert.equal(f.physical.closes, 1);
+  });
+}
