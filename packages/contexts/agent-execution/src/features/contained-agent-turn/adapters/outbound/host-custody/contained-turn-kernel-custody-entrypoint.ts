@@ -32,3 +32,5 @@ export {createNodeHostHttpConnection} from "./egress/node-host-http-connection.j
 export {NodeHttpEgressTrustedResolver, type NodeHttpEgressTrustedResolverOptions} from "./egress/node-http-egress-trusted-resolver.js";
 
 export {PostgresHttpEgressEvidence, initializePostgresHttpEgressEvidence, type PostgresHttpEgressEvidenceScope} from "./egress/postgres-http-egress-evidence.js";
+
+export {createNodeHostHttpConsumptionJournal} from "./egress/node-host-http-consumption-journal.js";

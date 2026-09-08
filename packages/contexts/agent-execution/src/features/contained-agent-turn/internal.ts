@@ -126,3 +126,5 @@ export {
 
 export {createNodeHostHttpListener, createNodeHostHttpConnection, hostHttpAbortOperations}
   from "./adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
+export {createNodeDockerDeploymentRecipe, type NodeDockerDeploymentRecipeInput}
+  from "./composition/node-docker-deployment-recipe.js";
