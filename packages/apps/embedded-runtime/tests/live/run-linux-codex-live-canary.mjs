@@ -79,11 +79,14 @@ function privateDirectory(path, empty = false) {
   if (!stat.isDirectory() || realpathSync(path) !== path || stat.uid !== process.getuid() ||
       (stat.mode & 0o077) || (empty && readdirSync(path).length)) {fail();}
 }
+function syncDirectory(path) {
+  const fd = openSync(path, constants.O_RDONLY | constants.O_DIRECTORY);
+  try {fsyncSync(fd);} finally {closeSync(fd);}
+}
 function durableCreate(path, value) {
   const fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
   try {writeFileSync(fd, JSON.stringify(value) + '\n'); fsyncSync(fd);} finally {closeSync(fd);}
-  const parent = openSync(dirname(path), constants.O_RDONLY | constants.O_DIRECTORY);
-  try {fsyncSync(parent);} finally {closeSync(parent);}
+  syncDirectory(dirname(path));
 }
 const identity = text => text;
 export function createRedactor(fields) {
@@ -130,7 +133,9 @@ export function createLinuxCodexLiveCanaryDriver(configuration, credentialFd) {
   const config = validateConfiguration(configuration);
   if (!Number.isSafeInteger(credentialFd) || credentialFd < 3) {fail();}
   let started = false, reconciliationReady = false, live, realPool, operationId, sequence = 0;
-  let observedStatus = 'unknown', markerObserved = false;
+  let observedStatus = 'unknown', markerObserved = false, evidenceWriteFailed = false;
+  const observations = [];
+  let collectLinuxCodexLiveEvidence;
   let redact = identity;
   const sanitize = value => typeof value === 'string' ? redact(value) :
     Array.isArray(value) ? value.map(sanitize) : value && typeof value === 'object' ?
@@ -138,11 +143,15 @@ export function createLinuxCodexLiveCanaryDriver(configuration, credentialFd) {
   let reportReady = false;
   const report = (kind, value) => {
     if (!reportReady) {return;}
-    durableCreate(join(config.evidenceDirectory, `${String(sequence++).padStart(4, '0')}-${kind}.json`),
-      {kind, at: new Date().toISOString(), value: sanitize(value)});
+    try {
+      durableCreate(join(config.evidenceDirectory, `${String(sequence++).padStart(4, '0')}-${kind}.json`),
+        {kind, at: new Date().toISOString(), value: sanitize(value)});
+    } catch {evidenceWriteFailed = true;} // Disk failure must never discard public resource owners.
   };
   const retainOutcome = (kind, value) => {
-    observedStatus = value?.turn?.status ?? value?.status ?? observedStatus;
+    observations.push(value);
+    if (observations.length > 512) {observations.shift();}
+    observedStatus = value?.turn?.status ?? value?.status ?? 'unknown';
     operationId = value?.turn?.operationId ?? value?.operationId ?? value?.candidateOperationId ?? operationId;
     report(kind, value);
   };
@@ -154,34 +163,13 @@ export function createLinuxCodexLiveCanaryDriver(configuration, credentialFd) {
     if (!live?.cancel || !operationId || isReleased()) {return {status: 'unavailable'};}
     const value = await live.cancel(operationId); retainOutcome('cancel', value); return value;
   };
-  // Read only owner artifact/receipt directories, never private homes, auth or logs.
   const collect = () => {
     if (!live?.directory) {return;}
-    let count = 0, total = 0;
-    const root = live.directory;
-    for (const part of ['artifacts/blobs', 'artifacts/manifests', 'artifacts/results', 'workspaces/receipts', 'workspaces/seals']) {
-      const directory = join(root, 'disposable', part);
-      if (!lstatSync(directory, {throwIfNoEntry: false})) {continue;}
-      privateDirectory(directory);
-      for (const name of readdirSync(directory)) {
-        if (++count > 128) {fail();}
-        const path = join(directory, name);
-        const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-        try {
-          const stat = fstatSync(fd);
-          if (!stat.isFile() || stat.size > 1_048_576 || (total += stat.size) > 8_388_608) {fail();}
-          const text = readBounded(fd, 1_048_576);
-          if (part === 'artifacts/blobs') {
-            markerObserved ||= text === config.approval.marker + '\n';
-            report('artifact-blob', {relativePath: `${part}/${name}`, bytes: stat.size,
-              markerMatches: text === config.approval.marker + '\n',
-              ...(text === config.approval.marker + '\n' ? {actualMarker: text} : {content: 'omitted'})});
-          } else {
-            report('artifact-receipt', {relativePath: `${part}/${name}`, record: JSON.parse(text)});
-          }
-        } finally {closeSync(fd);}
-      }
-    }
+    const evidence = collectLinuxCodexLiveEvidence({root: live.directory, approval: config.approval,
+      operationId, observations});
+    markerObserved = evidence.markerObserved;
+    for (const record of evidence.records) {report(record.kind, record.value);}
+    if (evidenceWriteFailed) {fail();}
   };
   const {cleanup: cleanupResources, isReleased} = createCleanupController({collect, getLive: () => live,
     hasPool: () => realPool !== undefined,
@@ -192,62 +180,77 @@ export function createLinuxCodexLiveCanaryDriver(configuration, credentialFd) {
   return Object.freeze({observe, cancel, cleanup, async run() {
     if (started) {fail();}
     started = true; // Consume in-memory admission before the first await.
-    const repository = fileURLToPath(new URL('../../../../../', import.meta.url));
-    const actualSourceSHA = execFileSync('git', ['-C', repository, 'rev-parse', 'HEAD'],
-      {encoding: 'utf8', timeout: 5000, maxBuffer: 1024}).trim();
-    if (actualSourceSHA !== config.hostPins.sourceRevision ||
-        execFileSync("git", ["-C", repository, "status", "--porcelain", "--untracked-files=no"],
-          {encoding: "utf8", timeout: 5000, maxBuffer: 4096}).trim()) {fail();}
-    privateDirectory(config.hostPins.testParent, true);
-    privateDirectory(dirname(config.evidenceDirectory));
-    mkdirSync(config.evidenceDirectory, {mode: 0o700}); // Exclusive run, never reuse evidence.
-    privateDirectory(config.evidenceDirectory, true);
-    durableCreate(join(config.evidenceDirectory, 'attempt.json'), {actualSourceSHA,
-      commandId: config.approval.commandId, testId: config.approval.testId,
-      databaseName: new URL(config.databaseUrl).pathname.slice(1),
-      testParent: config.hostPins.testParent, state: 'consumed-before-setup-no-retry',
-      driverSHA256: digest(readFileSync(fileURLToPath(import.meta.url)))});
-    reportReady = true;
-    report('report', {actualSourceSHA, usage, liveExecution: 'not-yet-observed'});
-    let credentials, transferred = false;
+    let credentialOpen = true;
+    const closeCredential = () => {
+      if (credentialOpen) {credentialOpen = false; try {closeSync(credentialFd);} catch { /* Invalid FD. */ }}
+    };
     try {
-      const stat = fstatSync(credentialFd);
-      if (!stat.isFIFO() && !stat.isSocket()) {fail();}
-      let fields;
-      try {fields = JSON.parse(readBounded(credentialFd, 40_000));} finally {closeSync(credentialFd);}
-      if (Object.keys(fields).toSorted().join(',') !== 'accountId,token' ||
-          ![fields.token, fields.accountId].every(v => typeof v === 'string' && v.length &&
-            Buffer.byteLength(v) <= 16384 && !/[\r\n\0]/u.test(v))) {fail();}
-      redact = createRedactor(fields);
-      credentials = {token: new Uint8Array(Buffer.from(fields.token)), accountId: new Uint8Array(Buffer.from(fields.accountId))};
-      fields = undefined;
+      const repository = fileURLToPath(new URL('../../../../../', import.meta.url));
+      const actualSourceSHA = execFileSync('git', ['-C', repository, 'rev-parse', 'HEAD'],
+        {encoding: 'utf8', timeout: 5000, maxBuffer: 1024}).trim();
+      if (actualSourceSHA !== config.hostPins.sourceRevision ||
+          execFileSync("git", ["-C", repository, "status", "--porcelain", "--untracked-files=no"],
+            {encoding: "utf8", timeout: 5000, maxBuffer: 4096}).trim()) {fail();}
+      privateDirectory(config.hostPins.testParent, true);
+      privateDirectory(dirname(config.evidenceDirectory));
+      mkdirSync(config.evidenceDirectory, {mode: 0o700}); // Exclusive run, never reuse evidence.
+      syncDirectory(dirname(config.evidenceDirectory));
+      privateDirectory(config.evidenceDirectory, true);
+      durableCreate(join(config.evidenceDirectory, 'attempt.json'), {actualSourceSHA,
+        commandId: config.approval.commandId, testId: config.approval.testId,
+        databaseName: new URL(config.databaseUrl).pathname.slice(1),
+        testParent: config.hostPins.testParent, state: 'consumed-before-setup-no-retry',
+        driverSHA256: digest(readFileSync(fileURLToPath(import.meta.url)))});
       reportReady = true;
       report('report', {actualSourceSHA, usage, liveExecution: 'not-yet-observed'});
-      const [{Pool}, {setupLinuxCodexLiveCanary}] = await Promise.all([
-        import('pg'), import('./linux-codex-live-canary-config.ts')]);
-      if (config.hostPins.firewall) {
-        const {createFirewallCommand} = await import('./linux-codex-live-admin-firewall.ts');
-        const {toolPaths, ...pins} = config.hostPins.firewall;
-        config.hostPins.firewall = {...pins, command: createFirewallCommand(toolPaths)};
+      let credentials, transferred = false;
+      try {
+        const stat = fstatSync(credentialFd);
+        if (!stat.isFIFO() && !stat.isSocket()) {fail();}
+        let fields;
+        try {fields = JSON.parse(readBounded(credentialFd, 40_000));} finally {closeCredential();}
+        if (Object.keys(fields).toSorted().join(',') !== 'accountId,token' ||
+            ![fields.token, fields.accountId].every(v => typeof v === 'string' && v.length &&
+              Buffer.byteLength(v) <= 16384 && !/[\r\n\0]/u.test(v))) {fail();}
+        redact = createRedactor(fields);
+        credentials = {token: new Uint8Array(Buffer.from(fields.token)), accountId: new Uint8Array(Buffer.from(fields.accountId))};
+        fields = undefined;
+        reportReady = true;
+        report('report', {actualSourceSHA, usage, liveExecution: 'not-yet-observed'});
+        const [{Pool}, {setupLinuxCodexLiveCanary}, evidenceModule] = await Promise.all([
+          import('pg'), import('./linux-codex-live-canary-config.ts'), import('./linux-codex-live-evidence.mjs')]);
+        collectLinuxCodexLiveEvidence = evidenceModule.collectLinuxCodexLiveEvidence;
+        if (config.hostPins.firewall) {
+          const {createFirewallCommand} = await import('./linux-codex-live-admin-firewall.ts');
+          const {toolPaths, ...pins} = config.hostPins.firewall;
+          config.hostPins.firewall = {...pins, command: createFirewallCommand(toolPaths)};
+        }
+        realPool = new Pool({connectionString: config.databaseUrl, max: 8, connectionTimeoutMillis: 2000,
+          query_timeout: 5000, idleTimeoutMillis: 1000, ssl: false,
+          password: async () => ''}); // Explicit passwordless disposable DB; never pgpass/environment credentials.
+        realPool.on('error', () => report('database-error', {state: 'unknown'}));
+        try {transferred = true; live = await setupLinuxCodexLiveCanary(realPool, config.approval, config.hostPins, credentials);}
+        catch (error) {if (typeof error?.cleanup === 'function') {live = error;} throw error;}
+        report('setup', {directory: live.directory});
+        // Durable marker already fsynced; only invocation in this driver, never retried.
+        const outcome = await live.submit();
+        retainOutcome('submit', outcome);
+        if (operationId) {await pollObservation(observe);}
+      } catch {
+        observedStatus = 'unknown';
+        report('unknown', {operationId, commandId: config.approval.commandId, retryAllowed: false});
+      } finally {
+        for (const bytes of Object.values(transferred ? {} : credentials ?? {})) {try {bytes.fill(0);} catch { /* Transferred. */ }}
+        closeCredential();
+        reconciliationReady = true;
       }
-      realPool = new Pool({connectionString: config.databaseUrl, max: 8, connectionTimeoutMillis: 2000,
-        query_timeout: 5000, idleTimeoutMillis: 1000, ssl: false,
-        password: async () => ''}); // Explicit passwordless disposable DB; never pgpass/environment credentials.
-      realPool.on('error', () => report('database-error', {state: 'unknown'}));
-      try {transferred = true; live = await setupLinuxCodexLiveCanary(realPool, config.approval, config.hostPins, credentials);}
-      catch (error) {if (typeof error?.cleanup === 'function') {live = error;} throw error;}
-      report('setup', {directory: live.directory});
-      // Durable marker already fsynced; only invocation in this driver, never retried.
-      const outcome = await live.submit();
-      retainOutcome('submit', outcome);
-      if (operationId) {await pollObservation(observe);}
-    } catch {
-      report('unknown', {operationId, commandId: config.approval.commandId, retryAllowed: false});
-    } finally {
-      for (const bytes of Object.values(transferred ? {} : credentials ?? {})) {try {bytes.fill(0);} catch { /* Transferred. */ }}
-      reconciliationReady = true;
-    }
-    return sanitize({cleanup: await cleanup(), observedStatus, markerObserved, operationId, evidenceDirectory: config.evidenceDirectory});
+      let evidenceComplete = false;
+      try {collect(); evidenceComplete = true;} catch {report('evidence-incomplete', {stage: 'artifact-receipt'});}
+      const automaticRelease = !live && !realPool ||
+        observedStatus === 'succeeded' && markerObserved && evidenceComplete && !evidenceWriteFailed;
+      return sanitize({cleanup: automaticRelease ? await cleanup() : 'pending', observedStatus, markerObserved,
+        operationId, evidenceWriteFailed, evidenceDirectory: config.evidenceDirectory});
+    } finally {closeCredential(); reconciliationReady = true;}
   }});
 }
 
@@ -267,17 +270,30 @@ async function reconcile(driver) {
 }
 async function main() {
   if (process.argv[2] === '--help') {process.stdout.write(usage + '\n'); return;}
+  let credentialFd, driver;
   try {
     if (process.argv.length !== 4 || !isAbsolute(process.argv[2])) {fail();}
+    credentialFd = Number(process.argv[3]);
+    if (!Number.isSafeInteger(credentialFd) || credentialFd < 3) {fail();}
+    fstatSync(credentialFd); // Ensure the config open cannot reuse an invalid credential number.
     const fd = openSync(process.argv[2], constants.O_RDONLY | constants.O_NOFOLLOW);
     let config;
     try {if (!fstatSync(fd).isFile()) {fail();} config = JSON.parse(readBounded(fd, 8_000_000));}
     finally {closeSync(fd);}
-    const driver = createLinuxCodexLiveCanaryDriver(config, Number(process.argv[3]));
+    driver = createLinuxCodexLiveCanaryDriver(config, credentialFd);
+    credentialFd = undefined; // Ownership transferred to the first run.
     const result = await driver.run();
     process.stdout.write(JSON.stringify(result) + '\n');
     if (result.observedStatus !== 'succeeded' || !result.markerObserved) {process.exitCode = 1;}
     if (result.cleanup === 'pending') {await reconcile(driver);}
-  } catch {process.stderr.write('Canary incomplete; retain attempt evidence. No automatic retry.\n'); process.exitCode = 1;}
+  } catch {
+    process.stderr.write('Canary incomplete; retain attempt evidence. No automatic retry.\n');
+    process.exitCode = 1;
+    if (driver) {await reconcile(driver);}
+  } finally {
+    if (Number.isSafeInteger(credentialFd) && credentialFd >= 3) {
+      try {closeSync(credentialFd);} catch { /* Invalid or already absent inherited FD. */ }
+    }
+  }
 }
 if (process.argv[1] && resolvePath(process.argv[1]) === fileURLToPath(import.meta.url)) {await main();}

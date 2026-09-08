@@ -1,6 +1,6 @@
 import {strict as assert} from "node:assert";
 import {test} from "node:test";
-import {LinuxCodexLiveAdminSetupError, setupLinuxCodexLiveAdmin, snapshotLinuxCodexLiveAdminRoute} from "./linux-codex-live-admin.ts";
+import {assertLinuxCodexLiveAdminIdentity, LinuxCodexLiveAdminSetupError, setupLinuxCodexLiveAdmin, snapshotLinuxCodexLiveAdminRoute} from "./linux-codex-live-admin.ts";
 
 // Invalid administration never reaches a Pool or runtime owner. These are
 // malformed-input tests, not mocked PA/RS/custody authority or live tests.
@@ -71,4 +71,38 @@ test("route snapshot preserves native cancellation while isolating mutable data"
   controller.abort();
   assert.equal(cancelled, true);
   assert.equal(captured.operationAbortSignal.aborted, true);
+});
+
+
+test("deployment requires positive matching container, native and real/effective process identities", t => {
+  for (const name of ["getuid", "geteuid", "getgid", "getegid"] as const) {
+    t.mock.method(process, name, () => 1000);
+  }
+  const node = {enginePolicy: {user: "1000:1000"}, native: {ownerUid: 1000, ownerGid: 1000}};
+  assert.doesNotThrow(() => assertLinuxCodexLiveAdminIdentity(node as never));
+  for (const user of ["0:0", "1001:1000", "1000:1001", "01000:1000"]) {
+    assert.throws(() => assertLinuxCodexLiveAdminIdentity({...node, enginePolicy: {user}} as never));
+  }
+  for (const native of [{ownerUid: 0, ownerGid: 1000}, {ownerUid: 1000, ownerGid: 0}]) {
+    assert.throws(() => assertLinuxCodexLiveAdminIdentity({...node, native} as never));
+  }
+  for (const name of ["getuid", "geteuid", "getgid", "getegid"] as const) {
+    t.mock.method(process, name, () => 0);
+    assert.throws(() => assertLinuxCodexLiveAdminIdentity(node as never));
+    t.mock.method(process, name, () => 1000);
+  }
+});
+
+test("root Host rejects before configuration I/O or allocation and erases material", async t => {
+  t.mock.method(process, "getuid", () => 0);
+  const material = {token: new Uint8Array([1]), accountId: new Uint8Array([2])};
+  let configurationRead = false;
+  const config = {node: {}, get issuance() {configurationRead = true; throw new Error("unexpected configuration read");}};
+  await assert.rejects(setupLinuxCodexLiveAdmin(undefined as never, {} as never, config as never, material), error => {
+    assert.ok(error instanceof LinuxCodexLiveAdminSetupError);
+    assert.equal(error.directory, undefined);
+    return true;
+  });
+  assert.equal(configurationRead, false);
+  assert.deepEqual([...material.token, ...material.accountId], [0, 0]);
 });

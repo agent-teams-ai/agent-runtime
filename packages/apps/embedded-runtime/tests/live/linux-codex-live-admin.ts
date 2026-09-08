@@ -107,6 +107,18 @@ const validateApproval = (approval: LinuxCodexLiveAdminApproval,
   }
 };
 
+/** Deployment identity is observed locally before any allocation or database call. */
+export const assertLinuxCodexLiveAdminIdentity = (node: LinuxCodexLiveAdminConfiguration["node"]): void => {
+  const uid = process.getuid?.();
+  const gid = process.getgid?.();
+  if (uid === undefined || gid === undefined || uid <= 0 || gid <= 0 ||
+      process.geteuid?.() !== uid || process.getegid?.() !== gid ||
+      node.enginePolicy.user !== `${uid}:${gid}` ||
+      node.native.ownerUid !== uid || node.native.ownerGid !== gid) {
+    throw new TypeError("Linux Codex Host and container deployment identity mismatch");
+  }
+};
+
 const validateConfiguration = (config: LinuxCodexLiveAdminConfiguration,
   lifetime: LinuxCodexLivePins["node"]["lifetime"], credentialDeadline: number) => {
   if (process.platform !== "linux" || process.arch !== "x64" ||
@@ -226,6 +238,7 @@ export const setupLinuxCodexLiveAdmin = async (
     // Snapshot approvals before the first await. No acknowledged authority is
     // synthesized from these facts; bootstrap obtains it from PA and RS stores.
     const approval = structuredClone(approved);
+    assertLinuxCodexLiveAdminIdentity(config.node);
     const {binding, submission, dispatchPolicy} = approval;
     const issuance = structuredClone({...config.issuance, binding});
     const route = snapshotLinuxCodexLiveAdminRoute({...config.route, binding});

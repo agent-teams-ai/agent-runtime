@@ -152,3 +152,199 @@ test('different approved revision and dirty tracked source reject before filesys
   dirty = true;
   await assert.rejects(createLinuxCodexLiveCanaryDriver(c, 999999).run(), /Explicit disposable canary/u);
 });
+
+// Public driver tests with explicit synthetic dependencies; these are not live E2E evidence.
+async function publicFixture(t, status = 'unknown') {
+  const fs = (await import('node:fs')).default;
+  const {registerHooks} = await import('node:module');
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'ar69-public-driver-')));
+  mkdirSync(join(root, 'project'), {mode: 0o700});
+  const events = [], values = [];
+  const state = {markerObserved: false, failReport: false};
+  const turn = () => ({status: 'observed', turn: {status, operationId: 'operation:synthetic'}});
+  const live = {directory: join(root, 'project'),
+    async submit() {events.push('submit'); const value = turn(); values.push(value); return value;},
+    async observe() {events.push('observe'); const value = turn(); values.push(value); return value;},
+    async cancel() {events.push('cancel'); const value = turn(); values.push(value); return value;},
+    async cleanup() {events.push('cleanup'); return 'released';}};
+  globalThis.__ar69DriverFixture = {live, events, collect(input) {
+    assert.equal(input.root, live.directory);
+    assert.equal(input.approval.markerFile, 'marker.txt');
+    assert.equal(input.operationId, 'operation:synthetic');
+    assert.deepEqual(input.observations, values.slice(-512));
+    for (let i = 0; i < input.observations.length; i++) {
+      assert.equal(input.observations[i], values.slice(-512)[i]);
+    }
+    events.push('collect');
+    return {markerObserved: state.markerObserved, records: [{kind: 'receipt', value: {synthetic: true}}]};
+  }};
+  const sources = {
+    pg: 'export class Pool {on() {} async end() {globalThis.__ar69DriverFixture.events.push("pool-end");}}',
+    './linux-codex-live-canary-config.ts': 'export async function setupLinuxCodexLiveCanary() {globalThis.__ar69DriverFixture.events.push("setup"); return globalThis.__ar69DriverFixture.live;}',
+    './linux-codex-live-evidence.mjs': 'export function collectLinuxCodexLiveEvidence(input) {return globalThis.__ar69DriverFixture.collect(input);}',
+  };
+  const hooks = registerHooks({resolve(specifier, context, next) {
+    return sources[specifier] ? {url: `ar69-fixture:${specifier}`, shortCircuit: true} : next(specifier, context);
+  }, load(url, context, next) {
+    return url.startsWith('ar69-fixture:') ? {format: 'module', source: sources[url.slice(13)], shortCircuit: true} : next(url, context);
+  }});
+  const credential = fs.openSync(join(root, 'credential'), 'wx+', 0o600);
+  fs.writeSync(credential, JSON.stringify({token: 'synthetic-token', accountId: 'synthetic-account'}));
+  const originalStat = fs.fstatSync, originalRead = fs.readSync, originalWrite = fs.writeFileSync;
+  let readOffset = 0, credentialReading = true;
+  t.mock.method(fs, 'fstatSync', fd => fd === credential && credentialReading ? {isFIFO: () => true} : originalStat(fd));
+  t.mock.method(fs, 'readSync', (fd, buffer, offset, length, position) => {
+    const count = originalRead(fd, buffer, offset, length, fd === credential && credentialReading ? readOffset : position);
+    if (fd === credential && credentialReading) {readOffset += count; if (!count) {credentialReading = false;}}
+    return count;
+  });
+  t.mock.method(fs, 'writeFileSync', (...args) => {
+    if (state.failReport && events.includes('submit')) {throw new Error('synthetic disk failure');}
+    return originalWrite(...args);
+  });
+  t.mock.method(childProcess, 'execFileSync', (_file, args) => args.includes('status') ? '' : SOURCE);
+  syncBuiltinESMExports();
+  t.after(() => {
+    hooks.deregister(); t.mock.restoreAll(); syncBuiltinESMExports();
+    delete globalThis.__ar69DriverFixture;
+    rmSync(root, {recursive: true, force: true});
+  });
+  return {driver: createLinuxCodexLiveCanaryDriver(config(root), credential), events, state, root, credential, originalStat, live};
+}
+
+test('public unknown result retains observe/cancel until explicit cleanup', async t => {
+  const {driver, events} = await publicFixture(t);
+  const result = await driver.run();
+  assert.equal(result.cleanup, 'pending');
+  assert.ok(!events.includes('cleanup'));
+  assert.equal((await driver.observe()).turn.status, 'unknown');
+  assert.equal((await driver.cancel()).turn.status, 'unknown');
+  for (let i = 0; i < 520; i++) {await driver.observe();}
+  assert.equal(await driver.cleanup(), 'released');
+  assert.deepEqual(events.slice(-3), ['collect', 'cleanup', 'pool-end']);
+  assert.deepEqual(await driver.observe(), {status: 'unavailable'});
+});
+test('public succeeded result releases only after collected marker evidence', async t => {
+  const {driver, events, state, root} = await publicFixture(t, 'succeeded');
+  state.markerObserved = true;
+  const result = await driver.run();
+  assert.equal(result.cleanup, 'released');
+  assert.equal(result.markerObserved, true);
+  assert.ok(events.indexOf('collect') < events.indexOf('cleanup'));
+  const receipt = readdirSync(join(root, 'evidence')).find(name => name.endsWith('-receipt.json'));
+  assert.deepEqual(JSON.parse(readFileSync(join(root, 'evidence', receipt))).value, {synthetic: true});
+});
+test('public report disk failure preserves outcome and accessible pending driver', async t => {
+  const {driver, state, events} = await publicFixture(t, 'succeeded');
+  state.markerObserved = true; state.failReport = true;
+  const result = await driver.run();
+  assert.equal(result.cleanup, 'pending');
+  assert.equal(result.evidenceWriteFailed, true);
+  assert.equal(result.operationId, 'operation:synthetic');
+  assert.equal((await driver.observe()).turn.status, 'succeeded');
+  assert.equal((await driver.cancel()).turn.status, 'succeeded');
+  assert.equal(await driver.cleanup(), 'pending');
+  assert.ok(!events.includes('cleanup'));
+});
+
+test('first run closes credential once on wrong type, source, and filesystem failure; rerun preserves reused FD', async t => {
+  const fs = (await import('node:fs')).default;
+  let source = SOURCE;
+  t.mock.method(childProcess, 'execFileSync', (_file, args) => args.includes('status') ? '' : source);
+  syncBuiltinESMExports();
+  t.after(() => {t.mock.restoreAll(); syncBuiltinESMExports();});
+  for (const failure of ['type', 'source', 'filesystem']) {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'ar69-fd-driver-')));
+    try {
+      mkdirSync(join(root, 'project'), {mode: 0o700});
+      const fd = fs.openSync(join(root, 'credential'), 'wx', 0o600);
+      source = failure === 'source' ? '2'.repeat(40) : SOURCE;
+      const c = config(root);
+      if (failure === 'filesystem') {c.hostPins.testParent = join(root, 'missing');}
+      const driver = createLinuxCodexLiveCanaryDriver(c, fd);
+      if (failure === 'type') {await driver.run();} else {await assert.rejects(driver.run());}
+      assert.throws(() => fs.fstatSync(fd), {code: 'EBADF'});
+      const reused = fs.openSync(join(root, 'credential'), 'r');
+      try {
+        assert.equal(reused, fd);
+        await assert.rejects(driver.run());
+        assert.ok(fs.fstatSync(reused).isFile());
+      } finally {fs.closeSync(reused);}
+    } finally {rmSync(root, {recursive: true, force: true});}
+  }
+});
+
+test('evidence parent fsync failure prevents setup and closes the credential', async t => {
+  const fs = (await import('node:fs')).default;
+  const {driver, events, root} = await publicFixture(t);
+  const originalOpen = fs.openSync, originalSync = fs.fsyncSync;
+  let parentFd;
+  t.mock.method(fs, 'openSync', (path, ...args) => {
+    const fd = originalOpen(path, ...args);
+    if (path === root) {parentFd = fd;}
+    return fd;
+  });
+  t.mock.method(fs, 'fsyncSync', fd => {
+    if (fd === parentFd) {throw new Error('synthetic parent fsync failure');}
+    return originalSync(fd);
+  });
+  syncBuiltinESMExports();
+  await assert.rejects(driver.run(), /parent fsync failure/u);
+  assert.deepEqual(events, []);
+  assert.deepEqual(readdirSync(join(root, 'evidence')), []);
+});
+
+test('credential read failure closes its descriptor without double closing a reused number', async t => {
+  const fs = (await import('node:fs')).default;
+  const {driver, events, credential, originalStat} = await publicFixture(t);
+  const originalClose = fs.closeSync, originalRead = fs.readSync;
+  let credentialClosed = false, invalidCloses = 0;
+  t.mock.method(fs, 'readSync', (fd, ...args) => {
+    if (fd === credential && !credentialClosed) {throw new Error('synthetic read failure');}
+    return originalRead(fd, ...args);
+  });
+  t.mock.method(fs, 'closeSync', fd => {
+    if (fd === credential) {credentialClosed = true;}
+    try {return originalClose(fd);} catch (error) {invalidCloses++; throw error;}
+  });
+  syncBuiltinESMExports();
+  const result = await driver.run();
+  assert.equal(result.cleanup, 'released');
+  assert.equal(credentialClosed, true);
+  assert.equal(invalidCloses, 0);
+  assert.throws(() => originalStat(credential), {code: 'EBADF'});
+  assert.deepEqual(events, []);
+});
+
+test('running public result retains access after polling deadline', async t => {
+  const {driver, events} = await publicFixture(t, 'running');
+  let now = 0;
+  t.mock.method(Date, 'now', () => {now += 180_001; return now;});
+  const result = await driver.run();
+  assert.equal(result.cleanup, 'pending');
+  assert.equal((await driver.observe()).turn.status, 'running');
+  assert.equal((await driver.cancel()).turn.status, 'running');
+  assert.ok(!events.includes('cleanup'));
+  assert.equal(await driver.cleanup(), 'released');
+});
+test('succeeded without collected marker evidence retains the public owner', async t => {
+  const {driver, events} = await publicFixture(t, 'succeeded');
+  const result = await driver.run();
+  assert.equal(result.cleanup, 'pending');
+  assert.equal(result.markerObserved, false);
+  assert.ok(!events.includes('cleanup'));
+  assert.equal((await driver.observe()).turn.status, 'succeeded');
+  assert.equal(await driver.cleanup(), 'released');
+});
+
+test('failed observation cannot release on a stale succeeded submit value', async t => {
+  const {driver, events, state, live} = await publicFixture(t, 'succeeded');
+  state.markerObserved = true;
+  live.observe = async () => {throw new Error('synthetic observation failure');};
+  const result = await driver.run();
+  assert.equal(result.observedStatus, 'unknown');
+  assert.equal(result.cleanup, 'pending');
+  assert.ok(!events.includes('cleanup'));
+  assert.equal((await driver.cancel()).turn.status, 'succeeded');
+  assert.equal(await driver.cleanup(), 'released');
+});

@@ -1,3 +1,4 @@
+import {assertNodeLinuxRoutePrivilege} from "./node-linux-route-privilege.js";
 import {sameDockerAuthority} from "./docker-host-custody-lifecycle-guards.js";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -49,7 +50,7 @@ const scheduleCutoff = (delayMs: number, callback: () => void): (() => void) => 
 };
 const call = () => ({deadlineEpochMs: Date.now() + 5_000, signal: new AbortController().signal});
 const assertPlatform = (): void => {
-  if (process.platform !== "linux" || process.arch !== "x64" || process.geteuid?.() !== 0) {throw rejected();}
+  assertNodeLinuxRoutePrivilege();
 };
 
 const openPinnedTool = (pin: LinuxRouteToolPin): number => {
@@ -125,6 +126,7 @@ export const openNodeLinuxExclusiveRoute = async (input: Readonly<{
         pathIdentity.dev !== identity.dev || pathIdentity.ino !== identity.ino) {throw rejected();}
     const invoke = (args: readonly string[]): Uint8Array => {
       try {
+        assertPlatform();
         return execFileSync("/proc/self/fd/3", ["--net=/proc/self/fd/5", "--", "/proc/self/fd/4", ...args], {
           env: {PATH: "/usr/sbin:/usr/bin", LANG: "C", LC_ALL: "C"},
           maxBuffer: 65_536, timeout: 1_000,
