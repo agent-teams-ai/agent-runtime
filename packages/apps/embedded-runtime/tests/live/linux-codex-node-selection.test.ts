@@ -152,8 +152,8 @@ const canarySelection = async () => {
     tools: {nsenter: {path: join(parent, "nsenter"), sha256: "a".repeat(64)},
       nft: {path: join(parent, "nft"), sha256: "b".repeat(64)}},
     imageInitLock: {
-      imageReference: "sha256:8db55f3551afd7c1032bb8dba936caefd4d5c8f2fb4b5f21af19da1fb7345979",
-      imageConfigId: "sha256:8db55f3551afd7c1032bb8dba936caefd4d5c8f2fb4b5f21af19da1fb7345979", os: "linux", architecture: "amd64", variant: "",
+      imageReference: "sha256:041d6401e155737c93b484483d16ccf460b66c41f1a71bbbeff259bf7a4d5a9a",
+      imageConfigId: "sha256:041d6401e155737c93b484483d16ccf460b66c41f1a71bbbeff259bf7a4d5a9a", os: "linux", architecture: "amd64", variant: "",
       loadingPolicy: "closed-bundle-node-builtins-only-v1",
       interpreter: {path: "/ar-custody-node", mode: 0o555, size: 100,
         sha256: "41a74efb34cbde5c7632cdac0cf8bd1a14d0b8d73dc1e82755014d9a9ce70f5c"},

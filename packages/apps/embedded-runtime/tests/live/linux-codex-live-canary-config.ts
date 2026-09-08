@@ -181,7 +181,7 @@ export const createLinuxCodexLiveCanaryConfiguration = (
   const p = structuredClone(hostData);
   validateCanaryFacts(a, p);
   const imageInitLock = snapshotDockerImageInitLock(p.imageInitLock);
-  if (imageInitLock.imageReference !== "sha256:8db55f3551afd7c1032bb8dba936caefd4d5c8f2fb4b5f21af19da1fb7345979" ||
+  if (imageInitLock.imageReference !== "sha256:041d6401e155737c93b484483d16ccf460b66c41f1a71bbbeff259bf7a4d5a9a" ||
       imageInitLock.architecture !== "amd64" ||
       imageInitLock.bootstrap.sha256 !== "e54bf7263a01b3ccc48a0b401a48eb14be60ce27520edd2bd865d04e3f04674c" ||
       imageInitLock.bootstrap.size !== 85430 ||
