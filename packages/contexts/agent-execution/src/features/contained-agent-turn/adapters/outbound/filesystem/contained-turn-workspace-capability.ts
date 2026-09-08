@@ -19,6 +19,13 @@ export interface ResolvedWorkspaceLaunchAuthority {
   readonly identity: Readonly<{ readonly dev: bigint; readonly ino: bigint; readonly mountId: string }>;
 }
 
+const activeLaunchAuthorities = new WeakMap<ResolvedWorkspaceLaunchAuthority, Readonly<{operationId: string; workspaceRef: string}>>();
+/** One-use, callback-lifetime provenance for private descriptor retention. */
+export const claimResolvedWorkspaceAuthority = (authority: ResolvedWorkspaceLaunchAuthority, operationId: string, workspaceRef: string): void => {
+  const accepted = activeLaunchAuthorities.get(authority);
+  if (accepted?.operationId !== operationId || accepted.workspaceRef !== workspaceRef || !activeLaunchAuthorities.delete(authority)) {throw new Error("Workspace retention requires the original active launch authority");}
+};
+
 interface RetainedAuthority {
   readonly canonicalPath: string;
   readonly handle: FileHandle;
@@ -168,14 +175,12 @@ export const createWorkspaceCapabilityRetention = (): WorkspaceCapabilityRetenti
           throw new Error("contained turn workspace launch authority is stale");
         }
       } finally {await current.close();}
-      outcome = Object.freeze({
-        ok: true,
-        value: await callback(Object.freeze({
-          canonicalPath: retained.canonicalPath,
-          descriptorPath: descriptorChildPath(retained.handle),
-          identity: Object.freeze({ ...retained.identity, mountId: retained.mountId }),
-        })),
-      });
+      const target = Object.freeze({canonicalPath: retained.canonicalPath,
+        descriptorPath: descriptorChildPath(retained.handle),
+        identity: Object.freeze({...retained.identity, mountId: retained.mountId})});
+      activeLaunchAuthorities.set(target, {operationId: retained.operationId, workspaceRef: retained.workspaceRef});
+      try {outcome = Object.freeze({ok: true, value: await callback(target)});}
+      finally {activeLaunchAuthorities.delete(target);}
     } catch (error) {outcome = Object.freeze({ error, ok: false });}
     let closeFailure: unknown;
     try {await closeRetainedAuthority(retained);} catch (error) {closeFailure = error;}

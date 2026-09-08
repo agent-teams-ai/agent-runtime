@@ -33,3 +33,5 @@ export {NodeUnixSocketDockerEngine, snapshotDockerImageInitLock, snapshotDockerE
 export {NodeDockerCustodyJournalStorage} from "./journal/node-docker-custody-journal-storage.js";
 export {HostHttpEgressV4NodeStorage} from "./journal/host-http-egress-v4-node-storage.js";
 export {HostHttpEgressV4Journal} from "./journal/host-http-egress-v4-journal.js";
+
+export {captureDockerWorkspaceCustody, readDockerWorkspaceCustody} from "./node-linux-docker-residue-custody.js";

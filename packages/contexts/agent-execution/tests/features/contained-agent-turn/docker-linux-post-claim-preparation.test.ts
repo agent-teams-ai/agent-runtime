@@ -320,11 +320,18 @@ test("joined owners are required before allocation", async t => {
   assert.deepEqual(f.events, []); assert.deepEqual(f.network.state.calls, []);
 });
 
-test("success retains exact one-use handoff and cleanup after take", async t => {
-  const j = await joinedFixture(t); const {f} = j;
-  const owner = createDockerLinuxPostClaimOwner(f.dependencies, j.join);
+test("success waits for workspace capture then retains exact one-use handoff and cleanup after take", async t => {
+  const j = await joinedFixture(t); const {f} = j; const entered = deferred(); const gate = deferred();
+  t.after(() => gate.resolve());
+  const owner = createDockerLinuxPostClaimOwner(f.dependencies, {...j.join, async afterInit() {
+    assert.ok(f.events.includes("host-handshake"));
+    entered.resolve(); await gate.promise;
+  }});
+  const preparing = owner.preparation.prepareClaimed(f.claimed);
+  await entered.promise;
+  assert.equal(j.counts().finishes, 0); assert.equal(f.events.includes("provider-exec"), false);
   assert.throws(() => owner.takePrepared(f.claimed));
-  assert.deepEqual(await owner.preparation.prepareClaimed(f.claimed), {kind: "prepared"});
+  gate.resolve(); assert.deepEqual(await preparing, {kind: "prepared"});
   assert.throws(() => owner.takePrepared({...f.claimed}));
   const handoff = owner.takePrepared(f.claimed);
   assert.equal(handoff.providerIo, j.io); assert.equal(handoff.launch, j.launch); assert.equal(handoff.plan, j.plan);
@@ -349,10 +356,12 @@ test("unknown container absence keeps route ownership sticky", async t => {
   assert.throws(() => owner.takePrepared(f.claimed));
 });
 
-for (const failure of ["throw", "unissued-plan"] as const) {
-  test(`finish hook ${failure} prevents publication and retains cleanup`, async t => {
+for (const failure of ["throw", "unissued-plan", "workspace-capture"] as const) {
+  test(`preparation hook ${failure} prevents publication and retains cleanup`, async t => {
     const j = await joinedFixture(t); const {f} = j;
-    const owner = createDockerLinuxPostClaimOwner(f.dependencies, {...j.join, async finishClaimed() {
+    const owner = createDockerLinuxPostClaimOwner(f.dependencies, {...j.join, async afterInit() {
+      if (failure === "workspace-capture") {throw new Error("mounted roots unproven");}
+    }, async finishClaimed() {
       if (failure === "throw") {throw new Error("lost finalization acknowledgement");}
       return {plan: {...j.plan}};
     }});

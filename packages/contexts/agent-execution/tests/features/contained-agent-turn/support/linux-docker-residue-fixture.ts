@@ -1,3 +1,4 @@
+import {linuxExclusiveRouteSeccomp} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-policy.js";
 import {rm} from "node:fs/promises";
 import type {TestContext} from "node:test";
 import {FakeDockerEngine} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/fake-docker-engine.js";
@@ -140,17 +141,22 @@ export class FixtureResidueIo implements DockerResidueIo {
   }
 }
 
-export const residueFixture = async (t: TestContext, driver = "systemd") => {
+export const residueFixture = async (t: TestContext, driver = "systemd", workspaceCapture?: Readonly<{bootId: string}>) => {
   const root = await disposable();
   const selectedPolicy = {...policy(root), cgroupParent: driver === "systemd" ? "agent-runtime.slice" : "agent-runtime/turns"};
+  if (workspaceCapture !== undefined) {
+    const seccomp = linuxExclusiveRouteSeccomp();
+    selectedPolicy.seccompProfileJson = seccomp.json; selectedPolicy.seccompProfileSha256 = seccomp.sha256;
+  }
   const parent = `/sys/fs/cgroup${residueParent(selectedPolicy.cgroupParent, driver)}`;
   const io = new FixtureResidueIo(parent);
+  if (workspaceCapture !== undefined) {io.node("/proc/sys/kernel/random/boot_id").contents = `${workspaceCapture.bootId}\n`;}
   const fake = new FakeDockerEngine(selectedPolicy);
   const storage = new MemoryStorage();
   const controls = {deleteLeaf: false, descendants: false, driver, version: "2" as "1" | "2",
     afterStart: undefined as (() => void) | undefined, drift: {} as {-readonly [Key in keyof DockerEngineIdentity]?: DockerEngineIdentity[Key]}};
   const internalHost = digest("fake-host-boot:initial");
-  const externalHost = digest(BOOT);
+  const externalHost = digest(workspaceCapture?.bootId ?? BOOT);
   const inward = (authority: DockerContainerAuthority) => ({...authority, hostBootGenerationSha256: internalHost});
   const outward = (authority: DockerContainerAuthority) => ({...authority, hostBootGenerationSha256: externalHost});
   const engineIdentity = (identity: DockerEngineIdentity): DockerEngineIdentity => ({...identity,

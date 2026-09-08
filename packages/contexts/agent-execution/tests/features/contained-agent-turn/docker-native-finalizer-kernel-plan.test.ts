@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import {withWorkspaceAuthority} from "./support/docker-workspace-authority-fixture.ts";
 import {imageLock} from "../../fixtures/docker-image-init-fixture.ts";
 import {registerHooks} from "node:module";
 import test from "node:test";
@@ -33,7 +34,7 @@ const hooks = registerHooks({
 const {createDockerCodexHostKernelOwner} = await import("../../../dist/features/contained-agent-turn/composition/docker-codex-host-kernel-owner.js");
 hooks.deregister();
 
-test("component evidence: kernel retains the original finalizer receiver, callback and finalizable plan", async t => {
+test("component evidence: kernel retains the original finalizer receiver, callback and finalizable plan", {skip: process.platform !== "linux"}, async t => {
   const f = await connectionFixture(); t.after(() => f.contain());
   let selections = 0; let finishes = 0;
   const seen: unknown[] = [];
@@ -44,8 +45,7 @@ test("component evidence: kernel retains the original finalizer receiver, callba
       privateRootPath: f.options.plan.privateRootPath, tmpDir: f.options.plan.tmpDir,
       credentialOutputInventory: f.options.credentialOutputInventory};}},
     workspaceOwner: {async withLaunchAuthority(_input: unknown, consume: (authority: never) => unknown) {
-      return consume({canonicalPath: f.options.plan.workspaceRef, descriptorPath: f.options.plan.workspaceRef,
-        identity: {dev: 1n, ino: 2n, mountId: "synthetic"}} as never);
+      return withWorkspaceAuthority(f.options.plan.workspaceRef, f.options.attempt.operationId, consume);
     }},
     preparation() {selections += 1; return {deadlines: {routeLifetimeMs: 1000}};},
     finishClaimed(input: {originalPlan: unknown}) {

@@ -16,6 +16,7 @@ export interface LinuxCodexNodeRecipeSelection {
   readonly initOptions: Preparation["initOptions"];
   readonly deadlines: Preparation["deadlines"];
   readonly cleanupMilliseconds: number;
+  readonly workspaceBackingTreeOwnership: NonNullable<Preparation["workspaceBackingTreeOwnership"]>;
   readonly consumptionSubject: Readonly<{tenantId: string; projectId: string; executionGenerationId: string}>;
   readonly localCut: Preparation["resources"]["localCut"];
   readonly connection: Selected["connection"];
@@ -62,6 +63,7 @@ export const createLinuxCodexNodeRecipe = (options: Readonly<{
     const nativeFiles = createDeferredCodexNativeBrokerFiles({...selected.nativeFileOptions, boundary: input.record.boundary});
     const init = selected.initOptions;
     const preparation: Preparation = Object.freeze({...node.preparation,
+      workspaceBackingTreeOwnership: Object.freeze({...selected.workspaceBackingTreeOwnership}),
       openResourceJournal(request: Parameters<Preparation["openResourceJournal"]>[0]) {
         const actual = {...request.subject.attempt, executionGenerationId: request.subject.executionGenerationId};
         if ((Object.keys(expected) as Array<keyof typeof expected>).some(key => actual[key] !== expected[key]) ||

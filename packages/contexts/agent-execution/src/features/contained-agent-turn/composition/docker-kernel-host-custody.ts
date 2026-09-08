@@ -1,3 +1,4 @@
+import {retainLaunchWorkspace, type RetainedLaunchWorkspace} from "../adapters/outbound/filesystem/retained-launch-workspace.js";
 import {retainedHostPrivateRootBinding, type HostPrivateRootOwner} from "./host-private-root-owner.js";
 import {custodyDataRecord, createImmutableHostCustodyLaunchPlan, type ContainedTurnHostCustodyPort}
   from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
@@ -8,6 +9,7 @@ import {DockerKernelEvidence} from "./docker-kernel-evidence.js";
 type Containment = Awaited<ReturnType<ContainedTurnHostCustodyPort["requestContainment"]>>;
 export interface DockerKernelReservation {
   readonly input: HostCustodyReservationInput;
+  readonly workspace: RetainedLaunchWorkspace;
   readonly custodyRef: string;
   readonly evidence: DockerKernelEvidence;
 }
@@ -26,8 +28,8 @@ interface Retained extends DockerKernelReservation {
   containmentStarted?: boolean;
 }
 
-/** Raw Host port, inert reservations only. Private composition installs the
- * actual preparation cleanup before it can allocate any external resource. */
+/** Raw Host port retains the accepted directory during reservation. Private
+ * composition installs preparation cleanup before Docker allocation. */
 export class DockerKernelHostCustody implements ContainedTurnHostCustodyPort {
   readonly #records = new Map<string, Retained>();
   #disposed = false;
@@ -46,16 +48,19 @@ export class DockerKernelHostCustody implements ContainedTurnHostCustodyPort {
       throw new HostCustodyUnsupportedError("platform-profile-unavailable");
     }
     const input = Object.freeze({...value, launchPlan: createImmutableHostCustodyLaunchPlan(value.launchPlan),
-      providerBinding: Object.freeze({...value.providerBinding}), workspaceAuthority: Object.freeze({...value.workspaceAuthority,
+      providerBinding: Object.freeze({...value.providerBinding}), workspaceAuthority: Object.freeze({...value.workspaceAuthority, descriptorPath: "",
         identity: Object.freeze({...value.workspaceAuthority.identity})})});
     const custodyRef = `docker-host-reservation:${randomUUID()}`;
-    this.#records.set(custodyRef, {input, custodyRef, evidence: new DockerKernelEvidence(input), resourcesReleased: false});
+    const evidence = new DockerKernelEvidence(input);
+    const workspace = await retainLaunchWorkspace(value.workspaceAuthority, value.operationId, value.workspaceRef);
+    if (this.#disposed || this.#records.size >= 64) {await workspace.close(); throw new HostCustodyUnsupportedError("retention-capacity-exhausted");}
+    this.#records.set(custodyRef, {input, workspace, custodyRef, evidence, resourcesReleased: false});
     return Object.freeze({custodyRef});
   }
   public reservation(custodyRef: string): DockerKernelReservation {
     const record = this.#records.get(custodyRef);
     if (record === undefined) {throw new TypeError("Docker reservation unavailable");}
-    return Object.freeze({input: record.input, custodyRef, evidence: record.evidence});
+    return Object.freeze({input: record.input, workspace: record.workspace, custodyRef, evidence: record.evidence});
   }
   public installCleanup(custodyRef: string, cleanup: DockerKernelReservationCleanup): void {
     const record = this.#records.get(custodyRef);
@@ -101,6 +106,7 @@ export class DockerKernelHostCustody implements ContainedTurnHostCustodyPort {
         const evidence = record.evidence.snapshot();
         if (record.cutoffFailed || !record.resourcesReleased || !evidence.sealed || evidence.closure.status !== "closed" ||
           record.root !== undefined && evidence.privateRoot.status !== "deleted") {return this.unproven(record.custodyRef);}
+        await record.workspace.close();
         record.receipt = `urn:agent-runtime:docker-containment:${createHash("sha256")
           .update(JSON.stringify([record.custodyRef, record.input.operationId, record.input.attemptId, evidence])).digest("hex")}`;
         return Object.freeze({kind: "contained" as const, receiptRef: record.receipt});

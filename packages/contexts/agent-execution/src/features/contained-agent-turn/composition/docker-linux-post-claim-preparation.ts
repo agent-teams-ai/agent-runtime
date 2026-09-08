@@ -110,6 +110,7 @@ export type DockerLinuxPreparedExecution<Io extends DockerLinuxPreparedProviderI
 export type DockerLinuxClaimedJoin<Io extends DockerLinuxPreparedProviderIo> = Readonly<{
   captureHost?(): Promise<Readonly<{create: DockerHostCustodyContainerCreateInput; hostLifecycleGenerationSha256: string}>>;
   beforeLaunch?(input: Readonly<{identity: EngineIdentity; policy: EnginePolicy}>): Promise<NonNullable<LaunchInput["imageInit"]>>;
+  afterInit?(input: Readonly<{claimed: Claimed; launch: Launched}>): Promise<void>;
   prepareProviderIo(input: Readonly<{claimed: Claimed; launch: Launched; init: InitOptions}>): Io;
   finishClaimed(input: Readonly<{claimed: Claimed; launch: Launched; providerIo: Io;
     http: DockerHostHttpResources; routeFirstWrite: DockerLinuxOperationRouteFirstWrite}>):
@@ -123,6 +124,14 @@ export interface DockerLinuxPostClaimOwner<Io extends DockerLinuxPreparedProvide
 }
 
 /** Joined construction requires both external owners before any allocation. */
+const finishInitReadiness = async (ready: Promise<Readonly<{kind: string}>>, afterReady: () => Promise<void> | undefined,
+  assertOpen: () => void): Promise<void> => {
+  if ((await ready).kind !== "ready") {throw new TypeError("Docker authenticated init readiness is unproven");}
+  assertOpen();
+  await afterReady();
+  assertOpen();
+};
+
 export const createDockerLinuxPostClaimOwner = <Io extends DockerLinuxPreparedProviderIo>(
   dependencies: DockerLinuxPostClaimDependencies, join: DockerLinuxClaimedJoin<Io>,
 ): DockerLinuxPostClaimOwner<Io> => {
@@ -136,6 +145,7 @@ export const createDockerLinuxPostClaimOwner = <Io extends DockerLinuxPreparedPr
   }
   return createPreparationOwner(dependencies, Object.freeze({
     prepareProviderIo: join.prepareProviderIo.bind(join), finishClaimed: join.finishClaimed.bind(join),
+    ...(join.afterInit === undefined ? {} : {afterInit: join.afterInit.bind(join)}),
     ...(join.captureHost === undefined ? {} : {captureHost: join.captureHost.bind(join)}),
     ...(join.beforeLaunch === undefined ? {} : {beforeLaunch: join.beforeLaunch.bind(join)}),
   }));
@@ -502,9 +512,8 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
         // ledger constrains only the resource axis and says nothing about it.
         stage = "init";
         providerIo = join?.prepareProviderIo(Object.freeze({claimed: input, launch: launched, init: dependencies.initOptions}));
-        const ready = await (join === undefined ? launched.openInitSession(dependencies.initOptions) : providerIo!).ready();
-        if (ready.kind !== "ready") {throw new TypeError("Docker authenticated init readiness is unproven");}
-        assertOpen();
+        await finishInitReadiness((join === undefined ? launched.openInitSession(dependencies.initOptions) : providerIo!).ready(),
+          () => join?.afterInit?.(Object.freeze({claimed: input, launch: launched})), assertOpen);
 
         stage = "membership";
         await product.observeContainer(launched.authority, call(deadlines.membershipMs));

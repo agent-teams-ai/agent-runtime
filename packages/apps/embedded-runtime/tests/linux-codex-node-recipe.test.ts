@@ -29,6 +29,7 @@ const fixture = () => {
         within: async (_deadline, operation) => operation()}},
     connection: {limits: {deadline: 1000, closureDeadline: 2000}} as LinuxCodexNodeRecipeSelection["connection"],
     consumption: {directory: {path: "/synthetic/consumption", device: "1", inode: "1"}},
+    workspaceBackingTreeOwnership: {kind: "exclusive-host-owned-disposable-tree", evidenceRef: "urn:synthetic:workspace-ownership"},
     nativeFileOptions: {catalogSource: new Uint8Array(), ownerUid: 0, ownerGid: 0},
   };
   const factory = () => createLinuxCodexNodeRecipe({hostBootId: "boot-1", hostInstanceId: "host-1",

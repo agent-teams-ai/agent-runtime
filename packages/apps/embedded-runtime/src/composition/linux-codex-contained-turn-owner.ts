@@ -37,6 +37,7 @@ export interface LinuxCodexContainedTurnResources {
   select(input: Parameters<DockerOptions["preparation"]>[0]): Readonly<{
     dispose?(): void;
     preparation: Omit<DockerLinuxPostClaimDependencies, "resources" | "routeAdmission" | "publishRouteFirstWrite"> & Readonly<{
+      workspaceBackingTreeOwnership?: NonNullable<ReturnType<DockerOptions["preparation"]>["workspaceBackingTreeOwnership"]>;
       resources: Omit<DockerLinuxPostClaimDependencies["resources"], "accept" | "listenerFor" | "consumption"> &
         Readonly<{consumption: NodeDockerConsumptionRecipe}>;
     }>;
@@ -187,7 +188,7 @@ export const createLinuxCodexContainedTurnOwner = (
   const owner = createDockerCodexHostKernelOwner({
     hostBootId: options.hostBootId, hostInstanceId: options.hostInstanceId,
     workspaceOwner: options.workspaceOwner, launchRecords: options.launchRecords,
-    platformTarget: options.platformTarget, effectCustody: options.effectCustody,
+    platformTarget: options.platformTarget,
     cleanupMilliseconds: resources.cleanupMilliseconds, imageInitLock: resources.imageInitLock,
     preparation(input) {
       const selection = select(input);

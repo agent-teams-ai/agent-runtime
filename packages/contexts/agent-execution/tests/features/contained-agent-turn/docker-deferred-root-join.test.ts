@@ -14,14 +14,14 @@ const fixture = () => {
   let installed: unknown;
   let creates = 0; let joins = 0;
   const binding = {canonicalBindSourcePath: "/synthetic/private", canonicalWorkspacePath: "/synthetic/workspace",
-    hostLifecycleGenerationSha256: "a".repeat(64)};
+    hostLifecycleGenerationSha256: "a".repeat(64), workspaceIdentity: {dev: 1n, ino: 2n, mountId: "synthetic"}};
   const root = {async capture() {events.push("capture"); return binding;}};
   const nativeFiles = {bindRoot(owner: unknown) {assert.strictEqual(owner, installed); events.push("bind");},
     cutoff() {events.push("files-cut");}, quiesce() {joins += 1; return writer.promise;}};
   const roots = {create(_options: unknown, cleanup: typeof quiescence) {
     creates += 1; quiescence = cleanup; events.push("create-root"); return root;
   }};
-  const raw = {reservation() {return {input: {operationId: "op", attemptId: "attempt", workspaceRef: binding.canonicalWorkspacePath,
+  const raw = {reservation() {return {workspace: {async revalidate() {return binding.workspaceIdentity;}}, input: {operationId: "op", attemptId: "attempt", workspaceRef: binding.canonicalWorkspacePath,
     launchPlan: {privateRootPath: binding.canonicalBindSourcePath}}};},
     installCleanup(_ref: string, cleanup: typeof quiescence) {assert.strictEqual(cleanup, quiescence); events.push("cleanup");},
     installPrivateRoot(_ref: string, owner: unknown) {installed = owner; events.push("root");}};

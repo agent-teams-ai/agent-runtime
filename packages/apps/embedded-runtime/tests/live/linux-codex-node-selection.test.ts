@@ -33,6 +33,7 @@ const fixture = () => {
     provider: {executablePath: "/usr/local/bin/provider-entrypoint", executableSha256: sha(), allowedEnvironmentNames: ["HOME"],
       maximumStdinBytes: 1024, maximumStdoutBytes: 1024, maximumStderrBytes: 1024,
       maximumProviderRuntimeMs: 1000, shutdownGraceMs: 100}, native: {catalogSource: Buffer.from("{}"), ownerUid: 1000, ownerGid: 1000},
+    workspaceBackingTreeOwnership: {kind: "exclusive-host-owned-disposable-tree", evidenceRef: "urn:synthetic:workspace-ownership"},
     observerSha256: sha(), expectedClock: {authorityId: "synthetic", epoch: "test"},
     clock: {read: () => ({authorityId: "synthetic", epoch: "test", controlTime: control}), within: async () => {throw Error("unused");}},
     monotonicNow: () => mono, wallNow: () => wall,

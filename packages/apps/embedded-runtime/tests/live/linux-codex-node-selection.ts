@@ -27,6 +27,8 @@ export interface LinuxCodexNodeSelectionPins {
   readonly imageInitLock: LinuxCodexDeploymentInfrastructure["imageInitLock"];
   readonly provider: Omit<DockerCustodyInitConfiguration, "observedIdentity">;
   readonly native: Selection["nativeFileOptions"];
+  /** Receipt for the test administrator's exclusive disposable backing tree. */
+  readonly workspaceBackingTreeOwnership: Selection["workspaceBackingTreeOwnership"];
   readonly observerSha256: string;
   /** Same borrowed control clock/domain as RS and the HTTP broker. */
   readonly clock: Clock;
@@ -130,6 +132,7 @@ export const createLinuxCodexNodeSelection = (inputPins: LinuxCodexNodeSelection
   const p = {...inputPins, binding: structuredClone(inputPins.binding),
     enginePolicy: structuredClone(inputPins.enginePolicy), tools: structuredClone(inputPins.tools),
     imageInitLock: structuredClone(inputPins.imageInitLock), provider: structuredClone(inputPins.provider),
+    workspaceBackingTreeOwnership: {...inputPins.workspaceBackingTreeOwnership},
     native: {...inputPins.native, catalogSource: Buffer.from(inputPins.native.catalogSource)},
     lifetime: {...inputPins.lifetime}, expectedClock: {...inputPins.expectedClock},
     deadlines: {...inputPins.deadlines}, initTimeouts: {...inputPins.initTimeouts},
@@ -205,6 +208,7 @@ export const createLinuxCodexNodeSelection = (inputPins: LinuxCodexNodeSelection
         signal: t.signal, monotonicNow: p.monotonicNow,
         maximumStdoutBytes: p.provider.maximumStdoutBytes, maximumStderrBytes: p.provider.maximumStderrBytes,
         isCurrentGeneration: candidate => candidate === generation && current(false), isObservationActive: () => current(true)},
+      workspaceBackingTreeOwnership: p.workspaceBackingTreeOwnership,
       deadlines: {...p.deadlines, routeLifetimeMs: remaining}, cleanupMilliseconds: p.deadlines.cleanupMs,
       consumptionSubject: {...s.scope, executionGenerationId: s.executionGenerationId},
       consumption: {directory: d.consumption}, nativeFileOptions: p.native,

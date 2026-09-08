@@ -1,7 +1,8 @@
+import {createDockerCodexEffectCustodyOwner} from "./docker-codex-effect-custody-owner.js";
 import type {DeferredCodexNativeBrokerFiles} from "./deferred-codex-native-broker-files.js";
 import {createHostPrivateRootOwnerFactory} from "./host-private-root-owner.js";
 import {createDockerHostReservationOwners} from "./docker-host-reservation-owners.js";
-import {snapshotDockerImageInitLock, prepareDockerProviderProcessIo, dockerProviderProcessMountFacts, isConcreteLinuxDockerLifecycle,
+import {captureDockerWorkspaceCustody, snapshotDockerImageInitLock, prepareDockerProviderProcessIo, dockerProviderProcessMountFacts, isConcreteLinuxDockerLifecycle,
   type DockerImageInitLock, type PreparedDockerProviderIo, type DockerProviderProcessInput, type DockerHostCustodyLifecycle}
   from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import {createCodexDockerPathProjection, CodexAppServerCurrentKernelAdapter} from "../adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
@@ -24,6 +25,8 @@ type FinalizeInput = Parameters<DockerLinuxClaimedJoin<PreparedDockerProviderIo>
 const apply = Reflect.apply;
 export type DockerCodexHostPreparationSelection = DockerLinuxPostClaimDependencies & Readonly<{
   nativeFiles: DeferredCodexNativeBrokerFiles;
+  /** Deployment evidence excluding uncontrolled Host writers to the disposable tree. */
+  workspaceBackingTreeOwnership?: Readonly<{kind: "exclusive-host-owned-disposable-tree"; evidenceRef: string}>;
 }>;
 export interface CreateDockerCodexHostKernelOwnerOptions {
   readonly hostBootId: string;
@@ -31,7 +34,8 @@ export interface CreateDockerCodexHostKernelOwnerOptions {
   readonly workspaceOwner: ContainedTurnKernelWorkspaceOwner;
   readonly launchRecords: CodexCurrentKernelLaunchRecordResolver;
   readonly platformTarget: CreateDockerCodexCurrentKernelOwnerOptions["platformTarget"];
-  readonly effectCustody: CreateDockerCodexCurrentKernelOwnerOptions["effectCustody"];
+  /** Compatibility selection only; production uses its own retained filesystem proof. */
+  readonly effectCustody?: CreateDockerCodexCurrentKernelOwnerOptions["effectCustody"];
   readonly cleanupMilliseconds: number;
   /** Independently selected immutable image/interpreter/closed init bundle lock.
    * Missing selection refuses before allocation; observed bytes cannot select it. */
@@ -55,8 +59,32 @@ interface Retained {
   provider?: DockerCodexCurrentKernelOwner;
   nativeFiles?: DeferredCodexNativeBrokerFiles;
   removeAbort?: () => void;
+  effectOwner?: ReturnType<typeof createDockerCodexEffectCustodyOwner>;
   used: boolean;
 }
+
+const createProvider = (records: Map<string, Retained>, options: CreateDockerCodexHostKernelOwnerOptions, isDisposed: () => boolean): ContainedTurnKernelProviderPort => {
+  const selection = new CodexAppServerCurrentKernelAdapter({platformTarget: options.platformTarget,
+    attempts: {async prepare() {throw new TypeError("Docker execution requires retained preparation");}}});
+  const provider: ContainedTurnKernelProviderPort = Object.freeze({adapterSnapshot: selection.adapterSnapshot,
+    manifest: selection.manifest, async execute(input: Parameters<ContainedTurnKernelProviderPort["execute"]>[0]) {
+    const retained = records.get(input.custodyId);
+    if (isDisposed() || retained === undefined || retained.used || retained.owner === undefined || retained.claimed === undefined ||
+      retained.process === undefined || retained.effectOwner === undefined || retained.kernel.operationId !== input.operationId || retained.kernel.attemptId !== input.attemptId ||
+      retained.kernel.effectId !== input.effectId || retained.kernel.workspaceId !== input.workspaceId ||
+      retained.kernel.authorityVectorDigest !== input.authorityVectorDigest || retained.kernel.intentMode !== input.intent.mode ||
+      !sameHostCustodyBinding(retained.kernel.adapterSnapshot, input.adapterSnapshot) ||
+      !sameHostCustodyBinding(retained.kernel.providerAccessSnapshot, input.providerAccessSnapshot)) {throw new TypeError("Docker prepared attempt conflict");}
+    retained.used = true;
+    const prepared = retained.owner.takePrepared(retained.claimed);
+    const owner = createDockerCodexCurrentKernelOwner({attempt: input, boundary: retained.record.boundary,
+      credentialOutputInventory: retained.record.credentialOutputInventory, effectCustody: retained.effectOwner.authority,
+      plan: prepared.plan, platformTarget: options.platformTarget, process: retained.process});
+    retained.provider = owner;
+    return owner.provider.execute(input);
+  }});
+  return provider;
+};
 
 /** Private Docker selection, with exactly the existing custody/provider product
  * surface. Construction retains functions only. No Node final-launch seam. */
@@ -115,6 +143,11 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
     const filesOwner = selected.nativeFiles;
     retained.nativeFiles = filesOwner;
     try {
+      if (selected.workspaceBackingTreeOwnership?.kind !== "exclusive-host-owned-disposable-tree" ||
+        !/^urn:[^\s]{1,1000}$/u.test(selected.workspaceBackingTreeOwnership.evidenceRef)) {
+        throw new TypeError("Docker requires deployment evidence excluding uncontrolled workspace writers");
+      }
+      const backingTreeOwnership = Object.freeze({...selected.workspaceBackingTreeOwnership});
       const methods = custodyDataRecord(filesOwner);
       const captured = {} as DeferredCodexNativeBrokerFiles;
       for (const key of ["bindRoot", "install", "cutoff", "quiesce", "snapshot"] as const) {
@@ -124,13 +157,13 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
       }
       const nativeFiles = Object.freeze(captured);
       retained.nativeFiles = nativeFiles;
-      const subscription = hostHttpAbortOperations.subscribe(claimed.signal, () => nativeFiles.cutoff());
+      const subscription = hostHttpAbortOperations.subscribe(claimed.signal, () => {retained.effectOwner?.cutoff(); nativeFiles.cutoff();});
       retained.removeAbort = () => hostHttpAbortOperations.remove(subscription);
       if (disposed || hostHttpAbortOperations.aborted(claimed.signal)) {throw new TypeError("Docker selection closed");}
-      const {nativeFiles: _nativeFiles, ...dependencies} = selected;
+      const {nativeFiles: _nativeFiles, workspaceBackingTreeOwnership: _ownership, ...dependencies} = selected;
       const deadlineEpochMs = Date.now() + dependencies.deadlines.routeLifetimeMs;
       const hostOwners = createDockerHostReservationOwners({roots, raw, custodyRef: claimed.underlyingCustodyRef,
-        dependencies, nativeFiles, signal: claimed.signal, lock: imageInitLock, cutoffProvider: () => retained.provider?.dispose()});
+        dependencies, nativeFiles, signal: claimed.signal, lock: imageInitLock, cutoffProvider: () => {retained.effectOwner?.cutoff(); retained.provider?.dispose();}});
       let lifecycle: DockerHostCustodyLifecycle | undefined;
       const owner = createDockerLinuxPostClaimOwner({...dependencies,
         openLifecycle(policy) {
@@ -140,6 +173,19 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
           return lifecycle;
         }}, {
         ...hostOwners.hooks,
+        async afterInit({launch}) {
+          if (lifecycle === undefined) {throw new TypeError("Docker lifecycle unavailable");}
+          const binding = await hostOwners.capturedRoot();
+          const proof = await captureDockerWorkspaceCustody(lifecycle, launch, {signal: claimed.signal, deadlineEpochMs});
+          await hostOwners.capturedRoot();
+          if (disposed || claimed.signal.aborted) {throw new TypeError("Docker workspace capture closed");}
+          retained.effectOwner = createDockerCodexEffectCustodyOwner({proof, launch,
+            root: roots.get(claimed.underlyingCustodyRef)!, reservationCustodyRef: claimed.underlyingCustodyRef,
+            hostLifecycleGenerationSha256: binding.hostLifecycleGenerationSha256,
+            workspaceWritable: retained.kernel.intentMode === "workspace-write", backingTreeOwnership,
+            execution: Object.freeze({operationId: retained.kernel.operationId, attemptId: retained.kernel.attemptId,
+              effectId: retained.kernel.effectId, custodyRef: launch.key.custodyId, workspaceRef: retained.record.boundary.workspaceRef})});
+        },
         prepareProviderIo({launch, init}) {
           if (lifecycle === undefined) {throw new TypeError("Docker lifecycle unavailable");}
           const process = {launch, init, expected: Object.freeze({authority: launch.authority, custodyRef: launch.key.custodyId,
@@ -173,31 +219,14 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
   }});
   const custody = new ContainedTurnKernelCustodyAdapter(raw, {attemptOwner, workspaceOwner: options.workspaceOwner,
     hostBootId: options.hostBootId, hostInstanceId: options.hostInstanceId, postClaimPreparation: preparation});
-  const selection = new CodexAppServerCurrentKernelAdapter({platformTarget: options.platformTarget,
-    attempts: {async prepare() {throw new TypeError("Docker execution requires retained preparation");}}});
-  const provider: ContainedTurnKernelProviderPort = Object.freeze({adapterSnapshot: selection.adapterSnapshot,
-    manifest: selection.manifest, async execute(input: Parameters<ContainedTurnKernelProviderPort["execute"]>[0]) {
-    const retained = records.get(input.custodyId);
-    if (disposed || retained === undefined || retained.used || retained.owner === undefined || retained.claimed === undefined ||
-      retained.process === undefined || retained.kernel.operationId !== input.operationId || retained.kernel.attemptId !== input.attemptId ||
-      retained.kernel.effectId !== input.effectId || retained.kernel.workspaceId !== input.workspaceId ||
-      retained.kernel.authorityVectorDigest !== input.authorityVectorDigest || retained.kernel.intentMode !== input.intent.mode ||
-      !sameHostCustodyBinding(retained.kernel.adapterSnapshot, input.adapterSnapshot) ||
-      !sameHostCustodyBinding(retained.kernel.providerAccessSnapshot, input.providerAccessSnapshot)) {throw new TypeError("Docker prepared attempt conflict");}
-    retained.used = true;
-    const prepared = retained.owner.takePrepared(retained.claimed);
-    const owner = createDockerCodexCurrentKernelOwner({attempt: input, boundary: retained.record.boundary,
-      credentialOutputInventory: retained.record.credentialOutputInventory, effectCustody: options.effectCustody,
-      plan: prepared.plan, platformTarget: options.platformTarget, process: retained.process});
-    retained.provider = owner;
-    return owner.provider.execute(input);
-  }});
+  const provider = createProvider(records, options, () => disposed);
   return Object.freeze({custody, provider, dispose() {
     disposed = true;
     let failed = false;
     let failure: unknown;
     const close = (action: () => void) => {try {action();} catch (error) {failed = true; failure ??= error;}};
     for (const record of records.values()) {
+      close(() => record.effectOwner?.cutoff());
       close(() => record.nativeFiles?.cutoff());
       close(() => record.owner?.cutoff());
       close(() => record.provider?.dispose());

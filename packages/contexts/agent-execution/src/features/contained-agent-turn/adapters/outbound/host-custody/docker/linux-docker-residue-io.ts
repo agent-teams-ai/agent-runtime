@@ -19,6 +19,8 @@ export interface ResidueStat {
 /** Docker-private kernel I/O seam. Production never accepts a backend argument. */
 export interface DockerResidueIo {
   open(path: "/" | "/proc"): Promise<ResidueFile>;
+  procObject?(process: ResidueFile, name: "root" | "ns/mnt"): Promise<ResidueFile>;
+  mountId?(file: ResidueFile): Promise<string>;
   child(parent: ResidueFile, name: string, directory: boolean): Promise<ResidueFile>;
   stat(file: ResidueFile): Promise<ResidueStat>;
   filesystem(file: ResidueFile): Promise<bigint>;
@@ -33,6 +35,21 @@ export class NodeLinuxDockerResidueIo implements DockerResidueIo {
   public async open(path: "/" | "/proc"): Promise<FileHandle> {
     if (process.platform !== "linux") {throw residueFault();}
     return open(path, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  }
+  /** The only followed magic links are rooted at an already pinned proc PID. */
+  public async procObject(process: ResidueFile, name: "root" | "ns/mnt"): Promise<FileHandle> {
+    if (name !== "root" && name !== "ns/mnt") {throw residueFault();}
+    return open(`${this.path(process)}/${name}`, constants.O_RDONLY | constants.O_NONBLOCK |
+      (name === "root" ? constants.O_DIRECTORY : 0));
+  }
+  public async mountId(file: ResidueFile): Promise<string> {
+    const info = await open(`/proc/${process.pid}/fdinfo/${file.fd}`, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const text = await this.read(info, 4096);
+      const ids = [...text.matchAll(/^mnt_id:\s*(\d+)$/gmu)];
+      if (ids.length !== 1) {throw residueFault();}
+      return ids[0]![1]!;
+    } finally {await info.close();}
   }
   public async child(parent: ResidueFile, name: string, directory: boolean): Promise<FileHandle> {
     if (!residueComponent(name)) {throw residueFault();}

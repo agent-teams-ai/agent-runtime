@@ -1,3 +1,4 @@
+import {withWorkspaceAuthority} from "./support/docker-workspace-authority-fixture.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {createDockerCodexHostKernelOwner, type CreateDockerCodexHostKernelOwnerOptions}
@@ -62,7 +63,7 @@ test("private Docker owner construction is synchronous and inert; provider use c
 });
 
 for (const missing of ["finalizer", "image"] as const) {
-test(`actual kernel custody refuses missing ${missing} before Docker allocation and fences a second start`, async t => {
+test(`actual kernel custody refuses missing ${missing} before Docker allocation and fences a second start`, {skip: process.platform !== "linux"}, async t => {
   const f = await connectionFixture(); t.after(() => f.contain());
   let allocations = 0; let executions = 0;
   const owner = createDockerCodexHostKernelOwner({cleanupMilliseconds: 100,
@@ -73,8 +74,7 @@ test(`actual kernel custody refuses missing ${missing} before Docker allocation 
       privateRootPath: f.options.plan.privateRootPath, tmpDir: f.options.plan.tmpDir,
       credentialOutputInventory: f.options.credentialOutputInventory};}},
     workspaceOwner: {async withLaunchAuthority(_input, consume) {
-      return consume({canonicalPath: f.options.plan.workspaceRef, descriptorPath: f.options.plan.workspaceRef,
-        identity: {dev: 1n, ino: 2n, mountId: "synthetic"}});
+      return withWorkspaceAuthority(f.options.plan.workspaceRef, _input.operationId, consume);
     }}, preparation() {allocations += 1; throw new Error("must refuse before resource selection");}});
   t.after(() => owner.dispose());
   const open = {...f.options.attempt, intentMode: f.options.attempt.intent.mode,
@@ -92,7 +92,7 @@ test(`actual kernel custody refuses missing ${missing} before Docker allocation 
 }
 
 for (const failure of ["selection-disposal", "postclaim-constructor", "missing-native"] as const) {
-test(`Host retains and cuts native selection after ${failure}, without execution or a second selection`, async t => {
+test(`Host retains and cuts native selection after ${failure}, without execution or a second selection`, {skip: process.platform !== "linux"}, async t => {
   const f = await connectionFixture(); t.after(() => f.contain());
   let allocations = 0; let executions = 0; let cuts = 0;
   const nativeFiles = {bindRoot: unused, install: unused, quiesce: async () => {}, snapshot: unused,
@@ -105,13 +105,13 @@ test(`Host retains and cuts native selection after ${failure}, without execution
       privateRootPath: f.options.plan.privateRootPath, tmpDir: f.options.plan.tmpDir,
       credentialOutputInventory: f.options.credentialOutputInventory};}},
     workspaceOwner: {async withLaunchAuthority(_input, consume) {
-      return consume({canonicalPath: f.options.plan.workspaceRef, descriptorPath: f.options.plan.workspaceRef,
-        identity: {dev: 1n, ino: 2n, mountId: "synthetic"}});
+      return withWorkspaceAuthority(f.options.plan.workspaceRef, _input.operationId, consume);
     }}, preparation() {
       allocations += 1;
       if (failure === "selection-disposal") {owner.dispose();}
       // Invalid postclaim dependencies force construction to fail before attach.
-      return {deadlines: {routeLifetimeMs: 100}, ...(failure === "missing-native" ? {} : {nativeFiles})} as never;
+      return {workspaceBackingTreeOwnership: {kind: "exclusive-host-owned-disposable-tree", evidenceRef: "urn:test:owned-tree"},
+        deadlines: {routeLifetimeMs: 100}, ...(failure === "missing-native" ? {} : {nativeFiles})} as never;
     }});
   t.after(() => owner.dispose());
   const open = {...f.options.attempt, intentMode: f.options.attempt.intent.mode,

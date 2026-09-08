@@ -141,7 +141,8 @@ test("abort forwarding resists stopped propagation and mutated signal cleanup pr
   assert.equal(await preparation.cleanup(Date.now() + 1000), true);
 });
 
-test("late listener and consumption acquisitions and cleanup survive detached deadline waiters in the same slots", async t => {
+for (const phase of ["listener", "consumption"] as const) {
+test(`late ${phase} acquisition and cleanup survive detached deadline waiters in the same slots`, async t => {
   const f = await fixture(t); const owner = f.createOwner(); const preparation = preparationFor(owner);
   const lifetime = preparation.acquire(f.handoff);
   const listenerGate = deferred(); const journalGate = deferred(); const retirement = deferred(); const closeGate = deferred();
@@ -161,21 +162,25 @@ test("late listener and consumption acquisitions and cleanup survive detached de
     clock: {read: () => ({authorityId: "clock", epoch: "1", controlTime: 1}),
       within: async (_deadline: number, action: () => Promise<unknown>) => action()}, operationDeadline: 1000}};
   const preparing = preparation.prepareResources(lifetime, resources as never); const pending = owner.pending;
-  await tick(); assert.equal(calls.open, 1); assert.equal(calls.consumption, 1);
+  await tick(); assert.equal(calls.open, 1); assert.equal(calls.consumption, 0);
+  if (phase === "consumption") {listenerGate.resolve(); await tick(); assert.equal(calls.consumption, 1);}
   preparation.cutoff();
   assert.equal(await preparation.cleanup(Date.now() + 10), false);
   assert.equal(owner.pending, pending); assert.equal(lifetime.signal.aborted, true);
   assert.throws(() => preparation.prepareResources(lifetime, resources as never));
   listenerGate.resolve(); journalGate.resolve();
   assert.equal((await preparing).kind, "unproven"); await pending;
-  assert.ok(calls.seals >= 2); assert.equal(calls.quarantines, 1); assert.equal(calls.retire, 1);
+  assert.ok(calls.seals >= (phase === "listener" ? 2 : 1));
+  const journals = phase === "consumption" ? 1 : 0;
+  assert.equal(calls.quarantines, journals); assert.equal(calls.retire, journals);
   assert.equal(await preparation.cleanup(Date.now() + 10), false);
   retirement.resolve(); await tick(); assert.equal(calls.close, 1); assert.equal(calls.release, 1);
   assert.equal(await preparation.cleanup(Date.now() + 10), false);
   closeGate.resolve(); await tick();
   assert.equal(await preparation.cleanup(Date.now() + 1000), true);
-  assert.equal(calls.open, 1); assert.equal(calls.consumption, 1); assert.equal(calls.retire, 1); assert.equal(calls.close, 1);
+  assert.equal(calls.open, 1); assert.equal(calls.consumption, journals); assert.equal(calls.retire, journals); assert.equal(calls.close, 1);
 });
+}
 
 test("Node handoff reader retains its detached proof semantics after sharing the internal HTTP contract", async t => {
   const f = await fixture(t); const mutable = {...f.proof};

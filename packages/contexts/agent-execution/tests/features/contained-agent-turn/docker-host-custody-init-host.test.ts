@@ -95,7 +95,8 @@ const tick = (): Promise<void> => new Promise(resolve => {setImmediate(resolve);
 
 test("fragmented ready and coalesced acknowledgement/output/exit/drain produce exact closed evidence", async () => {
   const chunks: string[] = []; const observations: unknown[] = []; const {channel, session} = create(new FakeChannel(),
-    {onDrainComplete: value => {observations.push(value);}, onOutput: chunk => {
+    {acknowledgementTimeoutMs: 5000, readyTimeoutMs: 5000,
+    onDrainComplete: value => {observations.push(value);}, onOutput: chunk => {
     chunks.push(`${chunk.stream}:${Buffer.from(chunk.bytes).toString()}`);
   }, onRootExit: value => {observations.push(value);}});
   const frame = encodeDockerCustodyFrame(ready); channel.pushBytes(frame.subarray(0, 3)); channel.pushBytes(frame.subarray(3)); await tick();

@@ -85,7 +85,7 @@ export const bindEffectCustody = (input: {
 }): object | undefined => {
   if (input.normalized.type !== "commandExecution" && input.normalized.type !== "fileChange") {return undefined;}
   if (input.custody === undefined || input.bound.endpointObservations.length === 0) {
-    throw new CodexAppServerProtocolError("Codex path-bearing effect lacks exact opened-object workspace custody evidence", true);
+    throw new CodexAppServerProtocolError("Codex path-bearing effect lacks Host-proven contained-turn workspace custody evidence", true);
   }
   const admission = input.custody.authority.admit({
     ...input.custody.execution,

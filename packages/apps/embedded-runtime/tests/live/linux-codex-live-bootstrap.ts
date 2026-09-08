@@ -60,8 +60,6 @@ export interface LinuxCodexLivePins {
   readonly routeEnforcement: NonNullable<HostCustodiedAgentRuntimeHostDependencies["containedTurn"]["routeEnforcement"]>;
   /** Borrowed concrete host owner; retained until this assembly reports released. */
   readonly hostCustody: HostCustodiedAgentRuntimeHostDependencies["containedTurn"]["hostCustody"];
-  /** Required dependency under separate development. No constant admission fallback. */
-  readonly effectCustody: CreateCodexCurrentKernelOwnerOptions["effectCustody"];
   readonly node: Omit<LinuxCodexNodeSelectionPins, "readAcknowledged">;
   readonly deployment: Omit<LinuxCodexDeploymentInfrastructure,
     "pool" | "recipe" | "currentAuthority" | "sourceRevision" | "createProviderAccess">;
@@ -120,14 +118,13 @@ export class LinuxCodexLiveSetupError extends Error {
 
 /** This function is administrative I/O, never an auto-running test. Invoke only
  * in a separately authorized disposable environment. Pool.end(), borrowed host
- * and effect authority disposal, secret erasure and directory removal belong to
+ * disposal, secret erasure and directory removal belong to
  * the caller, strictly AFTER cleanup returns released. Pending preserves debt.
  */
 export const setupLinuxCodexLiveBootstrap = async (pool: Pool, pins: LinuxCodexLivePins) => {
   if (process.platform !== "linux" || pins.platformTarget.platform !== "linux" ||
-      !/^[a-f0-9]{40}$/u.test(pins.sourceRevision) ||
-      pins.effectCustody === undefined || typeof pins.effectCustody.admit !== "function") {
-    throw new TypeError("Pinned Linux configuration and concrete effect custody are required");
+      !/^[a-f0-9]{40}$/u.test(pins.sourceRevision)) {
+    throw new TypeError("Pinned Linux configuration is required");
   }
   const actions: Dispose[] = [];
   const selectCurrentPolicy = pins.deployment.currentPolicy.bind(pins.deployment);
@@ -233,7 +230,7 @@ export const setupLinuxCodexLiveBootstrap = async (pool: Pool, pins: LinuxCodexL
         selectedProvider: Object.freeze({kind: "codex", owner: Object.freeze({
           hostBootId: pins.hostBootId, hostInstanceId: pins.hostInstanceId,
           platformTarget: pins.platformTarget, workspaceOwner: workspace,
-          effectCustody: pins.effectCustody, launchRecords,
+          launchRecords,
         })}),
         linuxCodexDeployment: {...pins.deployment, sourceRevision: pins.sourceRevision,
           pool, recipe: node.recipe,

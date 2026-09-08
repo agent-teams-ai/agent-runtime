@@ -65,8 +65,9 @@ export interface CodexCurrentKernelLaunchRecordResolver {
   }>): Promise<CodexCurrentKernelLaunchRecord | undefined>;
 }
 export interface CreateCodexCurrentKernelOwnerOptions {
-  /** Mandatory opened-object authority for every Codex command/file effect lifecycle. */
-  readonly effectCustody: CodexEffectCustodyAuthority;
+  /** Required by the direct Node owner (validated before I/O). The Docker Host
+   * owner instead constructs its authority from captured filesystem confinement. */
+  readonly effectCustody?: CodexEffectCustodyAuthority;
   readonly hostBootId: string;
   readonly hostCustody: ContainedTurnHostCustodyPort & Processes;
   readonly hostInstanceId: string;

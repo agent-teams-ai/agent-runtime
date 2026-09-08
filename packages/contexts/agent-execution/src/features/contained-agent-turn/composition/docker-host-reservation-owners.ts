@@ -34,7 +34,11 @@ export const createDockerHostReservationOwners = (input: Readonly<{
       active();
       const binding = await root.capture();
       active();
-      const reservation = input.raw.reservation(input.custodyRef).input;
+      const retained = input.raw.reservation(input.custodyRef);
+      const accepted = await retained.workspace.revalidate();
+      const reservation = retained.input;
+      if (binding.workspaceIdentity.dev !== accepted.dev || binding.workspaceIdentity.ino !== accepted.ino ||
+        binding.workspaceIdentity.mountId !== accepted.mountId) {throw new TypeError("Original workspace and Host root capture differ");}
       if (binding.canonicalBindSourcePath !== reservation.launchPlan.privateRootPath ||
         binding.canonicalWorkspacePath !== reservation.workspaceRef ||
         input.dependencies.create.privateRootSource !== binding.canonicalBindSourcePath ||
@@ -64,7 +68,16 @@ export const createDockerHostReservationOwners = (input: Readonly<{
       return Object.freeze({owner: createDockerImageInitOwner({engine, lock: input.lock, host}), host});
     },
   };
-  return Object.freeze({hooks, attach(preparation: DockerLinuxPostClaimOwner<PreparedDockerProviderIo>) {
+  return Object.freeze({hooks, async capturedRoot() {
+    active();
+    if (root === undefined) {throw new TypeError("Host root unavailable");}
+    const binding = await root.revalidate();
+    const accepted = await input.raw.reservation(input.custodyRef).workspace.revalidate();
+    active();
+    if (binding.workspaceIdentity.dev !== accepted.dev || binding.workspaceIdentity.ino !== accepted.ino ||
+      binding.workspaceIdentity.mountId !== accepted.mountId) {throw new TypeError("Accepted workspace changed");}
+    return binding;
+  }, attach(preparation: DockerLinuxPostClaimOwner<PreparedDockerProviderIo>) {
     if (attached) {throw new TypeError("Docker Host root attachment is one-use");}
     attached = true;
     active();
