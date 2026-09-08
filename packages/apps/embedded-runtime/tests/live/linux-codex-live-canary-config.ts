@@ -180,7 +180,9 @@ export const createLinuxCodexLiveCanaryConfiguration = (
     throw new TypeError("Approved canary image/init closure mismatch");
   }
   const enginePolicy: Configuration["node"]["enginePolicy"] = {...p.enginePolicy,
-    allowedEnvironmentKeys: ["HOME", "PATH", "TMPDIR", "AR_CUSTODY_INIT_CONFIGURATION"],
+    // The engine owns HOME/PATH/TMPDIR; only init configuration is caller supplied.
+    // Provider environment is authorized separately by provider.allowedEnvironmentNames.
+    allowedEnvironmentKeys: ["AR_CUSTODY_INIT_CONFIGURATION"],
     cpuNanoCpus: 1_000_000_000,
     memoryBytes: 1_073_741_824, pidsLimit: 128, tmpfsBytes: 67_108_864, writableLayerBytes: 67_108_864};
   const transport = {certificateAuthorities: p.certificateAuthorities, connectTimeoutMs: 10_000,
