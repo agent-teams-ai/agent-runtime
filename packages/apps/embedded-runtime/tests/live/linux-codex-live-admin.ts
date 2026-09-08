@@ -312,6 +312,7 @@ export const setupLinuxCodexLiveAdmin = async (
         if (closing) {throw new TypeError("Administrative entrypoint closed");}
         return live.submit(submission, {signal: lifetime.signal});
       },
+      collectNativeStart: live.collectNativeStart,
       observe: live.observe, cancel: live.cancel, cleanup,
     });
   } catch (error) {

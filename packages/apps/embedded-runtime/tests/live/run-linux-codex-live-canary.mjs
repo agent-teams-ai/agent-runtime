@@ -215,6 +215,7 @@ export function createLinuxCodexLiveCanaryDriver(configuration, credentialFd) {
     while (pendingReports.length) {
       persistReport(pendingReports[0]); pendingReports.shift();
     }
+    for (const value of live?.collectNativeStart?.() ?? []) {report('native-start', value);}
     if (!live?.directory) {return;}
     // Admin exposes tree.root; the collector reads artifacts/ and workspaces/
     // relative to the disposable root allocated by linux-codex-live-admin-directories.ts.

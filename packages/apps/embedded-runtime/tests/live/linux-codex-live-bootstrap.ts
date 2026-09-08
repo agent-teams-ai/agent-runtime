@@ -30,6 +30,8 @@ import {createLinuxCodexPaRenderingFactory, type LinuxCodexOwnedPaMaterial} from
 
 import {createLinuxCodexLiveFirewallWiring, type LinuxCodexLiveFirewallPins} from "./linux-codex-live-firewall-wiring.ts";
 
+import {createLiveNativeStartCollector} from "./linux-codex-live-native-start.ts";
+
 type Pool = ConstructorParameters<typeof PostgresContainedTurnOperationStore>[0]["pool"];
 type Host = ReturnType<typeof createHostCustodiedAgentRuntimeHost>;
 type Selection = Parameters<typeof createPostgresOperationDispatchConsumption>[1];
@@ -149,6 +151,7 @@ export class LinuxCodexLiveSetupError extends Error {
  */
 export const setupLinuxCodexLiveBootstrap = async (pool: Pool, pins: LinuxCodexLivePins) => {
   const actions: Dispose[] = [];
+  const nativeStart = createLiveNativeStartCollector();
   const acknowledgedSelections = new Map<string, NonNullable<ReturnType<LinuxCodexNodeSelectionPins["readAcknowledged"]>>>();
   let host: Host | undefined;
   let node: Recipe | undefined;
@@ -174,6 +177,7 @@ export const setupLinuxCodexLiveBootstrap = async (pool: Pool, pins: LinuxCodexL
           await actions[actions.length - 1]!();
           actions.pop();
         }
+        nativeStart.release();
         return "released";
       } catch {return "pending";}
     })();
@@ -256,7 +260,7 @@ export const setupLinuxCodexLiveBootstrap = async (pool: Pool, pins: LinuxCodexL
           launchRecords,
         })}),
         linuxCodexDeployment: {...pins.deployment, sourceRevision: pins.sourceRevision,
-          pool, recipe: node.recipe,
+          pool, recipe: nativeStart.wrap(node),
           createProviderAccess: createLinuxCodexPaRenderingFactory(pool,
             pins.credentials.takeOwnedMaterial.bind(pins.credentials)),
           currentPolicy(acknowledged) {
@@ -283,8 +287,9 @@ export const setupLinuxCodexLiveBootstrap = async (pool: Pool, pins: LinuxCodexL
         options?: Parameters<typeof containedTurn.submit>[1]) {
         if (closing || submitted) {throw new Error("Live bootstrap dispatch already consumed or closed");}
         submitted = true;
-        return containedTurn.submit(input, options);
+        return nativeStart.settle(() => containedTurn.submit(input, options));
       },
+      collectNativeStart: nativeStart.collect,
       observe: containedTurn.observe.bind(containedTurn),
       cancel: containedTurn.cancel.bind(containedTurn),
       cleanup,
