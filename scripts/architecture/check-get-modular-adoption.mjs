@@ -96,10 +96,17 @@ export function verifyAdoption(profile, evidence) {
     reviewRequired: ['new relationships inside existing boundaries', 'new capabilities inside existing source paths', 'semantic ownership'] };
 }
 
-async function readPackageArtifact(pkg, embedded, lock, bytes) {
-  assert.equal(embedded.dependencies?.[pkg.name], pkg.version, `exact manifest version drift: ${pkg.name}`);
+async function readPackageArtifact(pkg, embedded, lock, bytes, workspace) {
+  const specifier = embedded.dependencies?.[pkg.name];
+  if (specifier === 'catalog:') {
+    assert.equal(workspace.catalog?.[pkg.name], pkg.version, `exact catalog version drift: ${pkg.name}`);
+    assert.equal(lock.catalogs?.default?.[pkg.name]?.specifier, pkg.version, `lock catalog specifier drift: ${pkg.name}`);
+    assert.equal(lock.catalogs?.default?.[pkg.name]?.version, pkg.version, `lock catalog version drift: ${pkg.name}`);
+  } else {
+    assert.equal(specifier, pkg.version, `exact manifest version drift: ${pkg.name}`);
+  }
   const locked = lock.importers?.['packages/apps/embedded-runtime']?.dependencies?.[pkg.name];
-  assert.equal(locked?.specifier, pkg.version, `lock specifier drift: ${pkg.name}`);
+  assert.equal(locked?.specifier, specifier, `lock specifier drift: ${pkg.name}`);
   assert.equal(locked?.version, pkg.version, `lock version drift: ${pkg.name}`);
   const integrity = lock.packages?.[`${pkg.name}@${pkg.version}`]?.resolution?.integrity;
   const match = /^(sha256|sha512)-([A-Za-z0-9+/]+=*)$/.exec(integrity ?? '');
@@ -140,7 +147,9 @@ export async function checkAdoption(root) {
   const importer = 'packages/apps/embedded-runtime';
   const embedded = await json(`${importer}/package.json`);
   const lock = await loadStrictYamlFile(consumerRoot, 'pnpm-lock.yaml', 'consumer-adoption-lock');
-  const artifacts = await Promise.all(profile.packages.map(pkg => readPackageArtifact(pkg, embedded, lock, bytes)));
+  const workspace = profile.packages.some(pkg => embedded.dependencies?.[pkg.name] === 'catalog:')
+    ? await loadStrictYamlFile(consumerRoot, 'pnpm-workspace.yaml', 'consumer-adoption-workspace') : {};
+  const artifacts = await Promise.all(profile.packages.map(pkg => readPackageArtifact(pkg, embedded, lock, bytes, workspace)));
   const paths = new Set([profile.authority.path, profile.fms.profile]);
   if ((await bytes(profile.authority.path)).toString('utf8').includes('../architecture/get-modular-adoption.md')) {
     paths.add('docs/architecture/get-modular-adoption.md');
