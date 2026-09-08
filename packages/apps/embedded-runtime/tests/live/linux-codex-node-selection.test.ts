@@ -19,7 +19,7 @@ const fixture = () => {
     boundary: {workspaceRef: "/disposable/workspace/attempt"}}} as unknown as Input;
   const subject = {...kernel, ...binding, scope: binding, provider: "codex", purpose: "contained_turn_provider_start_v1",
     executionGenerationId: randomUUID(), providerAccessExpectation: {acceptedAuthorityDigest: authority},
-    runtimeSecurityExpectation: {acceptedAuthorityDigest: authority}};
+    runtimeSecurityExpectation: {acceptedAuthorityDigest: `sha256:${"e".repeat(64)}`}};
   const directories = {custody: dir("/disposable/journals/custody", 1), resource: dir("/disposable/journals/resource", 2),
     consumption: dir("/disposable/journals/consumption", 3), privateRoot: dir(input.record.privateRootPath, 4),
     workspace: dir(input.record.boundary.workspaceRef, 5)};
@@ -41,7 +41,7 @@ const fixture = () => {
       closureDeadline: 1200, wallDeadlineEpochMs: 101000, observationWallDeadlineEpochMs: 101100, maximumLifetimeMs: 1000},
     deadlines: {engineIdentityMs: 100, allocationMs: 100, launchMs: 100, membershipMs: 100, cleanupMs: 100, routeMs: 100},
     initTimeouts: {readyTimeoutMs: 100, acknowledgementTimeoutMs: 100}, connection: {limits: {maxInboundHeaderBytes: 1024}},
-    readAcknowledged: () => ({subject, acceptedAuthorityVectorDigest: authority}), readDirectories: () => directories,
+    readAcknowledged: () => ({subject, acceptedAuthorityVectorDigest: authority, securityDecisionDigest: `sha256:${"e".repeat(64)}`}), readDirectories: () => directories,
   } as unknown as LinuxCodexNodeSelectionPins;
   return {pins, input, subject, directories, admission, observation,
     advance: () => {control += 1000; wall += 1000; mono += 1000;}, rewind: () => {mono -= 1;}};
@@ -83,4 +83,15 @@ test("generation admission closes on cancellation, clock rollback and observatio
     if (action === "observation") {f.observation.abort();}
     assert.equal(s.initOptions.isCurrentGeneration(s.initOptions.authority.generation), false);
   }
+});
+
+test("RS decision digest is independent of the whole authority vector and must match its own readback", () => {
+  const f = fixture();
+  assert.notEqual(f.subject.runtimeSecurityExpectation.acceptedAuthorityDigest, f.input.kernel.authorityVectorDigest);
+  assert.doesNotThrow(() => createLinuxCodexNodeSelection(f.pins)(f.input));
+  const wrong = fixture();
+  const acknowledged = wrong.pins.readAcknowledged(wrong.input)!;
+  assert.throws(() => createLinuxCodexNodeSelection({...wrong.pins,
+    readAcknowledged: () => ({...acknowledged, securityDecisionDigest: wrong.input.kernel.authorityVectorDigest}),
+  })(wrong.input), /binding mismatch/u);
 });

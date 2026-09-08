@@ -244,6 +244,7 @@ export const setupLinuxCodexLiveBootstrap = async (pool: Pool, pins: LinuxCodexL
             acknowledgedSelections.set(acknowledged.input.subject.custodyId, structuredClone({
               subject: acknowledged.input.subject,
               acceptedAuthorityVectorDigest: acknowledged.input.accepted.acceptedAuthorityVectorDigest,
+              securityDecisionDigest: acknowledged.input.accepted.acceptedAuthorityVector.securityDecisionDigest,
             }));
             return policy;
           },

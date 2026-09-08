@@ -48,7 +48,7 @@ export interface LinuxCodexNodeSelectionPins {
    * Never synthesize it from binding pins or requested RS policy. Undefined fails
    * before selection. This reader does not create or approve authority. */
   readAcknowledged(input: Input): Readonly<{subject: ContainedTurnDispatchGrantSubject;
-    acceptedAuthorityVectorDigest: string}> | undefined;
+    acceptedAuthorityVectorDigest: string; securityDecisionDigest: string}> | undefined;
   /** Fresh disposable directories allocated by administration, outside provider
    * mounts. IDs are actual stat readbacks, not chosen labels. Do not recycle debt.
    * Mounted identity tokens below are configuration only; later AE owners must
@@ -56,6 +56,11 @@ export interface LinuxCodexNodeSelectionPins {
   readDirectories(input: Input): Readonly<{custody: Directory; resource: Directory;
     consumption: Directory; privateRoot: Directory; workspace: Directory}> | undefined;
 }
+
+const requireDecisionDigest = (value: string): string => {
+  if (!/^sha256:[a-f0-9]{64}$/u.test(value)) {return fail("security decision digest unavailable");}
+  return value;
+};
 
 const validateAcknowledged = (p: LinuxCodexNodeSelectionPins, input: Input) => {
   const {kernel: k} = input;
@@ -69,7 +74,7 @@ const validateAcknowledged = (p: LinuxCodexNodeSelectionPins, input: Input) => {
   if (acknowledged.acceptedAuthorityVectorDigest !== k.authorityVectorDigest ||
       !/^sha256:[a-f0-9]{64}$/u.test(k.authorityVectorDigest) ||
       s.providerAccessExpectation.acceptedAuthorityDigest !== k.authorityVectorDigest ||
-      s.runtimeSecurityExpectation.acceptedAuthorityDigest !== k.authorityVectorDigest ||
+      s.runtimeSecurityExpectation.acceptedAuthorityDigest !== requireDecisionDigest(acknowledged.securityDecisionDigest) ||
       s.provider !== "codex" || k.providerAccessSnapshot.provider !== "codex" ||
       s.purpose !== "contained_turn_provider_start_v1" ||
       s.scope.tenantId !== p.binding.tenantId || s.scope.projectId !== p.binding.projectId ||
