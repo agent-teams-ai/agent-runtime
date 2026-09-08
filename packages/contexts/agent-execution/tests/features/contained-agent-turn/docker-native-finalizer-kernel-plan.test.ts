@@ -47,7 +47,11 @@ test("component evidence: kernel retains the original finalizer receiver, callba
     workspaceOwner: {async withLaunchAuthority(_input: unknown, consume: (authority: never) => unknown) {
       return withWorkspaceAuthority(f.options.plan.workspaceRef, f.options.attempt.operationId, consume);
     }},
-    preparation() {selections += 1; return {deadlines: {routeLifetimeMs: 1000}};},
+    preparation() {selections += 1; return {deadlines: {routeLifetimeMs: 1000},
+      workspaceBackingTreeOwnership: {kind: "exclusive-host-owned-disposable-tree", evidenceRef: "urn:synthetic:finalizer-wiring"},
+      nativeFiles: {bindRoot() {throw new Error("no root capture in wiring probe");},
+        install() {throw new Error("no installation in wiring probe");}, cutoff() {}, async quiesce() {},
+        snapshot() {throw new Error("no material evidence in wiring probe");}}};},
     finishClaimed(input: {originalPlan: unknown}) {
       assert.equal(this, options); finishes += 1; seen.push(input.originalPlan);
       throw new Error("synthetic probe ends before any finalization effect");

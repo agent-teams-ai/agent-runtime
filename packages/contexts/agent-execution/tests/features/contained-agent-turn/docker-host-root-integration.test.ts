@@ -1,3 +1,4 @@
+import {reserveWorkspace, withWorkspaceAuthority} from "./support/docker-workspace-authority-fixture.ts";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import {syncBuiltinESMExports} from "node:module";
@@ -37,7 +38,7 @@ for (const debt of [false, true]) {
     await fs.chmod(create.privateRootSource, 0o700);
     const raw = new DockerKernelHostCustody(5000);
     const reservation = input(hostIdentity.operationId, hostIdentity.attemptId, create.workspaceSource, create.privateRootSource);
-    const handle = await raw.reserve(reservation);
+    const handle = await reserveWorkspace(t, raw, reservation);
     const roots = createHostPrivateRootOwnerFactory(hostIdentity);
     let launch: Awaited<ReturnType<typeof f.launch>>;
     let cleanups = 0; let cleanup: Promise<{kind: "released" | "quarantined"}> | undefined;
@@ -85,7 +86,7 @@ test("cancel during real root capture retains preparation and cleanup flights; n
   await fs.mkdir(privateRootPath, {mode: 0o700}); await fs.mkdir(workspace, {mode: 0o700});
   const raw = new DockerKernelHostCustody(5000);
   const reservation = input(f.proof.operationId, f.proof.attemptId, workspace, privateRootPath);
-  const handle = await raw.reserve(reservation);
+  const handle = await reserveWorkspace(t, raw, reservation);
   const dependencies = {...f.dependencies, create: {...f.dependencies.create, workspaceSource: workspace, privateRootSource: privateRootPath}};
   const roots = createHostPrivateRootOwnerFactory(f.proof);
   let providerCut = false;
@@ -136,8 +137,7 @@ test("normal kernel terminal-attestation entrypoint deletes the owned root befor
     postClaimPreparation: {async prepareClaimed() {throw new Error("terminal observation does not prepare a new launch");}},
     attemptOwner: {async prepare() {return plan;}, retain(retained) {custodyRef = retained.underlyingCustodyRef;}, retire() {}},
     workspaceOwner: {async withLaunchAuthority(_input, consume) {
-      return consume({canonicalPath: create.workspaceSource, descriptorPath: create.workspaceSource,
-        identity: {dev: 1n, ino: 2n, mountId: "synthetic"}});
+      return withWorkspaceAuthority(create.workspaceSource, ids.operationId, consume);
     }}});
   await custody.open({adapterSnapshot: ids.adapterSnapshot, providerAccessSnapshot: ids.providerAccessSnapshot,
     attemptId: ids.attemptId, operationId: ids.operationId, custodyId: ids.custodyId, effectId: ids.effectId,
@@ -212,7 +212,7 @@ test("same-root cleanup joins the actual native verifier after the deferred writ
     catalogSource: await fs.readFile(new URL("../../fixtures/codex-native-broker-0.153.4/models.json", import.meta.url)),
     ownerUid: process.getuid!(), ownerGid: process.getgid!()});
   const raw = new DockerKernelHostCustody(5000);
-  const handle = await raw.reserve(input(f.f.proof.operationId, f.f.proof.attemptId,
+  const handle = await reserveWorkspace(t, raw, input(f.f.proof.operationId, f.f.proof.attemptId,
     f.record.boundary.workspaceRef, f.record.privateRootPath));
   const roots = createHostPrivateRootOwnerFactory(f.f.proof);
   const dependencies = {...f.f.dependencies, create: {...f.f.dependencies.create,
