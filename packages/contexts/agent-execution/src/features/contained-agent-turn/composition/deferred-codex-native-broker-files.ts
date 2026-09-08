@@ -1,3 +1,4 @@
+import {nativeStartDiagnostic, type NativeStartDiagnostic} from "./docker-native-start-diagnostic.js";
 import {createCodexNativeBrokerFileInstaller, type CodexNativeBrokerFileInstaller,
   type CodexNativeBrokerFileInstallerOptions, type CodexNativeBrokerFileInstallerSnapshot}
   from "./codex-native-broker-file-installer.js";
@@ -13,6 +14,7 @@ export interface DeferredCodexNativeBrokerFiles {
   snapshot(): CodexNativeBrokerFileInstallerSnapshot & Readonly<{
     binding: "unbound" | "binding" | "bound" | "failed";
     closed: boolean;
+    nativeStart?: NativeStartDiagnostic;
   }>;
 }
 
@@ -35,7 +37,7 @@ export const createDeferredCodexNativeBrokerFiles = (
       void joining.catch(() => {});
     }
   };
-  return Object.freeze({
+  const files: DeferredCodexNativeBrokerFiles = Object.freeze({
     bindRoot(rootOwner: HostPrivateRootOwner) {
       if (binding !== "unbound" || closed) {throw new TypeError("Native file binding unavailable");}
       binding = "binding";
@@ -53,8 +55,10 @@ export const createDeferredCodexNativeBrokerFiles = (
     cutoff,
     async quiesce() {cutoff(); await joining;},
     snapshot() {
+      const nativeStart = nativeStartDiagnostic(files);
       return Object.freeze({...installer?.snapshot() ?? {installing: false, installed: false, debt: false, retainedHandles: 0},
-        binding, closed});
+        binding, closed, ...(nativeStart === undefined ? {} : {nativeStart})});
     },
   });
+  return files;
 };
