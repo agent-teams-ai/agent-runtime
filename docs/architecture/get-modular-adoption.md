@@ -32,9 +32,26 @@ Document identity, package versions/archive integrity, Core compatibility token,
 and local adoption authority are distinct. The profile retains the approved published
 Core and Assembly 0.1.0 archives, verifies their SHA-256 and lock integrity,
 and requires exact catalog versions. It records actual blocking commands,
-without `conformant: true` for the repository. Upstream main was compared with
-the retained standard on 2026-09-08 and resolved to the same pinned commit;
-there was no standard delta to migrate.
+without `conformant: true` for the repository. Upstream main was rechecked on
+2026-09-08 at `03a7df64bc5e9939f7b51694a80a7f3d61453f98`. The complete
+standard still has the SHA-256 recorded above, so the accepted pin remains
+content-current; no normative standard delta needs migration.
+
+The consumed release sources are distinct from the standard pin:
+
+| Published root | Version | Release source commit | Retained archive SHA-256 |
+| --- | --- | --- | --- |
+| `@get-modular/core` | `0.1.0` | `bbc5053c2f2f96e7c524bd65c42288fc88cd7358` | `50803ea69e2fb4078013a897f858908b4d73d26296336ab155a6118809dfb8ba` |
+| `@get-modular/assembly` | `0.1.0` | `41d72bfb266048e6893078cf39f813e08dea2550` | `e89207171e44afd5e813aa5e7a0db8abc999b42338559d38b44b4db71da228ab` |
+
+The Core generated stage1 subject is the complete published archive above.
+Its `dist/composition/generated/stage1.js` entry has SHA-256
+`93438ec6c300bad642dde280070cabe1f4df2ea07d30176b368f2cee311acf54`;
+this entry digest is not the digest of the complete subject. The consumer
+profile retains both archives and exact lockfile integrity.
+The [packed consumer test](../../packages/apps/embedded-runtime/tests/assembly-packed-consumer.test.ts)
+installs declared production roots and checks passive behavior and typings.
+These identities do not assert whole-runtime conformance.
 
 ## Ownership and composition scope
 
@@ -74,12 +91,12 @@ attempt isolation, failed handoff cleanup, and post-handoff startup abort must
 be proved alongside packed public-root consumer validation. Use only disposable
 TEST projects and passive temporary filesystem fixtures, never live providers.
 
-## Required L0 checker transition
+## Implemented L0 checker transition
 
 The current gate is `architecture:runtime-setup-l0-evidence`, backed by
 `scripts/architecture/runtime-setup-l0-evidence.mjs` and its spec, inputs,
-validation modules and tests. This documentation checkpoint does not edit them.
-Atomic cutover must implement the following bounded transition:
+validation modules and tests. The additive implementation preserves the
+following bounded transition contract:
 
 1. Retain schema-3 direct evidence, benchmark prompts/envelopes, source revisions,
    digests, HOLD verdicts, and historical change readback unchanged. Validate
@@ -103,6 +120,12 @@ Atomic cutover must implement the following bounded transition:
    after atomic package/API/caller integration. The new owner decision permits
    this static slice without asserting that historical L1 promotion passed.
    Broader L1 retains its two-of-three rule; L2-L5 remain no-go.
+
+The retained [current adoption capture](../spikes/runtime-setup-assembly-adoption-evidence.json)
+records source `7fcabfce2e6811ef05961c2b72ced6891f8b74a3` and 406 passing
+embedded-runtime tests with zero skips. The checker authenticates its package
+closure against current inputs; a later unrelated commit does not fabricate a
+new capture or change historical HOLD verdicts.
 
 Delivery remains pending until focused gates, fast/full integrated-source checks,
 independent review, exact artifacts, and before/after benefit measurements pass.
