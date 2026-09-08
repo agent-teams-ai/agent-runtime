@@ -401,7 +401,7 @@ const createPreparationCalls = (input: Claimed, admissionAbort: AbortController,
 };
 
 const createLaunchLifetime = (signal: AbortSignal, admissionSignal: AbortSignal, admissionDeadline: number,
-  observationSignal: AbortSignal, observationDeadline: number): LaunchInput["lifetime"] => ({
+  observationSignal: AbortSignal, observationDeadline: number): NonNullable<LaunchInput["lifetime"]> => ({
   admission: {signal: AbortSignal.any([signal, admissionSignal]), deadlineEpochMs: admissionDeadline},
   observation: {signal: observationSignal, deadlineEpochMs: observationDeadline,
     isActive: () => !observationSignal.aborted && Date.now() < observationDeadline},
