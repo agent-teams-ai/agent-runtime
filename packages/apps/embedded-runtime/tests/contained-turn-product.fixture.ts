@@ -22,8 +22,9 @@ export const setupCapabilities = Object.freeze({
   }),
 });
 
-type OuterProviderAccess = ContainedTurnOuterCompositionDependencies["providerAccess"];
-type OuterSecurityAuthority = ContainedTurnOuterCompositionDependencies["security"]["dispatchAuthorityV1"];
+type LegacyDependencies = Extract<ContainedTurnOuterCompositionDependencies, {authority?: "legacy"}>;
+type OuterProviderAccess = LegacyDependencies["providerAccess"];
+type OuterSecurityAuthority = LegacyDependencies["security"]["dispatchAuthorityV1"];
 
 const providerAccess = (bindingDigest = "binding:synthetic") => Object.freeze({
   dispatchConsumptionV1: Object.freeze({

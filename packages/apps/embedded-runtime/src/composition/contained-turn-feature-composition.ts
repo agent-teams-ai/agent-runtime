@@ -5,18 +5,14 @@ import {
   createCodexCurrentKernelOwner,
   createContainedTurnFeature,
   readContainedTurnRouteEnforcementTarget,
-  createContainedTurnProviderAccessPort,
   createContainedTurnRuntimeSecurityPort,
   type ClaudeCurrentKernelOwner,
   type CodexCurrentKernelOwner,
   type ContainedTurnFeatureDependencies,
-  type ContainedTurnProviderAccessPort,
   type CreateClaudeCurrentKernelOwnerOptions,
   type CreateCodexCurrentKernelOwnerOptions,
   type ContainedTurnRouteEnforcementCapability,
   type ContainedTurnRouteQualificationTarget,
-  type OuterContainedTurnProviderAccess,
-  type OuterContainedTurnRuntimeSecurityAuthority,
 } from "@agent-teams/agent-execution/composition";
 import {
   PRODUCT_QUALIFICATION_REGISTRY,
@@ -31,15 +27,14 @@ import {
   snapshotContainedTurnProviderSelection,
   type ContainedTurnProviderSelectionSnapshot,
 } from "./contained-turn-provider-selection.js";
+import {
+  captureContainedTurnCurrentAuthority,
+  snapshotContainedTurnAuthority,
+  type ContainedTurnAuthorityDependencies,
+} from "./contained-turn-current-authority.js";
 
-export interface ContainedTurnOuterCompositionDependencies
-  extends Omit<ContainedTurnFeatureDependencies, "providerAccess" | "security"> {
-  readonly providerAccess: OuterContainedTurnProviderAccess;
-  readonly security: Readonly<{
-    dispatchAuthorityV1: OuterContainedTurnRuntimeSecurityAuthority;
-    legacy: Pick<ContainedTurnFeatureDependencies["security"], "authorizeForAcceptance" | "revalidateForDispatch">;
-  }>;
-}
+export type ContainedTurnOuterCompositionDependencies =
+  Omit<ContainedTurnFeatureDependencies, "providerAccess" | "security"> & ContainedTurnAuthorityDependencies;
 
 type HostCustodyAuthority = CreateCodexCurrentKernelOwnerOptions["hostCustody"] &
   CreateClaudeCurrentKernelOwnerOptions["hostCustody"];
@@ -54,8 +49,9 @@ export type ContainedTurnHostProviderSelection =
     readonly owner: Omit<CreateCodexCurrentKernelOwnerOptions, "hostCustody">;
   }>;
 
-export interface HostCustodiedContainedTurnDependencies
-  extends Omit<ContainedTurnOuterCompositionDependencies, "custody" | "provider"> {
+export type HostCustodiedContainedTurnDependencies =
+  Omit<ContainedTurnFeatureDependencies, "custody" | "provider" | "providerAccess" | "security"> &
+  ContainedTurnAuthorityDependencies & {
   /** One operation-scoped authority shared by the custody and provider adapters. */
   readonly hostCustody: HostCustodyAuthority;
   readonly selectedProvider: ContainedTurnHostProviderSelection;
@@ -69,7 +65,7 @@ export interface HostCustodiedContainedTurnDependencies
   readonly routeEnforcement?: ContainedTurnRouteEnforcementCapability;
   /** Trusted private deployment composition only; never read from workspace configuration. */
   readonly linuxCodex?: LinuxCodexContainedTurnResources;
-}
+};
 
 export interface HostCustodiedContainedTurnComposition {
   readonly feature: ContainedTurnCapabilityBundle;
@@ -132,8 +128,6 @@ type NodeUtilTypes = Readonly<{ isProxy(value: unknown): boolean }>;
 const trustedIsProxy = (process.getBuiltinModule("node:util") as Readonly<{ types: NodeUtilTypes }>).types.isProxy;
 
 const invalidProviderOwner = (): TypeError => new TypeError("Contained turn provider owner is invalid");
-const invalidProviderAccessDependency = (): TypeError =>
-  new TypeError("Contained turn Provider Access dependency is invalid");
 
 const isExactProviderOwnerRecord = (value: unknown): value is object => {
   if (value === null || typeof value !== "object" || trustedIsProxy(value) ||
@@ -186,25 +180,6 @@ const captureProviderOwner = (
   }
 };
 
-const captureProviderAccessDependency = (
-  dependencies: ContainedTurnOuterCompositionDependencies,
-): ContainedTurnProviderAccessPort => {
-  let owner: OuterContainedTurnProviderAccess;
-  try {
-    if (trustedIsProxy(dependencies)) {
-      throw invalidProviderAccessDependency();
-    }
-    const descriptor = trustedGetOwnPropertyDescriptor(dependencies, "providerAccess");
-    if (descriptor === undefined || !("value" in descriptor)) {
-      throw invalidProviderAccessDependency();
-    }
-    owner = descriptor.value as OuterContainedTurnProviderAccess;
-  } catch {
-    throw invalidProviderAccessDependency();
-  }
-  return createContainedTurnProviderAccessPort(owner);
-};
-
 const createSelectedProviderOwner = (
   snapshot: ContainedTurnProviderSelectionSnapshot,
   hostCustody: HostCustodyAuthority,
@@ -232,12 +207,16 @@ export const createContainedTurnFeatureFromProviderAccess = (
 ): ContainedTurnCapabilityBundle => {
   // Product composition gates unqualified candidates before this exact seven-port
   // binding. Candidate evidence still closes Route C before publishing a handle.
-  const providerAccess = captureProviderAccessDependency(dependencies);
+  const {selection, providerAccess: capturedAccess} = snapshotContainedTurnAuthority(dependencies);
+  const {providerAccess, security} = selection.authority === "current"
+    ? captureContainedTurnCurrentAuthority(selection, capturedAccess)
+    : {
+      providerAccess: capturedAccess,
+      security: createContainedTurnRuntimeSecurityPort(selection.security.legacy, selection.security.dispatchAuthorityV1),
+    };
   return createContainedTurnFeature(Object.freeze({
     operationStore: dependencies.operationStore,
-    security: createContainedTurnRuntimeSecurityPort(
-      dependencies.security.legacy, dependencies.security.dispatchAuthorityV1,
-    ),
+    security,
     providerAccess,
     workspace: dependencies.workspace,
     artifacts: dependencies.artifacts,
@@ -252,12 +231,10 @@ export const composeHostCustodiedContainedTurn = (
   ownerFactories: ContainedTurnProviderOwnerFactories,
   featureFactory: typeof createContainedTurnFeatureFromProviderAccess,
 ): HostCustodiedContainedTurnComposition => {
-  // Fail closed on Provider Access before the selected owner is constructed; the
-  // resulting port is discarded here and rebuilt once inside featureFactory so the
-  // raw dependency, not this validation-only port, is what featureFactory captures.
-  captureProviderAccessDependency(
-    dependencies as unknown as ContainedTurnOuterCompositionDependencies,
-  );
+  // Preserve early Provider Access validation before constructing the provider.
+  // Forward the captured selection; featureFactory binds its own owner ports
+  // inside the existing construction cleanup boundary.
+  const {selection: authority} = snapshotContainedTurnAuthority(dependencies);
   const selectedProvider = snapshotContainedTurnProviderSelection(dependencies);
   const owner = createSelectedProviderOwner(
     selectedProvider, dependencies.hostCustody, ownerFactories,
@@ -266,8 +243,7 @@ export const composeHostCustodiedContainedTurn = (
   try {
     feature = featureFactory(Object.freeze({
       operationStore: dependencies.operationStore,
-      security: dependencies.security,
-      providerAccess: dependencies.providerAccess,
+      ...authority,
       workspace: dependencies.workspace,
       artifacts: dependencies.artifacts,
       custody: owner.custody,
