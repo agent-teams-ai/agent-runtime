@@ -19,7 +19,7 @@ export const projectLiveNativeStart = (snapshot: unknown) => {
     typeof v === "string" && phases.some(p => p === v);
   if (!validPhase(phase) || !(lastCompleted === null || validPhase(lastCompleted)) ||
       !(failingPhase === null || validPhase(failingPhase)) || typeof cutoff !== "boolean" ||
-      !(errorCode === null || errorCode === "native-start-rejected")) {return undefined;}
+      !(errorCode === null || errorCode === "native-start-rejected")) {return;}
   return Object.freeze({phase, lastCompleted, failingPhase, cutoff, errorCode});
 };
 
