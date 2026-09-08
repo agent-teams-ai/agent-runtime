@@ -186,10 +186,12 @@ for (const spawnMode of ["eager", "sdk-delegated"] as const) {
         assert.throws(() => fixture.custody.start(reserved.custodyRef, {
           arguments: fixture.plan.arguments,
           command: fixture.plan.executablePath,
-          cwd: fixture.workspaceRef,
+          // Strict Linux delegated starts name the guardian's workspace descriptor.
+          cwd: "/proc/self/fd/4",
           environment: fixture.plan.environment,
           signal: new AbortController().signal,
-        }), HostCustodyLaunchRejectedError);
+        }), (error: unknown) =>
+          error instanceof HostCustodyLaunchRejectedError && error.code === "authority-verification-failed");
       }
       const contained = await fixture.custody.requestContainment(input);
       assert.equal(contained.kind, "contained");
