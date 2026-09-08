@@ -3,6 +3,9 @@ import {mkdtemp, realpath, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {test} from "node:test";
+import {decodeBytes} from "./run-linux-codex-live-canary.mjs";
+import {NodeTlsHttpEgressTransport} from "../../../../contexts/agent-execution/dist/composition.js";
+import {captureLinuxCodexDeploymentData} from "../../dist/composition/linux-codex-deployment-authority.js";
 import {bindContainedTurnCapabilityAuthority} from "../../dist/composition/contained-turn-authority-capability.js";
 import {NodeUnixSocketDockerEngine} from
   "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-composition.js";
@@ -23,7 +26,10 @@ test("actual canary constructs Host access authority and engine while preserving
       const {workspaceSourceRoot: _workspace, privateRootSourceRoot: _private,
         allowedEnvironmentKeys: _environment, cpuNanoCpus: _cpu, memoryBytes: _memory,
         pidsLimit: _pids, tmpfsBytes: _tmpfs, writableLayerBytes: _layer, ...enginePolicy} = policy(parent);
-      const {approval, configuration} = createLinuxCodexLiveCanaryConfiguration({
+      const trustedCa = decodeBytes(JSON.parse(JSON.stringify({encoding: "base64",
+        data: Buffer.from(SYNTHETIC_LOOPBACK_CA).toString("base64")})));
+      assert.equal(Object.getPrototypeOf(trustedCa), Uint8Array.prototype);
+      const approved = {
         approvedIntent: "write-one-marker-and-return-it/v1", testId: "engine-env",
         commandId: "command:engine-env", deploymentId: "deployment:synthetic",
         deploymentIncarnation: "incarnation:synthetic", markerFile: "marker.txt", marker: "synthetic",
@@ -33,7 +39,8 @@ test("actual canary constructs Host access authority and engine while preserving
           credentialGeneration: 1, projectId: "project:synthetic", provider: "codex",
           providerAccountRef: "account:synthetic", providerRouteRef: "route:synthetic", revocation: "active",
           scopeDigest: "scope:synthetic", tenantId: "tenant:synthetic"},
-      }, {
+      } satisfies Parameters<typeof createLinuxCodexLiveCanaryConfiguration>[0];
+      const pins = {
         sourceRevision: "b74acfc338655cc3731d0756f0c5d5d3c13108e6",
         hostBootId: "host-boot:synthetic", hostInstanceId: "host-instance:synthetic",
         testParent: parent, enginePolicy,
@@ -49,8 +56,29 @@ test("actual canary constructs Host access authority and engine while preserving
             sha256: "e54bf7263a01b3ccc48a0b401a48eb14be60ce27520edd2bd865d04e3f04674c"},
         },
         native: {catalogSource: Buffer.from("{}"), ownerUid: 1000, ownerGid: 1000},
-        observerSha256: "c".repeat(64), certificateAuthorities: [SYNTHETIC_LOOPBACK_CA],
-      });
+        observerSha256: "c".repeat(64), certificateAuthorities: [trustedCa],
+      } satisfies Parameters<typeof createLinuxCodexLiveCanaryConfiguration>[1];
+      const {approval, configuration} = createLinuxCodexLiveCanaryConfiguration(approved, pins);
+      const originalDigest = new NodeTlsHttpEgressTransport({...configuration.deployment.transport,
+        certificateAuthorities: [trustedCa]}).tlsPolicyDigest;
+      const snapshot = captureLinuxCodexDeploymentData(configuration.deployment.transport);
+      assert.deepEqual(snapshot.certificateAuthorities, [SYNTHETIC_LOOPBACK_CA]);
+      assert.ok(Object.isFrozen(configuration.deployment.transport.certificateAuthorities));
+      assert.ok(Object.isFrozen(snapshot.certificateAuthorities));
+      assert.equal(new NodeTlsHttpEgressTransport(snapshot).tlsPolicyDigest, originalDigest);
+      assert.equal(approval.egressRule.tlsPolicyDigest, originalDigest);
+      assert.throws(() => captureLinuxCodexDeploymentData({...snapshot, certificateAuthorities: [trustedCa]}),
+        {name: "TypeError", message: "Linux Codex acknowledged deployment authority unavailable"});
+      assert.throws(() => captureLinuxCodexDeploymentData({unsupported: new Uint8Array([1])}),
+        {name: "TypeError", message: "Linux Codex acknowledged deployment authority unavailable"});
+      for (const certificateAuthorities of [[], [new Uint8Array([0xff])],
+        [Buffer.from("not a certificate")], ["not a certificate"],
+        [Buffer.concat([Buffer.from(SYNTHETIC_LOOPBACK_CA), Buffer.from([0xff])])]]) {
+        assert.throws(() => createLinuxCodexLiveCanaryConfiguration(approved, {...pins, certificateAuthorities}));
+      }
+      trustedCa.fill(0);
+      assert.equal(new NodeTlsHttpEgressTransport(snapshot).tlsPolicyDigest, originalDigest);
+      assert.deepEqual(configuration.deployment.transport.certificateAuthorities, [SYNTHETIC_LOOPBACK_CA]);
       const policyRevision = approval.dispatchPolicy.policyRevision;
       assert.match(policyRevision, /^linux-codex-marker-canary:v1:[a-f0-9]{64}$/u);
       assert.equal(approval.intentAuthority.authorityRevision, policyRevision);

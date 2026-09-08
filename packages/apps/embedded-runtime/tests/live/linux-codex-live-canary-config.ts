@@ -185,7 +185,18 @@ export const createLinuxCodexLiveCanaryConfiguration = (
     allowedEnvironmentKeys: ["AR_CUSTODY_INIT_CONFIGURATION"],
     cpuNanoCpus: 1_000_000_000,
     memoryBytes: 1_073_741_824, pidsLimit: 128, tmpfsBytes: 67_108_864, writableLayerBytes: 67_108_864};
-  const transport = {certificateAuthorities: p.certificateAuthorities, connectTimeoutMs: 10_000,
+  // Deployment snapshots accept plain DTOs. Preserve every PEM byte while
+  // projecting decoded JSON byte inputs; the TLS constructor still validates CAs.
+  const certificateAuthorities = Object.freeze(p.certificateAuthorities.map(authority => {
+    if (typeof authority === "string") {return authority;}
+    if (!(authority instanceof Uint8Array)) {throw new TypeError("Canary CA bytes required");}
+    const pem = new TextDecoder("utf-8", {fatal: true, ignoreBOM: true}).decode(authority);
+    if (!Buffer.from(pem, "utf8").equals(authority)) {
+      throw new TypeError("Lossless canary CA PEM required");
+    }
+    return pem;
+  }));
+  const transport = {certificateAuthorities, connectTimeoutMs: 10_000,
     responseIdleTimeoutMs: 30_000, closeTimeoutMs: 2_000};
   // Constructor parses explicit roots and derives the production TLS policy
   // digest. It does not connect. The deployment makes the actual transport.
