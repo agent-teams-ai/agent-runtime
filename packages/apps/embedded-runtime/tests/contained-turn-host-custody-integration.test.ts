@@ -317,8 +317,10 @@ for (const absent of ["route", "nativeFiles", "currentAuthority"] as const) {
       assert.equal(accepted.status, "accepted");
       if (accepted.status !== "accepted") {throw new Error("expected durable acceptance");}
       let observed = await access.containedTurn.observe(accepted.operationId);
-      for (let turn = 0; turn < 100 && !(observed.status === "observed" && observed.turn.status === "reconcile_required"); turn += 1) {
-        await new Promise<void>(resolve => {setImmediate(resolve);});
+      const observationDeadline = performance.now() + 5_000;
+      while (performance.now() < observationDeadline &&
+          !(observed.status === "observed" && observed.turn.status === "reconcile_required")) {
+        await new Promise<void>(resolve => {setTimeout(resolve, 10);});
         observed = await access.containedTurn.observe(accepted.operationId);
       }
       assert.equal(observed.status === "observed" && observed.turn.status, "reconcile_required");
