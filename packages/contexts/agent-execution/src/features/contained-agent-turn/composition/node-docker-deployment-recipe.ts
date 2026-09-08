@@ -182,8 +182,10 @@ export const createNodeDockerDeploymentRecipe = (input: NodeDockerDeploymentReci
         if (!consumptionSettled) {return "pending" as const;}
         try {
           if (published && journal !== undefined && journal.evidence().resourceLedger !== "retired") {
-            if (journal.evidence().reconcileRequired) {return "pending" as const;}
-            await journal.recordIntent(commandId(), {kind: "retired", targetSha256: journal.target("retired")});
+            // Resource retirement may retain reconciliation debt. V4 validates
+            // the required absence observations and persists the tombstone.
+            const retirement = await journal.recordIntent(commandId(), {kind: "retired", targetSha256: journal.target("retired")});
+            if (retirement.kind !== "recorded" || journal.evidence().resourceLedger !== "retired") {return "pending" as const;}
           }
           if (lifecycle !== undefined && await lifecycle.disposeResidue(call) !== "released") {return "pending" as const;}
           await journal?.close();
