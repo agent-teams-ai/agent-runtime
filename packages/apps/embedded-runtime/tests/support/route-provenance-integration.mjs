@@ -34,8 +34,11 @@ stub(new URL('docker-provider-process-entrypoint.js', docker), {
   openNodeLinuxExclusiveRoute: opener.openNodeLinuxExclusiveRoute,
   LinuxExclusiveRouteOpeningError: opener.LinuxExclusiveRouteOpeningError,
   createNodeLinuxDockerResidueCustody: () => ({lifecycle: {}, disposeResidue: async () => 'released'}),
-  NodeDockerCustodyJournalStorage: class {static async open() {return {close: async () => {}};}},
-  HostHttpEgressV4NodeStorage: class {}, HostHttpEgressV4Journal: class {},
+  NodeDockerCustodyJournalStorage: Object.assign(function NodeDockerCustodyJournalStorage() {}, {
+    async open() {return {close: async () => {}};},
+  }),
+  HostHttpEgressV4NodeStorage: function HostHttpEgressV4NodeStorage() {},
+  HostHttpEgressV4Journal: function HostHttpEgressV4Journal() {},
 });
 const capability = await import(new URL('composition/contained-turn-route-enforcement-capability.js', feature));
 stub('@agent-teams/agent-execution/composition', {...capability,
@@ -56,7 +59,7 @@ stub(new URL('linux-codex-deployment-authority.js', app), {...authorityModule,
   createLinuxCodexDeploymentAuthority: () => ({take: kernel => acknowledge(kernel), bind() {}, bindStore() {}, dispose() {}}),
 });
 
-test('deployment selected route retains each operation Engine through closure and historical removal', async () => {
+async function prepareSyntheticRouteEnvironment() {
 const imp = p=>import(new URL(p,docker));
 const {decodeInspection,decodeEngineIdentity}=await imp('engine/docker-engine-codec.js');
 const {NodeUnixSocketDockerEngine}=await imp('engine/node-unix-socket-docker-engine.js');
@@ -98,7 +101,7 @@ console.log('PASS codec: exact wire + authority accepted with operation policy; 
 const calls=[];
 const client={async endpointIdentity(){return endpointIdentity;},async buffered(r){
  assert.equal(r.method,'GET');calls.push(r.path);
- let value;if(r.path==='/v1.47/info')value=fixture.info;
+ let value;if(r.path==='/v1.47/info'){value=fixture.info;}
  else {assert.match(r.path,/^\/v1\.47\/containers\/[a-f0-9]{64}\/json$/);value=wire;}
  return {statusCode:200,contentType:'application/json',body:Buffer.from(JSON.stringify(value))};
 },async stream(){throw Error('unexpected stream');}};
@@ -142,17 +145,33 @@ const containers=new Map([[authority.containerId,wire]]); const inspected=[];
 BoundedUnixHttpClient.prototype.endpointIdentity=client.endpointIdentity;
 BoundedUnixHttpClient.prototype.buffered=async function(r){
  assert.equal(r.method,'GET');
- if(r.path==='/v1.47/info')return {statusCode:200,contentType:'application/json',body:Buffer.from(JSON.stringify(fixture.info))};
+ if(r.path==='/v1.47/info'){return {statusCode:200,contentType:'application/json',body:Buffer.from(JSON.stringify(fixture.info))};}
  const match=/^\/v1\.47\/containers\/([a-f0-9]{64})\/json$/.exec(r.path);assert.ok(match); inspected.push(match[1]);
  const value=containers.get(match[1]);
  return {statusCode:value?200:404,contentType:'application/json',body:Buffer.from(JSON.stringify(value??{message:'No such container'}))};
 };
+return {
+ identityPolicy, pin, cap, bad, good, createNodeDockerDeploymentRecipe, createLinuxCodexDeploymentResources,
+ NodeUnixSocketDockerEngine, f, operationPolicy, operationNetworkName, netBinding, input, encodeCreateRequest,
+ canonicalJsonSha256, containerName, containers, wire, authority, retainDockerNativeBrokerRoute,
+ descriptors, BoundedUnixHttpClient, kernels, inspected,
+};
+}
+
+const subjectOf=b=>Object.fromEntries(['operationId','attemptId','custodyId','executionGenerationId','authorityVectorDigest','hostBootId'].map(k=>[k,b[k]]));
+
+test('deployment selected route retains each operation Engine through closure and historical removal', async () => {
+const {
+ identityPolicy, pin, cap, bad, good, createNodeDockerDeploymentRecipe, createLinuxCodexDeploymentResources,
+ NodeUnixSocketDockerEngine, f, operationPolicy, operationNetworkName, netBinding, input, encodeCreateRequest,
+ canonicalJsonSha256, containerName, containers, wire, authority, retainDockerNativeBrokerRoute,
+ descriptors, BoundedUnixHttpClient, kernels, inspected,
+}=await prepareSyntheticRouteEnvironment();
 const target={provider:'codex',providerAdapter:'adapter:test',binaryClosure:'@openai/codex:0.153.4+linux-x64',platform:`${process.platform}-${process.arch}`,credentialRoute:'route:test',storageTopology:'storage:test',transportTopology:'transport:test',failureDomain:'host:test'};
 const binding={tenantId:'tenant:test',projectId:'project:test',scopeDigest:'scope:test',
  operationId:'operation:test',attemptId:'attempt:test',custodyId:'custody:test',sourceRevision:'849833c00c76f465304f66e013ff8d61e45ff098',
  binaryRevision:target.binaryClosure,hostBootId:'boot:test',executionGenerationId:'generation:test',adapterRevision:target.providerAdapter,capabilityManifestRevision:'manifest:test',authorityVectorDigest:'authority:test',
  providerAccountRef:'account:test',accessRef:'access:test',bindingRevision:3,credentialBindingRef:'credential:test',providerRouteRef:'route:test',routeRevision:'revision:1',credentialBindingDigest:'opaque:test',credentialGeneration:7};
-const subjectOf=b=>Object.fromEntries(['operationId','attemptId','custodyId','executionGenerationId','authorityVectorDigest','hostBootId'].map(k=>[k,b[k]]));
 let nominalInspections=0;
 const mintPolicy=structuredClone(identityPolicy); const mintPin={...pin};
 const gate=cap.createContainedTurnRouteEnforcement({qualificationTarget:target,binding,enginePolicy:mintPolicy,
@@ -220,7 +239,7 @@ assert.equal(descriptors.size,0);
 for(const expected of [authority,secondAuthority]) {
  const own=successful.filter(item=>item.authority.containerId===expected.containerId);
  assert.ok(own.length>=4);assert.equal(new Set(own.map(item=>item.engine)).size,1);
- assert.equal(own.at(-1).existence,'absent');for(const item of own)assert.deepEqual(item.authority,expected);
+ assert.equal(own.at(-1).existence,'absent');for(const item of own){assert.deepEqual(item.authority,expected);}
 }
 assert.notEqual(successful.find(item=>item.authority.containerId===authority.containerId).engine,
  successful.find(item=>item.authority.containerId===secondAuthority.containerId).engine);
@@ -230,7 +249,7 @@ await racingRecipe.preparation.engineIdentity(f.call());racingRecipe.preparation
 containers.set(authority.containerId,{...wire,State:{...wire.State,Pid:4244}});
 const beforeRace=BoundedUnixHttpClient.prototype.buffered;let racingCleanup;
 BoundedUnixHttpClient.prototype.buffered=async function(r){
- if(r.path.includes('/containers/') && racingCleanup===undefined)racingCleanup=racingRecipe.releaseAfterHostCleanup(f.call());
+ if(r.path.includes('/containers/') && racingCleanup===undefined){racingCleanup=racingRecipe.releaseAfterHostCleanup(f.call());}
  return beforeRace.call(this,r);
 };
 const racingAdmission=cap.readContainedTurnSelectedRouteAdmission(racingSelected.route);

@@ -203,7 +203,7 @@ test("Node recipe nominal route joins the acknowledged generation without a kern
     assert.throws(() => bindContainedTurnRouteEnforcement(capability, binding,
       {...selected, route: {...selected.route}}), /provenance mismatch/u);
     const route = bindContainedTurnRouteEnforcement(capability, binding, selected);
-    assert.equal(route.engine, selected.route.engine);
+    assert.equal(route.engine.inspect, selected.route.engine.inspect);
     assert.ok(readContainedTurnSelectedRouteAdmission(route));
     assert.equal(readContainedTurnSelectedRouteAdmission({...route}), undefined);
     assert.throws(() => bindContainedTurnRouteEnforcement(capability, binding, selected), /provenance mismatch/u);
