@@ -329,17 +329,17 @@ const createResourceCleanup = (
     if (resources.routeAttempted && containerAbsent) {
       proven = await releaseRoute() && proven;
     }
-    // Aggregate resource release includes journal retirement. Its debt must
-    // remain pending even when the existing listener observer independently
-    // proves physical closure and permits the network owner's guarded cleanup.
+    // Only the resource owner can separate journal debt from deployment debt.
+    // Physical listener readback remains necessary but cannot authorize release.
     if (!Number.isSafeInteger(observationDeadline) || Date.now() >= observationDeadline) {return false;}
-    const released = resources.product === undefined || await resources.product
-      .cleanupResources(Math.min(observationDeadline, Date.now() + cleanupMs)).catch(() => false);
-    proven = released && proven;
+    const released = resources.product === undefined ? {released: true, dependenciesReleased: true} : await resources.product
+      .cleanupResourceOutcome(Math.min(observationDeadline, Date.now() + cleanupMs))
+      .catch(() => ({released: false, dependenciesReleased: false}));
+    proven = released.released && proven;
     const listenerAbsent = await proveListenerAbsent();
     proven = listenerAbsent && proven;
     if (resources.networkAttempted) {
-      if (!listenerAbsent) {return false;}
+      if (!released.dependenciesReleased || !listenerAbsent) {return false;}
       if (Date.now() >= observationDeadline) {return false;}
       const removed = await resources.network?.cleanupNetwork().catch(() => "unknown" as const);
       proven = removed === "absent" && proven;

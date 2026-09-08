@@ -172,6 +172,7 @@ export const createDockerHostHttpResources = (input: Readonly<{
     },
     observeContainer: (...args: Parameters<DockerOperationNetworkOwner["observeContainer"]>) => network.observeContainer(...args),
     cleanupResources: (deadlineEpochMs: number) => {cutoff(); return host.cleanup(deadlineEpochMs);},
+    cleanupResourceOutcome: (deadlineEpochMs: number) => {cutoff(); return host.cleanupOutcome(deadlineEpochMs);},
     cleanupNetwork: () => {cutoff(); return network.cleanupNetwork();},
   });
 };

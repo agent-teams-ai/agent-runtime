@@ -68,6 +68,7 @@ export class NodeCustodyHttpResources {
   #entered = false;
   #cut = false;
   #uncertain = false;
+  #journalUncertain = false;
   #listenerOwned = false;
   #listener: NodeHostHttpListener | undefined;
   #journal: PreparedHostHttpConsumptionJournal | undefined;
@@ -168,22 +169,22 @@ export class NodeCustodyHttpResources {
     if (this.#cut) {return;}
     try {
       const prepared = await this.#input!.consumption.prepare();
-      if (prepared.kind !== "ready") {this.#uncertain = true; this.cutoff(); return;}
+      if (prepared.kind !== "ready") {this.#journalUncertain = true; this.cutoff(); return;}
       this.#journal = prepared;
       if (this.#cut) {this.#quarantineJournal();}
-    } catch {this.#uncertain = true; this.cutoff();}
+    } catch {this.#journalUncertain = true; this.cutoff();}
   }
 
   #quarantineJournal(): void {
     if (this.#journal === undefined || this.#retirement !== undefined) {return;}
     const completion = Promise.withResolvers<void>();
     this.#retirement = completion.promise;
-    try {this.#journal.quarantine();} catch {this.#uncertain = true;}
+    try {this.#journal.quarantine();} catch {this.#journalUncertain = true;}
     // Own retirement before calling it, including synchronous failures/reentrancy.
     try {
       void this.#journal.retire().then(result => {this.#journalRetired = result === "retired"; return this.#journalRetired;},
-        () => {this.#uncertain = true;}).finally(() => completion.resolve());
-    } catch {this.#uncertain = true; completion.resolve();}
+        () => {this.#journalUncertain = true;}).finally(() => completion.resolve());
+    } catch {this.#journalUncertain = true; completion.resolve();}
   }
 
   public cutoff(): void {
@@ -195,6 +196,14 @@ export class NodeCustodyHttpResources {
     try {this.#input?.listener.sealAdmission();} catch {this.#uncertain = true;}
     this.#quarantineJournal();
     this.#reservation.cutoff();
+  }
+
+  /** Private owner outcome: native readback cannot discharge deployment debt.
+   * Journal retirement remains part of aggregate release only. */
+  public async cleanupOutcome(): Promise<Readonly<{released: boolean; dependenciesReleased: boolean}>> {
+    const released = await this.cleanup();
+    return Object.freeze({released, dependenciesReleased: !this.#uncertain && !this.#binding &&
+      (!this.#listenerOwned || this.#listenerClosed)});
   }
 
   public cleanup(): Promise<boolean> {
@@ -231,7 +240,7 @@ export class NodeCustodyHttpResources {
     await this.#listenerCleanup;
     // Unknown closure keeps the same recipe reachable for a later bounded retry.
     if (!this.#listenerClosed) {this.#listenerCleanup = undefined;}
-    return !this.#uncertain && !this.#binding && (!this.#listenerOwned || this.#listenerClosed) &&
+    return !this.#uncertain && !this.#journalUncertain && !this.#binding && (!this.#listenerOwned || this.#listenerClosed) &&
       (this.#journal === undefined || this.#journalRetired);
   }
 }
