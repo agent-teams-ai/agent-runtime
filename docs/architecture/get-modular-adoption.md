@@ -122,8 +122,8 @@ following bounded transition contract:
    Broader L1 retains its two-of-three rule; L2-L5 remain no-go.
 
 The retained [current adoption capture](../spikes/runtime-setup-assembly-adoption-evidence.json)
-records source `7fcabfce2e6811ef05961c2b72ced6891f8b74a3` and 406 passing
-embedded-runtime tests with zero skips. The checker authenticates its package
+records its exact source revision and complete zero-skip embedded-runtime
+test result. The checker authenticates its package
 closure against current inputs; a later unrelated commit does not fabricate a
 new capture or change historical HOLD verdicts.
 
