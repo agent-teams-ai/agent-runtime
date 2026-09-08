@@ -31,6 +31,18 @@ export const initializePostgresHttpEgressEvidence = async (pool: Pool): Promise<
       throw new Error("HTTP evidence schema fence mismatch");
     }
     await query("SELECT canonical_receipt FROM host_http_egress.receipt LIMIT 0");
+    // Match PostgreSQL's column arbiter inference: INCLUDE columns are allowed,
+    // but partial, expression and multi-key indexes cannot arbitrate this insert.
+    // A matching deferred index also makes ON CONFLICT unusable, even if another
+    // matching immediate index exists. Never repair an incompatible schema.
+    const uniqueness = await query(`SELECT 1 FROM pg_index i
+      JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+      WHERE i.indrelid = 'host_http_egress.receipt'::regclass
+        AND a.attname = 'receipt_key' AND NOT a.attisdropped
+        AND i.indisunique AND i.indisvalid AND i.indnkeyatts = 1
+        AND i.indexprs IS NULL AND i.indpred IS NULL
+      HAVING bool_and(i.indimmediate) AND bool_or(i.indisready AND i.indislive)`);
+    if (uniqueness.rows.length !== 1) {throw new Error("HTTP evidence receipt_key uniqueness mismatch");}
   });
 };
 
@@ -66,7 +78,7 @@ export class PostgresHttpEgressEvidence implements HttpEgressEvidence {
         }
         await query(`INSERT INTO host_http_egress.receipt
           (tenant_id, project_id, deployment_id, operation_id, attempt_id, request_id, canonical_receipt, receipt_key)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING`, [...key, canonical, keyDigest]);
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (receipt_key) DO NOTHING`, [...key, canonical, keyDigest]);
         // Separate READ COMMITTED statement sees the winner after unique-index waiting.
         const stored = await query(`SELECT canonical_receipt FROM host_http_egress.receipt WHERE
           tenant_id=$1 AND project_id=$2 AND deployment_id=$3 AND operation_id=$4 AND attempt_id=$5 AND request_id=$6 AND receipt_key=$7`, [...key, keyDigest]);

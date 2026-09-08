@@ -14,9 +14,10 @@ const receipt = () => ({schema: "agent-runtime.host-http-egress-receipt/v1" as c
 const fakePool = () => {
   const rows = new Map<string, string>();
   const calls: string[] = []; const releases: boolean[] = [];
-  let loseCommit = false; let failRead = false; let format = HTTP_EVIDENCE_FENCE;
+  let loseCommit = false; let failRead = false; let unique = true; let format = HTTP_EVIDENCE_FENCE;
   const pool = {connect: async () => ({query: async (sql: string, values: unknown[] = []) => {
     calls.push(sql);
+    if (sql.includes("FROM pg_index")) {return {rows: unique ? [{"?column?": 1}] : []};}
     if (sql.includes("SELECT version")) {return {rows: [{version: 1, format}]};}
     const key = JSON.stringify(values.slice(0, 6));
     if (sql.includes("INSERT INTO host_http_egress.receipt") && !rows.has(key)) {rows.set(key, values[6] as string);}
@@ -28,8 +29,22 @@ const fakePool = () => {
     return {rows: []};
   }, release: (destroy: boolean) => releases.push(destroy)})} as unknown as Pool;
   return {pool, rows, calls, releases, loseCommit: () => {loseCommit = true;},
-    failRead: () => {failRead = true;}, wrongFence: () => {format = "other";}};
+    failRead: () => {failRead = true;}, missingUniqueness: () => {unique = false;}, wrongFence: () => {format = "other";}};
 };
+
+test("initialization rejects missing usable uniqueness without repair", async () => {
+  const fake = fakePool();
+  await initializePostgresHttpEgressEvidence(fake.pool);
+  fake.missingUniqueness(); fake.calls.length = 0;
+  // Model an existing schema so initialization must only inspect it.
+  const pool = {connect: async () => {
+    const client = await fake.pool.connect();
+    return {release: (destroy: boolean) => client.release(destroy), query: (sql: string, values?: unknown[]) =>
+      sql.includes("FROM pg_namespace") ? Promise.resolve({rows: [{exists: 1}]}) : client.query(sql, values)};
+  }} as unknown as Pool;
+  await assert.rejects(initializePostgresHttpEgressEvidence(pool), /receipt_key uniqueness mismatch/);
+  assert.equal(fake.calls.some(sql => /CREATE|ALTER|INSERT|UPDATE|DELETE/.test(sql)), false);
+});
 
 test("constructor is inert, snapshots scope, and digest hashes concatenated bytes without framing", async () => {
   const fake = fakePool(); const mutable = {...scope}; const owner = new PostgresHttpEgressEvidence(fake.pool, mutable);
@@ -51,6 +66,9 @@ test("complete canonical replay ignores field order and conflicts on changed evi
     assert.equal(await owner.record({...original, ...change} as typeof original), "conflict");
   }
   assert.equal(fake.rows.size, 1);
+  const inserts = fake.calls.filter(sql => sql.includes("INSERT INTO host_http_egress.receipt"));
+  assert.ok(inserts.length > 0);
+  for (const sql of inserts) {assert.match(sql, /ON CONFLICT \(receipt_key\) DO NOTHING/);}
 });
 
 test("rejects accessors, proxies, unknown fields, raw payload and unsafe values before I/O", async () => {
@@ -159,6 +177,33 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
       assert.equal(await reloaded.record({...ambiguous, anomalyCode: "evidence_ack_lost"}), "conflict");
       const stored = await fresh.query("SELECT canonical_receipt FROM host_http_egress.receipt WHERE request_id='ambiguous'");
       assert.deepEqual(JSON.parse(stored.rows[0].canonical_receipt), ambiguous);
+      const before = await fresh.query("SELECT * FROM host_http_egress.receipt ORDER BY receipt_key");
+      const fenceBefore = await fresh.query("SELECT * FROM host_http_egress.version_fence");
+      await fresh.query("ALTER TABLE host_http_egress.receipt DROP CONSTRAINT receipt_pkey");
+      await assert.rejects(initializePostgresHttpEgressEvidence(fresh), /receipt_key uniqueness mismatch/);
+      const unfenced = {...receipt(), requestId: "missing-uniqueness"};
+      assert.deepEqual(await Promise.all(Array.from({length: 6}, (_, inboundRequestBytes) =>
+        reloaded.record({...unfenced, inboundRequestBytes}))), Array(6).fill("unknown"));
+      assert.equal(await reloaded.record(ambiguous), "unknown", "existing data cannot bypass the missing arbiter");
+      assert.deepEqual((await fresh.query("SELECT * FROM host_http_egress.receipt ORDER BY receipt_key")).rows, before.rows);
+      assert.deepEqual((await fresh.query("SELECT * FROM host_http_egress.version_fence")).rows, fenceBefore.rows);
+      // Only this disposable test performs DDL. Initialization must reject indexes
+      // that cannot arbitrate the exact target, and accept independent INCLUDE indexes.
+      for (const definition of ["(receipt_key) WHERE request_id = 'partial'", "(lower(receipt_key))",
+        "(receipt_key, request_id)"]) {
+        await fresh.query(`CREATE UNIQUE INDEX receipt_test_unique ON host_http_egress.receipt ${definition}`);
+        await assert.rejects(initializePostgresHttpEgressEvidence(fresh), /receipt_key uniqueness mismatch/);
+        await fresh.query("DROP INDEX host_http_egress.receipt_test_unique");
+      }
+      await fresh.query("CREATE UNIQUE INDEX receipt_test_unique ON host_http_egress.receipt (receipt_key) INCLUDE (request_id)");
+      await initializePostgresHttpEgressEvidence(fresh);
+      assert.equal(await reloaded.record(ambiguous), "recorded");
+      await fresh.query("ALTER TABLE host_http_egress.receipt ADD CONSTRAINT receipt_deferred UNIQUE (receipt_key) DEFERRABLE");
+      await assert.rejects(initializePostgresHttpEgressEvidence(fresh), /receipt_key uniqueness mismatch/);
+      assert.equal(await reloaded.record(unfenced), "unknown");
+      await fresh.query("ALTER TABLE host_http_egress.receipt DROP CONSTRAINT receipt_deferred");
+      await initializePostgresHttpEgressEvidence(fresh);
+      assert.deepEqual((await fresh.query("SELECT * FROM host_http_egress.receipt ORDER BY receipt_key")).rows, before.rows);
       await fresh.query("UPDATE host_http_egress.version_fence SET version=2");
       assert.equal(await reloaded.record(receipt()), "unknown");
       await assert.rejects(initializePostgresHttpEgressEvidence(fresh), /fence mismatch/);
