@@ -6,7 +6,7 @@ import type { createNodeHostHttpConsumptionJournal, PreparedHostHttpConsumptionJ
 import { prepareAuthenticatedHostHttpEgressSession, type HostHttpEgressSessionDependencies } from "./egress/host-http-egress-session.js";
 import { createHostHttpLocalCutOwner, type HostHttpLocalCutInput } from "./egress/host-http-local-cut-owner.js";
 
-type ListenerRecipe = ReturnType<typeof createNodeHostHttpListener>;
+type ListenerRecipe = Omit<ReturnType<typeof createNodeHostHttpListener>, "settleAccepted">;
 type ConsumptionRecipe = ReturnType<typeof createNodeHostHttpConsumptionJournal>;
 type Ingress = ReturnType<typeof prepareAuthenticatedHostHttpEgressSession>;
 type Session = ReturnType<Ingress["bind"]>;

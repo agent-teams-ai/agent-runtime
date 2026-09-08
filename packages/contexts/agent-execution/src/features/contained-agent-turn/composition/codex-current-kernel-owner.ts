@@ -1,6 +1,6 @@
 import { capturePostClaimPreparation } from "./host-post-claim-preparation.js";
 import type { ContainedTurnProviderBinding } from "../contracts/contained-agent-turn.js";
-import type { ContainedTurnKernelProviderPort } from "../application/ports/outbound/contained-turn-ports.js";
+import type { ContainedTurnKernelProviderPort, ContainedTurnKernelCustodyPort } from "../application/ports/outbound/contained-turn-ports.js";
 import { createCodexAppServerLaunchPlan, createCodexAppServerFinalizableLaunchPlan, isIssuedCodexAppServerLaunchPlan } from "../adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
 import type { CodexAppServerPermissionBoundary } from "../adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
 import {
@@ -78,7 +78,7 @@ export interface CreateCodexCurrentKernelOwnerOptions {
   readonly workspaceOwner: ContainedTurnKernelWorkspaceOwner;
 }
 export interface CodexCurrentKernelOwner {
-  readonly custody: ContainedTurnKernelCustodyAdapter;
+  readonly custody: ContainedTurnKernelCustodyPort;
   readonly provider: ContainedTurnKernelProviderPort;
   dispose(): void;
 }

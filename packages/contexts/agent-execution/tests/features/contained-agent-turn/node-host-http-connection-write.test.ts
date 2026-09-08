@@ -386,3 +386,21 @@ for (const fault of ["end throws", "close hadError", "surplus at close"] as cons
     assert.equal(f.signal.aborted, true);
   });
 }
+
+test("operation cutoff between response completion and peer FIN retains uncertain HTTP closure", async () => {
+  const socket = new SyntheticSocket();
+  socket.autoClose = false;
+  const f = await ready(socket);
+  await f.connection.write(encode("complete response"));
+  const closing = f.connection.close("complete");
+  await flush();
+  assert.equal(socket.endCalls, 1);
+  assert.equal(socket.writableFinished, true);
+  assert.equal(socket.readableEnded, false);
+  f.cutoff.abort();
+  assert.equal(socket.destroyCalls, 1);
+  socket.peerEnd();
+  socket.actualClose();
+  assert.equal((await closing).state, "unknown");
+  assert.equal(f.clock.pending, 0);
+});

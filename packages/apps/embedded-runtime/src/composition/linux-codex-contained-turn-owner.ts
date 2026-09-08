@@ -62,14 +62,18 @@ const joinedHttpResources = (
   selected: OperationSelection,
   kernel: Parameters<DockerOptions["preparation"]>[0]["kernel"],
   finalizer: Finalizer,
-): DockerLinuxPostClaimDependencies["resources"] => {
+): Readonly<{resources: DockerLinuxPostClaimDependencies["resources"]; settle(): Promise<void>; isSettled(): boolean}> => {
   const {broker, connection} = selected;
   const httpResources = selected.preparation.resources;
   let address: string | undefined;
-  return Object.freeze({...httpResources,
+  let retainedListener: ReturnType<typeof createNodeHostHttpListener> | undefined;
+  let requestDebt = false;
+  const resources: DockerLinuxPostClaimDependencies["resources"] = Object.freeze({...httpResources,
     listenerFor(host: string) {
       const listener = createNodeHostHttpListener({host, deadline: connection.limits.deadline,
         closureDeadline: connection.limits.closureDeadline}, broker.clock);
+      if (retainedListener !== undefined) {throw new TypeError("Docker HTTP listener already selected");}
+      retainedListener = listener;
       return Object.freeze({...listener, async open(...args: Parameters<typeof listener.open>) {
         const opened = await listener.open(...args);
         address = `${opened.address.address}:${opened.address.port}`;
@@ -85,11 +89,20 @@ const joinedHttpResources = (
           path: "/backend-api/codex/responses", host: address});
         const bound = createNodeHostHttpConnection({...connection, expectedRequest}, broker.clock)
           .bindAcceptedSocket(socket, cutoff);
-        await finalizer.execute({operationId: kernel.operationId, attemptId: kernel.attemptId,
+        const receipt = await finalizer.execute({operationId: kernel.operationId, attemptId: kernel.attemptId,
           expectedRequest, limits: connection.limits, ...bound});
-      } finally {hostHttpAbortOperations.remove(subscription); hostHttpAbortOperations.abort(cutoff);}
+        requestDebt ||= receipt.outcome === "reconcile_required";
+      } catch (error) {requestDebt = true; throw error;} finally {hostHttpAbortOperations.remove(subscription); hostHttpAbortOperations.abort(cutoff);}
     },
   });
+  return Object.freeze({resources, isSettled() {
+    return retainedListener !== undefined && !requestDebt && !retainedListener.observe().consumerWorkPending;
+  }, async settle() {
+    // The listener joins accepted callbacks, including receipt accounting above,
+    // before ordinary provider completion can initiate physical containment.
+    const settlement = await retainedListener?.settleAccepted();
+    if (settlement?.state !== "settled") {requestDebt = true;}
+  }});
 };
 
 const validateBrokerBinding = (
@@ -155,7 +168,7 @@ export const createLinuxCodexContainedTurnOwner = (
     return missing("cleanup-deadline");
   }
   const select = resources.select.bind(supplied);
-  const retained = new Map<string, Readonly<{finalizer: Finalizer; dispose(): void}>>();
+  const retained = new Map<string, Readonly<{finalizer: Finalizer; settle(): Promise<void>; isSettled(): boolean; dispose(): void}>>();
   const owner = createDockerCodexHostKernelOwner({
     hostBootId: options.hostBootId, hostInstanceId: options.hostInstanceId,
     workspaceOwner: options.workspaceOwner, launchRecords: options.launchRecords,
@@ -177,14 +190,15 @@ export const createLinuxCodexContainedTurnOwner = (
           method: "POST", path: "/backend-api/codex/responses", host: "unbound"}}, broker.clock);
         const finalizer = createDockerCodexNativeBrokerFinalizer({session, nativeFiles: selected.nativeFiles,
           routeAdmission: createDockerLinuxExclusiveRouteAdmission(route)});
+        const http = joinedHttpResources({...selected, broker, connection}, input.kernel, finalizer);
         const ownedSigner = signer; const ownedAuthorities = authorities;
-        retained.set(input.kernel.custodyId, Object.freeze({finalizer, dispose() {
+        retained.set(input.kernel.custodyId, Object.freeze({finalizer, settle: http.settle, isSettled: http.isSettled, dispose() {
           try {finalizer.cutoff();} finally {
             try {ownedAuthorities.dispose();} finally {try {ownedSigner.dispose();} finally {current.dispose();}}
           }
         }}));
         return Object.freeze({...preparation, routeAdmission: finalizer.routeAdmission,
-          resources: joinedHttpResources({...selected, broker, connection}, input.kernel, finalizer)});
+          resources: http.resources});
       } catch (error) {
         try {authorities?.dispose();} finally {try {signer?.dispose();} finally {current.dispose();}}
         throw error;
@@ -196,7 +210,43 @@ export const createLinuxCodexContainedTurnOwner = (
       return joined.finalizer.finishClaimed(input);
     },
   });
-  return Object.freeze({custody: owner.custody, provider: owner.provider, dispose() {
+  const provider: typeof owner.provider = Object.freeze({...owner.provider, async execute(input: Parameters<typeof owner.provider.execute>[0]) {
+    const result = await owner.provider.execute(input);
+    if (result.kind === "completed" && result.outcome !== "cancelled") {
+      const joined = retained.get(input.custodyId);
+      if (joined === undefined) {return missing("retained-http-settlement");}
+      await joined.settle();
+    }
+    return result;
+  }});
+  const underlying = owner.custody;
+  const requireHttpSettlement = (custodyId: string) => {
+    if (retained.get(custodyId)?.isSettled() !== true) {
+      throw new TypeError("Docker HTTP request settlement is unproven");
+    }
+  };
+  const custody: CodexCurrentKernelOwner["custody"] = Object.freeze({
+    open: underlying.open.bind(underlying), start: underlying.start.bind(underlying),
+    completionBoundary: underlying.completionBoundary.bind(underlying),
+    attestExecutionClosure: underlying.attestExecutionClosure.bind(underlying),
+    ensurePhysicalContainment: underlying.ensurePhysicalContainment.bind(underlying),
+    queryPhysicalContainment: underlying.queryPhysicalContainment.bind(underlying),
+    requestPhysicalContainment: underlying.requestPhysicalContainment.bind(underlying),
+    requestContainment: underlying.requestContainment.bind(underlying),
+    releaseReservation: underlying.releaseReservation.bind(underlying),
+    releaseRetiredReservation: underlying.releaseRetiredReservation.bind(underlying),
+    async attestContainment(input: Parameters<typeof underlying.attestContainment>[0]) {
+      const result = await underlying.attestContainment(input);
+      if (result.kind === "proved") {requireHttpSettlement(input.custodyId);}
+      return result;
+    },
+    async queryContainmentAttestation(input: Parameters<typeof underlying.queryContainmentAttestation>[0]) {
+      const result = await underlying.queryContainmentAttestation(input);
+      if (result.kind === "proved") {requireHttpSettlement(input.custodyId);}
+      return result;
+    },
+  });
+  return Object.freeze({custody, provider, dispose() {
     // A failing Host disposal keeps the borrowed lifetimes reachable for retry.
     owner.dispose();
     for (const joined of retained.values()) {joined.dispose();}

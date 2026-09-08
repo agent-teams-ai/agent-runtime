@@ -5,7 +5,7 @@ import {join} from "node:path";
 import {createHash} from "node:crypto";
 import test from "node:test";
 import {createCompositionInput, setupCapabilities, submit} from "../contained-turn-product.fixture.ts";
-import {createHostCustodiedAgentRuntimeHost} from "../../dist/composition.js";
+import {createHostCustodiedAgentRuntimeHost, AgentRuntimeHostDisposalIncompleteError} from "../../dist/composition.js";
 import {createContainedTurnRouteEnforcement} from "../../../../contexts/agent-execution/dist/composition.js";
 import {renderCodexNativeBrokerConfig} from "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
 import {DeterministicCurrentOwnerHost} from "../../../../contexts/agent-execution/tests/current-owner-success-fixture.ts";
@@ -25,13 +25,35 @@ import {openJoinedNetwork} from "./linux-joined-network.mjs";
 import {installJoinedPeer} from "./linux-joined-peer.mjs";
 const hash = value => createHash("sha256").update(value).digest("hex");
 
+const assertUnresolvedReceipt = saved => {
+  assert.equal(saved.providerExecution.kind, "closed");
+  assert.equal(saved.providerExecution.outcome, "succeeded");
+  assert.equal(saved.closureRecovery.kind, "required");
+  assert.equal(saved.closureRecovery.stage, "containment_attestation");
+  assert.equal(saved.terminal.kind, "open");
+  assert.equal(saved.reconciliation.kind, "clear", "HTTP closure debt must not invent provider ambiguity");
+};
+
 // Explicit integration entrypoint inside a new outer Linux netns. External
 // Docker, authority repositories and provider peer are synthetic. No live E2E claim.
-test("public RuntimeAccessHandle joins Docker custody, current authorities and native broker", {timeout: 90000}, async t => {
+for (const evidenceOutcome of ["recorded", "unknown"]) {
+test(`public RuntimeAccessHandle joins native broker with evidence ${evidenceOutcome}`, {timeout: 90000}, async t => {
   let network; let root; let current; let docker; let nativeHome; let host; let nativeRecipe; let peer; let brokerObservations;
+  let expectReconciliationDebt = false;
   t.after(async () => {
     const failures = [];
-    for (const cleanup of [() => host?.dispose(), () => docker?.dispose(), () => network?.dispose(),
+    for (const cleanup of [async () => {
+      if (!expectReconciliationDebt) {await host?.dispose(); return;}
+      // Physical containment does not turn unresolved request evidence into a
+      // terminal operation. Disposal must retain the exact unresolved owner.
+      await assert.rejects(host.dispose(), error => {
+        assert.ok(error instanceof AgentRuntimeHostDisposalIncompleteError);
+        assert.equal(error.status, "termination_unproven");
+        assert.equal(error.activeCallCount, 0);
+        assert.deepEqual(error.containedTurns, [{operationId: "operation:one", status: "reconcile_required"}]);
+        return true;
+      });
+    }, () => docker?.dispose(), () => network?.dispose(),
       () => current?.dispose(), () => root === undefined ? undefined : rm(root, {recursive: true, force: true})]) {
       try {await cleanup();} catch (error) {failures.push(error);}
     }
@@ -81,7 +103,7 @@ test("public RuntimeAccessHandle joins Docker custody, current authorities and n
         seccompProfileJson: seccomp.json, seccompProfileSha256: seccomp.sha256};
       docker = joinedDocker({policy, create, network, bootId: physicalBoot});
       peer = installJoinedPeer({docker, network, boundary: record.boundary, recipe: () => nativeRecipe, events});
-      const egress = createEgressFixture({route: current.route, deadlineNow: 1000, binding: {
+      const egress = createEgressFixture({evidence: evidenceOutcome, route: current.route, deadlineNow: 1000, binding: {
         certificateDigest: `sha256:${hash("joined-synthetic-certificate")}`,
         spkiDigest: `sha256:${hash("joined-synthetic-spki")}`, tlsPolicyDigest: current.input.rule.tlsPolicyDigest}});
       brokerObservations = egress.observations;
@@ -139,12 +161,13 @@ test("public RuntimeAccessHandle joins Docker custody, current authorities and n
   let observed;
   for (let iteration = 0; iteration < 300; iteration++) {
     observed = await access.containedTurn.observe(accepted.operationId);
-    if (observed.status === "observed" && ["succeeded", "failed", "reconcile_required"].includes(observed.turn.status)) {break;}
+    if (observed.status === "observed" && ["succeeded", "failed", "reconcile_required"].includes(observed.turn.status)
+      && composed.fixture.current()?.physicalContainment.kind === "contained") {break;}
     await new Promise(resolve => {setTimeout(resolve, 50);});
   }
   console.log(JSON.stringify({events, observed, brokerOrder: brokerObservations?.order, brokerReceipts: brokerObservations?.receipts, messages: docker?.messages.map(message => message.kind)}));
   await peer?.verify();
-  assert.equal(observed?.turn?.status, "succeeded");
+  assert.equal(observed?.turn?.status, evidenceOutcome === "recorded" ? "succeeded" : "reconcile_required");
   assert.ok(events.includes("broker-response"));
   assert.equal(brokerObservations.receipts.length, 1);
   const receipt = brokerObservations.receipts[0];
@@ -157,6 +180,11 @@ test("public RuntimeAccessHandle joins Docker custody, current authorities and n
   for (const key of ["provisionalAuthorizationReceiptDigest", "finalAuthorizationReceiptDigest", "materializationReceiptDigest"]) {
     assert.match(receipt[key], /^sha256:[a-f0-9]{64}$/u);
   }
+  assert.equal(composed.fixture.current()?.physicalContainment.kind, "contained");
   await assert.rejects(lstat(join(root, "private", "operation")), {code: "ENOENT"});
   assert.deepEqual(observed.turn.output, [{cursor: 0, kind: "assistant", text: "bounded synthetic output"}]);
+  if (evidenceOutcome === "unknown") {assertUnresolvedReceipt(composed.fixture.current());}
+  expectReconciliationDebt = evidenceOutcome === "unknown";
 });
+
+}
