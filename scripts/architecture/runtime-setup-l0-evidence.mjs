@@ -27,7 +27,7 @@ import {
 import { createEvidenceInputs } from "./runtime-setup-l0-evidence-inputs.mjs";
 
 import {
-  adoptionPaths, adoptionConstruction, adoptionEvidenceFiles, assertAdoptionAuthority,
+  adoptionPaths, adoptionConstruction, adoptionEvidenceFiles, assertAdoptionAuthority, retainedHistoricalEvidenceRoots,
   buildAdoptionReport, validateAdoptionReport,
 } from "./runtime-setup-l0-evidence-adoption.mjs";
 
@@ -172,7 +172,6 @@ const collectEvidenceFiles = async roots => {
 
 const {
   artifactDigests,
-  artifactDigestsAtRevision,
   assertEvidenceRootsClean,
   assertEvidenceRootsMatchRevision,
 } = createEvidenceInputs({ repositoryRoot, git, readRevisionFile });
@@ -390,7 +389,10 @@ const buildReport = async ({ capture, historicalChanges, sourceRevision, digests
 });
 
 const validateStoredReport = async (report, historical = false) => {
-  const digests = historical ? await artifactDigestsAtRevision(report.sourceRevision) : await artifactDigests();
+  const digests = historical ? await createEvidenceInputs({
+    repositoryRoot, git, readRevisionFile, roots: retainedHistoricalEvidenceRoots,
+    files: { fixtures: [], sources: [], tests: [] },
+  }).artifactDigestsAtRevision(report.sourceRevision) : await artifactDigests();
   validateStoredReportShape(report, changes);
   assert.equal(report.schemaVersion, 3);
   validateCurrentEvidenceIdentity(report, {

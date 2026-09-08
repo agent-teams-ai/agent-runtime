@@ -25,6 +25,20 @@ export const adoptionAuthority = Object.freeze({
   immutableDigest: "sha256:f8bd0ab5f9d7a4937095b45fd533da34f83964b8da6b766dc2a93d459396e9df",
 });
 export const retainedHistoricalSha256 = "f0f259e8cb07400f581e516511d3ee9a93eca5593306590c0f1a7e8a53f6f99f";
+// Immutable schema-3 closure used by retained source 51aa81a9. Modern capture
+// additionally covers provider-access and build inputs; those cannot be applied
+// retroactively to the historical report's digest.
+const retainedPackages = Object.freeze([
+  "packages/apps/embedded-runtime", "packages/contexts/agent-execution",
+  "packages/contexts/runtime-configuration", "packages/contexts/runtime-security",
+  "packages/platform/filesystem-custody",
+]);
+export const retainedHistoricalEvidenceRoots = Object.freeze({
+  fixtures: ["packages/contexts/agent-execution/tests/fixtures",
+    "packages/contexts/runtime-configuration/tests/fixtures", "packages/contexts/runtime-security/tests/fixtures"],
+  sources: retainedPackages.map(path => `${path}/src`),
+  tests: retainedPackages.map(path => `${path}/tests`),
+});
 export const adoptionConstruction = Object.freeze([
   { owner: "embedded-runtime", path: adoptionPaths.default, symbols: ["createDefaultAgentRuntimeHost"] },
   { owner: "embedded-runtime", path: adoptionPaths.graph, symbols: [] },

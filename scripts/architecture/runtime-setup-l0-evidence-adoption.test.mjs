@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { createEvidenceInputs } from "./runtime-setup-l0-evidence-inputs.mjs";
 import test from "node:test";
 import {
   adoptionAuthority, adoptionConstruction, adoptionPaths, assertAdoptionAuthority,
-  buildAdoptionReport, validateAdoptionReport,
+  buildAdoptionReport, validateAdoptionReport, retainedHistoricalEvidenceRoots,
 } from "./runtime-setup-l0-evidence-adoption.mjs";
 
 const capture = {
@@ -26,6 +29,17 @@ const authorityInput = async () => ({
 });
 
 export function registerAdoptionEvidenceTests() {
+test("historical closure authenticates the retained Git bytes independently of modern build inputs", async () => {
+  const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
+  const report = JSON.parse((await authorityInput()).historicalBytes);
+  const git = (...args) => execFileSync("git", args, { cwd: repositoryRoot, encoding: "utf8", maxBuffer: 20 * 1024 * 1024 });
+  const inputs = createEvidenceInputs({ repositoryRoot, git,
+    readRevisionFile: (revision, path) => execFileSync("git", ["show", `${revision}:${path}`], { cwd: repositoryRoot }),
+    roots: retainedHistoricalEvidenceRoots, files: { fixtures: [], sources: [], tests: [] },
+  });
+  assert.deepEqual(await inputs.artifactDigestsAtRevision(report.sourceRevision), report.artifactDigests);
+});
+
 test("adoption evidence keeps historical HOLD identity separate from current construction", async () => {
   assertAdoptionAuthority(await authorityInput());
   const report = buildAdoptionReport({ ...current, capture });
