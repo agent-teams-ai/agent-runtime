@@ -1,3 +1,4 @@
+import {retainNodeDockerRoute, type NodeDockerRouteSubject} from "./node-docker-route-provenance.js";
 import {randomBytes} from "node:crypto";
 import {isAbsolute, normalize, relative} from "node:path";
 import {NodeUnixSocketDockerEngine, snapshotDockerEnginePolicy, awaitNetworkCleanupWork,
@@ -30,6 +31,8 @@ export type NodeDockerConsumptionRecipe = Readonly<{
 
 export interface NodeDockerDeploymentRecipeInput {
   readonly enginePolicy: Dependencies["enginePolicy"];
+  /** Claimed operation facts supplied by the private deployment composition. */
+  readonly routeSubject?: NodeDockerRouteSubject;
   /** Dedicated, already-created private directories outside provider mounts.
    * Never replace a directory containing recovery debt with an empty one. */
   readonly custodyJournalRoot: string;
@@ -73,6 +76,7 @@ export const createNodeDockerDeploymentRecipe = (input: NodeDockerDeploymentReci
       journalRoots.some((root, index) => journalRoots.some((other, otherIndex) => index !== otherIndex && contains(root, other)))) {
     throw new TypeError("Docker recipe requires separate absolute journal roots outside provider mounts");
   }
+  const routeSubject = input.routeSubject === undefined ? undefined : Object.freeze({...input.routeSubject});
   const nsenter = Object.freeze({...input.nsenter});
   const nft = Object.freeze({...input.nft});
   const consumptionDirectory = Object.freeze({...input.consumption.directory});
@@ -139,6 +143,7 @@ export const createNodeDockerDeploymentRecipe = (input: NodeDockerDeploymentReci
       return routeEngine.inspect(...args);
     }}),
   });
+  if (routeSubject !== undefined) {retainNodeDockerRoute(route, routeSubject, preparation, () => !closed);}
   const consumption: NodeDockerConsumptionRecipe = Object.freeze({prepare(references: NodeDockerConsumptionReferences) {
     assertOpen();
     if (!published || consumptionEntered) {throw new TypeError("Docker consumption preparation order conflict");}

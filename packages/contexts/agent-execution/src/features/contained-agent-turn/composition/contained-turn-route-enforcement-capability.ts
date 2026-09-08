@@ -1,3 +1,5 @@
+import {nodeDockerRoutePolicy, selectNodeDockerRoute} from "./node-docker-route-provenance.js";
+import type {DockerLinuxPostClaimDependencies} from "./docker-linux-post-claim-preparation.js";
 import {custodyDataRecord} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import { createDockerLinuxExclusiveRouteAdmission,
   type DockerLinuxExclusiveRouteAdmissionInput } from "./docker-linux-exclusive-route-admission.js";
@@ -32,10 +34,12 @@ export type ContainedTurnRouteEnforcementInput = DockerLinuxExclusiveRouteAdmiss
    * of its dimensions are bound below to the route binding this owner enforces;
    * the remaining five are trusted deployment facts, exactly like the tool pins. */
   qualificationTarget: ContainedTurnRouteQualificationTarget;
+  /** Immutable deployment policy required for joining a concrete Node recipe. */
+  enginePolicy?: DockerLinuxPostClaimDependencies["enginePolicy"];
 }>;
 
 type Binding = DockerLinuxExclusiveRouteAdmissionInput["binding"];
-type Owner = Readonly<{target: ContainedTurnRouteQualificationTarget; route: DockerLinuxExclusiveRouteAdmissionInput}>;
+type Owner = Readonly<{policy: string | undefined; target: ContainedTurnRouteQualificationTarget; route: DockerLinuxExclusiveRouteAdmissionInput}>;
 const minted = new WeakMap<object, Owner>();
 const selectedAdmissions = new WeakMap<object, DockerLinuxOperationRouteAdmission>();
 // These facts belong to each committed operation, not to deployment qualification.
@@ -93,7 +97,8 @@ export const createContainedTurnRouteEnforcement = (
   const route = Object.freeze({binding, engine: Object.freeze({inspect: input.engine.inspect.bind(input.engine)}),
     nsenter: Object.freeze({...input.nsenter}), nft: Object.freeze({...input.nft})});
   const capability = Object.freeze({admission: createDockerLinuxExclusiveRouteAdmission(route)});
-  minted.set(capability, Object.freeze({target, route}));
+  minted.set(capability, Object.freeze({target, route,
+    policy: input.enginePolicy === undefined ? undefined : nodeDockerRoutePolicy(input.enginePolicy)}));
   return capability;
 };
 
@@ -108,11 +113,13 @@ export const readContainedTurnRouteEnforcementTarget = (
   value !== null && typeof value === "object" ? minted.get(value)?.target : undefined;
 
 /** Bind a fresh operation to the original nominal deployment owner. No target or
- * replacement engine/tools are accepted here. PA, Host and closure facts must
- * match that owner; only operation identities may change. This allocates no route.
+ * replacement engine/tools are accepted here. An exact issued Node recipe may
+ * supply its operation inspector after policy, pins and subject are joined.
+ * PA, Host and closure facts must match that owner; only operation identities may change. This allocates no route.
  */
 export const bindContainedTurnRouteEnforcement = (
   capability: ContainedTurnRouteEnforcementCapability, bindingInput: Binding,
+  recipe?: Parameters<typeof selectNodeDockerRoute>[0],
 ): DockerLinuxExclusiveRouteAdmissionInput => {
   const owner = minted.get(capability);
   if (owner === undefined) {throw invalidTarget();}
@@ -122,8 +129,24 @@ export const bindContainedTurnRouteEnforcement = (
     !Object.hasOwn(binding, key) || (!operationFields.has(key) && binding[key] !== owner.route.binding[key]))) {
     throw invalidTarget();
   }
-  const route = Object.freeze({...owner.route, binding});
-  selectedAdmissions.set(route, createDockerLinuxExclusiveRouteAdmission(route));
+  if (recipe !== undefined && owner.policy === undefined) {throw invalidTarget();}
+  const selected = recipe === undefined ? undefined :
+    selectNodeDockerRoute(recipe, binding, owner.policy!, owner.route);
+  const route = Object.freeze({...owner.route, binding, engine: selected?.engine ?? owner.route.engine});
+  const admission = createDockerLinuxExclusiveRouteAdmission(route);
+  selectedAdmissions.set(route, selected === undefined ? admission : Object.freeze({
+    async admit(request: Parameters<DockerLinuxOperationRouteAdmission["admit"]>[0]) {
+      const refused = {kind: "unsupported" as const, reason: "owner" as const};
+      if (!selected.isOpen()) {return refused;}
+      const result = await admission.admit(request);
+      if (!selected.isOpen()) {
+        if (result.kind === "installed") {result.owner.revoke();}
+        return refused;
+      }
+      return result;
+    },
+    releaseAfterContainerRemoval: admission.releaseAfterContainerRemoval,
+  }));
   return route;
 };
 

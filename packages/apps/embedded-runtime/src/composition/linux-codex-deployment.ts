@@ -40,7 +40,7 @@ export interface LinuxCodexDeploymentInfrastructure {
   readonly clock: Selection["broker"]["clock"];
   recipe(input: SelectInput): Readonly<{
     preparation: Selection["preparation"];
-    /** Compatibility slot; the nominal qualification owner supplies the route. */
+    /** Exact operation recipe projection; the nominal owner validates provenance. */
     route: Omit<Selection["route"], "binding">;
     nativeFiles: Selection["nativeFiles"];
     connection: Selection["connection"];
@@ -108,11 +108,9 @@ export const createLinuxCodexDeploymentResources = (infrastructure: LinuxCodexDe
       if (subject.hostBootId !== hostBootId || subject.hostInstanceId !== hostInstanceId) {
         throw new TypeError("Linux Codex acknowledged Host binding mismatch");
       }
-      // The gated owner retains all eight deployment facts and its actual
-      // engine/tools. Join the acknowledged PA/kernel/Host binding before recipe.
-      const route = bindContainedTurnRouteEnforcement(routeEnforcement, acknowledged.binding);
       const policy = infrastructure.currentPolicy(acknowledged);
       const recipe = infrastructure.recipe(input);
+      const route = bindContainedTurnRouteEnforcement(routeEnforcement, acknowledged.binding, recipe);
       const scope = Object.freeze({...subject.scope, scopeDigest: subject.scopeDigest, operationId: subject.operationId});
       const ids = new NodeHttpEgressBoundaryIds();
       const resolver = new NodeHttpEgressTrustedResolver(infrastructure.dns, infrastructure.clock);

@@ -11,7 +11,7 @@ type Listener = Parameters<NonNullable<Preparation["resources"]["decorateListene
 type NodeOwner = ReturnType<typeof createNodeDockerDeploymentRecipe>;
 
 export interface LinuxCodexNodeRecipeSelection {
-  readonly node: Omit<NodeDockerDeploymentRecipeInput, "consumption">;
+  readonly node: Omit<NodeDockerDeploymentRecipeInput, "consumption" | "routeSubject">;
   readonly create: Omit<Preparation["create"], "privateRootSource" | "workspaceSource">;
   readonly subjectFacts: Preparation["subjectFacts"];
   readonly initOptions: Preparation["initOptions"];
@@ -65,6 +65,8 @@ export const createLinuxCodexNodeRecipe = (options: Readonly<{
       tenantId: selected.consumptionSubject.tenantId, projectId: selected.consumptionSubject.projectId,
       executionGenerationId: selected.consumptionSubject.executionGenerationId});
     const node = createNodeDockerDeploymentRecipe({...selected.node,
+      routeSubject: {operationId: kernel.operationId, attemptId: kernel.attemptId, custodyId: kernel.custodyId,
+        executionGenerationId: kernel.executionGenerationId, authorityVectorDigest: kernel.authorityVectorDigest, hostBootId},
       consumption: bindLinuxCodexNodeConsumption(selected.consumption, {...expected, scopeDigest: `sha256:${subjectFacts.scopeSha256}`})});
     retained.set(kernel.custodyId, node);
     const nativeFiles = createDeferredCodexNativeBrokerFiles({...selected.nativeFileOptions, boundary: input.record.boundary});

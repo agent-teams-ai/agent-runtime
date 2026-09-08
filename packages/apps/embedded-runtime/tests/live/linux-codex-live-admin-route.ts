@@ -2,7 +2,7 @@
 import {readFile} from "node:fs/promises";
 import {createContainedTurnRouteEnforcement} from
   "../../../../contexts/agent-execution/dist/features/contained-agent-turn/composition/contained-turn-route-enforcement-capability.js";
-import {NodeUnixSocketDockerEngine, snapshotDockerEnginePolicy} from
+import {snapshotDockerEnginePolicy} from
   "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import {routeSelectionDigest, snapshotRouteSelectionFacts} from
   "../../../../contexts/provider-access/dist/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.js";
@@ -62,8 +62,10 @@ export const createLinuxCodexLiveAdminRoute = async (input: Readonly<{
   const routeRevision = await routeSelectionDigest(pins.route);
   // As in the production Node recipe, this policy name is never allocated.
   const policy = snapshotDockerEnginePolicy({...pins.enginePolicy, allowedNetworkName: "ar-identity-read-only"});
-  const engine = new NodeUnixSocketDockerEngine({policy});
-  return createContainedTurnRouteEnforcement({qualificationTarget: target, engine,
+  const engine = Object.freeze({inspect: async (): Promise<never> => {
+    throw new TypeError("Linux Codex route requires its operation recipe");
+  }});
+  return createContainedTurnRouteEnforcement({qualificationTarget: target, engine, enginePolicy: policy,
     nsenter: pins.tools.nsenter, nft: pins.tools.nft,
     binding: {
       tenantId: binding.tenantId, projectId: binding.projectId, scopeDigest: binding.scopeDigest,

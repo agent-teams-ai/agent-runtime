@@ -1,5 +1,6 @@
+import {policy as dockerPolicy} from "../../../contexts/agent-execution/tests/fixtures/docker-engine-test-fixture.ts";
 import assert from "node:assert/strict";
-import {createContainedTurnRouteEnforcement, readContainedTurnSelectedRouteAdmission} from "@agent-teams/agent-execution/composition";
+import {createNodeDockerDeploymentRecipe, createContainedTurnRouteEnforcement, readContainedTurnSelectedRouteAdmission} from "@agent-teams/agent-execution/composition";
 import {createContainedTurnLinuxRouteBinding} from "../dist/composition/contained-turn-linux-route-binding.js";
 import {createHash} from "node:crypto";
 import {test} from "node:test";
@@ -95,7 +96,18 @@ const setup = async (dynamicOperations = false, closure = {providerAdapter: "ada
     authorities: {} as never, signer: {keyRef: "synthetic-key", keyGeneration: "1", signerRevision: "2",
       clock: {read: () => ({authorityId: "control", epoch: "epoch-1", controlTime: 1000})}},
     clock: {now: () => 100, within: async (_deadline, work) => work()},
-    recipe() {recipes++; return {preparation: {}, route: {}, nativeFiles: {}, connection: {}, hostSession: {}} as never;},
+    recipe({kernel: selectedKernel}) {
+      recipes++;
+      const node = createNodeDockerDeploymentRecipe({enginePolicy: dockerPolicy("/synthetic"),
+        routeSubject: {operationId: selectedKernel.operationId, attemptId: selectedKernel.attemptId,
+          custodyId: selectedKernel.custodyId, executionGenerationId: selectedKernel.executionGenerationId,
+          authorityVectorDigest: selectedKernel.authorityVectorDigest, hostBootId: selectedKernel.hostBootId},
+        custodyJournalRoot: "/synthetic/custody", resourceJournalRoot: "/synthetic/resource",
+        nsenter: {path: "/synthetic/nsenter", sha256: "a".repeat(64)}, nft: {path: "/synthetic/nft", sha256: "b".repeat(64)},
+        consumption: {directory: {path: "/synthetic/consumption", device: "1", inode: "1"},
+          readEnvelope() {throw new Error("synthetic deployment never opens consumption");}}});
+      return {...node, nativeFiles: {}, connection: {}, hostSession: {}} as never;
+    },
   };
   const qualificationTarget = {provider: "codex", ...closure, platform: `${process.platform}-${process.arch}`,
     credentialRoute: "synthetic-endorsed-route", storageTopology: "synthetic-storage", transportTopology: "synthetic-http", failureDomain: "single-host"};
@@ -104,7 +116,7 @@ const setup = async (dynamicOperations = false, closure = {providerAdapter: "ada
     hostBootId: subject.hostBootId, executionGenerationId: subject.executionGenerationId, authorityVectorDigest: accepted.acceptedAuthorityVectorDigest, sourceRevision: infrastructure.sourceRevision,
     adapterRevision: closure.providerAdapter, binaryRevision: closure.binaryClosure, capabilityManifestRevision: adapterSnapshot.capabilityManifestRevision,
   } as never});
-  const routeEnforcement = createContainedTurnRouteEnforcement({qualificationTarget, binding: {...gateBinding, ...gateOverrides},
+  const routeEnforcement = createContainedTurnRouteEnforcement({qualificationTarget, enginePolicy: dockerPolicy("/synthetic"), binding: {...gateBinding, ...gateOverrides},
     engine: {inspect: async () => {throw new Error("synthetic gate never opens a route");}} as never,
     nsenter: {path: "/synthetic/nsenter", sha256: "a".repeat(64)}, nft: {path: "/synthetic/nft", sha256: "b".repeat(64)}});
   const deployment = createLinuxCodexDeploymentResources(infrastructure, subject, routeEnforcement);
@@ -357,12 +369,12 @@ test("simulation: live incomplete joins retain the 64 entry bound and retirement
 
 for (const field of ["providerRouteRef", "providerAccountRef", "accessRef", "bindingRevision", "credentialBindingRef",
   "credentialBindingDigest", "credentialGeneration", "routeRevision", "hostBootId", "sourceRevision", "capabilityManifestRevision"] as const) {
-  test(`simulation: gated owner ${field} mismatch refuses before recipe or allocation`, async () => {
+  test(`simulation: gated owner ${field} mismatch refuses before allocation`, async () => {
     const t = await setup(false, undefined, {[field]: "foreign"});
     try {
       await t.pa(); await t.rs();
       assert.throws(() => t.select(), /qualification/u);
-      assert.equal(t.recipes(), 0); assert.deepEqual(t.calls, []);
+      assert.equal(t.recipes(), 1); assert.deepEqual(t.calls, []);
     } finally {t.deployment.dispose(); t.f.dispose();}
   });
 }
