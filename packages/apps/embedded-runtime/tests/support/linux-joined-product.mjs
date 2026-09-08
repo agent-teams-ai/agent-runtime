@@ -65,7 +65,6 @@ test(`public RuntimeAccessHandle joins native broker with evidence ${evidenceOut
   let expectReconciliationDebt = false;
   let operationId = "operation:one";
   let persistence;
-  let launchOperation;
   t.after(() => disposeJoined({host, expectReconciliationDebt, operationId, docker, network, current, persistence, root}));
   network = await openJoinedNetwork();
   root = await mkdtemp(join(process.env.AR69_JOINED_TEST_PARENT ?? tmpdir(), "ar69-joined-product-"));
@@ -85,7 +84,6 @@ test(`public RuntimeAccessHandle joins native broker with evidence ${evidenceOut
     const record = await originalOwner.launchRecords.resolve(input);
     nativeHome = record.boundary.codexHome;
     const operation = await readOperation();
-    launchOperation = operation;
     assert.ok(operation, "durable acceptance before trusted launch record");
     try {current = await joinedCurrentOwners({operation, binding: operation.providerAccessSnapshot});}
     catch (error) {events.push(`current:${error.stack}`); throw error;}
@@ -107,7 +105,7 @@ test(`public RuntimeAccessHandle joins native broker with evidence ${evidenceOut
     engine, nsenter: network.nsenter, nft: network.nft, binding: baseBinding});
   const resources = {imageInitLock: imageLock(createInput(root).imageDigest), cleanupMilliseconds: 5000,
     select({kernel, record}) {
-      assert.equal(launchOperation?.dispatch.kind, "claimed");
+      assert.equal((persistence ? persistence.current() : composed.fixture.current())?.dispatch.kind, "claimed");
       assert.ok(current); events.push("selected");
       const create = {...createInput(root), privateRootSource: record.privateRootPath,
         workspaceSource: record.boundary.workspaceRef, entrypoint: DOCKER_CUSTODY_NODE_PATH,

@@ -18,7 +18,13 @@ export async function openPostgresHttpClosureStore(databaseUrl) {
     await applyContainedTurnPostgresSchema(pool);
   } catch (error) {await pool.end(); throw error;}
   let acceptedId;
+  let claimedOperation;
   class AcceptanceObservedStore extends PostgresContainedTurnOperationStore {
+    async claimPreparedDispatch(input) {
+      const result = await super.claimPreparedDispatch(input);
+      if (result.operation?.dispatch.kind === "claimed") {claimedOperation = result.operation;}
+      return result;
+    }
     async accept(candidate, authority) {
       const result = await super.accept(candidate, authority);
       if (result.kind === "accepted" || result.kind === "replayed") {acceptedId = result.operation.operationId;}
@@ -58,7 +64,7 @@ export async function openPostgresHttpClosureStore(databaseUrl) {
       close, ensureClosed, queryClosure: ensureClosed},
     artifacts: {seal, ensureSealed, querySeal: ensureSealed}};
   };
-  return {store, readOperation, closureOwners, dispose: () => pool.end(),
+  return {store, readOperation, closureOwners, current: () => claimedOperation, dispose: () => pool.end(),
     async verifyRecovery({operation, submit, assertUnresolvedReceipt}) {
       assertUnresolvedReceipt(operation);
       assert.equal(operation.physicalContainment.kind, "contained");
