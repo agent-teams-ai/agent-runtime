@@ -1,4 +1,4 @@
-import {NodeDockerCustodyJournalStorage, HostHttpEgressV4Journal}
+import {NodeDockerCustodyJournalStorage, HostHttpEgressV4Journal, HostHttpEgressV4NodeStorage}
   from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import assert from "node:assert/strict";
 import {test} from "node:test";
@@ -14,7 +14,7 @@ import {isConcreteLinuxDockerLifecycle}
   from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/node-linux-docker-residue-custody.js";
 import {policy, call, HOST, HOST_BOOT, DAEMON_BOOT}
   from "../../../contexts/agent-execution/tests/fixtures/docker-engine-test-fixture.ts";
-import {subject} from "../../../contexts/agent-execution/tests/fixtures/host-http-egress-v4-fixture.ts";
+import {subject, MemoryV4Storage} from "../../../contexts/agent-execution/tests/fixtures/host-http-egress-v4-fixture.ts";
 
 const options = (root: string): NodeDockerDeploymentRecipeInput => {
   const {allowedNetworkName: _network, ...enginePolicy} = policy(root);
@@ -112,3 +112,36 @@ for (const field of ["selectedDockerAuthorityDigest", "networkNamespaceIdentity"
     assert.equal(reads, 1);
   });
 }
+
+test("actual recipe opening command persists through the real V4 journal and codec", async t => {
+  const {v4Decode} = await import(
+    "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-codec.js");
+  // Replace only external identity/storage boundaries; prepare and record validation stay real.
+  t.mock.method(NodeUnixSocketDockerEngine.prototype, "identity", async () => identity);
+  t.mock.method(NodeDockerCustodyJournalStorage, "open", async () => ({}));
+  const memory = new MemoryV4Storage();
+  t.mock.method(HostHttpEgressV4NodeStorage.prototype, "prepare", memory.prepare.bind(memory));
+  t.mock.method(HostHttpEgressV4NodeStorage.prototype, "assertOwned", memory.assertOwned.bind(memory));
+  t.mock.method(HostHttpEgressV4NodeStorage.prototype, "append", memory.append.bind(memory));
+  t.mock.method(HostHttpEgressV4NodeStorage.prototype, "tombstone", memory.tombstone.bind(memory));
+  t.mock.method(HostHttpEgressV4NodeStorage.prototype, "close", memory.close.bind(memory));
+  const commands = new Set<string>();
+  for (let index = 0; index < 2; index++) {
+    memory.journal = null; memory.marker = null;
+    const selected = options(`/synthetic/fresh-opening-${index}`);
+    const owner = createNodeDockerDeploymentRecipe(selected);
+    await owner.preparation.engineIdentity(call());
+    owner.preparation.openLifecycle({...selected.enginePolicy, allowedNetworkName: "ar-test-opening"});
+    const journal = await owner.preparation.openResourceJournal({subject,
+      observer: {readObservation() {throw new Error("unexpected opening observation");}}});
+    const records = v4Decode(memory.journal!);
+    assert.equal(records.length, 1);
+    assert.equal(records[0]!.event.kind, "opened");
+    assert.match(records[0]!.commandId, /^command:[a-f0-9]{64}$/u);
+    commands.add(records[0]!.commandId);
+    assert.equal(memory.marker, null);
+    assert.equal(journal.evidence().reconcileRequired, false);
+    await journal.close();
+  }
+  assert.equal(commands.size, 2);
+});

@@ -1,5 +1,5 @@
 // Test-only administrative glue. Import/selection performs no discovery or launch.
-import {createHash, randomUUID} from "node:crypto";
+import {createHash, randomBytes, randomUUID} from "node:crypto";
 import {isAbsolute, normalize, relative} from "node:path";
 import type {LinuxCodexNodeRecipeSelection} from "../../dist/composition/linux-codex-node-recipe.js";
 import type {LinuxCodexDeploymentInfrastructure} from "../../dist/composition/linux-codex-deployment.js";
@@ -210,7 +210,8 @@ export const createLinuxCodexNodeSelection = (inputPins: LinuxCodexNodeSelection
         arguments: ["--no-addons", "--no-global-search-paths", "/ar-custody-init.mjs"], environment,
         launchFingerprintSha256, operationNonceSha256: hash(operationNonce), workspaceWritable: k.intentMode === "workspace-write"},
       subjectFacts: {scopeSha256: s.scopeDigest.slice(7), observerSha256: p.observerSha256,
-        networkHandle: randomUUID(), listenerHandle: randomUUID(), routeHandle: randomUUID()},
+        networkHandle: `network:${randomBytes(32).toString("hex")}`,
+        listenerHandle: `listener:${randomBytes(32).toString("hex")}`, routeHandle: `route:${randomBytes(32).toString("hex")}`},
       initOptions: {...p.initTimeouts, authority: {expectedIdentity, generation, operationNonce, launchFingerprintSha256},
         signal: t.signal, monotonicNow: p.monotonicNow,
         maximumStdoutBytes: p.provider.maximumStdoutBytes, maximumStderrBytes: p.provider.maximumStderrBytes,

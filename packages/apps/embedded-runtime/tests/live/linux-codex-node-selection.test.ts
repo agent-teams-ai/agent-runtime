@@ -95,3 +95,25 @@ test("RS decision digest is independent of the whole authority vector and must m
     readAcknowledged: () => ({...acknowledged, securityDecisionDigest: wrong.input.kernel.authorityVectorDigest}),
   })(wrong.input), /binding mismatch/u);
 });
+
+test("selected resource handles pass the real V4 network recipe without normalization", async () => {
+  const {dockerHttpOperationNetworkRecipe} = await import(
+    "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-network-resources.js");
+  const {subject} = await import("../../../../contexts/agent-execution/tests/fixtures/host-http-egress-v4-fixture.ts");
+  const handles = new Set<string>();
+  for (let index = 0; index < 2; index++) {
+    const f = fixture(); const selected = createLinuxCodexNodeSelection(f.pins)(f.input);
+    const actual = {...subject, ...selected.subjectFacts, imageDigest: selected.create.imageDigest,
+      attempt: {...subject.attempt, launchFingerprintSha256: selected.create.launchFingerprintSha256,
+        operationNonceSha256: selected.create.operationNonceSha256}};
+    const recipe = dockerHttpOperationNetworkRecipe(actual);
+    assert.equal(recipe.binding.networkHandleSha256, actual.networkHandle.slice(8));
+    for (const kind of ["network", "listener", "route"] as const) {
+      const key = `${kind}Handle` as const;
+      assert.match(actual[key], new RegExp(`^${kind}:[a-f0-9]{64}$`, "u"));
+      handles.add(actual[key].split(":")[1]!);
+      assert.throws(() => dockerHttpOperationNetworkRecipe({...actual, [key]: randomUUID()}));
+    }
+  }
+  assert.equal(handles.size, 6);
+});

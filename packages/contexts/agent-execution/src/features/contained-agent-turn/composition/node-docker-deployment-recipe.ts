@@ -1,4 +1,4 @@
-import {randomUUID} from "node:crypto";
+import {randomBytes} from "node:crypto";
 import {isAbsolute, normalize, relative} from "node:path";
 import {NodeUnixSocketDockerEngine, snapshotDockerEnginePolicy, awaitNetworkCleanupWork,
   createNodeLinuxDockerResidueCustody, NodeDockerCustodyJournalStorage,
@@ -7,6 +7,8 @@ import {NodeUnixSocketDockerEngine, snapshotDockerEnginePolicy, awaitNetworkClea
 import type {DockerLinuxPostClaimDependencies} from "./docker-linux-post-claim-preparation.js";
 import type {DockerLinuxExclusiveRouteAdmissionInput} from "./docker-linux-exclusive-route-admission.js";
 import {createNodeHostHttpConsumptionJournal} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
+
+const commandId = (): string => `command:${randomBytes(32).toString("hex")}`;
 
 type Dependencies = DockerLinuxPostClaimDependencies;
 type Call = Parameters<Dependencies["engineIdentity"]>[0];
@@ -122,7 +124,7 @@ export const createNodeDockerDeploymentRecipe = (input: NodeDockerDeploymentReci
       journal = new HostHttpEgressV4Journal(new HostHttpEgressV4NodeStorage(resourceRoot), subject, observer);
       const owned = journal;
       journalFlight = (async () => {
-        const result = await owned.prepare(randomUUID());
+        const result = await owned.prepare(commandId());
         assertOpen();
         if (result.kind !== "fresh") {throw new TypeError("Docker resource journal requires reconciliation");}
         published = true;
@@ -181,7 +183,7 @@ export const createNodeDockerDeploymentRecipe = (input: NodeDockerDeploymentReci
         try {
           if (published && journal !== undefined && journal.evidence().resourceLedger !== "retired") {
             if (journal.evidence().reconcileRequired) {return "pending" as const;}
-            await journal.recordIntent(randomUUID(), {kind: "retired", targetSha256: journal.target("retired")});
+            await journal.recordIntent(commandId(), {kind: "retired", targetSha256: journal.target("retired")});
           }
           if (lifecycle !== undefined && await lifecycle.disposeResidue(call) !== "released") {return "pending" as const;}
           await journal?.close();
