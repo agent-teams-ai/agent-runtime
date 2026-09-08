@@ -28,12 +28,25 @@ const childSource = `
   const watchdog = setTimeout(() => process.exit(72), 120000);
   const lines = createInterface({input: process.stdin});
   lines.on("line", async line => {
-    const {id, url, timeout} = JSON.parse(line);
+    const {id, url, timeout, method, headers, body} = JSON.parse(line);
     try {
-      const response = await fetch(url, {signal: AbortSignal.timeout(timeout)});
-      const text = await response.text();
-      send({id, status: response.status, text});
-    } catch (error) {send({id, error: error.name});}
+      const {request} = await import("node:http");
+      const result = await new Promise((resolve, reject) => {
+        const req = request(url, {method, headers, signal: AbortSignal.timeout(timeout)}, response => {
+          const chunks = []; let size = 0;
+          response.on("data", chunk => {
+            size += chunk.length;
+            if (size > 4096) {response.destroy(new Error("response bound")); return;}
+            chunks.push(chunk);
+          });
+          response.once("error", reject);
+          response.once("end", () => resolve({status: response.statusCode, text: Buffer.concat(chunks).toString("utf8")}));
+        });
+        req.once("error", reject);
+        req.end(body);
+      });
+      send({id, ...result});
+    } catch (error) {send({id, error: error.name, code: error.code ?? null});}
   });
   lines.on("close", () => {clearTimeout(watchdog); process.exit(0);});
 `;
@@ -124,15 +137,20 @@ export const openJoinedNetwork = async () => {
     childCommand(["addr", "add", "172.30.0.2/30", "dev", "joinchild"]);
     childCommand(["link", "set", "joinchild", "up"]);
     return Object.freeze({pid, nsenter, nft, gateway: "172.30.0.1", address: "172.30.0.2", dispose,
-      request(url, timeout = 2000) {
+      request(url, timeout = 2000, options = {}) {
         assert.equal(ended, false);
         assert.ok(Number.isSafeInteger(timeout) && timeout > 0 && timeout <= 5000);
         const parsed = new URL(url);
         assert.equal(parsed.protocol, "http:"); assert.equal(parsed.hostname, "172.30.0.1");
+        const {method = "GET", headers = {}, body = ""} = options;
+        assert.ok(method === "GET" || method === "POST");
+        assert.equal(typeof body, "string"); assert.ok(Buffer.byteLength(body) <= 4096);
+        assert.ok(Buffer.byteLength(JSON.stringify(headers)) <= 4096);
+        assert.equal(parsed.username, ""); assert.equal(parsed.password, "");
         const id = ++sequence; const result = Promise.withResolvers();
         const requestTimer = setTimeout(() => {pending.delete(id); result.reject(new Error("test child request stalled"));}, timeout + 1000);
         pending.set(id, {...result, timer: requestTimer});
-        child.stdin.write(JSON.stringify({id, url, timeout}) + "\n");
+        child.stdin.write(JSON.stringify({id, url, timeout, method, headers, body}) + "\n");
         return result.promise;
       },
     });

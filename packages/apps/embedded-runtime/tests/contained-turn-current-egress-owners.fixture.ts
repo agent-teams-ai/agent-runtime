@@ -25,12 +25,13 @@ type HttpSecurity = ReturnType<typeof bindContainedTurnHttpRuntimeSecurity>["run
 type FinalHttpInput = Parameters<HttpSecurity["authorizeFirstApplicationByte"]>[0];
 
 export const fixture = async (recipe: RouteSelectionInput["recipe"] = "codex-chatgpt",
-  profileId: NativeHttpRequestProfileId = "codex-chatgpt-responses/v1") => {
+  profileId: NativeHttpRequestProfileId = "codex-chatgpt-responses/v1",
+  selected: Readonly<{binding?: Partial<RouteSelectionInput["binding"]>; authority?: Parameters<typeof authority>[0]}> = {}) => {
   const profile = nativeHttpRequestProfile(profileId)!;
   const seed = selection(recipe);
   const paInput = { ...seed, descriptor: profile, binding: { ...seed.binding,
     scopeDigest: digest("scope"), credentialBindingDigest: digest("original-credential"),
-    credentialGeneration: 17, bindingRevision: 3 } };
+    credentialGeneration: 17, bindingRevision: 3, ...selected.binding } };
   // Existing PA synthetic pool and REAL route owner. Fixture endorsement is an
   // explicit setup action, outside the ACL; no database connection exists here.
   const paHarness = await harness(paInput);
@@ -42,7 +43,7 @@ export const fixture = async (recipe: RouteSelectionInput["recipe"] = "codex-cha
     acceptedAuthorityDigest: digest("accepted"), authorityHeadDigest: digest("head"),
     constraintsDigest: digest("constraints"), containmentPolicyDigest: digest("containment"),
     requestDigest: digest("request"), providerBindingDigest: digest("provider"),
-    claimBindingDigest: digest("claim"), claimBeforeControlTime: 1_005,
+    claimBindingDigest: digest("claim"), claimBeforeControlTime: 1_005, ...selected.authority,
   }) };
   const { scope, operationId, providerId, authorityGeneration, claimBindingDigest, ...facts } = acceptedDispatch.authority!;
   const operation = { scope: { ...scope, operationId }, providerId, authorityGeneration, claimBindingDigest };
@@ -97,7 +98,7 @@ export const fixture = async (recipe: RouteSelectionInput["recipe"] = "codex-cha
     authorityOwner: owner, clock: { read: () => ({ authorityId: "control", epoch: "epoch-1",
       controlTime: 1_000 + state.now - 100 }) } });
   const binding = bindContainedTurnHttpRuntimeSecurity(candidate);
-  return { input, state, owner, candidate, binding, request, endorsed, paHarness, paOwner, rs, pa,
+  return { input, state, owner, candidate, binding, request, endorsed, paInput, paHarness, paOwner, rs, pa,
     async provisional() {
       const result = await binding.runtimeSecurity.requestProvisional({
         contractVersion: "provider-process-egress-provisional/v2", authorizationRequestId: "request-1", request });

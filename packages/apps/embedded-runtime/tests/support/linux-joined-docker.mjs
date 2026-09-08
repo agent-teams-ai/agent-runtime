@@ -44,6 +44,7 @@ export const joinedDocker = ({policy, create, network, bootId}) => {
   const messages = [];
   let wire;
   let composed;
+  let boundEngine;
   let output;
   let closed = false;
   let protocolConsumer;
@@ -127,6 +128,8 @@ export const joinedDocker = ({policy, create, network, bootId}) => {
     },
   };
   return {client, io, messages, storage, lock, push,
+    endProtocol() {assert.ok(output && !closed); output.end();},
+    async inspect(authority, call) {assert.ok(boundEngine); return boundEngine.inspect(authority, call);},
     consumeProtocol(consumer) {assert.equal(protocolConsumer, undefined); protocolConsumer = consumer;},
     async engineIdentity(call) {
       return new NodeUnixSocketDockerEngine({client, policy}).identity(call);
@@ -134,6 +137,7 @@ export const joinedDocker = ({policy, create, network, bootId}) => {
     openLifecycle(boundPolicy) {
       assert.equal(composed, undefined, "one residue lifecycle");
       const engine = new NodeUnixSocketDockerEngine({client, policy: boundPolicy});
+      boundEngine = engine;
       composed = composeLinuxDockerResidueCustody({policy: boundPolicy, journalStorage: storage}, engine, io);
       return composed.lifecycle;
     },

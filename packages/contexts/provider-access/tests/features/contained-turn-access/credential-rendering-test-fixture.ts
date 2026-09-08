@@ -29,9 +29,10 @@ export const selectorFor = (request: AuthorizeCredentialMaterializationInput) =>
 });
 
 /** Existing in-memory PA repository is a synthetic fixture only, never durability evidence. */
-export const renderingFixture = (recipe: CredentialRecipe = "codex-chatgpt") => {
+export const renderingFixture = (recipe: CredentialRecipe = "codex-chatgpt",
+  selected: Readonly<{head?: Partial<ReturnType<typeof seed>>; operationRef?: string}> = {}) => {
   const head = {...seed({provider: recipe.startsWith("codex") ? "codex" : "claude"}),
-    availability: "available" as const, revocation: "active" as const};
+    availability: "available" as const, revocation: "active" as const, ...selected.head};
   const repositoryFixture = createInMemoryDispatchConsumptionRepository([head], 100);
   const controller = new AbortController();
   const binding: CredentialRenderingSelection["binding"] = {
@@ -41,7 +42,7 @@ export const renderingFixture = (recipe: CredentialRecipe = "codex-chatgpt") => 
     providerAccountRef: head.providerAccountRef, providerRouteRef: head.providerRouteRef, revocation: head.revocation,
     scopeDigest: head.scopeDigest, tenantId: head.tenantId,
   };
-  const selection = {operationRef: "operation:fixture", recipe, binding, operationAbortSignal: controller.signal,
+  const selection = {operationRef: selected.operationRef ?? "operation:fixture", recipe, binding, operationAbortSignal: controller.signal,
     deadline: performance.now() + 60_000};
   const events: string[] = [];
   const requests: CredentialGenerationRequest[] = [];
