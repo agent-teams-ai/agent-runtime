@@ -479,7 +479,8 @@ if (adoption) {
     assert.ok(graphImports.has(name) || defaultImports.has(name), `current construction lacks public root ${name}`);
   }
   const currentInputs = createEvidenceInputs({ repositoryRoot, git, readRevisionFile,
-    files: { ...evidenceFiles, sources: [...evidenceFiles.sources, ...adoptionEvidenceFiles] },
+    files: { ...evidenceFiles, sources: [...evidenceFiles.sources, ...adoptionEvidenceFiles,
+      profile.standard.evidencePath, ...profile.packages.map(pkg => pkg.archivePath)] },
   });
   currentInputs.assertEvidenceRootsClean();
   const currentPath = join(repositoryRoot, adoptionPaths.report);

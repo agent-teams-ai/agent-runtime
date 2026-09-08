@@ -22,7 +22,7 @@ const authorityInput = async () => ({
   registry: { decisions: [{ id: adoptionAuthority.id, path: adoptionAuthority.path,
     immutableDigest: adoptionAuthority.immutableDigest }] },
   profile: { status: "active", authority: { id: adoptionAuthority.id, path: adoptionAuthority.path } },
-  gate: { status: "verified-metadata", scope: "embedded-runtime passive setup" },
+  gate: { status: "verified", scope: "embedded-runtime passive setup" },
 });
 
 export function registerAdoptionEvidenceTests() {
@@ -39,7 +39,8 @@ test("adoption evidence keeps historical HOLD identity separate from current con
 
 for (const [name, mutate] of [
   ["pending profile", input => { input.profile.status = "pending"; }],
-  ["metadata-only pending gate", input => { input.gate.status = "pending"; }],
+  ["pending gate", input => { input.gate.status = "pending"; }],
+  ["metadata-only gate", input => { input.gate.status = "verified-metadata"; }],
   ["wrong scope gate", input => { input.gate.scope = "whole-runtime"; }],
   ["unaccepted ADR", input => { input.registry.decisions = []; }],
   ["different ADR registry digest", input => { input.registry.decisions[0].immutableDigest = "sha256:" + "0".repeat(64); }],

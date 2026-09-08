@@ -34,6 +34,8 @@ export const adoptionConstruction = Object.freeze([
 export const adoptionEvidenceFiles = Object.freeze([
   adoptionPaths.profile, "architecture/get-modular/consumer-profile.schema.json",
   adoptionPaths.checker, adoptionPaths.authority, adoptionPaths.registry,
+  "scripts/architecture/get-modular-source-census.mjs",
+  "scripts/architecture/check-get-modular-adoption.test.mjs",
   "scripts/architecture/runtime-setup-l0-evidence.mjs",
   "scripts/architecture/runtime-setup-l0-evidence-adoption.mjs",
   "scripts/architecture/runtime-setup-l0-evidence-inputs.mjs",
@@ -57,7 +59,7 @@ export function assertAdoptionAuthority({ authorityBytes, registry, historicalBy
   assert.equal(profile.authority.id, adoptionAuthority.id);
   assert.equal(profile.authority.path, adoptionAuthority.path);
   // The real checker must perform its evidence loader, not only validateProfile.
-  assert.equal(gate.status, "verified-metadata", "adoption not ready: active artifact/pin gate required");
+  assert.equal(gate.status, "verified", "adoption not ready: artifact, pin and live source gate required");
   assert.equal(gate.scope, "embedded-runtime passive setup");
 }
 
