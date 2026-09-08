@@ -5,6 +5,7 @@ import {registerHooks, syncBuiltinESMExports} from 'node:module';
 import {mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import {decodeBytes, validateConfiguration, createLinuxCodexLiveCanaryDriver, createCleanupController, createRedactor, safeSetupStage} from './run-linux-codex-live-canary.mjs';
 const hashFixtureBytes = value => createHash('sha256').update(value).digest('hex');
@@ -518,6 +519,19 @@ test('accessible git and empty testParent are required before configuration or c
 });
 
 test('real scope validator refuses mismatched approval before driver effects', async t => {
+  // Deregistering loader hooks does not evict modules loaded by earlier fixtures.
+  // Run the real factory and all driver assertions in a fresh module cache.
+  if (process.env.AR69_REAL_SCOPE_VALIDATOR_CHILD !== '1') {
+    const env = {...process.env, AR69_REAL_SCOPE_VALIDATOR_CHILD: '1'};
+    delete env.NODE_TEST_CONTEXT;
+    const result = childProcess.spawnSync(process.execPath, [
+      '--test', '--test-name-pattern=^real scope validator refuses mismatched approval before driver effects$',
+      fileURLToPath(import.meta.url),
+    ], {encoding: 'utf8', env, timeout: 30_000});
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    return;
+  }
   const {createLinuxCodexLiveCanaryConfiguration} = await import(
     new URL('./linux-codex-live-canary-config.ts', import.meta.url).href);
   const fs = (await import('node:fs')).default;
