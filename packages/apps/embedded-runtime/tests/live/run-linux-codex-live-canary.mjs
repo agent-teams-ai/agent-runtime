@@ -172,12 +172,16 @@ export function createLinuxCodexLiveCanaryDriver(configuration, credentialFd) {
     Array.isArray(value) ? value.map(sanitize) : value && typeof value === 'object' ?
       Object.fromEntries(Object.entries(value).map(([key, item]) => [redact(key), sanitize(item)])) : value;
   let reportReady = false;
+  const pendingReports = [];
   const report = (kind, value) => {
     if (!reportReady) {return;}
-    try {
-      durableCreate(join(config.evidenceDirectory, `${String(sequence++).padStart(4, '0')}-${kind}.json`),
-        {kind, at: new Date().toISOString(), value: sanitize(value)});
-    } catch {evidenceWriteFailed = true;} // Disk failure must never discard public resource owners.
+    const record = {kind, at: new Date().toISOString(), value: sanitize(value)};
+    try {persistReport(record);} catch {
+      evidenceWriteFailed = true; pendingReports.push(record);
+    } // Retain failed records as well as the historical diagnostic.
+  };
+  const persistReport = record => {
+    durableCreate(join(config.evidenceDirectory, `${String(sequence++).padStart(4, '0')}-${record.kind}.json`), record);
   };
   const retainOutcome = (kind, value) => {
     observations.push(value);
@@ -195,12 +199,19 @@ export function createLinuxCodexLiveCanaryDriver(configuration, credentialFd) {
     const value = await live.cancel(operationId); retainOutcome('cancel', value); return value;
   };
   const collect = () => {
+    // Retry persistence only, never submission. Failed writes may have left a
+    // partial file, so every retry gets a fresh exclusive sequence path.
+    while (pendingReports.length) {
+      persistReport(pendingReports[0]); pendingReports.shift();
+    }
     if (!live?.directory) {return;}
-    const evidence = collectLinuxCodexLiveEvidence({root: live.directory, approval: config.approval,
+    // Admin exposes tree.root; the collector reads artifacts/ and workspaces/
+    // relative to the disposable root allocated by linux-codex-live-admin-directories.ts.
+    const evidence = collectLinuxCodexLiveEvidence({root: join(live.directory, 'disposable'), approval: config.approval,
       operationId, observations});
     markerObserved = evidence.markerObserved;
     for (const record of evidence.records) {report(record.kind, record.value);}
-    if (evidenceWriteFailed) {fail();}
+    if (pendingReports.length) {fail();}
   };
   const {cleanup: cleanupResources, isReleased} = createCleanupController({collect, getLive: () => live,
     hasPool: () => realPool !== undefined,

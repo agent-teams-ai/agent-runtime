@@ -6,7 +6,10 @@ import {mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync,
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
+import {allocateLinuxCodexLiveAdminDirectories} from './linux-codex-live-admin-directories.ts';
+import {encodeContainedTurnArtifactManifest, computeContainedTurnArtifactTreeDigest} from '../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-manifest.js';
 import {decodeBytes, validateConfiguration, createLinuxCodexLiveCanaryDriver, createCleanupController, createRedactor} from './run-linux-codex-live-canary.mjs';
+import {collectLinuxCodexLiveEvidence} from './linux-codex-live-evidence.mjs';
 const SOURCE = '1'.repeat(40); // Explicit synthetic approved revision, never a runtime pin.
 
 const bytes = {encoding: 'base64', data: 'e30='};
@@ -168,7 +171,7 @@ async function publicFixture(t, status = 'unknown') {
     async cancel() {events.push('cancel'); const value = turn(); values.push(value); return value;},
     async cleanup() {events.push('cleanup'); return 'released';}};
   globalThis.ar69DriverFixture = {live, events, collect(input) {
-    assert.equal(input.root, live.directory);
+    assert.equal(input.root, join(live.directory, 'disposable'));
     assert.equal(input.approval.markerFile, 'marker.txt');
     assert.equal(input.operationId, 'operation:synthetic');
     assert.deepEqual(input.observations, values.slice(-512));
@@ -180,7 +183,7 @@ async function publicFixture(t, status = 'unknown') {
   }};
   const sources = {
     pg: 'export class Pool {on() {} async end() {globalThis.ar69DriverFixture.events.push("pool-end");}}',
-    './linux-codex-live-canary-config.ts': 'export async function setupLinuxCodexLiveCanary() {globalThis.ar69DriverFixture.events.push("setup"); return globalThis.ar69DriverFixture.live;}',
+    './linux-codex-live-canary-config.ts': 'export async function setupLinuxCodexLiveCanary() {globalThis.ar69DriverFixture.events.push("setup"); await globalThis.ar69DriverFixture.setup?.(); return globalThis.ar69DriverFixture.live;}',
     './linux-codex-live-evidence.mjs': 'export function collectLinuxCodexLiveEvidence(input) {return globalThis.ar69DriverFixture.collect(input);}',
   };
   const hooks = registerHooks({resolve(specifier, context, next) {
@@ -192,7 +195,7 @@ async function publicFixture(t, status = 'unknown') {
   fs.writeSync(credential, JSON.stringify({token: 'synthetic-token', accountId: 'synthetic-account'}));
   const originalStat = fs.fstatSync, originalRead = fs.readSync, originalWrite = fs.writeFileSync;
   let readOffset = 0, credentialReading = true;
-  t.mock.method(fs, 'fstatSync', fd => fd === credential && credentialReading ? {isFIFO: () => true} : originalStat(fd));
+  t.mock.method(fs, 'fstatSync', (fd, ...args) => fd === credential && credentialReading ? {isFIFO: () => true} : originalStat(fd, ...args));
   t.mock.method(fs, 'readSync', (fd, buffer, offset, length, position) => {
     const count = originalRead(fd, buffer, offset, length, fd === credential && credentialReading ? readOffset : position);
     if (fd === credential && credentialReading) {readOffset += count; if (!count) {credentialReading = false;}}
@@ -234,8 +237,8 @@ test('public succeeded result releases only after collected marker evidence', as
   const receipt = readdirSync(join(root, 'evidence')).find(name => name.endsWith('-receipt.json'));
   assert.deepEqual(JSON.parse(readFileSync(join(root, 'evidence', receipt))).value, {synthetic: true});
 });
-test('public report disk failure preserves outcome and accessible pending driver', async t => {
-  const {driver, state, events} = await publicFixture(t, 'succeeded');
+test('public report disk failure retains owners until persistence recovery permits explicit cleanup', async t => {
+  const {driver, state, events, root} = await publicFixture(t, 'succeeded');
   state.markerObserved = true; state.failReport = true;
   const result = await driver.run();
   assert.equal(result.cleanup, 'pending');
@@ -245,6 +248,22 @@ test('public report disk failure preserves outcome and accessible pending driver
   assert.equal((await driver.cancel()).turn.status, 'succeeded');
   assert.equal(await driver.cleanup(), 'pending');
   assert.ok(!events.includes('cleanup'));
+  assert.ok(!events.includes('pool-end'));
+  state.failReport = false;
+  const originalCleanup = globalThis.ar69DriverFixture.live.cleanup;
+  globalThis.ar69DriverFixture.live.cleanup = async () => {
+    const records = readdirSync(join(root, 'evidence')).filter(name => name !== 'attempt.json')
+      .map(name => readFileSync(join(root, 'evidence', name), 'utf8')).filter(Boolean).map(JSON.parse);
+    for (const kind of ['submit', 'observe', 'cancel', 'receipt', 'evidence-incomplete']) {
+      assert.ok(records.some(record => record.kind === kind), `persisted ${kind} before disposal`);
+    }
+    return originalCleanup();
+  };
+  assert.equal(await driver.cleanup(), 'released');
+  assert.equal(result.evidenceWriteFailed, true); // Historical failure is not cleared by recovery.
+  assert.deepEqual(events.slice(-3), ['collect', 'cleanup', 'pool-end']);
+  assert.equal(events.filter(event => event === 'submit').length, 1);
+  await assert.rejects(driver.run());
 });
 
 test('first run closes credential once on wrong type, source, and filesystem failure; rerun preserves reused FD', async t => {
@@ -347,4 +366,61 @@ test('failed observation cannot release on a stale succeeded submit value', asyn
   assert.ok(!events.includes('cleanup'));
   assert.equal((await driver.cancel()).turn.status, 'succeeded');
   assert.equal(await driver.cleanup(), 'released');
+});
+
+test('public driver collects real admin layout before tree release (synthetic artifact bytes)', {skip: process.platform !== 'linux' && 'descriptor-relative collector requires Linux'}, async t => {
+  const {writeFileSync, existsSync} = await import('node:fs');
+  const {driver, root, live, events} = await publicFixture(t, 'succeeded');
+  let tree;
+  globalThis.ar69DriverFixture.setup = async () => {
+    tree = await allocateLinuxCodexLiveAdminDirectories(join(root, 'project'));
+    live.directory = tree.root; // The administrative entrypoint exposes this exact boundary.
+    const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+    const put = (category, bytes) => {
+      const id = hash(bytes), shard = join(tree.artifacts.root, category, id.slice(0, 2));
+      mkdirSync(shard, {recursive: true, mode: 0o700});
+      writeFileSync(join(shard, id), bytes);
+      return id;
+    };
+    const operationId = 'operation:synthetic', scope = {tenantId: 'tenant:test', projectId: 'project:test'};
+    const entries = [{kind: 'file', path: 'marker.txt', mode: 0o600, size: 6,
+      digest: put('blobs', Buffer.from('hello\n'))}];
+    const output = [{cursor: 0, kind: 'assistant', text: 'hello'}];
+    const manifest = {schemaVersion: 3, operationId, ...scope, entries,
+      output: [{cursor: 0, kind: 'assistant', size: 5, digest: put('blobs', Buffer.from('hello'))}],
+      treeDigest: computeContainedTurnArtifactTreeDigest(entries)};
+    const manifestDigest = put('manifests', encodeContainedTurnArtifactManifest(manifest));
+    const workspaceName = `operation-${hash(JSON.stringify([scope.tenantId, scope.projectId, operationId]))}`;
+    const resultRef = `urn:agent-runtime:contained-turn-result:${manifestDigest}`;
+    const common = {operationId, scope, manifestDigest, workspaceName, treeDigest: manifest.treeDigest};
+    for (const [path, value] of [
+      [join(tree.artifacts.root, 'results'), {...common, schemaVersion: 1, resultRef,
+        manifestReceiptRef: `urn:agent-runtime:artifact-manifest-sealed:${manifestDigest}`,
+        resultReceiptRef: `urn:agent-runtime:result-published:${manifestDigest}`}],
+      [join(tree.workspace.root, 'seals'), {...common, schemaVersion: 2, rootIdentity: {dev: '1', ino: '1'}}],
+    ]) {
+      mkdirSync(path, {recursive: true, mode: 0o700});
+      writeFileSync(join(path, `${workspaceName}.json`), JSON.stringify(value));
+    }
+    const observation = {status: 'observed', turn: {operationId, status: 'succeeded', provider: 'codex',
+      revision: 2, output, resultRef, artifactManifestRef: `urn:agent-runtime:artifact-manifest:${manifestDigest}`}};
+    live.submit = async () => {events.push('submit'); return observation;};
+    live.observe = async () => {events.push('observe'); return observation;};
+    // Real collector and real directory allocator: no mock can normalize the wrong root.
+    globalThis.ar69DriverFixture.collect = input => collectLinuxCodexLiveEvidence(input);
+    assert.equal(collectLinuxCodexLiveEvidence({root: tree.root, approval: config(root).approval,
+      operationId, observations: [observation]}).markerObserved, false);
+    live.cleanup = async () => {
+      const saved = readdirSync(join(root, 'evidence')).filter(name => name.endsWith('-artifact-receipt.json'));
+      assert.equal(saved.length, 6); // Initial collection and pre-release collection.
+      assert.ok(existsSync(tree.artifacts.root));
+      events.push('cleanup');
+      return tree.releaseAfterBootstrap(async () => 'released'); // Synthetic bootstrap owner only.
+    };
+  };
+  const result = await driver.run();
+  assert.equal(result.markerObserved, true);
+  assert.equal(result.cleanup, 'released');
+  assert.equal(existsSync(tree.root), false);
+  assert.deepEqual(events, ['setup', 'submit', 'observe', 'cleanup', 'pool-end']);
 });
