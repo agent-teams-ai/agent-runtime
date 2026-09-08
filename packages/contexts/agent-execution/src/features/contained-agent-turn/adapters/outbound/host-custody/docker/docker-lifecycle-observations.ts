@@ -15,6 +15,7 @@ export interface DockerLifecycleObservation {
   readonly key: DockerCustodyAttemptKey;
   readonly journal: DockerCustodyJournalRecord;
   readonly initial: Present;
+  readonly mountFacts: Readonly<{workspaceSource: string; privateRootSource: string; imageDigest: string}>;
   readonly execution: Readonly<{exec: DockerCustodyInitHostExec; result: DockerCustodyInitHostStart | null;
     journal: DockerCustodyJournalRecord | null; settled: boolean}> | null;
   readonly terminal: Readonly<{observation: Present; journal: DockerCustodyJournalRecord}> | null;
@@ -62,12 +63,13 @@ export class DockerLifecycleObservations {
   readonly #active = new Map<string, Retained>();
 
   public issue(launch: object, binding: Readonly<{authority: DockerContainerAuthority; journal: DockerCustodyJournalRecord;
-    key: DockerCustodyAttemptKey}>, live: DockerContainedTurnHostCustody, initial: DockerContainerObservation): void {
+    key: DockerCustodyAttemptKey; mountFacts: DockerLifecycleObservation["mountFacts"]}>, live: DockerContainedTurnHostCustody, initial: DockerContainerObservation): void {
     if (initial.existence !== "present") {throw new TypeError("Docker observation launch requires present init");}
     const authority = Object.freeze({...binding.authority});
     const digest = dockerCustodyAuthoritySha256(authority);
     if (this.#issued.has(launch) || this.#active.has(digest)) {throw new TypeError("Docker observation launch already issued");}
     const retained: Retained = {live, snapshot: Object.freeze({authority, key: Object.freeze({...binding.key}),
+      mountFacts: Object.freeze({...binding.mountFacts}),
       journal: freezeJournal(binding.journal), initial: freezePresent(initial), execution: null, terminal: null, recursiveEmpty: null, removal: null,
       attachCleanup: "pending", retired: false})};
     this.#issued.set(launch, retained); this.#active.set(digest, retained);

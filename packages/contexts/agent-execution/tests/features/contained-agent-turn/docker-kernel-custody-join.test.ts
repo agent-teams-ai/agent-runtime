@@ -2,6 +2,8 @@ import {rm} from "node:fs/promises";
 import {reserveWorkspace} from "./support/docker-workspace-authority-fixture.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
+import {DockerKernelEvidence} from "../../../dist/features/contained-agent-turn/composition/docker-kernel-evidence.js";
+import {dockerProviderProcessMountFacts} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import {DockerKernelHostCustody} from "../../../dist/features/contained-agent-turn/composition/docker-kernel-host-custody.js";
 import {prepareDockerProviderProcessIo, createDockerProviderProcessBridge} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-bridge.js";
 import {executionEvidenceIsClosed, physicalEvidenceIsClosed, noStartEvidenceIsClosed, observeHostStart}
@@ -322,4 +324,87 @@ test("containment wins the execution journal race; rejected acknowledgement sett
   assert.equal(executionEvidenceIsClosed(f.read()), false); assert.equal(noStartEvidenceIsClosed(f.read()), false);
   assert.equal((await f.raw.requestContainment(f.containment)).kind, "contained"); assert.equal(cleanups, 1);
   assert.equal(f.channel.attaches, 1); assert.equal(f.channel.closes, 1);
+});
+
+for (const preparation of ["missing", "pending", "settled"] as const) {
+  test(`no-IO physical closure does not seal ${preparation} preparation prematurely`, {skip: process.platform !== "linux"}, async t => {
+    const f = await residueFixture(t);
+    const launch = await f.launch();
+    const create = createInput(f.root);
+    const raw = new DockerKernelHostCustody(1000);
+    const handle = await reserveWorkspace(t, raw, reservation(launch, create.workspaceSource, create.privateRootSource));
+    const evidence = raw.reservation(handle.custodyRef).evidence;
+    assert.equal((await f.contain(launch)).kind, "closed");
+    assert.throws(() => dockerProviderProcessMountFacts(launch)); // Execution-facing facts still require ACTIVE.
+    evidence.attachLifecycle(f.lifecycle, launch);
+    assert.throws(() => evidence.attachLifecycle(f.lifecycle, launch), /one-use/);
+    const gate = deferred(); t.after(() => gate.resolve());
+    if (preparation !== "missing") {
+      evidence.trackPreparation(gate.promise);
+      assert.throws(() => evidence.trackPreparation(Promise.resolve()), /one-use/);
+    }
+    if (preparation === "settled") {gate.resolve(); await tick();}
+    assert.equal(evidence.snapshot().sealed, preparation === "settled");
+    assert.equal(evidence.snapshot().closure.status, "closed");
+    assert.equal(evidence.snapshot().sealed, preparation === "settled");
+    if (preparation === "pending") {
+      gate.resolve(); await tick();
+      assert.equal(evidence.snapshot().sealed, true);
+    }
+    assert.equal(evidence.snapshot().spawn, "ambiguous");
+    assert.equal(evidence.snapshot().identity.status, "unproven");
+    assert.equal(evidence.snapshot().providerExit.status, "unobserved");
+    assert.equal(executionEvidenceIsClosed(evidence.snapshot()), false);
+    assert.equal(noStartEvidenceIsClosed(evidence.snapshot()), false);
+  });
+}
+
+test("split attachments retain exact lifecycle and reject foreign or repeated provider IO", {skip: process.platform !== "linux"}, async t => {
+  const f = await joined(t); const other = await joined(t);
+  t.after(() => f.contain()); t.after(() => other.contain());
+  const raw = new DockerKernelHostCustody(1000);
+  const handle = await reserveWorkspace(t, raw, reservation(f.launched, f.launchInput.create.workspaceSource,
+    f.launchInput.create.privateRootSource));
+  const evidence = raw.reservation(handle.custodyRef).evidence;
+  assert.throws(() => evidence.attachProviderIo(f.io), /unavailable/);
+  assert.throws(() => evidence.attachLifecycle(other.lifecycle, f.launched));
+  evidence.attachLifecycle(f.lifecycle, f.launched);
+  assert.throws(() => evidence.attachProviderIo({...f.io}), /actual prepared/);
+  assert.throws(() => evidence.attachProviderIo(other.io), /actual prepared/);
+  evidence.attachProviderIo(f.io);
+  assert.throws(() => evidence.attachProviderIo(f.io), /unavailable/);
+  assert.equal(evidence.snapshot().spawn, "ambiguous");
+  assert.equal(evidence.snapshot().sealed, false);
+});
+
+
+test("historical cleanup attachment rejects copied, foreign and conflicting launch facts", {skip: process.platform !== "linux"}, async t => {
+  const f = await residueFixture(t);
+  const other = await residueFixture(t);
+  const launch = await f.launch();
+  const create = createInput(f.root);
+  const raw = new DockerKernelHostCustody(1000);
+  const handle = await reserveWorkspace(t, raw, reservation(launch, create.workspaceSource, create.privateRootSource));
+  const {input, evidence} = raw.reservation(handle.custodyRef);
+  assert.equal((await f.contain(launch)).kind, "closed");
+  assert.throws(() => evidence.attachLifecycle(f.lifecycle, {...launch}), /actual issued launch/);
+  assert.throws(() => evidence.attachLifecycle(other.lifecycle, launch), /actual issued launch/);
+  for (const conflict of [
+    {...input, operationId: "foreign-operation"}, {...input, attemptId: "foreign-attempt"},
+    {...input, workspaceRef: `${input.workspaceRef}/foreign`},
+    {...input, launchPlan: {...input.launchPlan, privateRootPath: `${input.launchPlan.privateRootPath}/foreign`}},
+  ]) {
+    const rejected = new DockerKernelEvidence(conflict);
+    assert.throws(() => rejected.attachLifecycle(f.lifecycle, launch), /reservation conflicts/);
+    assert.equal(rejected.snapshot().closure.status, "unproven");
+    assert.equal(rejected.snapshot().sealed, false);
+  }
+  const facts = f.lifecycle.observeLaunch(launch).mountFacts;
+  assert.deepEqual(facts, {workspaceSource: create.workspaceSource, privateRootSource: create.privateRootSource,
+    imageDigest: launch.authority.imageDigest});
+  assert.equal(Object.isFrozen(facts), true);
+  evidence.attachLifecycle(f.lifecycle, launch);
+  assert.equal(evidence.snapshot().closure.status, "closed");
+  assert.equal(evidence.snapshot().sealed, false);
+  assert.throws(() => dockerProviderProcessMountFacts(launch));
 });

@@ -697,3 +697,27 @@ test("uncertain deployment listener cleanup prevents operation network release",
   assert.notEqual(f.network.state.network, undefined);
   assert.equal(kinds(f.v4Storage.journal).includes("network_release"), false);
 });
+
+test("launch ownership reaches the join even when cutoff wins its return continuation", async t => {
+  const j = await joinedFixture(t); const {f} = j;
+  const launch = f.lifecycle.launch.bind(f.lifecycle);
+  let actual: Awaited<ReturnType<typeof launch>> | undefined;
+  f.lifecycle.launch = async input => {
+    actual = await launch(input);
+    f.controller.abort();
+    return actual;
+  };
+  let retained = 0;
+  const owner = createDockerLinuxPostClaimOwner(f.dependencies, {...j.join, afterLaunch(input) {
+    retained += 1;
+    assert.strictEqual(input.launch, actual);
+    assert.strictEqual(input.claimed, f.claimed);
+    assert.equal(input.claimed.signal.aborted, true);
+  }});
+  assert.notEqual((await owner.preparation.prepareClaimed(f.claimed)).kind, "prepared");
+  assert.equal(retained, 1);
+  assert.equal(f.physical.opens, 0);
+  assert.equal(f.events.includes("host-handshake"), false);
+  assert.ok(actual);
+  assert.equal(f.lifecycle.observeLaunch(actual).journal.state, "closed");
+});

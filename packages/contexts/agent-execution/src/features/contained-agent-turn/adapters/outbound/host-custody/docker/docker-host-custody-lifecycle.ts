@@ -221,7 +221,8 @@ export class DockerHostCustodyLifecycle {
       const launched = Object.freeze({ authority, journal, key, kind: "launched" as const,
         openInitSession: (options: DockerContainedTurnInitOptions) => live.openInitSession(options, lifetime?.admission ?? input.call),
       });
-      this.#observations.issue(launched, launched, live, observation);
+      this.#observations.issue(launched, {...launched, mountFacts: {workspaceSource: create.workspaceSource,
+        privateRootSource: create.privateRootSource, imageDigest: authority.imageDigest}}, live, observation);
       launchIssuer.issue(launched, {authority, custodyRef: key.custodyId,
         mountFacts: Object.freeze({workspaceSource: create.workspaceSource,
           privateRootSource: create.privateRootSource, imageDigest: authority.imageDigest}),

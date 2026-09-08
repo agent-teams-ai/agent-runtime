@@ -86,6 +86,17 @@ const createProvider = (records: Map<string, Retained>, options: CreateDockerCod
   return provider;
 };
 
+const captureNativeFiles = (filesOwner: DeferredCodexNativeBrokerFiles): DeferredCodexNativeBrokerFiles => {
+  const methods = custodyDataRecord(filesOwner);
+  const captured = {} as DeferredCodexNativeBrokerFiles;
+  for (const key of ["bindRoot", "install", "cutoff", "quiesce", "snapshot"] as const) {
+    const method = methods[key];
+    if (!isHostCustodyDataCallback(method)) {throw new TypeError("Docker native file owner unavailable");}
+    Object.defineProperty(captured, key, {value: (...args: unknown[]) => apply(method, filesOwner, args), enumerable: true});
+  }
+  return Object.freeze(captured);
+};
+
 /** Private Docker selection, with exactly the existing custody/provider product
  * surface. Construction retains functions only. No Node final-launch seam. */
 export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKernelOwnerOptions) => {
@@ -148,14 +159,7 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
         throw new TypeError("Docker requires deployment evidence excluding uncontrolled workspace writers");
       }
       const backingTreeOwnership = Object.freeze({...selected.workspaceBackingTreeOwnership});
-      const methods = custodyDataRecord(filesOwner);
-      const captured = {} as DeferredCodexNativeBrokerFiles;
-      for (const key of ["bindRoot", "install", "cutoff", "quiesce", "snapshot"] as const) {
-        const method = methods[key];
-        if (!isHostCustodyDataCallback(method)) {throw new TypeError("Docker native file owner unavailable");}
-        Object.defineProperty(captured, key, {value: (...args: unknown[]) => apply(method, filesOwner, args), enumerable: true});
-      }
-      const nativeFiles = Object.freeze(captured);
+      const nativeFiles = captureNativeFiles(filesOwner);
       retained.nativeFiles = nativeFiles;
       const subscription = hostHttpAbortOperations.subscribe(claimed.signal, () => {retained.effectOwner?.cutoff(); nativeFiles.cutoff();});
       retained.removeAbort = () => hostHttpAbortOperations.remove(subscription);
@@ -173,6 +177,10 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
           return lifecycle;
         }}, {
         ...hostOwners.hooks,
+        afterLaunch({launch}) {
+          if (lifecycle === undefined) {throw new TypeError("Docker lifecycle unavailable");}
+          raw.reservation(claimed.underlyingCustodyRef).evidence.attachLifecycle(lifecycle, launch);
+        },
         async afterInit({launch}) {
           if (lifecycle === undefined) {throw new TypeError("Docker lifecycle unavailable");}
           const binding = await hostOwners.capturedRoot();
@@ -196,7 +204,7 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
               argv: Object.freeze([]), environment: Object.freeze([]), executableSha256: ""})};
           const providerIo = prepareDockerProviderProcessIo(process);
           retained.process = Object.freeze({...process, preparedIo: providerIo});
-          raw.reservation(claimed.underlyingCustodyRef).evidence.attach(lifecycle, launch, providerIo);
+          raw.reservation(claimed.underlyingCustodyRef).evidence.attachProviderIo(providerIo);
           return providerIo;
         },
         async finishClaimed(input) {
@@ -211,7 +219,9 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
       });
       retained.owner = owner;
       hostOwners.attach(owner);
-      return await owner.preparation.prepareClaimed(claimed);
+      const flight = owner.preparation.prepareClaimed(claimed);
+      raw.reservation(claimed.underlyingCustodyRef).evidence.trackPreparation(flight);
+      return await flight;
     } catch (error) {
       try {retained.nativeFiles?.cutoff();} finally {retained.removeAbort?.(); delete retained.removeAbort;}
       throw error;
