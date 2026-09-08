@@ -313,6 +313,8 @@ boundaries:
         - "@agent-teams/provider-access"
         - "@agent-teams/runtime-configuration"
         - "@agent-teams/runtime-security"
+        - "@get-modular/core"
+        - "@get-modular/assembly"
       builtins:
         - node:crypto
         - node:fs

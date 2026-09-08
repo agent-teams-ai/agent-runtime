@@ -45,7 +45,7 @@ const analyzeFixture = async files => {
       await mkdir(join(root, governedRoot), { recursive: true });
     }
     await writeFixtureFile(root, "package.json", JSON.stringify({
-      dependencies: { "@anthropic-ai/claude-agent-sdk": "1.0.0" },
+      dependencies: { "@anthropic-ai/claude-agent-sdk": "1.0.0", "@get-modular/core": "0.1.0", "@get-modular/assembly": "0.1.0" },
       name: "foundation-boundary-fixture",
       private: true,
       type: "module",
@@ -407,5 +407,32 @@ test("native abort subscriptions stay in physical adapters, never core or outer 
   for (const path of [paths.core, paths.composition]) {
     assert.deepEqual(rules(await analyzeFixture({[path]: 'import {addAbortListener} from "node:events";\n'})),
       ["architecture.source-dependencies.forbidden-builtin-dependency"], path);
+  }
+});
+
+
+test("Get Modular belongs only to Embedded Runtime composition, including type imports", async () => {
+  const packages = ["@get-modular/core", "@get-modular/assembly"];
+  for (const boundary of policy.boundaries) {
+    assert.deepEqual(boundary.allowedPackages.filter(name => packages.includes(name)).toSorted(),
+      boundary.id === "composition.embedded-runtime" ? packages.toSorted() : [], boundary.id);
+  }
+  for (const pkg of packages) {
+    for (const statement of [`import '${pkg}';`, `import type {} from '${pkg}';`]) {
+      assert.deepEqual(await analyzeFixture({
+        "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts": statement,
+      }), []);
+      for (const root of ["packages/apps/embedded-runtime/src",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn",
+        "packages/contexts/runtime-configuration/src",
+        "packages/contexts/runtime-security/src"]) {
+        for (const layer of ["application", "contracts", "domain"]) {
+          const path = `${root}/${layer}/negative-get-modular.ts`;
+          const diagnostics = await analyzeFixture({ [path]: statement });
+          assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.forbidden-package-dependency"], path);
+          assert.equal(diagnostics[0].location.path, path);
+        }
+      }
+    }
   }
 });
