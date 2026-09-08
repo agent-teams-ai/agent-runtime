@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { types } from "node:util";
 import {
   createDockerCodexHostKernelOwner, createDockerCodexNativeBrokerFinalizer,
-  createDockerLinuxExclusiveRouteAdmission, createNodeHostHttpConnection, createNodeHostHttpListener, hostHttpAbortOperations,
+  readContainedTurnSelectedRouteAdmission, createDockerLinuxExclusiveRouteAdmission, createNodeHostHttpConnection, createNodeHostHttpListener, hostHttpAbortOperations,
   type CreateCodexCurrentKernelOwnerOptions, type CodexCurrentKernelOwner, type CreateDockerCodexHostKernelOwnerOptions,
   type DockerCodexNativeBrokerFinalizerInput, type DockerLinuxExclusiveRouteAdmissionInput,
   type DockerLinuxPostClaimDependencies,
@@ -189,7 +189,7 @@ export const createLinuxCodexContainedTurnOwner = (
         createNodeHostHttpConnection({...connection, expectedRequest: {requestId: "unbound",
           method: "POST", path: "/backend-api/codex/responses", host: "unbound"}}, broker.clock);
         const finalizer = createDockerCodexNativeBrokerFinalizer({session, nativeFiles: selected.nativeFiles,
-          routeAdmission: createDockerLinuxExclusiveRouteAdmission(route)});
+          routeAdmission: readContainedTurnSelectedRouteAdmission(selected.route) ?? createDockerLinuxExclusiveRouteAdmission(route)});
         const http = joinedHttpResources({...selected, broker, connection}, input.kernel, finalizer);
         const ownedSigner = signer; const ownedAuthorities = authorities;
         retained.set(input.kernel.custodyId, Object.freeze({finalizer, settle: http.settle, isSettled: http.isSettled, dispose() {

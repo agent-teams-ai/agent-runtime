@@ -1,6 +1,6 @@
 import {types} from "node:util";
 import {
-  readContainedTurnRouteEnforcementTarget, type ContainedTurnRouteEnforcementCapability,
+  bindContainedTurnRouteEnforcement, readContainedTurnRouteEnforcementTarget, type ContainedTurnRouteEnforcementCapability,
   NodeHttpEgressBoundaryIds, NodeHttpEgressTrustedResolver, PostgresHttpEgressEvidence,
 } from "@agent-teams/agent-execution/composition";
 import type {LinuxCodexContainedTurnResources} from "./linux-codex-contained-turn-owner.js";
@@ -34,6 +34,7 @@ export interface LinuxCodexDeploymentInfrastructure {
   readonly clock: Selection["broker"]["clock"];
   recipe(input: SelectInput): Readonly<{
     preparation: Selection["preparation"];
+    /** Compatibility slot; the nominal qualification owner supplies the route. */
     route: Omit<Selection["route"], "binding">;
     nativeFiles: Selection["nativeFiles"];
     connection: Selection["connection"];
@@ -100,14 +101,9 @@ export const createLinuxCodexDeploymentResources = (infrastructure: LinuxCodexDe
       if (subject.hostBootId !== hostBootId || subject.hostInstanceId !== hostInstanceId) {
         throw new TypeError("Linux Codex acknowledged Host binding mismatch");
       }
-      // The nominal capability supplies the registry-gated deployment tuple.
-      // Bind its provider closure to the exact route input installed below,
-      // before even invoking the recipe. The remaining target dimensions are
-      // trusted deployment facts, as in the capability's owning factory.
-      if (acknowledged.binding.adapterRevision !== target.providerAdapter ||
-          acknowledged.binding.binaryRevision !== target.binaryClosure) {
-        throw new TypeError("Linux Codex selected route qualification mismatch");
-      }
+      // The gated owner retains all eight deployment facts and its actual
+      // engine/tools. Join the acknowledged PA/kernel/Host binding before recipe.
+      const route = bindContainedTurnRouteEnforcement(routeEnforcement, acknowledged.binding);
       const policy = infrastructure.currentPolicy(acknowledged);
       const recipe = infrastructure.recipe(input);
       const scope = Object.freeze({...subject.scope, scopeDigest: subject.scopeDigest, operationId: subject.operationId});
@@ -117,7 +113,7 @@ export const createLinuxCodexDeploymentResources = (infrastructure: LinuxCodexDe
         tenantId: scope.tenantId, projectId: scope.projectId, deploymentId: infrastructure.deploymentId,
       });
       const transport = createContainedTurnHttpUpstreamTransport(infrastructure.transport);
-      return Object.freeze({preparation: recipe.preparation, route: Object.freeze({...recipe.route, binding: acknowledged.binding}),
+      return Object.freeze({preparation: recipe.preparation, route,
         nativeFiles: recipe.nativeFiles, connection: recipe.connection,
         currentAuthority: Object.freeze({...policy, ...infrastructure.currentAuthority, acceptedDispatch: acknowledged.acceptedDispatch,
           operation: Object.freeze({scope, providerId: "codex", authorityGeneration: acknowledged.acceptedDispatch.authority!.authorityGeneration,

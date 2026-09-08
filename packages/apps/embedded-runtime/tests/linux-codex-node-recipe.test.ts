@@ -119,3 +119,32 @@ test("a reentrant selection cannot construct a second owner or reopen closed adm
   assert.throws(() => owner.recipe(input), /closed during selection/u);
   assert.equal(await owner.releaseAfterHostCleanup(call()), "released");
 });
+
+test("init selection freezes identity while captured methods observe their original live receiver", async () => {
+  const f = fixture();
+  const expectedIdentity = {containerImageSha256: "a".repeat(64)};
+  const init = {...f.selection.initOptions, generationCurrent: true, observationActive: true, time: 1,
+    authority: {...f.selection.initOptions.authority, expectedIdentity},
+    isCurrentGeneration(generation: string) {assert.equal(this, init); return this.generationCurrent && generation === "generation-1";},
+    isObservationActive() {assert.equal(this, init); return this.observationActive;},
+    monotonicNow() {assert.equal(this, init); return this.time;},
+    onOutput() {assert.equal(this, init);},
+    onRootExit() {assert.equal(this, init);},
+    onDrainComplete() {assert.equal(this, init);},
+  };
+  const owner = createLinuxCodexNodeRecipe({hostBootId: "boot-1", hostInstanceId: "host-1",
+    select: () => ({...f.selection, initOptions: init as LinuxCodexNodeRecipeSelection["initOptions"]})});
+  const captured = owner.recipe(input).preparation.initOptions;
+  expectedIdentity.containerImageSha256 = "b".repeat(64);
+  init.generationCurrent = false; init.observationActive = false; init.time = 42;
+  init.isCurrentGeneration = () => true; init.isObservationActive = () => true; init.monotonicNow = () => -1;
+  assert.equal(captured.authority.expectedIdentity.containerImageSha256, "a".repeat(64));
+  assert.ok(Object.isFrozen(captured.authority.expectedIdentity));
+  assert.ok(Object.isFrozen(captured.authority)); assert.ok(Object.isFrozen(captured));
+  // Rebinding at the later init preparation boundary must retain the selected receiver.
+  assert.equal(captured.isCurrentGeneration.bind(captured)("generation-1"), false);
+  assert.equal(captured.isObservationActive!.bind(captured)(), false);
+  assert.equal(captured.monotonicNow!.bind(captured)(), 42);
+  await captured.onOutput!({} as never); await captured.onRootExit!({} as never); await captured.onDrainComplete!({} as never);
+  assert.equal(await owner.releaseAfterHostCleanup(call()), "released");
+});

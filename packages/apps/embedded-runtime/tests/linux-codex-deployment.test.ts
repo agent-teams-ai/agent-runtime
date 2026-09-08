@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {createContainedTurnRouteEnforcement} from "@agent-teams/agent-execution/composition";
+import {createContainedTurnRouteEnforcement, readContainedTurnSelectedRouteAdmission} from "@agent-teams/agent-execution/composition";
 import {createContainedTurnLinuxRouteBinding} from "../dist/composition/contained-turn-linux-route-binding.js";
 import {createHash} from "node:crypto";
 import {test} from "node:test";
@@ -17,7 +17,7 @@ import {SYNTHETIC_LOOPBACK_CA} from "../../../contexts/agent-execution/tests/fix
  * PA route validation, RS current owner/signer, and HTTP adapters are real source.
  * No committed claim, Docker launch, DNS request, provider or live DB is exercised.
  */
-const setup = async (dynamicOperations = false, closure = {providerAdapter: "adapter-1", binaryClosure: "binary-1"}) => {
+const setup = async (dynamicOperations = false, closure = {providerAdapter: "adapter-1", binaryClosure: "binary-1"}, gateOverrides: Record<string, unknown> = {}) => {
   const f = await fixture();
   f.state.head = {...f.state.head, headVersion: "1"};
   const head = f.state.head.authority!;
@@ -81,7 +81,7 @@ const setup = async (dynamicOperations = false, closure = {providerAdapter: "ada
     hostBootId: subject.hostBootId, executionGenerationId: subject.executionGenerationId, authorityVectorDigest: accepted.acceptedAuthorityVectorDigest, sourceRevision: infrastructure.sourceRevision,
     adapterRevision: closure.providerAdapter, binaryRevision: closure.binaryClosure, capabilityManifestRevision: adapterSnapshot.capabilityManifestRevision,
   } as never});
-  const routeEnforcement = createContainedTurnRouteEnforcement({qualificationTarget, binding: gateBinding,
+  const routeEnforcement = createContainedTurnRouteEnforcement({qualificationTarget, binding: {...gateBinding, ...gateOverrides},
     engine: {inspect: async () => {throw new Error("synthetic gate never opens a route");}} as never,
     nsenter: {path: "/synthetic/nsenter", sha256: "a".repeat(64)}, nft: {path: "/synthetic/nft", sha256: "b".repeat(64)}});
   const deployment = createLinuxCodexDeploymentResources(infrastructure, subject, routeEnforcement);
@@ -113,6 +113,7 @@ test("simulation: selection needs both acknowledgements before any recipe and bi
     await t.rs();
     const selected = t.select();
     assert.equal(t.recipes(), 1);
+    assert.ok(readContainedTurnSelectedRouteAdmission(selected.route));
     assert.equal(selected.route.binding.operationId, t.kernel.operationId);
     assert.equal(selected.route.binding.attemptId, t.kernel.attemptId);
     assert.equal(selected.route.binding.custodyId, t.kernel.custodyId);
@@ -291,7 +292,7 @@ for (const dimension of ["providerAdapter", "binaryClosure"] as const) {
     const t = await setup(false, {providerAdapter: "adapter-1", binaryClosure: "binary-1", [dimension]: "foreign-closure"});
     try {
       await t.pa(); await t.rs();
-      assert.throws(() => t.select(), /selected route qualification mismatch/u);
+      assert.throws(() => t.select(), /route qualification/u);
       assert.equal(t.recipes(), 0); assert.deepEqual(t.calls, []);
     } finally {t.deployment.dispose(); t.f.dispose();}
   });
@@ -328,5 +329,26 @@ test("simulation: live incomplete joins retain the 64 entry bound and retirement
       disposition: "abandoned_without_claim", settlementRequestId: "settle-first"} as never);
     operation(65); await t.pa(); await t.rs(); t.select();
     assert.equal(t.recipes(), 1);
+  } finally {t.deployment.dispose(); t.f.dispose();}
+});
+
+for (const field of ["providerRouteRef", "providerAccountRef", "accessRef", "bindingRevision", "credentialBindingRef",
+  "credentialBindingDigest", "credentialGeneration", "routeRevision", "hostBootId", "sourceRevision", "capabilityManifestRevision"] as const) {
+  test(`simulation: gated owner ${field} mismatch refuses before recipe or allocation`, async () => {
+    const t = await setup(false, undefined, {[field]: "foreign"});
+    try {
+      await t.pa(); await t.rs();
+      assert.throws(() => t.select(), /qualification/u);
+      assert.equal(t.recipes(), 0); assert.deepEqual(t.calls, []);
+    } finally {t.deployment.dispose(); t.f.dispose();}
+  });
+}
+
+test("simulation: a copied owner cannot authorize a deployment", async () => {
+  const t = await setup();
+  try {
+    assert.throws(() => createLinuxCodexDeploymentResources(t.infrastructure, t.input.subject,
+      {...t.routeEnforcement}), /qualification/u);
+    assert.equal(t.recipes(), 0); assert.deepEqual(t.calls, []);
   } finally {t.deployment.dispose(); t.f.dispose();}
 });

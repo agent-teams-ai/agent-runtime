@@ -92,3 +92,6 @@ export {createDockerCodexNativeBrokerFinalizer, type DockerCodexNativeBrokerFina
 
 export {createNodeHostHttpListener, createNodeHostHttpConnection, hostHttpAbortOperations} from "./features/contained-agent-turn/internal.js";
 export {createNodeDockerDeploymentRecipe, type NodeDockerDeploymentRecipeInput} from "./features/contained-agent-turn/internal.js";
+
+export {bindContainedTurnRouteEnforcement, readContainedTurnSelectedRouteAdmission}
+  from "./features/contained-agent-turn/internal.js";

@@ -67,6 +67,7 @@ export const createLinuxCodexNodeRecipe = (options: Readonly<{
       consumption: bindLinuxCodexNodeConsumption(owners.consumption, {...expected, scopeDigest: `sha256:${subjectFacts.scopeSha256}`})});
     retained.set(kernel.custodyId, node);
     const nativeFiles = Object.freeze({install: owners.nativeFiles.install.bind(owners.nativeFiles)});
+    const init = selected.initOptions;
     const preparation: Preparation = Object.freeze({...node.preparation,
       create: Object.freeze({entrypoint: selected.create.entrypoint, imageDigest: selected.create.imageDigest,
         launchFingerprintSha256: selected.create.launchFingerprintSha256,
@@ -74,7 +75,14 @@ export const createLinuxCodexNodeRecipe = (options: Readonly<{
         arguments: Object.freeze([...selected.create.arguments]),
         environment: Object.freeze({...selected.create.environment}),
         privateRootSource: input.record.privateRootPath, workspaceSource: input.record.boundary.workspaceRef}),
-      subjectFacts, initOptions: Object.freeze({...selected.initOptions, authority: Object.freeze({...selected.initOptions.authority})}),
+      subjectFacts, initOptions: Object.freeze({...init,
+        authority: Object.freeze({...init.authority, expectedIdentity: Object.freeze({...init.authority.expectedIdentity})}),
+        isCurrentGeneration: init.isCurrentGeneration.bind(init),
+        ...(init.isObservationActive === undefined ? {} : {isObservationActive: init.isObservationActive.bind(init)}),
+        ...(init.monotonicNow === undefined ? {} : {monotonicNow: init.monotonicNow.bind(init)}),
+        ...(init.onOutput === undefined ? {} : {onOutput: init.onOutput.bind(init)}),
+        ...(init.onRootExit === undefined ? {} : {onRootExit: init.onRootExit.bind(init)}),
+        ...(init.onDrainComplete === undefined ? {} : {onDrainComplete: init.onDrainComplete.bind(init)})}),
       deadlines: Object.freeze({...selected.deadlines}), cleanupMilliseconds: selected.cleanupMilliseconds,
       // The real private-root capture replaces this slot before launch. It is
       // deliberately invalid as a generation observation on its own.

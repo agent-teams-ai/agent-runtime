@@ -1,3 +1,4 @@
+import {custodyDataRecord} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import { createDockerLinuxExclusiveRouteAdmission,
   type DockerLinuxExclusiveRouteAdmissionInput } from "./docker-linux-exclusive-route-admission.js";
 import type { DockerLinuxOperationRouteAdmission } from "./docker-linux-post-claim-preparation.js";
@@ -33,7 +34,17 @@ export type ContainedTurnRouteEnforcementInput = DockerLinuxExclusiveRouteAdmiss
   qualificationTarget: ContainedTurnRouteQualificationTarget;
 }>;
 
-const minted = new WeakMap<object, ContainedTurnRouteQualificationTarget>();
+type Binding = DockerLinuxExclusiveRouteAdmissionInput["binding"];
+type Owner = Readonly<{target: ContainedTurnRouteQualificationTarget; route: DockerLinuxExclusiveRouteAdmissionInput}>;
+const minted = new WeakMap<object, Owner>();
+const selectedAdmissions = new WeakMap<object, DockerLinuxOperationRouteAdmission>();
+// These facts belong to each committed operation, not to deployment qualification.
+const operationFields = new Set<keyof Binding>([
+  "operationId", "attemptId", "custodyId", "executionGenerationId", "authorityVectorDigest",
+]);
+const snapshotBinding = (binding: Binding): Binding => {
+  try {return Object.freeze({...custodyDataRecord(binding)});} catch {throw invalidTarget();}
+};
 // The registry forbids these tokens outright; a capability may not carry one.
 const WILDCARD_TOKENS = Object.freeze(["*", "any", "all"]);
 const invalidTarget = (): TypeError =>
@@ -74,13 +85,15 @@ export const createContainedTurnRouteEnforcement = (
   input: ContainedTurnRouteEnforcementInput,
 ): ContainedTurnRouteEnforcementCapability => {
   const target = snapshotTarget(input.qualificationTarget);
-  const binding = input.binding;
+  const binding = snapshotBinding(input.binding);
   if (target.binaryClosure !== binding.binaryRevision ||
       target.providerAdapter !== binding.adapterRevision) {
     throw invalidTarget();
   }
-  const capability = Object.freeze({admission: createDockerLinuxExclusiveRouteAdmission(input)});
-  minted.set(capability, target);
+  const route = Object.freeze({binding, engine: Object.freeze({inspect: input.engine.inspect.bind(input.engine)}),
+    nsenter: Object.freeze({...input.nsenter}), nft: Object.freeze({...input.nft})});
+  const capability = Object.freeze({admission: createDockerLinuxExclusiveRouteAdmission(route)});
+  minted.set(capability, Object.freeze({target, route}));
   return capability;
 };
 
@@ -92,4 +105,29 @@ export const createContainedTurnRouteEnforcement = (
 export const readContainedTurnRouteEnforcementTarget = (
   value: unknown,
 ): ContainedTurnRouteQualificationTarget | undefined =>
-  value !== null && typeof value === "object" ? minted.get(value) : undefined;
+  value !== null && typeof value === "object" ? minted.get(value)?.target : undefined;
+
+/** Bind a fresh operation to the original nominal deployment owner. No target or
+ * replacement engine/tools are accepted here. PA, Host and closure facts must
+ * match that owner; only operation identities may change. This allocates no route.
+ */
+export const bindContainedTurnRouteEnforcement = (
+  capability: ContainedTurnRouteEnforcementCapability, bindingInput: Binding,
+): DockerLinuxExclusiveRouteAdmissionInput => {
+  const owner = minted.get(capability);
+  if (owner === undefined) {throw invalidTarget();}
+  const binding = snapshotBinding(bindingInput);
+  const keys = Reflect.ownKeys(owner.route.binding) as (keyof Binding)[];
+  if (Reflect.ownKeys(binding).length !== keys.length || keys.some(key =>
+    !Object.hasOwn(binding, key) || (!operationFields.has(key) && binding[key] !== owner.route.binding[key]))) {
+    throw invalidTarget();
+  }
+  const route = Object.freeze({...owner.route, binding});
+  selectedAdmissions.set(route, createDockerLinuxExclusiveRouteAdmission(route));
+  return route;
+};
+
+/** Resolve only the exact selected route, never a structural copy or Proxy. */
+export const readContainedTurnSelectedRouteAdmission = (
+  route: DockerLinuxExclusiveRouteAdmissionInput,
+): DockerLinuxOperationRouteAdmission | undefined => selectedAdmissions.get(route);

@@ -137,12 +137,17 @@ export class NodeCustodyHttpResources {
       if (intent.kind !== "recorded") {throw rejected();}
       this.#listenerOwned = true;
       if (this.#cut) {return Object.freeze({kind: "unproven"});}
-      // Both pending slots exist before either factory can throw or reenter.
-      const opened = Promise.withResolvers<void>(); const prepared = Promise.withResolvers<void>();
-      this.#listenerOpen = opened.promise; this.#consumptionPrepare = prepared.promise;
+      // Own each flight before invoking it. Consumption observes the actual
+      // listener identity, which is unavailable until open acknowledges success.
+      const opened = Promise.withResolvers<void>();
+      this.#listenerOpen = opened.promise;
       void this.#openListener().finally(() => opened.resolve());
+      await this.#listenerOpen;
+      if (this.#cut || this.#listener === undefined) {return Object.freeze({kind: "unproven"});}
+      const prepared = Promise.withResolvers<void>();
+      this.#consumptionPrepare = prepared.promise;
       void this.#prepareConsumption().finally(() => prepared.resolve());
-      await Promise.all([this.#listenerOpen, this.#consumptionPrepare]);
+      await this.#consumptionPrepare;
       if (this.#cut || this.#listener === undefined || this.#journal === undefined) {return Object.freeze({kind: "unproven"});}
       return Object.freeze({kind: "prepared", address: this.#listener.address, journal: this.#journal.journal});
     } catch {

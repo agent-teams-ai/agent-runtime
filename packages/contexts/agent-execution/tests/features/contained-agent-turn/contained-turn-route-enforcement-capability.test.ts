@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   CONTAINED_TURN_ROUTE_QUALIFICATION_DIMENSIONS, createContainedTurnRouteEnforcement,
-  readContainedTurnRouteEnforcementTarget,
+  readContainedTurnRouteEnforcementTarget, bindContainedTurnRouteEnforcement, readContainedTurnSelectedRouteAdmission,
 } from "../../../dist/features/contained-agent-turn/composition/contained-turn-route-enforcement-capability.js";
 import {createContainedTurnRouteEnforcement as packedFactory} from "../../../dist/composition.js";
 
@@ -93,4 +93,43 @@ test("an accessor-backed tuple is refused rather than read twice", () => {
   assert.throws(() => createContainedTurnRouteEnforcement({
     binding, engine: engine as never, nsenter: pin, nft: pin, qualificationTarget: shifting as never,
   }), TypeError);
+});
+
+test("operation binding retains the nominal owner and accepts distinct operation identities", () => {
+  const capability = mint();
+  const first = bindContainedTurnRouteEnforcement(capability, binding);
+  const second = bindContainedTurnRouteEnforcement(capability, {...binding, operationId: "operation:second",
+    attemptId: "attempt:second", custodyId: "custody:second", executionGenerationId: "generation:second",
+    authorityVectorDigest: "authority:second"});
+  assert.equal(first.engine, second.engine);
+  assert.ok(Object.isFrozen(first.engine));
+  assert.deepEqual(second.nft, pin);
+  assert.equal(second.binding.operationId, "operation:second");
+  assert.notEqual(readContainedTurnSelectedRouteAdmission(first), readContainedTurnSelectedRouteAdmission(second));
+  assert.equal(typeof readContainedTurnSelectedRouteAdmission(second)?.admit, "function");
+  assert.equal(readContainedTurnSelectedRouteAdmission({...second}), undefined);
+  assert.equal(readContainedTurnSelectedRouteAdmission(new Proxy(second, {})), undefined);
+  assert.throws(() => bindContainedTurnRouteEnforcement({...capability}, binding), TypeError);
+});
+
+for (const field of Object.keys(binding).filter(key => ![
+  "operationId", "attemptId", "custodyId", "executionGenerationId", "authorityVectorDigest",
+].includes(key))) {
+  test(`selected route refuses changed deployment/PA/Host fact ${field}`, () => {
+    assert.throws(() => bindContainedTurnRouteEnforcement(mint(), {...binding, [field]: "foreign"}), TypeError);
+  });
+}
+
+test("the selected owner captures its engine method and pins before caller mutation", async () => {
+  let calls = 0;
+  const borrowed = {inspect: async () => {calls++; throw new Error("original owner");}};
+  const tools = {...pin};
+  const capability = createContainedTurnRouteEnforcement({binding, engine: borrowed as never,
+    nsenter: tools, nft: tools, qualificationTarget: target});
+  borrowed.inspect = async () => {throw new Error("replacement owner");};
+  tools.path = "/replacement";
+  const route = bindContainedTurnRouteEnforcement(capability, binding);
+  await assert.rejects(route.engine.inspect({} as never, {} as never), /original owner/u);
+  assert.equal(calls, 1);
+  assert.equal(route.nft.path, pin.path);
 });

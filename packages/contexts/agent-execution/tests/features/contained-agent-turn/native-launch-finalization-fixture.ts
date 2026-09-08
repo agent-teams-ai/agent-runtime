@@ -23,7 +23,7 @@ const hooks = registerHooks({
     if (!url.startsWith("native-finalization-fixture:")) {return next(url, context);}
     const name = url.slice("native-finalization-fixture:".length);
     const source = `const data = globalThis[Symbol.for(${JSON.stringify(slot.description)})].get(${JSON.stringify(name)});\n`
-      + Object.keys(modules.get(name)!).map(key => `export const ${key} = data.${key};`).join("\n");
+      + Object.keys(modules.get(name)!).map(key => key === "default" ? "export default data.default;" : `export const ${key} = data.${key};`).join("\n");
     return { format: "module", source, shortCircuit: true };
   },
 });
@@ -76,13 +76,22 @@ modules.set("node:fs", {
   },
   readFileSync: () => {throw new Error("unexpected product sync read");},
 });
+modules.get("node:fs")!.default = modules.get("node:fs")!;
 modules.set("node:fs/promises", {
+  open: async () => {throw new Error("filesystem access forbidden");},
+  readdir: async () => {throw new Error("filesystem access forbidden");},
+  readlink: async () => {throw new Error("filesystem access forbidden");},
   readFile: async () => {throw new Error("real process/config reads forbidden");},
   stat: async (path: string, options: {bigint?: boolean}) => stats(path, options),
   lstat: async (path: string, options: { bigint?: boolean }) => stats(path, options),
   realpath: async (path: string) => canonical(path),
 });
 modules.set("@agent-teams/filesystem-custody", {
+  withStableDirectoryProcessLock: async (...args: unknown[]) => {
+    const lock = modules.get("retention-lock")?.withStableDirectoryProcessLock;
+    if (typeof lock !== "function") {throw new Error("filesystem access forbidden");}
+    return lock(...args);
+  },
   capturePathLineage: async (path: string) => {entry(path); return path;},
   pathLineagesEqual: (left: string, right: string) => left === right,
   openStablePath: async (path: string, expected: string, use: (opened: object) => Promise<unknown>) => {

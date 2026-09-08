@@ -112,6 +112,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "PostgresContainedTurnOperationStore",
       "PostgresHttpEgressEvidence",
       "applyContainedTurnPostgresSchema",
+      "bindContainedTurnRouteEnforcement",
       "containedTurnPreventionDigest",
       "createClaudeCurrentKernelOwner",
       "createCodexAppServerPermissionBoundary",
@@ -140,6 +141,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       // Embedded Runtime consumes this value; NativeHttpRequestProfileId is type-only.
       "nativeHttpRequestProfile",
       "readContainedTurnRouteEnforcementTarget",
+      "readContainedTurnSelectedRouteAdmission",
       "recoverContainedTurnCommittedGrantSettlements",
       "recoverContainedTurnDispatchPreparations",
       "rollbackContainedTurnPostgresSchemaV4",

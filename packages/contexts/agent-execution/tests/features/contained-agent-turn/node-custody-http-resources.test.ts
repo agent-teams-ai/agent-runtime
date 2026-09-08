@@ -87,9 +87,9 @@ for (const missing of ["v4", "network-observation", "subject", "consumption"] as
   });
 }
 
-test("cutoff during both concrete preparations retains late bind and quarantines late journal success", async () => {
+test("cutoff during concrete consumption preparation quarantines late journal success", async () => {
   const journal = deferred<void>();
-  const f = await fixture({pendingListen: true, pendingJournal: journal.promise});
+  const f = await fixture({pendingJournal: journal.promise});
   const pending = f.prepare(); await tick();
   const owned = liveFor(f.custodyRef).httpReservation.pending;
   assert.ok(owned); assert.equal(f.storage.opens, 1); assert.equal(f.servers.length, 1);
@@ -97,7 +97,6 @@ test("cutoff during both concrete preparations retains late bind and quarantines
   let settled = false; void pending.then(() => {settled = true; return settled;});
   await tick(); assert.equal(settled, false);
   assert.equal(liveFor(f.custodyRef).httpReservation.pending, owned);
-  f.servers[0]!.bind();
   assert.equal(f.servers[0]!.listening, true); assert.equal(f.servers[0]!.closeCalls, 0);
   journal.resolve(); assert.equal((await pending).kind, "unproven"); await tick();
   assert.equal(f.storage.created, 1); assert.equal(f.storage.tombstones, 1); assert.equal(f.storage.closes, 1);
@@ -151,6 +150,7 @@ test("synchronous listener throw cannot orphan a recipe that later binds", async
   f.duringListen(() => {throw new Error("synthetic native listen throw");});
   assert.equal((await f.prepare()).kind, "unproven");
   assert.equal(f.lifetime.signal.aborted, true); assert.equal(f.servers[0]!.closeCalls, 0);
+  assert.equal(f.storage.opens, 0);
   f.servers[0]!.bind();
   assert.equal((await f.release()).kind, "unproven");
   await f.authorizeRelease();
@@ -240,3 +240,30 @@ test("the retained local-cut session propagates shutdown to the same reservation
   assert.throws(() => session.nativeBearerToken(), /inbound_authentication_denied/u);
   assert.equal(f.storage.tombstones, 1); assert.equal(f.servers[0]!.closeCalls, 0);
 });
+
+for (const cancelled of [false, true]) {
+  test(`deferred listener ACK gates consumption and retains late cleanup (cancelled=${cancelled})`, async () => {
+    const f = await fixture({pendingListen: true});
+    let reads = 0;
+    const consumption = {async prepare() {
+      reads++;
+      assert.equal(f.servers[0]!.listening, true);
+      return f.resourceInput.consumption.prepare();
+    }};
+    const pending = f.preparation.prepareResources(f.lifetime, {...f.resourceInput, consumption});
+    await tick();
+    assert.equal(f.servers.length, 1); assert.equal(reads, 0); assert.equal(f.storage.opens, 0);
+    const owned = liveFor(f.custodyRef).httpReservation.pending;
+    assert.ok(owned);
+    if (cancelled) {burn(f);}
+    f.servers[0]!.bind();
+    assert.equal((await pending).kind, cancelled ? "unproven" : "prepared");
+    assert.equal(reads, cancelled ? 0 : 1);
+    assert.equal(f.storage.opens, cancelled ? 0 : 1);
+    assert.equal(f.servers[0]!.closeCalls, 0);
+    assert.equal((await f.release()).kind, "unproven");
+    await f.authorizeRelease();
+    assert.equal((await f.release()).kind, cancelled ? "released" : "unproven");
+    assert.equal(f.servers[0]!.closeCalls, 1);
+  });
+}
