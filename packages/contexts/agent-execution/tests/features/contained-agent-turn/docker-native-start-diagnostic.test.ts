@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
-import {writeFileSync} from "node:fs";
+import {writeFileSync, rmSync} from "node:fs";
 import test from "node:test";
 import {nativeFinalizerFixture} from "./support/docker-native-finalizer-fixture.ts";
-import {nativeStartDiagnostic} from "../../../src/features/contained-agent-turn/composition/docker-native-start-diagnostic.ts";
 import {createDeferredCodexNativeBrokerFiles} from "../../../src/features/contained-agent-turn/composition/deferred-codex-native-broker-files.ts";
 import {createDockerCodexNativeBrokerFinalizer} from "../../../src/features/contained-agent-turn/composition/docker-codex-native-broker-finalizer.ts";
 
@@ -66,13 +65,12 @@ test("existing deferred native file snapshot carries private start evidence", as
     failingPhase: "preflight", cutoff: true, errorCode: "native-start-rejected"});
 });
 
-import {linkNativeStartDiagnostic, nativeStartStep, recordNativeStart, retainNativeStartDiagnostic,
+import {nativeStartDiagnostic, linkNativeStartDiagnostic, nativeStartStep, recordNativeStart, retainNativeStartDiagnostic,
   type NativeStartPhase} from "../../../src/features/contained-agent-turn/composition/docker-native-start-diagnostic.ts";
 import {captureDockerCodexProcessInput} from "../../../src/features/contained-agent-turn/composition/docker-codex-current-kernel-owner.ts";
 import {createCodexDockerPathProjection} from "../../../src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.ts";
 import {dockerProviderProcessMountFacts} from "../../../src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.ts";
 import {connectionFixture, installProtocol} from "./support/docker-codex-kernel-fixture.ts";
-import {rmSync} from "node:fs";
 
 const postPhases: readonly NativeStartPhase[] = ["native-plan-recognition", "mount-path-projection",
   "process-input-projection", "process-input-tmpdir", "process-input-executable", "reservation-evidence-finalize",
@@ -194,15 +192,15 @@ test("successful actual bridge handoff completes the private diagnostic without 
 });
 
 
-test("diagnostic lookup failure leaves actions and original throws untouched", () => {
+test("diagnostic lookup failure leaves actions and original throws untouched", t => {
   const files = {}; const recorder = retainNativeStartDiagnostic(files); const result = {};
-  const get = WeakMap.prototype.get;
+  let mocked: {mock: {restore(): void}} | undefined;
   try {
-    WeakMap.prototype.get = () => {throw new Error("synthetic diagnostic lookup failure");};
+    mocked = t.mock.method(WeakMap.prototype, "get", () => {throw new Error("synthetic diagnostic lookup failure");});
     assert.equal(nativeStartStep(files, "prepared-handoff", () => result), result);
     assert.throws(() => nativeStartStep(files, "prepared-handoff", () => {throw result;}), value => value === result);
     recorder.begin("return"); recorder.complete(); recorder.fail(); recorder.cutoff();
     assert.equal(nativeStartDiagnostic(files), undefined);
     linkNativeStartDiagnostic({}, files);
-  } finally {WeakMap.prototype.get = get;}
+  } finally {mocked?.mock.restore();}
 });

@@ -413,6 +413,17 @@ const createLaunchLifetime = (signal: AbortSignal, admissionSignal: AbortSignal,
     isActive: () => !observationSignal.aborted && Date.now() < observationDeadline},
 });
 
+const publishPreparedPlan = <T>(plan: object, assertOpen: () => void, publish: () => T): T => {
+  recordNativeStart(plan, "begin", "plan-publication");
+  try {
+    assertOpen();
+    if (!isIssuedCodexAppServerLaunchPlan(plan)) {throw new TypeError("Docker final plan is not issued");}
+    const result = publish();
+    recordNativeStart(plan, "complete");
+    return result;
+  } catch (error) {recordNativeStart(plan, "fail"); throw error;}
+};
+
 const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
   dependencies: DockerLinuxPostClaimDependencies, join?: DockerLinuxClaimedJoin<Io>,
 ): DockerLinuxPostClaimOwner<Io> => {
@@ -568,16 +579,11 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
       if (join !== undefined) {
         const final = await join.finishClaimed(Object.freeze({claimed: input, launch: resources.launched,
           providerIo: providerIo!, http: resources.product, routeFirstWrite}));
-        recordNativeStart(final.plan, "begin", "plan-publication");
-        try {
-        assertOpen();
-        if (!isIssuedCodexAppServerLaunchPlan(final.plan)) {throw new TypeError("Docker final plan is not issued");}
-        execution = Object.freeze({launch: resources.launched, providerIo: providerIo!, plan: final.plan});
-        assertOpen();
-        const result = prepared();
-        recordNativeStart(final.plan, "complete");
-        return result;
-        } catch (error) {recordNativeStart(final.plan, "fail"); throw error;}
+        return publishPreparedPlan(final.plan, assertOpen, () => {
+          execution = Object.freeze({launch: resources.launched!, providerIo: providerIo!, plan: final.plan});
+          assertOpen();
+          return prepared();
+        });
       } else {dependencies.publishRouteFirstWrite?.(routeFirstWrite);}
       assertOpen();
       return prepared();

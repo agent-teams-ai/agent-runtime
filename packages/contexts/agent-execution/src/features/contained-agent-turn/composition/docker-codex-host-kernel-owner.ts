@@ -71,7 +71,7 @@ const createProvider = (records: Map<string, Retained>, options: CreateDockerCod
     manifest: selection.manifest, async execute(input: Parameters<ContainedTurnKernelProviderPort["execute"]>[0]) {
     const retained = records.get(input.custodyId);
     const diagnosticKey = retained?.nativeFiles;
-    if (diagnosticKey !== undefined) {recordNativeStart(diagnosticKey, "begin", "prepared-handoff");}
+    recordHandoff(diagnosticKey, "begin");
     try {
     if (isDisposed() || retained === undefined || retained.used || retained.owner === undefined || retained.claimed === undefined ||
       retained.process === undefined || retained.effectOwner === undefined || retained.kernel.operationId !== input.operationId || retained.kernel.attemptId !== input.attemptId ||
@@ -85,17 +85,19 @@ const createProvider = (records: Map<string, Retained>, options: CreateDockerCod
       credentialOutputInventory: retained.record.credentialOutputInventory, effectCustody: retained.effectOwner.authority,
       plan: prepared.plan, platformTarget: options.platformTarget, process: retained.process});
     retained.provider = owner;
-    if (diagnosticKey !== undefined) {
-      recordNativeStart(diagnosticKey, "begin", "prepared-handoff");
-      recordNativeStart(diagnosticKey, "complete");
-    }
+    recordHandoff(diagnosticKey, "begin");
+    recordHandoff(diagnosticKey, "complete");
     return owner.provider.execute(input);
     } catch (error) {
-      if (diagnosticKey !== undefined) {recordNativeStart(diagnosticKey, "fail");}
+      recordHandoff(diagnosticKey, "fail");
       throw error;
     }
   }});
   return provider;
+};
+
+const recordHandoff = (key: object | undefined, event: "begin" | "complete" | "fail"): void => {
+  if (key !== undefined) {recordNativeStart(key, event, event === "begin" ? "prepared-handoff" : undefined);}
 };
 
 const captureNativeFiles = (filesOwner: DeferredCodexNativeBrokerFiles): DeferredCodexNativeBrokerFiles => {
@@ -109,9 +111,7 @@ const captureNativeFiles = (filesOwner: DeferredCodexNativeBrokerFiles): Deferre
   return Object.freeze(captured);
 };
 
-/** Private Docker selection, with exactly the existing custody/provider product
- * surface. Construction retains functions only. No Node final-launch seam. */
-export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKernelOwnerOptions) => {
+const captureHostOptions = (value: CreateDockerCodexHostKernelOwnerOptions) => {
   const data = custodyDataRecord(value);
   const options = Object.freeze({...data, platformTarget: Object.freeze({...custodyDataRecord(data.platformTarget)})});
   if (options.platformTarget.platform !== "linux") {throw new TypeError("Docker requires Linux");}
@@ -119,6 +119,14 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
   if (finishClaimed !== undefined && !isHostCustodyDataCallback(finishClaimed)) {
     throw new TypeError("Docker native finalizer must be a callable data property");
   }
+  return options;
+};
+
+/** Private Docker selection, with exactly the existing custody/provider product
+ * surface. Construction retains functions only. No Node final-launch seam. */
+export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKernelOwnerOptions) => {
+  const options = captureHostOptions(value);
+  const finishClaimed = options.finishClaimed;
   const imageInitLock = options.imageInitLock === undefined ? undefined : snapshotDockerImageInitLock(options.imageInitLock);
   const roots = createHostPrivateRootOwnerFactory({hostInstanceId: options.hostInstanceId, hostBootId: options.hostBootId});
   const records = new Map<string, Retained>();
