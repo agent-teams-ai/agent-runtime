@@ -105,7 +105,8 @@ test("joined AE feature with actual PostgreSQL PA current/v2 and RS acceptance/p
     assert.ok(captured.selection.authority === "current");
     deployment = postgresDeploymentSelection(captureContainedTurnCurrentAuthority(captured.selection, captured.providerAccess),
       {runtimeSecurity: repository, providerAccess: routeOwner}, otherKey);
-    const feature = createContainedTurnFeature(Object.freeze({...harness.dependencies, ...deployment.ports}));
+    const feature = createContainedTurnFeature(Object.freeze({...harness.dependencies, ...deployment.ports,
+      operationStore: deployment.bindStore(harness.dependencies.operationStore)}));
     const request = {commandId: `command:${id}`, expectedProvider: "codex", scope, intent};
     const result = await feature.submit.execute(request) as OwnerSubmitOutcome;
     assert.equal(result.status, "observed");

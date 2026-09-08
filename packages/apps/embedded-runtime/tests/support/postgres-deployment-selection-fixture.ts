@@ -32,6 +32,9 @@ export const postgresDeploymentSelection = (ports: Ports, readers: Readers,
   let checks = 0;
   return {
     get checks() {return checks;},
+    bindStore(store: ContainedTurnFeatureDependencies["operationStore"]) {
+      return selections.reduce((boundStore, selection) => selection.bindStore(boundStore), store);
+    },
     ports: {
       providerAccess: {...ports.providerAccess, async consumeForDispatch(input: Parameters<Ports["providerAccess"]["consumeForDispatch"]>[0]) {
         const outcomes = [];
