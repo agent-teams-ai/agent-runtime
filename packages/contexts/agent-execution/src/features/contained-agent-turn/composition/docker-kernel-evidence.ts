@@ -61,7 +61,7 @@ export class DockerKernelEvidence {
   public trackPreparation(flight: Promise<unknown>): void {
     if (this.#preparation !== undefined) {throw new TypeError("Docker preparation evidence is one-use");}
     this.#preparation = flight;
-    void flight.then(() => {this.#preparationSettled = true;}, () => {this.#preparationSettled = true;});
+    void flight.then(() => {this.#preparationSettled = true; return;}, () => {this.#preparationSettled = true;});
   }
 
   /** Same-object capabilities from the retained preparation, not observation bags. */
@@ -159,8 +159,8 @@ export class DockerKernelEvidence {
       identity: this.identity(), providerExit,
       guardianExit: terminal === undefined ? Object.freeze({status: "unobserved"})
         : Object.freeze({status: "observed", code: terminal.exitCode, signal: null}),
-      stdout: Object.freeze({...observation?.stdout ?? {bytes: 0, sha256: empty}, status: complete ? "complete" : "incomplete"}),
-      stderr: Object.freeze({...observation?.stderr ?? {bytes: 0, sha256: empty}, status: complete ? "complete" : "incomplete"}),
+      stdout: streamEvidence(observation?.stdout, complete),
+      stderr: streamEvidence(observation?.stderr, complete),
       closure: Object.freeze({profile: "strict-linux-cgroup-v2", limitations: Object.freeze([] as const),
         status: physicallyClosed ? "closed" : "unproven"}),
       privateRoot: this.#root?.snapshot().evidence ?? Object.freeze({identitySha256: empty, status: "unproven"}),
@@ -193,3 +193,6 @@ const physicalClosure = (owner: DockerHostCustodyLifecycle, lifecycle: Lifecycle
 
 const observationSettled = (lifecycle: Lifecycle): boolean => lifecycle !== undefined && lifecycle.attachCleanup === "complete" &&
   (lifecycle.execution === null || lifecycle.execution.settled);
+
+const streamEvidence = (stream: {bytes: number; sha256: string} | undefined, complete: boolean): HostCustodyEvidence["stdout"] =>
+  Object.freeze({...stream ?? {bytes: 0, sha256: empty}, status: complete ? "complete" : "incomplete"});

@@ -105,6 +105,37 @@ const syntheticEngine = (context: SyntheticEngineContext): DockerEnginePort => {
   };
 };
 
+/** Point-in-time facts of a synthetic Node listener recipe, in the exact shape
+ * `NodeHostHttpListener.observe()` publishes. No socket is ever bound. */
+const createListenerReadback = () => ({
+  scope: "retained-node-server-and-delivered-sockets", openState: "not-attempted",
+  listenerState: "not-attempted", admissionSealed: false, nativeBindPending: false, closeRequested: false,
+  serverCloseAcknowledged: false, sockets: {observed: 0, closeEvents: 0, awaitingClose: 0, droppedWithoutSocket: 0},
+  consumerPending: false, consumerWorkPending: false, uncertainty: [] as string[],
+});
+
+const createListener = (physical: {opens: number; seals: number; closes: number; recipes: string[]},
+  faults: {listener: boolean}, record: (name: string) => void) => {
+  const readback = createListenerReadback();
+  const listener = {
+    observe() {return {...readback, sockets: {...readback.sockets}, uncertainty: [...readback.uncertainty]};},
+    async open() {
+      physical.opens += 1; record("listener-open");
+      if (faults.listener) {throw new Error("synthetic listener failure");}
+      readback.openState = "published"; readback.listenerState = "open";
+      return {address: {address: physical.recipes.at(-1)!, family: "IPv4", port: 43_129},
+        sealAdmission: listener.sealAdmission, close: listener.close, observe: listener.observe};
+    },
+    sealAdmission() {physical.seals += 1; readback.admissionSealed = true;},
+    async close() {
+      physical.closes += 1;
+      readback.listenerState = "closed"; readback.closeRequested = true; readback.serverCloseAcknowledged = true;
+      return {state: "closed"};
+    },
+  };
+  return {listener, readback};
+};
+
 /** Actual Docker Host Custody lifecycle, operation network owner, V4 ledger and
  * Host listener slots over a synthetic Engine and in-memory init channel. There
  * is no real socket, namespace, nftables rule, provider process or credential
@@ -192,30 +223,7 @@ export const postClaimFixture = async (t: TestContext, gateway?: string, selecte
   const v4Storage = new MemoryV4Storage();
   let journal: HostHttpEgressV4Journal | undefined;
   const physical = {opens: 0, seals: 0, closes: 0, consumption: 0, recipes: [] as string[]};
-  /** Point-in-time facts of a synthetic Node listener recipe, in the exact shape
-   * `NodeHostHttpListener.observe()` publishes. No socket is ever bound. */
-  const readback = {
-    scope: "retained-node-server-and-delivered-sockets", openState: "not-attempted",
-    listenerState: "not-attempted", admissionSealed: false, nativeBindPending: false, closeRequested: false,
-    serverCloseAcknowledged: false, sockets: {observed: 0, closeEvents: 0, awaitingClose: 0, droppedWithoutSocket: 0},
-    consumerPending: false, consumerWorkPending: false, uncertainty: [] as string[],
-  };
-  const listener = {
-    observe() {return {...readback, sockets: {...readback.sockets}, uncertainty: [...readback.uncertainty]};},
-    async open() {
-      physical.opens += 1; record("listener-open");
-      if (faults.listener) {throw new Error("synthetic listener failure");}
-      readback.openState = "published"; readback.listenerState = "open";
-      return {address: {address: physical.recipes.at(-1)!, family: "IPv4", port: 43_129},
-        sealAdmission: listener.sealAdmission, close: listener.close, observe: listener.observe};
-    },
-    sealAdmission() {physical.seals += 1; readback.admissionSealed = true;},
-    async close() {
-      physical.closes += 1;
-      readback.listenerState = "closed"; readback.closeRequested = true; readback.serverCloseAcknowledged = true;
-      return {state: "closed"};
-    },
-  };
+  const {listener, readback} = createListener(physical, faults, record);
   const routeAdmissions: unknown[] = [];
   const route: {lease: unknown; release: "closed" | "quarantined" | "none"} = {lease: undefined, release: "none"};
   const publishedFirstWrites: unknown[] = [];
@@ -232,7 +240,7 @@ export const postClaimFixture = async (t: TestContext, gateway?: string, selecte
       if (faults.identity) {throw new Error("synthetic engine identity failure");}
       return engineIdentity;
     },
-    openLifecycle(policy) {policies.push(policy.allowedNetworkName); return lifecycle;},
+    openLifecycle(selectedPolicy) {policies.push(selectedPolicy.allowedNetworkName); return lifecycle;},
     async openResourceJournal(input) {
       record("resource-journal");
       if (faults.journal) {throw new Error("synthetic ledger failure");}

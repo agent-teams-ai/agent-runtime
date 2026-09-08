@@ -400,6 +400,13 @@ const createPreparationCalls = (input: Claimed, admissionAbort: AbortController,
   return {call, cleanupCall};
 };
 
+const createLaunchLifetime = (signal: AbortSignal, admissionSignal: AbortSignal, admissionDeadline: number,
+  observationSignal: AbortSignal, observationDeadline: number): LaunchInput["lifetime"] => ({
+  admission: {signal: AbortSignal.any([signal, admissionSignal]), deadlineEpochMs: admissionDeadline},
+  observation: {signal: observationSignal, deadlineEpochMs: observationDeadline,
+    isActive: () => !observationSignal.aborted && Date.now() < observationDeadline},
+});
+
 const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
   dependencies: DockerLinuxPostClaimDependencies, join?: DockerLinuxClaimedJoin<Io>,
 ): DockerLinuxPostClaimOwner<Io> => {
@@ -484,11 +491,8 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
       const launch = await hostPreparation.beforeLaunch({identity, policy}, call(deadlines.launchMs));
       assertOpen();
       resources.launchAttempted = true;
-      resources.launched = await resources.lifecycle.launch({...launch, create, owner, lifetime: {
-        admission: {signal: AbortSignal.any([input.signal, admissionAbort.signal]), deadlineEpochMs: admissionDeadline},
-        observation: {signal: observationAbort.signal, deadlineEpochMs: observationDeadline,
-          isActive: () => !observationAbort.signal.aborted && Date.now() < observationDeadline},
-      }});
+      resources.launched = await resources.lifecycle.launch({...launch, create, owner,
+        lifetime: createLaunchLifetime(input.signal, admissionAbort.signal, admissionDeadline, observationAbort.signal, observationDeadline)});
 
       // Retain ownership even if cutoff raced the launch await. This callback
       // publishes no admission or execution authority and runs before decoration.

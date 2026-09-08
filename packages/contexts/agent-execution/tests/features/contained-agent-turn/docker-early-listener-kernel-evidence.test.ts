@@ -39,13 +39,14 @@ const {createDockerCodexHostKernelOwner} = await import("../../../dist/features/
 const capture = await import("synthetic:early-root");
 hooks.deregister();
 
+const unused = () => {throw new Error("must not reach provider IO/finalization");};
+
 for (const pending of ["none", "listener", "removal", "cutoff", "cutoff-removal", "cutoff-settlement"] as const) {
   test(`kernel early listener decoration failure retains physical closure without provider IO: pending=${pending}`,
     {skip: process.platform !== "linux", timeout: 15_000}, async t => {
     const f = await connectionFixture(); t.after(() => f.contain());
     let selected: Awaited<ReturnType<typeof postClaimFixture>>;
     let executions = 0;
-    const unused = () => {throw new Error("must not reach provider IO/finalization");};
     const owner = createDockerCodexHostKernelOwner({cleanupMilliseconds: 1000, imageInitLock: imageLock(),
       finishClaimed: async () => unused(), hostBootId: "host-boot:docker", hostInstanceId: "host-instance:docker",
       platformTarget: f.options.platformTarget,
