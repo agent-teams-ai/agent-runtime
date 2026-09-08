@@ -85,6 +85,93 @@ export class LinuxCodexLiveAdminSetupError extends Error {
   }
 }
 
+const validateApproval = (approval: LinuxCodexLiveAdminApproval,
+  issuance: LinuxCodexLivePins["issuance"], route: LinuxCodexLivePins["route"]) => {
+  const {binding, submission, dispatchPolicy} = approval;
+  const scope = {tenantId: binding.tenantId, projectId: binding.projectId, scopeDigest: binding.scopeDigest};
+  if (submission.expectedProvider !== "codex" || binding.provider !== "codex" ||
+      binding.availability !== "available" || binding.revocation !== "active" ||
+      route.recipe !== "codex-chatgpt" || issuance.materializationHeadVersion !== 1 ||
+      dispatchPolicy.providerId !== "codex" || !dispatchPolicy.enabled || dispatchPolicy.revoked ||
+      !isDeepStrictEqual(dispatchPolicy.scope, scope) ||
+      dispatchPolicy.intentDigest !== containedTurnAcceptanceIntentDigestV1(submission.intent) ||
+      approval.egressRule.expectedAcceptedConstraintsDigest !== dispatchPolicy.constraintsDigest) {
+    throw new TypeError("Independent Linux Codex approval/configuration mismatch");
+  }
+};
+
+const validateConfiguration = (config: LinuxCodexLiveAdminConfiguration,
+  lifetime: LinuxCodexLivePins["node"]["lifetime"], credentialDeadline: number) => {
+  if (process.platform !== "linux" || process.arch !== "x64" ||
+      !/^[a-f0-9]{40}$/u.test(config.sourceRevision) ||
+      !(config.hostCustody instanceof NodeProviderProcessCustody) ||
+      !isDeepStrictEqual(config.node.imageInitLock, config.deployment.imageInitLock) ||
+      config.executablePath !== config.node.provider.executablePath ||
+      !Number.isSafeInteger(config.authorityReadTimeoutMs) || config.authorityReadTimeoutMs < 1 ||
+      !Number.isFinite(credentialDeadline) || credentialDeadline <= performance.now() ||
+      credentialDeadline - performance.now() > lifetime.wallDeadlineEpochMs - Date.now() ||
+      lifetime.signal.aborted || lifetime.observationSignal.aborted) {
+    throw new TypeError("Independent Linux Codex approval/configuration mismatch");
+  }
+};
+
+const credentialOutputTokens = (credentials: LinuxCodexLiveAdminCredentials): string[] => {
+  // PA requires dedicated non-shared buffers, not Buffer slices or aliases.
+  for (const bytes of [credentials.token, credentials.accountId]) {
+    if (Object.getPrototypeOf(bytes) !== Uint8Array.prototype ||
+        !(bytes.buffer instanceof ArrayBuffer) || bytes.buffer.resizable ||
+        bytes.byteOffset !== 0 || bytes.byteLength !== bytes.buffer.byteLength ||
+        bytes.byteLength === 0 || bytes.byteLength > 16384) {
+      throw new TypeError("Dedicated bounded credential bytes required");
+    }
+  }
+  if (credentials.token.buffer === credentials.accountId.buffer) {throw new TypeError("Credential buffers overlap");}
+  const decoder = new TextDecoder("utf-8", {fatal: true});
+  return [credentials.token, credentials.accountId].flatMap(bytes => {
+    const value = decoder.decode(bytes);
+    if (!value || /[\r\n\0]/u.test(value)) {throw new TypeError("Credential field invalid");}
+    return [value, createHash("sha256").update(bytes).digest("hex")];
+  });
+};
+
+const approvedCurrentPolicy = (approval: LinuxCodexLiveAdminApproval,
+  timing: CurrentPolicy["timing"], monotonicNow: CurrentPolicy["monotonicNow"]):
+  LinuxCodexLivePins["deployment"]["currentPolicy"] => {
+  const {binding, dispatchPolicy} = approval;
+  const scope = {tenantId: binding.tenantId, projectId: binding.projectId, scopeDigest: binding.scopeDigest};
+  return acknowledged => {
+    const head = acknowledged.acceptedDispatch.authority;
+    const subject = acknowledged.input.subject;
+    if (head === undefined || head.revoked || head.constraintsDigest !== dispatchPolicy.constraintsDigest ||
+        head.containmentPolicyDigest !== dispatchPolicy.containmentPolicyDigest ||
+        !isDeepStrictEqual(head.scope, scope) || head.providerId !== "codex" ||
+        acknowledged.input.accepted.intentDigest !== dispatchPolicy.intentDigest ||
+        !isDeepStrictEqual(acknowledged.current.binding, binding)) {
+      throw new TypeError("Acknowledged authority differs from independent approval");
+    }
+    // Same closed projection used by the existing current-egress ACL. All
+    // head fields come from acknowledged RS, never request expectations.
+    const operation = {scope: {...head.scope, operationId: head.operationId},
+      providerId: head.providerId, authorityGeneration: head.authorityGeneration,
+      claimBindingDigest: head.claimBindingDigest};
+    if (head.operationId !== subject.operationId ||
+        head.claimBindingDigest !== subject.runtimeSecurityRequest.claimBindingDigest) {
+      throw new TypeError("Acknowledged operation mismatch");
+    }
+    const acceptedDispatch = {headVersion: acknowledged.acceptedDispatch.headVersion,
+      authority: {operation, decision: head.decision, purpose: head.purpose,
+        authorityRevision: head.authorityRevision, acceptedAuthorityDigest: head.acceptedAuthorityDigest,
+        authorityHeadDigest: head.authorityHeadDigest, constraintsDigest: head.constraintsDigest,
+        containmentPolicyDigest: head.containmentPolicyDigest, requestDigest: head.requestDigest,
+        providerBindingDigest: head.providerBindingDigest, claimBeforeControlTime: head.claimBeforeControlTime,
+        revoked: head.revoked, ownerEvidenceRef: head.ownerEvidenceRef}};
+    const rule = structuredClone(approval.egressRule);
+    return {rule, approval: {ruleRevision: rule.revision,
+      bindingDigest: currentEgressDigest({domain: "rs-current-egress-rule/v1", operation, acceptedDispatch, rule})},
+      timing, monotonicNow};
+  };
+};
+
 /** Allocates a private empty project, composes the real PA/RS/AE owners and
  * returns one explicitly invokable turn. Setup migrates only an empty disposable
  * database; it does not submit or launch. No public runtime framework is added.
@@ -143,40 +230,9 @@ export const setupLinuxCodexLiveAdmin = async (
       operationDeadlineMonotonic: monotonicNow() + lifetime.wallDeadlineEpochMs - Date.now(),
       readTimeoutMilliseconds: config.authorityReadTimeoutMs};
     const scope = {tenantId: binding.tenantId, projectId: binding.projectId, scopeDigest: binding.scopeDigest};
-    if (process.platform !== "linux" || process.arch !== "x64" ||
-        !/^[a-f0-9]{40}$/u.test(config.sourceRevision) ||
-        !(config.hostCustody instanceof NodeProviderProcessCustody) ||
-        submission.expectedProvider !== "codex" || binding.provider !== "codex" ||
-        binding.availability !== "available" || binding.revocation !== "active" ||
-        route.recipe !== "codex-chatgpt" || issuance.materializationHeadVersion !== 1 ||
-        dispatchPolicy.providerId !== "codex" || !dispatchPolicy.enabled || dispatchPolicy.revoked ||
-        !isDeepStrictEqual(dispatchPolicy.scope, scope) ||
-        dispatchPolicy.intentDigest !== containedTurnAcceptanceIntentDigestV1(submission.intent) ||
-        approval.egressRule.expectedAcceptedConstraintsDigest !== dispatchPolicy.constraintsDigest ||
-        !isDeepStrictEqual(config.node.imageInitLock, config.deployment.imageInitLock) ||
-        config.executablePath !== config.node.provider.executablePath ||
-        !Number.isSafeInteger(config.authorityReadTimeoutMs) || config.authorityReadTimeoutMs < 1 ||
-        !Number.isFinite(credentialDeadline) || credentialDeadline <= performance.now() ||
-        credentialDeadline - performance.now() > lifetime.wallDeadlineEpochMs - Date.now() ||
-        lifetime.signal.aborted || lifetime.observationSignal.aborted) {
-      throw new TypeError("Independent Linux Codex approval/configuration mismatch");
-    }
-    // PA requires dedicated non-shared buffers, not Buffer slices or aliases.
-    for (const bytes of [credentials.token, credentials.accountId]) {
-      if (Object.getPrototypeOf(bytes) !== Uint8Array.prototype ||
-          !(bytes.buffer instanceof ArrayBuffer) || bytes.buffer.resizable ||
-          bytes.byteOffset !== 0 || bytes.byteLength !== bytes.buffer.byteLength ||
-          bytes.byteLength === 0 || bytes.byteLength > 16384) {
-        throw new TypeError("Dedicated bounded credential bytes required");
-      }
-    }
-    if (credentials.token.buffer === credentials.accountId.buffer) {throw new TypeError("Credential buffers overlap");}
-    const decoder = new TextDecoder("utf-8", {fatal: true});
-    tokens.push(...[credentials.token, credentials.accountId].flatMap(bytes => {
-      const value = decoder.decode(bytes);
-      if (!value || /[\r\n\0]/u.test(value)) {throw new TypeError("Credential field invalid");}
-      return [value, createHash("sha256").update(bytes).digest("hex")];
-    }));
+    validateApproval(approval, issuance, route);
+    validateConfiguration(config, lifetime, credentialDeadline);
+    tokens.push(...credentialOutputTokens(credentials));
     directories = await allocateLinuxCodexLiveAdminDirectories(config.testParent);
     const tree = directories;
     const enginePolicy = {...config.node.enginePolicy, ...tree.engineRoots};
@@ -200,37 +256,7 @@ export const setupLinuxCodexLiveAdmin = async (
       node: {...config.node, lifetime, enginePolicy, binding: {...scope, hostBootId: config.hostBootId,
         hostInstanceId: config.hostInstanceId}, readDirectories: tree.readDirectories,
         workspaceBackingTreeOwnership: tree.workspaceBackingTreeOwnership},
-      deployment: {...config.deployment, currentPolicy(acknowledged) {
-        const head = acknowledged.acceptedDispatch.authority;
-        const subject = acknowledged.input.subject;
-        if (head === undefined || head.revoked || head.constraintsDigest !== dispatchPolicy.constraintsDigest ||
-            head.containmentPolicyDigest !== dispatchPolicy.containmentPolicyDigest ||
-            !isDeepStrictEqual(head.scope, scope) || head.providerId !== "codex" ||
-            acknowledged.input.accepted.intentDigest !== dispatchPolicy.intentDigest ||
-            !isDeepStrictEqual(acknowledged.current.binding, binding)) {
-          throw new TypeError("Acknowledged authority differs from independent approval");
-        }
-        // Same closed projection used by the existing current-egress ACL. All
-        // head fields come from acknowledged RS, never request expectations.
-        const operation = {scope: {...head.scope, operationId: head.operationId},
-          providerId: head.providerId, authorityGeneration: head.authorityGeneration,
-          claimBindingDigest: head.claimBindingDigest};
-        if (head.operationId !== subject.operationId ||
-            head.claimBindingDigest !== subject.runtimeSecurityRequest.claimBindingDigest) {
-          throw new TypeError("Acknowledged operation mismatch");
-        }
-        const acceptedDispatch = {headVersion: acknowledged.acceptedDispatch.headVersion,
-          authority: {operation, decision: head.decision, purpose: head.purpose,
-            authorityRevision: head.authorityRevision, acceptedAuthorityDigest: head.acceptedAuthorityDigest,
-            authorityHeadDigest: head.authorityHeadDigest, constraintsDigest: head.constraintsDigest,
-            containmentPolicyDigest: head.containmentPolicyDigest, requestDigest: head.requestDigest,
-            providerBindingDigest: head.providerBindingDigest, claimBeforeControlTime: head.claimBeforeControlTime,
-            revoked: head.revoked, ownerEvidenceRef: head.ownerEvidenceRef}};
-        const rule = structuredClone(approval.egressRule);
-        return {rule, approval: {ruleRevision: rule.revision,
-          bindingDigest: currentEgressDigest({domain: "rs-current-egress-rule/v1", operation, acceptedDispatch, rule})},
-          timing, monotonicNow};
-      }},
+      deployment: {...config.deployment, currentPolicy: approvedCurrentPolicy(approval, timing, monotonicNow)},
       credentials: {
         inventory: {credentialBindingDigest: binding.credentialBindingDigest,
           credentialGeneration: binding.credentialGeneration, sensitiveOutputTokens: tokens},

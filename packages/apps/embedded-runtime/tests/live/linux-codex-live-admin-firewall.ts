@@ -5,7 +5,7 @@ import {randomUUID} from "node:crypto";
 import {isIPv4, type AddressInfo} from "node:net";
 import {
   assertNetworkEngine, assertNetworkContainer, decodeOperationNetwork, networkBinding,
-  networkDigest, operationNetworkLabels, operationNetworkName,
+  networkDigest, networkObject, operationNetworkLabels, operationNetworkName,
   type DockerOperationNetworkBinding,
 } from "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-operation-network-codec.js";
 import type {DockerEngineIdentity, DockerContainerAuthority} from
@@ -28,13 +28,18 @@ export function createFirewallCommand(paths: Readonly<Record<"iptables" | "ip" |
 
 /** Supply these from the committed operation and independently observed Host owner,
  * never by copying labels from the network being inspected. The caller retains
- * the Host/daemon lifetime and local socket custody through cleanup. */
+ * the Host/daemon lifetime and local socket custody through cleanup. networkId
+ * MUST come from the retained real operation owner's allocate()/inspectMembership() result,
+ * never this helper's CLI inspection or a fabricated observer. networkName is
+ * operationNetworkName(binding), pinned before allocation. This is explicit
+ * owner-authorized TEST-ONLY host administration, not allocation custody proof.
+ * The production owner continues verifying its original private allocation. */
 export type ExpectedOwnedNetwork = Readonly<{
   binding: DockerOperationNetworkBinding;
   hostEngine: DockerEngineIdentity;
   daemonId: string;
   socketPath: string;
-  allocation: string;
+  networkName: string;
   networkId: string;
   container?: DockerContainerAuthority;
 }>;
@@ -50,11 +55,54 @@ function subnetFor(value: unknown, gateway: string): {subnet: string; prefix: nu
   return {subnet: value, prefix};
 }
 
+async function assertBridge(command: FirewallCommand, bridge: string, gateway: string, prefix: number): Promise<void> {
+  const links = JSON.parse(await command("ip", ["-j", "-d", "address", "show", "dev", bridge]));
+  if (!Array.isArray(links) || links.length !== 1 || links[0].ifname !== bridge ||
+      links[0].linkinfo?.info_kind !== "bridge" ||
+      !Array.isArray(links[0].addr_info) || !links[0].addr_info.some((a: Record<string, unknown>) =>
+        a.family === "inet" && a.local === gateway && a.prefixlen === prefix)) {throw fail();}
+}
+
+async function inspectOwnedTuple(command: FirewallCommand, endpoint: AddressInfo, expected: ExpectedOwnedNetwork) {
+  const binding = networkBinding(expected.binding);
+  assertNetworkEngine(binding, expected.hostEngine);
+  if (expected.container) {assertNetworkContainer(binding, expected.container);}
+  const id = networkDigest(expected.networkId);
+  if (expected.networkName !== operationNetworkName(binding)) {throw fail();}
+  if (!/^\/[\w/.-]+$/u.test(expected.socketPath) || !expected.daemonId ||
+      endpoint.family !== "IPv4" || !isIPv4(endpoint.address) ||
+      !Number.isInteger(endpoint.port) || endpoint.port < 1 || endpoint.port > 65535) {throw fail();}
+  const docker = (...args: string[]) => command("docker", ["--host", `unix://${expected.socketPath}`, ...args]);
+  const info = JSON.parse(await docker("info", "--format", "{{json .}}"));
+  if (info.ID !== expected.daemonId) {throw fail();}
+  const networks = JSON.parse(await docker("network", "inspect", id));
+  if (!Array.isArray(networks) || networks.length !== 1) {throw fail();}
+  const raw = networks[0];
+  // Observed metadata only: no independent allocation custody is asserted here.
+  const allocation = networkDigest(networkObject(networkObject(raw).Labels)["com.agent-runtime.http.allocation"]);
+  const observed = decodeOperationNetwork({value: raw, name: expected.networkName,
+    labels: operationNetworkLabels(binding, allocation), networkId: id, container: expected.container});
+  if (observed.gateway !== endpoint.address) {throw fail();}
+  const {subnet, prefix} = subnetFor(raw.IPAM.Config[0].Subnet, observed.gateway);
+  const bridge = `br-${id.slice(0, 12)}`; // Fixed codec recipe forbids a custom bridge name.
+  await assertBridge(command, bridge, observed.gateway, prefix);
+  return {bridge, subnet, gateway: observed.gateway};
+}
+
 /** Retain this owner BEFORE allow(). A failed/aborted allow can still own a rule.
  * Calls serialize; cleanup queued during allow prevents further use. Pending means
  * retry cleanup on the same owner; do not dispose its Host/network resources yet.
  *
- * Integration at result.preparation.resources.listenerFor(gateway):
+ * Integration in the authorized disposable harness retaining DockerOperationNetwork:
+ *   const binding = committedNetworkInput.binding; // retained construction input
+ *   const observation = await network.allocate(call); // real retained owner
+ *   const expectedOwnedNetwork = {binding, hostEngine, daemonId, socketPath,
+ *     networkName: operationNetworkName(binding), networkId: observation.networkId};
+ * hostEngine and daemonId come from the retained Host's identity observation;
+ * socketPath is its pinned local daemon socket. Do not infer any of these from
+ * network labels. If already attached, use network.inspectMembership(call) and include the
+ * retained container authority. Keep that real network owner through cleanup.
+ * At result.preparation.resources.listenerFor(observation.gateway):
  *   const opened = await originalListener.open(...args); // actual bound address
  *   try { await firewall.allow(opened.address, expectedOwnedNetwork, signal); }
  *   catch (error) { await firewall.cleanup(); throw error; }
@@ -93,31 +141,9 @@ export function createLinuxCodexLiveAdminFirewall(command: FirewallCommand) {
         if (used || closing || signal?.aborted) {throw fail();}
         used = true;
         try {
-          const binding = networkBinding(expected.binding);
-          assertNetworkEngine(binding, expected.hostEngine);
-          if (expected.container) {assertNetworkContainer(binding, expected.container);}
-          const id = networkDigest(expected.networkId);
-          if (!/^\/[\w/.-]+$/u.test(expected.socketPath) || !expected.daemonId ||
-              endpoint.family !== "IPv4" || !isIPv4(endpoint.address) ||
-              !Number.isInteger(endpoint.port) || endpoint.port < 1 || endpoint.port > 65535) {throw fail();}
-          const docker = (...args: string[]) => command("docker", ["--host", `unix://${expected.socketPath}`, ...args]);
-          const info = JSON.parse(await docker("info", "--format", "{{json .}}"));
-          if (info.ID !== expected.daemonId) {throw fail();}
-          const networks = JSON.parse(await docker("network", "inspect", id));
-          if (!Array.isArray(networks) || networks.length !== 1) {throw fail();}
-          const raw = networks[0];
-          const observed = decodeOperationNetwork({value: raw, name: operationNetworkName(binding),
-            labels: operationNetworkLabels(binding, expected.allocation), networkId: id, container: expected.container});
-          if (observed.gateway !== endpoint.address) {throw fail();}
-          const {subnet, prefix} = subnetFor(raw.IPAM.Config[0].Subnet, observed.gateway);
-          const bridge = `br-${id.slice(0, 12)}`; // Fixed codec recipe forbids a custom bridge name.
-          const links = JSON.parse(await command("ip", ["-j", "-d", "address", "show", "dev", bridge]));
-          if (!Array.isArray(links) || links.length !== 1 || links[0].ifname !== bridge ||
-              links[0].linkinfo?.info_kind !== "bridge" ||
-              !Array.isArray(links[0].addr_info) || !links[0].addr_info.some((a: Record<string, unknown>) =>
-                a.family === "inet" && a.local === observed.gateway && a.prefixlen === prefix)) {throw fail();}
+          const {bridge, subnet, gateway} = await inspectOwnedTuple(command, endpoint, expected);
           if (ownLines(await list()).length || signal?.aborted || closing) {throw fail();}
-          rule = ["-i", bridge, "-s", subnet, "-d", `${observed.gateway}/32`, "-p", "tcp",
+          rule = ["-i", bridge, "-s", subnet, "-d", `${gateway}/32`, "-p", "tcp",
             "-m", "tcp", "--dport", String(endpoint.port), "-m", "comment", "--comment", comment, "-j", "ACCEPT"];
           await command("iptables", ["-w", "2", "-t", "filter", "-I", "INPUT", "1", ...rule]);
           await command("iptables", ["-w", "2", "-t", "filter", "-C", "INPUT", ...rule]);

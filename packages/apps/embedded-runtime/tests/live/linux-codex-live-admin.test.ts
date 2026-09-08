@@ -36,3 +36,25 @@ test("concurrent early-failure cleanup shares the retained flight", async () => 
     assert.equal(await first, "released");
   }
 });
+
+test("approval snapshot failure erases transferred arrays despite producer slot replacement", async () => {
+  const token = new Uint8Array([65, 66]);
+  const accountId = new Uint8Array([67, 68]);
+  const replacement = new Uint8Array([69]);
+  const material = {token, accountId};
+  const approval = {get binding() {
+    material.token = replacement;
+    material.accountId = replacement;
+    throw new Error("snapshot failed");
+  }};
+  await assert.rejects(
+    setupLinuxCodexLiveAdmin(undefined as never, approval as never, undefined as never, material),
+    error => {
+      assert.ok(error instanceof LinuxCodexLiveAdminSetupError);
+      assert.equal(error.directory, undefined);
+      return true;
+    },
+  );
+  assert.deepEqual([...token, ...accountId], [0, 0, 0, 0]);
+  assert.deepEqual([...replacement], [69]);
+});
