@@ -193,6 +193,13 @@ export const registerPassiveSetupScenarios = (
     // Actual security denial, rather than a fabricated denied dependency result.
     const denied = host.bindAccess({ codexSetup: { ...scope.codexSetup, roots: [] } });
     assert.equal((await denied.codexSetup.inspect({})).status, "denied");
+    const deniedClaude = host.bindAccess({ claudeCodeSetup: {
+      ...scope.claudeCodeSetup, workspaceRoot: scope.claudeCodeSetup.homeRoot,
+    } });
+    const deniedClaudeResult = await deniedClaude.claudeCodeSetup.inspect();
+    assert.equal(deniedClaudeResult.status, "denied");
+    assertFrozen(deniedClaudeResult);
+    assert.ok(!JSON.stringify(deniedClaudeResult).includes(root));
     await writeFile(join(root, "home", ".codex", "config.toml"), "model = [\n");
     const malformed = await access.codexSetup.inspect({ nativeProfile: "invalid profile" });
     assert.ok(malformed.diagnostics.some(item => item.code === "config_parse_failed"));
