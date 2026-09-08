@@ -49,7 +49,7 @@ test("installed archives expose async composition and preserve passive sibling a
   await writeFile(join(consumer, "package.json"), JSON.stringify({
     name: "disposable-agent-runtime-packed-consumer", private: true, type: "module",
     packageManager: "pnpm@11.18.0", dependencies,
-    devDependencies: { typescript: "7.0.2", "@types/node": "24.13.3", "@types/pg": "8.23.1" },
+    devDependencies: { typescript: "7.0.2", "@types/node": "24.13.3" },
   }));
   await writeFile(join(consumer, "pnpm-workspace.yaml"), JSON.stringify({ overrides: dependencies, minimumReleaseAgeExclude: ["@get-modular/core@0.1.0", "@get-modular/assembly@0.1.0"] }));
   // Missing cache entries are a concrete failure, never a skip or a source fallback.
