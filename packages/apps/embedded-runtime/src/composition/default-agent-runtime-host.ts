@@ -1,9 +1,16 @@
 import { compileComposition } from "@get-modular/core";
+import type { AssemblyOutcome } from "@get-modular/assembly";
 import type { AgentRuntimeHost } from "./agent-runtime-host.js";
 import { AgentRuntimeHostCreationError, assemblyErrorCodes, projectDiagnostics, type AgentRuntimeHostCreationPhase } from "./agent-runtime-host-creation-error.js";
-import { bindRuntimeSetup, createRuntimeSetupFactories, runtimeSetupDeclarations, runtimeSetupProfile, type RuntimeSetupFactories } from "./runtime-setup-assembly.js";
+import { bindRuntimeSetup, createRuntimeSetupFactories, runtimeSetupDeclarations, runtimeSetupProfile, type RuntimeSetupFactories, type RuntimeSetupRootCompletion } from "./runtime-setup-assembly.js";
 
 export interface DefaultAgentRuntimeHostOptions { readonly signal?: AbortSignal; }
+
+// Internal fixed checkpoints, absent from the private package entrypoint.
+interface RuntimeSetupAttemptCheckpoints {
+  readonly completeRoot?: RuntimeSetupRootCompletion;
+  readonly observeOutcome?: (outcome: AssemblyOutcome<ReturnType<typeof bindRuntimeSetup>["roots"]>) => void;
+}
 
 export async function createDefaultAgentRuntimeHost(options?: DefaultAgentRuntimeHostOptions): Promise<AgentRuntimeHost> {
   return createRuntimeSetupAttempt(options);
@@ -13,6 +20,7 @@ export async function createDefaultAgentRuntimeHost(options?: DefaultAgentRuntim
 export async function createRuntimeSetupAttempt(
   options?: DefaultAgentRuntimeHostOptions,
   factoriesForAttempt: (platform: NodeJS.Platform) => RuntimeSetupFactories = createRuntimeSetupFactories,
+  checkpoints: RuntimeSetupAttemptCheckpoints = {},
 ): Promise<AgentRuntimeHost> {
   let phase: AgentRuntimeHostCreationPhase = "options";
   let signal: AbortSignal | undefined;
@@ -36,7 +44,7 @@ export async function createRuntimeSetupAttempt(
       signal?.aborted, false, projectDiagnostics(composition.diagnostics));
     checkCancellation();
     phase = "bind";
-    const bindings = bindRuntimeSetup(factoriesForAttempt(platform), (host) => { ownedHost = host; });
+    const bindings = bindRuntimeSetup(factoriesForAttempt(platform), (host) => { ownedHost = host; }, checkpoints.completeRoot);
     phase = "prepare";
     const preparation = await bindings.assembly.prepare({ composition, factories: bindings.factories, roots: bindings.roots });
     if (preparation.status === "failed") throw failureForAttempt(
@@ -45,6 +53,7 @@ export async function createRuntimeSetupAttempt(
     checkCancellation();
     phase = "run";
     const outcome = await preparation.prepared.run(signal === undefined ? {} : { signal });
+    checkpoints.observeOutcome?.(outcome);
     if (outcome.status === "failed") throw failureForAttempt(
       assemblyErrorCodes[outcome.code] ?? "internal_failure", phase,
       outcome.cancellation !== undefined || signal?.aborted === true, false, [], outcome.cause, undefined,

@@ -18,7 +18,9 @@
     "@agent-teams/agent-execution": "workspace:*",
     "@agent-teams/provider-access": "workspace:*",
     "@agent-teams/runtime-configuration": "workspace:*",
-    "@agent-teams/runtime-security": "workspace:*"
+    "@agent-teams/runtime-security": "workspace:*",
+    "@get-modular/assembly": "catalog:",
+    "@get-modular/core": "catalog:"
   },
   "files": [
     "dist"

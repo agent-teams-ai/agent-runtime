@@ -12,6 +12,12 @@ catalogs:
     '@anthropic-ai/claude-agent-sdk':
       specifier: 0.3.251
       version: 0.3.251
+    '@get-modular/assembly':
+      specifier: 0.1.0
+      version: 0.1.0
+    '@get-modular/core':
+      specifier: 0.1.0
+      version: 0.1.0
     '@opencode-ai/plugin':
       specifier: 1.18.5
       version: 1.18.5
@@ -138,6 +144,12 @@ importers:
       '@agent-teams/runtime-security':
         specifier: workspace:*
         version: link:../../contexts/runtime-security
+      '@get-modular/assembly':
+        specifier: 'catalog:'
+        version: 0.1.0
+      '@get-modular/core':
+        specifier: 'catalog:'
+        version: 0.1.0
     devDependencies:
       pg:
         specifier: 'catalog:'
@@ -195,7 +207,6 @@ importers:
       pg:
         specifier: 'catalog:'
         version: 8.23.0
-
 
   packages/platform/filesystem-custody: {}
 
@@ -297,6 +308,14 @@ packages:
 
   '@emnapi/wasi-threads@1.2.2':
     resolution: {integrity: sha512-c95qOXkHdydNKhscBTebqEC1CVAZpyqOfVfBzQ1qgzyl3gfeldUjIggDbIZgDKsHLgnsM+igH7TJ/eAasaVuMA==}
+
+  '@get-modular/assembly@0.1.0':
+    resolution: {integrity: sha512-wxK49abnnAWLkCuI8EwL8cJENP2IfDmEm29UHi0w5t0/BL/c2IdTNbOTvQDo/8+hl0ZCJZtwqIqPZ3AnxJ7WNQ==}
+    engines: {node: '>=24.18.0 <25'}
+
+  '@get-modular/core@0.1.0':
+    resolution: {integrity: sha512-0aqzW7sbh7O8aAPBGJIPZBbhgeYnk+HuZdVf27dimkQ3d/zb9zpsYIMdLGt3EXi1B8MaBjw09ApzLaiIRiAgIQ==}
+    engines: {node: '>=24.18.0 <25'}
 
   '@hono/node-server@2.1.1':
     resolution: {integrity: sha512-ELuehkj5VCBdgEw9zs+ivkKwyzzUCSQuE96YmiPvn1ECBoZCczbFXJLeEGMTYjphP6gydh4pHMqEYPVMYUVgQg==}
@@ -2091,6 +2110,12 @@ snapshots:
     dependencies:
       tslib: 2.8.1
     optional: true
+
+  '@get-modular/assembly@0.1.0':
+    dependencies:
+      '@get-modular/core': 0.1.0
+
+  '@get-modular/core@0.1.0': {}
 
   '@hono/node-server@2.1.1(hono@4.13.5)':
     dependencies:

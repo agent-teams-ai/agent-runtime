@@ -136,7 +136,12 @@ export const createRuntimeSetupFactories = (platform: NodeJS.Platform) => ({
 });
 export type RuntimeSetupFactories = ReturnType<typeof createRuntimeSetupFactories>;
 
-export function bindRuntimeSetup(factories: RuntimeSetupFactories, captureHost: (host: AgentRuntimeHost) => void) {
+// Fixed owner-local completion seam for synthetic envelope/ownership tests.
+export type RuntimeSetupRootProduct = { readonly instance: AgentRuntimeHost; readonly capabilities: Record<string, never> };
+export type RuntimeSetupRootCompletion = (product: RuntimeSetupRootProduct) => Promise<RuntimeSetupRootProduct>;
+
+export function bindRuntimeSetup(factories: RuntimeSetupFactories, captureHost: (host: AgentRuntimeHost) => void,
+  completeRoot?: RuntimeSetupRootCompletion) {
   const assembly = assemblyFor<RuntimeSetupCapabilities>();
   const setupSecurity = assembly.bindFactory(setupSecurityDeclaration, async () => {
     const instance = await factories.security();
@@ -191,6 +196,7 @@ export function bindRuntimeSetup(factories: RuntimeSetupFactories, captureHost: 
       },
     });
     captureHost(host);
+    if (completeRoot !== undefined) return await completeRoot({ instance: host, capabilities: {} });
     return { instance: host, capabilities: {} };
   });
   return { assembly, factories: [setupSecurity, installationDiscovery, codexConfiguration, claudeConfiguration, codexPlanner, claudePlanner, runtimeHost], roots: { host: runtimeHost } };
