@@ -119,6 +119,14 @@ function prepareAttempt(config) {
   return actualSourceSHA;
 }
 
+// Only fixed stage codes cross the diagnostic boundary; never inspect causes or stacks.
+export function safeSetupStage(error) {
+  try {
+    const stage = error?.setupStage;
+    return ['admin-setup', 'configuration', 'schema', 'pa', 'rs', 'operation-store', 'workspace',
+      'artifacts', 'node-recipe', 'host-composition'].includes(stage) ? stage : undefined;
+  } catch {return;}
+}
 const identity = text => text;
 export function createRedactor(fields) {
   const secrets = Object.values(fields).flatMap(v => [v, JSON.stringify(v).slice(1, -1),
@@ -257,9 +265,10 @@ export function createLinuxCodexLiveCanaryDriver(configuration, credentialFd) {
         const outcome = await live.submit();
         retainOutcome('submit', outcome);
         if (operationId) {await pollObservation(observe);}
-      } catch {
+      } catch (error) {
         observedStatus = 'unknown';
-        report('unknown', {operationId, commandId: config.approval.commandId, retryAllowed: false});
+        report('unknown', {operationId, commandId: config.approval.commandId, retryAllowed: false,
+          setupStage: safeSetupStage(error)});
       } finally {
         for (const bytes of Object.values(transferred ? {} : credentials ?? {})) {try {bytes.fill(0);} catch { /* Transferred. */ }}
         closeCredential();

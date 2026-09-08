@@ -108,15 +108,35 @@ const bindOperationStore = (store: PostgresContainedTurnOperationStore) => Objec
   terminalProof: store.terminalProof.bind(store),
 });
 
+export type LinuxCodexLiveSetupStage = "configuration" | "schema" | "pa" | "rs" |
+  "operation-store" | "workspace" | "artifacts" | "node-recipe" | "host-composition";
+
+const createLaunchRecords = (pins: LinuxCodexLivePins, isClosing: () => boolean): Launch => Object.freeze({async resolve(input: LaunchInput) {
+  if (isClosing()) {return;}
+  const inventory = pins.credentials.inventory;
+  if (input.credentialBindingDigest !== inventory.credentialBindingDigest ||
+      input.credentialGeneration !== inventory.credentialGeneration) {return;}
+  const paths = await pins.launchPaths(input);
+  if (isClosing()) {return;}
+  const boundary = createCodexAppServerPermissionBoundary({codexHome: paths.codexHome,
+    workspaceRef: input.workspaceAuthority.canonicalPath, intentMode: input.intentMode});
+  return Object.freeze({boundary, executablePath: paths.executablePath,
+    privateRootPath: paths.privateRootPath, tmpDir: paths.tmpDir,
+    credentialOutputInventory: Object.freeze({...inventory,
+      sensitiveOutputTokens: Object.freeze([...inventory.sensitiveOutputTokens])})});
+}});
+
 /** Retains the cleanup handle even when construction failed. Errors intentionally
  * omit underlying causes, which may contain PG configuration or secret material.
  */
 export class LinuxCodexLiveSetupError extends Error {
   public readonly cleanup: (call: Parameters<Recipe["releaseAfterHostCleanup"]>[0]) => Promise<"released" | "pending">;
-  public constructor(cleanup: LinuxCodexLiveSetupError["cleanup"]) {
+  public readonly setupStage: LinuxCodexLiveSetupStage;
+  public constructor(cleanup: LinuxCodexLiveSetupError["cleanup"], setupStage: LinuxCodexLiveSetupStage = "configuration") {
     super("Linux Codex live setup incomplete; retain inputs until cleanup releases");
     this.name = "LinuxCodexLiveSetupError";
     this.cleanup = cleanup;
+    this.setupStage = setupStage;
   }
 }
 
@@ -126,12 +146,7 @@ export class LinuxCodexLiveSetupError extends Error {
  * the caller, strictly AFTER cleanup returns released. Pending preserves debt.
  */
 export const setupLinuxCodexLiveBootstrap = async (pool: Pool, pins: LinuxCodexLivePins) => {
-  if (process.platform !== "linux" || pins.platformTarget.platform !== "linux" ||
-      !/^[a-f0-9]{40}$/u.test(pins.sourceRevision)) {
-    throw new TypeError("Pinned Linux configuration is required");
-  }
   const actions: Dispose[] = [];
-  const selectCurrentPolicy = pins.deployment.currentPolicy.bind(pins.deployment);
   const acknowledgedSelections = new Map<string, NonNullable<ReturnType<LinuxCodexNodeSelectionPins["readAcknowledged"]>>>();
   let host: Host | undefined;
   let node: Recipe | undefined;
@@ -163,12 +178,20 @@ export const setupLinuxCodexLiveBootstrap = async (pool: Pool, pins: LinuxCodexL
     void cleanupInFlight.finally(() => {cleanupInFlight = undefined;});
     return cleanupInFlight;
   };
+  let setupStage: LinuxCodexLiveSetupStage = "configuration";
   try {
+    if (process.platform !== "linux" || pins.platformTarget.platform !== "linux" ||
+        !/^[a-f0-9]{40}$/u.test(pins.sourceRevision)) {
+      throw new TypeError("Pinned Linux configuration is required");
+    }
+    const selectCurrentPolicy = pins.deployment.currentPolicy.bind(pins.deployment);
+    setupStage = "schema";
     // Same empty-owner-database guard and migration order as postgres-authority-join.
     const existing = await pool.query("SELECT 1 FROM pg_namespace WHERE nspname IN ('agent_execution','provider_access','runtime_security_dispatch_v1','runtime_security_dispatch_acceptance_v1','host_http_egress')");
     if (existing.rows.length !== 0) {throw new Error("Disposable database must have no owner schemas");}
     await applyContainedTurnPostgresSchema(pool);
     await initializePostgresHttpEgressEvidence(pool);
+    setupStage = "pa";
     const pa = createPostgresOperationDispatchConsumption(pool, pins.issuance);
     actions.push(pa.dispose);
     await pa.control.migrate();
@@ -187,6 +210,7 @@ export const setupLinuxCodexLiveBootstrap = async (pool: Pool, pins: LinuxCodexL
     actions.push(route.dispose);
     await route.control.migrate();
     await route.control.endorse(bindingVersion);
+    setupStage = "rs";
     const digest = createNodeSha256DispatchDigest();
     const sql = {pool, connectTimeoutMs: 2000, queryTimeoutMs: 5000, transactionTimeoutMs: 10000};
     const repository = createPostgresDispatchConsumptionRepository({...sql, digest});
@@ -197,10 +221,14 @@ export const setupLinuxCodexLiveBootstrap = async (pool: Pool, pins: LinuxCodexL
     await decisions.migrate();
     const acceptance = createDispatchAcceptanceFeature({repository, decisions, digest,
       policy: pins.policy, clock: pins.clock});
+    setupStage = "operation-store";
     const durable = new PostgresContainedTurnOperationStore({pool, intentAuthority: pins.intentAuthority});
+    setupStage = "workspace";
     const workspace = await createNodeContainedTurnWorkspaceOwner(pins.workspace);
     actions.push(workspace.dispose);
+    setupStage = "artifacts";
     const artifacts = await createNodeContainedTurnArtifacts(pins.artifacts);
+    setupStage = "node-recipe";
     node = createLinuxCodexNodeRecipe({hostBootId: pins.hostBootId,
       hostInstanceId: pins.hostInstanceId, select: createLinuxCodexNodeSelection({...pins.node,
       ...(pins.firewall === undefined ? {} : {decorateListener: createLinuxCodexLiveFirewallWiring(pins.firewall)}),
@@ -210,20 +238,8 @@ export const setupLinuxCodexLiveBootstrap = async (pool: Pool, pins: LinuxCodexL
           return value;
         },
       })});
-    const launchRecords: Launch = Object.freeze({async resolve(input: LaunchInput) {
-      if (closing) {return;}
-      const inventory = pins.credentials.inventory;
-      if (input.credentialBindingDigest !== inventory.credentialBindingDigest ||
-          input.credentialGeneration !== inventory.credentialGeneration) {return;}
-      const paths = await pins.launchPaths(input);
-      if (closing) {return;}
-      const boundary = createCodexAppServerPermissionBoundary({codexHome: paths.codexHome,
-        workspaceRef: input.workspaceAuthority.canonicalPath, intentMode: input.intentMode});
-      return Object.freeze({boundary, executablePath: paths.executablePath,
-        privateRootPath: paths.privateRootPath, tmpDir: paths.tmpDir,
-        credentialOutputInventory: Object.freeze({...inventory,
-          sensitiveOutputTokens: Object.freeze([...inventory.sensitiveOutputTokens])})});
-    }});
+    const launchRecords = createLaunchRecords(pins, () => closing);
+    setupStage = "host-composition";
     host = createHostCustodiedAgentRuntimeHost({authorityRevision: pins.authorityRevision,
       capabilities: pins.capabilities,
       containedTurn: {
@@ -281,6 +297,6 @@ export const setupLinuxCodexLiveBootstrap = async (pool: Pool, pins: LinuxCodexL
     // borrowed authorities and all owned state quarantined in that case.
     // Do not discard partial owners or automatically repeat ambiguous PG writes.
     // Caller supplies a fresh cleanup deadline and retains this exception's handle.
-    throw new LinuxCodexLiveSetupError(cleanup);
+    throw new LinuxCodexLiveSetupError(cleanup, setupStage);
   }
 };

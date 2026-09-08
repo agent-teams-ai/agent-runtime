@@ -6,7 +6,7 @@ import {mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync,
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
-import {decodeBytes, validateConfiguration, createLinuxCodexLiveCanaryDriver, createCleanupController, createRedactor} from './run-linux-codex-live-canary.mjs';
+import {decodeBytes, validateConfiguration, createLinuxCodexLiveCanaryDriver, createCleanupController, createRedactor, safeSetupStage} from './run-linux-codex-live-canary.mjs';
 const hashFixtureBytes = value => createHash('sha256').update(value).digest('hex');
 import {SOURCE, bytes, config} from './linux-codex-driver-test-fixture.mjs';
 test('explicit byte conversion rejects noncanonical or path inputs; owns dedicated arrays', () => {
@@ -418,4 +418,39 @@ test('public driver collects real admin layout before tree release (synthetic ar
   assert.equal(result.cleanup, 'released');
   assert.equal(existsSync(tree.root), false);
   assert.deepEqual(events, ['setup', 'submit', 'observe', 'cleanup', 'pool-end']);
+});
+
+test('stage whitelist rejects arbitrary values and throwing accessors without reading error text', () => {
+  for (const stage of [undefined, null, {}, 'secret-/private/path', 'schema secret']) {
+    assert.equal(safeSetupStage({setupStage: stage}), undefined);
+  }
+  assert.equal(safeSetupStage({get setupStage() {throw new Error('secret');}}), undefined);
+  for (const stage of ['admin-setup', 'configuration', 'schema', 'pa', 'rs', 'operation-store', 'workspace',
+    'artifacts', 'node-recipe', 'host-composition']) {
+    assert.equal(safeSetupStage({setupStage: stage,
+      get message() {return assert.fail('must not read message');},
+      get stack() {return assert.fail('must not read stack');},
+      get cause() {return assert.fail('must not read cause');}}), stage);
+  }
+});
+
+test('unknown setup report records only the fixed stage and retains cleanup without submission', async t => {
+  const {driver, root, events} = await publicFixture(t);
+  const secret = 'malicious-error-password-/private/path';
+  const failure = Object.assign(new Error(secret), {setupStage: 'rs',
+    cause: new Error(secret), async cleanup() {events.push('cleanup'); return 'released';}});
+  globalThis.ar69DriverFixture.setup = async () => {throw failure;};
+  const result = await driver.run();
+  assert.equal(result.observedStatus, 'unknown');
+  assert.equal(result.cleanup, 'pending');
+  const records = readdirSync(join(root, 'evidence')).filter(name => name.endsWith('.json'))
+    .map(name => readFileSync(join(root, 'evidence', name), 'utf8'));
+  assert.ok(records.every(text => !text.includes(secret)));
+  const unknown = records.map(JSON.parse).find(record => record.kind === 'unknown');
+  assert.equal(unknown.value.setupStage, 'rs');
+  assert.equal(unknown.value.retryAllowed, false);
+  assert.deepEqual(events, ['setup']);
+  assert.equal(await driver.cleanup(), 'released');
+  assert.deepEqual(events, ['setup', 'cleanup', 'pool-end']);
+  await assert.rejects(driver.run());
 });

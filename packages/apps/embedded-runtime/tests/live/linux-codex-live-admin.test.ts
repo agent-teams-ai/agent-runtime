@@ -106,3 +106,46 @@ test("root Host rejects before configuration I/O or allocation and erases materi
   assert.equal(configurationRead, false);
   assert.deepEqual([...material.token, ...material.accountId], [0, 0]);
 });
+
+// Synthetic failures only: no database, filesystem owner or provider is started.
+import {LinuxCodexLiveSetupError, setupLinuxCodexLiveBootstrap} from "./linux-codex-live-bootstrap.ts";
+
+test("bootstrap schema failure retains cleanup and excludes the original error", {skip: process.platform !== "linux"}, async () => {
+  const secret = "malicious-password-/private/path";
+  const pool = {async query() {throw new Error(secret);}};
+  const pins = {sourceRevision: "a".repeat(40), platformTarget: {platform: "linux"},
+    deployment: {currentPolicy() {}}};
+  await assert.rejects(setupLinuxCodexLiveBootstrap(pool as never, pins as never), asyncError => {
+    assert.ok(asyncError instanceof LinuxCodexLiveSetupError);
+    assert.equal(asyncError.setupStage, "schema");
+    assert.equal(Object.hasOwn(asyncError, "cause"), false);
+    assert.ok(!JSON.stringify(asyncError).includes(secret));
+    assert.ok(!String(asyncError.stack).includes(secret));
+    return true;
+  });
+});
+
+test("admin preserves every bootstrap stage and its retained cleanup without cause text", async () => {
+  for (const stage of ["configuration", "schema", "pa", "rs", "operation-store", "workspace", "artifacts",
+    "node-recipe", "host-composition"] as const) {
+    let cleanupCalls = 0;
+    const original = new LinuxCodexLiveSetupError(async () => {cleanupCalls++; return "pending";}, stage);
+    original.message = "malicious-credential-/private/path";
+    const approval = {get binding() {throw original;}};
+    const material = {token: new Uint8Array([1]), accountId: new Uint8Array([2])};
+    try {
+      await setupLinuxCodexLiveAdmin(undefined as never, approval as never, undefined as never, material);
+      assert.fail("expected setup failure");
+    } catch (error) {
+      assert.ok(error instanceof LinuxCodexLiveAdminSetupError);
+      assert.equal(error.setupStage, stage);
+      assert.equal(Object.hasOwn(error, "cause"), false);
+      assert.ok(!JSON.stringify(error).includes(original.message));
+      assert.ok(!String(error.stack).includes(original.message));
+      assert.equal(cleanupCalls, 0);
+      assert.deepEqual([...material.token, ...material.accountId], [1, 2]);
+      assert.equal(await error.cleanup(undefined as never), "pending");
+      assert.equal(cleanupCalls, 1);
+    }
+  }
+});

@@ -1,3 +1,5 @@
+import type {ContainedTurnKernelWorkspaceOwner} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-contracts.js";
+import {withWorkspaceAuthority} from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/docker-workspace-authority-fixture.ts";
 import { imageLock } from "../../../contexts/agent-execution/tests/fixtures/docker-image-init-fixture.ts";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -268,17 +270,32 @@ for (const absent of ["route", "nativeFiles", "currentAuthority"] as const) {
     const resourceEffect = () => {resourceEffects += 1; throw new Error("resource effect before admission");};
     try {
       const composed = await createCompositionInput(custody, root);
-      const input = {...composed.input, routeEnforcement: await dockerProductRoute(), linuxCodex: {
+      // Keep the original one-use capability active through the actual reservation.
+      // Other product fixtures retain their existing synthetic workspace owner.
+      const owner = composed.input.selectedProvider.owner;
+      const workspaceOwner: ContainedTurnKernelWorkspaceOwner = {
+        withLaunchAuthority: (input, consume) =>
+          withWorkspaceAuthority(join(root, "workspace"), input.operationId, consume),
+      };
+      const input = {...composed.input,
+        selectedProvider: {...composed.input.selectedProvider, owner: {...owner, workspaceOwner}},
+        routeEnforcement: await dockerProductRoute(), linuxCodex: {
         imageInitLock: imageLock(), cleanupMilliseconds: 100,
         select() {
           selectionCount += 1;
           // The real Docker owner is the only factory that invokes this callback.
           // The kernel's actual synthetic store must already acknowledge its claim.
           assert.equal(composed.fixture.current()?.dispatch.kind, "claimed");
+          assert.equal(composed.fixture.claimAuthorities.length, 1);
           return {
             preparation: {resources: {consumption: {prepare: resourceEffect}},
               engineIdentity: resourceEffect, openLifecycle: resourceEffect, openResourceJournal: resourceEffect},
-            route: {}, nativeFiles: {install: resourceEffect}, broker: {}, connection: {},
+            // These records are inert: admission checks their presence before
+            // inspecting route/current-authority bindings or creating resources.
+            route: {},
+            nativeFiles: {install: resourceEffect, bindRoot: resourceEffect,
+              cutoff() {}, quiesce: resourceEffect, snapshot: resourceEffect},
+            broker: {}, connection: {}, currentAuthority: {},
             [absent]: undefined,
           } as never;
         },

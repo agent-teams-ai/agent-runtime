@@ -10,7 +10,7 @@ import {currentEgressDigest} from
 import {allocateLinuxCodexLiveAdminDirectories} from "./linux-codex-live-admin-directories.ts";
 import {createLinuxCodexLiveAdminRoute} from "./linux-codex-live-admin-route.ts";
 import {LinuxCodexLiveSetupError, setupLinuxCodexLiveBootstrap,
-  type LinuxCodexLivePins} from "./linux-codex-live-bootstrap.ts";
+  type LinuxCodexLivePins, type LinuxCodexLiveSetupStage} from "./linux-codex-live-bootstrap.ts";
 
 type Bootstrap = Awaited<ReturnType<typeof setupLinuxCodexLiveBootstrap>>;
 type CleanupCall = Parameters<Bootstrap["cleanup"]>[0];
@@ -77,12 +77,15 @@ export interface LinuxCodexLiveAdminCredentials {
 export class LinuxCodexLiveAdminSetupError extends Error {
   public readonly directory: string | undefined;
   public readonly cleanup: (call: CleanupCall) => Promise<"released" | "pending">;
+  public readonly setupStage: LinuxCodexLiveSetupStage | "admin-setup";
   public constructor(directory: string | undefined,
-    cleanup: (call: CleanupCall) => Promise<"released" | "pending">) {
+    cleanup: (call: CleanupCall) => Promise<"released" | "pending">,
+    setupStage: LinuxCodexLiveSetupStage | "admin-setup" = "admin-setup") {
     super("Linux Codex administrative setup incomplete; retain owners and retry cleanup");
     this.name = "LinuxCodexLiveAdminSetupError";
     this.directory = directory;
     this.cleanup = cleanup;
+    this.setupStage = setupStage;
   }
 }
 
@@ -305,6 +308,7 @@ export const setupLinuxCodexLiveAdmin = async (
     // Keep partial owner handles and tree; do not invent a cleanup deadline or
     // erase a live rendering owner's bytes while its cleanup is still pending.
     if (failedCleanup === undefined && bootstrap === undefined) {erase();}
-    throw new LinuxCodexLiveAdminSetupError(directories?.root, cleanup);
+    throw new LinuxCodexLiveAdminSetupError(directories?.root, cleanup,
+      error instanceof LinuxCodexLiveSetupError ? error.setupStage : "admin-setup");
   }
 };
