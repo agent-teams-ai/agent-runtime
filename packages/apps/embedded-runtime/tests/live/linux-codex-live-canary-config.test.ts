@@ -94,8 +94,8 @@ test("actual canary constructs RS acceptance port, Host access authority and eng
       assert.equal(configuration.authorityRevision.length, 118);
       let securityCalls = 0;
       const noSecurityIO = async () => {securityCalls += 1; throw new Error("Unexpected security owner invocation");};
-      const securityOwner = {evaluateForAcceptance: noSecurityIO, publishAndConsumeForDispatch: noSecurityIO,
-        observeDispatchConsumption: noSecurityIO, settleDispatchConsumption: noSecurityIO};
+      const securityOwner = Object.freeze({evaluateForAcceptance: noSecurityIO, publishAndConsumeForDispatch: noSecurityIO,
+        observeDispatchConsumption: noSecurityIO, settleDispatchConsumption: noSecurityIO});
       // Same immutable profile selected by the live driver from dispatchPolicy.
       const security = createContainedTurnSecurityAcceptancePort(securityOwner, Object.freeze({policyRevision}));
       assert.equal(typeof security.authorizeForAcceptance, "function");
