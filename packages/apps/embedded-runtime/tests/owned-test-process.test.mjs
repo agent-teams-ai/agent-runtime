@@ -46,3 +46,19 @@ test("interruption cannot become success when the child exits zero", async t => 
   assert.equal(await runOwnedTestProcess({command: process.execPath, args: ["-e", source], cwd: f.cwd}), 130);
   await absent(f.evidence);
 });
+
+test("interruption escalates even when the direct child ignores TERM", async t => {
+  const f = await fixture(t);
+  const source = `${f.prefix}process.on('SIGTERM',()=>{});process.kill(process.ppid,'SIGTERM');setInterval(()=>{},1000);`;
+  const started = performance.now();
+  assert.equal(await runOwnedTestProcess({command: process.execPath, args: ["-e", source], cwd: f.cwd}), 130);
+  assert.ok(performance.now() - started < 10000);
+  await absent(f.evidence);
+});
+
+test("synchronous spawn failure restores interruption handlers", async t => {
+  const f = await fixture(t);
+  const before = [process.listenerCount("SIGINT"), process.listenerCount("SIGTERM")];
+  await assert.rejects(runOwnedTestProcess({command: null, args: [], cwd: f.cwd}), {code: "ERR_INVALID_ARG_TYPE"});
+  assert.deepEqual([process.listenerCount("SIGINT"), process.listenerCount("SIGTERM")], before);
+});

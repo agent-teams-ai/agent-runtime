@@ -6,37 +6,42 @@ import {tmpdir} from "node:os";
 import {setTimeout as delay} from "node:timers/promises";
 
 // Private test-runner lifetime; never used for provider execution.
+// Linux callers require a host reaper for orphaned descendants.
 export async function runOwnedTestProcess({command, args, cwd, timeoutMilliseconds = 120000}) {
-  const temporaryRoot = await mkdtemp(join(tmpdir(), "ar69-joined-runner-"));
-  const child = spawn(command, args,
-    {cwd, stdio: "inherit", detached: true,
-      env: {...process.env, AR69_JOINED_TEST_PARENT: temporaryRoot}});
+  let child; let temporaryRoot; let timer; let escalation;
+  let interrupted = false; let expired = false; let code;
   const terminate = signal => {
-    if (child.pid === undefined) {return;}
+    if (child?.pid === undefined) {return;}
     try {process.kill(-child.pid, signal);} catch (error) {if (error.code !== "ESRCH") {throw error;}}
   };
   const groupExists = () => {
-    if (child.pid === undefined) {return false;}
+    if (child?.pid === undefined) {return false;}
     try {process.kill(-child.pid, 0); return true;} catch (error) {
       if (error.code === "ESRCH") {return false;} throw error;
     }
   };
-  let interrupted = false;
-  let expired = false;
-  const timer = setTimeout(() => {expired = true; terminate("SIGKILL");}, timeoutMilliseconds);
-  const interrupt = () => {interrupted = true; terminate("SIGTERM");};
+  const interrupt = () => {
+    if (interrupted) {return;}
+    interrupted = true;
+    terminate("SIGTERM");
+    escalation = setTimeout(() => terminate("SIGKILL"), 1000);
+  };
   process.on("SIGINT", interrupt);
   process.on("SIGTERM", interrupt);
-  let code;
   try {
-    code = await new Promise((resolve, reject) => {
-      child.once("error", reject);
-      child.once("exit", (status, signal) => resolve(signal === null ? status : 1));
-    });
-  
+    temporaryRoot = await mkdtemp(join(tmpdir(), "ar69-joined-runner-"));
+    if (!interrupted) {
+      child = spawn(command, args, {cwd, stdio: "inherit", detached: true,
+        env: {...process.env, AR69_JOINED_TEST_PARENT: temporaryRoot}});
+      timer = setTimeout(() => {expired = true; terminate("SIGKILL");}, timeoutMilliseconds);
+      code = await new Promise((resolve, reject) => {
+        child.once("error", reject);
+        child.once("exit", (status, signal) => resolve(signal === null ? status : 1));
+      });
+    }
   } finally {
-    // Direct-child exit does not prove descendant exit. Keep ownership of the
-    // detached group and its directory through bounded escalation.
+    // Direct-child exit does not prove descendant exit. Retain exact directory
+    // ownership until the detached group has disappeared, including reaping.
     try {
       terminate("SIGTERM");
       const deadline = Date.now() + 1000;
@@ -45,14 +50,11 @@ export async function runOwnedTestProcess({command, args, cwd, timeoutMillisecon
       const killDeadline = Date.now() + 2000;
       while (groupExists() && Date.now() < killDeadline) {await delay(25);}
       assert.ok(!groupExists(), `test process group remains; retained directory: ${temporaryRoot}`);
-      await rm(temporaryRoot, {recursive: true, force: true});
+      if (temporaryRoot !== undefined) {await rm(temporaryRoot, {recursive: true, force: true});}
     } finally {
-      clearTimeout(timer);
-      process.off("SIGINT", interrupt);
-      process.off("SIGTERM", interrupt);
-  
+      clearTimeout(timer); clearTimeout(escalation);
+      process.off("SIGINT", interrupt); process.off("SIGTERM", interrupt);
     }
   }
-  
-  return expired ? 124 : interrupted ? 130 : code ?? 1;
+  return interrupted ? 130 : expired ? 124 : code ?? 1;
 }

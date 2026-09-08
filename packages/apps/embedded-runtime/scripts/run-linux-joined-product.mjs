@@ -21,6 +21,13 @@ const executable = async name => {
   }
   throw new Error(`Required installed test tool unavailable: ${name}`);
 };
+// This explicit developer runner supports systemd hosts, not containers with
+// an arbitrary PID 1. Strict group absence includes reaping orphaned children.
+const reaper = await realpath("/proc/1/exe");
+assert.ok(["/usr/lib/systemd/systemd", "/lib/systemd/systemd"].includes(reaper),
+  "joined integration requires a systemd host reaper");
+const reaperFacts = await stat(reaper);
+assert.ok(reaperFacts.uid === 0 && !(reaperFacts.mode & 0o022), "untrusted host reaper");
 const [unshare] = await Promise.all(["unshare", "nsenter", "ip", "nft"].map(executable));
 for (const path of ["packages/apps/embedded-runtime/dist/composition.js",
   "packages/contexts/agent-execution/dist/composition.js", "packages/contexts/provider-access/dist/composition.js",
