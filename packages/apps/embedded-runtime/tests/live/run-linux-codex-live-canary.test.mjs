@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import {test} from 'node:test';
+import {test, beforeEach} from 'node:test';
 import childProcess from 'node:child_process';
-import {syncBuiltinESMExports} from 'node:module';
+import {registerHooks, syncBuiltinESMExports} from 'node:module';
 import {mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -9,6 +9,23 @@ import {createHash} from 'node:crypto';
 import {decodeBytes, validateConfiguration, createLinuxCodexLiveCanaryDriver, createCleanupController, createRedactor, safeSetupStage} from './run-linux-codex-live-canary.mjs';
 const hashFixtureBytes = value => createHash('sha256').update(value).digest('hex');
 import {SOURCE, bytes, config} from './linux-codex-driver-test-fixture.mjs';
+// Synthetic lifecycle admission; semantic validation belongs to the real factory.
+// Each test may inject a factory refusal without reproducing domain validation.
+beforeEach(t => {
+  const hooks = registerHooks({resolve(specifier, context, next) {
+    if (specifier === './linux-codex-live-canary-config.ts') {
+      return {url: 'ar69-admission:config', shortCircuit: true};
+    }
+    return next(specifier, context);
+  }, load(url, context, next) {
+    if (url === 'ar69-admission:config') {
+      return {format: 'module', shortCircuit: true, source:
+        'export function createLinuxCodexLiveCanaryConfiguration(a, p) {globalThis.ar69DriverFixture?.validate?.(a, p);}' };
+    }
+    return next(url, context);
+  }});
+  t.after(() => hooks.deregister());
+});
 test('explicit byte conversion rejects noncanonical or path inputs; owns dedicated arrays', () => {
   const a = decodeBytes(bytes), b = decodeBytes(bytes);
   assert.equal(Object.getPrototypeOf(a), Uint8Array.prototype);
@@ -175,7 +192,7 @@ async function publicFixture(t, status = 'unknown') {
   }};
   const sources = {
     pg: 'export class Pool {on() {} async end() {globalThis.ar69DriverFixture.events.push("pool-end");}}',
-    './linux-codex-live-canary-config.ts': 'export async function setupLinuxCodexLiveCanary() {globalThis.ar69DriverFixture.events.push("setup"); await globalThis.ar69DriverFixture.setup?.(); return globalThis.ar69DriverFixture.live;}',
+    './linux-codex-live-canary-config.ts': 'export function createLinuxCodexLiveCanaryConfiguration(a, p) {globalThis.ar69DriverFixture.validate?.(a, p);} export async function setupLinuxCodexLiveCanary() {globalThis.ar69DriverFixture.events.push("setup"); await globalThis.ar69DriverFixture.setup?.(); return globalThis.ar69DriverFixture.live;}',
     './linux-codex-live-evidence.mjs': 'export function collectLinuxCodexLiveEvidence(input) {return globalThis.ar69DriverFixture.collect(input);}',
   };
   const hooks = registerHooks({resolve(specifier, context, next) {
@@ -221,8 +238,14 @@ test('public unknown result retains observe/cancel until explicit cleanup', asyn
 });
 test('public succeeded result releases only after collected marker evidence', async t => {
   const {driver, events, state, root} = await publicFixture(t, 'succeeded');
+  let validated = false;
+  globalThis.ar69DriverFixture.validate = () => {
+    validated = true;
+    assert.deepEqual(readdirSync(root).sort(), ['credential', 'project']);
+  };
   state.markerObserved = true;
   const result = await driver.run();
+  assert.equal(validated, true);
   assert.equal(result.cleanup, 'released');
   assert.equal(result.markerObserved, true);
   assert.ok(events.indexOf('collect') < events.indexOf('cleanup'));
@@ -453,4 +476,67 @@ test('unknown setup report records only the fixed stage and retains cleanup with
   assert.equal(await driver.cleanup(), 'released');
   assert.deepEqual(events, ['setup', 'cleanup', 'pool-end']);
   await assert.rejects(driver.run());
+});
+
+test('configuration refusal precedes durable admission and credential reads, closes FD and releases', async t => {
+  const fs = (await import('node:fs')).default;
+  const {driver, root, events, credential, originalStat} = await publicFixture(t);
+  let validations = 0, reads = 0;
+  globalThis.ar69DriverFixture.validate = (approval, pins) => {
+    validations++;
+    assert.equal(approval.commandId, 'command:driver');
+    assert.equal(pins.testParent, join(root, 'project'));
+    assert.deepEqual(readdirSync(root).sort(), ['credential', 'project']);
+    throw new TypeError('Approved Linux marker canary scope digest mismatch');
+  };
+  t.mock.method(fs, 'readSync', () => {reads++; throw new Error('must not consume credentials');});
+  syncBuiltinESMExports();
+  await assert.rejects(driver.run(), {setupStage: 'configuration'});
+  assert.equal(validations, 1);
+  assert.equal(reads, 0);
+  assert.deepEqual(events, []);
+  assert.deepEqual(readdirSync(root).sort(), ['credential', 'project']);
+  assert.throws(() => originalStat(credential), {code: 'EBADF'});
+  assert.equal(await driver.cleanup(), 'released');
+  await assert.rejects(driver.run());
+});
+
+test('accessible git and empty testParent are required before configuration or credentials', async t => {
+  const fs = (await import('node:fs')).default;
+  const {root, credential, originalStat} = await publicFixture(t);
+  let validations = 0;
+  globalThis.ar69DriverFixture.validate = () => {validations++;};
+  fs.writeFileSync(join(root, 'project', 'occupied'), 'synthetic');
+  await assert.rejects(createLinuxCodexLiveCanaryDriver(config(root), credential).run());
+  assert.equal(validations, 0);
+  assert.throws(() => originalStat(credential), {code: 'EBADF'});
+  t.mock.method(childProcess, 'execFileSync', () => {throw Object.assign(new Error('git unavailable'), {code: 'ENOENT'});});
+  syncBuiltinESMExports();
+  await assert.rejects(createLinuxCodexLiveCanaryDriver(config(root), 999999).run(), {code: 'ENOENT'});
+  assert.equal(validations, 0);
+  assert.deepEqual(readdirSync(root).sort(), ['credential', 'project']);
+});
+
+test('real scope validator refuses mismatched approval before driver effects', async t => {
+  const {createLinuxCodexLiveCanaryConfiguration} = await import(
+    new URL('./linux-codex-live-canary-config.ts', import.meta.url).href);
+  const fs = (await import('node:fs')).default;
+  const {root, credential, originalStat} = await publicFixture(t);
+  const c = config(root);
+  c.approval.binding = {tenantId: 'tenant:synthetic', projectId: 'project:synthetic',
+    scopeDigest: 'sha256:' + '0'.repeat(64)};
+  let calls = 0;
+  globalThis.ar69DriverFixture.validate = (a, p) => {
+    calls++;
+    assert.throws(() => createLinuxCodexLiveCanaryConfiguration(a, p), /scope digest mismatch/u);
+    return createLinuxCodexLiveCanaryConfiguration(a, p);
+  };
+  t.mock.method(fs, 'readSync', () => assert.fail('credential read before scope validation'));
+  syncBuiltinESMExports();
+  const driver = createLinuxCodexLiveCanaryDriver(c, credential);
+  await assert.rejects(driver.run(), {setupStage: 'configuration'});
+  assert.equal(calls, 1);
+  assert.deepEqual(readdirSync(root).sort(), ['credential', 'project']);
+  assert.throws(() => originalStat(credential), {code: 'EBADF'});
+  assert.equal(await driver.cleanup(), 'released');
 });

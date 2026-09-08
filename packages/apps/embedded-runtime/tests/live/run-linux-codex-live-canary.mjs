@@ -99,7 +99,7 @@ function durableCreate(path, value) {
   try {writeFileSync(fd, JSON.stringify(value) + '\n'); fsyncSync(fd);} finally {closeSync(fd);}
   syncDirectory(dirname(path));
 }
-function prepareAttempt(config) {
+function preflightHost(config) {
   const repository = fileURLToPath(new URL('../../../../../', import.meta.url));
   const actualSourceSHA = execFileSync('git', ['-C', repository, 'rev-parse', 'HEAD'],
     {encoding: 'utf8', timeout: 5000, maxBuffer: 1024}).trim();
@@ -108,6 +108,9 @@ function prepareAttempt(config) {
         {encoding: "utf8", timeout: 5000, maxBuffer: 4096}).trim()) {fail();}
   privateDirectory(config.hostPins.testParent, true);
   privateDirectory(dirname(config.evidenceDirectory));
+  return actualSourceSHA;
+}
+function prepareAttempt(config, actualSourceSHA) {
   mkdirSync(config.evidenceDirectory, {mode: 0o700}); // Exclusive run, never reuse evidence.
   syncDirectory(dirname(config.evidenceDirectory));
   privateDirectory(config.evidenceDirectory, true);
@@ -235,7 +238,23 @@ export function createLinuxCodexLiveCanaryDriver(configuration, credentialFd) {
       if (credentialOpen) {credentialOpen = false; try {closeSync(credentialFd);} catch { /* Invalid FD. */ }}
     };
     try {
-      const actualSourceSHA = prepareAttempt(config);
+      const actualSourceSHA = preflightHost(config);
+      const {createLinuxCodexLiveCanaryConfiguration, setupLinuxCodexLiveCanary} =
+        await import('./linux-codex-live-canary-config.ts');
+      try {
+        if (config.hostPins.firewall) {
+          const {createFirewallCommand} = await import('./linux-codex-live-admin-firewall.ts');
+          const {toolPaths, ...pins} = config.hostPins.firewall;
+          config.hostPins.firewall = {...pins, command: createFirewallCommand(toolPaths)};
+        }
+        // Constructor-only admission: no command invocation or credential ownership.
+        // Discard time-bound policy; setup rebuilds it at the existing transfer boundary.
+        createLinuxCodexLiveCanaryConfiguration(config.approval, config.hostPins);
+      } catch {
+        throw Object.assign(new Error('Canary configuration preflight refused'), {setupStage: 'configuration'});
+      }
+      // Recheck host facts after module loading, before durable admission.
+      prepareAttempt(config, preflightHost(config));
       reportReady = true;
       report('report', {actualSourceSHA, usage, liveExecution: 'not-yet-observed'});
       let credentials, transferred = false;
@@ -246,14 +265,9 @@ export function createLinuxCodexLiveCanaryDriver(configuration, credentialFd) {
         fields = undefined;
         reportReady = true;
         report('report', {actualSourceSHA, usage, liveExecution: 'not-yet-observed'});
-        const [{Pool}, {setupLinuxCodexLiveCanary}, evidenceModule] = await Promise.all([
-          import('pg'), import('./linux-codex-live-canary-config.ts'), import('./linux-codex-live-evidence.mjs')]);
+        const [{Pool}, evidenceModule] = await Promise.all([
+          import('pg'), import('./linux-codex-live-evidence.mjs')]);
         collectLinuxCodexLiveEvidence = evidenceModule.collectLinuxCodexLiveEvidence;
-        if (config.hostPins.firewall) {
-          const {createFirewallCommand} = await import('./linux-codex-live-admin-firewall.ts');
-          const {toolPaths, ...pins} = config.hostPins.firewall;
-          config.hostPins.firewall = {...pins, command: createFirewallCommand(toolPaths)};
-        }
         realPool = new Pool({connectionString: config.databaseUrl, max: 8, connectionTimeoutMillis: 2000,
           query_timeout: 5000, idleTimeoutMillis: 1000, ssl: false,
           password: async () => ''}); // Explicit passwordless disposable DB; never pgpass/environment credentials.
@@ -321,10 +335,12 @@ async function main() {
     process.stdout.write(JSON.stringify(result) + '\n');
     if (result.observedStatus !== 'succeeded' || !result.markerObserved) {process.exitCode = 1;}
     if (result.cleanup === 'pending') {await reconcile(driver);}
-  } catch {
+  } catch (error) {
+    const setupStage = safeSetupStage(error);
+    if (setupStage) {process.stderr.write(JSON.stringify({setupStage}) + '\n');}
     process.stderr.write('Canary incomplete; retain attempt evidence. No automatic retry.\n');
     process.exitCode = 1;
-    if (driver) {await reconcile(driver);}
+    if (driver && await driver.cleanup() !== 'released') {await reconcile(driver);}
   } finally {
     if (Number.isSafeInteger(credentialFd) && credentialFd >= 3) {
       try {closeSync(credentialFd);} catch { /* Invalid or already absent inherited FD. */ }
