@@ -40,7 +40,8 @@ export interface LinuxCodexContainedTurnResources {
       workspaceBackingTreeOwnership?: NonNullable<ReturnType<DockerOptions["preparation"]>["workspaceBackingTreeOwnership"]>;
       resources: Omit<DockerLinuxPostClaimDependencies["resources"], "accept" | "listenerFor" | "consumption"> &
         Readonly<{consumption: NodeDockerConsumptionRecipe;
-          decorateListener?: (listener: ReturnType<typeof createNodeHostHttpListener>) => ReturnType<typeof createNodeHostHttpListener>}>;
+          decorateListener?: (listener: ReturnType<typeof createNodeHostHttpListener>,
+            context: Parameters<DockerLinuxPostClaimDependencies["resources"]["listenerFor"]>[1]) => ReturnType<typeof createNodeHostHttpListener>}>;
     }>;
     route: DockerLinuxExclusiveRouteAdmissionInput;
     currentAuthority: ContainedTurnCurrentEgressOwnersInput;
@@ -83,11 +84,11 @@ const joinedHttpResources = (
   let requestDebt = false;
   const resources: DockerLinuxPostClaimDependencies["resources"] = Object.freeze({...httpResources,
     consumption: joinLinuxCodexSignerConsumption(httpResources.consumption, verifier),
-    listenerFor(host: string) {
+    listenerFor(host: string, context: Parameters<DockerLinuxPostClaimDependencies["resources"]["listenerFor"]>[1]) {
       const listener = createNodeHostHttpListener({host, deadline: connection.limits.deadline,
         closureDeadline: connection.limits.closureDeadline}, broker.clock);
       if (retainedListener !== undefined) {throw new TypeError("Docker HTTP listener already selected");}
-      const decorated = decorateListener === undefined ? listener : decorateListener(listener);
+      const decorated = decorateListener === undefined ? listener : decorateListener(listener, context);
       retainedListener = decorated;
       return Object.freeze({...decorated, async open(...args: Parameters<typeof listener.open>) {
         const opened = await decorated.open(...args);

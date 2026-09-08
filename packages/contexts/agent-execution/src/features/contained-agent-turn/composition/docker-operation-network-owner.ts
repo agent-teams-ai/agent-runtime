@@ -20,6 +20,7 @@ export const createDockerOperationNetworkOwner = (input: DockerHttpNetworkResour
   const network = new DockerHttpNetworkResources(data(input));
   let allocation: DockerOperationNetworkAllocation | undefined;
   return Object.freeze({
+    get listenerContext() {return network.listenerContext;},
     get subject() {return network.subject;},
     get networkName() {return network.networkName;},
     get signal(): AbortSignal {return network.signal;},
@@ -34,6 +35,7 @@ export const createDockerOperationNetworkOwner = (input: DockerHttpNetworkResour
       allocation = Object.freeze({networkName: prepared.networkName, gateway: prepared.gateway});
       return allocation;
     },
+    retainContainer: (authority: Parameters<DockerHttpNetworkResources["retainContainer"]>[0]) => network.retainContainer(authority),
     observeContainer: (...args: Parameters<DockerHttpNetworkResources["observeContainer"]>) => network.observeContainer(...args),
     cutoff: () => {network.cutoff();},
     cleanupNetwork: () => network.cleanupNetwork(),

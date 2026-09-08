@@ -12,7 +12,7 @@ function fixture() {
     "hostBootGenerationSha256", "operationSha256", "executionGenerationSha256", "networkHandleSha256",
     "ownerIdentitySha256", "operationNonceSha256", "launchFingerprintSha256"].map(key => [key, hash])) as ExpectedOwnedNetwork["binding"];
   const expected: ExpectedOwnedNetwork = {binding, hostEngine: {...binding} as ExpectedOwnedNetwork["hostEngine"],
-    daemonId: "test-daemon", socketPath: "/run/test-docker.sock", networkName: operationNetworkName(binding), networkId: "b".repeat(64)};
+    daemonId: "test-daemon", socketPath: "/run/test-docker.sock", networkName: operationNetworkName(binding), networkId: "b".repeat(64), allocation: hash};
   const raw = {Id: expected.networkId, Name: operationNetworkName(binding), Driver: "bridge", Scope: "local",
     Internal: true, Attachable: false, Ingress: false, EnableIPv6: false,
     Labels: {...operationNetworkLabels(binding, hash)},
@@ -116,10 +116,11 @@ test("CLI rejects relative executable selection without launching anything", () 
   assert.throws(() => createFirewallCommand({iptables: "iptables", ip: "/sbin/ip", docker: "/usr/bin/docker"}));
 });
 
-test("allocation is well-formed observed metadata, not independent custody", async () => {
+test("replacement allocation label cannot replace the retained pin", async () => {
   const f = fixture();
   f.raw.Labels["com.agent-runtime.http.allocation"] = "d".repeat(64);
-  await f.owner.allow(f.endpoint, f.expected);
+  await assert.rejects(f.owner.allow(f.endpoint, f.expected));
+  assert.equal(f.state.calls.some(c => c.args.includes("-I")), false);
   assert.equal(await f.owner.cleanup(), "removed");
 });
 

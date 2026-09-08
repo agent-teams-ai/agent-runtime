@@ -3,8 +3,6 @@ import {createLinuxCodexLiveAdminFirewall, type ExpectedOwnedNetwork, type Firew
   from "./linux-codex-live-admin-firewall.ts";
 import {dockerHttpOperationNetworkRecipe} from
   "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-network-resources.js";
-import {networkDigest} from
-  "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-operation-network-codec.js";
 import type {LinuxCodexNodeRecipeSelection} from "../../dist/composition/linux-codex-node-recipe.js";
 
 export type LinuxCodexLiveFirewallPins = Readonly<{
@@ -14,18 +12,16 @@ export type LinuxCodexLiveFirewallPins = Readonly<{
   socketPath: string;
 }>;
 
-/** The independently built journal subject pins the operation recipe. Name lookup
- * obtains only CLI metadata, never allocation custody or a runtime proof. The
- * firewall helper re-inspects the resulting ID against that pinned recipe, Host
- * and actual endpoint. The real network owner retains its private allocation.
- * This intentionally supersedes the helper's older allocation-ID wiring example.
- */
+/** The private resource owner supplies retained allocation and container metadata
+ * before open. CLI readback is compared with those pins; it issues no custody proof. */
 export function createLinuxCodexLiveFirewallWiring(pins: LinuxCodexLiveFirewallPins):
   NonNullable<LinuxCodexNodeRecipeSelection["decorateListener"]> {
   const command = pins.command;
   const host = structuredClone({hostEngine: pins.hostEngine, daemonId: pins.daemonId, socketPath: pins.socketPath});
   if (!/^\/[\w/.-]+$/u.test(host.socketPath) || !host.daemonId) {throw new TypeError("Pinned local daemon required");}
-  return (listener, subject) => {
+  return (listener, subject, context) => {
+    const retained = structuredClone(context);
+    if (retained.container === undefined) {throw new TypeError("Retained provider container required");}
     const recipe = dockerHttpOperationNetworkRecipe(subject);
     const firewall = createLinuxCodexLiveAdminFirewall(command);
     let opening: Promise<unknown> | undefined;
@@ -49,14 +45,8 @@ export function createLinuxCodexLiveFirewallWiring(pins: LinuxCodexLiveFirewallP
       const work = (async () => {
         const opened = await listener.open(...args);
         if (closing || args[1].signal.aborted) {throw new Error("Test listener admission closed");}
-        const raw = JSON.parse(await command("docker", ["--host", `unix://${host.socketPath}`,
-          "network", "inspect", recipe.name]));
-        if (!Array.isArray(raw) || raw.length !== 1 || raw[0]?.Name !== recipe.name) {
-          throw new Error("Test operation network lookup unproven");
-        }
-        const networkId = networkDigest(raw[0].Id);
         await firewall.allow(opened.address, {...host, binding: recipe.binding,
-          networkName: recipe.name, networkId}, args[1].signal);
+          networkName: recipe.name, ...retained}, args[1].signal);
         if (closing || args[1].signal.aborted) {throw new Error("Test listener admission closed");}
         return Object.freeze({...opened, close});
       })();

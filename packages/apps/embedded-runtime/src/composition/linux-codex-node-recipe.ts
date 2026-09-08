@@ -24,7 +24,8 @@ export interface LinuxCodexNodeRecipeSelection {
   /** Private deployment wrapper; constructed before open, retained through cleanup.
    * Subject is the independently constructed committed operation, not readback. */
   readonly decorateListener?: (listener: Listener,
-    subject: Parameters<Preparation["openResourceJournal"]>[0]["subject"]) =>
+    subject: Parameters<Preparation["openResourceJournal"]>[0]["subject"],
+    context: Parameters<NonNullable<Preparation["resources"]["decorateListener"]>>[1]) =>
       Listener;
   readonly consumption: Omit<NodeDockerDeploymentRecipeInput["consumption"], "readEnvelope">;
   /** Native file custody remains a separate deployment owner. */
@@ -99,9 +100,9 @@ export const createLinuxCodexNodeRecipe = (options: Readonly<{
       // The real private-root capture replaces this slot before launch. It is
       // deliberately invalid as a generation observation on its own.
       hostLifecycleGenerationSha256: "",
-      resources: Object.freeze({...(decorate === undefined ? {} : {decorateListener(listener: Listener) {
+      resources: Object.freeze({...(decorate === undefined ? {} : {decorateListener(listener: Listener, context: Parameters<NonNullable<Preparation["resources"]["decorateListener"]>>[1]) {
         if (resourceSubject === undefined) {throw new TypeError("Operation resource subject unavailable");}
-        return decorate(listener, resourceSubject);
+        return decorate(listener, resourceSubject, context);
       }}), localCut: Object.freeze({...selected.localCut,
         expectedClock: Object.freeze({...selected.localCut.expectedClock}),
         clock: Object.freeze({read: selected.localCut.clock.read.bind(selected.localCut.clock),

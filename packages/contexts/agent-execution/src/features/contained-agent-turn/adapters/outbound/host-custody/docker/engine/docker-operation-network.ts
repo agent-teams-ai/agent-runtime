@@ -72,6 +72,14 @@ export class DockerOperationNetwork {
     this.#engine = new NodeUnixSocketDockerEngine({client: this.#client, policy});
   }
 
+  /** Internal deployment metadata from retained ownership, never a custody proof. */
+  public get listenerContext() {
+    if (this.#cut || this.#uncertain || this.#networkId === undefined ||
+        this.#allocation === undefined) {throw networkFailure();}
+    return Object.freeze({networkId: this.#networkId, allocation: this.#allocation,
+      ...(this.#container === undefined ? {} : {container: Object.freeze({...this.#container})})});
+  }
+
   public get name(): string {return this.#name;}
   public get reconcileRequired(): boolean {return this.#uncertain;}
   public sealAdmission(): void {

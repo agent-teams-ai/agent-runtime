@@ -491,6 +491,8 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
       assertOpen();
 
       stage = "listener";
+      // The running launch is retained before decoration, without publishing membership.
+      network.retainContainer(resources.launched.authority);
       const reservation = new DockerCustodyHttpReservation({lifecycle: resources.lifecycle, launch: resources.launched,
         hostLifecycleGenerationSha256, claimed: input});
       resources.product = createDockerHostHttpResources({host: reservation, network, allocated: resources.allocated,

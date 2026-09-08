@@ -5,7 +5,7 @@ import {randomUUID} from "node:crypto";
 import {isIPv4, type AddressInfo} from "node:net";
 import {
   assertNetworkEngine, assertNetworkContainer, decodeOperationNetwork, networkBinding,
-  networkDigest, networkObject, operationNetworkLabels, operationNetworkName,
+  networkDigest, operationNetworkLabels, operationNetworkName,
   type DockerOperationNetworkBinding,
 } from "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-operation-network-codec.js";
 import type {DockerEngineIdentity, DockerContainerAuthority} from
@@ -29,7 +29,7 @@ export function createFirewallCommand(paths: Readonly<Record<"iptables" | "ip" |
 /** Supply these from the committed operation and independently observed Host owner,
  * never by copying labels from the network being inspected. The caller retains
  * the Host/daemon lifetime and local socket custody through cleanup. networkId
- * MUST come from the retained real operation owner's allocate()/inspectMembership() result,
+ * and allocation MUST come from the retained real operation owner's listenerContext,
  * never this helper's CLI inspection or a fabricated observer. networkName is
  * operationNetworkName(binding), pinned before allocation. This is explicit
  * owner-authorized TEST-ONLY host administration, not allocation custody proof.
@@ -41,6 +41,7 @@ export type ExpectedOwnedNetwork = Readonly<{
   socketPath: string;
   networkName: string;
   networkId: string;
+  allocation: string;
   container?: DockerContainerAuthority;
 }>;
 const fail = () => new Error("Test host firewall ownership or endpoint unproven");
@@ -78,8 +79,7 @@ async function inspectOwnedTuple(command: FirewallCommand, endpoint: AddressInfo
   const networks = JSON.parse(await docker("network", "inspect", id));
   if (!Array.isArray(networks) || networks.length !== 1) {throw fail();}
   const raw = networks[0];
-  // Observed metadata only: no independent allocation custody is asserted here.
-  const allocation = networkDigest(networkObject(networkObject(raw).Labels)["com.agent-runtime.http.allocation"]);
+  const allocation = networkDigest(expected.allocation);
   const observed = decodeOperationNetwork({value: raw, name: expected.networkName,
     labels: operationNetworkLabels(binding, allocation), networkId: id, container: expected.container});
   if (observed.gateway !== endpoint.address) {throw fail();}
@@ -93,16 +93,13 @@ async function inspectOwnedTuple(command: FirewallCommand, endpoint: AddressInfo
  * Calls serialize; cleanup queued during allow prevents further use. Pending means
  * retry cleanup on the same owner; do not dispose its Host/network resources yet.
  *
- * Integration in the authorized disposable harness retaining DockerOperationNetwork:
- *   const binding = committedNetworkInput.binding; // retained construction input
- *   const observation = await network.allocate(call); // real retained owner
+ * Integration in the authorized disposable harness:
  *   const expectedOwnedNetwork = {binding, hostEngine, daemonId, socketPath,
- *     networkName: operationNetworkName(binding), networkId: observation.networkId};
- * hostEngine and daemonId come from the retained Host's identity observation;
- * socketPath is its pinned local daemon socket. Do not infer any of these from
- * network labels. If already attached, use network.inspectMembership(call) and include the
- * retained container authority. Keep that real network owner through cleanup.
- * At result.preparation.resources.listenerFor(observation.gateway):
+ *     networkName: operationNetworkName(binding), ...owner.listenerContext};
+ * The private listener context carries the retained ID, allocation nonce and
+ * attached container authority. Host identity and socket custody remain with
+ * their real owner through cleanup; none are inferred from network labels.
+ * At result.preparation.resources.listenerFor(gateway, context):
  *   const opened = await originalListener.open(...args); // actual bound address
  *   try { await firewall.allow(opened.address, expectedOwnedNetwork, signal); }
  *   catch (error) { await firewall.cleanup(); throw error; }

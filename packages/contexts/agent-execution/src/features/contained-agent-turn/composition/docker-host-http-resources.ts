@@ -10,7 +10,7 @@ type Resources = Parameters<Preparation["prepareResources"]>[1];
 type Journal = Parameters<typeof createV4HostHttpListenerLifecycle>[0]["v4"];
 /** The listener recipe is built from the observed gateway, never from a guess. */
 export type DockerHostHttpListenerResources = Omit<Resources, "listener" | "listenerLifecycle" | "consumption"> &
-  Readonly<{listenerFor: (host: string) => Resources["listener"];
+  Readonly<{listenerFor: (host: string, context: DockerOperationNetworkOwner["listenerContext"]) => Resources["listener"];
     consumption: Readonly<{prepare(references: DockerHttpConsumptionReferences): ReturnType<Resources["consumption"]["prepare"]>}>}>;
 export type DockerHostHttpResources = ReturnType<typeof createDockerHostHttpResources>;
 const {httpPreparation} = DockerCustodyHttpReservation;
@@ -123,7 +123,7 @@ export const createDockerHostHttpResources = (input: Readonly<{
         resources = data(resources);
         // The recipe is produced now, from the observed gateway. No listener
         // address can be chosen before the Engine assigned the bridge address.
-        const supplied = resources.listenerFor(retained.gateway);
+        const supplied = resources.listenerFor(retained.gateway, network.listenerContext);
         const recipe = data(supplied);
         let references: DockerHttpConsumptionReferences | undefined;
         const open = recipe.open.bind(supplied);
