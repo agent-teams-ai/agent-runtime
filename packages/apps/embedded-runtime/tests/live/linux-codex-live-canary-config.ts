@@ -39,7 +39,8 @@ import {setupLinuxCodexLiveAdmin, type LinuxCodexLiveAdminApproval,
 type Configuration = LinuxCodexLiveAdminConfiguration;
 type Approval = LinuxCodexLiveAdminApproval;
 const revision = "linux-codex-marker-canary:v1";
-const runtimeMs = 180_000;
+// Keep the whole canary lease within the exclusive route owner's supported maximum.
+const runtimeMs = 120_000;
 const cleanupMs = 30_000;
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
@@ -171,7 +172,7 @@ const validateCanaryFacts = (a: LinuxCodexCanaryApproval, p: LinuxCodexCanaryHos
  * independently of all subsequent requests. No directories, DB, DNS, Docker,
  * firewall or provider are touched here (Node custody checks its own procfs).
  * Build immediately before setup: the
- * three-minute lease starts here and never renews on submit/retry/cleanup.
+ * two-minute lease starts here and never renews on submit/retry/cleanup.
  */
 export const createLinuxCodexLiveCanaryConfiguration = (
   approved: LinuxCodexCanaryApproval, host: LinuxCodexCanaryHostPins,

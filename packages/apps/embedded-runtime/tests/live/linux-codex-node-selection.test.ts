@@ -121,7 +121,7 @@ test("selected resource handles pass the real V4 network recipe without normaliz
 
 // Actual canary configuration plus synthetic acknowledged/readback facts only.
 // Never call setup or any engine/lifecycle method.
-const canarySelection = async () => {
+const canarySelection = async (elapsedMs?: number) => {
   const {createLinuxCodexLiveCanaryConfiguration} = await import("./linux-codex-live-canary-config.ts");
   const {containedTurnScopeDigest} = await import(
     "../../../../contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-authority.js");
@@ -169,7 +169,14 @@ const canarySelection = async () => {
   const binding = {...approved.binding, hostBootId: pins.hostBootId, hostInstanceId: pins.hostInstanceId};
   Object.assign(f.subject, binding, {scope: binding});
   Object.assign(f.input.kernel.providerAccessSnapshot, binding);
+  // Deterministic elapsed time from the shipped configuration's original deadline.
+  const start = configuration.node.lifetime.operationDeadline - configuration.node.lifetime.maximumLifetimeMs;
   const selected = createLinuxCodexNodeSelection({...f.pins, ...configuration.node, binding,
+    ...(elapsedMs === undefined ? {} : {
+      clock: {...configuration.node.clock, read: () => ({...configuration.node.expectedClock,
+        controlTime: start + elapsedMs})},
+      wallNow: () => start + elapsedMs, monotonicNow: () => elapsedMs,
+    }),
     enginePolicy: {...configuration.node.enginePolicy,
       privateRootSourceRoot: f.pins.enginePolicy.privateRootSourceRoot,
       workspaceSourceRoot: f.pins.enginePolicy.workspaceSourceRoot},
@@ -230,4 +237,51 @@ test("actual canary create encoder supplies reserved defaults and preserves prov
     }
     assert.deepEqual(request.Env, ["HOME=/agent-private/home", "PATH=/usr/local/bin:/usr/bin:/bin", "TMPDIR=/tmp",
       `AR_CUSTODY_INIT_CONFIGURATION=${encoded}`]);
+  });
+
+test("shipped canary lifetime passes route owner admission before effects as preparation spends its lease",
+  {skip: process.platform !== "linux" || process.arch !== "x64"}, async t => {
+    const {installLinuxExclusiveRoute} = await import(
+      "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-owner.js");
+    const binding = {
+      tenantId: "tenant:test", projectId: "project:test", scopeDigest: "scope:test", operationId: "operation:test",
+      attemptId: "attempt:test", custodyId: "custody:test", sourceRevision: "f3cfa197da750f1b5da115da525d0ba83dfafd04",
+      binaryRevision: "@openai/codex:0.153.4+linux-x64", hostBootId: "boot:test", executionGenerationId: "generation:test",
+      adapterRevision: "adapter:test", capabilityManifestRevision: "manifest:test", authorityVectorDigest: "authority:test",
+      providerAccountRef: "account:test", accessRef: "access:test", bindingRevision: 1, credentialBindingRef: "credential:test",
+      providerRouteRef: "route:test", routeRevision: "revision:1", credentialBindingDigest: "binding:test", credentialGeneration: 1,
+    };
+    // Stop at the first kernel boundary: reaching this sentinel proves the real
+    // owner's lifetime checks passed, without installing or reading any rules.
+    const beforeEffects = new Error("synthetic stop before kernel effects");
+    for (const [selectionElapsed, preparationElapsed] of [[0, 0], [1_000, 25_000], [26_000, 0],
+      [110_000, 6_000], [110_000, 6_001]] as const) {
+      await t.test(`selection ${selectionElapsed} ms; preparation ${preparationElapsed} ms`, async () => {
+        const {selected, configuration} = await canarySelection(selectionElapsed);
+        assert.equal(selected.deadlines.routeLifetimeMs,
+          configuration.node.lifetime.maximumLifetimeMs - selectionElapsed);
+        assert.equal(JSON.parse(selected.create.environment.AR_CUSTODY_INIT_CONFIGURATION!).maximumProviderRuntimeMs,
+          Math.min(configuration.node.provider.maximumProviderRuntimeMs, selected.deadlines.routeLifetimeMs));
+        // Post-claim preparation captures this deadline once and passes its
+        // remaining time to admit; no renewal or maximum clamp is applied here.
+        const admissionDeadline = selectionElapsed + selected.deadlines.routeLifetimeMs;
+        const now = selectionElapsed + preparationElapsed;
+        const lifetimeMs = Math.max(0, admissionDeadline - now);
+        let transactions = 0;
+        const install = () => installLinuxExclusiveRoute({binding, endpoint: {address: "172.30.0.1", port: 18443},
+          lifetimeMs, startedAtMs: now, monotonicNow: () => now,
+          scheduleCutoff: () => {throw new Error("unexpected scheduler");},
+          kernel: {transact: () => {transactions += 1; throw beforeEffects;},
+            readRules: () => {throw new Error("unexpected readback");},
+            containerRemoved: async () => {throw new Error("unexpected removal");},
+            releaseNamespace: () => {throw new Error("unexpected release");}}});
+        if (selectionElapsed + preparationElapsed <= 116_000) {
+          assert.throws(install, error => error === beforeEffects);
+          assert.ok(transactions > 0);
+        } else {
+          assert.throws(install, /route lease requires 4000..120000 integer milliseconds/u);
+          assert.equal(transactions, 0);
+        }
+      });
+    }
   });
