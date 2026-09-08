@@ -9,7 +9,7 @@ import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import {decodeBytes, validateConfiguration, createLinuxCodexLiveCanaryDriver, createCleanupController, createRedactor, safeSetupStage} from './run-linux-codex-live-canary.mjs';
 const hashFixtureBytes = value => createHash('sha256').update(value).digest('hex');
-import {SOURCE, bytes, config} from './linux-codex-driver-test-fixture.mjs';
+import {SOURCE, bytes, config, publicFixture} from './linux-codex-driver-test-fixture.mjs';
 // Synthetic lifecycle admission; semantic validation belongs to the real factory.
 // Each test may inject a factory refusal without reproducing domain validation.
 beforeEach(t => {
@@ -166,65 +166,6 @@ test('different approved revision and dirty tracked source reject before filesys
   await assert.rejects(createLinuxCodexLiveCanaryDriver(c, 999999).run(), /Explicit disposable canary/u);
 });
 
-// Public driver tests with explicit synthetic dependencies; these are not live E2E evidence.
-async function publicFixture(t, status = 'unknown') {
-  const fs = (await import('node:fs')).default;
-  const {registerHooks} = await import('node:module');
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'ar69-public-driver-')));
-  mkdirSync(join(root, 'project'), {mode: 0o700});
-  const events = [], values = [];
-  const state = {markerObserved: false, failReport: false};
-  const turn = () => ({status: 'observed', turn: {status, operationId: 'operation:synthetic'}});
-  const live = {directory: join(root, 'project'),
-    async submit() {events.push('submit'); const value = turn(); values.push(value); return value;},
-    async observe() {events.push('observe'); const value = turn(); values.push(value); return value;},
-    async cancel() {events.push('cancel'); const value = turn(); values.push(value); return value;},
-    async cleanup() {events.push('cleanup'); return 'released';}};
-  globalThis.ar69DriverFixture = {live, events, collect(input) {
-    assert.equal(input.root, join(live.directory, 'disposable'));
-    assert.equal(input.approval.markerFile, 'marker.txt');
-    assert.equal(input.operationId, 'operation:synthetic');
-    assert.deepEqual(input.observations, values.slice(-512));
-    for (let i = 0; i < input.observations.length; i++) {
-      assert.equal(input.observations[i], values.slice(-512)[i]);
-    }
-    events.push('collect');
-    return {markerObserved: state.markerObserved, records: [{kind: 'receipt', value: {synthetic: true}}]};
-  }};
-  const sources = {
-    pg: 'export class Pool {on() {} async end() {globalThis.ar69DriverFixture.events.push("pool-end");}}',
-    './linux-codex-live-canary-config.ts': 'export function createLinuxCodexLiveCanaryConfiguration(a, p) {globalThis.ar69DriverFixture.validate?.(a, p);} export async function setupLinuxCodexLiveCanary() {globalThis.ar69DriverFixture.events.push("setup"); await globalThis.ar69DriverFixture.setup?.(); return globalThis.ar69DriverFixture.live;}',
-    './linux-codex-live-evidence.mjs': 'export function collectLinuxCodexLiveEvidence(input) {return globalThis.ar69DriverFixture.collect(input);}',
-  };
-  const hooks = registerHooks({resolve(specifier, context, next) {
-    return sources[specifier] ? {url: `ar69-fixture:${specifier}`, shortCircuit: true} : next(specifier, context);
-  }, load(url, context, next) {
-    return url.startsWith('ar69-fixture:') ? {format: 'module', source: sources[url.slice(13)], shortCircuit: true} : next(url, context);
-  }});
-  const credential = fs.openSync(join(root, 'credential'), 'wx+', 0o600);
-  fs.writeSync(credential, JSON.stringify({token: 'synthetic-token', accountId: 'synthetic-account'}));
-  const originalStat = fs.fstatSync, originalRead = fs.readSync, originalWrite = fs.writeFileSync;
-  let readOffset = 0, credentialReading = true;
-  t.mock.method(fs, 'fstatSync', (fd, ...args) => fd === credential && credentialReading ? {isFIFO: () => true} : originalStat(fd, ...args));
-  t.mock.method(fs, 'readSync', (fd, buffer, offset, length, position) => {
-    const count = originalRead(fd, buffer, offset, length, fd === credential && credentialReading ? readOffset : position);
-    if (fd === credential && credentialReading) {readOffset += count; if (!count) {credentialReading = false;}}
-    return count;
-  });
-  t.mock.method(fs, 'writeFileSync', (...args) => {
-    if (state.failReport && events.includes('submit')) {throw new Error('synthetic disk failure');}
-    return originalWrite(...args);
-  });
-  t.mock.method(childProcess, 'execFileSync', (_file, args) => args.includes('status') ? '' : SOURCE);
-  syncBuiltinESMExports();
-  t.after(() => {
-    hooks.deregister(); t.mock.restoreAll(); syncBuiltinESMExports();
-    delete globalThis.ar69DriverFixture;
-    rmSync(root, {recursive: true, force: true});
-  });
-  return {driver: createLinuxCodexLiveCanaryDriver(config(root), credential), events, state, root, credential, originalStat, live};
-}
-
 test('public unknown result retains observe/cancel until explicit cleanup', async t => {
   const {driver, events} = await publicFixture(t);
   const result = await driver.run();
@@ -242,7 +183,7 @@ test('public succeeded result releases only after collected marker evidence', as
   let validated = false;
   globalThis.ar69DriverFixture.validate = () => {
     validated = true;
-    assert.deepEqual(readdirSync(root).sort(), ['credential', 'project']);
+    assert.deepEqual(readdirSync(root).toSorted(), ['credential', 'project']);
   };
   state.markerObserved = true;
   const result = await driver.run();
@@ -487,7 +428,7 @@ test('configuration refusal precedes durable admission and credential reads, clo
     validations++;
     assert.equal(approval.commandId, 'command:driver');
     assert.equal(pins.testParent, join(root, 'project'));
-    assert.deepEqual(readdirSync(root).sort(), ['credential', 'project']);
+    assert.deepEqual(readdirSync(root).toSorted(), ['credential', 'project']);
     throw new TypeError('Approved Linux marker canary scope digest mismatch');
   };
   t.mock.method(fs, 'readSync', () => {reads++; throw new Error('must not consume credentials');});
@@ -496,7 +437,7 @@ test('configuration refusal precedes durable admission and credential reads, clo
   assert.equal(validations, 1);
   assert.equal(reads, 0);
   assert.deepEqual(events, []);
-  assert.deepEqual(readdirSync(root).sort(), ['credential', 'project']);
+  assert.deepEqual(readdirSync(root).toSorted(), ['credential', 'project']);
   assert.throws(() => originalStat(credential), {code: 'EBADF'});
   assert.equal(await driver.cleanup(), 'released');
   await assert.rejects(driver.run());
@@ -515,7 +456,7 @@ test('accessible git and empty testParent are required before configuration or c
   syncBuiltinESMExports();
   await assert.rejects(createLinuxCodexLiveCanaryDriver(config(root), 999999).run(), {code: 'ENOENT'});
   assert.equal(validations, 0);
-  assert.deepEqual(readdirSync(root).sort(), ['credential', 'project']);
+  assert.deepEqual(readdirSync(root).toSorted(), ['credential', 'project']);
 });
 
 test('real scope validator refuses mismatched approval before driver effects', async t => {
@@ -550,7 +491,7 @@ test('real scope validator refuses mismatched approval before driver effects', a
   const driver = createLinuxCodexLiveCanaryDriver(c, credential);
   await assert.rejects(driver.run(), {setupStage: 'configuration'});
   assert.equal(calls, 1);
-  assert.deepEqual(readdirSync(root).sort(), ['credential', 'project']);
+  assert.deepEqual(readdirSync(root).toSorted(), ['credential', 'project']);
   assert.throws(() => originalStat(credential), {code: 'EBADF'});
   assert.equal(await driver.cleanup(), 'released');
 });

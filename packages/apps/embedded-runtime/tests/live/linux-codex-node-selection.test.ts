@@ -125,6 +125,8 @@ const canarySelection = async () => {
   const {createLinuxCodexLiveCanaryConfiguration} = await import("./linux-codex-live-canary-config.ts");
   const {containedTurnScopeDigest} = await import(
     "../../../../contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-authority.js");
+  const {digestContainedTurnCanonicalValue} = await import(
+    "../../../../contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-codecs.js");
   const {policy} = await import("../../../../contexts/agent-execution/tests/fixtures/docker-engine-test-fixture.ts");
   const {SYNTHETIC_LOOPBACK_CA} = await import(
     "../../../../contexts/agent-execution/tests/fixtures/http-egress-tls/synthetic-loopback-certificates.ts");
@@ -134,9 +136,10 @@ const canarySelection = async () => {
     approvedIntent: "write-one-marker-and-return-it/v1", testId: "engine-env",
     commandId: "command:engine-env", deploymentId: "deployment:synthetic",
     deploymentIncarnation: "incarnation:synthetic", markerFile: "marker.txt", marker: "synthetic",
-    externalAuthorityDigest: `sha256:${"a".repeat(64)}`,
+    externalAuthorityDigest: digestContainedTurnCanonicalValue({authority: "synthetic"}),
     binding: {accessRef: "access:synthetic", availability: "available", bindingRevision: 1,
-      credentialBindingDigest: "credential:digest:synthetic", credentialBindingRef: "credential:synthetic",
+      credentialBindingDigest: digestContainedTurnCanonicalValue({credentialBinding: "synthetic"}),
+      credentialBindingRef: "credential:synthetic",
       credentialGeneration: 1, projectId: "project:synthetic", provider: "codex",
       providerAccountRef: "account:synthetic", providerRouteRef: "route:synthetic", revocation: "active",
       scopeDigest: containedTurnScopeDigest({tenantId: "tenant:synthetic", projectId: "project:synthetic"}),
@@ -205,17 +208,25 @@ test("actual canary create encoder supplies reserved defaults and preserves prov
   {skip: process.platform !== "linux" || process.arch !== "x64"}, async () => {
     const {encodeCreateRequest} = await import(
       "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-create-request.js");
+    const {dockerHttpOperationNetworkRecipe} = await import(
+      "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-network-resources.js");
+    const {subject} = await import("../../../../contexts/agent-execution/tests/fixtures/host-http-egress-v4-fixture.ts");
     const {selected, configuration, input} = await canarySelection();
+    const actual = {...subject, ...selected.subjectFacts, imageDigest: selected.create.imageDigest,
+      attempt: {...subject.attempt, launchFingerprintSha256: selected.create.launchFingerprintSha256,
+        operationNonceSha256: selected.create.operationNonceSha256}};
+    const enginePolicy = {...selected.node.enginePolicy,
+      allowedNetworkName: dockerHttpOperationNetworkRecipe(actual).name};
     const create = {...selected.create, ownerIdentitySha256: "f".repeat(64),
       privateRootSource: input.record.privateRootPath, workspaceSource: input.record.boundary.workspaceRef};
-    const request = encodeCreateRequest(create, selected.node.enginePolicy);
+    const request = encodeCreateRequest(create, enginePolicy);
     assert.deepEqual(Object.keys(create.environment), ["AR_CUSTODY_INIT_CONFIGURATION"]);
     const encoded = create.environment.AR_CUSTODY_INIT_CONFIGURATION!;
     assert.deepEqual(JSON.parse(encoded).allowedEnvironmentNames, configuration.node.provider.allowedEnvironmentNames);
     for (const key of ["HOME", "PATH", "TMPDIR"]) {
       assert.ok(JSON.parse(encoded).allowedEnvironmentNames.includes(key));
       assert.throws(() => encodeCreateRequest({...create, environment: {...create.environment, [key]: "/reserved"}},
-        selected.node.enginePolicy), error => Reflect.get(error as object, "code") === "invalid-create-request");
+        enginePolicy), error => Reflect.get(error as object, "code") === "invalid-create-request");
     }
     assert.deepEqual(request.Env, ["HOME=/agent-private/home", "PATH=/usr/local/bin:/usr/bin:/bin", "TMPDIR=/tmp",
       `AR_CUSTODY_INIT_CONFIGURATION=${encoded}`]);
