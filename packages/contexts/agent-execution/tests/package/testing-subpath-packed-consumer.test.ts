@@ -133,6 +133,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "createNativeHttpEgressRoute",
       "createNodeContainedTurnArtifacts",
       "createNodeContainedTurnWorkspace",
+      "createNodeContainedTurnWorkspaceOwner",
       "createNodeDockerDeploymentRecipe",
       "createNodeExecutableFileObserver",
       "createNodeHostHttpConnection",

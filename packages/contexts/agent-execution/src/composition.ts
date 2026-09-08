@@ -31,6 +31,8 @@ export {
   createDockerLinuxPostClaimPreparation,
   createNodeContainedTurnArtifacts,
   createNodeContainedTurnWorkspace,
+  createNodeContainedTurnWorkspaceOwner,
+  type NodeContainedTurnWorkspaceOwner,
   createHostHttpEgressSession,
   createNativeHttpEgressRoute,
   nativeHttpRequestProfile,
