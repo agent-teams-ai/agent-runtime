@@ -82,7 +82,8 @@ export type {
   ContainedTurnPreventionReceipt,
 } from "./domain/contained-turn-intent-guard.js";
 export { containedTurnPreventionDigest } from "./domain/contained-turn-intent-guard.js";
-export { createNativeHttpEgressRoute, nativeHttpRequestProfile, NodeHttpEgressBoundaryIds, NodeTlsHttpEgressError,
+export { createNativeHttpEgressRoute, nativeHttpRequestProfile, NodeHttpEgressBoundaryIds,
+  NodeHttpEgressTrustedResolver, type NodeHttpEgressTrustedResolverOptions, NodeTlsHttpEgressError,
   NodeTlsHttpEgressTransport, type NodeTlsHttpEgressTransportOptions, type HttpEgressRouteFirstWrite,
   type HttpEgressRouteFirstWriteReservation, type NativeHttpRequestProfileId,
 } from "./adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";

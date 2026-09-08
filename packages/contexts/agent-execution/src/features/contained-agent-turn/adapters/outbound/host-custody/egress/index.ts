@@ -24,3 +24,4 @@ export {
   NodeTlsHttpEgressTransport,
 } from "./node-tls-http-egress-transport.js";
 export type { NodeTlsHttpEgressTransportOptions } from "./node-tls-http-egress-transport.js";
+export {NodeHttpEgressTrustedResolver, type NodeHttpEgressTrustedResolverOptions} from "./node-http-egress-trusted-resolver.js";

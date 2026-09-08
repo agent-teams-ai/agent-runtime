@@ -38,6 +38,7 @@ export {
   CONTAINED_TURN_ROUTE_QUALIFICATION_DIMENSIONS,
   NodeTlsHttpEgressError,
   NodeHttpEgressBoundaryIds,
+  NodeHttpEgressTrustedResolver, type NodeHttpEgressTrustedResolverOptions,
   NodeTlsHttpEgressTransport,
   type NodeTlsHttpEgressTransportOptions,
   type HttpEgressRouteFirstWrite,

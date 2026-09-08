@@ -260,6 +260,7 @@ test("existing Host and SDK capabilities retain their exact ownership", async ()
     "node:buffer",
     "node:child_process",
     "node:crypto",
+    "node:dns/promises",
     "node:events",
     "node:fs",
     "node:fs/promises",
@@ -272,7 +273,7 @@ test("existing Host and SDK capabilities retain their exact ownership", async ()
     "node:util",
   ]);
 
-  for (const builtin of ["node:net", "node:os", "node:stream", "node:tls"]) {
+  for (const builtin of ["node:dns/promises", "node:net", "node:os", "node:stream", "node:tls"]) {
     assert.deepEqual(await analyzeFixture({
       [`${host.roots[0]}/owned-import.ts`]: `import '${builtin}';\n`,
     }), []);
@@ -286,7 +287,7 @@ test("Codex evidence utilities do not grant spawn or network ownership", async (
   const codex = boundariesById.get("adapter.agent-execution.codex-app-server");
   const path = `${codex.roots[0]}/negative-fixture.ts`;
   assert.deepEqual(await analyzeFixture({ [path]: "import 'node:util';\n" }), []);
-  for (const builtin of ["node:child_process", "node:http", "node:net", "node:tls", "node:timers"]) {
+  for (const builtin of ["node:child_process", "node:dns/promises", "node:http", "node:net", "node:tls", "node:timers"]) {
     assert.deepEqual(rules(await analyzeFixture({ [path]: `import '${builtin}';\n` })),
       ["architecture.source-dependencies.forbidden-builtin-dependency"]);
   }
