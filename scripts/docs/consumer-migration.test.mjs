@@ -34,7 +34,7 @@ test("projected direct tooling pins and exact transitive age exceptions preserve
   assert.deepEqual(manifest.engines, { node: ">=24.18.0 <25", pnpm: "11.18.0" });
   assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.1.0");
   assert.equal(manifest.devDependencies["@agent-teams/docs-protocol"], "0.6.0");
-  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol-agent-teams"], "0.2.0");
+  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol-agent-teams"], "0.2.1");
   for (const section of ["dependencies", "optionalDependencies", "peerDependencies"]) {
     assert.equal(Object.hasOwn(manifest[section] ?? {}, "@agent-teams/docs-protocol-agent-teams"), false);
   }
@@ -44,7 +44,7 @@ test("projected direct tooling pins and exact transitive age exceptions preserve
     assert.equal(Object.hasOwn(manifest.devDependencies, `@agent-teams/${name}`), false);
   }
   assert.deepEqual(workspace.minimumReleaseAgeExclude.filter(value => value.startsWith("@agent-teams/")).toSorted(), [
-    "@agent-teams/docs-protocol-agent-teams@0.2.0",
+    "@agent-teams/docs-protocol-agent-teams@0.2.1",
     "@agent-teams/docs-protocol@0.6.0", "@agent-teams/document-authoring@0.3.0",
     "@agent-teams/engineering-foundation@1.1.0", "@agent-teams/repository-mutation@0.2.0",
   ]);

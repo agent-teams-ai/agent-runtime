@@ -82,8 +82,8 @@ importers:
         specifier: 0.6.0
         version: 0.6.0
       '@agent-teams/docs-protocol-agent-teams':
-        specifier: 0.2.0
-        version: 0.2.0
+        specifier: 0.2.1
+        version: 0.2.1
       '@agent-teams/engineering-foundation':
         specifier: 1.1.0
         version: 1.1.0(@types/node@24.13.3)
@@ -192,8 +192,8 @@ importers:
 
 packages:
 
-  '@agent-teams/docs-protocol-agent-teams@0.2.0':
-    resolution: {integrity: sha512-kCu54MTqm98jus9D8R+ymAz+Z83Ba8xZstPNyNzjK0OA31xZ/v4oghAq3vcps0hfrvx3e8UHbrYyserr/gqwyA==}
+  '@agent-teams/docs-protocol-agent-teams@0.2.1':
+    resolution: {integrity: sha512-i6mjctpevsTQqOjec4McKzXltZEtLgvR5qFF8IrkJIYVKP5N+hn+aINiFcTlOqbPPV7pjYXRc868Ps2mZ9ZTkg==}
     engines: {node: '>=24.18.0 <25', pnpm: '>=11.17.0 <12'}
     hasBin: true
 
@@ -1765,7 +1765,7 @@ packages:
 
 snapshots:
 
-  '@agent-teams/docs-protocol-agent-teams@0.2.0':
+  '@agent-teams/docs-protocol-agent-teams@0.2.1':
     dependencies:
       '@agent-teams/docs-protocol': 0.6.0
       '@agent-teams/repository-mutation': 0.2.0

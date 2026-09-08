@@ -5,6 +5,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
   symlink,
   writeFile
@@ -127,7 +128,8 @@ async function attachPublishedTooling(root) {
 }
 
 async function disposableRepository(run, { attachTooling = false } = {}) {
-  const root = await mkdtemp(join(tmpdir(), "atd-r-"));
+  // macOS temp roots can traverse /var; qualification requires direct physical paths.
+  const root = await realpath(await mkdtemp(join(tmpdir(), "atd-r-")));
   try {
     await cp(join(repositoryRoot, "docs"), join(root, "docs"), { recursive: true });
     await mkdir(join(root, "architecture", "foundation"), { recursive: true });
