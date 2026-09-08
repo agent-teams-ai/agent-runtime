@@ -313,10 +313,8 @@ const createResourceCleanup = (
   });
   const proveListenerAbsent = retainProof(async (): Promise<boolean> => {
     if (resources.product === undefined) {return true;}
-    const released = await resources.product.cleanupResources(Math.min(observationDeadline, Date.now() + cleanupMs))
-      .catch(() => false);
     const readback = resources.product.listener;
-    if (!released || readback === undefined || resources.observers === undefined) {return false;}
+    if (readback === undefined || resources.observers === undefined) {return false;}
     return resources.observers.observeListenerAbsent(readback).then(() => true, () => false);
   });
   const releaseRoute = retainProof(async () =>
@@ -331,6 +329,13 @@ const createResourceCleanup = (
     if (resources.routeAttempted && containerAbsent) {
       proven = await releaseRoute() && proven;
     }
+    // Aggregate resource release includes journal retirement. Its debt must
+    // remain pending even when the existing listener observer independently
+    // proves physical closure and permits the network owner's guarded cleanup.
+    if (!Number.isSafeInteger(observationDeadline) || Date.now() >= observationDeadline) {return false;}
+    const released = resources.product === undefined || await resources.product
+      .cleanupResources(Math.min(observationDeadline, Date.now() + cleanupMs)).catch(() => false);
+    proven = released && proven;
     const listenerAbsent = await proveListenerAbsent();
     proven = listenerAbsent && proven;
     if (resources.networkAttempted) {
