@@ -25,6 +25,7 @@ mock.module("@agent-teams/agent-execution/composition", {exports: {
       cutoff() {active.events.push("finalizer-cutoff");},
     };
   },
+  readContainedTurnSelectedRouteAdmission() {return undefined;},
   createDockerLinuxExclusiveRouteAdmission() {return {};},
   createNodeHostHttpConnection() {
     return {bindAcceptedSocket() {return {}; }};
