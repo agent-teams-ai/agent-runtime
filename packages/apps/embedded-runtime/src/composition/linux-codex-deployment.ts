@@ -1,8 +1,10 @@
+import {types} from "node:util";
 import {
+  readContainedTurnRouteEnforcementTarget, type ContainedTurnRouteEnforcementCapability,
   NodeHttpEgressBoundaryIds, NodeHttpEgressTrustedResolver, PostgresHttpEgressEvidence,
 } from "@agent-teams/agent-execution/composition";
 import type {LinuxCodexContainedTurnResources} from "./linux-codex-contained-turn-owner.js";
-import {createLinuxCodexDeploymentAuthority} from "./linux-codex-deployment-authority.js";
+import {captureLinuxCodexDeploymentData, captureLinuxCodexDeploymentPort, createLinuxCodexDeploymentAuthority} from "./linux-codex-deployment-authority.js";
 import {createContainedTurnHttpUpstreamTransport} from "./contained-turn-http-egress-upstream.js";
 
 type Selection = ReturnType<LinuxCodexContainedTurnResources["select"]>;
@@ -41,21 +43,70 @@ export interface LinuxCodexDeploymentInfrastructure {
   }>;
 }
 
+const captureInfrastructure = (value: LinuxCodexDeploymentInfrastructure): LinuxCodexDeploymentInfrastructure => {
+  if (value === null || typeof value !== "object" || types.isProxy(value) ||
+      ![Object.prototype, null].includes(Object.getPrototypeOf(value))) {
+    throw new TypeError("Linux Codex deployment infrastructure unavailable");
+  }
+  const fields = Object.getOwnPropertyDescriptors(value);
+  if (Object.values(fields).some(field => !("value" in field))) {
+    throw new TypeError("Linux Codex deployment infrastructure accessor unavailable");
+  }
+  const current = fields.currentAuthority?.value as LinuxCodexDeploymentInfrastructure["currentAuthority"];
+  if (current === null || typeof current !== "object" || types.isProxy(current)) {
+    throw new TypeError("Linux Codex deployment current authority unavailable");
+  }
+  const readers = Object.getOwnPropertyDescriptors(current);
+  if (!readers.runtimeSecurity || !("value" in readers.runtimeSecurity) ||
+      !readers.providerAccess || !("value" in readers.providerAccess)) {
+    throw new TypeError("Linux Codex deployment current authority accessor unavailable");
+  }
+  return captureLinuxCodexDeploymentData({...value,
+    ...captureLinuxCodexDeploymentPort(value, ["currentPolicy", "recipe"]),
+    pool: captureLinuxCodexDeploymentPort(fields.pool?.value as LinuxCodexDeploymentInfrastructure["pool"], ["connect"]),
+    currentAuthority: {
+      runtimeSecurity: captureLinuxCodexDeploymentPort(readers.runtimeSecurity.value as Current["runtimeSecurity"], ["readAuthority"]),
+      providerAccess: captureLinuxCodexDeploymentPort(readers.providerAccess.value as Current["providerAccess"], ["readCurrent"]),
+    },
+  });
+};
+
+export interface LinuxCodexDeploymentResources {
+  readonly resources: LinuxCodexContainedTurnResources;
+  readonly bindAuthority: ReturnType<typeof createLinuxCodexDeploymentAuthority>["bind"];
+  readonly bindOperationStore: ReturnType<typeof createLinuxCodexDeploymentAuthority>["bindStore"];
+  dispose(): void;
+}
+
 /** Private real caller of the HTTP resource owners. There is no selectable
  * authority until the same feature's PA and RS ports acknowledge publication.
  * The Host still owns the sole claim/start/cleanup lifecycle and seven ports.
  */
 export const createLinuxCodexDeploymentResources = (infrastructure: LinuxCodexDeploymentInfrastructure,
-  host: Readonly<{hostBootId: string; hostInstanceId: string}>): Readonly<{resources: LinuxCodexContainedTurnResources; bindAuthority: ReturnType<typeof createLinuxCodexDeploymentAuthority>["bind"]}> => {
-  const {hostBootId, hostInstanceId} = host;
+  host: Readonly<{hostBootId: string; hostInstanceId: string}>,
+  routeEnforcement: ContainedTurnRouteEnforcementCapability): LinuxCodexDeploymentResources => {
+  const target = readContainedTurnRouteEnforcementTarget(routeEnforcement);
+  if (target === undefined || target.provider !== "codex" || target.platform !== `${process.platform}-${process.arch}`) {
+    throw new TypeError("Linux Codex deployment route qualification unavailable");
+  }
+  infrastructure = captureInfrastructure(infrastructure);
+  const {hostBootId, hostInstanceId} = captureLinuxCodexDeploymentData(host);
   const authority = createLinuxCodexDeploymentAuthority(infrastructure.currentAuthority, infrastructure.sourceRevision);
   const resources: LinuxCodexContainedTurnResources = Object.freeze({
     imageInitLock: infrastructure.imageInitLock, cleanupMilliseconds: infrastructure.cleanupMilliseconds,
-    select(input: SelectInput) {
+    select(input: SelectInput): Selection {
       const acknowledged = authority.take(input.kernel);
       const {subject} = acknowledged.input;
       if (subject.hostBootId !== hostBootId || subject.hostInstanceId !== hostInstanceId) {
         throw new TypeError("Linux Codex acknowledged Host binding mismatch");
+      }
+      // The nominal capability supplies the registry-gated deployment tuple.
+      // Bind its provider closure to the exact route input installed below,
+      // before even invoking the recipe. The remaining target dimensions are
+      // trusted deployment facts, as in the capability's owning factory.
+      if (acknowledged.binding.adapterRevision !== target.providerAdapter ||
+          acknowledged.binding.binaryRevision !== target.binaryClosure) {
+        throw new TypeError("Linux Codex selected route qualification mismatch");
       }
       const policy = infrastructure.currentPolicy(acknowledged);
       const recipe = infrastructure.recipe(input);
@@ -87,5 +138,5 @@ export const createLinuxCodexDeploymentResources = (infrastructure: LinuxCodexDe
       });
     },
   });
-  return Object.freeze({resources, bindAuthority: authority.bind});
+  return Object.freeze({resources, bindAuthority: authority.bind, bindOperationStore: authority.bindStore, dispose: authority.dispose});
 };

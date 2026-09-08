@@ -384,23 +384,33 @@ export const composeQualifiedHostCustodiedContainedTurn = (
 const createLinuxCodexDeployment = (
   dependencies: Omit<Extract<HostCustodiedContainedTurnDependencies, {authority: "current"}>, "linuxCodex" | "linuxCodexDeployment">,
   infrastructure: LinuxCodexDeploymentInfrastructure,
-) => {
+): HostCustodiedContainedTurnComposition => {
   const {selection: provider} = snapshotContainedTurnProviderSelection(dependencies);
   if (provider.kind !== "codex" || provider.owner.platformTarget.platform !== "linux") {
     throw new TypeError("Linux Codex deployment requires Linux Codex owners");
   }
-  const deployment = createLinuxCodexDeploymentResources(infrastructure, provider.owner);
-  return composeQualifiedHostCustodiedContainedTurn(dependencies, Object.freeze({
+  // Refuse before observing infrastructure, preserving the nominal product gate.
+  if (!registryQualifiesRouteTarget(PRODUCT_QUALIFICATION_REGISTRY, requireRouteEnforcementTarget(dependencies))) {
+    throw new ProviderRouteEnforcementUnsupportedError();
+  }
+  const deployment = createLinuxCodexDeploymentResources(infrastructure, provider.owner,
+    trustedGetOwnPropertyDescriptor(dependencies, "routeEnforcement")!.value as ContainedTurnRouteEnforcementCapability);
+  let composition: HostCustodiedContainedTurnComposition;
+  try {composition = composeQualifiedHostCustodiedContainedTurn(dependencies, Object.freeze({
     claude: createClaudeCurrentKernelOwner,
     codex: (options: Parameters<typeof createLinuxCodexContainedTurnOwner>[0]) => createLinuxCodexContainedTurnOwner(options, deployment.resources),
   }), input => {
     const {selection, providerAccess} = snapshotContainedTurnAuthority(input);
     if (selection.authority !== "current") {throw new TypeError("Linux Codex deployment requires current authority");}
     const ports = deployment.bindAuthority(captureContainedTurnCurrentAuthority(selection, providerAccess));
-    return createContainedTurnFeature(Object.freeze({operationStore: input.operationStore, ...ports,
+    return createContainedTurnFeature(Object.freeze({operationStore: deployment.bindOperationStore(input.operationStore), ...ports,
       workspace: input.workspace, artifacts: input.artifacts, custody: input.custody, provider: input.provider,
     }) satisfies ContainedTurnFeatureDependencies);
   }, PRODUCT_QUALIFICATION_REGISTRY);
+  } catch (error) {deployment.dispose(); throw error;}
+  return Object.freeze({feature: composition.feature, dispose(): void {
+    try {composition.dispose();} finally {deployment.dispose();}
+  }});
 };
 
 /**

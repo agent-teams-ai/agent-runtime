@@ -4,8 +4,8 @@ import type {Pool, PoolClient} from "pg";
 export const HTTP_EVIDENCE_FENCE = "host-http-egress-receipt/v1:canonical-complete-json/v1";
 const TIMEOUT_MS = 5_000;
 export class PostgresHttpEvidenceTransactions {
-  readonly #pool: Pool;
-  public constructor(pool: Pool) {this.#pool = pool;}
+  readonly #pool: Pick<Pool, "connect">;
+  public constructor(pool: Pick<Pool, "connect">) {this.#pool = pool;}
   async #connect(): Promise<PoolClient> {
     const pending = this.#pool.connect();
     let timer: ReturnType<typeof setTimeout> | undefined;

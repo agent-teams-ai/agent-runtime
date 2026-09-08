@@ -2,13 +2,48 @@ import assert from "node:assert/strict";
 import {test} from "node:test";
 import {createHostCustodiedContainedTurn, ProviderRouteEnforcementUnsupportedError} from "../dist/composition/contained-turn-feature-composition.js";
 import {createLinuxCodexDeploymentAuthority} from "../dist/composition/linux-codex-deployment-authority.js";
-import {createContainedTurnOperationProviderAccessPort, createContainedTurnSecurityAcceptancePort, nativeHttpRequestProfile} from "@agent-teams/agent-execution/composition";
+import {createContainedTurnOperationProviderAccessPort, createContainedTurnSecurityAcceptancePort, nativeHttpRequestProfile, createContainedTurnFeature, type ContainedTurnFeatureDependencies} from "@agent-teams/agent-execution/composition";
 import {operationHarness, fixtureHash} from "../../../contexts/provider-access/tests/features/contained-turn-access/operation-dispatch-test-fixture.ts";
 import {harness, selection} from "../../../contexts/provider-access/tests/features/contained-turn-access/route-selection-fixture.ts";
 import {createHarness} from "../../../contexts/runtime-security/tests/postgres-dispatch.fixtures.ts";
 import {createDispatchAcceptanceFeature, createNodeSha256DispatchDigest, createPostgresDispatchAcceptanceStore} from "@agent-teams/runtime-security/composition";
-import {joinedAeSubmit} from "./support/joined-authority-fixture.ts";
+import {containedTurnIdentity} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-identities.js";
+import {createDependencies} from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 import {adapterSnapshot, manifest} from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/contained-turn-fixture-snapshots.ts";
+
+// Local assembly retains the existing synthetic AE store and observes its real
+// one-shot claim through the deployment lifecycle. No shared fixture is edited.
+const joinedAeSubmit = (providerAccess: ContainedTurnFeatureDependencies["providerAccess"],
+  security: ContainedTurnFeatureDependencies["security"], scope: {projectId: string; tenantId: string},
+  intent: {mode: "analysis"; prompt: string}, authority: ReturnType<typeof createLinuxCodexDeploymentAuthority>) =>
+  async (id: string, beforeConsume?: (input: Parameters<typeof providerAccess.consumeForDispatch>[0]) => Promise<void>) => {
+    const ae = createDependencies();
+    let handoff: Parameters<typeof providerAccess.consumeForDispatch>[0] | undefined;
+    const operationStore = authority.bindStore({...ae.dependencies.operationStore,
+      async read(request) {
+        const current = ae.current();
+        return current?.operationId === request.operationId && current.scope.tenantId === request.scope.tenantId &&
+          current.scope.projectId === request.scope.projectId ? current : undefined;
+      },
+      async identifyAcceptance() {
+        return {kind: "available", operationId: containedTurnIdentity("operation", `operation:${id}`),
+          effectId: containedTurnIdentity("effect", `effect:${id}`), acceptanceProofId: containedTurnIdentity("proof", `proof:acceptance:${id}`),
+          operationAuthorityRevision: "operation-authority:one"};
+      },
+    });
+    const feature = createContainedTurnFeature({...ae.dependencies, operationStore, security,
+      custody: {...ae.dependencies.custody, async open(input) {
+        const custody = await ae.dependencies.custody.open(input);
+        return {...custody, hostCustodyProof: {...custody.hostCustodyProof,
+          binding: {...custody.hostCustodyProof.binding, effectId: containedTurnIdentity("effect", `effect:${id}`)}}};
+      }},
+      providerAccess: {...providerAccess, async consumeForDispatch(input) {
+        handoff = input; await beforeConsume?.(input); return providerAccess.consumeForDispatch(input);
+      }},
+    });
+    const result = await feature.submit.execute({commandId: `command:${id}`, expectedProvider: "codex", intent, scope});
+    return {ae, handoff, result, feature};
+  };
 
 test("simulation: real AE/PA/RS publication acknowledgements supply the deployment selection, including opaque PA digest", async () => {
   // All stores, custody and provider execution are synthetic. This runs the real
@@ -44,7 +79,7 @@ test("simulation: real AE/PA/RS publication acknowledgements supply the deployme
     security: createContainedTurnSecurityAcceptancePort(owner, Object.freeze({policyRevision: policy.policyRevision}))});
   await dispatch.control.provisionIssuance();
   let early = false;
-  const submit = joinedAeSubmit(ports.providerAccess, ports.security, scope, intent);
+  const submit = joinedAeSubmit(ports.providerAccess, ports.security, scope, intent, authority);
   const beforeConsume: NonNullable<Parameters<typeof submit>[1]> = async handoff => {
     early = true;
     assert.equal(pa.records("publication").length, 0);

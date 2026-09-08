@@ -11,7 +11,7 @@ export type {PostgresHttpEgressEvidenceScope} from "./postgres-http-egress-evide
  * Existing schemas are verified, never repaired or automatically upgraded.
  * The caller owns the borrowed pool and its database/role selection.
  */
-export const initializePostgresHttpEgressEvidence = async (pool: Pool): Promise<void> => {
+export const initializePostgresHttpEgressEvidence = async (pool: Pick<Pool, "connect">): Promise<void> => {
   await new PostgresHttpEvidenceTransactions(pool).run(async (_client, query) => {
     await query("SELECT pg_advisory_xact_lock(721903522)");
     const existing = await query("SELECT 1 FROM pg_namespace WHERE nspname = 'host_http_egress'");
@@ -53,7 +53,7 @@ export const initializePostgresHttpEgressEvidence = async (pool: Pool): Promise<
 export class PostgresHttpEgressEvidence implements HttpEgressEvidence {
   readonly #scope: PostgresHttpEgressEvidenceScope;
   readonly #transactions: PostgresHttpEvidenceTransactions;
-  public constructor(pool: Pool, scope: PostgresHttpEgressEvidenceScope) {
+  public constructor(pool: Pick<Pool, "connect">, scope: PostgresHttpEgressEvidenceScope) {
     this.#scope = snapshotHttpEvidenceScope(scope);
     this.#transactions = new PostgresHttpEvidenceTransactions(pool);
   }

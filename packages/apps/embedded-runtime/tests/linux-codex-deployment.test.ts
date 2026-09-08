@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import {createContainedTurnRouteEnforcement} from "@agent-teams/agent-execution/composition";
+import {createContainedTurnLinuxRouteBinding} from "../dist/composition/contained-turn-linux-route-binding.js";
 import {createHash} from "node:crypto";
 import {test} from "node:test";
-import {createLinuxCodexDeploymentResources} from "../dist/composition/linux-codex-deployment.js";
+import {createLinuxCodexDeploymentResources, type LinuxCodexDeploymentInfrastructure} from "../dist/composition/linux-codex-deployment.js";
 import {createContainedTurnCurrentEgressOwners} from "../dist/composition/contained-turn-current-egress-owners.js";
 import {createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate} from "@agent-teams/runtime-security/composition";
 import {bindContainedTurnHttpRuntimeSecurity} from "../dist/composition/contained-turn-http-runtime-security.js";
@@ -15,7 +17,7 @@ import {SYNTHETIC_LOOPBACK_CA} from "../../../contexts/agent-execution/tests/fix
  * PA route validation, RS current owner/signer, and HTTP adapters are real source.
  * No committed claim, Docker launch, DNS request, provider or live DB is exercised.
  */
-const setup = async () => {
+const setup = async (dynamicOperations = false, closure = {providerAdapter: "adapter-1", binaryClosure: "binary-1"}) => {
   const f = await fixture();
   f.state.head = {...f.state.head, headVersion: "1"};
   const head = f.state.head.authority!;
@@ -51,10 +53,14 @@ const setup = async () => {
     return {rows: []};
   }, release() {calls.push("release");}};}};
   let recipes = 0;
-  const deployment = createLinuxCodexDeploymentResources({imageInitLock: {} as never, cleanupMilliseconds: 1000,
+  const rsReader = dynamicOperations ? {async readAuthority(key: {operationId: string}) {
+    assert.equal(this, rsReader); assert.equal(key.operationId, f.state.head.authority!.operationId);
+    return f.state.head;
+  }} : f.rs;
+  const infrastructure: LinuxCodexDeploymentInfrastructure = {imageInitLock: {} as never, cleanupMilliseconds: 1000,
     sourceRevision: "a".repeat(40), deploymentId: "deployment-simulation", pool: pool as never,
     dns: {resolverIdentity: "resolver", resolverEpoch: "epoch-1", timeoutMs: 1000},
-    transport: {certificateAuthorities: [SYNTHETIC_LOOPBACK_CA]}, currentAuthority: {runtimeSecurity: f.rs, providerAccess: f.pa},
+    transport: {certificateAuthorities: [SYNTHETIC_LOOPBACK_CA]}, currentAuthority: {runtimeSecurity: rsReader, providerAccess: f.pa},
     currentPolicy(ack) {
       const {scope: rsScope, operationId, providerId, authorityGeneration, claimBindingDigest, ...facts} = ack.acceptedDispatch.authority!;
       const operation = {scope: {...rsScope, operationId}, providerId, authorityGeneration, claimBindingDigest};
@@ -67,14 +73,35 @@ const setup = async () => {
       clock: {read: () => ({authorityId: "control", epoch: "epoch-1", controlTime: 1000})}},
     clock: {now: () => 100, within: async (_deadline, work) => work()},
     recipe() {recipes++; return {preparation: {}, route: {}, nativeFiles: {}, connection: {}, hostSession: {}} as never;},
-  }, subject);
+  };
+  const qualificationTarget = {provider: "codex", ...closure, platform: `${process.platform}-${process.arch}`,
+    credentialRoute: "synthetic-endorsed-route", storageTopology: "synthetic-storage", transportTopology: "synthetic-http", failureDomain: "single-host"};
+  const gateBinding = await createContainedTurnLinuxRouteBinding({current: f.endorsed, provider: "codex", campaign: {
+    operationId: subject.operationId, attemptId: subject.attemptId, custodyId: subject.custodyId,
+    hostBootId: subject.hostBootId, executionGenerationId: subject.executionGenerationId, authorityVectorDigest: accepted.acceptedAuthorityVectorDigest, sourceRevision: infrastructure.sourceRevision,
+    adapterRevision: closure.providerAdapter, binaryRevision: closure.binaryClosure, capabilityManifestRevision: adapterSnapshot.capabilityManifestRevision,
+  } as never});
+  const routeEnforcement = createContainedTurnRouteEnforcement({qualificationTarget, binding: gateBinding,
+    engine: {inspect: async () => {throw new Error("synthetic gate never opens a route");}} as never,
+    nsenter: {path: "/synthetic/nsenter", sha256: "a".repeat(64)}, nft: {path: "/synthetic/nft", sha256: "b".repeat(64)}});
+  const deployment = createLinuxCodexDeploymentResources(infrastructure, subject, routeEnforcement);
+  const claimed = new Set<string>();
+  const store = deployment.bindOperationStore({
+    async claimPreparedDispatch(request: {subject: typeof subject}) {
+      const key = request.subject.custodyId;
+      if (claimed.has(key)) {return {kind: "observed_claim"};}
+      claimed.add(key); return {kind: "claimed"};
+    },
+    async retireDispatchPreparation() {return {kind: "retired"};},
+  } as never);
+  const claim = () => store.claimPreparedDispatch({subject: input.subject} as never);
   const outcomes = {pa: {kind: "consumed", receipt: receipt("pa")}, rs: {kind: "consumed", receipt: receipt("rs")}};
-  const ports = deployment.bindAuthority({providerAccess: {async consumeForDispatch() {return outcomes.pa;}},
-    security: {async consumeForDispatch() {return outcomes.rs;}}} as never);
+  const ports = deployment.bindAuthority({providerAccess: {async consumeForDispatch() {return outcomes.pa;}, async settleConsumedGrant() {return {kind: "settled"};}},
+    security: {async consumeForDispatch() {return outcomes.rs;}, async settleConsumedGrant() {return {kind: "settled"};}}} as never);
   const pa = () => ports.providerAccess.consumeForDispatch({...input, grantRequestId: "pa-grant"} as never);
-  const rs = () => ports.security.consumeForDispatch(input as never);
+  const rs = async () => {const outcome = await ports.security.consumeForDispatch(input as never); await claim(); return outcome;};
   const select = (value = kernel) => deployment.resources.select({kernel: value, record: {}} as never);
-  return {f, calls, rows, outcomes, input, kernel, pa, rs, select, recipes: () => recipes};
+  return {f, calls, rows, outcomes, input, kernel, pa, rs, claim, ports, store, infrastructure, deployment, routeEnforcement, select, recipes: () => recipes};
 };
 
 test("simulation: selection needs both acknowledgements before any recipe and binds concrete HTTP owners", async () => {
@@ -163,3 +190,143 @@ for (const path of ["adapterSnapshot.binaryRevision", "providerAccessSnapshot.cr
     } finally {t.f.dispose();}
   });
 }
+
+
+test("simulation: 130 completed selections release payloads and old consumed receipts cannot rearm a durable observed claim", async () => {
+  const t = await setup(true);
+  const first = structuredClone({input: t.input, kernel: t.kernel, outcomes: t.outcomes, head: t.f.state.head});
+  try {
+    for (let index = 0; index < 130; index++) {
+      const operationId = `operation-${index}`; const custodyId = `custody-${index}`;
+      Object.assign(t.input.subject, {operationId, custodyId}); Object.assign(t.kernel, {operationId, custodyId});
+      t.outcomes.pa.receipt.operationId = operationId; t.outcomes.rs.receipt.operationId = operationId;
+      t.f.state.head = {...t.f.state.head, authority: {...t.f.state.head.authority!, operationId}};
+      await t.pa(); await t.rs(); t.select();
+      assert.throws(() => t.select(), /acknowledged/u);
+      if (index === 0) {Object.assign(first, structuredClone({input: t.input, kernel: t.kernel, outcomes: t.outcomes, head: t.f.state.head}));}
+    }
+    Object.assign(t.input, first.input); Object.assign(t.kernel, first.kernel);
+    Object.assign(t.outcomes, first.outcomes); t.f.state.head = first.head;
+    await t.pa(); await t.rs();
+    assert.throws(() => t.select(), /acknowledged/u);
+    assert.equal(t.recipes(), 130);
+  } finally {t.deployment.dispose(); t.f.dispose();}
+});
+
+test("simulation: abandoned incomplete joins and preparation retirement release capacity", async () => {
+  const t = await setup();
+  try {
+    for (let index = 0; index < 130; index++) {
+      t.input.subject.custodyId = `abandoned-${index}`;
+      await t.pa();
+      if (index % 2 === 0) {
+        await t.ports.providerAccess.settleConsumedGrant({receipt: t.outcomes.pa.receipt,
+          disposition: "abandoned_without_claim", settlementRequestId: `settlement-${index}`} as never);
+      } else {
+        await t.store.retireDispatchPreparation({preparationToken: t.input.subject.preparationToken,
+          authority: {operationId: t.input.subject.operationId, scope: t.input.subject.scope}} as never);
+      }
+    }
+    t.input.subject.custodyId = t.kernel.custodyId;
+    await t.pa(); await t.rs(); t.select();
+    assert.equal(t.recipes(), 1);
+  } finally {t.deployment.dispose(); t.f.dispose();}
+});
+
+test("simulation: disposal clears pending selection and late acknowledgements cannot revive it", async () => {
+  const t = await setup();
+  try {
+    await t.pa(); t.deployment.dispose(); await t.rs();
+    assert.throws(() => t.select(), /acknowledged/u);
+    await t.pa(); await t.rs(); assert.throws(() => t.select(), /acknowledged/u);
+    assert.equal(t.recipes(), 0);
+  } finally {t.f.dispose();}
+});
+
+test("simulation: construction captures readers, methods, config and borrowed receivers", async () => {
+  const t = await setup();
+  const originalReaders = t.infrastructure.currentAuthority;
+  let replacements = 0;
+  const replaced = (): never => {replacements++; throw new Error("replacement owner invoked");};
+  try {
+    Object.assign(t.infrastructure, {currentAuthority: {runtimeSecurity: {readAuthority: replaced}, providerAccess: {readCurrent: replaced}},
+      currentPolicy: replaced, recipe: replaced, pool: {connect: replaced}, deploymentId: "replacement", clock: {now: replaced, within: replaced}});
+    Object.assign(t.infrastructure.signer, {keyRef: "replacement"});
+    Object.assign(t.infrastructure.dns, {resolverIdentity: "replacement"});
+    const originalRead = originalReaders.runtimeSecurity.readAuthority;
+    Object.assign(originalReaders.runtimeSecurity, {readAuthority: replaced});
+    await t.pa(); await t.rs();
+    const selected = t.select();
+    assert.equal(selected.signer.keyRef, "synthetic-key");
+    assert.equal(selected.broker.clock.now(), 100);
+    const head = t.f.state.head.authority!;
+    const key = {scope: head.scope, operationId: head.operationId, providerId: head.providerId, authorityGeneration: head.authorityGeneration};
+    assert.deepEqual(await selected.currentAuthority.runtimeSecurity.readAuthority(key),
+      await originalRead.call(originalReaders.runtimeSecurity, key));
+    assert.equal(replacements, 0); assert.equal(t.recipes(), 1);
+    // Disposing the composition does not close the borrowed authority owners.
+    t.deployment.dispose();
+    assert.ok(await selected.currentAuthority.providerAccess.readCurrent());
+  } finally {t.f.dispose();}
+});
+
+test("simulation: infrastructure accessors and proxies are refused without invocation", async () => {
+  const t = await setup();
+  let reads = 0;
+  try {
+    const accessor = {...t.infrastructure};
+    Object.defineProperty(accessor, "currentAuthority", {get() {reads++; return t.infrastructure.currentAuthority;}});
+    assert.throws(() => createLinuxCodexDeploymentResources(accessor, t.input.subject, t.routeEnforcement), /accessor/u);
+    const proxy = new Proxy(t.infrastructure, {ownKeys() {reads++; return [];}, get() {reads++;}});
+    assert.throws(() => createLinuxCodexDeploymentResources(proxy, t.input.subject, t.routeEnforcement), /unavailable/u);
+    const nested = {...t.infrastructure, currentAuthority: new Proxy(t.infrastructure.currentAuthority, {ownKeys() {reads++; return [];}})};
+    assert.throws(() => createLinuxCodexDeploymentResources(nested, t.input.subject, t.routeEnforcement), /unavailable/u);
+    assert.equal(reads, 0);
+  } finally {t.deployment.dispose(); t.f.dispose();}
+});
+
+
+for (const dimension of ["providerAdapter", "binaryClosure"] as const) {
+  test(`simulation: nominal gate for closure A cannot allocate the selected ${dimension} B recipe`, async () => {
+    const t = await setup(false, {providerAdapter: "adapter-1", binaryClosure: "binary-1", [dimension]: "foreign-closure"});
+    try {
+      await t.pa(); await t.rs();
+      assert.throws(() => t.select(), /selected route qualification mismatch/u);
+      assert.equal(t.recipes(), 0); assert.deepEqual(t.calls, []);
+    } finally {t.deployment.dispose(); t.f.dispose();}
+  });
+}
+
+test("simulation: deployment selection requires an authentic nominal route capability", async () => {
+  const t = await setup();
+  try {
+    for (const candidate of [{...t.routeEnforcement}, new Proxy(t.routeEnforcement, {}), undefined]) {
+      assert.throws(() => createLinuxCodexDeploymentResources(t.infrastructure, t.input.subject, candidate as never), /qualification unavailable/u);
+    }
+    assert.equal(t.recipes(), 0);
+  } finally {t.deployment.dispose(); t.f.dispose();}
+});
+
+
+test("simulation: live incomplete joins retain the 64 entry bound and retirement recovers capacity", async () => {
+  const t = await setup(true);
+  let firstReceipt: typeof t.outcomes.pa.receipt | undefined;
+  const operation = (index: number): void => {
+    const operationId = `pending-operation-${index}`; const custodyId = `pending-custody-${index}`;
+    Object.assign(t.input.subject, {operationId, custodyId}); Object.assign(t.kernel, {operationId, custodyId});
+    t.outcomes.pa.receipt.operationId = operationId; t.outcomes.rs.receipt.operationId = operationId;
+    t.f.state.head = {...t.f.state.head, authority: {...t.f.state.head.authority!, operationId}};
+  };
+  try {
+    for (let index = 0; index < 64; index++) {
+      operation(index); await t.pa();
+      if (index === 0) {firstReceipt = structuredClone(t.outcomes.pa.receipt);}
+    }
+    operation(64); await t.pa(); await t.rs();
+    assert.throws(() => t.select(), /acknowledged/u); assert.equal(t.recipes(), 0);
+    await t.ports.providerAccess.settleConsumedGrant({receipt: firstReceipt,
+      disposition: "abandoned_without_claim", settlementRequestId: "settle-first"} as never);
+    operation(65); await t.pa(); await t.rs(); t.select();
+    assert.equal(t.recipes(), 1);
+  } finally {t.deployment.dispose(); t.f.dispose();}
+});
