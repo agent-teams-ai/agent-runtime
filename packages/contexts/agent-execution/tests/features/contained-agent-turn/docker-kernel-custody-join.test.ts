@@ -323,3 +323,53 @@ test("containment wins the execution journal race; rejected acknowledgement sett
   assert.equal((await f.raw.requestContainment(f.containment)).kind, "contained"); assert.equal(cleanups, 1);
   assert.equal(f.channel.attaches, 1); assert.equal(f.channel.closes, 1);
 });
+
+for (const preparation of ["missing", "pending", "settled"] as const) {
+  test(`no-IO physical closure does not seal ${preparation} preparation prematurely`, {skip: process.platform !== "linux"}, async t => {
+    const f = await residueFixture(t);
+    const launch = await f.launch();
+    const create = createInput(f.root);
+    const raw = new DockerKernelHostCustody(1000);
+    const handle = await reserveWorkspace(t, raw, reservation(launch, create.workspaceSource, create.privateRootSource));
+    const evidence = raw.reservation(handle.custodyRef).evidence;
+    evidence.attachLifecycle(f.lifecycle, launch);
+    assert.throws(() => evidence.attachLifecycle(f.lifecycle, launch), /one-use/);
+    const gate = deferred(); t.after(() => gate.resolve());
+    if (preparation !== "missing") {
+      evidence.trackPreparation(gate.promise);
+      assert.throws(() => evidence.trackPreparation(Promise.resolve()), /one-use/);
+    }
+    if (preparation === "settled") {gate.resolve(); await tick();}
+    assert.equal(evidence.snapshot().sealed, false);
+    assert.equal((await f.contain(launch)).kind, "closed");
+    assert.equal(evidence.snapshot().closure.status, "closed");
+    assert.equal(evidence.snapshot().sealed, preparation === "settled");
+    if (preparation === "pending") {
+      gate.resolve(); await tick();
+      assert.equal(evidence.snapshot().sealed, true);
+    }
+    assert.equal(evidence.snapshot().spawn, "ambiguous");
+    assert.equal(evidence.snapshot().identity.status, "unproven");
+    assert.equal(evidence.snapshot().providerExit.status, "unobserved");
+    assert.equal(executionEvidenceIsClosed(evidence.snapshot()), false);
+    assert.equal(noStartEvidenceIsClosed(evidence.snapshot()), false);
+  });
+}
+
+test("split attachments retain exact lifecycle and reject foreign or repeated provider IO", {skip: process.platform !== "linux"}, async t => {
+  const f = await joined(t); const other = await joined(t);
+  t.after(() => f.contain()); t.after(() => other.contain());
+  const raw = new DockerKernelHostCustody(1000);
+  const handle = await reserveWorkspace(t, raw, reservation(f.launched, f.launchInput.create.workspaceSource,
+    f.launchInput.create.privateRootSource));
+  const evidence = raw.reservation(handle.custodyRef).evidence;
+  assert.throws(() => evidence.attachProviderIo(f.io), /unavailable/);
+  assert.throws(() => evidence.attachLifecycle(other.lifecycle, f.launched));
+  evidence.attachLifecycle(f.lifecycle, f.launched);
+  assert.throws(() => evidence.attachProviderIo({...f.io}), /actual prepared/);
+  assert.throws(() => evidence.attachProviderIo(other.io), /actual prepared/);
+  evidence.attachProviderIo(f.io);
+  assert.throws(() => evidence.attachProviderIo(f.io), /unavailable/);
+  assert.equal(evidence.snapshot().spawn, "ambiguous");
+  assert.equal(evidence.snapshot().sealed, false);
+});

@@ -110,6 +110,7 @@ export type DockerLinuxPreparedExecution<Io extends DockerLinuxPreparedProviderI
 export type DockerLinuxClaimedJoin<Io extends DockerLinuxPreparedProviderIo> = Readonly<{
   captureHost?(): Promise<Readonly<{create: DockerHostCustodyContainerCreateInput; hostLifecycleGenerationSha256: string}>>;
   beforeLaunch?(input: Readonly<{identity: EngineIdentity; policy: EnginePolicy}>): Promise<NonNullable<LaunchInput["imageInit"]>>;
+  afterLaunch?(input: Readonly<{claimed: Claimed; launch: Launched}>): void;
   afterInit?(input: Readonly<{claimed: Claimed; launch: Launched}>): Promise<void>;
   prepareProviderIo(input: Readonly<{claimed: Claimed; launch: Launched; init: InitOptions}>): Io;
   finishClaimed(input: Readonly<{claimed: Claimed; launch: Launched; providerIo: Io;
@@ -145,6 +146,7 @@ export const createDockerLinuxPostClaimOwner = <Io extends DockerLinuxPreparedPr
   }
   return createPreparationOwner(dependencies, Object.freeze({
     prepareProviderIo: join.prepareProviderIo.bind(join), finishClaimed: join.finishClaimed.bind(join),
+    ...(join.afterLaunch === undefined ? {} : {afterLaunch: join.afterLaunch.bind(join)}),
     ...(join.afterInit === undefined ? {} : {afterInit: join.afterInit.bind(join)}),
     ...(join.captureHost === undefined ? {} : {captureHost: join.captureHost.bind(join)}),
     ...(join.beforeLaunch === undefined ? {} : {beforeLaunch: join.beforeLaunch.bind(join)}),
@@ -488,6 +490,9 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
           isActive: () => !observationAbort.signal.aborted && Date.now() < observationDeadline},
       }});
 
+      // Retain ownership even if cutoff raced the launch await. This callback
+      // publishes no admission or execution authority and runs before decoration.
+      join?.afterLaunch?.(Object.freeze({claimed: input, launch: resources.launched}));
       assertOpen();
 
       stage = "listener";

@@ -31,7 +31,10 @@ export const dockerReservationFingerprint = (input: HostCustodyReservationInput)
 
 export class DockerKernelEvidence {
   #fingerprint: HostCustodyLaunchFingerprintEvidence;
-  #source: Readonly<{lifecycle: DockerHostCustodyLifecycle; launch: LaunchedDockerCustody; io: PreparedDockerProviderIo}> | undefined;
+  #source: Readonly<{lifecycle: DockerHostCustodyLifecycle; launch: LaunchedDockerCustody}> | undefined;
+  #io: PreparedDockerProviderIo | undefined;
+  #preparation: Promise<unknown> | undefined;
+  #preparationSettled = false;
   #finalExec: Readonly<{argv: readonly string[]; environment: readonly {name: string; value: string}[]; executableSha256: string}> | undefined;
   #completion: Awaited<PreparedDockerProviderIo["completion"]> | undefined;
   #settled = false;
@@ -53,24 +56,46 @@ export class DockerKernelEvidence {
   }
   public constructor(private readonly input: HostCustodyReservationInput) {this.#fingerprint = dockerReservationFingerprint(input); Object.freeze(this);}
 
+  /** Observe the retained flight, including failure settlement; an observation
+   * timeout or a competing start must never stand in for this flight. */
+  public trackPreparation(flight: Promise<unknown>): void {
+    if (this.#preparation !== undefined) {throw new TypeError("Docker preparation evidence is one-use");}
+    this.#preparation = flight;
+    void flight.then(() => {this.#preparationSettled = true;}, () => {this.#preparationSettled = true;});
+  }
+
   /** Same-object capabilities from the retained preparation, not observation bags. */
-  public attach(lifecycle: DockerHostCustodyLifecycle, launch: LaunchedDockerCustody, io: PreparedDockerProviderIo): void {
+  public attachLifecycle(lifecycle: DockerHostCustodyLifecycle, launch: LaunchedDockerCustody): void {
     if (this.#source !== undefined) {throw new TypeError("Docker evidence attachment is one-use");}
-    assertDockerPreparedIoLaunch(io, launch);
     const mounts = dockerProviderProcessMountFacts(launch);
     if (launch.key.operationId !== this.input.operationId || launch.key.attemptId !== this.input.attemptId ||
       mounts.workspaceSource !== this.input.workspaceRef || mounts.privateRootSource !== this.input.launchPlan.privateRootPath) {
       throw new TypeError("Docker evidence reservation conflicts with launch");
     }
     retainedObservation(lifecycle, launch); // Reject a foreign lifecycle without effects.
-    this.#source = Object.freeze({lifecycle, launch, io});
+    this.#source = Object.freeze({lifecycle, launch});
+  }
+
+  public attachProviderIo(io: PreparedDockerProviderIo): void {
+    if (this.#source === undefined || this.#io !== undefined || this.#preparationSettled) {
+      throw new TypeError("Docker provider IO attachment unavailable");
+    }
+    assertDockerPreparedIoLaunch(io, this.#source.launch);
+    this.#io = io;
     void io.completion.then(result => {this.#completion = result; this.#settled = true; return;}, () => {this.#settled = true;});
+  }
+
+  /** Existing joined callers retain the same validation and one-use semantics. */
+  public attach(lifecycle: DockerHostCustodyLifecycle, launch: LaunchedDockerCustody, io: PreparedDockerProviderIo): void {
+    assertDockerPreparedIoLaunch(io, launch);
+    this.attachLifecycle(lifecycle, launch);
+    this.attachProviderIo(io);
   }
 
   /** Finalized material is recorded by the same private composition that derives
    * bridge exec. This does not establish independently selected init provenance. */
   public finalize(plan: HostCustodyReservationInput["launchPlan"], exec: Readonly<{argv: readonly string[]; environment: readonly {name: string; value: string}[]; executableSha256: string}>): void {
-    if (!isIssuedCodexAppServerLaunchPlan(plan) || this.#source === undefined || this.#finalExec !== undefined) {throw new TypeError("Docker evidence finalization unavailable");}
+    if (!isIssuedCodexAppServerLaunchPlan(plan) || this.#source === undefined || this.#io === undefined || this.#finalExec !== undefined) {throw new TypeError("Docker evidence finalization unavailable");}
     this.#finalExec = Object.freeze({...exec, argv: Object.freeze([...exec.argv]),
       environment: Object.freeze(exec.environment.map(item => Object.freeze({...item})))});
     const fingerprint = dockerReservationFingerprint({...this.input, launchPlan: plan});
@@ -101,7 +126,7 @@ export class DockerKernelEvidence {
 
   private identity(): HostCustodyEvidence["identity"] {
     const source = this.#source;
-    const observation = source?.io.observation;
+    const observation = this.#io?.observation;
     const execution = source === undefined ? undefined : retainedObservation(source.lifecycle, source.launch).execution;
     const instance = observation?.providerInstance;
     const conflicting = this.#finalExec !== undefined && execution !== undefined && execution !== null &&
@@ -120,7 +145,7 @@ export class DockerKernelEvidence {
   public snapshot(): HostCustodyEvidence {
     const source = this.#source;
     const lifecycle = source === undefined ? undefined : retainedObservation(source.lifecycle, source.launch);
-    const observation = source?.io.observation;
+    const observation = this.#io?.observation;
     const execution = lifecycle?.execution;
     const acknowledged = executionAcknowledged(execution, observation);
     const providerExit = observedProviderExit(acknowledged, observation);
@@ -139,7 +164,8 @@ export class DockerKernelEvidence {
       closure: Object.freeze({profile: "strict-linux-cgroup-v2", limitations: Object.freeze([] as const),
         status: physicallyClosed ? "closed" : "unproven"}),
       privateRoot: this.#root?.snapshot().evidence ?? Object.freeze({identitySha256: empty, status: "unproven"}),
-      sealed: this.#settled && observationSettled(lifecycle),
+      sealed: observationSettled(lifecycle) && (this.#io !== undefined ? this.#settled
+        : this.#preparationSettled && physicallyClosed && lifecycle?.execution === null),
     });
   }
 }

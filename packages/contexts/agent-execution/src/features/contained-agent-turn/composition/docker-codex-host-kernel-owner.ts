@@ -173,6 +173,10 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
           return lifecycle;
         }}, {
         ...hostOwners.hooks,
+        afterLaunch({launch}) {
+          if (lifecycle === undefined) {throw new TypeError("Docker lifecycle unavailable");}
+          raw.reservation(claimed.underlyingCustodyRef).evidence.attachLifecycle(lifecycle, launch);
+        },
         async afterInit({launch}) {
           if (lifecycle === undefined) {throw new TypeError("Docker lifecycle unavailable");}
           const binding = await hostOwners.capturedRoot();
@@ -196,7 +200,7 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
               argv: Object.freeze([]), environment: Object.freeze([]), executableSha256: ""})};
           const providerIo = prepareDockerProviderProcessIo(process);
           retained.process = Object.freeze({...process, preparedIo: providerIo});
-          raw.reservation(claimed.underlyingCustodyRef).evidence.attach(lifecycle, launch, providerIo);
+          raw.reservation(claimed.underlyingCustodyRef).evidence.attachProviderIo(providerIo);
           return providerIo;
         },
         async finishClaimed(input) {
@@ -211,7 +215,9 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
       });
       retained.owner = owner;
       hostOwners.attach(owner);
-      return await owner.preparation.prepareClaimed(claimed);
+      const flight = owner.preparation.prepareClaimed(claimed);
+      raw.reservation(claimed.underlyingCustodyRef).evidence.trackPreparation(flight);
+      return await flight;
     } catch (error) {
       try {retained.nativeFiles?.cutoff();} finally {retained.removeAbort?.(); delete retained.removeAbort;}
       throw error;
