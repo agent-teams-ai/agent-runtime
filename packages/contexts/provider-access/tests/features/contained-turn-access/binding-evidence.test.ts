@@ -41,13 +41,13 @@ test("complete versioned PA evidence is deterministic and passes the current AE 
   assert.equal(result.evidence.authorityDigest.length, 71);
   assert.deepEqual(await resolve(), result);
   assert.ok(Object.isFrozen(result.evidence));
-  assert.deepEqual(Object.keys(result.evidence).sort(), ["authorityDigest", "bindingAuthorityDigest", "proofRef", "purpose"]);
+  assert.deepEqual(Object.keys(result.evidence).toSorted(), ["authorityDigest", "bindingAuthorityDigest", "proofRef", "purpose"]);
   for (const value of Object.values(result.evidence)) { assert.ok(exactBoundedToken(value)); }
   for (const value of Object.values(result.binding)) {
     if (typeof value === "string") { assert.ok(exactBoundedToken(value)); }
   }
   assert.equal(result.evidence.bindingAuthorityDigest, binding().credentialBindingDigest);
-  assert.deepEqual(result.binding, (({ availability, revocation, ...value }) => value)(binding()));
+  assert.deepEqual(result.binding, (({ availability: _availability, revocation: _revocation, ...value }) => value)(binding()));
   assert.equal(result.evidence.proofRef, `binding:${result.binding.accessRef}:revision:1:purpose:acceptance`);
   const dispatch = await revalidateResultToContract({ binding: binding(), kind: "valid" });
   assert.equal(dispatch.kind, "valid");
