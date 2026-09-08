@@ -16,6 +16,8 @@ import {containedTurnAcceptanceConstraintsDigestV1, containedTurnAcceptanceInten
   "../../../../contexts/agent-execution/dist/features/contained-agent-turn/application/contained-turn-acceptance-digests.js";
 import {digestContainedTurnCanonicalValue} from
   "../../../../contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
+import {containedTurnScopeDigest} from
+  "../../../../contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 import {snapshotDockerImageInitLock} from
   "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-image-init-lock.js";
 import {createCredentialMaterializationRequestDigest} from "../../../../contexts/provider-access/dist/composition.js";
@@ -141,6 +143,13 @@ const createCapabilities = (): Configuration["capabilities"] => {
 };
 
 const validateCanaryFacts = (a: LinuxCodexCanaryApproval, p: LinuxCodexCanaryHostPins) => {
+  // Reject inconsistent approval before constructing any setup resources.
+  // The approved binding remains authoritative; never repair its scope here.
+  if (a.binding.scopeDigest !== containedTurnScopeDigest({
+    tenantId: a.binding.tenantId, projectId: a.binding.projectId,
+  })) {
+    throw new TypeError("Approved Linux marker canary scope digest mismatch");
+  }
   if (process.platform !== "linux" || process.arch !== "x64" ||
       !/^[a-f0-9]{40}$/u.test(p.sourceRevision) ||
       a.approvedIntent !== "write-one-marker-and-return-it/v1" ||

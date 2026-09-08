@@ -16,6 +16,8 @@ import {SYNTHETIC_LOOPBACK_CA} from
   "../../../../contexts/agent-execution/tests/fixtures/http-egress-tls/synthetic-loopback-certificates.ts";
 import {allocateLinuxCodexLiveAdminDirectories} from "./linux-codex-live-admin-directories.ts";
 import {createLinuxCodexLiveCanaryConfiguration} from "./linux-codex-live-canary-config.ts";
+import {containedTurnScopeDigest} from
+  "../../../../contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 
 // Constructor-only regression. Synthetic pins are not measured deployment facts;
 // no setup, credentials, daemon observation, provider or network operations.
@@ -38,7 +40,8 @@ test("actual canary constructs RS acceptance port, Host access authority and eng
           credentialBindingDigest: "credential:digest:synthetic", credentialBindingRef: "credential:synthetic",
           credentialGeneration: 1, projectId: "project:synthetic", provider: "codex",
           providerAccountRef: "account:synthetic", providerRouteRef: "route:synthetic", revocation: "active",
-          scopeDigest: "scope:synthetic", tenantId: "tenant:synthetic"},
+          scopeDigest: containedTurnScopeDigest({tenantId: "tenant:synthetic", projectId: "project:synthetic"}),
+          tenantId: "tenant:synthetic"},
       } satisfies Parameters<typeof createLinuxCodexLiveCanaryConfiguration>[0];
       const pins = {
         sourceRevision: "b74acfc338655cc3731d0756f0c5d5d3c13108e6",
@@ -58,7 +61,26 @@ test("actual canary constructs RS acceptance port, Host access authority and eng
         native: {catalogSource: Buffer.from("{}"), ownerUid: 1000, ownerGid: 1000},
         observerSha256: "c".repeat(64), certificateAuthorities: [trustedCa],
       } satisfies Parameters<typeof createLinuxCodexLiveCanaryConfiguration>[1];
+      for (const binding of [
+        {...approved.binding, scopeDigest: "scope:synthetic"},
+        {...approved.binding, scopeDigest: containedTurnScopeDigest({
+          tenantId: approved.binding.tenantId, projectId: "project:other",
+        })},
+        {...approved.binding, tenantId: "tenant:other"},
+      ]) {
+        const mismatched = {...approved, binding};
+        const retained = structuredClone(mismatched);
+        // Invalid image pins would fail next: scope rejection must precede setup construction.
+        assert.throws(() => createLinuxCodexLiveCanaryConfiguration(mismatched,
+          {...pins, imageInitLock: {...pins.imageInitLock, imageReference: "invalid"}}),
+        {name: "TypeError", message: "Approved Linux marker canary scope digest mismatch"});
+        assert.deepEqual(mismatched, retained);
+      }
       const {approval, configuration} = createLinuxCodexLiveCanaryConfiguration(approved, pins);
+      assert.deepEqual(approval.binding, approved.binding);
+      assert.deepEqual(approval.dispatchPolicy.scope, {tenantId: approved.binding.tenantId,
+        projectId: approved.binding.projectId, scopeDigest: approved.binding.scopeDigest});
+      assert.equal(approval.intentAuthority.externalAuthorityDigest, approved.externalAuthorityDigest);
       const originalDigest = new NodeTlsHttpEgressTransport({...configuration.deployment.transport,
         certificateAuthorities: [trustedCa]}).tlsPolicyDigest;
       const snapshot = captureLinuxCodexDeploymentData(configuration.deployment.transport);
