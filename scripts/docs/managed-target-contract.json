@@ -1,0 +1,56 @@
+{
+  "kind": "runtime-managed-target-prerequisites",
+  "status": "pending-installed-evidence",
+  "gateInvocation": null,
+  "custodyPrerequisite": {
+    "reader": "scripts/docs/managed-target-captures.mjs#readRetainedTargetCapture",
+    "independentlySelectedArguments": ["expectedSha256", "authority.retainedRoot", "authority.mutableTargetRoot", "authority.cleanupRoots"],
+    "maxBytes": 2097152,
+    "boundary": "Coordinator supplies canonical existing direct roots and the complete nonempty cleanup-root list separately from capture input. Retained root must be disjoint from mutable target and every cleanup root. Reader validates lineage, single-link bytes, no-follow descriptor identity and bounded digest-checked reading. Coordinator owns continued retention; observations do not lock the filesystem or confer product authority.",
+    "invocationStatus": "pending-real-coordinator-custody-and-target-evidence"
+  },
+  "lockOwner": "existing-registry-engine",
+  "target": { "consumerIntegration": 3, "cohort": 2, "managedState": 2, "qualificationReceipt": 3, "scenario": 2 },
+  "directDevelopmentPackages": {
+    "@agent-teams/docs-protocol": "0.6.0",
+    "@agent-teams/docs-protocol-agent-teams": "0.2.0",
+    "@agent-teams/engineering-foundation": "1.1.0"
+  },
+  "transitiveCohortPackages": {
+    "@agent-teams/document-authoring": "0.3.0",
+    "@agent-teams/repository-mutation": "0.2.0"
+  },
+  "packageManager": "pnpm@11.18.0",
+  "scenario": {
+    "path": "architecture/foundation/docs-protocol-qualification.json",
+    "sha256": "sha256:1f7e50ec5b0e6ecc991668b83790b2367062240043c4b885c58377855968969b",
+    "count": 5
+  },
+  "installedPublicApis": {
+    "@agent-teams/docs-protocol-agent-teams": [
+      "planNodeConsumerIntegration", "applyConsumerIntegration", "checkConsumerIntegration",
+      "recoverConsumerIntegration", "canonicalManagedState", "describeCanonicalConsumerAssets",
+      "canonicalManagedRoute", "canonicalDocsScriptsDigest"
+    ],
+    "@agent-teams/docs-protocol-agent-teams/qualification": [
+      "observeDocsProtocolQualificationV3Lockfile", "runDocsProtocolQualificationV3",
+      "projectDocsProtocolQualificationV3Authority"
+    ]
+  },
+  "requiredIndependentBindings": [
+    "repository", "fixtureRoot", "head", "sourceCustody", "patch", "profile",
+    "manifest", "rootLock", "installedLock", "scenario", "packages", "invocation",
+    "receipt", "state", "wrapper", "engineResult", "sharedManagedKernelPair", "scenarioResults"
+  ],
+  "unresolved": [
+    "Engine-generated three-root registry lock and verified offline installed closure under the unchanged package-manager pin",
+    "Independently selected immutable engine/driver captures outside cleanup roots and disposable target",
+    "Installed public API receipt 3 and canonical digest plus installed schema validation of profile 3, Cohort 2 and state 2",
+    "Actual target current/idempotence, stale-plan and unknown-asset refusals with byte/mode preservation",
+    "Target-bound execution of all five unchanged scenario assertions, separately from bootstrap receipt",
+    "Matched retained managed controller/kernel process-death and recovery pair",
+    "Consumer status wiring over authenticated captures; never a bare receipt or input success flag"
+  ],
+  "historicalEvidence": "Keep profile 2, state 1, stable10, scenario 2 and journals unchanged; target bootstrap is not historical restoration",
+  "authority": "Synthetic local binding only in independently allocated disposable target; public authority/publication and CLI restoration remain separate owner obligations"
+}
