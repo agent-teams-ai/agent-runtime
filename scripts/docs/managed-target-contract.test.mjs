@@ -27,9 +27,9 @@ test("managed projection is exact registry dev-only tooling with immutable scena
   const exclusions = workspace.split("minimumReleaseAgeExclude:\n")[1].split("\n")
     .map(line => line.trim().replace(/^- ["']/u, "").replace(/["']$/u, ""))
     .filter(value => value.startsWith("@agent-teams/"));
-  assert.deepEqual(exclusions.sort(), Object.entries({
+  assert.deepEqual(exclusions.toSorted(), Object.entries({
     ...contract.directDevelopmentPackages, ...contract.transitiveCohortPackages
-  }).map(([name, version]) => `${name}@${version}`).sort());
+  }).map(([name, version]) => `${name}@${version}`).toSorted());
   for (const name of Object.keys(contract.transitiveCohortPackages)) {
     assert.equal(Object.hasOwn(manifest.devDependencies, name), false);
   }

@@ -38,13 +38,20 @@ async function analyze(files, config = policy) {
     await writeFile(join(consumer, path), content);
   };
   try {
-    for (const path of config.governedRoots) await mkdir(join(consumer, path), { recursive: true });
+    for (const path of config.governedRoots) {
+      await mkdir(join(consumer, path), { recursive: true });
+    }
     for (const boundary of config.boundaries) {
       for (const path of boundary.roots) {
-        if (path.endsWith(".ts")) await write(path);
-        else await mkdir(join(consumer, path), { recursive: true });
+        if (path.endsWith(".ts")) {
+          await write(path);
+        } else {
+          await mkdir(join(consumer, path), { recursive: true });
+        }
       }
-      for (const path of boundary.entrypoints) await write(path);
+      for (const path of boundary.entrypoints) {
+        await write(path);
+      }
     }
     await write("package.json", JSON.stringify({ name: "runtime-builtin-counterexample", private: true, type: "module" }));
     await write("pnpm-workspace.yaml", "packages: []\n");
@@ -53,7 +60,9 @@ async function analyze(files, config = policy) {
       schemaVersion: 1, project: { id: "runtime-builtin-counterexample" },
       capabilities: { "architecture.source-dependencies": { configPath } },
     }));
-    for (const [path, content] of Object.entries(files)) await write(path, content);
+    for (const [path, content] of Object.entries(files)) {
+      await write(path, content);
+    }
     const result = spawnSync(process.execPath, [cli, "check", "architecture.source-dependencies",
       "--consumer", consumer, "--json"], { cwd: consumer, encoding: "utf8", timeout: 60_000, maxBuffer: 8 * 1024 * 1024 });
     assert.equal(result.error, undefined);
@@ -73,7 +82,7 @@ async function analyze(files, config = policy) {
 
 function expectForbidden(diagnostics, paths) {
   assert.deepEqual(diagnostics.map(d => d.ruleId), paths.map(() => forbidden));
-  assert.deepEqual(diagnostics.map(d => d.location.path).sort(), [...paths].sort());
+  assert.deepEqual(diagnostics.map(d => d.location.path).toSorted(), [...paths].toSorted());
 }
 
 test("all seven actual getBuiltinModule roles pass; removing util reproduces exactly seven failures", async () => {
@@ -125,7 +134,7 @@ test("nonliteral builtin lookup and core-to-adapter access remain errors", async
     [approved[0]]: 'const builtin = "node:util"; void process.getBuiltinModule(builtin);\n',
     [`${agent}domain/builtin-counterexample.ts`]: 'import "../adapters/outbound/codex-app-server/codex-app-server-provider-options.js";\n',
   });
-  assert.deepEqual(diagnostics.map(d => d.ruleId).sort(), [
+  assert.deepEqual(diagnostics.map(d => d.ruleId).toSorted(), [
     "architecture.source-dependencies.forbidden-boundary-dependency",
     "architecture.source-dependencies.unresolved-runtime-reference",
   ]);

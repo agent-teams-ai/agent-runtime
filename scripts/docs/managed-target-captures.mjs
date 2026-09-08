@@ -49,7 +49,7 @@ const lineage = async (path, fileSystem, file = false) => {
 
 const authorityPlan = authority => {
   assert.ok(authority && typeof authority === "object", "missing retained-root authority");
-  assert.deepEqual(Object.keys(authority).sort(), ["cleanupRoots", "mutableTargetRoot", "retainedRoot"]);
+  assert.deepEqual(Object.keys(authority).toSorted(), ["cleanupRoots", "mutableTargetRoot", "retainedRoot"]);
   const retainedRoot = canonicalPath(authority.retainedRoot);
   const mutableTargetRoot = canonicalPath(authority.mutableTargetRoot);
   assert.ok(Array.isArray(authority.cleanupRoots) && authority.cleanupRoots.length > 0,
@@ -85,7 +85,7 @@ const readBounded = async (handle, maxBytes) => {
 // options is a trusted host/test seam, never deserialized evidence.
 export async function readRetainedTargetCapture(capture, expectedSha256, authority, options = {}) {
   assert.ok(capture && typeof capture === "object", "missing target evidence");
-  assert.deepEqual(Object.keys(capture).sort(), ["path", "sha256"]);
+  assert.deepEqual(Object.keys(capture).toSorted(), ["path", "sha256"]);
   assert.match(expectedSha256, /^sha256:[a-f0-9]{64}$/u);
   assert.equal(capture.sha256, expectedSha256, "mismatched target evidence selection");
   const path = canonicalPath(capture.path);

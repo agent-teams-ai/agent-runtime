@@ -10,6 +10,16 @@ const requireValid = (condition, detail) => {
   if (!condition) { throw new Error(`Invalid scaffold fixture input: ${detail}`); }
 };
 
+const assertLockedDependencyResolution = (name, entry, lock) => {
+  const packageKey = `${name}@${entry.version.split("(")[0]}`;
+  const resolution = lock.packages?.[packageKey]?.resolution;
+  requireValid(
+    isRecord(resolution) && (isText(resolution.integrity) || isText(resolution.tarball))
+      && isRecord(lock.snapshots?.[`${name}@${entry.version}`]),
+    `missing or malformed locked resolution for ${name}`,
+  );
+};
+
 const selectDependency = (name, manifest, lock, workspace) => {
   const specifier = manifest.devDependencies?.[name];
   const entry = lock.importers?.["."]?.devDependencies?.[name];
@@ -25,13 +35,7 @@ const selectDependency = (name, manifest, lock, workspace) => {
       `missing or mismatching catalog for ${name}`,
     );
   }
-  const packageKey = `${name}@${entry.version.split("(")[0]}`;
-  const resolution = lock.packages?.[packageKey]?.resolution;
-  requireValid(
-    isRecord(resolution) && (isText(resolution.integrity) || isText(resolution.tarball))
-      && isRecord(lock.snapshots?.[`${name}@${entry.version}`]),
-    `missing or malformed locked resolution for ${name}`,
-  );
+  assertLockedDependencyResolution(name, entry, lock);
   return { specifier, entry };
 };
 
