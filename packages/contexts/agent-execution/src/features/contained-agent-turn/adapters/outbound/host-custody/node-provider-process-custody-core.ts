@@ -29,7 +29,7 @@ import {
   delegatedStartAbortError,
   NodeCustodiedSdkProcess,
 } from "./host-custody-process-tree.js";
-import type { OperationResidueAuthorityFactory } from "./host-custody-cgroup-v2.js";
+import { OperationResidueNotAllocatedError, type OperationResidueAuthorityFactory } from "./host-custody-cgroup-v2.js";
 import { bindCooperativeProcessGroupGuardian } from "./host-custody-posix-process-group.js";
 import { DescriptorAuthorityAcquisitionError } from "./host-custody-launch-failure.js";
 import { launchGuardedProvider } from "./node-provider-process-custody-launch.js";
@@ -39,7 +39,7 @@ import {
 } from "./node-provider-process-custody-open.js";
 import { assertPrivateReservationReplay, privateReservationIdentity, snapshotPrivateReservationReplayInput, replayCustody } from "./node-provider-process-custody-replay.js";
 import { releaseHostCustody } from "./host-custody-release.js";
-import { quarantinePrivateRootForReconciliation, retainPrivateRootCleanupAuthority } from "./host-custody-private-root.js";
+import { quarantinePrivateRootForReconciliation } from "./host-custody-private-root.js";
 import {
   assertRetainedWorkspaceAuthority,
   assertReservedWorkspaceAuthority,
@@ -310,9 +310,17 @@ export class NodeProviderProcessCustodyCore implements
         this.#byAttempt.delete(live.attemptId);
         this.#byRef.delete(live.custodyRef);
       },
-      residueAuthorityFactory: {create: custodyRef => {
-        retainPrivateRootCleanupAuthority(live);
-        return this.#residueAuthorityFactory.create(custodyRef);
+      residueAuthorityFactory: {create: async reference => {
+        live.residueAllocation = "uncertain";
+        try {
+          const authority = await this.#residueAuthorityFactory.create(reference);
+          live.residueAuthority = authority;
+          live.residueAllocation = "retained";
+          return authority;
+        } catch (error) {
+          if (error instanceof OperationResidueNotAllocatedError) {live.residueAllocation = "not-allocated";}
+          throw error;
+        }
       }},
       expectedContainmentProfile: this.#runtimeProfile.containmentProfile,
       ...(requiredSpawnMode === undefined ? {} : { requiredSpawnMode }),
@@ -522,6 +530,9 @@ export class NodeProviderProcessCustodyCore implements
         // no-start cleanup path has no evidence for this admitted launch.
         await Promise.resolve();
         if (live.guardian === undefined) {return unprovenResult("stable-guardian-unavailable", input, live);}
+      }
+      if (live.residueAllocation === "uncertain") {
+        return unprovenResult("operation-cgroup-release-unproven", input, live);
       }
       return await containCustody(live, input, {
         containmentAfterMs: this.#containmentAfterMs,

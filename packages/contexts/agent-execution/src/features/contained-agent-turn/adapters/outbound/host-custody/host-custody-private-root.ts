@@ -33,7 +33,10 @@ export const retainPrivateRootCleanupAuthority = (live: LiveCustody): number | u
   try {
     if (realpathSync(expected.path) !== expected.path) {return;}
     descriptor = openSync(expected.path, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
-    if (!sameDirectoryIdentity(fstatSync(descriptor, { bigint: true }), expected)) {return;}
+    const observed = fstatSync(descriptor, { bigint: true });
+    // Before retention, recycled inode numbers are not authority. Once pinned,
+    // child changes may legitimately change ctime without changing identity.
+    if (!sameDirectoryIdentity(observed, expected) || observed.ctimeNs !== expected.ctimeNs) {return;}
     const retained = descriptor;
     let closed = false;
     live.privateRootCleanupAuthority = Object.freeze({
@@ -50,6 +53,9 @@ export const retainPrivateRootCleanupAuthority = (live: LiveCustody): number | u
   finally {if (descriptor !== undefined) {closeSync(descriptor);}}
 };
 
+const retainedRootDescriptor = (live: LiveCustody): number | undefined =>
+  live.launchAuthority?.privateRootDescriptor.parentDescriptor ?? live.privateRootCleanupAuthority?.descriptor;
+
 const quarantinePath = (live: LiveCustody): string | undefined => {
   const expected = live.privatePaths?.root;
   return expected === undefined ? undefined : `${expected.path}.quarantine-${sha256(live.custodyRef)}`;
@@ -65,8 +71,7 @@ export const quarantinePrivateRootForReconciliation = (live: LiveCustody): boole
     live.privateRootClosure = Object.freeze({ ...live.privateRootClosure, status: "unproven" });
     return false;
   }
-  const descriptor = live.launchAuthority?.privateRootDescriptor.parentDescriptor ??
-    live.privateRootCleanupAuthority?.descriptor;
+  const descriptor = retainedRootDescriptor(live);
   const expected = live.privatePaths?.root;
   if (descriptor === undefined || expected === undefined) {return false;}
   try {
@@ -107,8 +112,7 @@ export const quarantinePrivateRootForReconciliation = (live: LiveCustody): boole
 export const quarantinePrivateRoot = (live: LiveCustody): boolean => {
   if (live.privateRootClosure.status === "deleted") {return true;}
   if (!quarantinePrivateRootForReconciliation(live)) {return false;}
-  const descriptor = live.launchAuthority?.privateRootDescriptor.parentDescriptor ??
-    live.privateRootCleanupAuthority?.descriptor;
+  const descriptor = retainedRootDescriptor(live);
   const retainedPath = quarantinePath(live);
   if (descriptor === undefined || retainedPath === undefined) {return false;}
   try {

@@ -22,6 +22,8 @@ import {
   closeRetainedWorkspaceAuthority,
 } from "./private-host-custody-reservation.js";
 
+import { retainPrivateRootCleanupAuthority } from "./host-custody-private-root.js";
+
 type OpenInput = Parameters<ProviderProcessCustodyPort["open"]>[0];
 
 export interface HostCustodyOpenReservation {
@@ -76,6 +78,9 @@ const bindLaunchCandidate = async (reservation: HostCustodyOpenReservation): Pro
     status: "active",
   });
   if (live.sealed) {return;}
+  if (retainPrivateRootCleanupAuthority(live) === undefined) {
+    throw new HostCustodyLaunchRejectedError("authority-verification-failed");
+  }
   live.executable = Object.freeze(await verifyExecutable(candidate.plan));
   if (live.sealed) {return;}
   live.residueAuthority = await reservation.residueAuthorityFactory.create(live.custodyRef);
