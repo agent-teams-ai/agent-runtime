@@ -53,6 +53,9 @@ const setup = async (dynamicOperations = false, closure = {providerAdapter: "ada
     return {rows: []};
   }, release() {calls.push("release");}};}};
   let recipes = 0;
+  const renderingOwners: {closed: boolean; disposals: number; cancel(): void; expire(): void}[] = [];
+  const factoryState = {fail: false, malformed: false, reuse: false};
+  let previousOwner: ReturnType<LinuxCodexDeploymentInfrastructure["createProviderAccess"]> | undefined;
   const rsReader = dynamicOperations ? {async readAuthority(key: {operationId: string}) {
     assert.equal(this, rsReader); assert.equal(key.operationId, f.state.head.authority!.operationId);
     return f.state.head;
@@ -68,6 +71,26 @@ const setup = async (dynamicOperations = false, closure = {providerAdapter: "ada
       // Explicit synthetic approval, never deployment policy provisioning.
       return {...f.input, approval: {ruleRevision: f.input.rule.revision,
         bindingDigest: digest(canonicalEgressValue({domain: "rs-current-egress-rule/v1", operation, acceptedDispatch, rule: f.input.rule}))}};
+    },
+    createProviderAccess(selectedInput, acknowledged) {
+      assert.equal(this, infrastructure);
+      assert.equal(selectedInput.kernel.operationId, acknowledged.input.subject.operationId);
+      assert.equal(selectedInput.kernel.custodyId, acknowledged.input.subject.custodyId);
+      if (factoryState.reuse && previousOwner !== undefined) {return previousOwner;}
+      if (factoryState.fail) {throw new Error("factory failure before allocation");}
+      const cancellation = new AbortController();
+      let now = 0;
+      const deadline = 10;
+      const state = {closed: false, disposals: 0,
+        cancel() {cancellation.abort();}, expire() {now = deadline;}};
+      renderingOwners.push(state);
+      const owner = {authorization: {}, rendering: {async render() {
+        state.closed ||= cancellation.signal.aborted || now >= deadline;
+        return {kind: state.closed ? "denied" : "unsupported"};
+      }}, dispose() {assert.equal(this, owner); state.disposals++; state.closed = true;}};
+      if (factoryState.malformed) {Object.defineProperty(owner, "rendering", {get() {throw new Error("must not invoke accessor");}});}
+      previousOwner = owner as never;
+      return owner as never;
     },
     authorities: {} as never, signer: {keyRef: "synthetic-key", keyGeneration: "1", signerRevision: "2",
       clock: {read: () => ({authorityId: "control", epoch: "epoch-1", controlTime: 1000})}},
@@ -101,7 +124,7 @@ const setup = async (dynamicOperations = false, closure = {providerAdapter: "ada
   const pa = () => ports.providerAccess.consumeForDispatch({...input, grantRequestId: "pa-grant"} as never);
   const rs = async () => {const outcome = await ports.security.consumeForDispatch(input as never); await claim(); return outcome;};
   const select = (value = kernel) => deployment.resources.select({kernel: value, record: {}} as never);
-  return {f, calls, rows, outcomes, input, kernel, pa, rs, claim, ports, store, infrastructure, deployment, routeEnforcement, select, recipes: () => recipes};
+  return {renderingOwners, factoryState, f, calls, rows, outcomes, input, kernel, pa, rs, claim, ports, store, infrastructure, deployment, routeEnforcement, select, recipes: () => recipes};
 };
 
 test("simulation: selection needs both acknowledgements before any recipe and binds concrete HTTP owners", async () => {
@@ -251,7 +274,7 @@ test("simulation: construction captures readers, methods, config and borrowed re
   const replaced = (): never => {replacements++; throw new Error("replacement owner invoked");};
   try {
     Object.assign(t.infrastructure, {currentAuthority: {runtimeSecurity: {readAuthority: replaced}, providerAccess: {readCurrent: replaced}},
-      currentPolicy: replaced, recipe: replaced, pool: {connect: replaced}, deploymentId: "replacement", clock: {now: replaced, within: replaced}});
+      currentPolicy: replaced, recipe: replaced, createProviderAccess: replaced, pool: {connect: replaced}, deploymentId: "replacement", clock: {now: replaced, within: replaced}});
     Object.assign(t.infrastructure.signer, {keyRef: "replacement"});
     Object.assign(t.infrastructure.dns, {resolverIdentity: "replacement"});
     const originalRead = originalReaders.runtimeSecurity.readAuthority;
@@ -350,5 +373,61 @@ test("simulation: a copied owner cannot authorize a deployment", async () => {
     assert.throws(() => createLinuxCodexDeploymentResources(t.infrastructure, t.input.subject,
       {...t.routeEnforcement}), /qualification/u);
     assert.equal(t.recipes(), 0); assert.deepEqual(t.calls, []);
+  } finally {t.deployment.dispose(); t.f.dispose();}
+});
+
+for (const cutoff of ["cancel", "expire"] as const) {
+  test(`simulation: operation rendering owners isolate ${cutoff} and dispose once`, async () => {
+    const t = await setup(true);
+    try {
+      await t.pa(); await t.rs(); const first = t.select();
+      Object.assign(t.input.subject, {operationId: "second", custodyId: "second-custody"});
+      Object.assign(t.kernel, {operationId: "second", custodyId: "second-custody"});
+      t.outcomes.pa.receipt.operationId = "second"; t.outcomes.rs.receipt.operationId = "second";
+      t.f.state.head = {...t.f.state.head, authority: {...t.f.state.head.authority!, operationId: "second"}};
+      await t.pa(); await t.rs(); const second = t.select();
+      assert.notEqual(first.authorities.providerAccess, second.authorities.providerAccess);
+      if (cutoff === "cancel") {t.renderingOwners[0]!.cancel();}
+      else {t.renderingOwners[0]!.expire();}
+      assert.equal((await first.authorities.providerAccess.rendering.render({})).kind, "denied");
+      assert.equal((await second.authorities.providerAccess.rendering.render({})).kind, "unsupported");
+      first.dispose?.(); first.authorities.providerAccess.dispose();
+      second.authorities.providerAccess.dispose(); second.dispose?.();
+      assert.deepEqual(t.renderingOwners.map(owner => owner.disposals), [1, 1]);
+      await t.pa(); await t.rs(); assert.throws(() => t.select(), /acknowledged/u);
+      assert.equal(t.renderingOwners.length, 2);
+    } finally {t.deployment.dispose(); t.f.dispose();}
+  });
+}
+
+test("simulation: rendering selection construction failure cleans up and cannot replay", async () => {
+  for (const fault of ["fail", "malformed"] as const) {
+    const t = await setup();
+    try {
+      t.factoryState[fault] = true;
+      await t.pa(); await t.rs(); assert.throws(() => t.select());
+      assert.deepEqual(t.renderingOwners.map(owner => owner.disposals), fault === "fail" ? [] : [1]);
+      t.factoryState[fault] = false;
+      await t.pa(); await t.rs(); assert.throws(() => t.select(), /acknowledged/u);
+      assert.equal(t.renderingOwners.length, fault === "fail" ? 0 : 1);
+    } finally {t.deployment.dispose(); t.f.dispose();}
+  }
+});
+
+test("simulation: factory cannot share a concrete owner with another operation", async () => {
+  const t = await setup(true);
+  try {
+    await t.pa(); await t.rs(); const first = t.select();
+    t.factoryState.reuse = true;
+    Object.assign(t.input.subject, {operationId: "second", custodyId: "second-custody"});
+    Object.assign(t.kernel, {operationId: "second", custodyId: "second-custody"});
+    t.outcomes.pa.receipt.operationId = "second"; t.outcomes.rs.receipt.operationId = "second";
+    t.f.state.head = {...t.f.state.head, authority: {...t.f.state.head.authority!, operationId: "second"}};
+    await t.pa(); await t.rs(); assert.throws(() => t.select(), /already selected/u);
+    assert.equal((await first.authorities.providerAccess.rendering.render({})).kind, "unsupported");
+    assert.equal(t.renderingOwners[0]!.disposals, 0);
+    first.dispose?.(); assert.equal(t.renderingOwners[0]!.disposals, 1);
+    assert.throws(() => t.select(), /acknowledged/u);
+    assert.equal(t.renderingOwners.length, 1);
   } finally {t.deployment.dispose(); t.f.dispose();}
 });

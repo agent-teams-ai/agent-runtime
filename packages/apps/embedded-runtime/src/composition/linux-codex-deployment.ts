@@ -29,7 +29,13 @@ export interface LinuxCodexDeploymentInfrastructure {
    * This callback must not mint approval from the operation's requested policy. */
   currentPolicy(input: ReturnType<ReturnType<typeof createLinuxCodexDeploymentAuthority>["take"]>):
     Omit<Current, "operation" | "acceptedDispatch" | "runtimeSecurity" | "providerAccess">;
-  readonly authorities: Selection["authorities"];
+  readonly authorities: Omit<Selection["authorities"], "providerAccess">;
+  /** Allocate one concrete rendering lifetime after acknowledgement and claim.
+   * Bind its signal, deadline and material to this acknowledged operation.
+   * The factory owns cleanup if it throws before returning an owner. */
+  createProviderAccess(input: SelectInput,
+    acknowledged: ReturnType<ReturnType<typeof createLinuxCodexDeploymentAuthority>["take"]>):
+    Selection["authorities"]["providerAccess"];
   readonly signer: Omit<Selection["signer"], "scope" | "hostReservationId">;
   readonly clock: Selection["broker"]["clock"];
   recipe(input: SelectInput): Readonly<{
@@ -63,7 +69,7 @@ const captureInfrastructure = (value: LinuxCodexDeploymentInfrastructure): Linux
     throw new TypeError("Linux Codex deployment current authority accessor unavailable");
   }
   return captureLinuxCodexDeploymentData({...value,
-    ...captureLinuxCodexDeploymentPort(value, ["currentPolicy", "recipe"]),
+    ...captureLinuxCodexDeploymentPort(value, ["currentPolicy", "recipe", "createProviderAccess"]),
     pool: captureLinuxCodexDeploymentPort(fields.pool?.value as LinuxCodexDeploymentInfrastructure["pool"], ["connect"]),
     currentAuthority: {
       runtimeSecurity: captureLinuxCodexDeploymentPort(readers.runtimeSecurity.value as Current["runtimeSecurity"], ["readAuthority"]),
@@ -93,6 +99,7 @@ export const createLinuxCodexDeploymentResources = (infrastructure: LinuxCodexDe
   infrastructure = captureInfrastructure(infrastructure);
   const {hostBootId, hostInstanceId} = captureLinuxCodexDeploymentData(host);
   const authority = createLinuxCodexDeploymentAuthority(infrastructure.currentAuthority, infrastructure.sourceRevision);
+  const selectedOwners = new WeakSet<object>();
   const resources: LinuxCodexContainedTurnResources = Object.freeze({
     imageInitLock: infrastructure.imageInitLock, cleanupMilliseconds: infrastructure.cleanupMilliseconds,
     select(input: SelectInput): Selection {
@@ -113,13 +120,12 @@ export const createLinuxCodexDeploymentResources = (infrastructure: LinuxCodexDe
         tenantId: scope.tenantId, projectId: scope.projectId, deploymentId: infrastructure.deploymentId,
       });
       const transport = createContainedTurnHttpUpstreamTransport(infrastructure.transport);
-      return Object.freeze({preparation: recipe.preparation, route,
+      const selection = {preparation: recipe.preparation, route,
         nativeFiles: recipe.nativeFiles, connection: recipe.connection,
         currentAuthority: Object.freeze({...policy, ...infrastructure.currentAuthority, acceptedDispatch: acknowledged.acceptedDispatch,
           operation: Object.freeze({scope, providerId: "codex", authorityGeneration: acknowledged.acceptedDispatch.authority!.authorityGeneration,
             claimBindingDigest: subject.runtimeSecurityRequest.claimBindingDigest})}),
         signer: Object.freeze({...infrastructure.signer, scope, hostReservationId: subject.custodyId}),
-        authorities: infrastructure.authorities,
         broker: Object.freeze({...recipe.hostSession, ...acknowledged.upstream, clock: infrastructure.clock,
           ids: Object.freeze({fresh: ids.fresh.bind(ids)}),
           resolver: Object.freeze({resolve: resolver.resolve.bind(resolver)}),
@@ -131,7 +137,20 @@ export const createLinuxCodexDeploymentResources = (infrastructure: LinuxCodexDe
           }}),
           transport: Object.freeze({beginOpen: transport.beginOpen.bind(transport)}),
         }),
-      });
+      };
+      const owner = infrastructure.createProviderAccess(input, acknowledged);
+      // Reusing a concrete owner would couple sibling cancellation. Do not
+      // dispose a rejected duplicate: its original operation still owns it.
+      if (selectedOwners.has(owner)) {throw new TypeError("Linux Codex rendering owner already selected");}
+      const disposeOwner = captureLinuxCodexDeploymentPort(owner, ["dispose"]).dispose;
+      selectedOwners.add(owner);
+      let disposed = false;
+      const dispose = (): void => {if (!disposed) {disposed = true; disposeOwner();}};
+      try {
+        const providerAccess = Object.freeze({...captureLinuxCodexDeploymentData(owner), dispose});
+        return Object.freeze({...selection, dispose,
+          authorities: Object.freeze({...infrastructure.authorities, providerAccess})});
+      } catch (error) {dispose(); throw error;}
     },
   });
   return Object.freeze({resources, bindAuthority: authority.bind, bindOperationStore: authority.bindStore, dispose: authority.dispose});

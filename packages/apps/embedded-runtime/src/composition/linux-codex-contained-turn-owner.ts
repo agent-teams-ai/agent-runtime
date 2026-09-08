@@ -27,6 +27,7 @@ export interface LinuxCodexContainedTurnResources {
   readonly imageInitLock: NonNullable<DockerOptions["imageInitLock"]>;
   readonly cleanupMilliseconds: number;
   select(input: Parameters<DockerOptions["preparation"]>[0]): Readonly<{
+    dispose?(): void;
     preparation: Omit<DockerLinuxPostClaimDependencies, "resources" | "routeAdmission" | "publishRouteFirstWrite"> & Readonly<{
       resources: Omit<DockerLinuxPostClaimDependencies["resources"], "accept" | "listenerFor">;
     }>;
@@ -175,12 +176,14 @@ export const createLinuxCodexContainedTurnOwner = (
     platformTarget: options.platformTarget, effectCustody: options.effectCustody,
     cleanupMilliseconds: resources.cleanupMilliseconds, imageInitLock: resources.imageInitLock,
     preparation(input) {
-      const {selected, preparation, route, broker, connection, currentInput, signerInput} =
-        validateOperationSelection(select(input), input.kernel);
-      const current = createContainedTurnCurrentEgressOwners(currentInput);
+      const selection = select(input);
+      let current: ReturnType<typeof createContainedTurnCurrentEgressOwners> | undefined;
       let signer: ReturnType<typeof createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate> | undefined;
       let authorities: ReturnType<typeof bindContainedTurnHttpEgressAuthorities> | undefined;
       try {
+        const {selected, preparation, route, broker, connection, currentInput, signerInput} =
+          validateOperationSelection(selection, input.kernel);
+        current = createContainedTurnCurrentEgressOwners(currentInput);
         signer = createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate({...signerInput, authorityOwner: current});
         authorities = bindContainedTurnHttpEgressAuthorities({...selected.authorities, runtimeSecurity: signer});
         const session = composeContainedTurnHttpEgressSession(authorities, broker);
@@ -191,16 +194,16 @@ export const createLinuxCodexContainedTurnOwner = (
         const finalizer = createDockerCodexNativeBrokerFinalizer({session, nativeFiles: selected.nativeFiles,
           routeAdmission: readContainedTurnSelectedRouteAdmission(selected.route) ?? createDockerLinuxExclusiveRouteAdmission(route)});
         const http = joinedHttpResources({...selected, broker, connection}, input.kernel, finalizer);
-        const ownedSigner = signer; const ownedAuthorities = authorities;
+        const ownedSigner = signer; const ownedAuthorities = authorities; const ownedCurrent = current;
         retained.set(input.kernel.custodyId, Object.freeze({finalizer, settle: http.settle, isSettled: http.isSettled, dispose() {
           try {finalizer.cutoff();} finally {
-            try {ownedAuthorities.dispose();} finally {try {ownedSigner.dispose();} finally {current.dispose();}}
+            try {ownedAuthorities.dispose();} finally {try {ownedSigner.dispose();} finally {try {ownedCurrent.dispose();} finally {selection.dispose?.();}}}
           }
         }}));
         return Object.freeze({...preparation, routeAdmission: finalizer.routeAdmission,
           resources: http.resources});
       } catch (error) {
-        try {authorities?.dispose();} finally {try {signer?.dispose();} finally {current.dispose();}}
+        try {authorities?.dispose();} finally {try {signer?.dispose();} finally {try {current?.dispose();} finally {selection.dispose?.();}}}
         throw error;
       }
     },
