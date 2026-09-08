@@ -153,3 +153,34 @@ test("a workspace failure before consuming launch authority cannot acquire later
   assert.throws(late, /already consumed/u);
   assert.deepEqual(h.counts, { prepares: 0, reserves: 0, retires: 1, releases: 0 });
 });
+
+
+test("owner lifetime admission bound retains fences and refuses before workspace acquisition", async () => {
+  let callbacks = 0;
+  const h = harness("prepare", undefined, {
+    withLaunchAuthority: async (_input, consume) => {callbacks += 1; return consume(target);},
+  });
+  for (let index = 0; index < 1024; index += 1) {
+    await assert.rejects(h.custody.open({ ...input,
+      custodyId: index === 0 ? custodyId : `${custodyId}:${index}` as typeof custodyId,
+      attemptId: index === 0 ? attemptId : `${attemptId}:${index}` as typeof attemptId,
+    }), error => error === failure);
+  }
+  const refused = { ...input, custodyId: `${custodyId}:refused` as typeof custodyId,
+    attemptId: `${attemptId}:refused` as typeof attemptId };
+  await assert.rejects(h.custody.open(refused), /owner lifetime open attempt limit reached/u);
+  await h.custody.releaseReservation(release);
+  assert.equal((await h.custody.releaseRetiredReservation({ cleanupPermit: permit })).kind, "already_released");
+  await assert.rejects(h.custody.open(input), /already consumed/u);
+  await assert.rejects(h.custody.open({ ...input, custodyId: refused.custodyId }), /already consumed/u);
+  await assert.rejects(h.custody.open(refused), /owner lifetime open attempt limit reached/u);
+  await assert.rejects(h.custody.releaseReservation({ ...release, ...refused }), /unavailable/u);
+  assert.equal((await h.custody.releaseRetiredReservation({
+    cleanupPermit: { ...permit, custodyId: refused.custodyId, attemptId: refused.attemptId },
+  })).kind, "indeterminate");
+  assert.equal(callbacks, 1024);
+  assert.deepEqual(h.counts, { prepares: 1024, reserves: 0, retires: 1024, releases: 0 });
+  const fresh = h.create();
+  await assert.rejects(fresh.releaseReservation(release), /unavailable/u);
+  assert.equal((await fresh.releaseRetiredReservation({ cleanupPermit: permit })).kind, "indeterminate");
+});

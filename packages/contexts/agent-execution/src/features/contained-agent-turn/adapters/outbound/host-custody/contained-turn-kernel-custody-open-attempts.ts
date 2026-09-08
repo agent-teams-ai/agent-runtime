@@ -6,6 +6,9 @@ import type {
 } from "./contained-turn-kernel-custody-contracts.js";
 import type { HostCustodyReservationInput } from "./custodied-provider-process.js";
 
+// Bound retained fences for the entire owner lifetime; never evict or reopen them.
+const MAX_OWNER_LIFETIME_OPEN_ATTEMPTS = 1024;
+
 export interface KernelOpenAttempt {
   readonly input: KernelOpenInput;
   closed: boolean;
@@ -15,6 +18,7 @@ export interface KernelOpenAttempt {
 /** Private owner-lifetime fencing and retirement for kernel open attempts. */
 export class KernelOpenAttempts {
   readonly #openAttempts = new Map<string, KernelOpenAttempt>();
+  readonly #consumedOperationAttempts = new Set<string>();
 
   public async open(
     input: KernelOpenInput,
@@ -28,10 +32,14 @@ export class KernelOpenAttempts {
   ): ReturnType<ContainedTurnKernelCustodyPort["open"]> {
     // Keep failed identities fenced for this owner lifetime: absence is not proof,
     // and a duplicate call must never race preparation or resurrect acquisition.
-    if (this.#openAttempts.has(input.custodyId) || [...this.#openAttempts.values()].some(
-      prior => prior.input.attemptId === input.attemptId && prior.input.operationId === input.operationId,
-    )) {
+    const operationAttempt = JSON.stringify([input.operationId, input.attemptId]);
+    if (this.#openAttempts.has(input.custodyId) || this.#consumedOperationAttempts.has(operationAttempt)) {
       throw new TypeError("Host Custody kernel open attempt is already consumed");
+    }
+    // Refuse before workspace authority or attempt preparation. Saturation is permanent
+    // for this owner, so refused identities cannot retry after cleanup frees resources.
+    if (this.#openAttempts.size >= MAX_OWNER_LIFETIME_OPEN_ATTEMPTS) {
+      throw new TypeError("Host Custody kernel owner lifetime open attempt limit reached");
     }
     input = Object.freeze({ ...input, adapterSnapshot: Object.freeze({ ...input.adapterSnapshot }),
       providerAccessSnapshot: Object.freeze({ ...input.providerAccessSnapshot }) });
@@ -39,6 +47,7 @@ export class KernelOpenAttempts {
       input, closed: false, acquisitionPossible: false, failedBeforeAcquisition: false,
     };
     this.#openAttempts.set(input.custodyId, attempt);
+    this.#consumedOperationAttempts.add(operationAttempt);
     let scoped: ReturnType<ContainedTurnKernelCustodyPort["open"]> | undefined;
     try {
       return await workspaceOwner.withLaunchAuthority({
