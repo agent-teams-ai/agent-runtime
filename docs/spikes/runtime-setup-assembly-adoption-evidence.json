@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "evidenceKind": "runtime-setup-static-assembly-construction",
-  "sourceRevision": "7fcabfce2e6811ef05961c2b72ced6891f8b74a3",
+  "sourceRevision": "15f92b38d0fec8a56fbd6d6324d02de2566cccb7",
   "authority": {
     "id": "ADR-0015",
     "path": "docs/decisions/0015-passive-setup-static-assembly-adoption.md",
@@ -24,7 +24,7 @@
     },
     "tests": {
       "fileCount": 475,
-      "sha256": "0f24fa5c41eee150d0e1269c45a8a4eb75ee108ff327411eef7343acbc5240b6"
+      "sha256": "0f769ecd686bcff694575a52dec1f93c445541b13e951cfc28fa8e4b9721f10d"
     }
   },
   "construction": [
@@ -58,7 +58,7 @@
   "capture": {
     "command": "pnpm --filter @agent-teams/embedded-runtime check",
     "exitCode": 0,
-    "outputSha256": "de91946aefff4522b9e8eaf10cb25c014eb0e67a1a88816598d278e883954602",
+    "outputSha256": "91505816cfd53822579976554905ffbfacff0df05a7d1382e7e3ed78129c6dfb",
     "architecture": "arm64",
     "nodeVersion": "v24.18.0",
     "platform": "darwin",
