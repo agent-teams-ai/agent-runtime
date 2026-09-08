@@ -67,6 +67,7 @@ export interface LiveCustody {
   guardianNoStartAcknowledged?: boolean;
   guardianStartErrorCode?: HostCustodyStartCode;
   launchAuthority?: VerifiedLaunchDescriptors;
+  privateRootCleanupAuthority?: { readonly descriptor: number; close(): void };
   identity: HostCustodyProcessIdentityEvidence;
   identityProof?: Promise<HostCustodyProcessIdentityProof | undefined>;
   opening: Promise<void>;
@@ -78,6 +79,7 @@ export interface LiveCustody {
   process?: CustodiedProviderProcess;
   providerPid?: number;
   residueAuthority?: OperationResidueAuthority;
+  residueAllocation: "not-allocated" | "uncertain" | "retained";
   sdkProcess?: NodeCustodiedSdkProcess;
   sealed: boolean;
   signalAuthorized: boolean;
@@ -130,6 +132,7 @@ export const createLiveCustody = (
     sealed: false,
     signalAuthorized: false,
     spawnStatus: "never-started",
+    residueAllocation: "not-allocated",
     stdinBytes: 0,
     workspaceRef: input.workspaceRef,
     ...(options.workspaceAuthority === undefined ? {} : { workspaceAuthority: options.workspaceAuthority }),

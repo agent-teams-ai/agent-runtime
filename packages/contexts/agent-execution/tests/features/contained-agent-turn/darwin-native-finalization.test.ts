@@ -4,7 +4,7 @@ import { test } from "node:test";
 import {
   fixture, issuer, recipes, filesIssuer, tuple, linuxTuple, boundaries, captures, retainedBytes,
   launch, validation, material, darwin, host, sessionDependencies, observedPaths, materialPreimages,
-  mutate, file, directory, holdRead, providerOptions, legacyCapture, guarded, lastSpawnRequest,
+  mutate, file, directory, holdRead, providerOptions, legacyCapture, guarded, lastSpawnRequest, descriptorIsOpen,
 } from "./darwin-native-finalization-fixture.ts";
 
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
@@ -15,6 +15,32 @@ const finalized = async (mode: "analysis" | "workspace-write" = "analysis") => {
   const final = finalizer.commit(stage);
   return {...f, ...reservation, finalizer, files, stage, dependencies, session, final};
 };
+
+test("Darwin fixture teardown closes only its retained root without claiming containment", async t => {
+  const first = await fixture().reserve(); t.after(first.close);
+  const second = await fixture().reserve(); t.after(second.close);
+  const firstRoot = first.live.privateRootCleanupAuthority;
+  const secondRoot = second.live.privateRootCleanupAuthority;
+  assert.ok(firstRoot); assert.ok(secondRoot);
+  assert.notEqual(firstRoot.descriptor, secondRoot.descriptor);
+  assert.equal(first.live.launchAuthority, undefined);
+  assert.equal(first.live.spawnStatus, "never-started");
+  const closure = first.live.privateRootClosure;
+  const evidence = first.live.closureEvidence;
+  assert.equal(evidence.status, "unproven");
+  assert.equal(descriptorIsOpen(firstRoot.descriptor), true);
+  assert.equal(descriptorIsOpen(secondRoot.descriptor), true);
+  first.close();
+  assert.equal(descriptorIsOpen(firstRoot.descriptor), false);
+  assert.equal(descriptorIsOpen(secondRoot.descriptor), true);
+  first.close();
+  assert.equal(first.live.spawnStatus, "never-started");
+  assert.equal(first.live.privateRootClosure, closure);
+  assert.equal(first.live.closureEvidence, evidence);
+  assert.equal(first.live.contained, undefined);
+  second.close();
+  assert.equal(descriptorIsOpen(secondRoot.descriptor), false);
+});
 
 test("Darwin native factory uses the exact 0.153.4 captures for both admitted intents", async () => {
   for (const mode of ["analysis", "workspace-write"] as const) {

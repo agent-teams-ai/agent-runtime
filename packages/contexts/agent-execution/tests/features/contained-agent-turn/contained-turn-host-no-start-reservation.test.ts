@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { access, mkdir, mkdtemp, open, readFile, realpath, rm, stat } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, open, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
@@ -37,8 +37,8 @@ const providerBinding = Object.freeze({
 const executableDigest = async (path: string): Promise<string> =>
   createHash("sha256").update(await readFile(path)).digest("hex");
 
-const createFixture = async (spawnMode: HostCustodyLaunchPlan["spawnMode"]) => {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "contained-turn-host-reserve-")));
+const createFixture = async (spawnMode: HostCustodyLaunchPlan["spawnMode"], refuseBeforeGuardian = false) => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "TEST-contained-turn-host-reserve-")));
   disposableRoots.push(root);
   const workspaceRef = join(root, "workspace");
   const privateRootPath = join(root, "workspace-host-private");
@@ -89,13 +89,16 @@ const createFixture = async (spawnMode: HostCustodyLaunchPlan["spawnMode"]) => {
     ...(spawnMode === undefined ? {} : { spawnMode }),
   });
   const counts = { guardianAuthorizations: 0, residueAuthorities: 0 };
+  const custodyRefs: string[] = [];
   const custody = new NodeProviderProcessCustody({
     containmentAfterMs: 5_000,
     forceKillAfterMs: 1_000,
     launchPlans: Object.freeze({ async resolve() {return plan;} }),
     residueAuthorityFactory: Object.freeze({
-      async create() {
+      async create(custodyRef) {
+        custodyRefs.push(custodyRef);
         counts.residueAuthorities += 1;
+        if (refuseBeforeGuardian) {await chmod(temporary, 0o500);}
         return Object.freeze({
           async attachGuardian() {counts.guardianAuthorizations += 1; return true;},
           async close() {return true;},
@@ -106,7 +109,7 @@ const createFixture = async (spawnMode: HostCustodyLaunchPlan["spawnMode"]) => {
     }),
     terminateAfterMs: 1_000,
   });
-  return { counts, custody, marker, plan, workspaceAuthority, workspaceRef };
+  return { counts, custody, custodyRefs, marker, plan, workspaceAuthority, workspaceRef };
 };
 
 const hostOpenInput = (
@@ -166,3 +169,60 @@ test("real Node Host delegated reserve remains never-started without start autho
   assert.deepEqual(fixture.counts, { guardianAuthorizations: 0, residueAuthorities: 1 });
   await assertMarkerAbsent(fixture.marker);
 });
+
+for (const spawnMode of ["eager", "sdk-delegated"] as const) {
+  for (const replaceRoot of [false, true]) {
+    test(`pre-guardian ${spawnMode} refusal releases only the authentic root (replacement=${replaceRoot})`, {
+      skip: process.platform !== "linux",
+    }, async () => {
+      const fixture = await createFixture(spawnMode, true);
+      const input = {attemptId, operationId, providerBinding, workspaceRef: fixture.workspaceRef, intentMode: "analysis" as const};
+      if (spawnMode === "eager") {
+        await assert.rejects(fixture.custody.open(input), HostCustodyLaunchRejectedError);
+      } else {
+        const reserved = await fixture.custody.reserve(hostOpenInput(
+          fixture.workspaceRef, fixture.workspaceAuthority, fixture.plan,
+        ));
+        assert.throws(() => fixture.custody.start(reserved.custodyRef, {
+          arguments: fixture.plan.arguments,
+          command: fixture.plan.executablePath,
+          // Strict Linux delegated starts name the guardian's workspace descriptor.
+          cwd: "/proc/self/fd/4",
+          environment: fixture.plan.environment,
+          signal: new AbortController().signal,
+        }), (error: unknown) =>
+          error instanceof HostCustodyLaunchRejectedError && error.code === "authority-verification-failed");
+      }
+      const contained = await fixture.custody.requestContainment(input);
+      assert.equal(contained.kind, "contained");
+      if (contained.kind !== "contained") {throw new Error("no-start containment missing");}
+      assert.deepEqual(fixture.counts, {guardianAuthorizations: 0, residueAuthorities: 1});
+      await assertMarkerAbsent(fixture.marker);
+      const custodyRef = fixture.custodyRefs[0];
+      assert.ok(custodyRef);
+      const evidence = fixture.custody.evidence(custodyRef);
+      assert.equal(evidence?.spawn, "never-started");
+      assert.equal(evidence?.identity.status, "not-started");
+      const release = {...input, custodyRef, receiptRef: contained.receiptRef};
+      assert.equal((await fixture.custody.release({...release, receiptRef: "foreign"})).kind, "unproven");
+      if (replaceRoot) {
+        await rename(fixture.plan.privateRootPath, `${fixture.plan.privateRootPath}-retained`);
+        await mkdir(fixture.plan.privateRootPath, {mode: 0o700});
+        const marker = join(fixture.plan.privateRootPath, "replacement");
+        await writeFile(marker, "untouched");
+        assert.equal((await fixture.custody.release(release)).kind, "unproven");
+        assert.equal(await readFile(marker, "utf8"), "untouched");
+        await rm(fixture.plan.privateRootPath, {recursive: true});
+        await rename(`${fixture.plan.privateRootPath}-retained`, fixture.plan.privateRootPath);
+      }
+      assert.deepEqual(await fixture.custody.release(release), {kind: "released"});
+      assert.equal(fixture.custody.evidence(custodyRef)?.spawn, "never-started");
+      assert.equal(fixture.custody.evidence(custodyRef)?.identity.status, "not-started");
+      await assertMarkerAbsent(fixture.plan.privateRootPath);
+      assert.deepEqual(await fixture.custody.release(release), {kind: "released"});
+      assert.equal((await fixture.custody.release({...release, operationId: "foreign"})).kind, "unproven");
+      assert.equal((await fixture.custody.release({...release, attemptId: "foreign"})).kind, "unproven");
+      assert.equal((await fixture.custody.release({...release, custodyRef: "foreign"})).kind, "unproven");
+    });
+  }
+}
