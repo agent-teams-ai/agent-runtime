@@ -196,8 +196,8 @@ export const createLinuxCodexNodeSelection = (inputPins: LinuxCodexNodeSelection
       maximumProviderRuntimeMs: Math.min(p.provider.maximumProviderRuntimeMs, remaining), observedIdentity: expectedIdentity};
     const encoded = JSON.stringify(configuration);
     if (Buffer.byteLength(`AR_CUSTODY_INIT_CONFIGURATION=${encoded}`) > 32768) {return fail("init configuration too large");}
-    const environment = {HOME: "/agent-private/home", PATH: "/usr/local/bin:/usr/bin:/bin", TMPDIR: "/tmp",
-      AR_CUSTODY_INIT_CONFIGURATION: encoded};
+    // The Docker encoder supplies reserved HOME/PATH/TMPDIR defaults.
+    const environment = {AR_CUSTODY_INIT_CONFIGURATION: encoded};
     const launchFingerprintSha256 = hash(JSON.stringify({domain: "linux-codex-live-node-selection/v1",
       subject: s, authority: k.authorityVectorDigest, generation, operationNonce,
       image: lock, policy: p.enginePolicy, configuration, privateRoot: d.privateRoot, workspace: d.workspace,
@@ -217,7 +217,9 @@ export const createLinuxCodexNodeSelection = (inputPins: LinuxCodexNodeSelection
         maximumStdoutBytes: p.provider.maximumStdoutBytes, maximumStderrBytes: p.provider.maximumStderrBytes,
         isCurrentGeneration: candidate => candidate === generation && current(false), isObservationActive: () => current(true)},
       workspaceBackingTreeOwnership: p.workspaceBackingTreeOwnership,
-      deadlines: {...p.deadlines, routeLifetimeMs: remaining}, cleanupMilliseconds: p.deadlines.cleanupMs,
+      deadlines: {...p.deadlines, routeLifetimeMs: remaining},
+      // Network cleanup has its own consumer bound, separate from outer closure.
+      cleanupMilliseconds: 5_000,
       consumptionSubject: {...s.scope, executionGenerationId: s.executionGenerationId},
       consumption: {directory: d.consumption}, nativeFileOptions: p.native,
       localCut: {clock: p.clock, expectedClock: p.expectedClock, operationDeadline: t.operationDeadline,

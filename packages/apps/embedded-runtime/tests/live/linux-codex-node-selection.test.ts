@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {createHash, randomUUID} from "node:crypto";
 import {test} from "node:test";
+import {join} from "node:path";
 import {createLinuxCodexNodeSelection, type LinuxCodexNodeSelectionPins} from "./linux-codex-node-selection.ts";
 
 type Input = Parameters<ReturnType<typeof createLinuxCodexNodeSelection>>[0];
@@ -117,3 +118,105 @@ test("selected resource handles pass the real V4 network recipe without normaliz
   }
   assert.equal(handles.size, 6);
 });
+
+// Actual canary configuration plus synthetic acknowledged/readback facts only.
+// Never call setup or any engine/lifecycle method.
+const canarySelection = async () => {
+  const {createLinuxCodexLiveCanaryConfiguration} = await import("./linux-codex-live-canary-config.ts");
+  const {containedTurnScopeDigest} = await import(
+    "../../../../contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-authority.js");
+  const {policy} = await import("../../../../contexts/agent-execution/tests/fixtures/docker-engine-test-fixture.ts");
+  const {SYNTHETIC_LOOPBACK_CA} = await import(
+    "../../../../contexts/agent-execution/tests/fixtures/http-egress-tls/synthetic-loopback-certificates.ts");
+  const parent = "/disposable";
+  const enginePolicy = policy(parent);
+  const approved = {
+    approvedIntent: "write-one-marker-and-return-it/v1", testId: "engine-env",
+    commandId: "command:engine-env", deploymentId: "deployment:synthetic",
+    deploymentIncarnation: "incarnation:synthetic", markerFile: "marker.txt", marker: "synthetic",
+    externalAuthorityDigest: `sha256:${"a".repeat(64)}`,
+    binding: {accessRef: "access:synthetic", availability: "available", bindingRevision: 1,
+      credentialBindingDigest: "credential:digest:synthetic", credentialBindingRef: "credential:synthetic",
+      credentialGeneration: 1, projectId: "project:synthetic", provider: "codex",
+      providerAccountRef: "account:synthetic", providerRouteRef: "route:synthetic", revocation: "active",
+      scopeDigest: containedTurnScopeDigest({tenantId: "tenant:synthetic", projectId: "project:synthetic"}),
+      tenantId: "tenant:synthetic"},
+  } satisfies Parameters<typeof createLinuxCodexLiveCanaryConfiguration>[0];
+  const pins = {
+    sourceRevision: "f1b7a77f9267d188521cd202a628beae3413f9bc",
+    hostBootId: "host-boot:synthetic", hostInstanceId: "host-instance:synthetic",
+    testParent: parent, enginePolicy,
+    tools: {nsenter: {path: join(parent, "nsenter"), sha256: "a".repeat(64)},
+      nft: {path: join(parent, "nft"), sha256: "b".repeat(64)}},
+    imageInitLock: {
+      imageReference: "sha256:8db55f3551afd7c1032bb8dba936caefd4d5c8f2fb4b5f21af19da1fb7345979",
+      imageConfigId: "sha256:8db55f3551afd7c1032bb8dba936caefd4d5c8f2fb4b5f21af19da1fb7345979", os: "linux", architecture: "amd64", variant: "",
+      loadingPolicy: "closed-bundle-node-builtins-only-v1",
+      interpreter: {path: "/ar-custody-node", mode: 0o555, size: 100,
+        sha256: "41a74efb34cbde5c7632cdac0cf8bd1a14d0b8d73dc1e82755014d9a9ce70f5c"},
+      bootstrap: {path: "/ar-custody-init.mjs", mode: 0o444, size: 85430,
+        sha256: "e54bf7263a01b3ccc48a0b401a48eb14be60ce27520edd2bd865d04e3f04674c"},
+    },
+    native: {catalogSource: Buffer.from("{}"), ownerUid: 1000, ownerGid: 1000},
+    observerSha256: "c".repeat(64), certificateAuthorities: [SYNTHETIC_LOOPBACK_CA],
+  } satisfies Parameters<typeof createLinuxCodexLiveCanaryConfiguration>[1];
+
+  const {configuration} = createLinuxCodexLiveCanaryConfiguration(approved, pins);
+  const f = fixture();
+  const binding = {...approved.binding, hostBootId: pins.hostBootId, hostInstanceId: pins.hostInstanceId};
+  Object.assign(f.subject, binding, {scope: binding});
+  Object.assign(f.input.kernel.providerAccessSnapshot, binding);
+  const selected = createLinuxCodexNodeSelection({...f.pins, ...configuration.node, binding,
+    enginePolicy: {...configuration.node.enginePolicy,
+      privateRootSourceRoot: f.pins.enginePolicy.privateRootSourceRoot,
+      workspaceSourceRoot: f.pins.enginePolicy.workspaceSourceRoot},
+  })(f.input);
+  return {selected, configuration, input: f.input};
+};
+
+test("actual canary selection satisfies network cleanup constructor while outer cleanup remains 30000",
+  {skip: process.platform !== "linux" || process.arch !== "x64"}, async () => {
+    const {DockerHttpNetworkResources, dockerHttpOperationNetworkRecipe} = await import(
+      "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-network-resources.js");
+    const {subject} = await import("../../../../contexts/agent-execution/tests/fixtures/host-http-egress-v4-fixture.ts");
+    const {selected, configuration} = await canarySelection();
+    const actual = {...subject, ...selected.subjectFacts, imageDigest: selected.create.imageDigest,
+      attempt: {...subject.attempt, launchFingerprintSha256: selected.create.launchFingerprintSha256,
+        operationNonceSha256: selected.create.operationNonceSha256}};
+    let calls = 0;
+    const noIO = () => {calls += 1; throw new Error("Unexpected engine I/O");};
+    const engine = {policy: {...selected.node.enginePolicy,
+      hostIdentitySha256: actual.attempt.hostIdentitySha256,
+      allowedNetworkName: dockerHttpOperationNetworkRecipe(actual).name},
+      client: {buffered: noIO, endpointIdentity: noIO, stream: noIO, hijack: noIO}};
+    assert.equal(configuration.node.deadlines.cleanupMs, 30_000);
+    assert.equal(selected.deadlines.cleanupMs, 30_000);
+    assert.equal(selected.connection.limits.closureDeadline - selected.connection.limits.deadline, 30_000);
+    assert.ok(new DockerHttpNetworkResources({subject: actual, engine,
+      cleanupMilliseconds: selected.cleanupMilliseconds}) instanceof DockerHttpNetworkResources);
+    assert.equal(selected.cleanupMilliseconds, 5_000);
+    for (const cleanupMilliseconds of [5_001, selected.deadlines.cleanupMs]) {
+      assert.throws(() => new DockerHttpNetworkResources({subject: actual, engine, cleanupMilliseconds}));
+    }
+    assert.equal(calls, 0);
+  });
+
+test("actual canary create encoder supplies reserved defaults and preserves provider environment",
+  {skip: process.platform !== "linux" || process.arch !== "x64"}, async () => {
+    const {encodeCreateRequest} = await import(
+      "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-create-request.js");
+    const {selected, configuration, input} = await canarySelection();
+    const create = {...selected.create, ownerIdentitySha256: "f".repeat(64),
+      privateRootSource: input.record.privateRootPath, workspaceSource: input.record.boundary.workspaceRef};
+    const request = encodeCreateRequest(create, selected.node.enginePolicy);
+    assert.deepEqual(Object.keys(create.environment), ["AR_CUSTODY_INIT_CONFIGURATION"]);
+    const encoded = create.environment.AR_CUSTODY_INIT_CONFIGURATION!;
+    assert.deepEqual(JSON.parse(encoded).allowedEnvironmentNames, configuration.node.provider.allowedEnvironmentNames);
+    for (const key of ["HOME", "PATH", "TMPDIR"]) {
+      assert.ok(JSON.parse(encoded).allowedEnvironmentNames.includes(key));
+      assert.throws(() => encodeCreateRequest({...create, environment: {...create.environment, [key]: "/reserved"}},
+        selected.node.enginePolicy), error => Reflect.get(error as object, "code") === "invalid-create-request");
+    }
+    assert.deepEqual(request.Env, ["HOME=/agent-private/home", "PATH=/usr/local/bin:/usr/bin:/bin", "TMPDIR=/tmp",
+      `AR_CUSTODY_INIT_CONFIGURATION=${encoded}`]);
+  });
