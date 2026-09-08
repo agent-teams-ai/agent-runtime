@@ -27,6 +27,9 @@ import {installJoinedPeer} from "./linux-joined-peer.mjs";
 const storeInput = persistence => persistence ? {operationStore: persistence.store} : {};
 const hash = value => createHash("sha256").update(value).digest("hex");
 
+const closureReady = (saved, outcome) => saved?.physicalContainment.kind === "contained" &&
+  (outcome !== "unknown" || saved.closureRecovery.stage === "containment_attestation");
+
 const assertUnresolvedReceipt = saved => {
   assert.equal(saved.providerExecution.kind, "closed");
   assert.equal(saved.providerExecution.outcome, "succeeded");
@@ -176,7 +179,7 @@ test(`public RuntimeAccessHandle joins native broker with evidence ${evidenceOut
   for (let iteration = 0; iteration < 300; iteration++) {
     observed = await access.containedTurn.observe(accepted.operationId);
     if (observed.status === "observed" && ["succeeded", "failed", "reconcile_required"].includes(observed.turn.status)
-      && (await readOperation())?.physicalContainment.kind === "contained") {break;}
+      && closureReady(await readOperation(), evidenceOutcome)) {break;}
     await new Promise(resolve => {setTimeout(resolve, 50);});
   }
   console.log(JSON.stringify({events, observed, brokerOrder: brokerObservations?.order, brokerReceipts: brokerObservations?.receipts, messages: docker?.messages.map(message => message.kind)}));
