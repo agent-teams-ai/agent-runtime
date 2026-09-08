@@ -21,6 +21,7 @@ import {
   snapshotProviderAccessProvider,
   snapshotProviderAccessScope,
 } from "../../domain/provider-access-binding.js";
+import { createSha256DispatchConsumptionDigest } from "../outbound/sha256-dispatch-consumption-digest.js";
 import { exactProviderAccessDataRecord } from "../provider-access-data.js";
 
 const CONTRACT_BINDING_KEYS = [
@@ -60,11 +61,12 @@ const bindingToContract = (
   });
 };
 
-const bindingEvidence = (
+const bindingEvidence = async (
   binding: ContainedTurnProviderAccessBinding,
   purpose: "acceptance" | "dispatch",
-) => Object.freeze({
-  authorityDigest: JSON.stringify({
+) => {
+  // Hash the complete versioned binding/purpose preimage, never the owner digest alone.
+  const authorityDigest = await createSha256DispatchConsumptionDigest().digest(JSON.stringify({
     binding: {
       accessRef: binding.accessRef,
       credentialBindingDigest: binding.credentialBindingDigest,
@@ -79,11 +81,16 @@ const bindingEvidence = (
     },
     purpose,
     version: 1,
-  }),
-  bindingAuthorityDigest: binding.credentialBindingDigest,
-  proofRef: `binding:${binding.accessRef}:revision:${binding.revision}:purpose:${purpose}`,
-  purpose,
-});
+  }));
+  const proofRef = `binding:${binding.accessRef}:revision:${binding.revision}:purpose:${purpose}`;
+  return Object.freeze({
+    authorityDigest,
+    bindingAuthorityDigest: binding.credentialBindingDigest,
+    // Preserve existing references when bounded; commit the complete preimage otherwise.
+    proofRef: proofRef.length <= 512 ? proofRef : `binding:${authorityDigest}:purpose:${purpose}`,
+    purpose,
+  });
+};
 
 const rejectionEvidence = (reason: string, purpose: "acceptance" | "dispatch") => Object.freeze({
   authorityDigest: JSON.stringify({ purpose, reason, version: 1 }),
@@ -103,9 +110,9 @@ export const resolveCommandFromContract = (input: {
   });
 };
 
-export const resolveResultToContract = (
+export const resolveResultToContract = async (
   result: ResolveProviderAccessResult,
-): ResolveContainedTurnProviderAccessOutcome => {
+): Promise<ResolveContainedTurnProviderAccessOutcome> => {
   const kindDescriptor = result !== null && typeof result === "object"
     ? Object.getOwnPropertyDescriptor(result, "kind") : undefined;
   if (kindDescriptor === undefined || !("value" in kindDescriptor)) { throw new TypeError("resolve result kind is invalid"); }
@@ -119,7 +126,7 @@ export const resolveResultToContract = (
   }
   const data = exactProviderAccessDataRecord("resolve result", result, ["binding", "kind"]);
   const binding = bindingToContract(data.binding as never);
-  return Object.freeze({ binding, evidence: bindingEvidence(binding, "acceptance"), kind: "resolved" });
+  return Object.freeze({ binding, evidence: await bindingEvidence(binding, "acceptance"), kind: "resolved" });
 };
 
 export const revalidateCommandFromContract = (input: {
@@ -143,9 +150,9 @@ export const revalidateCommandFromContract = (input: {
   });
 };
 
-export const revalidateResultToContract = (
+export const revalidateResultToContract = async (
   result: RevalidateProviderAccessResult,
-): RevalidateContainedTurnProviderAccessOutcome => {
+): Promise<RevalidateContainedTurnProviderAccessOutcome> => {
   const kindDescriptor = result !== null && typeof result === "object"
     ? Object.getOwnPropertyDescriptor(result, "kind") : undefined;
   if (kindDescriptor === undefined || !("value" in kindDescriptor)) { throw new TypeError("revalidate result kind is invalid"); }
@@ -163,7 +170,7 @@ export const revalidateResultToContract = (
   }
   const data = exactProviderAccessDataRecord("revalidate result", result, ["binding", "kind"]);
   const binding = bindingToContract(data.binding as never);
-  return Object.freeze({ binding, evidence: bindingEvidence(binding, "dispatch"), kind: "valid" });
+  return Object.freeze({ binding, evidence: await bindingEvidence(binding, "dispatch"), kind: "valid" });
 };
 
 interface ContainedTurnProviderAccessUseCases {
@@ -190,7 +197,7 @@ export const createContainedTurnProviderAccessAdapter = (
   resolve: Object.freeze({
     async execute(input: ResolveContainedTurnProviderAccessInput) {
       try {
-        return resolveResultToContract(await useCases.resolve.execute(resolveCommandFromContract(input)));
+        return await resolveResultToContract(await useCases.resolve.execute(resolveCommandFromContract(input)));
       } catch {
         return unavailable();
       }
@@ -199,7 +206,7 @@ export const createContainedTurnProviderAccessAdapter = (
   revalidate: Object.freeze({
     async execute(input: RevalidateContainedTurnProviderAccessInput) {
       try {
-        return revalidateResultToContract(await useCases.revalidate.execute(revalidateCommandFromContract(input)));
+        return await revalidateResultToContract(await useCases.revalidate.execute(revalidateCommandFromContract(input)));
       } catch {
         return rejected();
       }
