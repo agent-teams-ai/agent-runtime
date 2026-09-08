@@ -1,6 +1,7 @@
+const unused = async () => Object.freeze({kind: "not_found" as const});
 import {strict as assert} from "node:assert";
 import {test} from "node:test";
-import {assertLinuxCodexLiveAdminIdentity, LinuxCodexLiveAdminSetupError, setupLinuxCodexLiveAdmin, snapshotLinuxCodexLiveAdminRoute} from "./linux-codex-live-admin.ts";
+import {createLinuxCodexLiveCredentialInventory, assertLinuxCodexLiveAdminIdentity, LinuxCodexLiveAdminSetupError, setupLinuxCodexLiveAdmin, snapshotLinuxCodexLiveAdminRoute} from "./linux-codex-live-admin.ts";
 
 // Invalid administration never reaches a Pool or runtime owner. These are
 // malformed-input tests, not mocked PA/RS/custody authority or live tests.
@@ -108,7 +109,7 @@ test("root Host rejects before configuration I/O or allocation and erases materi
 });
 
 // Synthetic failures only: no database, filesystem owner or provider is started.
-import {LinuxCodexLiveSetupError, setupLinuxCodexLiveBootstrap} from "./linux-codex-live-bootstrap.ts";
+import {createLinuxCodexLiveLaunchRecords, LinuxCodexLiveSetupError, setupLinuxCodexLiveBootstrap} from "./linux-codex-live-bootstrap.ts";
 
 test("bootstrap schema failure retains cleanup and excludes the original error", {skip: process.platform !== "linux"}, async () => {
   const secret = "malicious-password-/private/path";
@@ -148,4 +149,117 @@ test("admin preserves every bootstrap stage and its retained cleanup without cau
       assert.equal(cleanupCalls, 1);
     }
   }
+});
+
+// Synthetic caller regression: actual ACL, admin producer, bootstrap resolver and
+// current owner; fake custody/process only, with no provider or runtime launch.
+import {createContainedTurnProviderAccessPort} from
+  "../../../../contexts/agent-execution/dist/features/contained-agent-turn/composition/provider-access-anti-corruption.js";
+import { createHash } from "node:crypto";
+import { createCodexCurrentKernelOwner } from "../../../../contexts/agent-execution/dist/composition.js";
+import { CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT } from "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
+import {
+  access, executeInput, FakeHost, ids, openInput,
+  syntheticCodexEffectCustody, workspaceOwner,
+} from "../../../../contexts/agent-execution/tests/features/contained-agent-turn/support/current-provider-owner-fixture.ts";
+import {
+  boundary as codexFixtureBoundary,
+  FakeCodexProcess,
+  standardHandshake,
+  syntheticPrivateRoot as codexFixturePrivateRoot,
+  syntheticTmp as codexFixtureTmp,
+} from "../../../../contexts/agent-execution/tests/codex-app-server-contained-turn-provider-fixture.ts";
+import { emitAgentCompleted, emitAgentStarted, emitTurnStarted, generatedTurn } from "../../../../contexts/agent-execution/tests/codex-app-server-test-messages.mjs";
+
+test("admin inventory and real bootstrap resolver carry accepted ACL identity into the owner plan and redact output", async () => {
+  const workspaceRef = codexFixtureBoundary.workspaceRef;
+  const privateRootPath = codexFixturePrivateRoot;
+  const codexHome = codexFixtureBoundary.codexHome;
+  const tmpDir = codexFixtureTmp;
+  const oauthToken = "test-fixture-literal";
+  const tokenDigest = createHash("sha256").update(oauthToken).digest("hex");
+  const reviewToken = "ARBITRARY_REVIEW_TOKEN_93e77fe_exact_inventory";
+  const process = new FakeCodexProcess((message, target) => {
+    if (standardHandshake(message, target)) {return;}
+    if (message.method === "turn/start") {
+      target.emit({id: message.id, result: {turn: generatedTurn("turn:sensitive", "inProgress")}});
+      emitTurnStarted(target, "turn:sensitive");
+      emitAgentStarted(target, "turn:sensitive", "item:sensitive");
+      target.emit({method: "item/agentMessage/delta", params: {
+        delta: `unlabeled ${oauthToken} ${tokenDigest} ${reviewToken}`, itemId: "item:sensitive",
+        threadId: "thread:test", turnId: "turn:sensitive",
+      }});
+      emitAgentCompleted(target, "turn:sensitive", "item:sensitive", `unlabeled ${oauthToken} ${tokenDigest} ${reviewToken}`);
+      target.emit({method: "turn/completed", params: {
+        threadId: "thread:test", turn: generatedTurn("turn:sensitive", "completed"),
+      }});
+    }
+  });
+  class CredentialHost extends FakeHost {
+    override async reserve(input: any) {
+      this.reserves += 1;
+      this.refs.set(input.attemptId, process.custodyRef);
+      this.plans.push(input.launchPlan);
+      return Object.freeze({custodyRef: process.custodyRef});
+    }
+    override get(custodyRef: string) {return custodyRef === process.custodyRef ? process : null;}
+  }
+  const host = new CredentialHost();
+  const identity = ids("codex", "sensitive-output");
+  const mutableTokens = [oauthToken, tokenDigest, reviewToken];
+  const {ownerAuthorityDigest: _owner, ...baseBinding} = access("codex");
+  const binding = Object.freeze({...baseBinding, credentialBindingDigest: "owner:raw:synthetic"});
+  const port = createContainedTurnProviderAccessPort(Object.freeze({
+    dispatchConsumptionV1: Object.freeze({consumeForDispatch: unused,
+      observeDispatchConsumption: unused, settleDispatchConsumption: unused}),
+    resolve: Object.freeze({async execute() {return Object.freeze({kind: "resolved" as const, binding,
+      evidence: Object.freeze({authorityDigest: "authority:synthetic", bindingAuthorityDigest: binding.credentialBindingDigest,
+        proofRef: "proof:synthetic", purpose: "acceptance" as const})});}}),
+    revalidate: Object.freeze({async execute() {throw new Error("unused");}}),
+  }));
+  const accepted = await port.resolveForAcceptance({operationId: identity.operationId,
+    intent: {mode: "analysis", prompt: "Synthetic inspection"}, provider: "codex",
+    scope: {tenantId: binding.tenantId, projectId: binding.projectId}});
+  assert.equal(accepted.kind, "resolved");
+  if (accepted.kind !== "resolved") {throw new Error("Expected accepted snapshot");}
+  const mutableInventory = createLinuxCodexLiveCredentialInventory(binding, mutableTokens);
+  assert.equal(mutableInventory.credentialBindingDigest, accepted.snapshot.credentialBindingDigest);
+  assert.equal(accepted.snapshot.ownerAuthorityDigest, binding.credentialBindingDigest);
+  assert.notEqual(mutableInventory.credentialBindingDigest, binding.credentialBindingDigest);
+  let pathCalls = 0;
+  const launchRecords = createLinuxCodexLiveLaunchRecords({
+    credentials: {inventory: mutableInventory, takeOwnedMaterial() {throw new Error("unused");}},
+    async launchPaths() {pathCalls++; return {codexHome, executablePath: "/synthetic/codex", privateRootPath, tmpDir};},
+  }, () => false);
+  // These are rejected before any path read, including an equal-generation raw digest.
+  for (const expected of [binding, {...accepted.snapshot, credentialGeneration: 2}]) {
+    assert.equal(await launchRecords.resolve(expected as never), undefined);
+  }
+  assert.equal(pathCalls, 0);
+  const owner = createCodexCurrentKernelOwner({
+    effectCustody: syntheticCodexEffectCustody(), hostBootId: "host-boot:sensitive-output",
+    hostCustody: host as any, hostInstanceId: "host-instance:sensitive-output",
+    launchRecords,
+    platformTarget: {architecture: "x64", platform: "linux"},
+    workspaceOwner: workspaceOwner(identity, workspaceRef),
+  });
+  await owner.custody.open({...openInput(identity, "codex", CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT),
+    providerAccessSnapshot: accepted.snapshot});
+  assert.equal(pathCalls, 1);
+  assert.equal(host.plans.length, 1);
+  assert.equal(JSON.stringify(host.plans).includes(oauthToken), false);
+  mutableTokens.splice(0, mutableTokens.length, "later-substituted-token");
+  const output: unknown[] = [];
+  const outcome = await owner.provider.execute({...executeInput(
+    identity, "codex", CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT,
+  ), providerAccessSnapshot: accepted.snapshot, emit: async chunk => {output.push(chunk);}});
+  const publicEvidence = JSON.stringify({outcome, output});
+  assert.equal(outcome.kind, "indeterminate");
+  assert.deepEqual(output, []);
+  assert.equal(publicEvidence.includes(oauthToken), false);
+  assert.equal(publicEvidence.includes(tokenDigest), false);
+  assert.equal(publicEvidence.includes(reviewToken), false);
+  assert.equal(JSON.stringify(openInput(identity, "codex", CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT))
+    .includes(oauthToken), false);
+  owner.dispose();
 });

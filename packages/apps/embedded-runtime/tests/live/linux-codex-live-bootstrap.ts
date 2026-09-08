@@ -111,7 +111,9 @@ const bindOperationStore = (store: PostgresContainedTurnOperationStore) => Objec
 export type LinuxCodexLiveSetupStage = "configuration" | "schema" | "pa" | "rs" |
   "operation-store" | "workspace" | "artifacts" | "node-recipe" | "host-composition";
 
-const createLaunchRecords = (pins: LinuxCodexLivePins, isClosing: () => boolean): Launch => Object.freeze({async resolve(input: LaunchInput) {
+export const createLinuxCodexLiveLaunchRecords = (
+  pins: Pick<LinuxCodexLivePins, "credentials" | "launchPaths">, isClosing: () => boolean,
+): Launch => Object.freeze({async resolve(input: LaunchInput) {
   if (isClosing()) {return;}
   const inventory = pins.credentials.inventory;
   if (input.credentialBindingDigest !== inventory.credentialBindingDigest ||
@@ -238,7 +240,7 @@ export const setupLinuxCodexLiveBootstrap = async (pool: Pool, pins: LinuxCodexL
           return value;
         },
       })});
-    const launchRecords = createLaunchRecords(pins, () => closing);
+    const launchRecords = createLinuxCodexLiveLaunchRecords(pins, () => closing);
     setupStage = "host-composition";
     host = createHostCustodiedAgentRuntimeHost({authorityRevision: pins.authorityRevision,
       capabilities: pins.capabilities,

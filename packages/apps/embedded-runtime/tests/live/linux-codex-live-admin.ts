@@ -1,5 +1,7 @@
 // Private, test-only administrative entrypoint. Importing performs no I/O.
 import {createHash} from "node:crypto";
+import {digestContainedTurnCanonicalValue} from
+  "../../../../contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import {isDeepStrictEqual} from "node:util";
 import {NodeProviderProcessCustody} from "../../../../contexts/agent-execution/dist/composition.js";
 import {containedTurnAcceptanceIntentDigestV1} from
@@ -156,6 +158,16 @@ const credentialOutputTokens = (credentials: LinuxCodexLiveAdminCredentials): st
   });
 };
 
+/** AE inventory uses the accepted snapshot namespace. PA issuance, route and
+ * owned material retain the original owner binding, including its raw digest. */
+export const createLinuxCodexLiveCredentialInventory = (
+  binding: Pick<LinuxCodexLivePins["issuance"]["binding"], "credentialBindingDigest" | "credentialGeneration">,
+  sensitiveOutputTokens: readonly string[],
+): LinuxCodexLivePins["credentials"]["inventory"] => ({
+  credentialBindingDigest: digestContainedTurnCanonicalValue({ownerDigest: binding.credentialBindingDigest}),
+  credentialGeneration: binding.credentialGeneration, sensitiveOutputTokens,
+});
+
 const approvedCurrentPolicy = (approval: LinuxCodexLiveAdminApproval,
   timing: CurrentPolicy["timing"], monotonicNow: CurrentPolicy["monotonicNow"]):
   LinuxCodexLivePins["deployment"]["currentPolicy"] => {
@@ -282,8 +294,7 @@ export const setupLinuxCodexLiveAdmin = async (
         workspaceBackingTreeOwnership: tree.workspaceBackingTreeOwnership},
       deployment: {...config.deployment, currentPolicy: approvedCurrentPolicy(approval, timing, monotonicNow)},
       credentials: {
-        inventory: {credentialBindingDigest: binding.credentialBindingDigest,
-          credentialGeneration: binding.credentialGeneration, sensitiveOutputTokens: tokens},
+        inventory: createLinuxCodexLiveCredentialInventory(binding, tokens),
         takeOwnedMaterial(operationId) {
           if (closing || materialTaken) {throw new TypeError("Administrative material already consumed or closed");}
           materialTaken = true;
