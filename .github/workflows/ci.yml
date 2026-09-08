@@ -25,6 +25,8 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+          # L0 regression authenticates retained historical Git objects.
+          fetch-depth: 0
 
       - name: Verify checkout revision
         shell: bash

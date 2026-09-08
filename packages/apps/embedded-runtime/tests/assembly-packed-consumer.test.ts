@@ -52,8 +52,9 @@ test("installed archives expose async composition and preserve passive sibling a
     devDependencies: { typescript: "7.0.2", "@types/node": "24.13.3" },
   }));
   await writeFile(join(consumer, "pnpm-workspace.yaml"), JSON.stringify({ overrides: dependencies, minimumReleaseAgeExclude: ["@get-modular/core@0.1.0", "@get-modular/assembly@0.1.0"] }));
-  // Missing cache entries are a concrete failure, never a skip or a source fallback.
-  run("pnpm", ["install", "--offline", "--ignore-scripts", "--config.node-linker=hoisted"], consumer);
+  // A fresh consumer resolves published roots from the registry; a frozen workspace
+  // install does not guarantee the metadata required by an offline new project.
+  run("pnpm", ["install", "--ignore-scripts", "--config.node-linker=hoisted"], consumer);
   const installedConsumer = await realpath(consumer);
   for (const name of Object.keys(dependencies)) {
     const installed = await realpath(join(consumer, "node_modules", name));
