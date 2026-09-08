@@ -686,6 +686,32 @@ transition. Adapter conformance and E2E suites may reuse oracle scenario IDs.
 
 ## Pull request sequence
 
+### PR #69 delivery scope amendment (owner accepted 2026-09-08)
+
+The owner explicitly selected one real Linux Codex E2E as the delivery boundary
+for this existing PR. Claude Linux, Codex macOS and Claude macOS live acceptance
+and production qualification move to the next delivery stage. This supersedes
+the four-combination merge prerequisite in the earlier completion sequence;
+it does not declare the original V1 program complete or weaken its invariants.
+
+Keep already implemented deferred-provider code and regression coverage.
+Unqualified paths must remain fail-closed and must not acquire production claims
+from this merge. Review and required CI still cover all retained PR code.
+Do not add new Claude/macOS implementation lanes before this checkpoint ships.
+
+Current acceptance requires a real disposable Linux Codex turn through the
+existing seven ports, real PA/RS and PostgreSQL ownership, committed claim,
+pre-spawn route enforcement, provider output/exit and cleanup evidence. Finish
+exact-head independent review, required checks, qualified Linux-only registry
+and L0 evidence, then normal push/merge under the owner's current authorization.
+Do not bypass checks or substitute synthetic evidence. Reuse unchanged evidence;
+run the final full gate once on the stable candidate and rerun affected checks
+only after subsequent changes.
+
+Report current-PR completion separately from original-program completion. The
+three deferred live combinations remain outstanding in the original program;
+changing the delivery denominator is a scope change, not implementation progress.
+
 ### PR #69 completion simplification (owner accepted 2026-09-06)
 
 This execution update preserves the approved V1 scope, ADR invariants, required
