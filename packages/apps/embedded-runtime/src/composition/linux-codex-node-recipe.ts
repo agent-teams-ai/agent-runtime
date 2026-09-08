@@ -1,4 +1,4 @@
-import {createNodeDockerDeploymentRecipe, type NodeDockerDeploymentRecipeInput}
+import {createNodeDockerDeploymentRecipe, createDeferredCodexNativeBrokerFiles, type DeferredCodexNativeBrokerFilesOptions, type NodeDockerDeploymentRecipeInput}
   from "@agent-teams/agent-execution/composition";
 import type {LinuxCodexDeploymentInfrastructure} from "./linux-codex-deployment.js";
 import {bindLinuxCodexNodeConsumption} from "./linux-codex-node-recipe-consumption.js";
@@ -21,7 +21,7 @@ export interface LinuxCodexNodeRecipeSelection {
   readonly connection: Selected["connection"];
   readonly consumption: Omit<NodeDockerDeploymentRecipeInput["consumption"], "readEnvelope">;
   /** Native file custody remains a separate deployment owner. */
-  readonly remainingOwners?: Readonly<{nativeFiles: Selected["nativeFiles"]}>;
+  readonly nativeFileOptions: Omit<DeferredCodexNativeBrokerFilesOptions, "boundary">;
 }
 
 /** Private app recipe for infrastructure.recipe. select supplies approved facts,
@@ -47,9 +47,8 @@ export const createLinuxCodexNodeRecipe = (options: Readonly<{
     retained.set(input.kernel.custodyId, undefined);
     const selected = select(input);
     if (closed) {throw new TypeError("Linux Codex Node recipe admission closed during selection");}
-    const owners = selected.remainingOwners;
-    if (typeof owners?.nativeFiles?.install !== "function") {
-      throw new TypeError("Linux Codex Node recipe requires native-file installation owner");
+    if (selected.nativeFileOptions === undefined) {
+      throw new TypeError("Linux Codex Node recipe requires native-file installation options");
     }
     const kernel = input.kernel;
     const subjectFacts = Object.freeze({...selected.subjectFacts});
@@ -60,7 +59,7 @@ export const createLinuxCodexNodeRecipe = (options: Readonly<{
     const node = createNodeDockerDeploymentRecipe({...selected.node,
       consumption: bindLinuxCodexNodeConsumption(selected.consumption, {...expected, scopeDigest: `sha256:${subjectFacts.scopeSha256}`})});
     retained.set(kernel.custodyId, node);
-    const nativeFiles = Object.freeze({install: owners.nativeFiles.install.bind(owners.nativeFiles)});
+    const nativeFiles = createDeferredCodexNativeBrokerFiles({...selected.nativeFileOptions, boundary: input.record.boundary});
     const init = selected.initOptions;
     const preparation: Preparation = Object.freeze({...node.preparation,
       openResourceJournal(request: Parameters<Preparation["openResourceJournal"]>[0]) {

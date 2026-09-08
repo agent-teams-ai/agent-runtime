@@ -5,7 +5,7 @@ import {
   createDockerCodexHostKernelOwner, createDockerCodexNativeBrokerFinalizer,
   readContainedTurnSelectedRouteAdmission, createDockerLinuxExclusiveRouteAdmission, createNodeHostHttpConnection, createNodeHostHttpListener, hostHttpAbortOperations,
   type CreateCodexCurrentKernelOwnerOptions, type CodexCurrentKernelOwner, type CreateDockerCodexHostKernelOwnerOptions,
-  type DockerCodexNativeBrokerFinalizerInput, type DockerLinuxExclusiveRouteAdmissionInput,
+  type DeferredCodexNativeBrokerFiles, type DockerLinuxExclusiveRouteAdmissionInput,
   type DockerLinuxPostClaimDependencies, type NodeDockerConsumptionRecipe,
 } from "@agent-teams/agent-execution/composition";
 import { createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate } from "@agent-teams/runtime-security/composition";
@@ -13,6 +13,13 @@ import { createContainedTurnCurrentEgressOwners, type ContainedTurnCurrentEgress
   from "./contained-turn-current-egress-owners.js";
 import { bindContainedTurnHttpEgressAuthorities, composeContainedTurnHttpEgressSession,
   type ContainedTurnHttpEgressBrokerPorts } from "./contained-turn-http-egress-authorities.js";
+
+const disposeAll = (actions: Array<() => void>): void => {
+  let failed = false;
+  let failure: unknown;
+  for (const action of actions) {try {action();} catch (error) {failed = true; failure = error;}}
+  if (failed) {throw failure;}
+};
 
 type DockerOptions = CreateDockerCodexHostKernelOwnerOptions;
 type Finalizer = ReturnType<typeof createDockerCodexNativeBrokerFinalizer>;
@@ -38,7 +45,7 @@ export interface LinuxCodexContainedTurnResources {
     signer: Omit<SignerInput, "authorityOwner">;
     authorities: Omit<Parameters<typeof bindContainedTurnHttpEgressAuthorities>[0], "runtimeSecurity">;
     broker: ContainedTurnHttpEgressBrokerPorts;
-    nativeFiles: DockerCodexNativeBrokerFinalizerInput["nativeFiles"];
+    nativeFiles: DeferredCodexNativeBrokerFiles;
     connection: Omit<ConnectionInput, "expectedRequest">;
   }>;
 }
@@ -134,7 +141,7 @@ const validateOperationSelection = (
   const httpResources = data(preparation.resources, "http-resources");
   const route = data(selected.route, "route-admission");
   const files = data(selected.nativeFiles, "native-finalizer");
-  if (typeof files.install !== "function") {return missing("native-finalizer");}
+  if ([files.install, files.bindRoot, files.cutoff, files.quiesce, files.snapshot].some(method => typeof method !== "function")) {return missing("native-finalizer");}
   // Validate the complete selection before entering any resource recipe.
   if (typeof preparation.engineIdentity !== "function" || typeof preparation.openLifecycle !== "function" ||
       typeof preparation.openResourceJournal !== "function" || typeof httpResources.consumption?.prepare !== "function") {
@@ -199,6 +206,7 @@ export const createLinuxCodexContainedTurnOwner = (
         createNodeHostHttpConnection({...connection, expectedRequest: {requestId: "unbound",
           method: "POST", path: "/backend-api/codex/responses", host: "unbound"}}, broker.clock);
         const finalizer = createDockerCodexNativeBrokerFinalizer({session, nativeFiles: selected.nativeFiles,
+          cutoffNativeFiles: selected.nativeFiles.cutoff.bind(selected.nativeFiles),
           routeAdmission: readContainedTurnSelectedRouteAdmission(selected.route) ?? createDockerLinuxExclusiveRouteAdmission(route)});
         const http = joinedHttpResources({...selected, broker, connection}, input.kernel, finalizer,
           signer.hostEgressVerifierV2);
@@ -208,10 +216,11 @@ export const createLinuxCodexContainedTurnOwner = (
             try {ownedAuthorities.dispose();} finally {try {ownedSigner.dispose();} finally {try {ownedCurrent.dispose();} finally {selection.dispose?.();}}}
           }
         }}));
-        return Object.freeze({...preparation, routeAdmission: finalizer.routeAdmission,
+        return Object.freeze({...preparation, nativeFiles: selected.nativeFiles, routeAdmission: finalizer.routeAdmission,
           resources: http.resources});
       } catch (error) {
-        try {authorities?.dispose();} finally {try {signer?.dispose();} finally {try {current?.dispose();} finally {selection.dispose?.();}}}
+        disposeAll([() => selection.nativeFiles?.cutoff(), () => authorities?.dispose(),
+          () => signer?.dispose(), () => current?.dispose(), () => selection.dispose?.()]);
         throw error;
       }
     },

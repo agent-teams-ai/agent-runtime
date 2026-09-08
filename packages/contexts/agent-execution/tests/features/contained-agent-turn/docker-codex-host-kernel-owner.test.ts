@@ -90,3 +90,41 @@ test(`actual kernel custody refuses missing ${missing} before Docker allocation 
   assert.equal(allocations, 0);
 });
 }
+
+for (const failure of ["selection-disposal", "postclaim-constructor", "missing-native"] as const) {
+test(`Host retains and cuts native selection after ${failure}, without execution or a second selection`, async t => {
+  const f = await connectionFixture(); t.after(() => f.contain());
+  let allocations = 0; let executions = 0; let cuts = 0;
+  const nativeFiles = {bindRoot: unused, install: unused, quiesce: async () => {}, snapshot: unused,
+    cutoff() {assert.strictEqual(this, nativeFiles); cuts += 1;}};
+  const owner = createDockerCodexHostKernelOwner({cleanupMilliseconds: 100,
+    finishClaimed: async () => unused(), imageInitLock: imageLock(),
+    hostBootId: "host-boot:docker", hostInstanceId: "host-instance:docker", platformTarget: f.options.platformTarget,
+    effectCustody: f.options.effectCustody,
+    launchRecords: {async resolve() {return {boundary: f.options.boundary, executablePath: f.options.plan.executablePath,
+      privateRootPath: f.options.plan.privateRootPath, tmpDir: f.options.plan.tmpDir,
+      credentialOutputInventory: f.options.credentialOutputInventory};}},
+    workspaceOwner: {async withLaunchAuthority(_input, consume) {
+      return consume({canonicalPath: f.options.plan.workspaceRef, descriptorPath: f.options.plan.workspaceRef,
+        identity: {dev: 1n, ino: 2n, mountId: "synthetic"}});
+    }}, preparation() {
+      allocations += 1;
+      if (failure === "selection-disposal") {owner.dispose();}
+      // Invalid postclaim dependencies force construction to fail before attach.
+      return {deadlines: {routeLifetimeMs: 100}, ...(failure === "missing-native" ? {} : {nativeFiles})} as never;
+    }});
+  t.after(() => owner.dispose());
+  const open = {...f.options.attempt, intentMode: f.options.attempt.intent.mode,
+    commandId: id("command", "command:docker"), preparationToken: id("preparation", "preparation:docker"),
+    operationCutoffRevision: containedTurnOperationCutoffRevision(0), operationRevision: 1};
+  const opened = await owner.custody.open(open);
+  const start = {attemptId: open.attemptId, custodyId: open.custodyId, operationId: open.operationId,
+    workspaceId: open.workspaceId, intentMode: open.intentMode, committedDispatchProof: committedDispatchProofFixture(open, opened),
+    async execute() {executions += 1; return {kind: "completed" as const, outcome: "succeeded" as const};}};
+  assert.equal((await owner.custody.start(start)).kind, "indeterminate");
+  assert.equal(allocations, 1); assert.equal(executions, 0);
+  assert.equal(cuts > 0, failure !== "missing-native");
+  await assert.rejects(owner.custody.start(start));
+  assert.equal(allocations, 1);
+});
+}

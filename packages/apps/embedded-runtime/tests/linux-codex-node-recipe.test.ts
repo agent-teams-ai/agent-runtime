@@ -29,9 +29,7 @@ const fixture = () => {
         within: async (_deadline, operation) => operation()}},
     connection: {limits: {deadline: 1000, closureDeadline: 2000}} as LinuxCodexNodeRecipeSelection["connection"],
     consumption: {directory: {path: "/synthetic/consumption", device: "1", inode: "1"}},
-    remainingOwners: {
-      nativeFiles: {async install() {assert.equal(this, selection.remainingOwners!.nativeFiles); events.push("native-install");}},
-    },
+    nativeFileOptions: {catalogSource: new Uint8Array(), ownerUid: 0, ownerGid: 0},
   };
   const factory = () => createLinuxCodexNodeRecipe({hostBootId: "boot-1", hostInstanceId: "host-1",
     select(request) {assert.equal(request, input); events.push("select"); return selection;}});
@@ -55,8 +53,9 @@ test("Node recipe supplies infrastructure.recipe with actual construction and fi
   assert.throws(() => result.hostSession.localAuthorityCut.read(), /not been activated/u);
   assert.equal(result.hostSession.journal.consume({} as never, "fingerprint"), "unknown");
   // The existing finalizer supplies the issued recipe, not this test fixture.
-  await result.nativeFiles.install({} as never);
-  assert.deepEqual(f.events, ["select", "native-install"]);
+  await assert.rejects(result.nativeFiles.install({} as never), /installation unavailable/u);
+  assert.equal(result.nativeFiles.snapshot().binding, "unbound");
+  assert.deepEqual(f.events, ["select"]);
   assert.equal(await owner.releaseAfterHostCleanup(call()), "released");
   assert.throws(() => recipe(input), /reservation unavailable/u);
 });
@@ -77,9 +76,9 @@ test("selection is one-use and captures mutable deployment facts without opening
 
 test("missing production joins refuse before Engine or native resource preparation", async () => {
   const f = fixture();
-  const {remainingOwners: _owners, ...unavailable} = f.selection;
+  const {nativeFileOptions: _options, ...unavailable} = f.selection;
   const owner = createLinuxCodexNodeRecipe({hostBootId: "boot-1", hostInstanceId: "host-1", select: () => unavailable});
-  assert.throws(() => owner.recipe(input), /native-file installation owner/u);
+  assert.throws(() => owner.recipe(input), /native-file installation options/u);
   assert.deepEqual(f.events, []);
   assert.equal(await owner.releaseAfterHostCleanup(call()), "released");
 });

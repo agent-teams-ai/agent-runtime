@@ -114,7 +114,7 @@ export {
   type ContainedTurnRouteQualificationTarget,
 } from "./composition/contained-turn-route-enforcement-capability.js";
 
-export {createDockerCodexHostKernelOwner, type CreateDockerCodexHostKernelOwnerOptions} from "./composition/docker-codex-host-kernel-owner.js";
+export {createDockerCodexHostKernelOwner, type CreateDockerCodexHostKernelOwnerOptions, type DockerCodexHostPreparationSelection} from "./composition/docker-codex-host-kernel-owner.js";
 export { createContainedTurnOperationProviderAccessPort, type OuterContainedTurnProviderAccessOperation } from "./composition/provider-access-anti-corruption.js";
 export { createContainedTurnSecurityAcceptancePort, type OuterContainedTurnSecurityAcceptance, type ContainedTurnSecurityAcceptanceProfile } from "./composition/runtime-security-acceptance-anti-corruption.js";
 export {createDockerCodexNativeBrokerFinalizer, type DockerCodexNativeBrokerFinalizerInput} from "./composition/docker-codex-native-broker-finalizer.js";
@@ -134,3 +134,6 @@ export {bindContainedTurnRouteEnforcement, readContainedTurnSelectedRouteAdmissi
 
 export {createCodexNativeBrokerFileInstaller, type CodexNativeBrokerFileInstaller,
   type CodexNativeBrokerFileInstallerOptions, type CodexNativeBrokerFileInstallerSnapshot} from "./composition/codex-native-broker-file-installer.js";
+
+export {createDeferredCodexNativeBrokerFiles, type DeferredCodexNativeBrokerFiles,
+  type DeferredCodexNativeBrokerFilesOptions} from "./composition/deferred-codex-native-broker-files.js";

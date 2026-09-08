@@ -59,10 +59,11 @@ export const nativeFinalizerFixture = async (t: TestContext) => {
     writeFileSync(`${codexHome}/config.toml`, renderCodexNativeBrokerConfig(recipe), {mode: 0o600});
     writeFileSync(`${codexHome}/models.json`, readFileSync(new URL("../../../fixtures/codex-native-broker-0.153.4/models.json", import.meta.url)), {mode: 0o600});
   }};
-  const input = {session, nativeFiles, routeAdmission: f.dependencies.routeAdmission!};
+  const input = {session, nativeFiles, cutoffNativeFiles() {}, routeAdmission: f.dependencies.routeAdmission!};
   let finishInput: FinishInput | undefined; let error: unknown;
   let prepareIoCount = 0;
-  const start = (finalizer = createDockerCodexNativeBrokerFinalizer(input), change: (value: FinishInput) => FinishInput = value => value) => {
+  const start = (finalizer = createDockerCodexNativeBrokerFinalizer(input), change: (value: FinishInput) => FinishInput = value => value,
+    captureHost?: NonNullable<Parameters<typeof createDockerLinuxPostClaimOwner>[1]>["captureHost"]) => {
     const owner = createDockerLinuxPostClaimOwner({...f.dependencies,
       create: {...f.dependencies.create, workspaceSource: workspaceRef, privateRootSource: privateRootPath},
       routeAdmission: finalizer.routeAdmission,
@@ -73,6 +74,7 @@ export const nativeFinalizerFixture = async (t: TestContext) => {
         clock: {read: () => ({authorityId: "clock-authority", epoch: "epoch-1", controlTime: 1}),
           within: session.clock.within}}},
     }, {
+      ...(captureHost === undefined ? {} : {captureHost}),
       prepareProviderIo({launch, init}) {
         prepareIoCount += 1;
         return prepareDockerProviderProcessIo({launch, init, expected: {authority: launch.authority,

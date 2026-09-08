@@ -1,4 +1,4 @@
-import {custodyDataRecord, hostLaunchFinalizationRecipe, retainFinalizationHttpResources,
+import {custodyDataRecord, isHostCustodyDataCallback, hostLaunchFinalizationRecipe, retainFinalizationHttpResources,
   hostHttpAbortOperations, type HostHttpEgressSessionDependencies}
   from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import {assertDockerPreparedIoLaunch, dockerProviderProcessMountFacts}
@@ -21,6 +21,7 @@ export interface DockerCodexNativeBrokerFinalizerInput {
   /** Installs only the renderer's non-secret config and pinned catalog into the
    * retained private home. File issuance below independently checks exact bytes.
    * This owner retains any partial-file cleanup debt through custody cleanup. */
+  readonly cutoffNativeFiles: () => void;
   readonly nativeFiles: Readonly<{install(recipe: CodexNativeBrokerRecipe): Promise<void>}>;
 }
 const apply = Reflect.apply;
@@ -42,6 +43,9 @@ const assertProviderSelection = (
  * Independent image provenance and private-root closure remain separate owners. */
 export const createDockerCodexNativeBrokerFinalizer = (value: DockerCodexNativeBrokerFinalizerInput) => {
   const input = custodyDataRecord(value);
+  const cutoffMethod = input.cutoffNativeFiles;
+  if (!isHostCustodyDataCallback(cutoffMethod)) {throw rejected();}
+  const cutoffNativeFiles = () => apply(cutoffMethod, value, []);
   const files = custodyDataRecord(input.nativeFiles);
   if (typeof files.install !== "function") {throw rejected();}
   const installMethod = files.install;
@@ -61,10 +65,12 @@ export const createDockerCodexNativeBrokerFinalizer = (value: DockerCodexNativeB
   let subscription: ReturnType<typeof hostHttpAbortOperations.subscribe> | undefined;
   const cutoff = () => {
     cut = true;
+    try {cutoffNativeFiles();} finally {
     try {session?.close();} finally {
       try {cutHttp?.();} finally {
         if (subscription !== undefined) {hostHttpAbortOperations.remove(subscription); subscription = undefined;}
       }
+    }
     }
   };
   const finishClaimed: Finish = async supplied => {

@@ -1,3 +1,4 @@
+import type {DeferredCodexNativeBrokerFiles} from "./deferred-codex-native-broker-files.js";
 import {createHostPrivateRootOwnerFactory} from "./host-private-root-owner.js";
 import {createDockerHostReservationOwners} from "./docker-host-reservation-owners.js";
 import {snapshotDockerImageInitLock, prepareDockerProviderProcessIo, dockerProviderProcessMountFacts, isConcreteLinuxDockerLifecycle,
@@ -5,7 +6,7 @@ import {snapshotDockerImageInitLock, prepareDockerProviderProcessIo, dockerProvi
   from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import {createCodexDockerPathProjection, CodexAppServerCurrentKernelAdapter} from "../adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
 import {randomUUID} from "node:crypto";
-import {custodyDataRecord, sameHostCustodyBinding, isHostCustodyDataCallback, ContainedTurnKernelCustodyAdapter, type ContainedTurnKernelCustodyAttemptOwner,
+import {custodyDataRecord, hostHttpAbortOperations, sameHostCustodyBinding, isHostCustodyDataCallback, ContainedTurnKernelCustodyAdapter, type ContainedTurnKernelCustodyAttemptOwner,
   type ContainedTurnKernelWorkspaceOwner} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import {DockerKernelHostCustody} from "./docker-kernel-host-custody.js";
 import {createCodexAppServerFinalizableLaunchPlan, isCodexNativeBrokerLaunchPlan, type CodexAppServerLaunchPlan}
@@ -21,6 +22,9 @@ type Prepare = Parameters<ContainedTurnKernelCustodyAttemptOwner["prepare"]>[0];
 type Kernel = Prepare["kernel"];
 type FinalizeInput = Parameters<DockerLinuxClaimedJoin<PreparedDockerProviderIo>["finishClaimed"]>[0];
 const apply = Reflect.apply;
+export type DockerCodexHostPreparationSelection = DockerLinuxPostClaimDependencies & Readonly<{
+  nativeFiles: DeferredCodexNativeBrokerFiles;
+}>;
 export interface CreateDockerCodexHostKernelOwnerOptions {
   readonly hostBootId: string;
   readonly hostInstanceId: string;
@@ -33,7 +37,7 @@ export interface CreateDockerCodexHostKernelOwnerOptions {
    * Missing selection refuses before allocation; observed bytes cannot select it. */
   readonly imageInitLock?: DockerImageInitLock;
   /** Trusted, operation-scoped resource selection. No effects during selection. */
-  preparation(input: Readonly<{kernel: Kernel; record: CodexCurrentKernelLaunchRecord}>): DockerLinuxPostClaimDependencies;
+  preparation(input: Readonly<{kernel: Kernel; record: CodexCurrentKernelLaunchRecord}>): DockerCodexHostPreparationSelection;
   /** Unavailable until the native broker owner binds this HTTP reservation,
    * installed first-write route and issued Docker-path native material. Missing
    * finalization refuses before allocation; there is no ordinary-plan fallback. */
@@ -49,6 +53,8 @@ interface Retained {
   claimed?: DockerLinuxClaimedPreparation;
   process?: DockerProviderProcessInput;
   provider?: DockerCodexCurrentKernelOwner;
+  nativeFiles?: DeferredCodexNativeBrokerFiles;
+  removeAbort?: () => void;
   used: boolean;
 }
 
@@ -105,45 +111,65 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
       return Object.freeze({kind: "unsupported" as const, reason: "broker" as const});
     }
     retained.claimed = claimed; // One-use before calling resource selection.
-    const dependencies = options.preparation({kernel: retained.kernel, record: retained.record});
-    const deadlineEpochMs = Date.now() + dependencies.deadlines.routeLifetimeMs;
-    const hostOwners = createDockerHostReservationOwners({roots, raw, custodyRef: claimed.underlyingCustodyRef,
-      dependencies, lock: imageInitLock, cutoffProvider: () => retained.provider?.dispose()});
-    let lifecycle: DockerHostCustodyLifecycle | undefined;
-    const owner = createDockerLinuxPostClaimOwner({...dependencies,
-      openLifecycle(policy) {
-        if (lifecycle !== undefined) {throw new TypeError("Docker lifecycle selection is one-use");}
-        lifecycle = dependencies.openLifecycle(policy);
-        if (!isConcreteLinuxDockerLifecycle(lifecycle)) {throw new TypeError("Docker requires the concrete Linux residue owner");}
-        return lifecycle;
-      }}, {
-      ...hostOwners.hooks,
-      prepareProviderIo({launch, init}) {
-        if (lifecycle === undefined) {throw new TypeError("Docker lifecycle unavailable");}
-        const process = {launch, init, expected: Object.freeze({authority: launch.authority, custodyRef: launch.key.custodyId,
-          generation: init.authority.generation, workspaceAuthorityPath: retained.record.boundary.workspaceRef}),
-          call: Object.freeze({signal: claimed.signal, deadlineEpochMs}),
-          exec: Object.freeze({requestId: randomUUID(), uid: Number(dependencies.enginePolicy.user.split(":")[0]),
-            gid: Number(dependencies.enginePolicy.user.split(":")[1]), wallDeadlineUnixMs: deadlineEpochMs,
-            argv: Object.freeze([]), environment: Object.freeze([]), executableSha256: ""})};
-        const providerIo = prepareDockerProviderProcessIo(process);
-        retained.process = Object.freeze({...process, preparedIo: providerIo});
-        raw.reservation(claimed.underlyingCustodyRef).evidence.attach(lifecycle, launch, providerIo);
-        return providerIo;
-      },
-      async finishClaimed(input) {
-        const result = await apply(finishClaimed, value, [{...input, record: retained.record, originalPlan: retained.originalPlan}]);
-        if (!isCodexNativeBrokerLaunchPlan(result.plan)) {throw new TypeError("Docker native broker finalization unavailable");}
-        const process = retained.process!;
-        const paths = createCodexDockerPathProjection(dockerProviderProcessMountFacts(input.launch), retained.record.boundary);
-        const actual = captureDockerCodexProcessInput(process, result.plan, paths, claimed.signal, () => !disposed);
-        raw.reservation(claimed.underlyingCustodyRef).evidence.finalize(result.plan, actual.exec);
-        return result;
-      },
-    });
-    retained.owner = owner;
-    hostOwners.attach(owner);
-    return owner.preparation.prepareClaimed(claimed);
+    const selected = options.preparation({kernel: retained.kernel, record: retained.record});
+    const filesOwner = selected.nativeFiles;
+    retained.nativeFiles = filesOwner;
+    try {
+      const methods = custodyDataRecord(filesOwner);
+      const captured = {} as DeferredCodexNativeBrokerFiles;
+      for (const key of ["bindRoot", "install", "cutoff", "quiesce", "snapshot"] as const) {
+        const method = methods[key];
+        if (!isHostCustodyDataCallback(method)) {throw new TypeError("Docker native file owner unavailable");}
+        Object.defineProperty(captured, key, {value: (...args: unknown[]) => apply(method, filesOwner, args), enumerable: true});
+      }
+      const nativeFiles = Object.freeze(captured);
+      retained.nativeFiles = nativeFiles;
+      const subscription = hostHttpAbortOperations.subscribe(claimed.signal, () => nativeFiles.cutoff());
+      retained.removeAbort = () => hostHttpAbortOperations.remove(subscription);
+      if (disposed || hostHttpAbortOperations.aborted(claimed.signal)) {throw new TypeError("Docker selection closed");}
+      const {nativeFiles: _nativeFiles, ...dependencies} = selected;
+      const deadlineEpochMs = Date.now() + dependencies.deadlines.routeLifetimeMs;
+      const hostOwners = createDockerHostReservationOwners({roots, raw, custodyRef: claimed.underlyingCustodyRef,
+        dependencies, nativeFiles, signal: claimed.signal, lock: imageInitLock, cutoffProvider: () => retained.provider?.dispose()});
+      let lifecycle: DockerHostCustodyLifecycle | undefined;
+      const owner = createDockerLinuxPostClaimOwner({...dependencies,
+        openLifecycle(policy) {
+          if (lifecycle !== undefined) {throw new TypeError("Docker lifecycle selection is one-use");}
+          lifecycle = dependencies.openLifecycle(policy);
+          if (!isConcreteLinuxDockerLifecycle(lifecycle)) {throw new TypeError("Docker requires the concrete Linux residue owner");}
+          return lifecycle;
+        }}, {
+        ...hostOwners.hooks,
+        prepareProviderIo({launch, init}) {
+          if (lifecycle === undefined) {throw new TypeError("Docker lifecycle unavailable");}
+          const process = {launch, init, expected: Object.freeze({authority: launch.authority, custodyRef: launch.key.custodyId,
+            generation: init.authority.generation, workspaceAuthorityPath: retained.record.boundary.workspaceRef}),
+            call: Object.freeze({signal: claimed.signal, deadlineEpochMs}),
+            exec: Object.freeze({requestId: randomUUID(), uid: Number(dependencies.enginePolicy.user.split(":")[0]),
+              gid: Number(dependencies.enginePolicy.user.split(":")[1]), wallDeadlineUnixMs: deadlineEpochMs,
+              argv: Object.freeze([]), environment: Object.freeze([]), executableSha256: ""})};
+          const providerIo = prepareDockerProviderProcessIo(process);
+          retained.process = Object.freeze({...process, preparedIo: providerIo});
+          raw.reservation(claimed.underlyingCustodyRef).evidence.attach(lifecycle, launch, providerIo);
+          return providerIo;
+        },
+        async finishClaimed(input) {
+          const result = await apply(finishClaimed, value, [{...input, record: retained.record, originalPlan: retained.originalPlan}]);
+          if (!isCodexNativeBrokerLaunchPlan(result.plan)) {throw new TypeError("Docker native broker finalization unavailable");}
+          const process = retained.process!;
+          const paths = createCodexDockerPathProjection(dockerProviderProcessMountFacts(input.launch), retained.record.boundary);
+          const actual = captureDockerCodexProcessInput(process, result.plan, paths, claimed.signal, () => !disposed);
+          raw.reservation(claimed.underlyingCustodyRef).evidence.finalize(result.plan, actual.exec);
+          return result;
+        },
+      });
+      retained.owner = owner;
+      hostOwners.attach(owner);
+      return await owner.preparation.prepareClaimed(claimed);
+    } catch (error) {
+      try {retained.nativeFiles?.cutoff();} finally {retained.removeAbort?.(); delete retained.removeAbort;}
+      throw error;
+    }
   }});
   const custody = new ContainedTurnKernelCustodyAdapter(raw, {attemptOwner, workspaceOwner: options.workspaceOwner,
     hostBootId: options.hostBootId, hostInstanceId: options.hostInstanceId, postClaimPreparation: preparation});
@@ -168,7 +194,17 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
   }});
   return Object.freeze({custody, provider, dispose() {
     disposed = true;
-    for (const record of records.values()) {record.provider?.dispose();}
-    raw.dispose();
+    let failed = false;
+    let failure: unknown;
+    const close = (action: () => void) => {try {action();} catch (error) {failed = true; failure ??= error;}};
+    for (const record of records.values()) {
+      close(() => record.nativeFiles?.cutoff());
+      close(() => record.owner?.cutoff());
+      close(() => record.provider?.dispose());
+      close(() => record.removeAbort?.());
+      delete record.removeAbort;
+    }
+    close(() => raw.dispose());
+    if (failed) {throw failure;}
   }});
 };

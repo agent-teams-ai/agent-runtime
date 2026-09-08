@@ -124,6 +124,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "createContainedTurnRouteEnforcement",
       "createContainedTurnRuntimeSecurityPort",
       "createContainedTurnSecurityAcceptancePort",
+      "createDeferredCodexNativeBrokerFiles",
       "createDockerCodexHostKernelOwner",
       "createDockerCodexNativeBrokerFinalizer",
       "createDockerLinuxExclusiveRouteAdmission",

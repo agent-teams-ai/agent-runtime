@@ -25,7 +25,7 @@ mock.module("@agent-teams/agent-execution/composition", {exports: {
       cutoff() {active.events.push("finalizer-cutoff");},
     };
   },
-  readContainedTurnSelectedRouteAdmission() {return undefined;},
+  readContainedTurnSelectedRouteAdmission() {},
   createDockerLinuxExclusiveRouteAdmission() {return {};},
   createNodeHostHttpConnection() {
     return {bindAcceptedSocket() {return {}; }};
@@ -67,7 +67,7 @@ mock.module("@agent-teams/agent-execution/composition", {exports: {
 
 mock.module("@agent-teams/runtime-security/composition", {exports: {
   createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate() {
-    return {dispose() {}};
+    return {hostEgressVerifierV2: {signingKey: {publicKeyDigest: `sha256:${"b".repeat(64)}`}}, dispose() {}};
   },
 }});
 mock.module(new URL(`${composition}contained-turn-current-egress-owners.js`, import.meta.url),
@@ -95,10 +95,11 @@ async function fixture(t) {
   };
   const scope = {
     operationId: kernel.operationId, tenantId: "tenant:test",
-    projectId: "project:test", scopeDigest: "scope:test",
+    projectId: "project:test", scopeDigest: `sha256:${"a".repeat(64)}`,
   };
   const selected = {
     preparation: {
+      subjectFacts: {scopeSha256: "a".repeat(64)},
       engineIdentity() {}, openLifecycle() {}, openResourceJournal() {},
       resources: {consumption: {prepare() {}}},
     },
@@ -110,7 +111,7 @@ async function fixture(t) {
       ids: {}, resolver: {}, evidence: {}, clock: {},
       providerAccessSnapshot: {...scope},
     },
-    nativeFiles: {install() {}},
+    nativeFiles: {install() {}, bindRoot() {}, cutoff() {}, async quiesce() {}, snapshot() {return {binding: "unbound", closed: false};}},
     connection: {limits: {deadline: 100, closureDeadline: 200}},
   };
   const owner = createLinuxCodexContainedTurnOwner({}, {

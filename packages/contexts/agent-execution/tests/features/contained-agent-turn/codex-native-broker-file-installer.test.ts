@@ -23,10 +23,11 @@ const fixture = async (t: TestContext) => {
   const home = join(rootPath, "home");
   const workspace = join(base, "workspace");
   for (const path of [rootPath, home, workspace]) {await fs.mkdir(path, {mode: 0o700});}
+  let deferredConsumer: {quiesce(): Promise<void>} | undefined;
   let installer: ReturnType<typeof createCodexNativeBrokerFileInstaller> | undefined;
   const rootOwner = createHostPrivateRootOwnerFactory({hostInstanceId: "test-host", hostBootId: "test-boot"}).create({
     rootPath, workspacePath: workspace, operationId: "test-operation", attemptId: "test-attempt", custodyRef: "test-custody",
-  }, {cutoff() {}, async cleanup() {await installer?.quiesce(); return {kind: "released"};}});
+  }, {cutoff() {}, async cleanup() {await installer?.quiesce(); await deferredConsumer?.quiesce(); return {kind: "released"};}});
   const boundary = createCodexAppServerPermissionBoundary({codexHome: home, workspaceRef: workspace, intentMode: "analysis"});
   const recipe = createCodexNativeBrokerRecipe({boundary, endpoint, profile: "codex-chatgpt",
     dockerMounts: {privateRootSource: rootPath, workspaceSource: workspace}});
@@ -34,10 +35,12 @@ const fixture = async (t: TestContext) => {
     ownerUid: process.getuid!(), ownerGid: process.getgid!()};
   t.after(async () => {
     await installer?.quiesce().catch(() => {});
+    await deferredConsumer?.quiesce().catch(() => {});
     await rootOwner.quarantineAndDelete(deadline());
     await fs.rm(base, {recursive: true, force: true});
   });
   return {base, rootPath, home, workspace, boundary, recipe, rootOwner, options,
+    retainDeferred(files: {quiesce(): Promise<void>}) {deferredConsumer = files;},
     create(overrides: Partial<typeof options> = {}) {
       installer = createCodexNativeBrokerFileInstaller({...options, ...overrides});
       return installer;
@@ -264,4 +267,163 @@ test("an authentic recipe for a HOME outside the retained root cannot authorize 
   await assert.rejects(installer.nativeFiles.install(recipe));
   assert.deepEqual(await fs.readdir(home), []);
   assert.equal(installer.snapshot().debt, false);
+});
+
+// The deferred adapter must preserve the concrete installer's provenance and
+// debt semantics, not introduce another root or a cleanup-to-deletion cycle.
+test("deferred binding snapshots options and retains same-root file debt through quiescence", linux, async t => {
+  const {createDeferredCodexNativeBrokerFiles} = await import("../../../dist/features/contained-agent-turn/composition/deferred-codex-native-broker-files.js");
+  const f = await fixture(t);
+  const files = createDeferredCodexNativeBrokerFiles(f.options);
+  f.retainDeferred(files);
+  t.after(() => files.quiesce());
+  f.options.catalogSource.fill(0);
+  await assert.rejects(files.install(f.recipe));
+  assert.equal(files.snapshot().binding, "unbound");
+  await f.rootOwner.capture();
+  files.bindRoot(f.rootOwner);
+  assert.throws(() => files.bindRoot(f.rootOwner));
+  await files.install(f.recipe);
+  assert.equal((await prepareCodexNativeBrokerFiles(f.recipe)).kind, "codex-native-broker-prepared-files/v1");
+  await files.quiesce();
+  assert.equal(files.snapshot().debt, true);
+  await assert.rejects(files.install(f.recipe));
+  assert.equal((await f.rootOwner.quarantineAndDelete(deadline())).evidence.status, "deleted");
+  assert.equal(files.snapshot().debt, false);
+});
+
+test("deferred failed binding and unbound cutoff permanently consume admission without file effects", linux, async t => {
+  const {createDeferredCodexNativeBrokerFiles} = await import("../../../dist/features/contained-agent-turn/composition/deferred-codex-native-broker-files.js");
+  for (const closed of [false, true]) {
+    const f = await fixture(t);
+    const files = createDeferredCodexNativeBrokerFiles(f.options);
+  f.retainDeferred(files);
+    if (closed) {files.cutoff();}
+    assert.throws(() => files.bindRoot(f.rootOwner));
+    assert.equal(files.snapshot().binding, closed ? "unbound" : "failed");
+    await f.rootOwner.capture();
+    assert.throws(() => files.bindRoot(f.rootOwner));
+    await assert.rejects(files.install(f.recipe));
+    await files.quiesce();
+    assert.equal(files.snapshot().retainedHandles, 0);
+    assert.equal(files.snapshot().debt, false);
+    assert.deepEqual(await fs.readdir(f.home), []);
+  }
+});
+
+test("deferred concrete constructor failure after capture consumes binding and invents no file debt", linux, async t => {
+  const {createDeferredCodexNativeBrokerFiles} = await import("../../../dist/features/contained-agent-turn/composition/deferred-codex-native-broker-files.js");
+  const f = await fixture(t);
+  const files = createDeferredCodexNativeBrokerFiles(f.options);
+  f.retainDeferred(files);
+  await f.rootOwner.capture();
+  const original = Buffer.from;
+  t.mock.method(Buffer, "from", () => {throw new Error("inert constructor allocation failed");});
+  try {assert.throws(() => files.bindRoot(f.rootOwner), /allocation failed/);}
+  finally {Buffer.from = original;}
+  assert.equal(files.snapshot().binding, "failed");
+  assert.throws(() => files.bindRoot(f.rootOwner));
+  assert.equal(files.snapshot().debt, false);
+  await files.quiesce();
+  assert.equal((await f.rootOwner.quarantineAndDelete(deadline())).evidence.status, "deleted");
+});
+
+test("deferred cutoff synchronously fences a gated writer and quiescence retains that flight", linux, async t => {
+  const {createDeferredCodexNativeBrokerFiles} = await import("../../../dist/features/contained-agent-turn/composition/deferred-codex-native-broker-files.js");
+  const f = await fixture(t);
+  const files = createDeferredCodexNativeBrokerFiles(f.options);
+  f.retainDeferred(files);
+  await f.rootOwner.capture(); files.bindRoot(f.rootOwner);
+  const entered = Promise.withResolvers<void>(); const gate = Promise.withResolvers<void>();
+  t.after(() => gate.resolve());
+  patchOpen(t, (handle, path) => {
+    if (!path.endsWith("models.json")) {return;}
+    const write = handle.writeFile.bind(handle);
+    t.mock.method(handle, "writeFile", async (...args: Parameters<typeof write>) => {
+      entered.resolve(); await gate.promise; return write(...args);
+    });
+  });
+  const writing = files.install(f.recipe); const rejected = assert.rejects(writing);
+  await entered.promise; files.cutoff();
+  assert.equal(files.snapshot().closed, true);
+  await assert.rejects(files.install(f.recipe));
+  let settled = false;
+  const joining = files.quiesce().then(() => {settled = true; return settled;});
+  await new Promise<void>(resolve => {setImmediate(resolve);});
+  assert.equal(settled, false);
+  assert.equal(f.rootOwner.snapshot().history.includes("exact-entry-remove-attempt"), false);
+  gate.resolve(); await rejected; await joining;
+  assert.equal(files.snapshot().debt, true);
+  assert.equal((await f.rootOwner.quarantineAndDelete(deadline())).evidence.status, "deleted");
+});
+
+test("deferred quiescence retains ambiguous close rejection across every observation", linux, async t => {
+  const {createDeferredCodexNativeBrokerFiles} = await import("../../../dist/features/contained-agent-turn/composition/deferred-codex-native-broker-files.js");
+  const f = await fixture(t);
+  const files = createDeferredCodexNativeBrokerFiles(f.options);
+  f.retainDeferred(files);
+  await f.rootOwner.capture(); files.bindRoot(f.rootOwner);
+  let closes = 0;
+  patchOpen(t, (handle, path) => {
+    if (!path.endsWith("config.toml")) {return;}
+    const close = handle.close.bind(handle);
+    t.mock.method(handle, "close", async () => {closes += 1; await close(); throw new Error("ambiguous close");});
+  });
+  await assert.rejects(files.install(f.recipe));
+  files.cutoff();
+  await assert.rejects(files.quiesce()); await assert.rejects(files.quiesce());
+  assert.equal(closes, 1); assert.equal(files.snapshot().retainedHandles, 1);
+  assert.equal(f.rootOwner.snapshot().history.includes("exact-entry-remove-attempt"), false);
+});
+
+for (const failure of ["write", "sync"] as const) {
+  test(`deferred catalog ${failure} failure keeps the config and partial catalog with the same root`, linux, async t => {
+    const {createDeferredCodexNativeBrokerFiles} = await import("../../../dist/features/contained-agent-turn/composition/deferred-codex-native-broker-files.js");
+    const f = await fixture(t);
+    const files = createDeferredCodexNativeBrokerFiles(f.options); f.retainDeferred(files);
+    await f.rootOwner.capture(); files.bindRoot(f.rootOwner);
+    patchOpen(t, (handle, path) => {
+      if (!path.endsWith("models.json")) {return;}
+      if (failure === "write") {
+        t.mock.method(handle, "writeFile", async () => {await handle.write(Buffer.from("partial")); throw new Error("partial write");});
+      } else {t.mock.method(handle, "sync", async () => {throw new Error("flush failure");});}
+    });
+    await assert.rejects(files.install(f.recipe));
+    await files.quiesce();
+    assert.equal(files.snapshot().debt, true); assert.equal(files.snapshot().retainedHandles, 0);
+    assert.deepEqual((await fs.readdir(f.home)).toSorted(), ["config.toml", "models.json"]);
+    assert.equal((await f.rootOwner.quarantineAndDelete(deadline())).evidence.status, "deleted");
+    assert.equal(files.snapshot().debt, false);
+  });
+}
+
+test("deferred binding rejects reentry and retains an installer constructed across cutoff", linux, async t => {
+  const {createDeferredCodexNativeBrokerFiles} = await import("../../../dist/features/contained-agent-turn/composition/deferred-codex-native-broker-files.js");
+  for (const action of ["rebind", "cutoff"] as const) {
+    const f = await fixture(t);
+    const files = createDeferredCodexNativeBrokerFiles(f.options); f.retainDeferred(files);
+    await f.rootOwner.capture();
+    const original = Buffer.from;
+    let entered = false;
+    t.mock.method(Buffer, "from", (...args: Parameters<typeof Buffer.from>) => {
+      if (!entered) {
+        entered = true;
+        if (action === "rebind") {assert.throws(() => files.bindRoot(f.rootOwner));}
+        else {files.cutoff();}
+      }
+      return Reflect.apply(original, Buffer, args);
+    });
+    try {
+      if (action === "cutoff") {assert.throws(() => files.bindRoot(f.rootOwner));}
+      else {files.bindRoot(f.rootOwner);}
+    } finally {Buffer.from = original;}
+    assert.equal(entered, true);
+    assert.equal(files.snapshot().binding, action === "cutoff" ? "failed" : "bound");
+    assert.throws(() => files.bindRoot(f.rootOwner));
+    await files.quiesce();
+    await assert.rejects(files.install(f.recipe));
+    assert.equal(files.snapshot().retainedHandles, 0);
+    assert.equal(files.snapshot().debt, false);
+    assert.equal((await f.rootOwner.quarantineAndDelete(deadline())).evidence.status, "deleted");
+  }
 });
