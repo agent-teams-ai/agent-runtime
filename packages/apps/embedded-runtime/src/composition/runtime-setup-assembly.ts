@@ -1,4 +1,4 @@
-import { defineModule, required } from "@get-modular/core";
+import { defineModule } from "@get-modular/core";
 import { assemblyFor, type CapabilityContract } from "@get-modular/assembly";
 import { createAgentRuntimeHost, type AgentRuntimeHost, type AgentRuntimeHostDependencies, type CodexSetupCapabilityBundle, type ClaudeCodeSetupCapabilityBundle } from "./agent-runtime-host.js";
 import { randomBytes } from "node:crypto";
@@ -98,14 +98,14 @@ const runtimeHostDeclaration = defineModule({
   owner: { authority: "agent-teams", path: ["embedded-runtime"] },
   provides: [
   ], slots: [
-    { slotId: "authorizeSetupInspection", capabilityId: "agent-runtime/codex-authorization", compatibility, cardinality: required() },
-    { slotId: "authorizeClaudeCodeSetupInspection", capabilityId: "agent-runtime/claude-authorization", compatibility, cardinality: required() },
-    { slotId: "discoverCodexInstallations", capabilityId: "agent-runtime/codex-installations", compatibility, cardinality: required() },
-    { slotId: "discoverClaudeCodeInstallations", capabilityId: "agent-runtime/claude-installations", compatibility, cardinality: required() },
-    { slotId: "inspectCodexConfiguration", capabilityId: "agent-runtime/codex-configuration", compatibility, cardinality: required() },
-    { slotId: "inspectClaudeCodeConfiguration", capabilityId: "agent-runtime/claude-configuration", compatibility, cardinality: required() },
-    { slotId: "planCodexSetupInspection", capabilityId: "agent-runtime/codex-planner", compatibility, cardinality: required() },
-    { slotId: "planClaudeCodeSetupInspection", capabilityId: "agent-runtime/claude-planner", compatibility, cardinality: required() },
+    { slotId: "authorize-setup-inspection", capabilityId: "agent-runtime/codex-authorization", compatibility, cardinality: { kind: "required" } },
+    { slotId: "authorize-claude-code-setup-inspection", capabilityId: "agent-runtime/claude-authorization", compatibility, cardinality: { kind: "required" } },
+    { slotId: "discover-codex-installations", capabilityId: "agent-runtime/codex-installations", compatibility, cardinality: { kind: "required" } },
+    { slotId: "discover-claude-code-installations", capabilityId: "agent-runtime/claude-installations", compatibility, cardinality: { kind: "required" } },
+    { slotId: "inspect-codex-configuration", capabilityId: "agent-runtime/codex-configuration", compatibility, cardinality: { kind: "required" } },
+    { slotId: "inspect-claude-code-configuration", capabilityId: "agent-runtime/claude-configuration", compatibility, cardinality: { kind: "required" } },
+    { slotId: "plan-codex-setup-inspection", capabilityId: "agent-runtime/codex-planner", compatibility, cardinality: { kind: "required" } },
+    { slotId: "plan-claude-code-setup-inspection", capabilityId: "agent-runtime/claude-planner", compatibility, cardinality: { kind: "required" } },
   ],
 });
 export const runtimeSetupDeclarations = [setupSecurityDeclaration, installationDiscoveryDeclaration, codexConfigurationDeclaration, claudeConfigurationDeclaration, codexPlannerDeclaration, claudePlannerDeclaration, runtimeHostDeclaration] as const;
@@ -114,14 +114,14 @@ export const runtimeSetupProfile = {
   roots: [runtimeHostDeclaration.moduleId],
   selections: runtimeSetupDeclarations.map(({ moduleId, implementationId }) => ({ moduleId, implementationId })),
   bindings: [
-    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "authorizeSetupInspection", providerImplementationIds: [setupSecurityDeclaration.implementationId] },
-    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "authorizeClaudeCodeSetupInspection", providerImplementationIds: [setupSecurityDeclaration.implementationId] },
-    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "discoverCodexInstallations", providerImplementationIds: [installationDiscoveryDeclaration.implementationId] },
-    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "discoverClaudeCodeInstallations", providerImplementationIds: [installationDiscoveryDeclaration.implementationId] },
-    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "inspectCodexConfiguration", providerImplementationIds: [codexConfigurationDeclaration.implementationId] },
-    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "inspectClaudeCodeConfiguration", providerImplementationIds: [claudeConfigurationDeclaration.implementationId] },
-    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "planCodexSetupInspection", providerImplementationIds: [codexPlannerDeclaration.implementationId] },
-    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "planClaudeCodeSetupInspection", providerImplementationIds: [claudePlannerDeclaration.implementationId] },
+    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "authorize-setup-inspection", providerImplementationIds: [setupSecurityDeclaration.implementationId] },
+    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "authorize-claude-code-setup-inspection", providerImplementationIds: [setupSecurityDeclaration.implementationId] },
+    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "discover-codex-installations", providerImplementationIds: [installationDiscoveryDeclaration.implementationId] },
+    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "discover-claude-code-installations", providerImplementationIds: [installationDiscoveryDeclaration.implementationId] },
+    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "inspect-codex-configuration", providerImplementationIds: [codexConfigurationDeclaration.implementationId] },
+    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "inspect-claude-code-configuration", providerImplementationIds: [claudeConfigurationDeclaration.implementationId] },
+    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "plan-codex-setup-inspection", providerImplementationIds: [codexPlannerDeclaration.implementationId] },
+    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "plan-claude-code-setup-inspection", providerImplementationIds: [claudePlannerDeclaration.implementationId] },
   ],
 } as const;
 
@@ -179,15 +179,15 @@ export function bindRuntimeSetup(factories: RuntimeSetupFactories, captureHost: 
   const runtimeHost = assembly.bindFactory(runtimeHostDeclaration, async (dependencies) => {
     const host = factories.host({
       codexSetup: {
-        authorizeSetupInspection: dependencies.authorizeSetupInspection,
-        discoverCodexInstallations: dependencies.discoverCodexInstallations,
-        inspectCodexConfiguration: dependencies.inspectCodexConfiguration,
-        planCodexSetupInspection: dependencies.planCodexSetupInspection,
+        authorizeSetupInspection: dependencies["authorize-setup-inspection"],
+        discoverCodexInstallations: dependencies["discover-codex-installations"],
+        inspectCodexConfiguration: dependencies["inspect-codex-configuration"],
+        planCodexSetupInspection: dependencies["plan-codex-setup-inspection"],
       }, claudeCodeSetup: {
-        authorizeClaudeCodeSetupInspection: dependencies.authorizeClaudeCodeSetupInspection,
-        discoverClaudeCodeInstallations: dependencies.discoverClaudeCodeInstallations,
-        inspectClaudeCodeConfiguration: dependencies.inspectClaudeCodeConfiguration,
-        planClaudeCodeSetupInspection: dependencies.planClaudeCodeSetupInspection,
+        authorizeClaudeCodeSetupInspection: dependencies["authorize-claude-code-setup-inspection"],
+        discoverClaudeCodeInstallations: dependencies["discover-claude-code-installations"],
+        inspectClaudeCodeConfiguration: dependencies["inspect-claude-code-configuration"],
+        planClaudeCodeSetupInspection: dependencies["plan-claude-code-setup-inspection"],
       },
     });
     captureHost(host);
