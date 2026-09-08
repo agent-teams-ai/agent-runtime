@@ -10,6 +10,12 @@ import { createPostgresDispatchConsumptionRepository } from "../../../contexts/r
 import { adapterSnapshot, manifest } from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/contained-turn-fixture-snapshots.ts";
 import { joinedAeSubmit } from "./support/joined-authority-fixture.ts";
 
+import {createContainedTurnFeatureFromProviderAccess} from "../dist/composition/contained-turn-feature-composition.js";
+import {applyContainedTurnPostgresSchema} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-schema.js";
+import type {OwnerSubmitOutcome, OwnerObservationOutcome} from "../dist/composition/contained-turn-composition-types.js";
+import {containedTurnIdentity} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-identities.js";
+import {createPostgresCurrentAuthorityFixture} from "./support/postgres-current-authority-fixture.ts";
+
 const databaseUrl = process.env.AE_ACL_POSTGRES_DISPOSABLE_URL;
 // A skip only checks loading/type definitions. Orchestrator owns execution on a new disposable database.
 test("joined AE feature with actual PostgreSQL PA current/v2 and RS acceptance/publication owners", {skip: !databaseUrl, timeout: 60_000}, async t => {
@@ -17,7 +23,8 @@ test("joined AE feature with actual PostgreSQL PA current/v2 and RS acceptance/p
   const pool = new Pool({connectionString: validateDisposablePostgresUrl(databaseUrl!), max: 8, connectionTimeoutMillis: 2000,
     query_timeout: 5000, idleTimeoutMillis: 1000, application_name: "ar69-authority-acl-disposable"});
   t.after(() => pool.end());
-  assert.equal((await pool.query("SELECT 1 FROM pg_namespace WHERE nspname IN ('provider_access','runtime_security_dispatch_v1','runtime_security_dispatch_acceptance_v1')")).rowCount, 0, "Requires a new disposable owner database");
+  assert.equal((await pool.query("SELECT 1 FROM pg_namespace WHERE nspname IN ('agent_execution','provider_access','runtime_security_dispatch_v1','runtime_security_dispatch_acceptance_v1')")).rowCount, 0, "Requires a new disposable owner database");
+  await applyContainedTurnPostgresSchema(pool);
   const now = Number((await pool.query("SELECT floor(extract(epoch FROM clock_timestamp())*1000)::bigint AS now")).rows[0].now);
   const issuance = issuanceFixture(now);
   const pa = createPostgresOperationDispatchConsumption(pool, issuance); t.after(pa.dispose);
@@ -54,8 +61,72 @@ test("joined AE feature with actual PostgreSQL PA current/v2 and RS acceptance/p
   const reconstructed = createContainedTurnOperationProviderAccessPort(Object.freeze({...current.providerAccess, dispatchConsumption: rebuilt.dispatchConsumption}));
   const historical = await providerAccess.consumeForDispatch(a.handoff);
   assert.deepEqual(await reconstructed.consumeForDispatch(a.handoff), historical);
+  // Exercise the current product composition with actual AE acceptance and final claim.
+  // The provider/custody boundary is explicitly synthetic and returns unknown, never live success.
+  const currentRuns = [];
+  for (const id of ["current-pg-A", "current-pg-B"]) {
+    const harness = await createPostgresCurrentAuthorityFixture(pool, scope);
+    t.after(harness.cleanup);
+    const dependencies = {...harness.dependencies, authority: "current" as const,
+      providerAccess: Object.freeze({...current.providerAccess, dispatchConsumption: pa.dispatchConsumption}),
+      security: Object.freeze({acceptance: owner, profile: Object.freeze({policyRevision: rule.policyRevision})})};
+    const feature = createContainedTurnFeatureFromProviderAccess(dependencies);
+    const request = {commandId: `command:${id}`, expectedProvider: "codex", scope, intent};
+    const result = await feature.submit.execute(request) as OwnerSubmitOutcome;
+    assert.equal(result.status, "observed");
+    assert.ok(result.status === "observed");
+    assert.equal(result.turn.status, "reconcile_required");
+    assert.deepEqual([harness.counts.provider, harness.counts.starts, harness.counts.boundaries], [1, 1, 0]);
+    const rebuiltStore = harness.rebuildStore();
+    const persisted = await rebuiltStore.durable.read({operationId: containedTurnIdentity("operation", result.turn.operationId), scope});
+    assert.ok(persisted);
+    assert.equal(persisted.dispatch.kind, "claimed");
+    assert.equal(persisted.reconciliation.kind, "required", "unknown provider outcome remains durable debt");
+    assert.notEqual(persisted.terminal.kind, "final", "synthetic custody supplies no terminal truth");
+    const replay = createContainedTurnFeatureFromProviderAccess({...dependencies, operationStore: rebuiltStore.operationStore,
+      providerAccess: Object.freeze({...current.providerAccess, dispatchConsumption: rebuilt.dispatchConsumption})});
+    assert.equal((await replay.observe.execute({operationId: result.turn.operationId, scope}) as OwnerObservationOutcome).status, "observed");
+    assert.equal((await replay.submit.execute(request) as OwnerSubmitOutcome).status, "observed");
+    assert.deepEqual([harness.counts.provider, harness.counts.starts, harness.counts.boundaries], [1, 1, 0]);
+    currentRuns.push(result.turn.operationId);
+  }
+  assert.notEqual(currentRuns[0], currentRuns[1]);
+  assert.equal((await pool.query("SELECT count(*) AS n FROM agent_execution.contained_turn_operation_v1")).rows[0].n, "2");
+  assert.equal((await pool.query("SELECT count(*) AS n FROM provider_access.dispatch_operation_record_v2 WHERE kind='publication'")).rows[0].n, "4");
+  assert.equal((await pool.query("SELECT count(*) AS n FROM provider_access.dispatch_operation_record_v2 WHERE kind='consumption'")).rows[0].n, "4");
+  assert.equal((await pool.query("SELECT count(*) AS n FROM runtime_security_dispatch_v1.consumptions")).rows[0].n, "4");
+  assert.deepEqual((await pool.query("SELECT binding,head_version FROM provider_access.materialization_owner")).rows, before);
+  const negative = async (id: string, expectedConsumptions: readonly [string, string], afterReservation?: () => Promise<void>) => {
+    const harness = await createPostgresCurrentAuthorityFixture(pool, scope, afterReservation);
+    t.after(harness.cleanup);
+    const feature = createContainedTurnFeatureFromProviderAccess({...harness.dependencies, authority: "current",
+      providerAccess: Object.freeze({...current.providerAccess, dispatchConsumption: pa.dispatchConsumption}),
+      security: Object.freeze({acceptance: owner, profile: Object.freeze({policyRevision: rule.policyRevision})})});
+    const request = {commandId: `command:${id}`, expectedProvider: "codex", scope, intent};
+    const result = await feature.submit.execute(request) as OwnerSubmitOutcome;
+    if (afterReservation === undefined) {assert.equal(result.status, "denied");}
+    else {
+      assert.ok(result.status === "observed");
+      assert.ok(harness.counts.released > 0, "revoked reservation must be cleaned up");
+      const persisted = await harness.durable.read({operationId: containedTurnIdentity("operation", result.turn.operationId), scope});
+      assert.ok(persisted);
+      assert.notEqual(persisted.dispatch.kind, "claimed");
+      await feature.observe.execute({operationId: result.turn.operationId, scope});
+      await feature.submit.execute(request);
+    }
+    assert.deepEqual([harness.counts.provider, harness.counts.starts, harness.counts.boundaries], [0, 0, 0]);
+    assert.equal((await pool.query("SELECT count(*) AS n FROM provider_access.dispatch_operation_record_v2 WHERE kind='consumption'")).rows[0].n, expectedConsumptions[0]);
+    assert.equal((await pool.query("SELECT count(*) AS n FROM runtime_security_dispatch_v1.consumptions")).rows[0].n, expectedConsumptions[1]);
+  };
   enabled = false;
+  await negative("current-pg-policy-denied", ["4", "4"]);
   assert.equal((await submit("pg-policy-revoked")).ae.providerCalls.value, 0);
-  assert.equal(await material.replaceBinding({...issuance.binding, revocation: "revoked"}, 1), 2);
+  // Owners consume independently: retain the other owner's partial success on revocation.
+  enabled = true;
+  await negative("current-pg-late-policy-revocation", ["5", "4"], async () => {enabled = false;});
+  enabled = true;
+  await negative("current-pg-late-revocation", ["5", "5"], async () => {
+    assert.equal(await material.replaceBinding({...issuance.binding, revocation: "revoked"}, 1), 2);
+  });
   assert.deepEqual(await reconstructed.consumeForDispatch(a.handoff), historical, "historical consumption survives revocation without another start");
 });
