@@ -1,4 +1,5 @@
 import type {DockerResidueIo, ResidueFile, ResidueIoScope, ResiduePin} from "./linux-docker-residue-io.js";
+import {sameResidueInode} from "./linux-docker-residue-io.js";
 import {residueFault} from "./linux-docker-residue-parsers.js";
 
 export interface DockerMountedRootIdentity {readonly dev: bigint; readonly ino: bigint; readonly mountId: string;}
@@ -9,6 +10,8 @@ export interface DockerWorkspaceCapture {
   readonly mountTable: string;
 }
 interface Mount {id: string; device: string; root: string; path: string; options: readonly string[];}
+const INIT_SOURCE = "/usr/libexec/docker/docker-init";
+const INIT_PATH = "/usr/sbin/docker-init";
 const SYSTEM_MOUNTS = new Set(["/", "/workspace", "/agent-private", "/tmp", "/dev", "/dev/pts", "/dev/shm", "/dev/mqueue",
   "/proc", "/sys", "/sys/fs/cgroup", "/etc/hosts", "/etc/hostname", "/etc/resolv.conf",
   "/proc/acpi", "/proc/asound", "/proc/bus", "/proc/fs", "/proc/irq", "/proc/sys", "/proc/sysrq-trigger",
@@ -22,10 +25,17 @@ const parseMounts = (text: string): Mount[] => {
   const paths = new Set<string>(); const ids = new Set<string>();
   for (const line of lines) {
     const parts = line.split(" "); const separator = parts.indexOf("-");
+    const init = parts[3] === INIT_SOURCE && parts[4] === INIT_PATH;
+    if (!init && (parts[3] === INIT_SOURCE || parts[4] === INIT_PATH)) {throw residueFault();}
+    const optional = parts.slice(6, separator);
+    const options = parts[5]?.split(",") ?? [];
+    if (init && (!options.includes("ro") || options.includes("rw") ||
+      new Set(options).size !== options.length ||
+      !(optional.length === 0 || optional.length === 1 && /^master:[1-9]\d*$/u.test(optional[0]!)))) {throw residueFault();}
     if (separator < 6 || parts.length !== separator + 4 || !/^\d+$/u.test(parts[0]!) ||
       !/^\d+:\d+$/u.test(parts[2]!) || !parts[3]!.startsWith("/") || line.includes("\\") ||
-      !SYSTEM_MOUNTS.has(parts[4]!) || paths.has(parts[4]!) || ids.has(parts[0]!) ||
-      parts.slice(6, separator).some(field => /^(?:shared|master|propagate_from):/u.test(field))) {throw residueFault();}
+      (!init && !SYSTEM_MOUNTS.has(parts[4]!)) || paths.has(parts[4]!) || ids.has(parts[0]!) ||
+      (!init && optional.some(field => /^(?:shared|master|propagate_from):/u.test(field)))) {throw residueFault();}
     paths.add(parts[4]!); ids.add(parts[0]!);
     mounts.push({id: parts[0]!, device: parts[2]!, root: parts[3]!, path: parts[4]!, options: parts[5]!.split(",")});
   }
@@ -48,6 +58,20 @@ export const validateDockerWorkspaceMounts = (text: string, workspace: DockerMou
     }
   }
   if (!mounts.find(entry => entry.path === "/")?.options.includes("ro")) {throw residueFault();}
+};
+
+/** Docker daemon/Host trust only: the image init lock does not pin these bytes.
+ * Walk from the pinned process root without following any path component. The
+ * final bind crosses devices, so scope.child's same-filesystem rule cannot apply. */
+const captureInit = async (scope: ResidueIoScope, root: ResidueFile, selected: Mount): Promise<ResiduePin> => {
+  let parent = root;
+  for (const name of ["usr", "sbin"]) {
+    const pin = await scope.protect(await scope.acquire(() => scope.io.child(parent, name, true)), true);
+    parent = pin.file;
+  }
+  const pin = await scope.protect(await scope.acquire(() => scope.io.child(parent, "docker-init", false)), false);
+  if ((pin.facts.mode & 0o111) === 0 || await scope.io.mountId!(pin.file) !== selected.id) {throw residueFault();}
+  return pin;
 };
 
 /** Only called inside the concrete residue owner's serialized process validation.
@@ -74,6 +98,8 @@ export const capturePinnedDockerWorkspace = async (scope: ResidueIoScope, proces
   };
   const workspace = await capture("workspace"); const privateRoot = await capture("agent-private");
   validateDockerWorkspaceMounts(before, workspace, privateRoot, writable);
+  const selectedInit = parseMounts(before).find(entry => entry.path === INIT_PATH);
+  const init = selectedInit === undefined ? undefined : await captureInit(scope, root, selectedInit);
   const afterNamespace: ResidueFile = await scope.acquire(() => magic(process.file, "ns/mnt"));
   const afterFacts = await io.stat(afterNamespace);
   const afterRoot = await scope.acquire(() => magic(process.file, "root"));
@@ -83,6 +109,12 @@ export const capturePinnedDockerWorkspace = async (scope: ResidueIoScope, proces
     !before.split("\n").some(line => line.split(" ")[0] === rootMountId && line.split(" ")[4] === "/")) {throw residueFault();}
   if (await scope.text(mountFile, 65536) !== before || namespaceFacts.dev !== afterFacts.dev ||
     namespaceFacts.ino !== afterFacts.ino) {throw residueFault();}
+  if (init !== undefined && selectedInit !== undefined) {
+    const reopened = await captureInit(scope, afterRoot, selectedInit);
+    await scope.verify(init);
+    if (!sameResidueInode(init.facts, reopened.facts) || init.facts.nlink !== reopened.facts.nlink ||
+      await mountId(init.file) !== selectedInit.id) {throw residueFault();}
+  }
   await scope.verify(process); scope.check();
   return Object.freeze({namespace: Object.freeze({dev: namespaceFacts.dev, ino: namespaceFacts.ino}),
     workspace, privateRoot, mountTable: before});
