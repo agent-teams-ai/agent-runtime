@@ -2,13 +2,13 @@
 // Test-only executable. Importing performs no setup, credential reads or launch.
 import {constants, openSync, closeSync, readSync, writeFileSync, fsyncSync,
   fstatSync, readFileSync, lstatSync, realpathSync, readdirSync, mkdirSync} from 'node:fs';
-import {join, resolve, dirname, isAbsolute} from 'node:path';
+import {join, resolve as resolvePath, dirname, isAbsolute} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 
-export const SOURCE = '95f788b73123952ca1362a00c0e8b2c65e372365';
-export const usage = `Node 24 with existing built dist and pg dependencies only:
+export const usage = `Node 24 source-loads the test-only .ts administration modules; their runtime imports
+require existing built dist and pg dependencies:
 node packages/apps/embedded-runtime/tests/live/run-linux-codex-live-canary.mjs /absolute/approved.json 3
 FD 3 must be an inherited pipe/socket carrying JSON {token: string, accountId: string}, then EOF.
 Never pass credential paths or credentials in argv/environment/configuration.
@@ -38,18 +38,21 @@ export function decodeBytes(value) {
   if (bytes.toString('base64') !== value.data) {fail();}
   return new Uint8Array(bytes);
 }
+function validateDatabase(databaseUrl) {
+  const url = new URL(databaseUrl);
+  if (!['postgres:', 'postgresql:'].includes(url.protocol) ||
+      !['127.0.0.1', '[::1]'].includes(url.hostname) || !url.port || !url.username ||
+      url.password || url.search || url.hash || !/^\/ar69_pa_test_[a-z0-9]+$/u.test(url.pathname)) {fail();}
+}
 export function validateConfiguration(value) {
   const c = structuredClone(value);
-  const url = new URL(c.databaseUrl);
+  validateDatabase(c.databaseUrl);
   if (c.ownerApproved !== true || c.disposableDatabase !== true || c.disposableTestParent !== true ||
-      !['postgres:', 'postgresql:'].includes(url.protocol) ||
-      !['127.0.0.1', '[::1]'].includes(url.hostname) || !url.port || !url.username ||
-      url.password || url.search || url.hash || !/^\/ar69_pa_test_[a-z0-9]+$/u.test(url.pathname) ||
-      c.hostPins?.sourceRevision !== SOURCE ||
+      !/^[a-f0-9]{40}$/u.test(c.hostPins?.sourceRevision ?? "") ||
       !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}\.txt$/u.test(c.approval?.markerFile) ||
       !/^[A-Za-z0-9_-]{1,128}$/u.test(c.approval?.marker)) {fail();}
   for (const path of [c.hostPins.testParent, c.evidenceDirectory]) {
-    if (typeof path !== 'string' || !isAbsolute(path) || resolve(path) !== path || path === '/') {fail();}
+    if (typeof path !== 'string' || !isAbsolute(path) || resolvePath(path) !== path || path === '/') {fail();}
   }
   if (c.evidenceDirectory === c.hostPins.testParent ||
       c.evidenceDirectory.startsWith(c.hostPins.testParent + '/')) {fail();}
@@ -82,12 +85,53 @@ function durableCreate(path, value) {
   const parent = openSync(dirname(path), constants.O_RDONLY | constants.O_DIRECTORY);
   try {fsyncSync(parent);} finally {closeSync(parent);}
 }
+const identity = text => text;
+export function createRedactor(fields) {
+  const secrets = Object.values(fields).flatMap(v => [v, JSON.stringify(v).slice(1, -1),
+    Buffer.from(v).toString('base64'), digest(v), encodeURIComponent(v)]).toSorted((a,b) => b.length-a.length);
+  return text => secrets.reduce((s, secret) => s.split(secret).join('[REDACTED]'), text);
+}
+async function pollObservation(observe) {
+  const deadline = Date.now() + 180_000;
+  while (Date.now() < deadline) {
+    const observation = await observe();
+    if (observation.status !== 'observed' ||
+        !['accepted', 'running'].includes(observation.turn.status)) {break;}
+    await new Promise(resolve => {setTimeout(resolve, 500);});
+  }
+}
+// Narrow lifecycle controller, also exercised with synthetic resource owners in unit tests.
+export function createCleanupController({collect, getLive, hasPool, closePool, report, getOperationId}) {
+  let released = false, cleanupFlight;
+  const cleanup = () => {
+    if (cleanupFlight) {return cleanupFlight;}
+    cleanupFlight = (async () => {
+      if (!released) {
+        // Evidence must survive the admin's removal of its tree on release.
+        try {collect();} catch {report('evidence-incomplete', {stage: 'artifact-receipt'}); return 'pending';}
+        let state = 'pending';
+        try {
+          if (getLive()?.cleanup) {state = await getLive().cleanup({deadlineEpochMs: Date.now() + 30_000,
+            signal: AbortSignal.timeout(30_000)});}
+          else if (!hasPool()) {state = 'released';}
+        } catch { /* Preserve unknown cleanup and retained owners. */ }
+        released = state === 'released';
+        report('cleanup', {state, directory: getLive()?.directory, operationId: getOperationId(),
+          reconciliation: released ? 'resource-release-only' : 'retain-this-driver-and-database; explicit cleanup retry'});
+      }
+      if (released && hasPool()) {await closePool(); report('pool', {state: 'closed'});}
+      return released ? 'released' : 'pending';
+    })().finally(() => {cleanupFlight = undefined;});
+    return cleanupFlight;
+  };
+  return Object.freeze({cleanup, isReleased: () => released});
+}
 export function createLinuxCodexLiveCanaryDriver(configuration, credentialFd) {
   const config = validateConfiguration(configuration);
   if (!Number.isSafeInteger(credentialFd) || credentialFd < 3) {fail();}
-  let started = false, live, realPool, operationId, released = false, sequence = 0;
-  let cleanupFlight, observedStatus = 'unknown', markerObserved = false;
-  let redact = text => text;
+  let started = false, reconciliationReady = false, live, realPool, operationId, sequence = 0;
+  let observedStatus = 'unknown', markerObserved = false;
+  let redact = identity;
   const sanitize = value => typeof value === 'string' ? redact(value) :
     Array.isArray(value) ? value.map(sanitize) : value && typeof value === 'object' ?
       Object.fromEntries(Object.entries(value).map(([key, item]) => [redact(key), sanitize(item)])) : value;
@@ -103,11 +147,11 @@ export function createLinuxCodexLiveCanaryDriver(configuration, credentialFd) {
     report(kind, value);
   };
   const observe = async () => {
-    if (!live?.observe || !operationId || released) {return {status: 'unavailable'};}
+    if (!live?.observe || !operationId || isReleased()) {return {status: 'unavailable'};}
     const value = await live.observe(operationId); retainOutcome('observe', value); return value;
   };
   const cancel = async () => {
-    if (!live?.cancel || !operationId || released) {return {status: 'unavailable'};}
+    if (!live?.cancel || !operationId || isReleased()) {return {status: 'unavailable'};}
     const value = await live.cancel(operationId); retainOutcome('cancel', value); return value;
   };
   // Read only owner artifact/receipt directories, never private homes, auth or logs.
@@ -139,34 +183,21 @@ export function createLinuxCodexLiveCanaryDriver(configuration, credentialFd) {
       }
     }
   };
-  const cleanup = () => {
-    if (cleanupFlight) {return cleanupFlight;}
-    cleanupFlight = (async () => {
-      if (!released) {
-        // Evidence must survive the admin's removal of its tree on release.
-        try {collect();} catch {report('evidence-incomplete', {stage: 'artifact-receipt'}); return 'pending';}
-        let state = 'pending';
-        try {
-          if (live?.cleanup) {state = await live.cleanup({deadlineEpochMs: Date.now() + 30_000,
-            signal: AbortSignal.timeout(30_000)});}
-          else if (!realPool) {state = 'released';}
-        } catch { /* Preserve unknown cleanup and retained owners. */ }
-        released = state === 'released';
-        report('cleanup', {state, directory: live?.directory, operationId,
-          reconciliation: released ? 'resource-release-only' : 'retain-this-driver-and-database; explicit cleanup retry'});
-      }
-      if (released && realPool) {await realPool.end(); realPool = undefined; report('pool', {state: 'closed'});}
-      return released ? 'released' : 'pending';
-    })().finally(() => {cleanupFlight = undefined;});
-    return cleanupFlight;
-  };
+  const {cleanup: cleanupResources, isReleased} = createCleanupController({collect, getLive: () => live,
+    hasPool: () => realPool !== undefined,
+    closePool: async () => {await realPool.end(); realPool = undefined;}, report,
+    getOperationId: () => operationId});
+  // Do not declare release while setup/submission may still acquire owners.
+  const cleanup = () => reconciliationReady ? cleanupResources() : Promise.resolve('pending');
   return Object.freeze({observe, cancel, cleanup, async run() {
     if (started) {fail();}
     started = true; // Consume in-memory admission before the first await.
     const repository = fileURLToPath(new URL('../../../../../', import.meta.url));
     const actualSourceSHA = execFileSync('git', ['-C', repository, 'rev-parse', 'HEAD'],
       {encoding: 'utf8', timeout: 5000, maxBuffer: 1024}).trim();
-    if (actualSourceSHA !== SOURCE) {fail();}
+    if (actualSourceSHA !== config.hostPins.sourceRevision ||
+        execFileSync("git", ["-C", repository, "status", "--porcelain", "--untracked-files=no"],
+          {encoding: "utf8", timeout: 5000, maxBuffer: 4096}).trim()) {fail();}
     privateDirectory(config.hostPins.testParent, true);
     privateDirectory(dirname(config.evidenceDirectory));
     mkdirSync(config.evidenceDirectory, {mode: 0o700}); // Exclusive run, never reuse evidence.
@@ -184,12 +215,10 @@ export function createLinuxCodexLiveCanaryDriver(configuration, credentialFd) {
       if (!stat.isFIFO() && !stat.isSocket()) {fail();}
       let fields;
       try {fields = JSON.parse(readBounded(credentialFd, 40_000));} finally {closeSync(credentialFd);}
-      if (Object.keys(fields).sort().join(',') !== 'accountId,token' ||
+      if (Object.keys(fields).toSorted().join(',') !== 'accountId,token' ||
           ![fields.token, fields.accountId].every(v => typeof v === 'string' && v.length &&
             Buffer.byteLength(v) <= 16384 && !/[\r\n\0]/u.test(v))) {fail();}
-      const secrets = Object.values(fields).flatMap(v => [v, JSON.stringify(v).slice(1, -1),
-        Buffer.from(v).toString('base64'), digest(v), encodeURIComponent(v)]).sort((a,b) => b.length-a.length);
-      redact = text => secrets.reduce((s, secret) => s.split(secret).join('[REDACTED]'), text);
+      redact = createRedactor(fields);
       credentials = {token: new Uint8Array(Buffer.from(fields.token)), accountId: new Uint8Array(Buffer.from(fields.accountId))};
       fields = undefined;
       reportReady = true;
@@ -211,51 +240,44 @@ export function createLinuxCodexLiveCanaryDriver(configuration, credentialFd) {
       // Durable marker already fsynced; only invocation in this driver, never retried.
       const outcome = await live.submit();
       retainOutcome('submit', outcome);
-      if (operationId) {
-        const deadline = Date.now() + 180_000;
-        while (Date.now() < deadline) {
-          const observation = await observe();
-          if (observation.status !== 'observed' ||
-              !['accepted', 'running'].includes(observation.turn.status)) {break;}
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-      }
+      if (operationId) {await pollObservation(observe);}
     } catch {
       report('unknown', {operationId, commandId: config.approval.commandId, retryAllowed: false});
     } finally {
       for (const bytes of Object.values(transferred ? {} : credentials ?? {})) {try {bytes.fill(0);} catch { /* Transferred. */ }}
+      reconciliationReady = true;
     }
-    return {cleanup: await cleanup(), observedStatus, markerObserved, operationId, evidenceDirectory: config.evidenceDirectory};
+    return sanitize({cleanup: await cleanup(), observedStatus, markerObserved, operationId, evidenceDirectory: config.evidenceDirectory});
   }});
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  if (process.argv[2] === '--help') {process.stdout.write(usage + '\n');}
-  else {
+async function reconcile(driver) {
+  process.exitCode = 2;
+  const keepAlive = setInterval(() => {}, 30_000);
+  const {createInterface} = await import('node:readline');
+  for await (const line of createInterface({input: process.stdin, terminal: false})) {
     try {
-      if (process.argv.length !== 4 || !isAbsolute(process.argv[2])) {fail();}
-      const fd = openSync(process.argv[2], constants.O_RDONLY | constants.O_NOFOLLOW);
-      let config;
-      try {if (!fstatSync(fd).isFile()) {fail();} config = JSON.parse(readBounded(fd, 8_000_000));}
-      finally {closeSync(fd);}
-      const driver = createLinuxCodexLiveCanaryDriver(config, Number(process.argv[3]));
-      const result = await driver.run();
-      process.stdout.write(JSON.stringify(result) + '\n');
-      if (result.observedStatus !== 'succeeded' || !result.markerObserved) {process.exitCode = 1;}
-      if (result.cleanup === 'pending') {
-        process.exitCode = 2;
-        const keepAlive = setInterval(() => {}, 30_000);
-        const {createInterface} = await import('node:readline');
-        for await (const line of createInterface({input: process.stdin, terminal: false})) {
-          try {
-            if (line === 'observe') {await driver.observe();}
-            if (line === 'cancel') {await driver.cancel();}
-            if (line === 'cleanup' && await driver.cleanup() === 'released') {
-              clearInterval(keepAlive); break;
-            }
-          } catch {process.stderr.write('Reconciliation remains pending; owners retained.\n');}
-        }
+      if (line === 'observe') {await driver.observe();}
+      if (line === 'cancel') {await driver.cancel();}
+      if (line === 'cleanup' && await driver.cleanup() === 'released') {
+        clearInterval(keepAlive); break;
       }
-    } catch {process.stderr.write('Canary incomplete; retain attempt evidence. No automatic retry.\n'); process.exitCode = 1;}
+    } catch {process.stderr.write('Reconciliation remains pending; owners retained.\n');}
   }
 }
+async function main() {
+  if (process.argv[2] === '--help') {process.stdout.write(usage + '\n'); return;}
+  try {
+    if (process.argv.length !== 4 || !isAbsolute(process.argv[2])) {fail();}
+    const fd = openSync(process.argv[2], constants.O_RDONLY | constants.O_NOFOLLOW);
+    let config;
+    try {if (!fstatSync(fd).isFile()) {fail();} config = JSON.parse(readBounded(fd, 8_000_000));}
+    finally {closeSync(fd);}
+    const driver = createLinuxCodexLiveCanaryDriver(config, Number(process.argv[3]));
+    const result = await driver.run();
+    process.stdout.write(JSON.stringify(result) + '\n');
+    if (result.observedStatus !== 'succeeded' || !result.markerObserved) {process.exitCode = 1;}
+    if (result.cleanup === 'pending') {await reconcile(driver);}
+  } catch {process.stderr.write('Canary incomplete; retain attempt evidence. No automatic retry.\n'); process.exitCode = 1;}
+}
+if (process.argv[1] && resolvePath(process.argv[1]) === fileURLToPath(import.meta.url)) {await main();}
