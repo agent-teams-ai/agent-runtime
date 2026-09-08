@@ -4,6 +4,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {createHash} from "node:crypto";
 import test from "node:test";
+import {pathToFileURL} from "node:url";
 import {createCompositionInput, setupCapabilities, submit} from "../contained-turn-product.fixture.ts";
 import {createHostCustodiedAgentRuntimeHost, AgentRuntimeHostDisposalIncompleteError} from "../../dist/composition.js";
 import {createContainedTurnRouteEnforcement} from "../../../../contexts/agent-execution/dist/composition.js";
@@ -23,6 +24,7 @@ import {joinedDocker} from "./linux-joined-docker.mjs";
 import {joinedCurrentOwners} from "./linux-joined-current.mjs";
 import {openJoinedNetwork} from "./linux-joined-network.mjs";
 import {installJoinedPeer} from "./linux-joined-peer.mjs";
+const storeInput = persistence => persistence ? {operationStore: persistence.store} : {};
 const hash = value => createHash("sha256").update(value).digest("hex");
 
 const assertUnresolvedReceipt = saved => {
@@ -34,13 +36,7 @@ const assertUnresolvedReceipt = saved => {
   assert.equal(saved.reconciliation.kind, "clear", "HTTP closure debt must not invent provider ambiguity");
 };
 
-// Explicit integration entrypoint inside a new outer Linux netns. External
-// Docker, authority repositories and provider peer are synthetic. No live E2E claim.
-for (const evidenceOutcome of ["recorded", "unknown"]) {
-test(`public RuntimeAccessHandle joins native broker with evidence ${evidenceOutcome}`, {timeout: 90000}, async t => {
-  let network; let root; let current; let docker; let nativeHome; let host; let nativeRecipe; let peer; let brokerObservations;
-  let expectReconciliationDebt = false;
-  t.after(async () => {
+const disposeJoined = async ({host, expectReconciliationDebt, operationId, docker, network, current, persistence, root}) => {
     const failures = [];
     for (const cleanup of [async () => {
       if (!expectReconciliationDebt) {await host?.dispose(); return;}
@@ -50,15 +46,27 @@ test(`public RuntimeAccessHandle joins native broker with evidence ${evidenceOut
         assert.ok(error instanceof AgentRuntimeHostDisposalIncompleteError);
         assert.equal(error.status, "termination_unproven");
         assert.equal(error.activeCallCount, 0);
-        assert.deepEqual(error.containedTurns, [{operationId: "operation:one", status: "reconcile_required"}]);
+        assert.deepEqual(error.containedTurns, [{operationId, status: "reconcile_required"}]);
         return true;
       });
     }, () => docker?.dispose(), () => network?.dispose(),
-      () => current?.dispose(), () => root === undefined ? undefined : rm(root, {recursive: true, force: true})]) {
+      () => current?.dispose(), () => persistence?.dispose(), () => root === undefined ? undefined : rm(root, {recursive: true, force: true})]) {
       try {await cleanup();} catch (error) {failures.push(error);}
     }
     if (failures.length) {throw new AggregateError(failures, "joined cleanup failed");}
-  });
+};
+
+// Explicit integration entrypoint inside a new outer Linux netns. External
+// Docker, authority repositories and provider peer are synthetic. No live E2E claim.
+export function registerLinuxJoinedProduct({outcomes = ["recorded", "unknown"], openStore} = {}) {
+for (const evidenceOutcome of outcomes) {
+test(`public RuntimeAccessHandle joins native broker with evidence ${evidenceOutcome}`, {timeout: 90000}, async t => {
+  let network; let root; let current; let docker; let nativeHome; let host; let nativeRecipe; let peer; let brokerObservations;
+  let expectReconciliationDebt = false;
+  let operationId = "operation:one";
+  let persistence;
+  let launchOperation;
+  t.after(() => disposeJoined({host, expectReconciliationDebt, operationId, docker, network, current, persistence, root}));
   network = await openJoinedNetwork();
   root = await mkdtemp(join(process.env.AR69_JOINED_TEST_PARENT ?? tmpdir(), "ar69-joined-product-"));
   root = await realpath(root);
@@ -66,12 +74,18 @@ test(`public RuntimeAccessHandle joins native broker with evidence ${evidenceOut
   const legacy = new DeterministicCurrentOwnerHost();
   const composed = await createCompositionInput(legacy, root, {workspaceRef: join(root, "workspaces", "operation"),
     privateRootPath: join(root, "private", "operation"), bindingDigest: `sha256:${hash("joined-synthetic-credential-binding")}`});
+  persistence = await openStore?.();
+  const readOperation = () => persistence
+    ? persistence.readOperation(submit)
+    : Promise.resolve(composed.fixture.current());
+  const closureOwners = persistence ? persistence.closureOwners(submit.scope) : {};
   const events = [];
   const originalOwner = composed.input.selectedProvider.owner;
   const launchRecords = {async resolve(input) {
     const record = await originalOwner.launchRecords.resolve(input);
     nativeHome = record.boundary.codexHome;
-    const operation = composed.fixture.current();
+    const operation = await readOperation();
+    launchOperation = operation;
     assert.ok(operation, "durable acceptance before trusted launch record");
     try {current = await joinedCurrentOwners({operation, binding: operation.providerAccessSnapshot});}
     catch (error) {events.push(`current:${error.stack}`); throw error;}
@@ -93,7 +107,7 @@ test(`public RuntimeAccessHandle joins native broker with evidence ${evidenceOut
     engine, nsenter: network.nsenter, nft: network.nft, binding: baseBinding});
   const resources = {imageInitLock: imageLock(createInput(root).imageDigest), cleanupMilliseconds: 5000,
     select({kernel, record}) {
-      assert.equal(composed.fixture.current()?.dispatch.kind, "claimed");
+      assert.equal(launchOperation?.dispatch.kind, "claimed");
       assert.ok(current); events.push("selected");
       const create = {...createInput(root), privateRootSource: record.privateRootPath,
         workspaceSource: record.boundary.workspaceRef, entrypoint: DOCKER_CUSTODY_NODE_PATH,
@@ -152,17 +166,19 @@ test(`public RuntimeAccessHandle joins native broker with evidence ${evidenceOut
       };
     }};
   host = createHostCustodiedAgentRuntimeHost({authorityRevision: "runtime-access-authority:fixture",
-    capabilities: setupCapabilities, containedTurn: {...composed.input, routeEnforcement, linuxCodex: resources,
+    capabilities: setupCapabilities, containedTurn: {...composed.input, ...closureOwners,
+      ...storeInput(persistence), routeEnforcement, linuxCodex: resources,
       selectedProvider: {kind: "codex", owner: {...originalOwner, launchRecords}}}});
   const access = host.bindAccess({containedTurn: submit.scope});
   const accepted = await access.containedTurn.submit({commandId: submit.commandId,
     expectedProvider: submit.expectedProvider, intent: submit.intent});
   assert.equal(accepted.status, "accepted");
+  operationId = accepted.operationId;
   let observed;
   for (let iteration = 0; iteration < 300; iteration++) {
     observed = await access.containedTurn.observe(accepted.operationId);
     if (observed.status === "observed" && ["succeeded", "failed", "reconcile_required"].includes(observed.turn.status)
-      && composed.fixture.current()?.physicalContainment.kind === "contained") {break;}
+      && (await readOperation())?.physicalContainment.kind === "contained") {break;}
     await new Promise(resolve => {setTimeout(resolve, 50);});
   }
   console.log(JSON.stringify({events, observed, brokerOrder: brokerObservations?.order, brokerReceipts: brokerObservations?.receipts, messages: docker?.messages.map(message => message.kind)}));
@@ -180,11 +196,19 @@ test(`public RuntimeAccessHandle joins native broker with evidence ${evidenceOut
   for (const key of ["provisionalAuthorizationReceiptDigest", "finalAuthorizationReceiptDigest", "materializationReceiptDigest"]) {
     assert.match(receipt[key], /^sha256:[a-f0-9]{64}$/u);
   }
-  assert.equal(composed.fixture.current()?.physicalContainment.kind, "contained");
+  assert.equal((await readOperation())?.physicalContainment.kind, "contained");
   await assert.rejects(lstat(join(root, "private", "operation")), {code: "ENOENT"});
   assert.deepEqual(observed.turn.output, [{cursor: 0, kind: "assistant", text: "bounded synthetic output"}]);
-  if (evidenceOutcome === "unknown") {assertUnresolvedReceipt(composed.fixture.current());}
+  if (evidenceOutcome === "unknown") {assertUnresolvedReceipt(await readOperation());}
   expectReconciliationDebt = evidenceOutcome === "unknown";
+  if (persistence) {
+    assert.equal(evidenceOutcome, "unknown");
+    await persistence.verifyRecovery({operation: await readOperation(), submit, assertUnresolvedReceipt});
+  }
 });
 
 }
+
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {registerLinuxJoinedProduct();}
