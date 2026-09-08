@@ -4,6 +4,7 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import { resolve, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv';
+import { readSourceCensus, requireSourceDiagnostics, verifySourceCensus } from './get-modular-source-census.mjs';
 
 const schema = JSON.parse(await readFile(new URL('../../architecture/get-modular/consumer-profile.schema.json', import.meta.url)));
 const validate = new Ajv({ allErrors: true, strict: true }).compile(schema);
@@ -11,8 +12,8 @@ export const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const equalSet = (actual, expected, label) => assert.deepEqual([...actual].toSorted(), [...expected].toSorted(), label);
 const within = (path, root) => path === root || path.startsWith(`${root}/`);
 
-/** Metadata only. Active verification requires current Foundation policy and separately executed source diagnostics.
- * No source parsing, inferred legacy, or whole-repository conformance claim lives here.
+/** Shape validation alone does not activate adoption; checkAdoption also executes
+ * Foundation diagnostics and compares the live source census.
  */
 export function validateProfile(profile) {
   assert.ok(validate(profile), `consumer profile schema: ${JSON.stringify(validate.errors)}`);
@@ -62,13 +63,13 @@ export function verifyAdoption(profile, evidence) {
     equalSet(current.roots, boundary.roots, `roots drift: ${boundary.id}`);
     equalSet(current.entrypoints, boundary.entrypoints, `entrypoints drift: ${boundary.id}`);
     boundary.entrypoints.forEach(get);
-    // Relationships are reviewed declarations, not a source-derived census.
+    // The loader separately compares every declaration with the live source census.
     boundary.relationships.forEach(edge => get(edge.from));
     if (boundary.status === 'adopted') {assert.ok(profile.compositions.some(c => c.boundary === boundary.id), 'adopted mapping missing');}
   }
   for (const composition of profile.compositions) {
     assert.ok(profile.boundaries.some(b => b.id === composition.boundary && b.status === 'adopted' && b.entrypoints.includes(composition.entrypoint)), 'mapping boundary mismatch');
-    [composition.entrypoint, composition.declarations, composition.profile, composition.factories, ...composition.tests].forEach(get);
+    [composition.entrypoint, ...(composition.implementation ? [composition.implementation] : []), composition.declarations, composition.profile, composition.factories, ...composition.tests].forEach(get);
     assert.ok(composition.tests.length, 'mapping tests missing');
   }
   for (const exception of profile.exceptions) {
@@ -83,12 +84,14 @@ export function verifyAdoption(profile, evidence) {
   }
   assert.ok(Object.keys(profile.enforcement.commands).length, 'commands missing');
   assert.ok(Object.values(profile.enforcement.commands).includes('node scripts/architecture/check-get-modular-adoption.mjs'), 'canonical adoption checker missing');
+  assert.ok(Object.values(profile.enforcement.commands).includes('node --test scripts/architecture/check-get-modular-adoption.test.mjs'), 'canonical adoption rejecting tests missing');
   for (const [name, command] of Object.entries(profile.enforcement.commands)) {
     assert.equal(scripts[name], command, `command drift: ${name}`);
     assert.ok(!/[|;\n]/.test(command) && !command.includes('allow-diagnostics'), 'nonblocking command');
     const executable = command.match(/^node (?:--test )?(scripts\/[^ ]+\.mjs)$/)?.[1];
     if (executable) {get(executable);}
     for (const root of profile.enforcement.roots) {
+      assert.match(scripts[root] ?? '', /^pnpm [\w:-]+(?: && pnpm [\w:-]+)*$/, `nonblocking root command: ${root}`);
       assert.ok(scripts[root]?.split(' && ').includes(`pnpm ${name}`), `root gate missing: ${root}/${name}`);
     }
   }
@@ -161,7 +164,7 @@ export async function checkAdoption(root) {
   }
   profile.productionRoots.forEach(path => paths.add(path));
   for (const composition of profile.compositions) {
-    [composition.entrypoint, composition.declarations, composition.profile, composition.factories, ...composition.tests].forEach(path => paths.add(path));
+    [composition.entrypoint, ...(composition.implementation ? [composition.implementation] : []), composition.declarations, composition.profile, composition.factories, ...composition.tests].forEach(path => paths.add(path));
   }
   for (const exception of profile.exceptions) {
     exception.paths.forEach(path => paths.add(path)); paths.add(exception.authority);
@@ -175,8 +178,12 @@ export async function checkAdoption(root) {
     const full = await local(path);
     if ((await stat(full)).isFile()) { files.set(path, await readFile(full, 'utf8')); }
   }
-  return verifyAdoption(profile, { policy, files, scripts: manifest.scripts, decisions, artifacts,
+  const result = verifyAdoption(profile, { policy, files, scripts: manifest.scripts, decisions, artifacts,
     standard: { commit: profile.standard.commit, bytes: (await bytes(profile.standard.evidencePath)).toString('utf8') } });
+  assert.ok(profile.sourceCensus, 'live source census missing');
+  await requireSourceDiagnostics(consumerRoot);
+  verifySourceCensus(profile, await readSourceCensus(consumerRoot, policy));
+  return { ...result, status: 'verified', reviewRequired: ['new capabilities inside existing source paths', 'semantic ownership'] };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -184,5 +191,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.argv[3] ?? fileURLToPath(new URL('../../', import.meta.url));
   const result = await checkAdoption(root);
   console.log(JSON.stringify(result));
-  if (result.status !== 'verified-metadata') { process.exitCode = 1; }
+  if (result.status !== 'verified') { process.exitCode = 1; }
 }

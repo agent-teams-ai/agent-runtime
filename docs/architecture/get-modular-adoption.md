@@ -10,9 +10,10 @@ summary: Tracks the passive setup adoption contract and outstanding evidence wit
 
 ## Status and authority
 
-Status: planned adoption, authority groundwork only. Package publication,
-consumer profile enforcement, production cutover, packed validation, and final
-benefit evidence are not established by this document.
+Status: scoped passive setup profile active, with blocking live source census
+and package archive verification. Integrated delivery, current L0 evidence,
+independent review and measured benefit remain separate release gates. This
+document does not certify their completion.
 [ADR-0015](../decisions/0015-passive-setup-static-assembly-adoption.md) accepts the
 bounded contract. ADR-0008 and its historical evidence remain immutable;
 ADR-0013 continues to govern exactly its three active FMS features.
@@ -28,10 +29,12 @@ The merged revision supersedes the earlier unmerged candidate reference:
 - Retained bytes are recorded by the consumer profile; they are evidence, not a second authority.
 
 Document identity, package versions/archive integrity, Core compatibility token,
-and local adoption authority are distinct. Publication and approved artifact
-identities remain unresolved; a private package version or workspace build
-cannot satisfy them. The future consumer profile records exact identities and
-actual blocking commands, without `conformant: true` for the repository.
+and local adoption authority are distinct. The profile retains the approved published
+Core and Assembly 0.1.0 archives, verifies their SHA-256 and lock integrity,
+and requires exact catalog versions. It records actual blocking commands,
+without `conformant: true` for the repository. Upstream main was compared with
+the retained standard on 2026-09-08 and resolved to the same pinned commit;
+there was no standard delta to migrate.
 
 ## Ownership and composition scope
 
@@ -48,9 +51,13 @@ configurable cross-module relationships require standard mapping or an exact
 accepted exception. Ordinary fixed feature-local helpers keep static typed
 imports. No feature-per-class rule, wildcard legacy allowance, implicit
 inventory growth, string service locator, or universal manager is authorized.
-The scoped FMS gate remains independent. The consumer census must enumerate
-existing direct boundaries and relationships explicitly, reject unknown/stale
-entries and new edges, and leave semantic ownership to technical review.
+The scoped FMS gate remains independent. The live Foundation inventory records six workspace package roots, nine feature
+roots, sixteen policy boundaries and exact source/target/runtime-or-type
+relationships. Unknown or stale roots and relationships fail, including new
+cross-feature edges inside an existing policy boundary. Fixed helpers within
+one feature remain ordinary imports. The two retained Host-custodied
+contained-turn composition seams are enumerated explicitly. New capabilities
+hidden inside existing functions still require semantic ownership review.
 
 ## Evidence and executable references
 
@@ -58,9 +65,10 @@ Existing passive contract evidence starts with
 [capability bundle tests](../../packages/apps/embedded-runtime/tests/capability-bundle-contract.test.ts),
 [access boundary tests](../../packages/apps/embedded-runtime/tests/runtime-access-boundaries.e2e.test.ts),
 and [Codex setup tests](../../packages/apps/embedded-runtime/tests/codex-setup.e2e.test.ts).
-These are existing behavior references, not evidence that Assembly is adopted.
-The integrated checkpoint must add the executable passive Assembly fixture to
-the actual embedded-runtime test command and retain an independent direct oracle.
+The profile maps `createDefaultAgentRuntimeHost`, its private
+`default-agent-runtime-host.ts` implementation, and declarations, profile and
+factories in `runtime-setup-assembly.ts`. It maps passive Assembly, type and
+independent direct-reference tests without adopting the whole composition directory.
 Wrong-binding mutation, typed token/slot rejection, zero-call preflight failure,
 attempt isolation, failed handoff cleanup, and post-handoff startup abort must
 be proved alongside packed public-root consumer validation. Use only disposable
@@ -102,7 +110,10 @@ Negative or inconclusive benefit must be reported honestly. No readiness or
 qualification claim follows from documentation acceptance.
 
 The scoped [consumer profile](../../architecture/get-modular/consumer-profile.json)
-records the activation inputs for ADR-0015. A pending profile does not prove adoption.
+records the activation inputs for ADR-0015. Both `check:fast` and `check` execute
+`architecture:get-modular-adoption` and `test:get-modular-adoption`. The canonical
+checker itself requires live Foundation source diagnostics to pass before
+comparing the exact census; metadata validation alone cannot activate adoption.
 
 ## Keeping the standard current
 

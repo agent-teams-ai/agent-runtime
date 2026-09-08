@@ -56,6 +56,7 @@
         "features": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}
       }
     },
+    "sourceCensus": {"type": "object", "additionalProperties": false, "required": ["packageRoots", "featureRoots"], "properties": {"packageRoots": {"type": "array", "uniqueItems": true, "items": {"type": "object", "additionalProperties": false, "required": ["name", "root"], "properties": {"name": {"type": "string", "minLength": 1}, "root": {"type": "string", "minLength": 1}}}}, "featureRoots": {"type": "array", "items": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"}, "uniqueItems": true}}},
     "productionRoots": {"type": "array", "items": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"}, "uniqueItems": true},
     "boundaries": {
       "type": "array",
@@ -76,8 +77,8 @@
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["from", "to"],
-              "properties": {"from": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"}, "to": {"type": "string", "minLength": 1}}
+              "required": ["from", "to", "mode"],
+              "properties": {"from": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"}, "to": {"type": "string", "minLength": 1}, "mode": {"enum": ["type-only", "runtime"]}}
             },
             "uniqueItems": true
           }
@@ -94,6 +95,8 @@
         "properties": {
           "boundary": {"type": "string", "minLength": 1},
           "entrypoint": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"},
+          "factorySymbol": {"type": "string", "minLength": 1},
+          "implementation": {"type": "string", "minLength": 1},
           "declarations": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"},
           "profile": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"},
           "factories": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"},

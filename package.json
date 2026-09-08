@@ -10,9 +10,9 @@
     "pnpm": "11.18.0"
   },
   "scripts": {
-    "check": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm test:ar2-contract && pnpm architecture:runtime-setup-l0-evidence && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:check && pnpm typecheck && pnpm lint && pnpm test",
+    "check": "pnpm architecture:get-modular-adoption && pnpm test:get-modular-adoption && pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm test:ar2-contract && pnpm architecture:runtime-setup-l0-evidence && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:check && pnpm typecheck && pnpm lint && pnpm test",
     "check:changed": "agent-teams-foundation agent-workflow changed --consumer .",
-    "check:fast": "pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm architecture:runtime-setup-l0-evidence && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:build && pnpm typecheck && pnpm lint",
+    "check:fast": "pnpm architecture:get-modular-adoption && pnpm test:get-modular-adoption && pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm architecture:runtime-setup-l0-evidence && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:build && pnpm typecheck && pnpm lint",
     "docs:check": "agent-teams-docs check --consumer . --profile architecture/foundation/docs-protocol.yaml",
     "docs:doctor": "agent-teams-docs doctor --consumer . --profile architecture/foundation/docs-protocol.yaml",
     "docs:find": "agent-teams-docs find --consumer . --profile architecture/foundation/docs-protocol.yaml",
@@ -73,7 +73,9 @@
     "spike:rust-boundaries:evidence": "node --test experiments/runtime-profile-behavior/test/rust-system-boundary-evidence.test.ts",
     "test": "node --test --test-concurrency=1 experiments/runtime-profile-behavior/test/*.test.ts experiments/rust-system-boundaries/client/guardian-conformance.test.ts experiments/rust-system-boundaries/client/protocol-compat/v1-v2-compat.test.ts",
     "test:contained-turn:acceptance": "pnpm --filter @agent-teams/agent-execution run test:contained-turn:acceptance",
-    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false && tsc --project tsconfig.synthetic-oracle.json --noEmit --pretty false"
+    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false && tsc --project tsconfig.synthetic-oracle.json --noEmit --pretty false",
+    "architecture:get-modular-adoption": "node scripts/architecture/check-get-modular-adoption.mjs",
+    "test:get-modular-adoption": "node --test scripts/architecture/check-get-modular-adoption.test.mjs"
   },
   "dependencies": {
     "zod": "catalog:"
