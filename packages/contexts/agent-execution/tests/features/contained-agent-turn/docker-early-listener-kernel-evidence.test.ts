@@ -39,7 +39,7 @@ const {createDockerCodexHostKernelOwner} = await import("../../../dist/features/
 const capture = await import("synthetic:early-root");
 hooks.deregister();
 
-for (const pending of ["none", "listener", "removal"] as const) {
+for (const pending of ["none", "listener", "removal", "cutoff", "cutoff-removal", "cutoff-settlement"] as const) {
   test(`kernel early listener decoration failure retains physical closure without provider IO: pending=${pending}`,
     {skip: process.platform !== "linux", timeout: 15_000}, async t => {
     const f = await connectionFixture(); t.after(() => f.contain());
@@ -75,21 +75,39 @@ for (const pending of ["none", "listener", "removal"] as const) {
       if (pending === "listener") {entered.resolve(); await gate.promise;}
       throw new Error("synthetic firewall decoration failed after bind");
     });
-    if (pending === "removal") {
+    let actualLaunch: Awaited<ReturnType<typeof selected.lifecycle.launch>> | undefined;
+    if (pending.startsWith("cutoff")) {
+      const launch = selected.lifecycle.launch.bind(selected.lifecycle);
+      t.mock.method(selected.lifecycle, "launch", async (...args: Parameters<typeof launch>) => {
+        const actual = await launch(...args); actualLaunch = actual;
+        const {raw, custodyRef} = capture.retained;
+        // Cut the actual kernel-owned preparation between launch resolution and afterLaunch.
+        void raw.requestContainment({custodyRef, operationId: open.operationId, attemptId: open.attemptId});
+        return actual;
+      });
+    }
+    if (pending === "removal" || pending === "cutoff-removal") {
       const remove = selected.engine.remove.bind(selected.engine);
       t.mock.method(selected.engine, "remove", async (...args: Parameters<typeof remove>) => {
         entered.resolve(); await gate.promise; return remove(...args);
       });
     }
+    if (pending === "cutoff-settlement") {
+      selected.network.state.before = async label => {
+        if (label.startsWith("DELETE /v1.47/networks/")) {
+          entered.resolve(); await gate.promise; // Physical closure is not preparation settlement.
+        }
+      };
+    }
     const start = {attemptId: open.attemptId, custodyId: open.custodyId, operationId: open.operationId,
       workspaceId: open.workspaceId, intentMode: open.intentMode, committedDispatchProof: proof,
       async execute() {executions += 1; return {kind: "completed" as const, outcome: "succeeded" as const};}};
     const starting = owner.custody.start(start);
-    if (pending !== "none") {
+    if (pending === "listener" || pending === "removal" || pending === "cutoff-removal" || pending === "cutoff-settlement") {
       await entered.promise;
       const {raw, custodyRef} = capture.retained;
       assert.equal(raw.evidence(custodyRef).sealed, false);
-      assert.equal(raw.evidence(custodyRef).closure.status, "unproven");
+      assert.equal(raw.evidence(custodyRef).closure.status, pending === "cutoff-settlement" ? "closed" : "unproven");
       await assert.rejects(owner.custody.start(start)); // Overlap cannot seal the original flight.
       assert.equal(raw.evidence(custodyRef).sealed, false);
       gate.resolve();
@@ -97,13 +115,21 @@ for (const pending of ["none", "listener", "removal"] as const) {
     assert.equal((await starting).kind, "indeterminate");
     const {raw, custodyRef} = capture.retained;
     const evidence = raw.evidence(custodyRef);
-    assert.equal(selected.physical.opens, 1, JSON.stringify(selected.events));
-    assert.equal(selected.physical.closes, 1);
+    assert.equal(selected.physical.opens, pending.startsWith("cutoff") ? 0 : 1, JSON.stringify(selected.events));
+    assert.equal(selected.physical.closes, pending.startsWith("cutoff") ? 0 : 1);
     assert.equal(selected.physical.consumption, 0);
     assert.equal(selected.events.includes("host-handshake"), false);
     assert.equal(selected.events.includes("provider-exec"), false);
     assert.equal(executions, 0);
     assert.equal(selected.routeAdmissions.length, 0);
+    if (actualLaunch !== undefined) {
+      const observed = selected.lifecycle.observeLaunch(actualLaunch);
+      assert.equal(observed.journal.state, "closed");
+      assert.notEqual(observed.recursiveEmpty, null);
+      assert.notEqual(observed.removal, null);
+      assert.equal(observed.attachCleanup, "complete");
+      assert.equal(observed.execution, null);
+    }
     assert.equal(evidence.closure.status, "closed");
     assert.equal(evidence.sealed, true);
     assert.equal(physicalEvidenceIsClosed(evidence), true);

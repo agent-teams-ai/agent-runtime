@@ -5,7 +5,7 @@ import {sameHostCustodyBinding} from "../adapters/outbound/host-custody/containe
 import {createHash} from "node:crypto";
 import type {HostCustodyEvidence, HostCustodyReservationInput, HostCustodyLaunchFingerprintEvidence}
   from "../adapters/outbound/host-custody/custodied-provider-process.js";
-import {assertDockerPreparedIoLaunch, canonicalJsonSha256, dockerProviderProcessMountFacts,
+import {assertDockerPreparedIoLaunch, canonicalJsonSha256,
   DockerHostCustodyLifecycle, isConcreteLinuxDockerLifecycle, type PreparedDockerProviderIo, type LaunchedDockerCustody}
   from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 
@@ -67,12 +67,12 @@ export class DockerKernelEvidence {
   /** Same-object capabilities from the retained preparation, not observation bags. */
   public attachLifecycle(lifecycle: DockerHostCustodyLifecycle, launch: LaunchedDockerCustody): void {
     if (this.#source !== undefined) {throw new TypeError("Docker evidence attachment is one-use");}
-    const mounts = dockerProviderProcessMountFacts(launch);
-    if (launch.key.operationId !== this.input.operationId || launch.key.attemptId !== this.input.attemptId ||
+    // Historical same-object facts validate cleanup attachment even after admission closes.
+    const {mountFacts: mounts, key} = retainedObservation(lifecycle, launch);
+    if (key.operationId !== this.input.operationId || key.attemptId !== this.input.attemptId ||
       mounts.workspaceSource !== this.input.workspaceRef || mounts.privateRootSource !== this.input.launchPlan.privateRootPath) {
       throw new TypeError("Docker evidence reservation conflicts with launch");
     }
-    retainedObservation(lifecycle, launch); // Reject a foreign lifecycle without effects.
     this.#source = Object.freeze({lifecycle, launch});
   }
 
