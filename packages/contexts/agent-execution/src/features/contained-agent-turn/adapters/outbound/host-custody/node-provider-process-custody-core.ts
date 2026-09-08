@@ -431,9 +431,9 @@ export class NodeProviderProcessCustodyCore implements
       throw new Error("Host Custody launch reservation is incomplete");
     }
     if (live.retainedWorkspaceAuthority !== undefined) {assertRetainedWorkspaceAuthority(live);}
-    // A thrown delegated launch cannot itself prove that no process started.
+    // A thrown admitted launch cannot itself prove that no process started.
     const spawnStatusBeforeLaunch = live.spawnStatus;
-    if (live.plan.spawnMode === "sdk-delegated") {live.spawnStatus = "ambiguous";}
+    live.spawnStatus = "ambiguous";
     let launched: ReturnType<typeof launchGuardedProvider>;
     try {
       launched = launchGuardedProvider({
@@ -524,7 +524,7 @@ export class NodeProviderProcessCustodyCore implements
     live.httpReservation.cutoff();
     live.containmentDeadline ??= this.#monotonicNow() + this.#containmentAfterMs;
     try {
-      if (live.startIdentitySha256 !== undefined && live.spawnStatus === "ambiguous" && live.guardian === undefined) {
+      if (live.spawnStatus === "ambiguous" && live.guardian === undefined) {
         // Reentrant abort may precede the synchronous launch's resource return.
         // If it throws instead, keep custody for reconciliation: the no-guardian
         // no-start cleanup path has no evidence for this admitted launch.
