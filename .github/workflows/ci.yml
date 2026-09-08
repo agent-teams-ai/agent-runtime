@@ -47,6 +47,25 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Fetch exact retained evidence commits
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync, spawnSync } from 'node:child_process';
+          import { changes } from './scripts/architecture/runtime-setup-l0-evidence-spec.mjs';
+          const revisions = changes.map(({ revision }) => revision);
+          for (const revision of revisions) assert.match(revision, /^[a-f0-9]{40}$/u);
+          const hasTrees = revision => [revision, `${revision}^`].every(ref =>
+            spawnSync('git', ['cat-file', '-e', `${ref}^{tree}`]).status === 0);
+          const missing = revisions.filter(revision => !hasTrees(revision));
+          if (missing.length) execFileSync('git', [
+            'fetch', '--no-tags', '--no-write-fetch-head',
+            'https://github.com/agent-teams-ai/agent-runtime.git', ...missing,
+          ], { stdio: 'inherit', timeout: 120_000 });
+          for (const revision of revisions) assert.ok(hasTrees(revision), `Missing retained trees: ${revision}`);
+          NODE
+
       - name: Run quality gate
         run: pnpm check
 
