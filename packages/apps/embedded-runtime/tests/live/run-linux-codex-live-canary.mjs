@@ -279,11 +279,16 @@ async function reconcile(driver) {
   process.exitCode = 2;
   const keepAlive = setInterval(() => {}, 30_000);
   const {createInterface} = await import('node:readline');
-  for await (const line of createInterface({input: process.stdin, terminal: false})) {
+  const commands = createInterface({input: process.stdin, terminal: false});
+  for await (const line of commands) {
     try {
       if (line === 'observe') {await driver.observe();}
       if (line === 'cancel') {await driver.cancel();}
       if (line === 'cleanup' && await driver.cleanup() === 'released') {
+        // readline.close() alone can leave inherited FIFO stdin referenced.
+        // This CLI owns command input; dispose it only after owners and pool release.
+        commands.close();
+        process.stdin.destroy();
         clearInterval(keepAlive); break;
       }
     } catch {process.stderr.write('Reconciliation remains pending; owners retained.\n');}

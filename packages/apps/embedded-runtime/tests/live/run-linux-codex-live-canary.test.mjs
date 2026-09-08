@@ -6,17 +6,9 @@ import {mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync,
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
-import {allocateLinuxCodexLiveAdminDirectories} from './linux-codex-live-admin-directories.ts';
-import {encodeContainedTurnArtifactManifest, computeContainedTurnArtifactTreeDigest} from '../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-manifest.js';
 import {decodeBytes, validateConfiguration, createLinuxCodexLiveCanaryDriver, createCleanupController, createRedactor} from './run-linux-codex-live-canary.mjs';
-import {collectLinuxCodexLiveEvidence} from './linux-codex-live-evidence.mjs';
-const SOURCE = '1'.repeat(40); // Explicit synthetic approved revision, never a runtime pin.
-
-const bytes = {encoding: 'base64', data: 'e30='};
-const config = root => ({ownerApproved: true, disposableDatabase: true, disposableTestParent: true,
-  databaseUrl: 'postgresql://test@127.0.0.1:5432/ar69_pa_test_driver',
-  evidenceDirectory: join(root, 'evidence'), approval: {commandId: 'command:driver', testId: 'driver', marker: 'hello', markerFile: 'marker.txt'},
-  hostPins: {sourceRevision: SOURCE, testParent: join(root, 'project'), native: {catalogSource: bytes}, certificateAuthorities: [bytes]}});
+const hashFixtureBytes = value => createHash('sha256').update(value).digest('hex');
+import {SOURCE, bytes, config} from './linux-codex-driver-test-fixture.mjs';
 test('explicit byte conversion rejects noncanonical or path inputs; owns dedicated arrays', () => {
   const a = decodeBytes(bytes), b = decodeBytes(bytes);
   assert.equal(Object.getPrototypeOf(a), Uint8Array.prototype);
@@ -369,17 +361,20 @@ test('failed observation cannot release on a stale succeeded submit value', asyn
 });
 
 test('public driver collects real admin layout before tree release (synthetic artifact bytes)', {skip: process.platform !== 'linux' && 'descriptor-relative collector requires Linux'}, async t => {
+  // Keep compiled-only dependencies scoped so CLI regressions run without a build.
+  const {allocateLinuxCodexLiveAdminDirectories} = await import('./linux-codex-live-admin-directories.ts');
+  const {encodeContainedTurnArtifactManifest, computeContainedTurnArtifactTreeDigest} = await import('../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-manifest.js');
+  const {collectLinuxCodexLiveEvidence} = await import('./linux-codex-live-evidence.mjs');
   const {writeFileSync, existsSync} = await import('node:fs');
   const {driver, root, live, events} = await publicFixture(t, 'succeeded');
   let tree;
   globalThis.ar69DriverFixture.setup = async () => {
     tree = await allocateLinuxCodexLiveAdminDirectories(join(root, 'project'));
     live.directory = tree.root; // The administrative entrypoint exposes this exact boundary.
-    const hash = bytes => createHash('sha256').update(bytes).digest('hex');
-    const put = (category, bytes) => {
-      const id = hash(bytes), shard = join(tree.artifacts.root, category, id.slice(0, 2));
+    const put = (category, contentBytes) => {
+      const id = hashFixtureBytes(contentBytes), shard = join(tree.artifacts.root, category, id.slice(0, 2));
       mkdirSync(shard, {recursive: true, mode: 0o700});
-      writeFileSync(join(shard, id), bytes);
+      writeFileSync(join(shard, id), contentBytes);
       return id;
     };
     const operationId = 'operation:synthetic', scope = {tenantId: 'tenant:test', projectId: 'project:test'};
@@ -390,7 +385,7 @@ test('public driver collects real admin layout before tree release (synthetic ar
       output: [{cursor: 0, kind: 'assistant', size: 5, digest: put('blobs', Buffer.from('hello'))}],
       treeDigest: computeContainedTurnArtifactTreeDigest(entries)};
     const manifestDigest = put('manifests', encodeContainedTurnArtifactManifest(manifest));
-    const workspaceName = `operation-${hash(JSON.stringify([scope.tenantId, scope.projectId, operationId]))}`;
+    const workspaceName = `operation-${hashFixtureBytes(JSON.stringify([scope.tenantId, scope.projectId, operationId]))}`;
     const resultRef = `urn:agent-runtime:contained-turn-result:${manifestDigest}`;
     const common = {operationId, scope, manifestDigest, workspaceName, treeDigest: manifest.treeDigest};
     for (const [path, value] of [

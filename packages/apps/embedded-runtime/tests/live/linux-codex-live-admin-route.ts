@@ -35,7 +35,11 @@ export const createLinuxCodexLiveAdminRoute = async (input: Readonly<{
   tools: LinuxCodexLivePins["node"]["tools"];
 }>) => {
   // Detach before the first await, including nested administrative facts.
-  const pins = structuredClone(input);
+  // Pick is only a static type: administration supplies the full route owner
+  // configuration, including its deadline and native cancellation signal.
+  const facts = snapshotRouteSelectionFacts({binding: input.route.binding,
+    recipe: input.route.recipe, descriptor: input.route.descriptor});
+  const pins = structuredClone({...input, route: facts});
   if (process.platform !== "linux" || process.arch !== "x64" ||
       !/^[a-f0-9]{40}$/u.test(pins.sourceRevision) || !pins.hostBootId || !pins.capabilityManifestRevision || pins.route.recipe !== "codex-chatgpt") {
     throw new TypeError("Linux Codex administrative route configuration unavailable");
@@ -49,14 +53,13 @@ export const createLinuxCodexLiveAdminRoute = async (input: Readonly<{
     return row?.id === "docker-linux-codex-enforced-network-route" && row.qualification === "implementation" &&
       Array.isArray(row.targets) && row.targets.some(candidate => {
         if (candidate === null || typeof candidate !== "object") {return false;}
-        const facts = candidate as Record<string, unknown>;
-        return Object.keys(facts).length === Object.keys(target).length &&
-          Object.entries(target).every(([key, expected]) => facts[key] === expected);
+        const targetFacts = candidate as Record<string, unknown>;
+        return Object.keys(targetFacts).length === Object.keys(target).length &&
+          Object.entries(target).every(([key, expected]) => targetFacts[key] === expected);
       });
   })) {throw new TypeError("Exact Linux Codex registry target unavailable");}
-  const facts = snapshotRouteSelectionFacts(pins.route);
-  const binding = facts.binding;
-  const routeRevision = await routeSelectionDigest(facts);
+  const binding = pins.route.binding;
+  const routeRevision = await routeSelectionDigest(pins.route);
   // As in the production Node recipe, this policy name is never allocated.
   const policy = snapshotDockerEnginePolicy({...pins.enginePolicy, allowedNetworkName: "ar-identity-read-only"});
   const engine = new NodeUnixSocketDockerEngine({policy});
