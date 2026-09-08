@@ -302,7 +302,8 @@ for (const aborted of [false, true]) {
 
 test("unexpected envelope inspection failure before journal commit retains the captured root", async () => {
   let disposed = 0;
-  let observed = false;
+  type Outcome = Parameters<NonNullable<NonNullable<Parameters<typeof createRuntimeSetupAttempt>[2]>["observeOutcome"]>>[0];
+  const outcomes: Outcome[] = [];
   let returned: unknown;
   await assert.rejects(createRuntimeSetupAttempt(undefined, (platform) => {
     const factories = createRuntimeSetupFactories(platform);
@@ -317,22 +318,21 @@ test("unexpected envelope inspection failure before journal commit retains the c
       }) };
       return returned as typeof product;
     },
-    observeOutcome: (outcome) => {
-      observed = true;
-      assert.equal(outcome.status, "failed");
-      if (outcome.status !== "failed") return;
-      assert.equal(outcome.code, "assembly.run.internal");
-      assert.equal(outcome.returned?.product, returned);
-      assert.equal(outcome.created.length, 6);
-      assert.ok(outcome.created.every((entry) => entry.implementationId !== "agent-runtime/runtime-host"));
-    },
+    observeOutcome: (outcome) => { outcomes.push(outcome); },
   }), (error: unknown) => {
     assert.ok(error instanceof AgentRuntimeHostCreationError);
     assert.equal(error.code, "internal_failure");
     assert.doesNotMatch(JSON.stringify(error), /synthetic envelope/);
     return true;
   });
-  assert.equal(observed, true);
+  assert.equal(outcomes.length, 1);
+  const outcome = outcomes[0]!;
+  assert.equal(outcome.status, "failed");
+  assert.ok(outcome.status === "failed");
+  assert.equal(outcome.code, "assembly.run.internal");
+  assert.equal(outcome.returned?.product, returned);
+  assert.equal(outcome.created.length, 6);
+  assert.ok(outcome.created.every((entry) => entry.implementationId !== "agent-runtime/runtime-host"));
   assert.equal(disposed, 1);
 });
 
