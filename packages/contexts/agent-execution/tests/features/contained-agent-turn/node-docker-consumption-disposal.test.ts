@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import {readFile} from "node:fs/promises";
+import {readFile, readdir} from "node:fs/promises";
 import {join} from "node:path";
 import test, {type TestContext} from "node:test";
 import {NodeCustodyHttpResources} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/node-custody-http-resources.js";
@@ -11,6 +11,11 @@ import {committedDispatchProofFixture} from "./support/committed-dispatch-proof-
 import {ids, openInput} from "./support/current-provider-owner-fixture.ts";
 import {call} from "../../fixtures/docker-engine-test-fixture.ts";
 
+// These integration faults require the concrete Linux /proc/self/fd storage,
+// mount-ID checks and native directory lock. Darwin supports the lock alone;
+// HostHttpConsumptionStorage.open deliberately rejects it before filesystem I/O.
+const linuxTest = process.platform === "linux" ? test : test.skip;
+
 const fingerprint = `sha256:${"c".repeat(64)}`;
 const key = {namespace: "provider-process-egress/v2" as const, tenantId: "tenant:test", projectId: "project:test",
   operationId: "operation:test", boundaryUseId: "boundary:one"};
@@ -20,7 +25,7 @@ const observe = (): never => {throw new Error("synthetic listener observations a
 // Concrete journal, storage, process lock, HTTP resource owner and deployment
 // recipe. Only Engine/V4 observations and the listener are synthetic; all files
 // and native lock work belong to this disposable test directory.
-async function composed(t: TestContext) {
+async function prepareComposed(t: TestContext, expectedConsumption: "ready" | "unsupported" = "ready") {
   const f = await fixture(t);
   const proof = committedDispatchProofFixture(openInput(ids("codex", "disposal"), "codex", {provider: "codex"}),
     {hostBootId: "host-boot:test", hostInstanceId: "host-instance:test", hostCustodyProof: {proofId: "proof:test"}} as never,
@@ -39,19 +44,24 @@ async function composed(t: TestContext) {
     accept: async () => {throw new Error("no exchanges in disposal fixture");},
     consumption: {async prepare() {
       const acquired = await f.recipe.consumption.prepare(f.references);
-      assert.equal(acquired.kind, "ready"); if (acquired.kind === "ready") {prepared = acquired;}
+      assert.equal(acquired.kind, expectedConsumption); if (acquired.kind === "ready") {prepared = acquired;}
       return acquired;
     }},
     listenerLifecycle: {bind: () => ({recordOpen: async () => ({kind: "recorded"}), recordRelease: async () => ({kind: "recorded"})})},
     localCut: {expectedClock: {authorityId: "clock:test", epoch: "1"}, operationDeadline: 1000,
       clock: {read: () => ({authorityId: "clock:test", epoch: "1", controlTime: 0}), within: async (_deadline, action) => action()}},
   });
-  assert.equal(result.kind, "prepared"); assert.ok(prepared);
-  return {...f, owner, prepared, listenerCloses: () => listenerCloses, listenerSealed: () => listenerSealed};
+  return {...f, owner, prepared, result, listenerCloses: () => listenerCloses, listenerSealed: () => listenerSealed};
+}
+
+async function composed(t: TestContext) {
+  const f = await prepareComposed(t);
+  assert.equal(f.result.kind, "prepared"); assert.ok(f.prepared);
+  return {...f, prepared: f.prepared};
 }
 
 for (const mode of ["healthy-zero", "healthy-one", "quarantined", "append-ambiguity"] as const) {
-  test(`concrete owner/recipe disposal preserves disposition: ${mode}`, async t => {
+  linuxTest(`concrete owner/recipe disposal preserves disposition: ${mode}`, async t => {
     const f = await composed(t);
     let closes = 0;
     const close = HostHttpConsumptionStorage.prototype.close;
@@ -97,7 +107,7 @@ for (const mode of ["healthy-zero", "healthy-one", "quarantined", "append-ambigu
 }
 
 for (const fault of ["tombstone-open", "write", "datasync", "directory-sync", "readback", "close", "missing-evidence"] as const) {
-  test(`recipe retains consumption gate after ${fault}`, async t => {
+  linuxTest(`recipe retains consumption gate after ${fault}`, async t => {
     const f = await composed(t); await f.partial();
     if (fault === "tombstone-open") {t.mock.method(fs, "openSync", () => {throw new Error("tombstone open failed");});}
     if (fault === "write") {t.mock.method(fs, "writeSync", () => {throw new Error("tombstone write failed");});}
@@ -129,7 +139,7 @@ for (const fault of ["tombstone-open", "write", "datasync", "directory-sync", "r
   });
 }
 
-test("acknowledged quarantine cannot discharge recipe debt after lock release fails", async t => {
+linuxTest("acknowledged quarantine cannot discharge recipe debt after lock release fails", async t => {
   const open = HostHttpConsumptionStorage.open;
   let held: HostHttpConsumptionStorage | undefined;
   t.mock.method(HostHttpConsumptionStorage, "open", async (...args: Parameters<typeof open>) => {
@@ -148,7 +158,7 @@ test("acknowledged quarantine cannot discharge recipe debt after lock release fa
   assert.deepEqual(f.closes, []);
 });
 
-test("pending physical closure keeps the recipe pending and joins the original retirement", async t => {
+linuxTest("pending physical closure keeps the recipe pending and joins the original retirement", async t => {
   const f = await composed(t); await f.partial();
   const gate = Promise.withResolvers<void>();
   const close = HostHttpConsumptionStorage.prototype.close;
@@ -168,7 +178,7 @@ test("pending physical closure keeps the recipe pending and joins the original r
 });
 
 for (const disposition of ["healthy", "quarantined"] as const) {
-  test(`actual tombstone descriptor close failure latches uncertainty: ${disposition}`, async t => {
+  linuxTest(`actual tombstone descriptor close failure latches uncertainty: ${disposition}`, async t => {
     const f = await composed(t); await f.partial();
     const open = fs.openSync; const close = fs.closeSync;
     let tombFd: number | undefined;
@@ -213,3 +223,28 @@ for (const disposition of ["healthy", "quarantined"] as const) {
     assert.deepEqual(await readFile(join(f.consumptionPath, "host-http-consumption-v1.tombstone")), tombstone);
   });
 }
+
+// Exercise the actual unsupported gate on every host, including native Darwin CI.
+// This characterizes refusal; it does not qualify Linux descriptor custody on macOS.
+test("Darwin consumption storage refuses acquisition and owner remains unproven", async t => {
+  const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+  Object.defineProperty(process, "platform", {...platform, value: "darwin"});
+  t.after(() => Object.defineProperty(process, "platform", platform));
+  // An invalid pin still reaches the explicit platform gate before any path read.
+  await assert.rejects(HostHttpConsumptionStorage.open({path: "/never-read", device: "0", inode: "0"}, 1024),
+    {message: "consumption platform unsupported"});
+  const f = await prepareComposed(t, "unsupported");
+  assert.deepEqual(f.result, {kind: "unproven"});
+  assert.equal(f.prepared, undefined);
+  assert.equal(f.listenerSealed(), true);
+  assert.deepEqual(await readdir(f.consumptionPath), []);
+  assert.deepEqual(await f.owner.cleanupOutcome(), {released: false, dependenciesReleased: true});
+  assert.equal(f.listenerCloses(), 1);
+  assert.equal(await f.recipe.releaseAfterHostCleanup(call()), "pending");
+  await f.partial();
+  // Unsupported preparation acquired no consumption resource: V4 absence can
+  // release recipe dependencies, while the HTTP owner remains unproven.
+  assert.equal(await f.recipe.releaseAfterHostCleanup(call()), "released");
+  assert.deepEqual(f.closes, ["resource", "custody"]);
+  assert.deepEqual(await f.owner.cleanupOutcome(), {released: false, dependenciesReleased: true});
+});

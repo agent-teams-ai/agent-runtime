@@ -13,7 +13,13 @@ for (const deploymentDebt of [false, true]) {
       const result = await original.close();
       return deploymentDebt ? {state: "unknown" as const} : result;
     }};
-    assert.equal((await owner.prepare(f.lifetime, {...f.resourceInput, listener})).kind, "prepared");
+    const consumption = {async prepare() {
+      const prepared = await f.resourceInput.consumption.prepare();
+      assert.equal(prepared.kind, "ready");
+      if (prepared.kind === "ready") {prepared.quarantine();}
+      return prepared;
+    }};
+    assert.equal((await owner.prepare(f.lifetime, {...f.resourceInput, listener, consumption})).kind, "prepared");
     await f.authorizeRelease();
     assert.deepEqual(await owner.cleanupOutcome(), {released: false, dependenciesReleased: !deploymentDebt});
     assert.equal(f.servers[0]!.listening, false);
