@@ -1,3 +1,4 @@
+import {reserveWorkspace, withWorkspaceAuthority} from "./support/docker-workspace-authority-fixture.ts";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import {syncBuiltinESMExports} from "node:module";
@@ -37,7 +38,7 @@ for (const debt of [false, true]) {
     await fs.chmod(create.privateRootSource, 0o700);
     const raw = new DockerKernelHostCustody(5000);
     const reservation = input(hostIdentity.operationId, hostIdentity.attemptId, create.workspaceSource, create.privateRootSource);
-    const handle = await raw.reserve(reservation);
+    const handle = await reserveWorkspace(t, raw, reservation);
     const roots = createHostPrivateRootOwnerFactory(hostIdentity);
     let launch: Awaited<ReturnType<typeof f.launch>>;
     let cleanups = 0; let cleanup: Promise<{kind: "released" | "quarantined"}> | undefined;
@@ -85,11 +86,14 @@ test("cancel during real root capture retains preparation and cleanup flights; n
   await fs.mkdir(privateRootPath, {mode: 0o700}); await fs.mkdir(workspace, {mode: 0o700});
   const raw = new DockerKernelHostCustody(5000);
   const reservation = input(f.proof.operationId, f.proof.attemptId, workspace, privateRootPath);
-  const handle = await raw.reserve(reservation);
+  const handle = await reserveWorkspace(t, raw, reservation);
   const dependencies = {...f.dependencies, create: {...f.dependencies.create, workspaceSource: workspace, privateRootSource: privateRootPath}};
   const roots = createHostPrivateRootOwnerFactory(f.proof);
   let providerCut = false;
   const resources = createDockerHostReservationOwners({roots, raw, custodyRef: handle.custodyRef, dependencies,
+    signal: f.controller.signal,
+    nativeFiles: {bindRoot: unexpected, install: unexpected, cutoff() {}, async quiesce() {},
+      snapshot: unexpected},
     cutoffProvider() {providerCut = true;}, lock: imageLock(dependencies.create.imageDigest)});
   const preparation = createDockerLinuxPostClaimOwner(dependencies, {...resources.hooks,
     prepareProviderIo: unexpected, finishClaimed: unexpected});
@@ -133,8 +137,7 @@ test("normal kernel terminal-attestation entrypoint deletes the owned root befor
     postClaimPreparation: {async prepareClaimed() {throw new Error("terminal observation does not prepare a new launch");}},
     attemptOwner: {async prepare() {return plan;}, retain(retained) {custodyRef = retained.underlyingCustodyRef;}, retire() {}},
     workspaceOwner: {async withLaunchAuthority(_input, consume) {
-      return consume({canonicalPath: create.workspaceSource, descriptorPath: create.workspaceSource,
-        identity: {dev: 1n, ino: 2n, mountId: "synthetic"}});
+      return withWorkspaceAuthority(create.workspaceSource, ids.operationId, consume);
     }}});
   await custody.open({adapterSnapshot: ids.adapterSnapshot, providerAccessSnapshot: ids.providerAccessSnapshot,
     attemptId: ids.attemptId, operationId: ids.operationId, custodyId: ids.custodyId, effectId: ids.effectId,
@@ -197,4 +200,55 @@ test("cleanup timeout during beforeLaunch retains the original preparation and n
   assert.equal(f.network.state.calls.filter(call => call.startsWith("DELETE ")).length, 1);
   assert.equal(f.events.includes("create"), false);
   assert.throws(() => owner.takePrepared(f.claimed));
+});
+
+
+test("same-root cleanup joins the actual native verifier after the deferred writer settles", linux, async t => {
+  const {nativeFinalizerFixture} = await import("./support/docker-native-finalizer-fixture.ts");
+  const {createDeferredCodexNativeBrokerFiles} = await import("../../../dist/features/contained-agent-turn/composition/deferred-codex-native-broker-files.js");
+  const {createDockerCodexNativeBrokerFinalizer} = await import("../../../dist/features/contained-agent-turn/composition/docker-codex-native-broker-finalizer.js");
+  const f = await nativeFinalizerFixture(t);
+  const nativeFiles = createDeferredCodexNativeBrokerFiles({boundary: f.boundary,
+    catalogSource: await fs.readFile(new URL("../../fixtures/codex-native-broker-0.153.4/models.json", import.meta.url)),
+    ownerUid: process.getuid!(), ownerGid: process.getgid!()});
+  const raw = new DockerKernelHostCustody(5000);
+  const handle = await reserveWorkspace(t, raw, input(f.f.proof.operationId, f.f.proof.attemptId,
+    f.record.boundary.workspaceRef, f.record.privateRootPath));
+  const roots = createHostPrivateRootOwnerFactory(f.f.proof);
+  const dependencies = {...f.f.dependencies, create: {...f.f.dependencies.create,
+    workspaceSource: f.record.boundary.workspaceRef, privateRootSource: f.record.privateRootPath}};
+  const resources = createDockerHostReservationOwners({roots, raw, dependencies, nativeFiles,
+    custodyRef: handle.custodyRef, signal: f.f.controller.signal, cutoffProvider() {},
+    lock: imageLock(dependencies.create.imageDigest)});
+  const finalizer = createDockerCodexNativeBrokerFinalizer({...f.input, nativeFiles,
+    cutoffNativeFiles: nativeFiles.cutoff.bind(nativeFiles)});
+  const running = f.start(finalizer, value => value, resources.hooks.captureHost);
+  resources.attach(running.owner);
+  const root = roots.get(handle.custodyRef)!;
+  const entered = Promise.withResolvers<void>(); const gate = Promise.withResolvers<void>();
+  const open = fs.open;
+  t.mock.method(fs, "open", async (...args: Parameters<typeof fs.open>) => {
+    const file = await open(...args);
+    if (nativeFiles.snapshot().installed && String(args[0]).endsWith("config.toml")) {
+      entered.resolve(); await gate.promise;
+    }
+    return file;
+  });
+  syncBuiltinESMExports();
+  t.after(() => {gate.resolve(); t.mock.restoreAll(); syncBuiltinESMExports();});
+  const preparing = running.prepare();
+  await entered.promise;
+  await nativeFiles.quiesce();
+  assert.equal(nativeFiles.snapshot().retainedHandles, 0);
+  assert.equal(nativeFiles.snapshot().debt, true);
+  const containment = raw.requestContainment({...handle, operationId: f.f.proof.operationId, attemptId: f.f.proof.attemptId});
+  await new Promise<void>(resolve => {setImmediate(resolve);});
+  assert.equal(root.snapshot().history.includes("exact-entry-remove-attempt"), false);
+  await fs.stat(f.record.privateRootPath);
+  gate.resolve();
+  assert.notEqual((await preparing).kind, "prepared");
+  await containment;
+  assert.equal(root.snapshot().evidence.status, "deleted");
+  assert.equal(nativeFiles.snapshot().debt, false);
+  await assert.rejects(fs.stat(f.record.privateRootPath), {code: "ENOENT"});
 });

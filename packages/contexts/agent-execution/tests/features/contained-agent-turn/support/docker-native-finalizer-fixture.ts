@@ -18,7 +18,7 @@ type FinishInput = Parameters<NonNullable<CreateDockerCodexHostKernelOwnerOption
 /** Component evidence only: new disposable native files plus the actual Docker
  * lifecycle/sole init reader, HTTP resources, V4, native issuers and broker.
  * Engine, listener, route enforcement, PA/RS and upstream IO are synthetic. */
-export const nativeFinalizerFixture = async (t: TestContext) => {
+export const nativeFinalizerFixture = async (t: TestContext, executablePath = "/usr/local/bin/codex") => {
   const f = await postClaimFixture(t);
   const root = realpathSync(mkdtempSync("/tmp/ar69-native-finalizer-component-"));
   t.after(() => rmSync(root, {recursive: true, force: true}));
@@ -43,7 +43,7 @@ export const nativeFinalizerFixture = async (t: TestContext) => {
       {name: "chatgpt-account-id", valueBytes: Buffer.from("synthetic-account")},
     ];}},
   };
-  const options = {boundary, executablePath: "/usr/local/bin/codex", intentMode: "analysis" as const,
+  const options = {boundary, executablePath, intentMode: "analysis" as const,
     platformTarget: {architecture: "x64", platform: "linux"} as const, privateRootPath, tmpDir};
   const originalPlan = createCodexAppServerFinalizableLaunchPlan(options, snapshot);
   const record = {...options, credentialOutputInventory: {credentialBindingDigest: "synthetic-binding",
@@ -59,10 +59,11 @@ export const nativeFinalizerFixture = async (t: TestContext) => {
     writeFileSync(`${codexHome}/config.toml`, renderCodexNativeBrokerConfig(recipe), {mode: 0o600});
     writeFileSync(`${codexHome}/models.json`, readFileSync(new URL("../../../fixtures/codex-native-broker-0.153.4/models.json", import.meta.url)), {mode: 0o600});
   }};
-  const input = {session, nativeFiles, routeAdmission: f.dependencies.routeAdmission!};
+  const input = {session, nativeFiles, cutoffNativeFiles() {}, routeAdmission: f.dependencies.routeAdmission!};
   let finishInput: FinishInput | undefined; let error: unknown;
   let prepareIoCount = 0;
-  const start = (finalizer = createDockerCodexNativeBrokerFinalizer(input), change: (value: FinishInput) => FinishInput = value => value) => {
+  const start = (finalizer = createDockerCodexNativeBrokerFinalizer(input), change: (value: FinishInput) => FinishInput = value => value,
+    captureHost?: NonNullable<Parameters<typeof createDockerLinuxPostClaimOwner>[1]>["captureHost"]) => {
     const owner = createDockerLinuxPostClaimOwner({...f.dependencies,
       create: {...f.dependencies.create, workspaceSource: workspaceRef, privateRootSource: privateRootPath},
       routeAdmission: finalizer.routeAdmission,
@@ -73,6 +74,7 @@ export const nativeFinalizerFixture = async (t: TestContext) => {
         clock: {read: () => ({authorityId: "clock-authority", epoch: "epoch-1", controlTime: 1}),
           within: session.clock.within}}},
     }, {
+      ...(captureHost === undefined ? {} : {captureHost}),
       prepareProviderIo({launch, init}) {
         prepareIoCount += 1;
         return prepareDockerProviderProcessIo({launch, init, expected: {authority: launch.authority,

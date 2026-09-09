@@ -10,6 +10,9 @@ test("reservation identity belongs to the same LiveCustody before and after dele
   const live = f.live();
   assert.equal(f.core.get(custodyRef), undefined);
   assert.equal(live.identity.status, "not-started");
+  assert.ok(live.privateRootCleanupAuthority);
+  assert.equal(live.spawnStatus, "never-started");
+  assert.equal(f.closedPrivateRoots(), 0);
   assert.equal(live.childProcessInstanceSha256, undefined);
   const identity = live.httpReservation.executionSessionIdentity;
   const lifetime = f.preparation.acquire(f.handoff(custodyRef));
@@ -166,6 +169,8 @@ test("release retains ownership during failed cleanup and tombstone/replay canno
   const contained = await f.core.requestContainment({...f.identity, custodyRef});
   assert.equal(contained.kind, "contained");
   if (contained.kind !== "contained") {return;}
+  const authority = f.live().privateRootCleanupAuthority;
+  assert.ok(authority);
   const release = {...f.identity, custodyRef, receiptRef: contained.receiptRef};
   const cleanup = deferred<boolean>(); f.closeWith(() => cleanup.promise);
   const releasing = f.core.release(release);
@@ -173,10 +178,16 @@ test("release retains ownership during failed cleanup and tombstone/replay canno
   assert.equal(f.closedPins(), 0);
   cleanup.resolve(false);
   assert.equal((await releasing).kind, "unproven");
+  assert.equal(f.live().privateRootCleanupAuthority, authority);
+  assert.equal(f.closedPrivateRoots(), 0);
   assert.equal(f.closedPins(), 0);
   assert.ok(f.core.evidence(custodyRef));
   f.closeWith(async () => true);
   assert.equal((await f.core.release(release)).kind, "released");
+  assert.equal(f.live().privateRootCleanupAuthority, undefined);
+  assert.equal(f.closedPrivateRoots(), 1);
+  authority.close();
+  assert.equal(f.closedPrivateRoots(), 1);
   assert.equal(f.closedPins(), 1);
   assert.throws(() => f.preparation.acquire(f.handoff(custodyRef)), /unavailable/u);
   const replay = await f.reserve();
@@ -649,6 +660,8 @@ test("a thrown admitted launch without a returned guardian cannot prove physical
   assert.equal(evidence.closure.status, "unproven");
   assert.equal(f.core.get(custodyRef), undefined);
   assert.ok(f.live().residueAuthority);
+  assert.ok(f.live().privateRootCleanupAuthority);
+  assert.equal(f.closedPrivateRoots(), 0);
   assert.throws(() => f.start(custodyRef), /sealed/u);
 });
 

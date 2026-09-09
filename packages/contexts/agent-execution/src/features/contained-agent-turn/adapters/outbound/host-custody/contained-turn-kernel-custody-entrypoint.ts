@@ -10,6 +10,7 @@ export {
 } from "./egress/host-http-egress-session.js";
 export { createNativeHttpEgressRoute, nativeHttpRequestProfile,
   type NativeHttpRequestProfileId } from "./egress/native-http-request-profile.js";
+export { NodeHttpEgressBoundaryIds } from "./egress/node-http-egress-boundary-ids.js";
 export { NodeTlsHttpEgressError, NodeTlsHttpEgressTransport,
   type NodeTlsHttpEgressTransportOptions } from "./egress/node-tls-http-egress-transport.js";
 export type { HttpEgressRouteFirstWrite,
@@ -25,3 +26,11 @@ export {createImmutableHostCustodyLaunchPlan} from "./host-custody-launch-plan-s
 
 export {hostLaunchFinalizationRecipe} from "./host-custody-finalizable-plan.js";
 export {retainFinalizationHttpResources} from "./host-launch-finalization-validation.js";
+
+export {createNodeHostHttpListener} from "./egress/node-host-http-listener.js";
+export {createNodeHostHttpConnection} from "./egress/node-host-http-connection.js";
+export {NodeHttpEgressTrustedResolver, type NodeHttpEgressTrustedResolverOptions} from "./egress/node-http-egress-trusted-resolver.js";
+
+export {PostgresHttpEgressEvidence, initializePostgresHttpEgressEvidence, type PostgresHttpEgressEvidenceScope} from "./egress/postgres-http-egress-evidence.js";
+
+export {createNodeHostHttpConsumptionJournal} from "./egress/node-host-http-consumption-journal.js";

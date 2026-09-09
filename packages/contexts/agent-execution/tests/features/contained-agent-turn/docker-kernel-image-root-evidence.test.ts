@@ -1,3 +1,4 @@
+import {reserveWorkspace} from "./support/docker-workspace-authority-fixture.ts";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import {dirname, join} from "node:path";
@@ -32,12 +33,10 @@ for (const image of ["same-generation", "wrong-generation", "missing"] as const)
     const plan = createCodexAppServerLaunchPlan({boundary, executablePath: "/usr/local/bin/codex", intentMode: "analysis",
       platformTarget: {platform: "linux", architecture: "x64"}, privateRootPath: create.privateRootSource, tmpDir});
     const raw = new DockerKernelHostCustody(5000);
-    const handle = await raw.reserve({operationId: owner.operationId, attemptId: owner.attemptId, workspaceRef: create.workspaceSource,
+    const handle = await reserveWorkspace(t, raw, {operationId: owner.operationId, attemptId: owner.attemptId, workspaceRef: create.workspaceSource,
       intentMode: "analysis", launchPlan: plan,
       providerBinding: {provider: "codex", binaryRevision: plan.binaryRevision, adapterRevision: "synthetic",
-        capabilityManifestRevision: "synthetic", credentialBindingDigest: "synthetic", providerRouteRef: "synthetic"},
-      workspaceAuthority: {canonicalPath: create.workspaceSource, descriptorPath: create.workspaceSource,
-        identity: {dev: 1n, ino: 2n, mountId: "synthetic"}}});
+        capabilityManifestRevision: "synthetic", credentialBindingDigest: "synthetic", providerRouteRef: "synthetic"}});
     const roots = createHostPrivateRootOwnerFactory(owner);
     const root = roots.create({rootPath: create.privateRootSource, workspacePath: create.workspaceSource,
       operationId: owner.operationId, attemptId: owner.attemptId, custodyRef: handle.custodyRef},

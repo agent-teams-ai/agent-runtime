@@ -1,5 +1,5 @@
 import {captureDockerHttpResourceRecord} from "./docker-http-network-resources.js";
-import {isDeepStrictEqual} from "node:util";
+import {isDeepStrictEqual, types} from "node:util";
 import {assertDockerProviderProcessClaimActive, prepareDockerProviderProcessLaunch, claimDockerProviderProcessLaunch, type DockerHostCustodyLifecycle} from "./docker-host-custody-lifecycle.js";
 import {sameDockerAuthority} from "./docker-host-custody-lifecycle-guards.js";
 import type {DockerContainedTurnInitOptions, DockerContainedTurnInitSession} from "./docker-contained-turn-host-custody.js";
@@ -162,8 +162,14 @@ const prepared = new WeakMap<PreparedDockerProviderIo, Readonly<{
   launch: DockerProviderProcessInput["launch"]; expected: DockerProviderProcessInput["expected"];
   isAdmitted(): boolean; init: DockerProviderProcessInput["init"]; process: DockerProviderProcess; session: DockerContainedTurnInitSession;
 }>>();
+const applyCallback = Reflect.apply;
 const captureInit = (value: DockerProviderProcessInput["init"]): DockerProviderProcessInput["init"] => {
   const options = captureDockerHttpResourceRecord(value);
+  if ((typeof options.isCurrentGeneration !== "function" || types.isProxy(options.isCurrentGeneration))
+    || (options.isObservationActive !== undefined && (typeof options.isObservationActive !== "function" || types.isProxy(options.isObservationActive)))
+    || (options.monotonicNow !== undefined && (typeof options.monotonicNow !== "function" || types.isProxy(options.monotonicNow)))) {
+    throw new TypeError("Docker provider IO requires inert callbacks");
+  }
   const authority = captureDockerHttpResourceRecord(options.authority);
   return Object.freeze({...options, authority: Object.freeze({...authority,
     expectedIdentity: captureDockerHttpResourceRecord(authority.expectedIdentity)})});
@@ -180,16 +186,17 @@ const capturePreparation = <T extends PreparationInput>(value: T): T => {
  * Does not consume the lifecycle's provider-execution claim or mount facts. */
 const prepareIo = (input: PreparationInput, issued: ReturnType<typeof prepareDockerProviderProcessLaunch>): PreparedDockerProviderIo => {
   const expected = Object.freeze({...input.expected, authority: Object.freeze({...input.expected.authority})});
-  const options = input.init;
+  const receiver = input.init;
+  const options = captureInit(receiver);
   const init = Object.freeze({acknowledgementTimeoutMs: options.acknowledgementTimeoutMs,
     maximumStderrBytes: options.maximumStderrBytes, maximumStdoutBytes: options.maximumStdoutBytes,
     readyTimeoutMs: options.readyTimeoutMs,
     ...(options.signal === undefined ? {} : {signal: options.signal}),
     authority: Object.freeze({...options.authority,
     expectedIdentity: Object.freeze({...options.authority.expectedIdentity})}),
-    isCurrentGeneration: options.isCurrentGeneration.bind(options),
-    ...(options.isObservationActive === undefined ? {} : {isObservationActive: options.isObservationActive.bind(options)}),
-    ...(options.monotonicNow === undefined ? {} : {monotonicNow: options.monotonicNow.bind(options)})});
+    isCurrentGeneration: (generation: string) => applyCallback(options.isCurrentGeneration, receiver, [generation]),
+    ...(options.isObservationActive === undefined ? {} : {isObservationActive: () => applyCallback(options.isObservationActive!, receiver, [])}),
+    ...(options.monotonicNow === undefined ? {} : {monotonicNow: () => applyCallback(options.monotonicNow!, receiver, [])})});
   if (!sameDockerAuthority(expected.authority, issued.authority) || expected.custodyRef !== issued.custodyRef ||
       expected.workspaceAuthorityPath !== issued.workspaceAuthorityPath || expected.generation !== init.authority.generation) {
     throw new TypeError("Docker provider process does not match exact launch authority");

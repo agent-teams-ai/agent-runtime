@@ -16,8 +16,12 @@ export interface PreparedHostHttpConsumptionJournal {
   /** Irreversible local seal; retains the process lock until retire. */
   quarantine(): void;
   /** Resource disposal only, never TCP drain, provider containment, or terminal
-   * operation truth. Leaves all generation/tombstone bytes for reconciliation. */
+   * operation truth. Leaves all generation/tombstone bytes for reconciliation.
+   * MUST seal admission synchronously before returning the cleanup promise. */
   retire(): Promise<"retired" | "unknown">;
+  /** Owner-issued physical evidence only. Absence never proves disposal.
+   * Quarantine remains uncertainty even when its seal and closure acknowledge. */
+  disposalEvidence?(): Readonly<{persistedSeal: "retired" | "quarantined" | "unknown"; closed: boolean}>;
 }
 
 export type HostHttpConsumptionPreparation = PreparedHostHttpConsumptionJournal |
@@ -27,6 +31,7 @@ class ConsumptionTail implements HostHttpConsumptionJournal {
   private readonly acknowledged = new Map<string, string>();
   private sealed = false;
   private retired = false;
+  private persistedSeal: "retired" | "quarantined" | "unknown" = "unknown";
   private tailDigest: string;
   private readonly envelopeDigest: string;
 
@@ -81,10 +86,13 @@ class ConsumptionTail implements HostHttpConsumptionJournal {
     try {
       const persisted = this.storage.persistTombstone(consumptionTombstone({ disposition,
         envelopeDigest: this.envelopeDigest, acknowledgedUses: this.acknowledged.size, tailDigest: this.tailDigest }));
+      if (persisted) { this.persistedSeal = disposition; }
       this.retired = disposition === "retired" && persisted;
     } catch { this.retired = false; }
     return this.retired;
   }
+
+  public sealEvidence(): "retired" | "quarantined" | "unknown" { return this.persistedSeal; }
 
   public retire(): boolean {
     if (!this.sealed) {
@@ -129,6 +137,7 @@ export const createNodeHostHttpConsumptionJournal = (input: Readonly<{
     let tail: ConsumptionTail | undefined;
     let contended = false;
     let cleanupSucceeded = true;
+    let cleanupComplete = false;
     let retirement: Promise<"retired" | "unknown"> | undefined;
     const running = (async (): Promise<void> => {
       try {
@@ -148,7 +157,8 @@ export const createNodeHostHttpConsumptionJournal = (input: Readonly<{
           const live = tail;
           ready.resolve(Object.freeze({ kind: "ready", journal: Object.freeze({
             consume: (key: ConsumptionKey, fingerprint: string) => live.consume(key, fingerprint),
-          }), quarantine: () => { live.seal("quarantined"); }, retire: () => {
+          }), disposalEvidence: () => Object.freeze({persistedSeal: live.sealEvidence(),
+            closed: cleanupComplete && cleanupSucceeded}), quarantine: () => { live.seal("quarantined"); }, retire: () => {
             retirement ??= (async (): Promise<"retired" | "unknown"> => {
               const retired = live.retire();
               release.resolve();
@@ -165,6 +175,7 @@ export const createNodeHostHttpConsumptionJournal = (input: Readonly<{
         ready.resolve({ kind: contended ? "busy" : unsupported(error) ? "unsupported" : "unknown" });
       } finally {
         try { await storage?.close(); } catch { cleanupSucceeded = false; }
+        cleanupComplete = true;
       }
     })();
     const result = await ready.promise;

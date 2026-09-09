@@ -79,6 +79,7 @@ export type ClaudeCurrentKernelPlatformTarget =
 export interface ClaudeCurrentKernelOwner {
   readonly custody: ContainedTurnKernelCustodyAdapter;
   readonly provider: ContainedTurnKernelProviderPort;
+  sealAdmission(): void;
   dispose(): void;
 }
 interface PreparedRecord {
@@ -212,5 +213,7 @@ export const createClaudeCurrentKernelOwner = (
     platformTuple,
     ...(options.queryFactory === undefined ? {} : { queryFactory: options.queryFactory }),
   });
-  return Object.freeze({custody, dispose() {disposed = true; records.clear();}, provider});
+  const sealAdmission = (): void => {disposed = true; custody.sealAdmission();};
+  return Object.freeze({custody, sealAdmission,
+    dispose() {sealAdmission();}, provider});
 };

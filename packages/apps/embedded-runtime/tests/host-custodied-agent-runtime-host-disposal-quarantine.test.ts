@@ -28,6 +28,7 @@ test("deadline-reject during Host disposal preserves contained-turn quarantine a
     dependencies as never,
     (() => Object.freeze({
       feature: capability,
+      sealAdmission() {},
       dispose: () => { containedTurnDisposeCalls += 1; },
     })) as never,
     (() => Object.freeze({

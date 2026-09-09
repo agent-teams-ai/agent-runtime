@@ -25,6 +25,7 @@ export const retainedBytes = (name: string) => retained.get(new URL(`codex-nativ
 interface Entry { ino: number; mode: number; directory: boolean; bytes: Buffer; revision: number }
 const entries = new Map<string, Entry>();
 const descriptors = new Map<number, Entry>();
+export const descriptorIsOpen = (descriptor: number) => descriptors.has(descriptor);
 let sequence = 0; let nextInode = 10; let nextDescriptor = 100;
 export const observedPaths: string[] = [];
 export const materialPreimages: string[] = [];
@@ -211,6 +212,9 @@ export const fixture = (mode: "analysis" | "workspace-write" = "analysis") => {
       const lifetime = live.httpReservation.acquire(live, handoff);
       return {live, lifetime, controller, close() {
         live.httpReservation.cutoff(); live.launchAuthority?.close(); bound.retainedWorkspaceAuthority.close();
+        // This in-memory fixture owns teardown, including the independently
+        // retained root handle. Closing it is not a product release or deletion.
+        live.privateRootCleanupAuthority?.close();
       }, bind() {return live.launchBinding.bind(live, lifetime);}};
     },
   };

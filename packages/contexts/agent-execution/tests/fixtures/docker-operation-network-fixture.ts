@@ -18,24 +18,35 @@ type WireCall = Parameters<Client["buffered"]>[0];
 
 /** Synthetic external Engine IO only. No Unix socket, native namespace, provider,
  * filesystem preparation or host network is used by this fixture. */
-export const networkFixture = (subjectOverride: Partial<typeof template> = {}, gateway = "172.30.0.1") => {
+type FixtureSelection = Readonly<{
+  policy?: ReturnType<typeof basePolicy>;
+  create?: ReturnType<typeof createInput>;
+  endpoint?: Readonly<{canonicalSocketPath: string; daemonBootGenerationSha256: string; hostBootGenerationSha256: string}>;
+  info?: Readonly<{ID: string; ServerVersion: string; Driver: string; CgroupDriver: string; CgroupVersion: string}>;
+  containerId?: string;
+}>;
+
+/** The joined product test supplies its actual operation paths, observed Host
+ * boot and synthetic daemon identity. Defaults preserve isolated legacy tests. */
+export const networkFixture = (subjectOverride: Partial<typeof template> = {}, gateway = "172.30.0.1",
+  selected: FixtureSelection = {}) => {
   // The bridge address is whatever the daemon assigned; nothing may assume it.
   const [octetA, octetB] = gateway.split(".");
   const subnet = `${octetA}.${octetB}.0.0/16`; const containerAddress = `${octetA}.${octetB}.0.2`;
-  const policy = basePolicy("/tmp/ar69-r276-synthetic-network");
-  const info = {ID: "synthetic-network-daemon", ServerVersion: "29.6.1", Driver: "overlay2", CgroupDriver: "systemd", CgroupVersion: "2"};
-  const endpoint = {canonicalSocketPath: policy.socketPath, daemonBootGenerationSha256: DAEMON_BOOT, hostBootGenerationSha256: HOST_BOOT};
+  const policy = selected.policy ?? basePolicy("/tmp/ar69-r276-synthetic-network");
+  const info = selected.info ?? {ID: "synthetic-network-daemon", ServerVersion: "29.6.1", Driver: "overlay2", CgroupDriver: "systemd", CgroupVersion: "2"};
+  const endpoint = selected.endpoint ?? {canonicalSocketPath: policy.socketPath, daemonBootGenerationSha256: DAEMON_BOOT, hostBootGenerationSha256: HOST_BOOT};
   const engine = decodeEngineIdentity(info, policy, endpoint);
   const subject = Object.freeze({...template, ...subjectOverride, attempt: Object.freeze({...template.attempt, ...subjectOverride.attempt,
     daemonIdentitySha256: engine.daemonIdentitySha256, daemonBootGenerationSha256: engine.daemonBootGenerationSha256,
     hostIdentitySha256: engine.hostIdentitySha256, hostBootGenerationSha256: engine.hostBootGenerationSha256})});
   const recipe = dockerHttpOperationNetworkRecipe(subject);
   const operationPolicy = {...policy, allowedNetworkName: recipe.name};
-  const create = {...createInput("/tmp/ar69-r276-synthetic-network"), imageDigest: subject.imageDigest,
+  const create = {...(selected.create ?? createInput("/tmp/ar69-r276-synthetic-network")), imageDigest: subject.imageDigest,
     ownerIdentitySha256: dockerCustodyOwnerIdentitySha256(subject.attempt),
     operationNonceSha256: subject.attempt.operationNonceSha256, launchFingerprintSha256: subject.attempt.launchFingerprintSha256};
   const body = encodeCreateRequest(create, operationPolicy) as any;
-  const container = Object.freeze({containerId: v4Hash("actual-operation-container"),
+  const container = Object.freeze({containerId: selected.containerId ?? v4Hash("actual-operation-container"),
     daemonIdentitySha256: engine.daemonIdentitySha256, daemonBootGenerationSha256: engine.daemonBootGenerationSha256,
     hostIdentitySha256: engine.hostIdentitySha256, hostBootGenerationSha256: engine.hostBootGenerationSha256,
     imageDigest: create.imageDigest, operationNonceSha256: create.operationNonceSha256,

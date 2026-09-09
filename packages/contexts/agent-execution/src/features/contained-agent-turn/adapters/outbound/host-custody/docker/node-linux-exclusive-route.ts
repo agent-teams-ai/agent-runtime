@@ -1,3 +1,5 @@
+import {assertNodeLinuxRoutePrivilege} from "./node-linux-route-privilege.js";
+import {sameDockerAuthority} from "./docker-host-custody-lifecycle-guards.js";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { closeSync, constants, fstatSync, openSync, readFileSync, realpathSync, statSync } from "node:fs";
@@ -23,6 +25,19 @@ export class LinuxExclusiveRouteOpeningError extends Error {
   }
 }
 
+const namespaceReadbacks = new WeakMap<LinuxExclusiveRouteOwner, Readonly<{
+  authority: DockerContainerAuthority; endpoint: LinuxExclusiveRouteEndpoint; identity: string; active(): boolean;
+}>>();
+
+/** Projects only descriptor facts retained by this production owner. */
+export const readNodeLinuxRouteNamespace = (owner: LinuxExclusiveRouteOwner,
+  authority: DockerContainerAuthority, endpoint: LinuxExclusiveRouteEndpoint): string => {
+  const retained = namespaceReadbacks.get(owner);
+  if (retained === undefined || !retained.active() || !sameDockerAuthority(authority, retained.authority) ||
+      endpoint.address !== retained.endpoint.address || endpoint.port !== retained.endpoint.port) {throw rejected();}
+  return retained.identity;
+};
+
 // Private production scheduling is mandatory. unref permits Host exit; neither
 // this timer nor performance.now proves Host-loss containment. The kernel set
 // independently expires while the Host is stopped; endpoint quarantine and
@@ -35,7 +50,7 @@ const scheduleCutoff = (delayMs: number, callback: () => void): (() => void) => 
 };
 const call = () => ({deadlineEpochMs: Date.now() + 5_000, signal: new AbortController().signal});
 const assertPlatform = (): void => {
-  if (process.platform !== "linux" || process.arch !== "x64" || process.geteuid?.() !== 0) {throw rejected();}
+  assertNodeLinuxRoutePrivilege();
 };
 
 const openPinnedTool = (pin: LinuxRouteToolPin): number => {
@@ -83,6 +98,7 @@ export const openNodeLinuxExclusiveRoute = async (input: Readonly<{
   const seccomp = linuxExclusiveRouteSeccomp();
   const engine = input.engine;
   const authority = Object.freeze({...input.authority});
+  const endpoint = Object.freeze({...input.endpoint});
   const observation = await engine.inspect(authority, call());
   if (observation.existence !== "present" || !observation.state.running || observation.state.hostPid < 1 ||
       observation.resources.seccompProfileSha256 !== seccomp.sha256 || observation.engine.cgroupVersion !== "2") {throw rejected();}
@@ -90,24 +106,27 @@ export const openNodeLinuxExclusiveRoute = async (input: Readonly<{
   const nsPath = `/proc/${pid}/ns/net`;
   const namespace = openSync(nsPath, constants.O_RDONLY);
   const opened = [namespace];
+  let released = false;
   const release = (): void => {
+    released = true;
     let failed = false;
     for (const fd of opened.splice(0).toReversed()) {try {closeSync(fd);} catch {failed = true;}}
     if (failed) {throw rejected();}
   };
   try {
-    const identity = fstatSync(namespace);
-    const host = statSync("/proc/self/ns/net");
+    const identity = fstatSync(namespace, {bigint: true});
+    const host = statSync("/proc/self/ns/net", {bigint: true});
     if (identity.dev === host.dev && identity.ino === host.ino) {throw rejected();}
     const nsenter = openPinnedTool(input.nsenter); opened.push(nsenter);
     const nft = openPinnedTool(input.nft); opened.push(nft);
     const current = await engine.inspect(authority, call());
-    const pathIdentity = statSync(nsPath);
+    const pathIdentity = statSync(nsPath, {bigint: true});
     if (current.existence !== "present" || !current.state.running || current.state.hostPid !== pid ||
         current.state.startedAt !== observation.state.startedAt ||
         pathIdentity.dev !== identity.dev || pathIdentity.ino !== identity.ino) {throw rejected();}
     const invoke = (args: readonly string[]): Uint8Array => {
       try {
+        assertPlatform();
         return execFileSync("/proc/self/fd/3", ["--net=/proc/self/fd/5", "--", "/proc/self/fd/4", ...args], {
           env: {PATH: "/usr/sbin:/usr/bin", LANG: "C", LC_ALL: "C"},
           maxBuffer: 65_536, timeout: 1_000,
@@ -115,7 +134,7 @@ export const openNodeLinuxExclusiveRoute = async (input: Readonly<{
         });
       } catch {throw rejected();}
     };
-    return installLinuxExclusiveRoute({...input, lifetimeMs, startedAtMs, monotonicNow: () => performance.now(), scheduleCutoff, kernel: {
+    const owner = installLinuxExclusiveRoute({...input, endpoint, lifetimeMs, startedAtMs, monotonicNow: () => performance.now(), scheduleCutoff, kernel: {
       // nft's file reader rejects Node's socket-backed stdin. Its command buffer
       // accepts the same bounded JSON directly, without a shell or temporary file.
       transact: transaction => {invoke(["-j", transaction]);},
@@ -123,6 +142,9 @@ export const openNodeLinuxExclusiveRoute = async (input: Readonly<{
       containerRemoved: async () => (await engine.inspect(authority, call())).existence === "absent",
       releaseNamespace: release,
     }});
+    namespaceReadbacks.set(owner, Object.freeze({authority, endpoint,
+      identity: `netns:${identity.dev}:${identity.ino}`, active: () => !released}));
+    return owner;
   } catch {
     // A failed installation has attempted a deny-only cut. Retain descriptors
     // even on opening failure; the campaign must remove this exact container.

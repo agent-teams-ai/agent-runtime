@@ -31,12 +31,17 @@ export {
   createDockerLinuxPostClaimPreparation,
   createNodeContainedTurnArtifacts,
   createNodeContainedTurnWorkspace,
+  createNodeContainedTurnWorkspaceOwner,
+  type NodeContainedTurnWorkspaceOwner,
   createHostHttpEgressSession,
   createNativeHttpEgressRoute,
   nativeHttpRequestProfile,
   readContainedTurnRouteEnforcementTarget,
   CONTAINED_TURN_ROUTE_QUALIFICATION_DIMENSIONS,
   NodeTlsHttpEgressError,
+  NodeHttpEgressBoundaryIds,
+  PostgresHttpEgressEvidence, initializePostgresHttpEgressEvidence, type PostgresHttpEgressEvidenceScope,
+  NodeHttpEgressTrustedResolver, type NodeHttpEgressTrustedResolverOptions,
   NodeTlsHttpEgressTransport,
   type NodeTlsHttpEgressTransportOptions,
   type HttpEgressRouteFirstWrite,
@@ -83,6 +88,18 @@ export {
   type PostgresContainedTurnOperationStoreOptions,
 } from "./features/contained-agent-turn/internal.js";
 
-export {createDockerCodexHostKernelOwner, type CreateDockerCodexHostKernelOwnerOptions} from "./features/contained-agent-turn/internal.js";
+export {createDockerCodexHostKernelOwner, type CreateDockerCodexHostKernelOwnerOptions, type DockerCodexHostPreparationSelection} from "./features/contained-agent-turn/internal.js";
 export { createContainedTurnOperationProviderAccessPort, type OuterContainedTurnProviderAccessOperation, createContainedTurnSecurityAcceptancePort, type OuterContainedTurnSecurityAcceptance, type ContainedTurnSecurityAcceptanceProfile } from "./features/contained-agent-turn/internal.js";
 export {createDockerCodexNativeBrokerFinalizer, type DockerCodexNativeBrokerFinalizerInput} from "./features/contained-agent-turn/internal.js";
+
+export {createNodeHostHttpListener, createNodeHostHttpConnection, hostHttpAbortOperations} from "./features/contained-agent-turn/internal.js";
+export {createNodeDockerDeploymentRecipe, type NodeDockerConsumptionReferences, type DockerHttpConsumptionReferences, type NodeDockerConsumptionRecipe, type NodeDockerDeploymentRecipe, type NodeDockerDeploymentRecipeInput} from "./features/contained-agent-turn/internal.js";
+
+export {bindContainedTurnRouteEnforcement, readContainedTurnSelectedRouteAdmission}
+  from "./features/contained-agent-turn/internal.js";
+
+export {createCodexNativeBrokerFileInstaller, type CodexNativeBrokerFileInstaller,
+  type CodexNativeBrokerFileInstallerOptions, type CodexNativeBrokerFileInstallerSnapshot} from "./features/contained-agent-turn/internal.js";
+
+export {createDeferredCodexNativeBrokerFiles, type DeferredCodexNativeBrokerFiles,
+  type DeferredCodexNativeBrokerFilesOptions} from "./features/contained-agent-turn/internal.js";

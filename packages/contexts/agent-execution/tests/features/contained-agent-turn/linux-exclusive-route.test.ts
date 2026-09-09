@@ -9,7 +9,7 @@ import { linuxExclusiveRouteRules, linuxExclusiveRouteReadback, linuxExclusiveRo
   "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-policy.js";
 import { installLinuxExclusiveRoute, type LinuxExclusiveRouteBinding } from
   "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-owner.js";
-import { openNodeLinuxExclusiveRoute, LinuxExclusiveRouteOpeningError } from
+import { readNodeLinuxRouteNamespace, openNodeLinuxExclusiveRoute, LinuxExclusiveRouteOpeningError } from
   "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/node-linux-exclusive-route.js";
 
 const endpoint = {address: "172.30.0.1", port: 18443};
@@ -429,19 +429,33 @@ test("independent teardown revokes first, verifies removal, and quarantines all 
 
 // Intercept Node builtins only inside the test process. No root access, tool,
 // namespace, Docker transport, or injectable production command runner is used.
-const nodeFixture = (t: TestContext, options: {replaceTools?: boolean; drift?: "inode" | "device" | "pid" | "start";
+const nodeFixture = (t: TestContext, options: {uid?: number; effectiveUid?: number; capabilities?: string; procFault?: "mapping" | "owner" | "oversized"; replaceTools?: boolean; drift?: "inode" | "device" | "pid" | "start";
   closeFailure?: boolean; hashDrift?: boolean; scheduleFailure?: boolean; unrefFailure?: boolean; prepareDelayMs?: number} = {}) => {
   const timer = fakeTimer(); let unrefs = 0;
   const state = persistentKernel({now: timer.now}); const closed: number[] = []; const invocations: any[] = [];
   const files = new Map([["/synthetic/nsenter", Buffer.from("pinned-nsenter")], ["/synthetic/nft", Buffer.from("pinned-nft")]]);
   const descriptors = new Map<number, {path: string; bytes: Buffer}>();
+  const uid = options.uid ?? 0;
+  const caps = options.capabilities ?? "0000000000281004";
+  const procFiles = new Map([
+    ["/proc/self/uid_map", Buffer.from("0 0 4294967295\n")],
+    ["/proc/self/gid_map", Buffer.from("0 0 4294967295\n")],
+    ["/proc/self/status", Buffer.from(`Uid: ${uid} ${uid} ${uid} ${uid}\nGid: ${uid} ${uid} ${uid} ${uid}\n` +
+      ["CapEff", "CapPrm", "CapInh", "CapAmb"].map(name => `${name}: ${caps}\n`).join(""))],
+  ]);
+  if (options.procFault === "mapping") {procFiles.set("/proc/self/uid_map", Buffer.from("0 1000 1\n"));}
+  if (options.procFault === "oversized") {procFiles.set("/proc/self/status", Buffer.alloc(16385, 65));}
+  const offsets = new Map<number, number>();
+  let nextProcFd = 1000;
   let nextFd = 40; let inspections = 0; let removed = false; let toolFailure: string | undefined;
   let hashed = false;
   const pin = (path: string) => ({path, sha256: createHash("sha256").update(files.get(path)!).digest("hex")});
   const nsenter = pin("/synthetic/nsenter"); const nft = pin("/synthetic/nft");
-  const namespaceIdentity = {dev: 4, ino: 100};
+  const namespaceIdentity = {dev: 4n, ino: 9007199254740993n};
   t.after(() => {t.mock.restoreAll(); syncBuiltinESMExports();});
-  t.mock.method(process, "geteuid", () => 0);
+  for (const name of ["getuid", "geteuid", "getgid", "getegid"] as const) {
+    t.mock.method(process, name, () => name === "geteuid" ? options.effectiveUid ?? uid : uid);
+  }
   t.mock.method(performance, "now", timer.now);
   t.mock.method(timers, "setTimeout", (callback: () => void, delay: number) => {
     if (options.scheduleFailure) {throw new Error("synthetic scheduling failure");}
@@ -453,27 +467,35 @@ const nodeFixture = (t: TestContext, options: {replaceTools?: boolean; drift?: "
   t.mock.method(fs, "realpathSync", (path: string) => path);
   t.mock.method(fs, "openSync", (path: string, flags: number) => {
     const namespace = path === "/proc/321/ns/net";
-    assert.equal(namespace || files.has(path), true);
+    assert.equal(namespace || files.has(path) || procFiles.has(path), true);
     assert.equal(flags, namespace ? fs.constants.O_RDONLY : fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
-    const fd = nextFd++; descriptors.set(fd, {path, bytes: files.get(path) ?? Buffer.alloc(0)}); return fd;
+    const fd = procFiles.has(path) ? nextProcFd++ : nextFd++;
+    descriptors.set(fd, {path, bytes: procFiles.get(path) ?? files.get(path) ?? Buffer.alloc(0)}); return fd;
   });
   t.mock.method(fs, "fstatSync", (fd: number) => {
     const file = descriptors.get(fd); assert.ok(file);
     if (file.path === "/proc/321/ns/net") {return namespaceIdentity;}
-    return {isFile: () => true, uid: 0, nlink: 1, mode: 0o100755, size: file.bytes.length,
+    return {isFile: () => true, uid: options.procFault === "owner" && (offsets.get(fd) ?? 0) > 0 ? 1001 : 0, gid: 0, dev: 1, ino: fd, nlink: 1, mode: 0o100755, size: file.bytes.length,
       mtimeMs: options.hashDrift && hashed ? 2 : 1, ctimeMs: 1};
+  });
+  t.mock.method(fs, "readSync", (fd: number, buffer: Buffer, offset: number, length: number) => {
+    const file = descriptors.get(fd); assert.ok(file); assert.ok(procFiles.has(file.path));
+    const position = offsets.get(fd) ?? 0;
+    const count = file.bytes.copy(buffer, offset, position, position + Math.min(length, 127));
+    offsets.set(fd, position + count); return count;
   });
   t.mock.method(fs, "readFileSync", (fd: number) => {
     assert.equal(typeof fd, "number"); hashed = true; return descriptors.get(fd)!.bytes;
   });
   t.mock.method(fs, "statSync", (path: string) => {
-    if (path === "/proc/self/ns/net") {return {dev: 4, ino: 1};}
+    if (path === "/proc/self/ns/net") {return {dev: 4n, ino: 1n};}
     assert.equal(path, "/proc/321/ns/net");
-    return {...namespaceIdentity, ...(options.drift === "inode" ? {ino: 101} : {}),
-      ...(options.drift === "device" ? {dev: 5} : {})};
+    return {...namespaceIdentity, ...(options.drift === "inode" ? {ino: 101n} : {}),
+      ...(options.drift === "device" ? {dev: 5n} : {})};
   });
   t.mock.method(fs, "closeSync", (fd: number) => {
-    closed.push(fd); assert.ok(descriptors.has(fd));
+    if (fd < 1000) {closed.push(fd);}
+    assert.ok(descriptors.has(fd));
     if (options.closeFailure && fd === 42) {throw new Error("synthetic descriptor close failure");}
     descriptors.delete(fd);
   });
@@ -514,7 +536,7 @@ const nodeFixture = (t: TestContext, options: {replaceTools?: boolean; drift?: "
         startedAt: inspections > 1 && options.drift === "start" ? "different" : "start:1"},
       resources: {seccompProfileSha256: linuxExclusiveRouteSeccomp().sha256}, engine: {cgroupVersion: "2"}} as any;
   }};
-  return {...state, closed, invocations, descriptors, timer, unrefs: () => unrefs,
+  return {...state, authority, closed, invocations, descriptors, timer, inspections: () => inspections, unrefs: () => unrefs,
     open: () => openNodeLinuxExclusiveRoute({authority, binding, endpoint, engine, lifetimeMs: 10_000, nsenter, nft}),
     remove: () => {removed = true;}, failNextTool: (code: string) => {toolFailure = code;}};
 };
@@ -654,4 +676,60 @@ test("Node preparation crossing the lease publishes cleanup only and never creat
   assert.deepEqual(f.closed, []);
   f.remove(); assert.equal(await error.releaseAfterContainerRemoval(), "quarantined");
   assert.deepEqual(f.closed, [42, 41, 40]);
+});
+
+test("production namespace readback is exact, owner-bound and unavailable after release", nodeOnly, async t => {
+  const f = nodeFixture(t); const owner = await f.open();
+  assert.equal(readNodeLinuxRouteNamespace(owner, f.authority, endpoint), "netns:4:9007199254740993");
+  assert.throws(() => readNodeLinuxRouteNamespace({...owner}, f.authority, endpoint));
+  assert.throws(() => readNodeLinuxRouteNamespace(owner, {...f.authority, containerId: "foreign"}, endpoint));
+  assert.throws(() => readNodeLinuxRouteNamespace(owner, f.authority, {...endpoint, port: endpoint.port + 1}));
+  f.remove(); assert.equal(await owner.releaseAfterContainerRemoval(), "closed");
+  assert.throws(() => readNodeLinuxRouteNamespace(owner, f.authority, endpoint));
+});
+
+test("failed production installation exposes cleanup only, never a namespace readback", nodeOnly, async t => {
+  const f = nodeFixture(t, {scheduleFailure: true});
+  const failure = await f.open().catch(error => error);
+  assert.ok(failure instanceof LinuxExclusiveRouteOpeningError);
+  assert.throws(() => readNodeLinuxRouteNamespace(failure as never, f.authority, endpoint));
+  f.remove(); await failure.releaseAfterContainerRemoval();
+});
+
+
+test("Node route admits a same-UID capability Host with descriptor custody intact", nodeOnly, async t => {
+  const f = nodeFixture(t, {uid: 1000});
+  const owner = await f.open();
+  assert.equal(owner.reserveFirstWrite(binding, "request:positive-uid").consume(), true);
+  assert.ok(f.invocations.length > 0);
+  f.remove();
+  await owner.releaseAfterContainerRemoval();
+  assert.equal(f.descriptors.size, 0);
+});
+
+test("Node route rejects a positive-UID Host missing capabilities before inspecting Docker", nodeOnly, async t => {
+  const f = nodeFixture(t, {uid: 1000, capabilities: "0000000000000000"});
+  await assert.rejects(f.open());
+  assert.equal(f.invocations.length, 0);
+  assert.equal(f.inspections(), 0);
+  assert.equal(f.descriptors.size, 0);
+  assert.deepEqual(f.closed, []);
+});
+
+
+for (const procFault of ["mapping", "owner", "oversized"] as const) {
+  test(`Node route fails closed on procfs ${procFault}`, nodeOnly, async t => {
+    const f = nodeFixture(t, {uid: 1000, procFault});
+    await assert.rejects(f.open());
+    assert.equal(f.inspections(), 0);
+    assert.equal(f.invocations.length, 0);
+    assert.equal(f.descriptors.size, 0);
+  });
+}
+
+test("Node route rejects mixed real/effective identity before observation", nodeOnly, async t => {
+  const f = nodeFixture(t, {uid: 1000, effectiveUid: 0});
+  await assert.rejects(f.open());
+  assert.equal(f.inspections(), 0);
+  assert.equal(f.descriptors.size, 0);
 });

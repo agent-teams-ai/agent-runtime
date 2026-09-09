@@ -76,6 +76,7 @@ export class DockerHttpNetworkResources implements HostHttpEgressV4ObservationOw
   }
   /** Detached validated recipe for composition; never a physical observation. */
   public get subject(): HostHttpEgressV4Subject {return this.#subject;}
+  public get listenerContext() {return this.#network.listenerContext;}
   public get networkName(): string {return this.#network.name;}
   public get signal(): AbortSignal {return this.#cut.signal;}
   public readObservation(token: object): HostHttpEgressV4Observation | undefined {return this.#tokens.get(token);}
@@ -147,6 +148,14 @@ export class DockerHttpNetworkResources implements HostHttpEgressV4ObservationOw
       this.#check(call);
       return Object.freeze({networkName: this.networkName, gateway: observed.gateway});
     } catch (error) {await this.#uncertain(); throw error;}
+  }
+
+  /** Retain the real launch authority before listener open; publish no membership evidence. */
+  public retainContainer(input: DockerContainerAuthority): void {
+    const authority = validateAuthorityShape(input);
+    if (authority.imageDigest !== this.#subject.imageDigest) {throw rejected();}
+    retainContainer.call(this.#network, authority);
+    this.#networkAbsent = false;
   }
 
   public observeContainer(input: DockerContainerAuthority, invocation: DockerEngineCall): Promise<void> {

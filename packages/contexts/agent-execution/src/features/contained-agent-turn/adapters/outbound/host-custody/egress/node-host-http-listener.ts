@@ -95,6 +95,13 @@ export const createNodeHostHttpListener = (input: NodeHostHttpListenerConfig, cl
       return custody.open();
     },
     sealAdmission(): void {sealed = true; custody?.sealAdmission();},
+    /** Normal completion only: prevent new consumers while retaining active IO
+     * and the endpoint. Cancellation and the original operation deadline still
+     * hard-cut immediately. This is settlement, not physical release proof. */
+    settleAccepted(): Promise<Readonly<{state: "settled" | "unknown"}>> {
+      sealed = true;
+      return custody?.settleAccepted() ?? Promise.resolve(Object.freeze({state: "settled"}));
+    },
     observe(): NodeHostHttpListenerObservation {
       return custody?.observe() ?? observation({ openState: "not-attempted", listenerState: "not-attempted",
         admissionSealed: sealed, nativeBindPending: false, closeRequested: emptyClose !== undefined,
@@ -125,6 +132,8 @@ class ListenerCustody {
   #consumerPending = false;
   #busy = false;
   #sealed = false;
+  #draining = false;
+  #settlement: Promise<Readonly<{state: "settled" | "unknown"}>> | undefined;
   #actualClose = false;
   #published = false;
   #bindPending = false;
@@ -179,7 +188,7 @@ class ListenerCustody {
     else if (this.#bindPending) {listenerState = this.#openState === "failed" ? "unknown" : "pending";}
     else if (this.#server.listening) {listenerState = "open";}
     else {listenerState = this.#actualClose ? "closed" : "unknown";}
-    return observation({ openState: this.#openState, listenerState, admissionSealed: this.#sealed,
+    return observation({ openState: this.#openState, listenerState, admissionSealed: this.#sealed || this.#draining,
       nativeBindPending: this.#bindPending, closeRequested: this.#closePromise !== undefined,
       serverCloseAcknowledged: listenerState === "closed",
       sockets: { observed: this.#socketCloseEvents + this.#sockets.size, closeEvents: this.#socketCloseEvents,
@@ -203,7 +212,10 @@ class ListenerCustody {
     this.#ready.resolve();
   };
   readonly #failed = (): void => {this.sealAdmission();};
-  readonly #dropped = (): void => {this.#droppedWithoutSocket += 1; this.#failed();};
+  readonly #dropped = (): void => {
+    this.#droppedWithoutSocket += 1;
+    if (!this.#draining) {this.#failed();}
+  };
   readonly #aborted = (): void => {this.sealAdmission();};
   readonly #onClose = (): void => {
     if (!this.#bindPending && this.#server?.listening === false) {
@@ -217,6 +229,7 @@ class ListenerCustody {
     this.#sockets.set(socket, closed.promise);
     socket.once("close", () => {this.#socketCloseEvents += 1; this.#sockets.delete(socket); closed.resolve();})
       .on("error", closedErrorSink);
+    if (this.#draining && !this.#sealed) {socket.destroy(); return;}
     if (!this.#published || this.#sealed || this.#busy || this.#cutoff.signal.aborted || !this.#live(this.#config.deadline)) {
       socket.destroy(); this.#failed(); return;
     }
@@ -235,6 +248,25 @@ class ListenerCustody {
     finally {this.#consumerPending = false;}
     if (!socket.destroyed) {socket.destroy(); this.#failed();}
     await closed;
+  }
+
+  public settleAccepted(): Promise<Readonly<{state: "settled" | "unknown"}>> {
+    if (this.#settlement !== undefined) {return this.#settlement;}
+    this.#draining = true;
+    this.#settlement = this.#settleAccepted();
+    return this.#settlement;
+  }
+
+  async #settleAccepted(): Promise<Readonly<{state: "settled" | "unknown"}>> {
+    try {
+      if (!this.#published || this.#sealed || this.#cutoff.signal.aborted) {throw failure();}
+      await this.#clock.within(this.#config.deadline, async () => {await this.#work;}, this.#cutoff.signal);
+      if (this.#sealed || this.#cutoff.signal.aborted || this.#busy || !this.#live(this.#config.deadline)) {throw failure();}
+      return Object.freeze({state: "settled"});
+    } catch {
+      this.sealAdmission();
+      return Object.freeze({state: "unknown"});
+    }
   }
 
   public sealAdmission(): void {

@@ -6,7 +6,7 @@ import type { createNodeHostHttpConsumptionJournal, PreparedHostHttpConsumptionJ
 import { prepareAuthenticatedHostHttpEgressSession, type HostHttpEgressSessionDependencies } from "./egress/host-http-egress-session.js";
 import { createHostHttpLocalCutOwner, type HostHttpLocalCutInput } from "./egress/host-http-local-cut-owner.js";
 
-type ListenerRecipe = ReturnType<typeof createNodeHostHttpListener>;
+type ListenerRecipe = Omit<ReturnType<typeof createNodeHostHttpListener>, "settleAccepted">;
 type ConsumptionRecipe = ReturnType<typeof createNodeHostHttpConsumptionJournal>;
 type Ingress = ReturnType<typeof prepareAuthenticatedHostHttpEgressSession>;
 type Session = ReturnType<Ingress["bind"]>;
@@ -68,6 +68,7 @@ export class NodeCustodyHttpResources {
   #entered = false;
   #cut = false;
   #uncertain = false;
+  #journalUncertain = false;
   #listenerOwned = false;
   #listener: NodeHostHttpListener | undefined;
   #journal: PreparedHostHttpConsumptionJournal | undefined;
@@ -81,6 +82,7 @@ export class NodeCustodyHttpResources {
   #journalRetired = false;
   #listenerCleanup: Promise<void> | undefined;
   #listenerClosed = false;
+  #listenerReleaseRecorded = false;
   #cleanup: Promise<boolean> | undefined;
 
   public constructor(reservation: HostCustodyHttpResourceOwner, controller: AbortController) {
@@ -137,12 +139,17 @@ export class NodeCustodyHttpResources {
       if (intent.kind !== "recorded") {throw rejected();}
       this.#listenerOwned = true;
       if (this.#cut) {return Object.freeze({kind: "unproven"});}
-      // Both pending slots exist before either factory can throw or reenter.
-      const opened = Promise.withResolvers<void>(); const prepared = Promise.withResolvers<void>();
-      this.#listenerOpen = opened.promise; this.#consumptionPrepare = prepared.promise;
+      // Own each flight before invoking it. Consumption observes the actual
+      // listener identity, which is unavailable until open acknowledges success.
+      const opened = Promise.withResolvers<void>();
+      this.#listenerOpen = opened.promise;
       void this.#openListener().finally(() => opened.resolve());
+      await this.#listenerOpen;
+      if (this.#cut || this.#listener === undefined) {return Object.freeze({kind: "unproven"});}
+      const prepared = Promise.withResolvers<void>();
+      this.#consumptionPrepare = prepared.promise;
       void this.#prepareConsumption().finally(() => prepared.resolve());
-      await Promise.all([this.#listenerOpen, this.#consumptionPrepare]);
+      await this.#consumptionPrepare;
       if (this.#cut || this.#listener === undefined || this.#journal === undefined) {return Object.freeze({kind: "unproven"});}
       return Object.freeze({kind: "prepared", address: this.#listener.address, journal: this.#journal.journal});
     } catch {
@@ -162,22 +169,26 @@ export class NodeCustodyHttpResources {
     if (this.#cut) {return;}
     try {
       const prepared = await this.#input!.consumption.prepare();
-      if (prepared.kind !== "ready") {this.#uncertain = true; this.cutoff(); return;}
+      if (prepared.kind !== "ready") {this.#journalUncertain = true; this.cutoff(); return;}
       this.#journal = prepared;
-      if (this.#cut) {this.#quarantineJournal();}
-    } catch {this.#uncertain = true; this.cutoff();}
+      if (this.#cut) {this.#retireJournal(true);}
+    } catch {this.#journalUncertain = true; this.cutoff();}
   }
 
-  #quarantineJournal(): void {
+  #retireJournal(quarantine = false): void {
     if (this.#journal === undefined || this.#retirement !== undefined) {return;}
     const completion = Promise.withResolvers<void>();
     this.#retirement = completion.promise;
-    try {this.#journal.quarantine();} catch {this.#uncertain = true;}
+    if (quarantine) {
+      this.#journalUncertain = true;
+      try {this.#journal.quarantine();} catch {this.#journalUncertain = true;}
+    }
+    // Healthy retirement seals synchronously; actual journal uncertainty stays sealed.
     // Own retirement before calling it, including synchronous failures/reentrancy.
     try {
       void this.#journal.retire().then(result => {this.#journalRetired = result === "retired"; return this.#journalRetired;},
-        () => {this.#uncertain = true;}).finally(() => completion.resolve());
-    } catch {this.#uncertain = true; completion.resolve();}
+        () => {this.#journalUncertain = true;}).finally(() => completion.resolve());
+    } catch {this.#journalUncertain = true; completion.resolve();}
   }
 
   public cutoff(): void {
@@ -187,8 +198,16 @@ export class NodeCustodyHttpResources {
     try {this.#session?.close();} catch {this.#uncertain = true;}
     try {this.#input?.localCut.close();} catch {this.#uncertain = true;}
     try {this.#input?.listener.sealAdmission();} catch {this.#uncertain = true;}
-    this.#quarantineJournal();
+    this.#retireJournal();
     this.#reservation.cutoff();
+  }
+
+  /** Private owner outcome: native readback cannot discharge deployment debt.
+   * Journal retirement remains part of aggregate release only. */
+  public async cleanupOutcome(): Promise<Readonly<{released: boolean; dependenciesReleased: boolean}>> {
+    const released = await this.cleanup();
+    return Object.freeze({released, dependenciesReleased: !this.#uncertain && !this.#binding &&
+      (!this.#listenerOwned || this.#listenerClosed)});
   }
 
   public cleanup(): Promise<boolean> {
@@ -207,11 +226,14 @@ export class NodeCustodyHttpResources {
       // Conflict/missing observations retain the endpoint. A later cleanup may
       // try again after the EXISTING observer records cutoff/socket/exact removal.
       const input = this.#input!;
-      let recorded;
-      try {
-        recorded = await input.listenerLifecycle.recordRelease();
-      } catch {return false;}
-      if (recorded.kind !== "recorded") {this.#uncertain = true; return false;}
+      if (!this.#listenerReleaseRecorded) {
+        let recorded;
+        try {
+          recorded = await input.listenerLifecycle.recordRelease();
+        } catch {return false;}
+        if (recorded.kind !== "recorded") {this.#uncertain = true; return false;}
+        this.#listenerReleaseRecorded = true;
+      }
       const completion = Promise.withResolvers<void>();
       this.#listenerCleanup = completion.promise;
       try {
@@ -220,7 +242,9 @@ export class NodeCustodyHttpResources {
       } catch {this.#uncertain = true; completion.resolve();}
     }
     await this.#listenerCleanup;
-    return !this.#uncertain && !this.#binding && (!this.#listenerOwned || this.#listenerClosed) &&
+    // Unknown closure keeps the same recipe reachable for a later bounded retry.
+    if (!this.#listenerClosed) {this.#listenerCleanup = undefined;}
+    return !this.#uncertain && !this.#journalUncertain && !this.#binding && (!this.#listenerOwned || this.#listenerClosed) &&
       (this.#journal === undefined || this.#journalRetired);
   }
 }

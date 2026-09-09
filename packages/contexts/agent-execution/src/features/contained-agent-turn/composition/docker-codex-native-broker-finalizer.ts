@@ -1,4 +1,5 @@
-import {custodyDataRecord, hostLaunchFinalizationRecipe, retainFinalizationHttpResources,
+import {retainNativeStartDiagnostic} from "./docker-native-start-diagnostic.js";
+import {custodyDataRecord, isHostCustodyDataCallback, hostLaunchFinalizationRecipe, retainFinalizationHttpResources,
   hostHttpAbortOperations, type HostHttpEgressSessionDependencies}
   from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import {assertDockerPreparedIoLaunch, dockerProviderProcessMountFacts}
@@ -21,6 +22,7 @@ export interface DockerCodexNativeBrokerFinalizerInput {
   /** Installs only the renderer's non-secret config and pinned catalog into the
    * retained private home. File issuance below independently checks exact bytes.
    * This owner retains any partial-file cleanup debt through custody cleanup. */
+  readonly cutoffNativeFiles: () => void;
   readonly nativeFiles: Readonly<{install(recipe: CodexNativeBrokerRecipe): Promise<void>}>;
 }
 const apply = Reflect.apply;
@@ -42,6 +44,9 @@ const assertProviderSelection = (
  * Independent image provenance and private-root closure remain separate owners. */
 export const createDockerCodexNativeBrokerFinalizer = (value: DockerCodexNativeBrokerFinalizerInput) => {
   const input = custodyDataRecord(value);
+  const cutoffMethod = input.cutoffNativeFiles;
+  if (!isHostCustodyDataCallback(cutoffMethod)) {throw rejected();}
+  const cutoffNativeFiles = () => apply(cutoffMethod, value, []);
   const files = custodyDataRecord(input.nativeFiles);
   if (typeof files.install !== "function") {throw rejected();}
   const installMethod = files.install;
@@ -54,6 +59,7 @@ export const createDockerCodexNativeBrokerFinalizer = (value: DockerCodexNativeB
   const sessionInput = retainFinalizationHttpResources(dependencies, expected);
   if (sessionInput.route.requestProfile !== "codex-chatgpt-responses/v1") {throw rejected();}
   const route = retainDockerNativeBrokerRoute(input.routeAdmission);
+  const diagnostic = retainNativeStartDiagnostic(input.nativeFiles);
   let entered = false;
   let cut = false;
   let session: Session | undefined;
@@ -61,10 +67,13 @@ export const createDockerCodexNativeBrokerFinalizer = (value: DockerCodexNativeB
   let subscription: ReturnType<typeof hostHttpAbortOperations.subscribe> | undefined;
   const cutoff = () => {
     cut = true;
+    diagnostic.cutoff();
+    try {cutoffNativeFiles();} finally {
     try {session?.close();} finally {
       try {cutHttp?.();} finally {
         if (subscription !== undefined) {hostHttpAbortOperations.remove(subscription); subscription = undefined;}
       }
+    }
     }
   };
   const finishClaimed: Finish = async supplied => {
@@ -102,25 +111,39 @@ export const createDockerCodexNativeBrokerFinalizer = (value: DockerCodexNativeB
       active();
       subscription = hostHttpAbortOperations.subscribe(claimed.signal, cutoff);
       const endpoint = route.endpoint(request.launch.authority, request.routeFirstWrite, http.gateway);
+      diagnostic.complete(); diagnostic.begin("recipe-create");
       const recipe = createCodexNativeBrokerRecipe({boundary: record.boundary, endpoint,
         profile: "codex-chatgpt", dockerMounts: mounts});
+      diagnostic.complete(); diagnostic.begin("ingress-open");
       const firstWrite = custodyDataRecord(request.routeFirstWrite);
       if (typeof firstWrite.reserve !== "function") {throw rejected();}
       const reserve = firstWrite.reserve.bind(request.routeFirstWrite);
       const ingress = openIngress();
+      diagnostic.complete(); diagnostic.begin("install");
       await install(recipe);
+      diagnostic.complete(); diagnostic.begin("after-install");
       active();
+      diagnostic.complete(); diagnostic.begin("files-prepare-validate");
       const preparedFiles = await prepareCodexNativeBrokerFiles(recipe);
+      diagnostic.complete(); diagnostic.begin("after-files");
       active();
+      diagnostic.complete(); diagnostic.begin("recipe-build");
       // The capability never crosses an installer, callback or public DTO. The
       // original provider-issued builder is its sole native-material consumer.
       const built = recipeOwner.build({recipe, files: preparedFiles}, ingress.nativeBearerToken());
+      diagnostic.complete(); diagnostic.begin("recipe-validate");
       built.validate();
       if (!isIssuedCodexAppServerLaunchPlan(built.plan) || !isCodexNativeBrokerLaunchPlan(built.plan)) {throw rejected();}
+      diagnostic.complete(); diagnostic.begin("bind-session");
       session = bindSession({...sessionInput, routeFirstWrite: Object.freeze({reserve})});
+      diagnostic.complete(); diagnostic.begin("return-validate");
       active(); built.validate(); ingress.nativeBearerToken();
-      return Object.freeze({plan: built.plan});
+      diagnostic.complete(); diagnostic.begin("return");
+      const result = Object.freeze({plan: built.plan});
+      diagnostic.complete();
+      return result;
     } catch {
+      diagnostic.fail();
       cutoff();
       throw rejected();
     }

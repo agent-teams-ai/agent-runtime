@@ -1,6 +1,6 @@
 import { capturePostClaimPreparation } from "./host-post-claim-preparation.js";
 import type { ContainedTurnProviderBinding } from "../contracts/contained-agent-turn.js";
-import type { ContainedTurnKernelProviderPort } from "../application/ports/outbound/contained-turn-ports.js";
+import type { ContainedTurnKernelProviderPort, ContainedTurnKernelCustodyPort } from "../application/ports/outbound/contained-turn-ports.js";
 import { createCodexAppServerLaunchPlan, createCodexAppServerFinalizableLaunchPlan, isIssuedCodexAppServerLaunchPlan } from "../adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
 import type { CodexAppServerPermissionBoundary } from "../adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
 import {
@@ -65,8 +65,9 @@ export interface CodexCurrentKernelLaunchRecordResolver {
   }>): Promise<CodexCurrentKernelLaunchRecord | undefined>;
 }
 export interface CreateCodexCurrentKernelOwnerOptions {
-  /** Mandatory opened-object authority for every Codex command/file effect lifecycle. */
-  readonly effectCustody: CodexEffectCustodyAuthority;
+  /** Required by the direct Node owner (validated before I/O). The Docker Host
+   * owner instead constructs its authority from captured filesystem confinement. */
+  readonly effectCustody?: CodexEffectCustodyAuthority;
   readonly hostBootId: string;
   readonly hostCustody: ContainedTurnHostCustodyPort & Processes;
   readonly hostInstanceId: string;
@@ -78,8 +79,9 @@ export interface CreateCodexCurrentKernelOwnerOptions {
   readonly workspaceOwner: ContainedTurnKernelWorkspaceOwner;
 }
 export interface CodexCurrentKernelOwner {
-  readonly custody: ContainedTurnKernelCustodyAdapter;
+  readonly custody: ContainedTurnKernelCustodyPort;
   readonly provider: ContainedTurnKernelProviderPort;
+  sealAdmission(): void;
   dispose(): void;
 }
 
@@ -145,6 +147,7 @@ export const createCodexCurrentKernelOwner = (
       let created = false;
       return Object.freeze({
         createProcess: () => {
+          if (disposed) {throw new TypeError("Codex current-kernel owner is disposed");}
           if (created) {throw new TypeError("Codex prepared attempt is one-use");}
           created = true;
           const provider = new CodexAppServerContainedTurnProvider({
@@ -229,9 +232,11 @@ export const createCodexCurrentKernelOwner = (
     attemptOwner, hostBootId: options.hostBootId, hostInstanceId: options.hostInstanceId,
     workspaceOwner: options.workspaceOwner,
   });
+  const sealAdmission = (): void => {disposed = true; custody.sealAdmission();};
   return Object.freeze({
     custody,
-    dispose() {disposed = true; records.clear();},
+    sealAdmission,
+    dispose() {sealAdmission();},
     provider: new CodexAppServerCurrentKernelAdapter({ attempts, platformTarget }),
   });
 };

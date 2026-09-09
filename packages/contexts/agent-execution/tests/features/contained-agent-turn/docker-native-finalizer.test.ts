@@ -173,3 +173,23 @@ for (const metadata of ["name", "length"] as const) {
     assert.equal(reads, 0);
   });
 }
+
+test("native cutoff is required, preserves receiver, and closes finalizer admission even when it throws", async t => {
+  const f = await nativeFinalizerFixture(t);
+  assert.throws(() => createDockerCodexNativeBrokerFinalizer({...f.input, cutoffNativeFiles: undefined!}));
+  let cuts = 0; let failCutoff = true;
+  const input = {...f.input, cutoffNativeFiles() {
+    assert.strictEqual(this, input); cuts += 1;
+    if (failCutoff) {throw new Error("native cutoff failed");}
+  }};
+  const owner = createDockerCodexNativeBrokerFinalizer(input);
+  const running = f.start(owner);
+  assert.deepEqual(await running.prepare(), {kind: "prepared"}, String(f.error));
+  const seals = f.f.physical.seals;
+  assert.throws(() => owner.cutoff(), /native cutoff failed/);
+  failCutoff = false; // The fixture performs a final disposal after the assertion.
+  assert.equal(cuts, 1);
+  assert.ok(f.f.physical.seals > seals);
+  await assert.rejects(owner.execute({} as never));
+  await assert.rejects(owner.finishClaimed({} as never));
+});

@@ -394,11 +394,13 @@ export class NodeDockerCustodyInitDriver {
       return "accepted";
     };
     const identityObserver = internals.observeRestrictedIdentity ?? (() => ({gid: process.getgid?.() ?? 0, uid: process.getuid?.() ?? 0}));
+    // Inherit the restricted identity validated before spawn; redundant setuid/setgid
+    // requests can fail under the production seccomp policy even for the current IDs.
     const spawnProcess = internals.spawnProcess ?? (specification => spawn(
       specification.executablePath,
       specification.argv.slice(1),
-      {argv0: specification.argv[0], detached: false, env: {...specification.environment}, gid: specification.gid,
-        shell: false, stdio: ["pipe", "pipe", "pipe"], uid: specification.uid},
+      {argv0: specification.argv[0], detached: false, env: {...specification.environment},
+        shell: false, stdio: ["pipe", "pipe", "pipe"]},
     ));
     const syscalls = new NodeInitSyscalls(
       options.observedIdentity, writeOutput, internals.observeTopology ?? observeTopology, identityObserver, spawnProcess,

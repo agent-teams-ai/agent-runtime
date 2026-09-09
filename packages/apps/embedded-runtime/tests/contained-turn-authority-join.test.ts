@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createContainedTurnFeatureFromProviderAccess, composeHostCustodiedContainedTurn } from "../dist/composition/contained-turn-feature-composition.js";
+import { ContainedTurnConstructionCleanupError } from "../dist/composition/contained-turn-construction-failure.js";
+import { createDependencies } from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 import { createContainedTurnOperationProviderAccessPort, createContainedTurnSecurityAcceptancePort } from "../../../contexts/agent-execution/dist/composition.js";
 import { containedTurnIdentity } from "../../../contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 import { acceptedProviderPreparation } from "../../../contexts/agent-execution/dist/features/contained-agent-turn/composition/accepted-authority-anti-corruption.js";
@@ -293,3 +296,187 @@ for (const metadata of ["name", "length"] as const) {
     assert.equal(touched, 0);
   });
 }
+
+// The same actual PA/RS owners now enter through private product composition.
+// Persistence here remains synthetic; no deployment or live qualification is implied.
+const productFixture = async (potentialAcceptance = false) => {
+  const h = await fixture();
+  const ae = createDependencies({potentialAcceptance});
+  const calls: string[] = [];
+  const preparedValues: unknown[] = [];
+  const dispatch = Object.seal({...h.dispatch.dispatchConsumption,
+    async publishAndConsumeForDispatch(prepared: Parameters<typeof h.dispatch.dispatchConsumption.publishAndConsumeForDispatch>[0], request: Parameters<typeof h.dispatch.dispatchConsumption.publishAndConsumeForDispatch>[1]) {
+      assert.equal(this, dispatch);
+      const accepted = ae.current(); assert.ok(accepted);
+      assert.equal(prepared.operationId, accepted.operationId);
+      assert.equal(prepared.acceptedAuthorityDigest, accepted.acceptedAuthorityVectorDigest);
+      assert.equal(prepared.acceptedBinding.credentialBindingDigest, h.pa.state.binding.credentialBindingDigest);
+      assert.equal(request.operationId, accepted.operationId);
+      assert.equal(prepared.grantRequestId, request.grantRequestId);
+      calls.push("pa.publish-and-consume"); preparedValues.push(prepared);
+      return h.dispatch.dispatchConsumption.publishAndConsumeForDispatch(prepared, request);
+    },
+  });
+  const security = Object.seal({...h.owner,
+    async evaluateForAcceptance(input: Parameters<typeof h.owner.evaluateForAcceptance>[0]) {
+      assert.equal(this, security);
+      assert.equal(input.operationId, "operation:one");
+      assert.equal(input.intentDigest, h.rule.intentDigest);
+      calls.push("rs.evaluate");
+      return h.owner.evaluateForAcceptance(input);
+    },
+    async publishAndConsumeForDispatch(prepared: Parameters<typeof h.owner.publishAndConsumeForDispatch>[0], request: Parameters<typeof h.owner.publishAndConsumeForDispatch>[1]) {
+      assert.equal(this, security);
+      const accepted = ae.current(); assert.ok(accepted);
+      assert.equal(prepared.acceptance.operationId, accepted.operationId);
+      assert.equal(prepared.acceptance.intentDigest, fixtureHash({purpose: "contained_turn_acceptance_intent_v1", intent: accepted.intent, version: 1}));
+      assert.equal(prepared.decisionDigest, accepted.acceptedAuthorityVector.securityDecisionDigest);
+      assert.equal(prepared.authorityGeneration, accepted.acceptedAuthorityVector.operationAuthorityRevision);
+      assert.equal(prepared.grantRequestId, request.grantRequestId);
+      assert.equal(prepared.requestDigest, request.requestDigest);
+      calls.push("rs.publish-and-consume"); preparedValues.push(prepared);
+      return h.owner.publishAndConsumeForDispatch(prepared, request);
+    },
+  });
+  const input = Object.freeze({...ae.dependencies, authority: "current" as const,
+    operationStore: {...ae.dependencies.operationStore, async read(request: Parameters<typeof ae.dependencies.operationStore.read>[0]) {
+      const current = ae.current();
+      return current?.operationId === request.operationId && current.scope.tenantId === request.scope.tenantId && current.scope.projectId === request.scope.projectId ? current : undefined;
+    }},
+    providerAccess: Object.freeze({...h.pa.current, dispatchConsumption: dispatch}),
+    security: Object.freeze({acceptance: security, profile: Object.freeze({policyRevision: h.rule.policyRevision})}),
+  });
+  return {...h, ae, input, calls, preparedValues, dispatchOwner: dispatch, securityOwner: security};
+};
+
+test("private current selection binds actual owners through accepted engine preparation and dispatch", async () => {
+  const h = await productFixture();
+  const hostCustody = Object.freeze({}); let disposed = 0; let constructed = 0;
+  const product = composeHostCustodiedContainedTurn(Object.freeze({...h.input, hostCustody,
+    selectedProvider: Object.freeze({kind: "codex", owner: Object.freeze({})}),
+  }) as never, Object.freeze({
+    codex: ((options: {hostCustody: unknown}) => {
+      constructed++; assert.equal(options.hostCustody, hostCustody);
+      return Object.freeze({custody: h.ae.dependencies.custody, provider: h.ae.dependencies.provider, sealAdmission() {}, dispose() {disposed++;}});
+    }) as never,
+    claude: (() => {throw new Error("unselected provider");}) as never,
+  }), createContainedTurnFeatureFromProviderAccess);
+  const feature = product.feature;
+  assert.equal(constructed, 1);
+  assert.equal(h.calls.length, 0, "construction is inert");
+  assert.equal(h.pa.records("publication").length, 0);
+  // Sealed owner methods may change, but construction captured the original methods and receivers.
+  h.dispatchOwner.publishAndConsumeForDispatch = async () => {throw new Error("replacement PA method");};
+  h.securityOwner.evaluateForAcceptance = async () => {throw new Error("replacement RS method");};
+  h.securityOwner.publishAndConsumeForDispatch = async () => {throw new Error("replacement RS publication");};
+  await feature.submit.execute({commandId: "command:product-current", expectedProvider: "codex", intent, scope: h.scope});
+  assert.equal(h.ae.providerCalls.value, 1);
+  assert.equal(h.preparedValues.length, 2);
+  assert.equal(h.pa.records("publication").length, 1);
+  assert.equal(h.pa.records("consumption").length, 1);
+  assert.equal(h.rs.db.tables.consumptions.size, 1);
+  assert.ok(h.calls.includes("rs.evaluate"));
+  product.dispose(); product.dispose(); assert.equal(disposed, 1);
+  h.rs.db.assertReleased();
+});
+
+test("private current selection cannot publish from potential acceptance or publication uncertainty", async () => {
+  for (const potential of [true, false]) {
+    const h = await productFixture(potential);
+    if (!potential) {h.pa.state.loseCommit = "publication";}
+    const feature = createContainedTurnFeatureFromProviderAccess(h.input);
+    const result = await feature.submit.execute({commandId: `command:product-${potential}`, expectedProvider: "codex", intent, scope: h.scope});
+    if (potential) {assert.equal(result.status, "potential_acceptance");}
+    assert.equal(h.ae.providerCalls.value, 0);
+    assert.equal(h.pa.records("publication").length, potential ? 0 : 1);
+    assert.equal(h.pa.records("consumption").length, 0);
+    // Grant owners run concurrently; RS may acknowledge even when PA publication is uncertain.
+    assert.equal(h.rs.db.tables.consumptions.size, potential ? 0 : 1);
+    if (!potential) {
+      const operation = h.ae.current(); assert.ok(operation);
+      await feature.observe.execute({operationId: operation.operationId, scope: h.scope});
+      assert.equal(h.pa.records("publication").length, 1);
+      assert.equal(h.pa.records("consumption").length, 0);
+      assert.equal(h.ae.providerCalls.value, 0);
+    }
+    h.rs.db.assertReleased();
+  }
+});
+
+test("private current selection honors the actual security owner's denial without fallback", async () => {
+  const h = await productFixture();
+  const feature = createContainedTurnFeatureFromProviderAccess(h.input);
+  h.revokePolicy();
+  const result = await feature.submit.execute({commandId: "command:product-revoked", expectedProvider: "codex", intent, scope: h.scope});
+  assert.equal(result.status, "denied");
+  assert.equal(h.ae.providerCalls.value, 0);
+  assert.equal(h.pa.records("publication").length, 0);
+  assert.equal(h.rs.db.tables.consumptions.size, 0);
+  assert.deepEqual(h.calls, ["rs.evaluate"]);
+  h.rs.db.assertReleased();
+});
+
+test("private current selection rejects missing, mixed, mutable and hostile configuration without execution", async () => {
+  const h = await productFixture(); let touched = 0;
+  const trap = () => {touched++; throw new Error("configuration must remain inert");};
+  const hostile = <Value extends object>(value: Value): Value => new Proxy(value, {
+    get: trap, getOwnPropertyDescriptor: trap, getPrototypeOf: trap, ownKeys: trap, isExtensible: trap,
+  });
+  const input = h.input;
+  const legacySecurity = Object.freeze({legacy: h.ae.dependencies.security, dispatchAuthorityV1: Object.freeze({})});
+  const cases: unknown[] = [
+    {...input, authority: undefined}, {...input, authority: "unknown"}, {...input, authority: "legacy"},
+    {...input, providerAccess: undefined}, {...input, security: undefined},
+    {...input, security: legacySecurity},
+    {...input, providerAccess: Object.freeze({resolve: input.providerAccess.resolve, revalidate: input.providerAccess.revalidate,
+      dispatchConsumptionV1: h.dispatchOwner})},
+    {...input, security: Object.freeze({...input.security, acceptance: undefined})},
+    {...input, security: Object.freeze({...input.security, profile: undefined})},
+    {...input, security: Object.freeze({...input.security, ...legacySecurity})},
+    {...input, providerAccess: Object.freeze({...input.providerAccess, dispatchConsumptionV1: h.dispatchOwner})},
+    {...input, security: {...input.security}},
+    {...input, security: Object.freeze({...input.security, profile: {policyRevision: h.rule.policyRevision}})},
+    {...input, security: Object.freeze({...input.security, profile: Object.freeze({policyRevision: "bad"})})},
+    hostile(input), {...input, security: hostile(input.security)},
+    {...input, providerAccess: hostile(input.providerAccess)},
+    {...input, security: Object.freeze({...input.security, acceptance: hostile(h.securityOwner)})},
+    {...input, security: Object.freeze({...input.security, profile: hostile(input.security.profile)})},
+    Object.freeze({...input, get authority() {return trap();}}),
+    Object.freeze({...input, get providerAccess() {return trap();}}),
+    Object.freeze({...input, get security() {return trap();}}),
+    {...input, security: Object.freeze({get acceptance() {return trap();}, profile: input.security.profile})},
+    {...input, security: Object.freeze({...input.security, get profile() {return trap();}})},
+    {...input, security: Object.freeze({...input.security, acceptance: Object.freeze({...h.securityOwner,
+      get evaluateForAcceptance() {return trap();}})})},
+    {...input, security: Object.freeze({...input.security, acceptance: Object.freeze({...h.securityOwner,
+      evaluateForAcceptance: hostile(h.securityOwner.evaluateForAcceptance)})})},
+    {...input, providerAccess: Object.freeze({...input.providerAccess, dispatchConsumption: Object.freeze({...h.dispatchOwner,
+      publishAndConsumeForDispatch: hostile(h.dispatchOwner.publishAndConsumeForDispatch)})})},
+  ];
+  const {authority: _authority, ...unselected} = input;
+  cases.push(unselected);
+  for (const value of cases) {
+    assert.throws(() => createContainedTurnFeatureFromProviderAccess(value as typeof input), TypeError);
+  }
+  assert.equal(touched, 0); assert.equal(h.calls.length, 0);
+  assert.equal(h.pa.records("publication").length, 0);
+});
+
+test("current host composition preserves selection and construction cleanup failure semantics", async () => {
+  const h = await productFixture(); let disposed = 0;
+  const owner = Object.freeze({custody: h.ae.dependencies.custody, provider: h.ae.dependencies.provider,
+    sealAdmission() {}, dispose() {disposed++; throw new Error("synthetic cleanup failure");}});
+  const factories = Object.freeze({codex: (() => owner) as never, claude: (() => {throw new Error("wrong provider");}) as never});
+  const input = Object.freeze({...h.input, hostCustody: Object.freeze({}),
+    selectedProvider: Object.freeze({kind: "codex" as const, owner: Object.freeze({})}),
+  });
+  assert.throws(() => composeHostCustodiedContainedTurn(input as never, factories, dependencies => {
+    assert.equal(dependencies.authority, "current");
+    assert.equal(dependencies.providerAccess, h.input.providerAccess);
+    assert.deepEqual(Object.keys(dependencies).toSorted(), ["artifacts", "authority", "custody", "operationStore", "provider", "providerAccess", "security", "workspace"]);
+    return createContainedTurnFeatureFromProviderAccess({...dependencies,
+      security: Object.freeze({...h.input.security, profile: Object.freeze({policyRevision: "invalid"})}),
+    } as never);
+  }), ContainedTurnConstructionCleanupError);
+  assert.equal(disposed, 1); assert.equal(h.calls.length, 0);
+});

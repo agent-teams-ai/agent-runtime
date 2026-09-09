@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { registerHooks } from "node:module";
+import { isIP, SocketAddress } from "node:net";
 import { after } from "node:test";
-import { modules, nodeFixture as baseNodeFixture, liveFor, Core, createEgressFixture, access, Kernel } from "./native-launch-finalization-fixture.ts";
-export { liveFor, Core, Kernel };
+import { modules } from "./native-launch-finalization-modules.ts";
 import { committedDispatchProofFixture } from "./support/committed-dispatch-proof-fixture.ts";
 export const deferred = <T>() => Promise.withResolvers<T>();
 export const tick = (): Promise<void> => new Promise(resolve => {setImmediate(resolve);});
@@ -27,7 +27,9 @@ class MemoryServer extends EventEmitter {
 // its native dependencies without granting this resource fixture any I/O.
 const forbidConnection = (): never => {throw new Error("network connections forbidden in resource fixture");};
 function ForbiddenSocket(): never {return forbidConnection();}
-modules.set("node:net", {Server: MemoryServer, Socket: ForbiddenSocket, createConnection: forbidConnection,
+// Seed the base fixture's existing hook before it imports the listener. Both
+// fixtures then use the same canonical adapter and the same event-only net fake.
+modules.set("node:net", {isIP, SocketAddress, Server: MemoryServer, Socket: ForbiddenSocket, createConnection: forbidConnection,
   isIPv4: (value: string) => value === "10.203.0.1"});
 const forbidFilesystem = async (): Promise<never> => {throw new Error("filesystem access forbidden in resource fixture");};
 // The base fixture's fs/promises module is already cached. Keep its memory
@@ -67,6 +69,9 @@ const lockHook = registerHooks({resolve(specifier, context, next) {
   return next(specifier, context);
 }});
 after(() => lockHook.deregister());
+const {nodeFixture: baseNodeFixture, liveFor, Core, createEgressFixture, access, Kernel} =
+  await import("./native-launch-finalization-fixture.ts");
+export { liveFor, Core, Kernel };
 const {createNodeHostHttpListener} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-host-http-listener.js");
 const {createNodeHostHttpConsumptionJournal} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-host-http-consumption-journal.js");
 export const {createV4HostHttpListenerLifecycle} = await import("../../../dist/features/contained-agent-turn/composition/v4-host-http-listener-lifecycle.js");

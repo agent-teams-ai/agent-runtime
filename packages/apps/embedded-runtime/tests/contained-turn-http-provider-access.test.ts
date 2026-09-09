@@ -1,3 +1,4 @@
+import {createContainedTurnHttpCredentialMaterialization} from "../src/composition/contained-turn-http-provider-access.ts";
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import type {AuthorizeCredentialMaterializationInput, CredentialMaterializationAuthorizationV1} from "@agent-teams/provider-access";
@@ -184,4 +185,62 @@ test("detaches receipts and sanitizes thrown, malformed and contradictory owner 
   assert.deepEqual(await throwing.authorize(input), {kind: "indeterminate"});
   assert.deepEqual(await throwing.observe(selector(input)), {kind: "indeterminate"});
   await assert.rejects(throwing.createRequestDigest(unsigned()), /^TypeError: HTTP Provider Access request digest unavailable$/u);
+});
+
+const disposalFixture = (dispose: () => void) => {
+  let calls = 0;
+  const input = {schemaVersion: 1, purpose: "contained-turn.credential-materialization-authorization/v1",
+    provider: "codex", availability: "available", revocation: "active", accessRef: "access:1",
+    authorizationRequestId: "request:1", bindingRevision: 1, credentialBindingDigest: "digest:1",
+    credentialBindingRef: "binding:1", credentialGeneration: 1, projectId: "project:1",
+    providerAccountRef: "account:1", providerRouteRef: "route:1", requestDigest: "request-digest:1",
+    scopeDigest: "scope:1", tenantId: "tenant:1"} as const;
+  const pair = createContainedTurnHttpCredentialMaterialization({authorization: {
+    async authorize() {calls++; return {kind: "authorized", receipt: {...input, decision: "authorized", rejectionReason: null}};},
+    async observe() {calls++; return {kind: "indeterminate"};},
+  }, rendering: {async render() {calls++; return {kind: "denied"};}}, dispose},
+  async () => {calls++; return "digest:1";});
+  return {pair, input, calls: () => calls};
+};
+
+for (const failure of [new Error("owner cleanup failed"), undefined]) {
+  test(`owner cleanup failure remains sticky (${failure === undefined ? "undefined" : "Error"}) with admission closed`, async () => {
+    let attempts = 0;
+    const f = disposalFixture(() => {attempts++; throw failure;});
+    const authorized = await f.pair.providerAccess.authorize(f.input);
+    assert.equal(authorized.kind, "authorized");
+    if (authorized.kind !== "authorized") {throw new Error("missing receipt");}
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let threw = false;
+      try {f.pair.dispose();} catch (error) {threw = true; assert.equal(error, failure);}
+      assert.equal(threw, true, "failed cleanup must not become successful disposal");
+      await assert.rejects(f.pair.materializer.render(authorized.receipt), /rendering unavailable/u);
+      assert.deepEqual(await f.pair.providerAccess.authorize(f.input), {kind: "indeterminate"});
+      assert.deepEqual(await f.pair.providerAccess.observe({authorizationRequestId: f.input.authorizationRequestId,
+        projectId: f.input.projectId, provider: f.input.provider, requestDigest: f.input.requestDigest,
+        scopeDigest: f.input.scopeDigest, tenantId: f.input.tenantId}), {kind: "indeterminate"});
+      const {requestDigest: _digest, ...disposalUnsigned} = f.input;
+      await assert.rejects(f.pair.providerAccess.createRequestDigest(disposalUnsigned), /digest unavailable/u);
+    }
+    assert.equal(attempts, 1); assert.equal(f.calls(), 1);
+  });
+}
+
+test("successful owner cleanup is idempotent; reentrant disposal cannot claim completion", () => {
+  let attempts = 0;
+  const f = disposalFixture(() => {
+    attempts++;
+    assert.throws(() => f.pair.dispose(), /disposal in progress/u);
+  });
+  f.pair.dispose(); f.pair.dispose();
+  assert.equal(attempts, 1);
+});
+
+test("uncaught reentrant disposal failure remains sticky without reinvoking owner", () => {
+  let attempts = 0;
+  const f = disposalFixture(() => {attempts++; f.pair.dispose();});
+  for (let attempt = 0; attempt < 2; attempt++) {
+    assert.throws(() => f.pair.dispose(), /disposal in progress/u);
+  }
+  assert.equal(attempts, 1);
 });

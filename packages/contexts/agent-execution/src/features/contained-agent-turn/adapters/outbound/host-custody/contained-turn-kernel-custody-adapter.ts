@@ -1,3 +1,4 @@
+import { KernelOpenAttempts, type KernelOpenAttempt } from "./contained-turn-kernel-custody-open-attempts.js";
 import { containedTurnIdentity } from "../../../domain/contained-turn-identities.js";
 import type { ContainedTurnProof } from "../../../domain/contained-turn-proofs.js";
 import type {
@@ -32,6 +33,7 @@ import {
   openIdentity,
   physicalEvidenceIsClosed,
   positiveInteger,
+  projectProviderBinding,
   projectProviderObservation,
   proofId,
   reservationIdentity,
@@ -68,6 +70,7 @@ type ContainmentInput = Parameters<ContainedTurnKernelCustodyPort["attestContain
  * operating-system exit status is never interpreted as a logical outcome.
  */
 export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCustodyPort {
+  #admissionClosed = false;
   readonly #preparation: ContainedTurnKernelCustodyAdapterOptions["postClaimPreparation"];
   readonly #preparing = new Map<string, AbortController>();
   readonly #completionAfterMs: number;
@@ -77,6 +80,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
   readonly #attemptOwner: ContainedTurnKernelCustodyAttemptOwner;
   readonly #workspaceOwner: ContainedTurnKernelWorkspaceOwner;
   readonly #monotonicNow: () => number;
+  readonly #openAttempts = new KernelOpenAttempts();
   readonly #reservations = new Map<string, KernelReservation>();
   readonly #startObservationAfterMs: number;
   public constructor(
@@ -100,7 +104,15 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     this.#hostBootId = containedTurnIdentity("host_boot", options.hostBootId);
     this.#hostInstanceId = containedTurnIdentity("host_instance", options.hostInstanceId);
   }
+  /** Host-private lifecycle fence; it neither releases custody nor proves closure. */
+  public sealAdmission(): void {
+    this.#admissionClosed = true;
+    this.#openAttempts.sealAdmission();
+    for (const reservation of this.#reservations.values()) {reservation.startBoundaryCutoff = true;}
+    for (const preparation of this.#preparing.values()) {preparation.abort();}
+  }
   public async open(input: KernelOpenInput): ReturnType<ContainedTurnKernelCustodyPort["open"]> {
+    if (this.#admissionClosed) {throw new TypeError("Host Custody admission is unavailable");}
     const existing = this.#reservations.get(input.custodyId);
     if (existing !== undefined) {
       const identity = openIdentity(input, {
@@ -112,34 +124,25 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
       }
       return this.#openOutcome(existing);
     }
-    return this.#workspaceOwner.withLaunchAuthority({
-      attemptId: input.attemptId,
-      operationId: input.operationId,
-      workspaceId: input.workspaceId,
-    }, authority => this.#openScoped(input, authority));
+    return this.#openAttempts.open(input, this.#workspaceOwner, this.#attemptOwner,
+      (snapshot, authority, attempt) => this.#openScoped(snapshot, authority, attempt));
   }
   async #openScoped(
     input: KernelOpenInput,
     workspaceAuthority: HostCustodyReservationInput["workspaceAuthority"],
+    attempt: KernelOpenAttempt,
   ): ReturnType<ContainedTurnKernelCustodyPort["open"]> {
     if (workspaceAuthority.canonicalPath.length === 0 || workspaceAuthority.descriptorPath.length === 0 ||
         workspaceAuthority.identity.mountId.length === 0 || input.intentMode !== "analysis" && input.intentMode !== "workspace-write") {
       throw new TypeError("Host Custody scoped workspace authority is unavailable");
     }
-    const providerBinding = this.#providerBinding(input);
+    const providerBinding = projectProviderBinding(input);
     const plan = await this.#attemptOwner.prepare({ kernel: input, providerBinding, workspaceAuthority });
     const authority = Object.freeze({ intentMode: input.intentMode, workspaceRef: workspaceAuthority.canonicalPath });
+    if (attempt.closed) {throw new TypeError("Host Custody open was cut off before acquisition");}
+    // From this point even a rejected or malformed raw response may own resources.
+    attempt.acquisitionPossible = true;
     return this.#reserve(input, authority, providerBinding, plan, workspaceAuthority);
-  }
-  #providerBinding(input: KernelOpenInput): HostCustodyReservationInput["providerBinding"] {
-    return Object.freeze({
-      adapterRevision: input.adapterSnapshot.adapterRevision,
-      binaryRevision: input.adapterSnapshot.binaryRevision,
-      capabilityManifestRevision: input.adapterSnapshot.capabilityManifestRevision,
-      credentialBindingDigest: input.providerAccessSnapshot.credentialBindingDigest,
-      provider: input.adapterSnapshot.provider,
-      providerRouteRef: input.providerAccessSnapshot.providerRouteRef,
-    });
   }
   async #reserve(
     input: KernelOpenInput,
@@ -244,6 +247,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     return boundary;
   }
   public async start(input: StartInput): ReturnType<ContainedTurnKernelCustodyPort["start"]> {
+    if (this.#admissionClosed) {throw new TypeError("Host Custody admission is unavailable");}
     const reservation = this.#reservation(input);
     const hostCustodyProof = this.#openOutcome(reservation).hostCustodyProof;
     admitCommittedDispatchStart(input, reservation, {
@@ -481,6 +485,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
   public async releaseReservation(
     input: Parameters<ContainedTurnKernelCustodyPort["releaseReservation"]>[0],
   ): Promise<void> {
+    if (this.#openAttempts.failedBeforeAcquisition(input) !== undefined) {return;}
     const reservation = this.#reservation(input);
     if (reservation.workspaceId !== input.workspaceId) {
       throw new TypeError("Host Custody reservation workspace identity conflict");
@@ -506,6 +511,12 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
   public async releaseRetiredReservation(
     input: Parameters<ContainedTurnKernelCustodyPort["releaseRetiredReservation"]>[0],
   ): ReturnType<ContainedTurnKernelCustodyPort["releaseRetiredReservation"]> {
+    const failed = this.#openAttempts.failedBeforeAcquisition(input.cleanupPermit);
+    if (failed !== undefined && failed.input.preparationToken === input.cleanupPermit.preparationToken &&
+        failed.input.operationRevision === input.cleanupPermit.preparedOperationRevision &&
+        failed.input.operationCutoffRevision === input.cleanupPermit.operationCutoffRevision) {
+      return Object.freeze({ kind: "already_released" });
+    }
     const reservation = this.#reservations.get(input.cleanupPermit.custodyId);
     if (reservation === undefined || !sameReservation(reservation, input.cleanupPermit) ||
         reservation.workspaceId !== input.cleanupPermit.workspaceId) {

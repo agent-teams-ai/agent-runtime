@@ -1,3 +1,4 @@
+import {joinLinuxCodexSignerConsumption, bindLinuxCodexNodeConsumption} from "../dist/composition/linux-codex-node-recipe-consumption.js";
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate,
@@ -130,5 +131,26 @@ test("the bridge rejects altered owner proofs before returning authorization", a
       contractVersion: "provider-process-egress-provisional/v2", authorizationRequestId: "request-1", request: request()}),
     {status: "denied"});
     assert.deepEqual(await binding.runtimeSecurity.authorizeFirstApplicationByte(finalInput(decision)), {status: "denied"});
+  } finally {f.candidate.dispose();}
+});
+
+test("consumption envelope records the actual broker verifier key and retains the selected receiver", async () => {
+  const f = fixture();
+  try {
+    const subject = {tenantId: "tenant-1", projectId: "project-1", scopeDigest: digest("c"), operationId: "operation-1",
+      attemptId: "attempt-1", custodyId: "custody-1", hostBootId: "boot-1", hostInstanceId: "host-1", executionGenerationId: "execution-1"};
+    const binder = bindLinuxCodexNodeConsumption({directory: {path: "/synthetic/consumption", device: "1", inode: "2"}}, subject);
+    let envelope: ReturnType<typeof binder.readEnvelope> | undefined;
+    const selected = {async prepare(references: Parameters<typeof binder.readEnvelope>[0]) {
+      assert.equal(this, selected); envelope = binder.readEnvelope(references);
+      return {kind: "unknown" as const};
+    }};
+    const joined = joinLinuxCodexSignerConsumption(selected, f.candidate.hostEgressVerifierV2);
+    selected.prepare = async () => {throw new Error("mutated callback");};
+    await joined.prepare({selectedDockerAuthorityDigest: digest("d"), networkNamespaceIdentity: "netns:1:2",
+      cgroupIdentity: "cgroup:3:4", listenerIdentity: "listener:ipv4:172.30.0.1:43129"});
+    assert.equal(envelope?.signerIdentity, f.binding.verifier.signingKey.publicKeyDigest);
+    assert.notEqual(envelope?.signerIdentity, "key-1");
+    assert.ok(Object.isFrozen(envelope));
   } finally {f.candidate.dispose();}
 });

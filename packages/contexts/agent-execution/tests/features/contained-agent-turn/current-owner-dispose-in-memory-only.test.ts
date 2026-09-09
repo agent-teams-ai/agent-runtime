@@ -54,7 +54,7 @@ const hostCounters = (host: FakeHost): HostCounters => ({
   releases: host.releases, startInputs: host.startInputs.length, starts: host.starts,
 });
 
-test("Codex current-kernel owner dispose clears only in-memory records; Host Custody sees no calls", async () => {
+test("Codex current-kernel owner dispose seals admission without raw Host Custody calls", async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), "codex-owner-dispose-")));
   try {
     const workspaceRef = join(root, "workspace");
@@ -81,9 +81,9 @@ test("Codex current-kernel owner dispose clears only in-memory records; Host Cus
       workspaceOwner: permissiveWorkspaceOwner(workspaceRef),
     });
 
-    // Populate the owner's private `records` Map with a real, retained (non-empty) entry.
+    // Populate the owner's private records with a retained entry before fencing admission.
     await owner.custody.open(openInput(identity, "codex", CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT));
-    assert.equal(host.reserves, 1, "precondition: the attempt is reserved, so records has a live entry to clear");
+    assert.equal(host.reserves, 1, "precondition: the attempt is reserved, so the owner has retained custody");
 
     const beforeDispose = hostCounters(host);
     owner.dispose();
@@ -92,11 +92,11 @@ test("Codex current-kernel owner dispose clears only in-memory records; Host Cus
     assert.deepEqual(
       hostCounters(host), beforeDispose,
       "dispose() must not call hostCustody.reserve/start/get/requestContainment/release: " +
-      "codex-current-kernel-owner.ts dispose() only runs `disposed = true; records.clear();`",
+      "codex-current-kernel-owner.ts dispose() seals admission without releasing custody",
     );
 
     // The disposed guard must fire in-memory for a brand-new attempt too, again without
-    // ever reaching Host Custody (proves clearing was real, not just a no-op flag).
+    // ever reaching Host Custody (the closed admission boundary survives disposal).
     const afterIdentity = ids("codex", "dispose-after");
     await assert.rejects(
       () => owner.custody.open(openInput(afterIdentity, "codex", CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT)),
@@ -108,7 +108,7 @@ test("Codex current-kernel owner dispose clears only in-memory records; Host Cus
   }
 });
 
-test("Claude current-kernel owner dispose clears only in-memory records; Host Custody sees no calls", async () => {
+test("Claude current-kernel owner dispose seals admission without raw Host Custody calls", async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), "claude-owner-dispose-")));
   try {
     const workspaceRef = join(root, "workspace");
@@ -137,7 +137,7 @@ test("Claude current-kernel owner dispose clears only in-memory records; Host Cu
     });
 
     await owner.custody.open(openInput(identity, "claude", claudeSnapshot));
-    assert.equal(host.reserves, 1, "precondition: the attempt is reserved, so records has a live entry to clear");
+    assert.equal(host.reserves, 1, "precondition: the attempt is reserved, so the owner has retained custody");
 
     const beforeDispose = hostCounters(host);
     owner.dispose();
@@ -146,7 +146,7 @@ test("Claude current-kernel owner dispose clears only in-memory records; Host Cu
     assert.deepEqual(
       hostCounters(host), beforeDispose,
       "dispose() must not call hostCustody.reserve/start/get/requestContainment/release: " +
-      "claude-current-kernel-owner.ts dispose() only runs `disposed = true; records.clear();`",
+      "claude-current-kernel-owner.ts dispose() seals admission without releasing custody",
     );
 
     const afterIdentity = ids("claude", "dispose-after");

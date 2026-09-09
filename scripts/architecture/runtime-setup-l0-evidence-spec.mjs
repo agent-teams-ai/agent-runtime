@@ -163,22 +163,26 @@ export const changes = Object.freeze([
     id: "route-enforcement-v1-current-history-anchor",
     revision: "51aa81a9185d80db11e765e6ceb6190359ca1a9c",
   }),
+  Object.freeze({
+    id: "runtime-setup-current-product-anchor",
+    revision: "e615369d50ed73cac6e00909fcc8f6705b0d6973",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
 
 export const sourceRevisionArtifactDigests = Object.freeze({
   fixtures: Object.freeze({
-    fileCount: 52,
-    sha256: "eac8c866ebb03e4f46ea55586d0468466c535e413cefcdb6d2c454e900278ff7",
+    fileCount: 56,
+    sha256: "2f185db9f8cd0bd29ed28b08d862dbf23846ce19e14c657d8e6afad9c3e769fc",
   }),
   sources: Object.freeze({
-    fileCount: 456,
-    sha256: "98ba6f04addd89af9bf28b648431d515bc10e8b34f25166d56c12978c041d164",
+    fileCount: 597,
+    sha256: "cd5d24caf5a8385b6c4249c2588c71a2c74e6b474573f9de644394fdd3ab50fe",
   }),
   tests: Object.freeze({
-    fileCount: 404,
-    sha256: "43239889826baee95acc185421eef184e2bf5133efaa28156b2e021fe48e115c",
+    fileCount: 553,
+    sha256: "ca4366ba19394483798602ac8af171e15509ceb72dcd7543128c10395838a757",
   }),
 });
 

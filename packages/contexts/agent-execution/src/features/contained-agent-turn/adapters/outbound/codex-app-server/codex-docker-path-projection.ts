@@ -44,11 +44,11 @@ export const codexDockerProjectionSource = (paths: CodexDockerPathProjection) =>
 export const projectCodexDockerPrivatePath = (paths: CodexDockerPathProjection, path: string): string =>
   privatePath(codexDockerProjectionSource(paths).privateRootSource, path);
 
-/** One image location, or the private mount's bin/codex. Init still verifies the
+/** Exact image locations, or the private mount's bin/codex. Init still verifies the
  * selected tuple's exact executable digest before exec; no basename guessing. */
 export const projectCodexDockerExecutable = (paths: CodexDockerPathProjection, path: string): string => {
   const source = codexDockerProjectionSource(paths);
-  if (path === "/usr/local/bin/codex") {return path;}
+  if (path === "/usr/local/bin/codex" || path === "/ar-provider/provider-entrypoint") {return path;}
   if (path !== `${source.privateRootSource}/bin/codex`) {throw rejected();}
   return projectCodexDockerPrivatePath(paths, path);
 };

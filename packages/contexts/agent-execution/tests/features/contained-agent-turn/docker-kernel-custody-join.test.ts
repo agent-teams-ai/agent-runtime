@@ -1,5 +1,9 @@
+import {rm} from "node:fs/promises";
+import {reserveWorkspace} from "./support/docker-workspace-authority-fixture.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
+import {DockerKernelEvidence} from "../../../dist/features/contained-agent-turn/composition/docker-kernel-evidence.js";
+import {dockerProviderProcessMountFacts} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import {DockerKernelHostCustody} from "../../../dist/features/contained-agent-turn/composition/docker-kernel-host-custody.js";
 import {prepareDockerProviderProcessIo, createDockerProviderProcessBridge} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-bridge.js";
 import {executionEvidenceIsClosed, physicalEvidenceIsClosed, noStartEvidenceIsClosed, observeHostStart}
@@ -7,24 +11,26 @@ import {executionEvidenceIsClosed, physicalEvidenceIsClosed, noStartEvidenceIsCl
 import {fixture, tick, deferred} from "./support/docker-provider-process-fixture.ts";
 import {residueFixture} from "./support/linux-docker-residue-fixture.ts";
 import {initOptions, installSyntheticInit} from "./support/docker-claim-init-fixture.ts";
-import {engineCall} from "./support/docker-host-custody-lifecycle-fixture.ts";
+import {engineCall, disposable, createInput} from "./support/docker-host-custody-lifecycle-fixture.ts";
 import type {HostCustodyReservationInput} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.js";
 
 const reservation = (launch: Awaited<ReturnType<ReturnType<typeof fixture>["launch"]>>["launched"],
-  workspaceRef: string, privateRootPath: string): HostCustodyReservationInput => ({
+  workspaceRef: string, privateRootPath: string): Omit<HostCustodyReservationInput, "workspaceAuthority"> => ({
   operationId: launch.key.operationId, attemptId: launch.key.attemptId, intentMode: "analysis", workspaceRef,
   providerBinding: {provider: "codex", binaryRevision: "synthetic", adapterRevision: "synthetic",
     capabilityManifestRevision: "synthetic", credentialBindingDigest: "synthetic", providerRouteRef: "synthetic"},
-  workspaceAuthority: {canonicalPath: workspaceRef, descriptorPath: workspaceRef, identity: {dev: 1n, ino: 2n, mountId: "synthetic"}},
   launchPlan: {arguments: [], binaryRevision: "synthetic", containmentProfile: "strict-linux-cgroup-v2",
     environment: {}, executablePath: "/synthetic/provider", executableSha256: "a".repeat(64), privateRootPath,
     intentMode: "analysis", provider: "codex", spawnMode: "sdk-delegated"},
 });
-const joined = async () => {
-  const f = fixture(); const a = await f.launch();
+const joined = async (t: import("node:test").TestContext) => {
+  const directory = await disposable();
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  const f = fixture(); f.launchInput.create = createInput(directory);
+  const a = await f.launch();
   const raw = new DockerKernelHostCustody(1000);
   const input = reservation(a.launched, f.launchInput.create.workspaceSource, f.launchInput.create.privateRootSource);
-  const handle = await raw.reserve(input); const retained = raw.reservation(handle.custodyRef);
+  const handle = await reserveWorkspace(t, raw, input); const retained = raw.reservation(handle.custodyRef);
   const io = prepareDockerProviderProcessIo(a.input); retained.evidence.attach(f.lifecycle, a.launched, io);
   const containment = {...handle, operationId: input.operationId, attemptId: input.attemptId};
   let cleanups = 0;
@@ -36,8 +42,8 @@ const joined = async () => {
 };
 
 for (const delay of ["ack", "root-exit", "drain", "channel-eof"] as const) {
-  test(`joined evidence independently waits for ${delay}; self-reported init never proves kernel start`, async t => {
-    const f = await joined(); t.after(() => f.contain());
+  test(`joined evidence independently waits for ${delay}; self-reported init never proves kernel start`, {skip: process.platform !== "linux"}, async t => {
+    const f = await joined(t); t.after(() => f.contain());
     const gate = deferred(); const entered = deferred(); t.after(() => gate.resolve());
     f.channel.onMessage = async message => {
       if (message.kind === "provider-exec" && delay === "ack") {entered.resolve(); await gate.promise;}
@@ -81,8 +87,8 @@ for (const delay of ["ack", "root-exit", "drain", "channel-eof"] as const) {
   });
 }
 
-test("execution acknowledgement survives later containment journal transitions; generic empty callback is insufficient", async t => {
-  const f = await joined(); t.after(() => f.contain());
+test("execution acknowledgement survives later containment journal transitions; generic empty callback is insufficient", {skip: process.platform !== "linux"}, async t => {
+  const f = await joined(t); t.after(() => f.contain());
   await createDockerProviderProcessBridge().open({...f.input, preparedIo: f.io});
   const execution = f.lifecycle.observeLaunch(f.launched).execution;
   assert.equal(execution?.result?.kind, "started"); assert.equal(execution?.journal?.state, "provider_exec_observed");
@@ -97,11 +103,11 @@ test("execution acknowledgement survives later containment journal transitions; 
   await f.raw.requestContainment(f.containment); assert.equal(f.cleanups(), 1);
 });
 
-test("foreign launches and copied prepared IO cannot supply a reservation's evidence", async t => {
-  const f = await joined(); const other = await joined(); t.after(() => f.contain()); t.after(() => other.contain());
+test("foreign launches and copied prepared IO cannot supply a reservation's evidence", {skip: process.platform !== "linux"}, async t => {
+  const f = await joined(t); const other = await joined(t); t.after(() => f.contain()); t.after(() => other.contain());
   const fresh = new DockerKernelHostCustody(1000);
   const input = {...reservation(f.launched, f.launchInput.create.workspaceSource, f.launchInput.create.privateRootSource), operationId: "operation:foreign"};
-  const handle = await fresh.reserve(input);
+  const handle = await reserveWorkspace(t, fresh, input);
   const evidence = fresh.reservation(handle.custodyRef).evidence;
   assert.throws(() => evidence.attach(f.lifecycle, f.launched, {...f.io}), /actual prepared/);
   assert.throws(() => evidence.attach(f.lifecycle, f.launched, other.io), /actual prepared/);
@@ -109,8 +115,8 @@ test("foreign launches and copied prepared IO cannot supply a reservation's evid
 });
 
 for (const failure of ["init-crash", "late-output"] as const) {
-  test(`${failure} retains observed provider exit without inventing drain or container exit`, async t => {
-    const f = await joined(); t.after(() => f.contain());
+  test(`${failure} retains observed provider exit without inventing drain or container exit`, {skip: process.platform !== "linux"}, async t => {
+    const f = await joined(t); t.after(() => f.contain());
     const process = await createDockerProviderProcessBridge().open({...f.input, preparedIo: f.io});
     const exit = process.waitForExit().catch(() => null);
     f.channel.rootExit(31); await tick();
@@ -127,12 +133,12 @@ for (const failure of ["init-crash", "late-output"] as const) {
 }
 
 for (const residue of [false, true]) {
-  test(`concrete Linux owner supplies physical predicate independently of execution and private root: residue=${residue}`, async t => {
+  test(`concrete Linux owner supplies physical predicate independently of execution and private root: residue=${residue}`, {skip: process.platform !== "linux"}, async t => {
     const f = await residueFixture(t); installSyntheticInit(f.fake);
     const launched = await f.launch(); const raw = new DockerKernelHostCustody(1000);
     const create = (await import("./support/docker-host-custody-lifecycle-fixture.ts")).createInput(f.root);
     const input = reservation(launched, create.workspaceSource, create.privateRootSource);
-    const handle = await raw.reserve(input); const retained = raw.reservation(handle.custodyRef);
+    const handle = await reserveWorkspace(t, raw, input); const retained = raw.reservation(handle.custodyRef);
     const init = initOptions(); const io = prepareDockerProviderProcessIo({launch: launched, init,
       expected: {authority: launched.authority, custodyRef: launched.key.custodyId,
         workspaceAuthorityPath: create.workspaceSource, generation: init.authority.generation}});
@@ -156,8 +162,8 @@ for (const residue of [false, true]) {
   });
 }
 
-test("sampled native mapping and complete streams do not invent independent init provenance; container status stays distinct", async t => {
-  const f = await joined(); t.after(() => f.contain());
+test("sampled native mapping and complete streams do not invent independent init provenance; container status stays distinct", {skip: process.platform !== "linux"}, async t => {
+  const f = await joined(t); t.after(() => f.contain());
   const {instance} = await import("./support/docker-provider-observation-fixture.ts");
   const process = await createDockerProviderProcessBridge().open({...f.input, preparedIo: f.io});
   const request = f.channel.messages.find(m => m.kind === "provider-exec"); assert.ok(request?.kind === "provider-exec");
@@ -184,8 +190,8 @@ test("sampled native mapping and complete streams do not invent independent init
 });
 
 for (const held of ["stdout", "stderr"] as const) {
-  test(`sole reader waits for the actual ${held} consumer before accepting root exit and drain`, async t => {
-    const f = await joined(); t.after(() => f.contain());
+  test(`sole reader waits for the actual ${held} consumer before accepting root exit and drain`, {skip: process.platform !== "linux"}, async t => {
+    const f = await joined(t); t.after(() => f.contain());
     const process = await createDockerProviderProcessBridge().open({...f.input, preparedIo: f.io});
     const other = held === "stdout" ? "stderr" : "stdout";
     const flowing = Array.fromAsync(process[other]);
@@ -199,12 +205,12 @@ for (const held of ["stdout", "stderr"] as const) {
   });
 }
 
-test("concrete recursive empty is retained before removal; absence and FD closure gate physical proof", async t => {
+test("concrete recursive empty is retained before removal; absence and FD closure gate physical proof", {skip: process.platform !== "linux"}, async t => {
   const f = await residueFixture(t); installSyntheticInit(f.fake);
   const launched = await f.launch(); const raw = new DockerKernelHostCustody(1000);
   const create = (await import("./support/docker-host-custody-lifecycle-fixture.ts")).createInput(f.root);
   const input = reservation(launched, create.workspaceSource, create.privateRootSource);
-  const handle = await raw.reserve(input); const init = initOptions();
+  const handle = await reserveWorkspace(t, raw, input); const init = initOptions();
   const io = prepareDockerProviderProcessIo({launch: launched, init, expected: {authority: launched.authority,
     custodyRef: launched.key.custodyId, generation: init.authority.generation, workspaceAuthorityPath: create.workspaceSource}});
   raw.reservation(handle.custodyRef).evidence.attach(f.lifecycle, launched, io); await io.ready();
@@ -225,8 +231,8 @@ test("concrete recursive empty is retained before removal; absence and FD closur
   assert.equal(snapshot.removal, null);
 });
 
-test("retained evidence cannot be replaced by caller-authored snapshots or a substituted lifecycle readback", async t => {
-  const f = await joined(); t.after(() => f.contain());
+test("retained evidence cannot be replaced by caller-authored snapshots or a substituted lifecycle readback", {skip: process.platform !== "linux"}, async t => {
+  const f = await joined(t); t.after(() => f.contain());
   assert.ok(Object.isFrozen(f.retained.evidence));
   assert.throws(() => Object.defineProperty(f.retained.evidence, "snapshot", {value: () => ({sealed: true})}));
   Object.defineProperty(f.lifecycle, "observeLaunch", {value() {throw new Error("substituted readback must not run");}});
@@ -237,9 +243,9 @@ test("retained evidence cannot be replaced by caller-authored snapshots or a sub
 const concreteJoined = async (t: import("node:test").TestContext, cleanupMilliseconds = 1000) => {
   const f = await residueFixture(t); const channel = installSyntheticInit(f.fake);
   const launch = await f.launch(); const raw = new DockerKernelHostCustody(cleanupMilliseconds);
-  const {createInput} = await import("./support/docker-host-custody-lifecycle-fixture.ts");
-  const create = createInput(f.root); const input = reservation(launch, create.workspaceSource, create.privateRootSource);
-  const handle = await raw.reserve(input); const init = initOptions();
+  const {createInput: createLifecycleInput} = await import("./support/docker-host-custody-lifecycle-fixture.ts");
+  const create = createLifecycleInput(f.root); const input = reservation(launch, create.workspaceSource, create.privateRootSource);
+  const handle = await reserveWorkspace(t, raw, input); const init = initOptions();
   const io = prepareDockerProviderProcessIo({launch, init, expected: {authority: launch.authority,
     custodyRef: launch.key.custodyId, generation: init.authority.generation, workspaceAuthorityPath: create.workspaceSource}});
   raw.reservation(handle.custodyRef).evidence.attach(f.lifecycle, launch, io); await io.ready();
@@ -248,7 +254,7 @@ const concreteJoined = async (t: import("node:test").TestContext, cleanupMillise
     read: () => raw.evidence(handle.custodyRef)!};
 };
 
-test("cleanup observation timeout rejoins the sole destructive flight and later proves concrete containment", async t => {
+test("cleanup observation timeout rejoins the sole destructive flight and later proves concrete containment", {skip: process.platform !== "linux"}, async t => {
   const f = await concreteJoined(t, 25);
   const {awaitNetworkCleanupWork} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js");
   const entered = deferred(); const gate = deferred(); t.after(() => gate.resolve());
@@ -282,7 +288,7 @@ test("cleanup observation timeout rejoins the sole destructive flight and later 
   assert.equal((await f.raw.release({...f.containment, receiptRef: receipt.kind === "contained" ? receipt.receiptRef : "missing"})).kind, "unproven");
 });
 
-test("containment wins the execution journal race; rejected acknowledgement settles without inventing spawn proof", async t => {
+test("containment wins the execution journal race; rejected acknowledgement settles without inventing spawn proof", {skip: process.platform !== "linux"}, async t => {
   const f = await concreteJoined(t);
   const entered = deferred(); const gate = deferred(); t.after(() => gate.resolve());
   const exclusive = f.storage.exclusive.bind(f.storage); let held = false;
@@ -318,4 +324,87 @@ test("containment wins the execution journal race; rejected acknowledgement sett
   assert.equal(executionEvidenceIsClosed(f.read()), false); assert.equal(noStartEvidenceIsClosed(f.read()), false);
   assert.equal((await f.raw.requestContainment(f.containment)).kind, "contained"); assert.equal(cleanups, 1);
   assert.equal(f.channel.attaches, 1); assert.equal(f.channel.closes, 1);
+});
+
+for (const preparation of ["missing", "pending", "settled"] as const) {
+  test(`no-IO physical closure does not seal ${preparation} preparation prematurely`, {skip: process.platform !== "linux"}, async t => {
+    const f = await residueFixture(t);
+    const launch = await f.launch();
+    const create = createInput(f.root);
+    const raw = new DockerKernelHostCustody(1000);
+    const handle = await reserveWorkspace(t, raw, reservation(launch, create.workspaceSource, create.privateRootSource));
+    const evidence = raw.reservation(handle.custodyRef).evidence;
+    assert.equal((await f.contain(launch)).kind, "closed");
+    assert.throws(() => dockerProviderProcessMountFacts(launch)); // Execution-facing facts still require ACTIVE.
+    evidence.attachLifecycle(f.lifecycle, launch);
+    assert.throws(() => evidence.attachLifecycle(f.lifecycle, launch), /one-use/);
+    const gate = deferred(); t.after(() => gate.resolve());
+    if (preparation !== "missing") {
+      evidence.trackPreparation(gate.promise);
+      assert.throws(() => evidence.trackPreparation(Promise.resolve()), /one-use/);
+    }
+    if (preparation === "settled") {gate.resolve(); await tick();}
+    assert.equal(evidence.snapshot().sealed, preparation === "settled");
+    assert.equal(evidence.snapshot().closure.status, "closed");
+    assert.equal(evidence.snapshot().sealed, preparation === "settled");
+    if (preparation === "pending") {
+      gate.resolve(); await tick();
+      assert.equal(evidence.snapshot().sealed, true);
+    }
+    assert.equal(evidence.snapshot().spawn, "ambiguous");
+    assert.equal(evidence.snapshot().identity.status, "unproven");
+    assert.equal(evidence.snapshot().providerExit.status, "unobserved");
+    assert.equal(executionEvidenceIsClosed(evidence.snapshot()), false);
+    assert.equal(noStartEvidenceIsClosed(evidence.snapshot()), false);
+  });
+}
+
+test("split attachments retain exact lifecycle and reject foreign or repeated provider IO", {skip: process.platform !== "linux"}, async t => {
+  const f = await joined(t); const other = await joined(t);
+  t.after(() => f.contain()); t.after(() => other.contain());
+  const raw = new DockerKernelHostCustody(1000);
+  const handle = await reserveWorkspace(t, raw, reservation(f.launched, f.launchInput.create.workspaceSource,
+    f.launchInput.create.privateRootSource));
+  const evidence = raw.reservation(handle.custodyRef).evidence;
+  assert.throws(() => evidence.attachProviderIo(f.io), /unavailable/);
+  assert.throws(() => evidence.attachLifecycle(other.lifecycle, f.launched));
+  evidence.attachLifecycle(f.lifecycle, f.launched);
+  assert.throws(() => evidence.attachProviderIo({...f.io}), /actual prepared/);
+  assert.throws(() => evidence.attachProviderIo(other.io), /actual prepared/);
+  evidence.attachProviderIo(f.io);
+  assert.throws(() => evidence.attachProviderIo(f.io), /unavailable/);
+  assert.equal(evidence.snapshot().spawn, "ambiguous");
+  assert.equal(evidence.snapshot().sealed, false);
+});
+
+
+test("historical cleanup attachment rejects copied, foreign and conflicting launch facts", {skip: process.platform !== "linux"}, async t => {
+  const f = await residueFixture(t);
+  const other = await residueFixture(t);
+  const launch = await f.launch();
+  const create = createInput(f.root);
+  const raw = new DockerKernelHostCustody(1000);
+  const handle = await reserveWorkspace(t, raw, reservation(launch, create.workspaceSource, create.privateRootSource));
+  const {input, evidence} = raw.reservation(handle.custodyRef);
+  assert.equal((await f.contain(launch)).kind, "closed");
+  assert.throws(() => evidence.attachLifecycle(f.lifecycle, {...launch}), /actual issued launch/);
+  assert.throws(() => evidence.attachLifecycle(other.lifecycle, launch), /actual issued launch/);
+  for (const conflict of [
+    {...input, operationId: "foreign-operation"}, {...input, attemptId: "foreign-attempt"},
+    {...input, workspaceRef: `${input.workspaceRef}/foreign`},
+    {...input, launchPlan: {...input.launchPlan, privateRootPath: `${input.launchPlan.privateRootPath}/foreign`}},
+  ]) {
+    const rejected = new DockerKernelEvidence(conflict);
+    assert.throws(() => rejected.attachLifecycle(f.lifecycle, launch), /reservation conflicts/);
+    assert.equal(rejected.snapshot().closure.status, "unproven");
+    assert.equal(rejected.snapshot().sealed, false);
+  }
+  const facts = f.lifecycle.observeLaunch(launch).mountFacts;
+  assert.deepEqual(facts, {workspaceSource: create.workspaceSource, privateRootSource: create.privateRootSource,
+    imageDigest: launch.authority.imageDigest});
+  assert.equal(Object.isFrozen(facts), true);
+  evidence.attachLifecycle(f.lifecycle, launch);
+  assert.equal(evidence.snapshot().closure.status, "closed");
+  assert.equal(evidence.snapshot().sealed, false);
+  assert.throws(() => dockerProviderProcessMountFacts(launch));
 });

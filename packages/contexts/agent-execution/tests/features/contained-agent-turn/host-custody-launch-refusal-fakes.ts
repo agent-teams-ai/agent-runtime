@@ -6,7 +6,7 @@ import {
 export type LaunchRefusalKind = "descriptor-authority" | "guardian-construction" | "unclassified";
 
 interface ObservedLaunch {
-  readonly live: {readonly spawnStatus: string};
+  readonly live: {readonly custodyRef: string; readonly spawnStatus: string};
 }
 
 let refusalKind: LaunchRefusalKind = "descriptor-authority";

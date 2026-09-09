@@ -582,3 +582,40 @@ for (const phase of ["resolve", "revalidate"] as const) {
     });
   }
 }
+
+
+test("PA full-binding evidence crosses the AE acceptance and dispatch boundary", async () => {
+  for (const accessRef of ["access:ar69-linux-codex-r6-20260907-acceptance", `access:${"x".repeat(505)}`]) {
+    const binding = {
+      ...record, accessRef, revision: Number.MAX_SAFE_INTEGER,
+      credentialBindingDigest: `sha256:${"a".repeat(64)}`,
+      credentialBindingRef: "credential-binding:ar69-linux-codex-r6-20260907",
+      providerAccountRef: "provider-account:ar69-linux-codex-r6-20260907",
+      providerRouteRef: "provider-route:ar69-linux-codex-r6-20260907",
+    };
+    const feature = createStaticContainedTurnProviderAccessFeature([{ ...binding, kind: "binding" as const }]);
+    const owner = Object.freeze({ dispatchConsumptionV1: unusedDispatch, resolve: feature.resolve, revalidate: feature.revalidate });
+    const input = { intent: { mode: "analysis" as const, prompt: "Inspect the disposable workspace." }, provider: "codex" as const, scope };
+    const resolved = await feature.resolve.execute({provider: input.provider, scope});
+    assert.equal(resolved.kind, "resolved");
+    if (resolved.kind !== "resolved") { throw new Error("expected binding"); }
+    const preimage = JSON.stringify({ binding: resolved.binding, purpose: "acceptance", version: 1 });
+    assert.ok(preimage.length > 512);
+    const port = createContainedTurnProviderAccessPort(owner);
+    const accepted = await port.resolveForAcceptance(input);
+    assert.equal(accepted.kind, "resolved");
+    if (accepted.kind !== "resolved") { throw new Error("expected accepted snapshot"); }
+    assert.equal(accepted.snapshot.accessRef, binding.accessRef);
+    assert.equal(accepted.snapshot.revision, binding.revision);
+    assert.equal((await port.revalidateForDispatch({
+      acceptedSnapshot: accepted.snapshot, operationId: "operation:binding-evidence", scope,
+    })).kind, "current");
+    const unboundedOwner = Object.freeze({
+      ...owner,
+      resolve: Object.freeze({ execute: async () => Object.freeze({
+        ...resolved, evidence: Object.freeze({ ...resolved.evidence, authorityDigest: preimage }),
+      }) }),
+    });
+    assert.equal((await createContainedTurnProviderAccessPort(unboundedOwner).resolveForAcceptance(input)).kind, "indeterminate");
+  }
+});

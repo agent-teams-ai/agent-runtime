@@ -20,6 +20,7 @@ const qualificationDatabaseUrl =
 const postgresTests = [
   join(containedTurnTestRoot, "postgres-contained-turn-intent.test.ts"),
   join(containedTurnTestRoot, "postgres-fresh-process-recovery.test.ts"),
+  join(containedTurnTestRoot, "postgres-http-egress-evidence.test.ts"),
   join(containedTurnTestRoot, "postgres-committed-dispatch.test.ts"),
   join(containedTurnTestRoot, "postgres-contained-turn-acceptance-commit.test.ts"),
   join(containedTurnTestRoot, "postgres-contained-turn.test.ts"),

@@ -1,4 +1,6 @@
-import {createDockerHostCustodyLifecycle, type DockerHostCustodyCompositionDependencies,
+import {capturePinnedDockerWorkspace, type DockerWorkspaceCapture} from "./docker-workspace-custody.js";
+import {linuxExclusiveRouteSeccomp} from "./linux-exclusive-route-policy.js";
+import {createDockerHostCustodyLifecycle, type DockerHostCustodyCompositionDependencies, DockerHostCustodyLifecycle,
   type DockerHostCustodyResiduePort} from "./docker-host-custody-lifecycle.js";
 import {sameDockerAuthority, isInactiveDockerObservation} from "./docker-host-custody-lifecycle-guards.js";
 import {validateAuthorityShape, snapshotDockerEnginePolicy, NodeUnixSocketDockerEngine}
@@ -10,11 +12,47 @@ import {boundResidueWork, NodeLinuxDockerResidueIo, ResidueIoScope, type DockerR
 import {compareResidueTrees, openResidueTree, pinResidueProcess, requireLeafMembership,
   scanResidueTree, verifyResidueProcess, type ResidueProcess, type ResidueTree} from "./linux-docker-residue-kernel.js";
 import {recursivePopulation, residueFault, residueLeaf, residueParent, sameResidueEngine} from "./linux-docker-residue-parsers.js";
-
-const concreteLifecycles = new WeakSet<object>();
+type Launched = Parameters<DockerHostCustodyLifecycle["observeLaunch"]>[0];
+const concreteLifecycles = new WeakMap<DockerHostCustodyLifecycle, LinuxDockerResidueOwner>();
+export const readNodeLinuxDockerCgroup = async (lifecycle: DockerHostCustodyLifecycle,
+  launch: Launched, call: DockerEngineCall): Promise<string> => {
+  const owner = concreteLifecycles.get(lifecycle);
+  if (owner === undefined) {throw residueFault();}
+  const observed = observeWorkspaceLaunch.call(lifecycle, launch);
+  if (observed.retired || observed.removal !== null || observed.recursiveEmpty !== null || observed.terminal !== null) {
+    throw residueFault();
+  }
+  return owner.readCgroup(observed.authority, call);
+};
 /** Provenance readback only; no caller-supplied empty callback qualifies. */
-export const isConcreteLinuxDockerLifecycle = (lifecycle: object): boolean => concreteLifecycles.has(lifecycle);
-
+export const isConcreteLinuxDockerLifecycle = (lifecycle: object): boolean => concreteLifecycles.has(lifecycle as DockerHostCustodyLifecycle);
+const observeWorkspaceLaunch = DockerHostCustodyLifecycle.prototype.observeLaunch;
+const workspaceProofs = new WeakMap<object, Readonly<{launch: Launched; lifecycle: DockerHostCustodyLifecycle; capture: DockerWorkspaceCapture}>>();
+const capturedLaunches = new WeakSet<Launched>();
+/** One-use launch provenance; no pathname or caller-created object can issue proof. */
+export const captureDockerWorkspaceCustody = async (lifecycle: DockerHostCustodyLifecycle,
+  launch: Launched, call: DockerEngineCall): Promise<object> => {
+  const owner = concreteLifecycles.get(lifecycle);
+  const observed = observeWorkspaceLaunch.call(lifecycle, launch);
+  if (owner === undefined || capturedLaunches.has(launch) || observed.retired || observed.terminal !== null ||
+    observed.removal !== null || observed.recursiveEmpty !== null || observed.execution !== null || observed.journal.state !== "init_ready") {throw residueFault();}
+  capturedLaunches.add(launch);
+  const capture = await owner.captureWorkspace(observed.authority, call);
+  const after = observeWorkspaceLaunch.call(lifecycle, launch);
+  if (after.retired || after.terminal !== null || after.removal !== null || after.recursiveEmpty !== null ||
+    after.execution !== null || after.journal.state !== "init_ready") {throw residueFault();}
+  const proof = Object.freeze({});
+  workspaceProofs.set(proof, Object.freeze({launch, lifecycle, capture}));
+  return proof;
+};
+export const readDockerWorkspaceCustody = (proof: object, launch: Launched): DockerWorkspaceCapture => {
+  const retained = workspaceProofs.get(proof);
+  if (retained === undefined || retained.launch !== launch) {throw residueFault();}
+  const current = observeWorkspaceLaunch.call(retained.lifecycle, launch);
+  if (current.retired || current.execution !== null || current.journal.state !== "init_ready") {throw residueFault();}
+  workspaceProofs.delete(proof); // One owner only; historical facts remain in that owner.
+  return retained.capture;
+};
 type Present = Extract<DockerContainerObservation, {existence: "present"}>;
 interface RetainedResidue {
   readonly authority: DockerContainerAuthority;
@@ -30,7 +68,6 @@ interface RetainedResidue {
   leaf?: ResiduePin;
   process?: ResidueProcess;
 }
-
 /** Volatile FD custody cannot be reconstructed from an Engine observation after
  * restart. The durable lifecycle retains reconciliation debt in that case. */
 class LinuxDockerResidueOwner implements DockerHostCustodyResiduePort {
@@ -43,7 +80,6 @@ class LinuxDockerResidueOwner implements DockerHostCustodyResiduePort {
   private admitted = 0;
   public constructor(private readonly engine: DockerEnginePort, private readonly policy: DockerEnginePolicy,
     private readonly io: DockerResidueIo) {}
-
   public reserveCreate(call: DockerEngineCall): void {
     if (this.disposed || this.admitted >= 64 || call.signal.aborted ||
         !Number.isSafeInteger(call.deadlineEpochMs) || Date.now() >= call.deadlineEpochMs) {throw residueFault();}
@@ -51,7 +87,6 @@ class LinuxDockerResidueOwner implements DockerHostCustodyResiduePort {
     // erase a possibly materialized container's reservation.
     this.admitted += 1;
   }
-
   private async run<T>(call: DockerEngineCall, work: (scope: ResidueIoScope) => Promise<T>): Promise<T> {
     if (this.disposed || this.active !== undefined || this.cleanupDebt.size > 0) {throw residueFault();}
     const scope = new ResidueIoScope(this.io, Object.freeze({...call}));
@@ -76,7 +111,6 @@ class LinuxDockerResidueOwner implements DockerHostCustodyResiduePort {
     });
     return boundResidueWork(publish, call, () => {scope.cancelled = true;});
   }
-
   private retain(scope: ResidueIoScope, record: RetainedResidue): void {
     scope.check();
     const pins = [...record.tree.ancestry, record.tree.proc, record.tree.events,
@@ -87,12 +121,10 @@ class LinuxDockerResidueOwner implements DockerHostCustodyResiduePort {
       if (scope.files.delete(pin.file)) {record.files.add(pin.file);}
     }
   }
-
   private expectedLeaves(): ReadonlyMap<string, ResiduePin | undefined> {
     return new Map([...this.records.values()].filter(record => !record.released)
       .map(record => [record.leafName, record.leaf]));
   }
-
   private assertObservation(authority: DockerContainerAuthority, observation: DockerContainerObservation): void {
     if (!sameDockerAuthority(authority, observation.authority) ||
         observation.engine.hostIdentitySha256 !== this.policy.hostIdentitySha256 || observation.engine.cgroupVersion !== "2" ||
@@ -106,7 +138,6 @@ class LinuxDockerResidueOwner implements DockerHostCustodyResiduePort {
         observation.resources.cgroupNamespaceMode !== "private" || observation.resources.capabilitiesDropped !== "all" ||
         !observation.resources.noNewPrivileges || observation.resources.restart !== "disabled")) {throw residueFault();}
   }
-
   private record(authority: DockerContainerAuthority, allowReleased = false): RetainedResidue {
     const record = this.records.get(authority.containerId);
     if (record === undefined || record.faulted || record.released && !allowReleased || !sameDockerAuthority(authority, record.authority)) {
@@ -114,7 +145,6 @@ class LinuxDockerResidueOwner implements DockerHostCustodyResiduePort {
     }
     return record;
   }
-
   private async confirm(scope: ResidueIoScope, record: RetainedResidue, call: DockerEngineCall): Promise<void> {
     const engine = await this.engine.identity(call);
     scope.check();
@@ -123,7 +153,6 @@ class LinuxDockerResidueOwner implements DockerHostCustodyResiduePort {
     await compareResidueTrees(scope, record.tree, current);
     if (current.boot !== engine.hostBootGenerationSha256) {throw residueFault();}
   }
-
   public async start(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<void> {
     authority = validateAuthorityShape(authority);
     return this.run(call, async scope => {
@@ -164,7 +193,6 @@ class LinuxDockerResidueOwner implements DockerHostCustodyResiduePort {
       } catch (error) {record.faulted = true; throw error;}
     });
   }
-
   private async validateRunning(scope: ResidueIoScope, record: RetainedResidue, actual: Present,
     call: DockerEngineCall): Promise<void> {
     if (record.process === undefined || record.leaf === undefined || record.sealed) {throw residueFault();}
@@ -180,7 +208,49 @@ class LinuxDockerResidueOwner implements DockerHostCustodyResiduePort {
     await requireLeafMembership(scope, record.leaf, actual.state.hostPid);
     await this.confirm(scope, record, call);
   }
-
+  public readCgroup(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<string> {
+    return this.run(call, async scope => {
+      const record = this.record(authority);
+      try {
+        const actual = await this.engine.inspect(authority, call);
+        scope.check();
+        this.assertObservation(authority, actual);
+        if (actual.existence !== "present" || !actual.state.running || !sameResidueEngine(record.engine, actual.engine)) {
+          throw residueFault();
+        }
+        await this.validateRunning(scope, record, actual, call);
+        scope.check();
+        return `cgroup:${record.leaf!.facts.dev}:${record.leaf!.facts.ino}`;
+      } catch (error) {record.faulted = true; throw error;}
+    });
+  }
+  public captureWorkspace(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<DockerWorkspaceCapture> {
+    return this.run(call, async scope => {
+      const record = this.record(authority);
+      try {
+        const actual = await this.engine.inspect(authority, call);
+        this.assertObservation(authority, actual);
+        if (actual.existence !== "present" || !actual.state.running ||
+          actual.resources.seccompProfileSha256 !== linuxExclusiveRouteSeccomp().sha256 ||
+          !actual.resources.readOnlyRoot || actual.resources.pidNamespaceMode !== "private" ||
+          actual.resources.mountPropagation !== "rprivate") {throw residueFault();}
+        await this.validateRunning(scope, record, actual, call);
+        const capture = await capturePinnedDockerWorkspace(scope, record.process!.directory, actual.resources.workspaceWritable);
+        const after = await this.engine.inspect(authority, call);
+        this.assertObservation(authority, after);
+        if (after.existence !== "present" || !after.state.running ||
+          after.resources.seccompProfileSha256 !== actual.resources.seccompProfileSha256 ||
+          after.resources.workspaceWritable !== actual.resources.workspaceWritable) {throw residueFault();}
+        await this.validateRunning(scope, record, after, call);
+        scope.check();
+        // These extra root/namespace pins share the residue owner's release and
+        // serialized read lifetime. No recursive call to run()/cleanup().
+        for (const file of scope.files) {record.files.add(file);}
+        scope.files.clear();
+        return capture;
+      } catch (error) {record.faulted = true; throw error;}
+    });
+  }
   public async inspect(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<DockerContainerObservation> {
     const actual = await this.engine.inspect(authority, call);
     this.assertObservation(authority, actual);
@@ -309,7 +379,7 @@ export const composeLinuxDockerResidueCustody = (
   });
   const lifecycle = createDockerHostCustodyLifecycle({engine: decorated, residue: owner, journalStorage: input.journalStorage,
     ...(input.journalLimits === undefined ? {} : {journalLimits: input.journalLimits})});
-  concreteLifecycles.add(lifecycle);
+  concreteLifecycles.set(lifecycle, owner);
   return Object.freeze({
     lifecycle,
     // Local residue FD disposal only; this does not stop a container, close the

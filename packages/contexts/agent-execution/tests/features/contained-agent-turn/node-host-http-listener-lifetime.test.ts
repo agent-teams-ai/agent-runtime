@@ -236,3 +236,49 @@ test("connections before publication cannot invoke consumers or reopen admission
   f.server.connection(); await flush(); assert.equal(calls, 0); assert.equal(f.server.closeCalls, 0);
   assert.deepEqual(await f.recipe.close(), { state: "closed" });
 });
+
+test("normal settlement retains accepted work and endpoint without hard cutoff", async t => {
+  const f = fixture(t); const work = Promise.withResolvers<void>();
+  let calls = 0;
+  const listener = await f.recipe.open(async socket => {
+    calls += 1; await work.promise; socket.destroy();
+  }, f.cutoff);
+  const socket = f.server.connection();
+  const settlement = f.recipe.settleAccepted();
+  f.server.emit("drop");
+  assert.equal(listener.observe().sockets.droppedWithoutSocket, 1);
+  assert.equal(f.recipe.settleAccepted(), settlement);
+  assert.equal(f.cutoff.signal.aborted, false); assert.equal(socket.destroyed, false);
+  assert.equal(f.server.closeCalls, 0);
+  const refused = f.server.connection();
+  assert.equal(refused.destroyed, true); assert.equal(calls, 1);
+  assert.equal(f.cutoff.signal.aborted, false);
+  work.resolve(); await flush();
+  assert.deepEqual(await settlement, {state: "settled"});
+  assert.equal(f.server.closeCalls, 0); assert.equal(f.server.listening, true);
+  assert.deepEqual(await listener.close(), {state: "closed"});
+});
+
+test("hard cancellation interrupts normal settlement and cannot become settled later", async t => {
+  const f = fixture(t); const work = Promise.withResolvers<void>();
+  const listener = await f.recipe.open(async () => {await work.promise;}, f.cutoff);
+  const socket = f.server.connection();
+  const settlement = f.recipe.settleAccepted();
+  f.cutoff.abort();
+  assert.equal(socket.destroyed, true);
+  assert.deepEqual(await settlement, {state: "unknown"});
+  work.resolve(); await flush();
+  assert.deepEqual(await f.recipe.settleAccepted(), {state: "unknown"});
+  await listener.close();
+});
+
+test("normal settlement expires at the original operation deadline", async t => {
+  const f = fixture(t); const work = Promise.withResolvers<void>();
+  const listener = await f.recipe.open(async () => {await work.promise;}, f.cutoff);
+  const socket = f.server.connection();
+  const settlement = f.recipe.settleAccepted();
+  f.clock.advance(config.deadline); await flush();
+  assert.equal(f.cutoff.signal.aborted, true); assert.equal(socket.destroyed, true);
+  assert.deepEqual(await settlement, {state: "unknown"});
+  work.resolve(); await flush(); await listener.close();
+});

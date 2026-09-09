@@ -87,9 +87,9 @@ for (const missing of ["v4", "network-observation", "subject", "consumption"] as
   });
 }
 
-test("cutoff during both concrete preparations retains late bind and quarantines late journal success", async () => {
+test("cutoff during concrete consumption preparation quarantines late journal success", async () => {
   const journal = deferred<void>();
-  const f = await fixture({pendingListen: true, pendingJournal: journal.promise});
+  const f = await fixture({pendingJournal: journal.promise});
   const pending = f.prepare(); await tick();
   const owned = liveFor(f.custodyRef).httpReservation.pending;
   assert.ok(owned); assert.equal(f.storage.opens, 1); assert.equal(f.servers.length, 1);
@@ -97,7 +97,6 @@ test("cutoff during both concrete preparations retains late bind and quarantines
   let settled = false; void pending.then(() => {settled = true; return settled;});
   await tick(); assert.equal(settled, false);
   assert.equal(liveFor(f.custodyRef).httpReservation.pending, owned);
-  f.servers[0]!.bind();
   assert.equal(f.servers[0]!.listening, true); assert.equal(f.servers[0]!.closeCalls, 0);
   journal.resolve(); assert.equal((await pending).kind, "unproven"); await tick();
   assert.equal(f.storage.created, 1); assert.equal(f.storage.tombstones, 1); assert.equal(f.storage.closes, 1);
@@ -151,6 +150,7 @@ test("synchronous listener throw cannot orphan a recipe that later binds", async
   f.duringListen(() => {throw new Error("synthetic native listen throw");});
   assert.equal((await f.prepare()).kind, "unproven");
   assert.equal(f.lifetime.signal.aborted, true); assert.equal(f.servers[0]!.closeCalls, 0);
+  assert.equal(f.storage.opens, 0);
   f.servers[0]!.bind();
   assert.equal((await f.release()).kind, "unproven");
   await f.authorizeRelease();
@@ -188,6 +188,8 @@ test("unknown listener cleanup cannot tombstone even after later native close ac
 test("release timeout keeps concrete pending retirement and cannot report released", async () => {
   const f = await fixture(); assert.equal((await f.prepare()).kind, "prepared");
   const retirement = deferred<void>(); f.storage.closeGate = retirement.promise;
+  // Keep this negative case uncertain after physical cleanup acknowledges.
+  f.storage.retiredUnknown = true;
   burn(f); await tick();
   // Exercise the existing bounded release without waiting the default 15 seconds.
   const live = liveFor(f.custodyRef);
@@ -206,6 +208,7 @@ test("release timeout keeps concrete pending retirement and cannot report releas
 
 test("retained endpoint requires V4 cutoff, socket closure, exact removal and a fresh release intent", async () => {
   const f = await fixture(); assert.equal((await f.prepare()).kind, "prepared");
+  f.storage.retiredUnknown = true; // Physical V4 prerequisites cannot repair consumption uncertainty.
   await f.observe("listener_allocated"); await f.observe("container_attached");
   await f.intent("route_intent"); await f.observe("route_installed");
   await f.intent("inbound_intent"); await f.observe("inbound_allocated");
@@ -240,3 +243,68 @@ test("the retained local-cut session propagates shutdown to the same reservation
   assert.throws(() => session.nativeBearerToken(), /inbound_authentication_denied/u);
   assert.equal(f.storage.tombstones, 1); assert.equal(f.servers[0]!.closeCalls, 0);
 });
+
+for (const cancelled of [false, true]) {
+  test(`deferred listener ACK gates consumption and retains late cleanup (cancelled=${cancelled})`, async () => {
+    const f = await fixture({pendingListen: true});
+    let reads = 0;
+    const consumption = {async prepare() {
+      reads++;
+      assert.equal(f.servers[0]!.listening, true);
+      return f.resourceInput.consumption.prepare();
+    }};
+    const pending = f.preparation.prepareResources(f.lifetime, {...f.resourceInput, consumption});
+    await tick();
+    assert.equal(f.servers.length, 1); assert.equal(reads, 0); assert.equal(f.storage.opens, 0);
+    const owned = liveFor(f.custodyRef).httpReservation.pending;
+    assert.ok(owned);
+    if (cancelled) {burn(f);}
+    f.servers[0]!.bind();
+    assert.equal((await pending).kind, cancelled ? "unproven" : "prepared");
+    assert.equal(reads, cancelled ? 0 : 1);
+    assert.equal(f.storage.opens, cancelled ? 0 : 1);
+    assert.equal(f.servers[0]!.closeCalls, 0);
+    assert.equal((await f.release()).kind, "unproven");
+    await f.authorizeRelease();
+    assert.equal((await f.release()).kind, "released");
+    assert.equal(f.servers[0]!.closeCalls, 1);
+  });
+}
+
+test("unknown deployment close retains the same listener and original release intent for retry", async () => {
+  const f = await fixture();
+  let closes = 0;
+  const original = f.resourceInput.listener;
+  const listener = {...original, async close() {
+    closes++;
+    const result = await original.close();
+    return closes === 1 ? {state: "unknown" as const} : result;
+  }};
+  assert.equal((await f.preparation.prepareResources(f.lifetime, {...f.resourceInput, listener})).kind, "prepared");
+  burn(f); await f.authorizeRelease();
+  await f.release(); assert.equal(closes, 1);
+  await f.release(); assert.equal(closes, 2);
+  assert.equal(f.records().filter(kind => kind === "listener_release").length, 1);
+});
+
+for (const uses of [0, 1]) {
+  test(`healthy concrete owner cleanup seals synchronously and closes once (${uses} uses)`, async () => {
+    const f = await fixture(); const prepared = await f.prepare();
+    assert.equal(prepared.kind, "prepared"); if (prepared.kind !== "prepared") {return;}
+    const proof = f.lifetime.committedDispatchProof;
+    const key = {namespace: "provider-process-egress/v2" as const, tenantId: proof.tenantId,
+      projectId: proof.projectId, operationId: proof.operationId, boundaryUseId: "boundary:healthy"};
+    if (uses === 1) {assert.equal(prepared.journal.consume(key, `sha256:${"a".repeat(64)}`), "consumed");}
+    const bytes = Buffer.from(f.storage.bytes);
+    burn(f);
+    assert.equal(prepared.journal.consume({...key, boundaryUseId: "boundary:late"}, `sha256:${"b".repeat(64)}`), "unknown");
+    assert.match(f.storage.disposition, /"disposition":"retired"/u);
+    assert.ok(f.storage.disposition.includes(`"acknowledgedUses":${uses}`));
+    await f.authorizeRelease();
+    assert.equal((await f.release()).kind, "released");
+    assert.equal((await f.release()).kind, "released");
+    assert.equal(f.storage.closes, 1); assert.equal(f.storage.locks, 0);
+    assert.equal(f.storage.tombstones, 1); assert.equal(f.servers[0]!.closeCalls, 1);
+    assert.deepEqual(f.storage.bytes, bytes);
+  });
+}

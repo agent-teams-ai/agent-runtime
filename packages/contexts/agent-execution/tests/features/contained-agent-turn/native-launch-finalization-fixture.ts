@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
+import type { LiveCustody } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-state.js";
 import { constants, readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { dirname } from "node:path";
 import { after } from "node:test";
+import { modules } from "./native-launch-finalization-modules.ts";
+export { modules };
 
 // Read only the pinned fixture catalog. Product filesystem/process operations
 // use in-memory observations before importing any reservation or provider code.
 const catalog = readFileSync(new URL("../../fixtures/codex-native-broker-0.153.4/models.json", import.meta.url));
-export const modules = new Map<string, Record<string, unknown>>();
 const slot = Symbol.for("ar69-r205-native-launch-finalization-fixture");
 Reflect.set(globalThis, slot, modules);
 const hooks = registerHooks({
@@ -22,7 +24,7 @@ const hooks = registerHooks({
     if (!url.startsWith("native-finalization-fixture:")) {return next(url, context);}
     const name = url.slice("native-finalization-fixture:".length);
     const source = `const data = globalThis[Symbol.for(${JSON.stringify(slot.description)})].get(${JSON.stringify(name)});\n`
-      + Object.keys(modules.get(name)!).map(key => `export const ${key} = data.${key};`).join("\n");
+      + Object.keys(modules.get(name)!).map(key => key === "default" ? "export default data.default;" : `export const ${key} = data.${key};`).join("\n");
     return { format: "module", source, shortCircuit: true };
   },
 });
@@ -75,13 +77,22 @@ modules.set("node:fs", {
   },
   readFileSync: () => {throw new Error("unexpected product sync read");},
 });
+modules.get("node:fs")!.default = modules.get("node:fs")!;
 modules.set("node:fs/promises", {
+  open: async () => {throw new Error("filesystem access forbidden");},
+  readdir: async () => {throw new Error("filesystem access forbidden");},
+  readlink: async () => {throw new Error("filesystem access forbidden");},
   readFile: async () => {throw new Error("real process/config reads forbidden");},
   stat: async (path: string, options: {bigint?: boolean}) => stats(path, options),
   lstat: async (path: string, options: { bigint?: boolean }) => stats(path, options),
   realpath: async (path: string) => canonical(path),
 });
 modules.set("@agent-teams/filesystem-custody", {
+  withStableDirectoryProcessLock: async (...args: unknown[]) => {
+    const lock = modules.get("retention-lock")?.withStableDirectoryProcessLock;
+    if (typeof lock !== "function") {throw new Error("filesystem access forbidden");}
+    return lock(...args);
+  },
   capturePathLineage: async (path: string) => {entry(path); return path;},
   pathLineagesEqual: (left: string, right: string) => left === right,
   openStablePath: async (path: string, expected: string, use: (opened: object) => Promise<unknown>) => {
@@ -125,6 +136,22 @@ modules.set("./node-provider-process-custody-spawn-acknowledgement.js", {
   },
 });
 modules.set("./host-custody-private-root.js", {
+  retainPrivateRootCleanupAuthority(live: LiveCustody) {
+    if (live.privateRootCleanupAuthority !== undefined) {return live.privateRootCleanupAuthority.descriptor;}
+    assert.equal(live.spawnStatus, "never-started");
+    const root = live.privatePaths?.root;
+    assert.ok(root);
+    const observed = stats(root.path, {bigint: true});
+    assert.equal(observed.isDirectory(), true);
+    for (const key of ["dev", "ino", "mode", "uid", "ctimeNs"] as const) {assert.equal(observed[key], root[key]);}
+    const descriptor = nextDescriptor++;
+    descriptors.set(descriptor, root.path);
+    let closed = false;
+    live.privateRootCleanupAuthority = Object.freeze({descriptor,
+      close() {if (!closed) {close(descriptor); closed = true;}},
+    });
+    return descriptor;
+  },
   quarantinePrivateRoot: () => true, quarantinePrivateRootForReconciliation: () => true,
 });
 export const host = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.js");

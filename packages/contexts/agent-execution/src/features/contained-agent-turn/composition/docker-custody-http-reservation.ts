@@ -77,7 +77,8 @@ export class DockerCustodyHttpReservation {
         this.#assertPreparation(lifetime); return this.#resources.bindSession(dependencies);
       },
       cutoff: this.#abort,
-      cleanup: (deadlineEpochMs: number) => this.#cleanup(deadlineEpochMs),
+      cleanup: async (deadlineEpochMs: number) => (await this.#cleanup(deadlineEpochMs)).released,
+      cleanupOutcome: (deadlineEpochMs: number) => this.#cleanup(deadlineEpochMs),
     });
   }
 
@@ -138,15 +139,15 @@ export class DockerCustodyHttpReservation {
     }
   }
 
-  async #cleanup(deadlineEpochMs: number): Promise<boolean> {
+  async #cleanup(deadlineEpochMs: number) {
     this.#cutoff();
-    if (!Number.isSafeInteger(deadlineEpochMs) || deadlineEpochMs <= Date.now()) {return false;}
-    const work = this.#resources.cleanup();
+    if (!Number.isSafeInteger(deadlineEpochMs) || deadlineEpochMs <= Date.now()) {return Object.freeze({released: false, dependenciesReleased: false});}
+    const work = this.#resources.cleanupOutcome();
     // Only the wait is bounded. The resource owner's existing shared cleanup
     // flight and late acquisitions remain retained after this waiter detaches.
     try {
       await awaitNetworkCleanupWork(work, {signal: new AbortController().signal, deadlineEpochMs});
       return await work;
-    } catch {return false;}
+    } catch {return Object.freeze({released: false, dependenciesReleased: false});}
   }
 }

@@ -1,3 +1,5 @@
+import {recordNativeStart} from "./docker-native-start-diagnostic.js";
+import {DockerConsumptionObservations} from "./docker-consumption-observations.js";
 import {isIssuedCodexAppServerLaunchPlan, type CodexAppServerLaunchPlan} from "../adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
 import { DockerCustodyHttpReservation } from "./docker-custody-http-reservation.js";
 import { createDockerHostHttpResources, type DockerHostHttpResources, type DockerHostHttpListenerResources } from "./docker-host-http-resources.js";
@@ -109,6 +111,8 @@ export type DockerLinuxPreparedExecution<Io extends DockerLinuxPreparedProviderI
 export type DockerLinuxClaimedJoin<Io extends DockerLinuxPreparedProviderIo> = Readonly<{
   captureHost?(): Promise<Readonly<{create: DockerHostCustodyContainerCreateInput; hostLifecycleGenerationSha256: string}>>;
   beforeLaunch?(input: Readonly<{identity: EngineIdentity; policy: EnginePolicy}>): Promise<NonNullable<LaunchInput["imageInit"]>>;
+  afterLaunch?(input: Readonly<{claimed: Claimed; launch: Launched}>): void;
+  afterInit?(input: Readonly<{claimed: Claimed; launch: Launched}>): Promise<void>;
   prepareProviderIo(input: Readonly<{claimed: Claimed; launch: Launched; init: InitOptions}>): Io;
   finishClaimed(input: Readonly<{claimed: Claimed; launch: Launched; providerIo: Io;
     http: DockerHostHttpResources; routeFirstWrite: DockerLinuxOperationRouteFirstWrite}>):
@@ -122,6 +126,14 @@ export interface DockerLinuxPostClaimOwner<Io extends DockerLinuxPreparedProvide
 }
 
 /** Joined construction requires both external owners before any allocation. */
+const finishInitReadiness = async (ready: Promise<Readonly<{kind: string}>>, afterReady: () => Promise<void> | undefined,
+  assertOpen: () => void): Promise<void> => {
+  if ((await ready).kind !== "ready") {throw new TypeError("Docker authenticated init readiness is unproven");}
+  assertOpen();
+  await afterReady();
+  assertOpen();
+};
+
 export const createDockerLinuxPostClaimOwner = <Io extends DockerLinuxPreparedProviderIo>(
   dependencies: DockerLinuxPostClaimDependencies, join: DockerLinuxClaimedJoin<Io>,
 ): DockerLinuxPostClaimOwner<Io> => {
@@ -135,6 +147,8 @@ export const createDockerLinuxPostClaimOwner = <Io extends DockerLinuxPreparedPr
   }
   return createPreparationOwner(dependencies, Object.freeze({
     prepareProviderIo: join.prepareProviderIo.bind(join), finishClaimed: join.finishClaimed.bind(join),
+    ...(join.afterLaunch === undefined ? {} : {afterLaunch: join.afterLaunch.bind(join)}),
+    ...(join.afterInit === undefined ? {} : {afterInit: join.afterInit.bind(join)}),
     ...(join.captureHost === undefined ? {} : {captureHost: join.captureHost.bind(join)}),
     ...(join.beforeLaunch === undefined ? {} : {beforeLaunch: join.beforeLaunch.bind(join)}),
   }));
@@ -300,10 +314,8 @@ const createResourceCleanup = (
   });
   const proveListenerAbsent = retainProof(async (): Promise<boolean> => {
     if (resources.product === undefined) {return true;}
-    const released = await resources.product.cleanupResources(Math.min(observationDeadline, Date.now() + cleanupMs))
-      .catch(() => false);
     const readback = resources.product.listener;
-    if (!released || readback === undefined || resources.observers === undefined) {return false;}
+    if (readback === undefined || resources.observers === undefined) {return false;}
     return resources.observers.observeListenerAbsent(readback).then(() => true, () => false);
   });
   const releaseRoute = retainProof(async () =>
@@ -318,8 +330,17 @@ const createResourceCleanup = (
     if (resources.routeAttempted && containerAbsent) {
       proven = await releaseRoute() && proven;
     }
-    proven = await proveListenerAbsent() && proven;
+    // Only the resource owner can separate journal debt from deployment debt.
+    // Physical listener readback remains necessary but cannot authorize release.
+    if (!Number.isSafeInteger(observationDeadline) || Date.now() >= observationDeadline) {return false;}
+    const released = resources.product === undefined ? {released: true, dependenciesReleased: true} : await resources.product
+      .cleanupResourceOutcome(Math.min(observationDeadline, Date.now() + cleanupMs))
+      .catch(() => ({released: false, dependenciesReleased: false}));
+    proven = released.released && proven;
+    const listenerAbsent = await proveListenerAbsent();
+    proven = listenerAbsent && proven;
     if (resources.networkAttempted) {
+      if (!released.dependenciesReleased || !listenerAbsent) {return false;}
       if (Date.now() >= observationDeadline) {return false;}
       const removed = await resources.network?.cleanupNetwork().catch(() => "unknown" as const);
       proven = removed === "absent" && proven;
@@ -361,6 +382,48 @@ const awaitPreparationCleanup = async (deadlineEpochMs: number, preparationFligh
   } catch {return Object.freeze({kind: "quarantined" as const});}
 };
 
+const assertPreparationOpen = (cut: boolean, signal: AbortSignal, deadline: number): void => {
+  if (cut || signal.aborted || Date.now() >= deadline) {throw new TypeError("Host post-claim preparation was cut off");}
+};
+
+const createFailureSettlement = (cutoff: () => void, settleResources: () => Promise<boolean>) =>
+  async (reason: UnsupportedReason): Promise<Outcome> => {
+    try {cutoff();} catch { /* Retained cleanup still runs after a failed cutoff. */ }
+    return await settleResources() ? unsupported(reason) : quarantined();
+  };
+
+const createPreparationCalls = (input: Claimed, admissionAbort: AbortController,
+  admissionDeadline: number, observationAbort: AbortController, observation: Readonly<{deadline: number; cleanupMs: number}>) => {
+  const observationDeadline = observation.deadline;
+    const call = (milliseconds: number): EngineCall =>
+      Object.freeze({signal: AbortSignal.any([input.signal, admissionAbort.signal]),
+        deadlineEpochMs: Math.min(admissionDeadline, Date.now() + milliseconds)});
+    // Release is not admission: an irreversible caller cutoff must not stop the
+    // Engine and journal work that proves these resources actually went away.
+    const cleanupCall = (): EngineCall =>
+      Object.freeze({signal: observationAbort.signal,
+        deadlineEpochMs: Math.min(observationDeadline, Date.now() + observation.cleanupMs)});
+  return {call, cleanupCall};
+};
+
+const createLaunchLifetime = (signal: AbortSignal, admissionSignal: AbortSignal, admissionDeadline: number,
+  observationSignal: AbortSignal, observationDeadline: number): NonNullable<LaunchInput["lifetime"]> => ({
+  admission: {signal: AbortSignal.any([signal, admissionSignal]), deadlineEpochMs: admissionDeadline},
+  observation: {signal: observationSignal, deadlineEpochMs: observationDeadline,
+    isActive: () => !observationSignal.aborted && Date.now() < observationDeadline},
+});
+
+const publishPreparedPlan = <T>(plan: object, assertOpen: () => void, publish: () => T): T => {
+  recordNativeStart(plan, "begin", "plan-publication");
+  try {
+    assertOpen();
+    if (!isIssuedCodexAppServerLaunchPlan(plan)) {throw new TypeError("Docker final plan is not issued");}
+    const result = publish();
+    recordNativeStart(plan, "complete");
+    return result;
+  } catch (error) {recordNativeStart(plan, "fail"); throw error;}
+};
+
 const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
   dependencies: DockerLinuxPostClaimDependencies, join?: DockerLinuxClaimedJoin<Io>,
 ): DockerLinuxPostClaimOwner<Io> => {
@@ -393,14 +456,8 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
     if (typeof routeAdmission?.admit !== "function" || typeof routeAdmission?.releaseAfterContainerRemoval !== "function" ||
       cut || input.signal.aborted) {return unsupported("owner");}
 
-    const call = (milliseconds: number): EngineCall =>
-      Object.freeze({signal: AbortSignal.any([input.signal, admissionAbort.signal]),
-        deadlineEpochMs: Math.min(admissionDeadline, Date.now() + milliseconds)});
-    // Release is not admission: an irreversible caller cutoff must not stop the
-    // Engine and journal work that proves these resources actually went away.
-    const cleanupCall = (): EngineCall =>
-      Object.freeze({signal: observationAbort.signal,
-        deadlineEpochMs: Math.min(observationDeadline, Date.now() + deadlines.cleanupMs)});
+    const {call, cleanupCall} = createPreparationCalls(input, admissionAbort,
+      admissionDeadline, observationAbort, {deadline: observationDeadline, cleanupMs: deadlines.cleanupMs});
     let stage: Stage = "subject";
     const resources = createPreparationResources();
 
@@ -408,16 +465,11 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
     cleanupResources = createResourceCleanup(resources, {routeAdmission, cleanupCall,
       cleanupMs: deadlines.cleanupMs, observationDeadline});
 
-    const settle = async (reason: UnsupportedReason): Promise<Outcome> => {
-      try {cutoff();} catch { /* Continue retained cleanup after failed admission cut. */ }
-      return await settleResources() ? unsupported(reason) : quarantined();
-    };
+    const settle = createFailureSettlement(cutoff, settleResources);
 
     // Irreversible caller cutoff is honored between every step, so a cut signal
     // can never let the next resource effect start.
-    const assertOpen = (): void => {
-      if (cut || input.signal.aborted || Date.now() >= admissionDeadline) {throw new TypeError("Host post-claim preparation was cut off");}
-    };
+    const assertOpen = (): void => assertPreparationOpen(cut, input.signal, admissionDeadline);
     const hostPreparation = createHostLaunchPreparation(dependencies, join, assertOpen);
     try {
       const proof = input.committedDispatchProof;
@@ -456,65 +508,83 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
       const launch = await hostPreparation.beforeLaunch({identity, policy}, call(deadlines.launchMs));
       assertOpen();
       resources.launchAttempted = true;
-      resources.launched = await resources.lifecycle.launch({...launch, create, owner, lifetime: {
-        admission: {signal: AbortSignal.any([input.signal, admissionAbort.signal]), deadlineEpochMs: admissionDeadline},
-        observation: {signal: observationAbort.signal, deadlineEpochMs: observationDeadline,
-          isActive: () => !observationAbort.signal.aborted && Date.now() < observationDeadline},
-      }});
+      resources.launched = await resources.lifecycle.launch({...launch, create, owner,
+        lifetime: createLaunchLifetime(input.signal, admissionAbort.signal, admissionDeadline, observationAbort.signal, observationDeadline)});
 
+      // Retain ownership even if cutoff raced the launch await. This callback
+      // publishes no admission or execution authority and runs before decoration.
+      join?.afterLaunch?.(Object.freeze({claimed: input, launch: resources.launched}));
       assertOpen();
 
       stage = "listener";
+      // The running launch is retained before decoration, without publishing membership.
+      network.retainContainer(resources.launched.authority);
       const reservation = new DockerCustodyHttpReservation({lifecycle: resources.lifecycle, launch: resources.launched,
         hostLifecycleGenerationSha256, claimed: input});
       resources.product = createDockerHostHttpResources({host: reservation, network, allocated: resources.allocated,
         hostLifecycleGenerationSha256});
-      const listener = await resources.product.prepare(resources.journal, input, dependencies.resources);
-      if (listener.kind !== "prepared" || resources.product.listener === undefined) {
-        throw new TypeError("Host HTTP listener preparation is unproven");
+      const product = resources.product;
+      const launched = resources.launched;
+      const lifecycle = resources.lifecycle;
+      const observers = resources.observers;
+      let providerIo: Io | undefined;
+      let routeFirstWrite: DockerLinuxOperationRouteFirstWrite | undefined;
+      const listener = await product.prepare(resources.journal, input, dependencies.resources, async address => {
+        // Throw only: settlement waits for this same Host preparation flight.
+        assertOpen();
+        // The endpoint the kernel actually bound is published by its own retained
+        // recipe; only then may the container be observed as a network member.
+        await observers.observeListener(product.listener!, address);
+        assertOpen();
+
+        // The authenticated handshake runs over the retained attach channel, not
+        // over the operation network, so it is ordered before membership. The V4
+        // ledger constrains only the resource axis and says nothing about it.
+        stage = "init";
+        providerIo = join?.prepareProviderIo(Object.freeze({claimed: input, launch: launched, init: dependencies.initOptions}));
+        await finishInitReadiness((join === undefined ? launched.openInitSession(dependencies.initOptions) : providerIo!).ready(),
+          () => join?.afterInit?.(Object.freeze({claimed: input, launch: launched})), assertOpen);
+
+        stage = "membership";
+        await product.observeContainer(launched.authority, call(deadlines.membershipMs));
+        assertOpen();
+
+        // The route owner is the last admission gate before provider execution.
+        // A fresh acknowledged intent is recorded first: it is the only permission
+        // to attempt the kernel effect, and an unobserved attempt stays uncertain.
+        stage = "route";
+        const endpoint = Object.freeze({address: address.address, port: address.port});
+        await observers.recordRouteIntent();
+        resources.routeAttempted = true;
+        const admitted = await routeAdmission.admit({authority: launched.authority, endpoint,
+          ...call(deadlines.routeMs),
+          lifetimeMs: Math.max(0, admissionDeadline - Date.now())});
+        if (admitted.kind !== "installed") {throw new TypeError("Docker exclusive route admission refused");}
+        resources.routeOwner = admitted.owner;
+        await observers.observeRouteInstalled(admitted.owner, endpoint);
+        resources.routeInstalled = true;
+        routeFirstWrite = admitted.firstWrite;
+        assertOpen();
+        const references = await DockerConsumptionObservations.read(lifecycle, launched, admitted.owner, endpoint,
+          call(deadlines.membershipMs));
+        assertOpen();
+        stage = "listener";
+        return references;
+      });
+      if (listener.kind !== "prepared" || routeFirstWrite === undefined) {
+        throw new TypeError("Host HTTP consumption preparation is unproven");
       }
-      // The endpoint the kernel actually bound is published by its own retained
-      // recipe; only then may the container be observed as a network member.
-      await resources.observers.observeListener(resources.product.listener, listener.address);
-      assertOpen();
-
-      // The authenticated handshake runs over the retained attach channel, not
-      // over the operation network, so it is ordered before membership. The V4
-      // ledger constrains only the resource axis and says nothing about it.
-      stage = "init";
-      const providerIo = join?.prepareProviderIo(Object.freeze({claimed: input, launch: resources.launched, init: dependencies.initOptions}));
-      const ready = await (join === undefined ? resources.launched.openInitSession(dependencies.initOptions) : providerIo!).ready();
-      if (ready.kind !== "ready") {throw new TypeError("Docker authenticated init readiness is unproven");}
-      assertOpen();
-
-      stage = "membership";
-      await resources.product.observeContainer(resources.launched.authority, call(deadlines.membershipMs));
-      assertOpen();
-
-      // The route owner is the last admission gate before provider execution.
-      // A fresh acknowledged intent is recorded first: it is the only permission
-      // to attempt the kernel effect, and an unobserved attempt stays uncertain.
-      stage = "route";
-      const endpoint = Object.freeze({address: listener.address.address, port: listener.address.port});
-      await resources.observers.recordRouteIntent();
-      resources.routeAttempted = true;
-      const admitted = await routeAdmission.admit({authority: resources.launched.authority, endpoint,
-        ...call(deadlines.routeMs),
-        lifetimeMs: Math.max(0, admissionDeadline - Date.now())});
-      if (admitted.kind !== "installed") {return await settle(admitted.reason);}
-      resources.routeOwner = admitted.owner;
-      await resources.observers.observeRouteInstalled(admitted.owner, endpoint);
-      resources.routeInstalled = true;
-      // The broker's first-write gate is handed over only after the ledger has
-      // observed the installation, so no session can hold an unobserved lease.
+      // Publication is after ready consumption as well as observed route installation.
       assertOpen();
       if (join !== undefined) {
         const final = await join.finishClaimed(Object.freeze({claimed: input, launch: resources.launched,
-          providerIo: providerIo!, http: resources.product, routeFirstWrite: admitted.firstWrite}));
-        assertOpen();
-        if (!isIssuedCodexAppServerLaunchPlan(final.plan)) {throw new TypeError("Docker final plan is not issued");}
-        execution = Object.freeze({launch: resources.launched, providerIo: providerIo!, plan: final.plan});
-      } else {dependencies.publishRouteFirstWrite?.(admitted.firstWrite);}
+          providerIo: providerIo!, http: resources.product, routeFirstWrite}));
+        return publishPreparedPlan(final.plan, assertOpen, () => {
+          execution = Object.freeze({launch: resources.launched!, providerIo: providerIo!, plan: final.plan});
+          assertOpen();
+          return prepared();
+        });
+      } else {dependencies.publishRouteFirstWrite?.(routeFirstWrite);}
       assertOpen();
       return prepared();
     } catch {

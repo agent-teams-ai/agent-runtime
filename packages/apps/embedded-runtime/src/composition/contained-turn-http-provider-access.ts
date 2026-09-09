@@ -216,6 +216,8 @@ export const createContainedTurnHttpCredentialMaterialization = (
   const disposeOwner = outer.dispose;
   if (typeof disposeOwner !== "function" || types.isProxy(disposeOwner)) {throw invalidOwner();}
   let closed = false;
+  let disposal: "open" | "disposing" | "disposed" | "failed" = "open";
+  let disposalFailure: unknown;
   let fresh = new WeakMap<HostReceipt, object>();
   const authorization = projectAuthorization({authorization: outer.authorization as CredentialRenderingOwner["authorization"],
     createRequestDigest}, (original, detached) => {
@@ -279,10 +281,22 @@ export const createContainedTurnHttpCredentialMaterialization = (
       },
     }),
     dispose() {
-      if (closed) {return;}
+      if (disposal === "disposed") {return;}
+      if (disposal === "failed") {throw disposalFailure;}
+      if (disposal === "disposing") {throw new TypeError("HTTP Provider Access disposal in progress");}
       closed = true;
       fresh = new WeakMap();
-      Reflect.apply(disposeOwner, undefined, []);
+      disposal = "disposing";
+      try {
+        Reflect.apply(disposeOwner, undefined, []);
+        disposal = "disposed";
+      } catch (error) {
+        // The owner contract does not promise safe retry after partial cleanup.
+        // Admission closure is not evidence that owner cleanup succeeded.
+        disposalFailure = error;
+        disposal = "failed";
+        throw error;
+      }
     },
   });
 };

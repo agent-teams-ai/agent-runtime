@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "evidenceKind": "runtime-setup-l0-direct-composition",
-  "sourceRevision": "51aa81a9185d80db11e765e6ceb6190359ca1a9c",
+  "sourceRevision": "e615369d50ed73cac6e00909fcc8f6705b0d6973",
   "authority": "ADR-0008",
   "productOutcome": "detached-safe-runtime-setup-preview",
   "taxonomyAuthority": "experiment-local-non-qualification-rubric",
@@ -40,13 +40,13 @@
   "capture": {
     "command": "pnpm --filter @agent-teams/embedded-runtime check",
     "exitCode": 0,
-    "outputSha256": "631ea191e4afe8908c7da8ad047723d7ca5079be188744753a1b80d48d80b173",
-    "architecture": "arm64",
+    "outputSha256": "8c44a1b127632f268788c2745c812a2a400fe4fd9a73c61cdb873edb83cb7592",
+    "architecture": "x64",
     "nodeVersion": "v24.18.0",
-    "platform": "darwin",
+    "platform": "linux",
     "testSummary": {
-      "tests": 331,
-      "pass": 331,
+      "tests": 5,
+      "pass": 5,
       "fail": 0,
       "cancelled": 0,
       "skipped": 0
@@ -54,16 +54,16 @@
   },
   "artifactDigests": {
     "fixtures": {
-      "fileCount": 52,
-      "sha256": "eac8c866ebb03e4f46ea55586d0468466c535e413cefcdb6d2c454e900278ff7"
+      "fileCount": 56,
+      "sha256": "2f185db9f8cd0bd29ed28b08d862dbf23846ce19e14c657d8e6afad9c3e769fc"
     },
     "sources": {
-      "fileCount": 456,
-      "sha256": "98ba6f04addd89af9bf28b648431d515bc10e8b34f25166d56c12978c041d164"
+      "fileCount": 597,
+      "sha256": "cd5d24caf5a8385b6c4249c2588c71a2c74e6b474573f9de644394fdd3ab50fe"
     },
     "tests": {
-      "fileCount": 404,
-      "sha256": "43239889826baee95acc185421eef184e2bf5133efaa28156b2e021fe48e115c"
+      "fileCount": 553,
+      "sha256": "ca4366ba19394483798602ac8af171e15509ceb72dcd7543128c10395838a757"
     }
   },
   "historicalChanges": [
@@ -1253,6 +1253,35 @@
         "before": 231,
         "after": 231,
         "retained": 231,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "runtime-setup-current-product-anchor",
+      "revision": "e615369d50ed73cac6e00909fcc8f6705b0d6973",
+      "files": 3,
+      "additions": 117,
+      "deletions": 22,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 1,
+        "additions": 45,
+        "deletions": 4
+      },
+      "tests": {
+        "files": 2,
+        "additions": 72,
+        "deletions": 18
+      },
+      "behaviorFixtures": {
+        "before": 358,
+        "after": 358,
+        "retained": 358,
         "reusePercent": 100
       }
     }

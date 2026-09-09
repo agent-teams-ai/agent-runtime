@@ -1,3 +1,4 @@
+import {DockerConsumptionObservations} from "../../../../dist/features/contained-agent-turn/composition/docker-consumption-observations.js";
 import assert from "node:assert/strict";
 import type {TestContext} from "node:test";
 import {networkFixture} from "../../../fixtures/docker-operation-network-fixture.ts";
@@ -30,7 +31,7 @@ export const syntheticLease = () => Object.freeze({cutoff: Promise.resolve("clos
 type SyntheticEngineContext = Readonly<{
   record: (name: string) => void;
   faults: {identity: boolean; journal: boolean; launch: boolean; listener: boolean};
-  state: {running: boolean; removed: boolean; attached: boolean; initReady: boolean};
+  state: {started: boolean; running: boolean; removed: boolean; attached: boolean; initReady: boolean};
   network: ReturnType<typeof networkFixture>;
   engineIdentity: DockerEngineIdentity;
 }>;
@@ -84,14 +85,15 @@ const syntheticEngine = (context: SyntheticEngineContext): DockerEnginePort => {
       async close() {closed = true; waiting?.({done: true, value: undefined}); waiting = undefined; state.attached = false;},
     };
   },
-  async start() {record("start"); state.running = true; network.attach();},
+  async start() {record("start"); state.started = true; state.running = true; network.attach();},
   async inspect(authority) {
     record("inspect");
     if (state.removed) {return {authority, cgroupTree: "unobserved", engine: engineIdentity, existence: "absent"};}
     const raw = network.state.containerRaw;
     return decodeInspection({...raw, State: {...raw.State, Running: state.running,
-      Pid: state.running ? 42 : 0, Status: state.running ? "running" : "exited",
-      FinishedAt: state.running ? raw.State.FinishedAt : "2026-01-01T00:00:01Z"}},
+      Pid: state.running ? 42 : 0, Status: state.running ? "running" : state.started ? "exited" : "created",
+      StartedAt: state.started ? raw.State.StartedAt : "0001-01-01T00:00:00Z",
+      FinishedAt: !state.started || state.running ? "0001-01-01T00:00:00Z" : "2026-01-01T00:00:01Z"}},
     authority, engineIdentity, network.input.policy);
   },
   async stop() {record("stop"); state.running = false;},
@@ -103,55 +105,22 @@ const syntheticEngine = (context: SyntheticEngineContext): DockerEnginePort => {
   };
 };
 
-/** Actual Docker Host Custody lifecycle, operation network owner, V4 ledger and
- * Host listener slots over a synthetic Engine and in-memory init channel. There
- * is no real socket, namespace, nftables rule, provider process or credential
- * here: this fixture proves ordering and ownership, never route enforcement. */
-export const postClaimFixture = async (t: TestContext, gateway?: string) => {
-  const create = createInput(ROOT);
-  const seed = {imageDigest: create.imageDigest, attempt: {launchFingerprintSha256: create.launchFingerprintSha256,
-    operationNonceSha256: create.operationNonceSha256}};
-  const template = networkFixture(seed as never, gateway).subject;
-  const opened = openInput(ids("codex", "docker-linux-post-claim"), "codex", {provider: "codex",
-    adapterRevision: "adapter:test", binaryRevision: "binary:test", capabilityManifestRevision: "manifest:test"});
-  const proof = committedDispatchProofFixture(opened, {hostBootId: template.attempt.hostBootId,
-    hostInstanceId: template.attempt.hostInstanceId, hostCustodyProof: {proofId: "proof:synthetic-docker-linux"}} as never,
-  {tenantId: template.attempt.tenantId, projectId: template.attempt.projectId, operationId: template.attempt.operationId,
-    attemptId: template.attempt.attemptId, custodyId: template.attempt.custodyId, effectId: template.effectId,
-    workspaceId: template.workspaceId, executionGenerationId: template.executionGenerationId} as never);
-  const network = networkFixture({...template, committedClaimSha256: proof.proofDigest.slice(7),
-    acceptedAuthoritySha256: proof.acceptedAuthorityVectorDigest.slice(7)}, gateway);
-  const subject = network.subject;
-  const engineIdentity: DockerEngineIdentity = {...subject.attempt, cgroupDriver: "systemd", cgroupVersion: "2",
-    storageDriver: "overlay2", engineVersion: "29.6.1"};
+/** Point-in-time facts of a synthetic Node listener recipe, in the exact shape
+ * `NodeHostHttpListener.observe()` publishes. No socket is ever bound. */
+const createListenerReadback = () => ({
+  scope: "retained-node-server-and-delivered-sockets", openState: "not-attempted",
+  listenerState: "not-attempted", admissionSealed: false, nativeBindPending: false, closeRequested: false,
+  serverCloseAcknowledged: false, sockets: {observed: 0, closeEvents: 0, awaitingClose: 0, droppedWithoutSocket: 0},
+  consumerPending: false, consumerWorkPending: false, uncertainty: [] as string[],
+});
 
-  const events: string[] = [];
-  /** Cut-off and fault injection points, keyed by the step they belong to. */
-  const hooks: Record<string, (() => void) | undefined> = {};
-  const record = (name: string): void => {events.push(name); hooks[name]?.();};
-  const state = {running: false, removed: false, attached: false, initReady: true};
-  const faults = {identity: false, journal: false, launch: false, listener: false};
-  const engine = syntheticEngine({record, faults, state, network, engineIdentity});
-  const custodyStorage = new MemoryStorage();
-  const custodyJournal = new DockerCustodyJournal(custodyStorage);
-  const lifecycle = new DockerHostCustodyLifecycle(engine, custodyJournal,
-    {async proveEmpty() {return "empty";}});
-
-  const v4Storage = new MemoryV4Storage();
-  let journal: HostHttpEgressV4Journal | undefined;
-  const physical = {opens: 0, seals: 0, closes: 0, consumption: 0, recipes: [] as string[]};
-  /** Point-in-time facts of a synthetic Node listener recipe, in the exact shape
-   * `NodeHostHttpListener.observe()` publishes. No socket is ever bound. */
-  const readback = {
-    scope: "retained-node-server-and-delivered-sockets", openState: "not-attempted",
-    listenerState: "not-attempted", admissionSealed: false, nativeBindPending: false, closeRequested: false,
-    serverCloseAcknowledged: false, sockets: {observed: 0, closeEvents: 0, awaitingClose: 0, droppedWithoutSocket: 0},
-    consumerPending: false, consumerWorkPending: false, uncertainty: [] as string[],
-  };
+const createListener = (physical: {opens: number; seals: number; closes: number; recipes: string[]},
+  faults: {listener: boolean}, record: (name: string) => void) => {
+  const readback = createListenerReadback();
   const listener = {
     observe() {return {...readback, sockets: {...readback.sockets}, uncertainty: [...readback.uncertainty]};},
     async open() {
-      physical.opens += 1;
+      physical.opens += 1; record("listener-open");
       if (faults.listener) {throw new Error("synthetic listener failure");}
       readback.openState = "published"; readback.listenerState = "open";
       return {address: {address: physical.recipes.at(-1)!, family: "IPv4", port: 43_129},
@@ -164,6 +133,97 @@ export const postClaimFixture = async (t: TestContext, gateway?: string) => {
       return {state: "closed"};
     },
   };
+  return {listener, readback};
+};
+
+/** Actual Docker Host Custody lifecycle, operation network owner, V4 ledger and
+ * Host listener slots over a synthetic Engine and in-memory init channel. There
+ * is no real socket, namespace, nftables rule, provider process or credential
+ * here: this fixture proves ordering and ownership, never route enforcement. */
+export const postClaimFixture = async (t: TestContext, gateway?: string, selected?: Readonly<{
+  root: string; proof: ReturnType<typeof committedDispatchProofFixture>;
+}>) => {
+  const root = selected?.root ?? ROOT;
+  const create = createInput(root);
+  const {policy, DAEMON_BOOT} = await import("../../../fixtures/docker-engine-test-fixture.ts");
+  const {BOOT, FixtureResidueIo, statText, privilegeText} = await import("./linux-docker-residue-fixture.ts");
+  const {createHash} = await import("node:crypto");
+  const networkSelection = selected === undefined ? {} : {policy: {...policy(root), cgroupParent: "agent-runtime.slice"}, create: {...create, ownerIdentitySha256: "f".repeat(64)},
+    endpoint: {canonicalSocketPath: policy(root).socketPath, daemonBootGenerationSha256: DAEMON_BOOT,
+      hostBootGenerationSha256: createHash("sha256").update(BOOT).digest("hex")}};
+  const seed = {imageDigest: create.imageDigest, attempt: {launchFingerprintSha256: create.launchFingerprintSha256,
+    operationNonceSha256: create.operationNonceSha256}};
+  const template = networkFixture(seed as never, gateway, networkSelection).subject;
+  const opened = openInput(ids("codex", "docker-linux-post-claim"), "codex", {provider: "codex",
+    adapterRevision: "adapter:test", binaryRevision: "binary:test", capabilityManifestRevision: "manifest:test"});
+  const proof = selected?.proof ?? committedDispatchProofFixture(opened, {hostBootId: template.attempt.hostBootId,
+    hostInstanceId: template.attempt.hostInstanceId, hostCustodyProof: {proofId: "proof:synthetic-docker-linux"}} as never,
+  {tenantId: template.attempt.tenantId, projectId: template.attempt.projectId, operationId: template.attempt.operationId,
+    attemptId: template.attempt.attemptId, custodyId: template.attempt.custodyId, effectId: template.effectId,
+    workspaceId: template.workspaceId, executionGenerationId: template.executionGenerationId} as never);
+  const network = networkFixture({...template, ...(selected === undefined ? {} : {
+    attempt: {...template.attempt, tenantId: proof.tenantId, projectId: proof.projectId,
+      operationId: proof.operationId, attemptId: proof.attemptId, custodyId: proof.custodyId,
+      hostInstanceId: proof.hostInstanceId, hostBootId: proof.hostBootId},
+    effectId: proof.effectId, workspaceId: proof.workspaceId, executionGenerationId: proof.executionGenerationId}), committedClaimSha256: proof.proofDigest.slice(7),
+    acceptedAuthoritySha256: proof.acceptedAuthorityVectorDigest.slice(7)}, gateway, networkSelection);
+  const subject = network.subject;
+  const engineIdentity: DockerEngineIdentity = {...subject.attempt, cgroupDriver: "systemd", cgroupVersion: "2",
+    storageDriver: "overlay2", engineVersion: "29.6.1"};
+
+  const events: string[] = [];
+  /** Cut-off and fault injection points, keyed by the step they belong to. */
+  const hooks: Record<string, (() => void) | undefined> = {};
+  const record = (name: string): void => {events.push(name); hooks[name]?.();};
+  // Only this projection is doubled. Dedicated owner tests validate FD provenance;
+  // this fixture asserts the join order without claiming to own Linux objects.
+  t.mock.method(DockerConsumptionObservations, "read", async (owner, launch, lease, endpoint, call) => {
+    record("consumption-observations");
+    assert.equal(owner, lifecycle); assert.equal(lease, route.lease);
+    assert.equal(owner.observeLaunch(launch).authority.containerId, network.container.containerId);
+    assert.deepEqual(endpoint, {address: network.gateway, port: 43129});
+    assert.equal(call.signal.aborted, false);
+    return {selectedDockerAuthorityDigest: `sha256:${launch.journal.authoritySha256}`,
+      networkNamespaceIdentity: "netns:1:2", cgroupIdentity: "cgroup:3:4"};
+  });
+  const state = {started: false, running: false, removed: false, attached: false, initReady: true};
+  const faults = {identity: false, journal: false, launch: false, listener: false};
+  const engine = syntheticEngine({record, faults, state, network, engineIdentity});
+  const custodyStorage = new MemoryStorage();
+  const custodyJournal = new DockerCustodyJournal(custodyStorage);
+  let lifecycle = new DockerHostCustodyLifecycle(engine, custodyJournal, {async proveEmpty() {return "empty";}});
+  if (selected !== undefined) {
+    const {composeLinuxDockerResidueCustody} = await import("../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/node-linux-docker-residue-custody.js");
+    const {residueParent, residueLeaf} = await import("../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-docker-residue-parsers.js");
+    const {PROC_SUPER_MAGIC} = await import("../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-docker-residue-io.js");
+    const parent = `/sys/fs/cgroup${residueParent(network.input.policy.cgroupParent, "systemd")}`;
+    const io = new FixtureResidueIo(parent);
+    const leaf = `${parent}/${residueLeaf(network.container.containerId, "systemd")}`;
+    hooks.start = () => {
+      io.group(leaf);
+      io.node(`${leaf}/cgroup.procs`).contents = "42\n";
+      io.node(`${leaf}/cgroup.events`).contents = "populated 1\nfrozen 0\n";
+      io.node(`${parent}/cgroup.events`).contents = "populated 1\nfrozen 0\n";
+      io.directory("/proc/42", PROC_SUPER_MAGIC, 65532);
+      io.file("/proc/42/stat", statText(42), 65532);
+      io.file("/proc/42/cgroup", `0::${leaf.slice("/sys/fs/cgroup".length)}\n`, 65532);
+      io.file("/proc/42/status", privilegeText(), 65532);
+    };
+    hooks.stop = () => {
+      io.node(`${leaf}/cgroup.procs`).contents = "";
+      io.node(`${leaf}/cgroup.events`).contents = "populated 0\nfrozen 0\n";
+      io.node(`${parent}/cgroup.events`).contents = "populated 0\nfrozen 0\n";
+    };
+    hooks.remove = () => {io.removeTree(leaf);};
+    const composed = composeLinuxDockerResidueCustody({policy: network.input.policy, journalStorage: custodyStorage}, engine, io);
+    lifecycle = composed.lifecycle;
+    t.after(async () => {await composed.disposeResidue(engineCall()); assert.equal(io.handles.size, 0);});
+  }
+
+  const v4Storage = new MemoryV4Storage();
+  let journal: HostHttpEgressV4Journal | undefined;
+  const physical = {opens: 0, seals: 0, closes: 0, consumption: 0, recipes: [] as string[]};
+  const {listener, readback} = createListener(physical, faults, record);
   const routeAdmissions: unknown[] = [];
   const route: {lease: unknown; release: "closed" | "quarantined" | "none"} = {lease: undefined, release: "none"};
   const publishedFirstWrites: unknown[] = [];
@@ -180,7 +240,7 @@ export const postClaimFixture = async (t: TestContext, gateway?: string) => {
       if (faults.identity) {throw new Error("synthetic engine identity failure");}
       return engineIdentity;
     },
-    openLifecycle(policy) {policies.push(policy.allowedNetworkName); return lifecycle;},
+    openLifecycle(selectedPolicy) {policies.push(selectedPolicy.allowedNetworkName); return lifecycle;},
     async openResourceJournal(input) {
       record("resource-journal");
       if (faults.journal) {throw new Error("synthetic ledger failure");}
@@ -190,7 +250,7 @@ export const postClaimFixture = async (t: TestContext, gateway?: string) => {
     },
     resources: {
       listenerFor: (bindHost: string) => {physical.recipes.push(bindHost); return listener as never;},
-      consumption: {async prepare() {physical.consumption += 1;
+      consumption: {async prepare() {physical.consumption += 1; record("consumption-prepare");
         return {kind: "ready", journal: {}, quarantine() {}, async retire() {return "retired";}};}},
       accept: async () => {},
       localCut: {expectedClock: {authorityId: "synthetic-clock", epoch: "1"},
@@ -222,6 +282,6 @@ export const postClaimFixture = async (t: TestContext, gateway?: string) => {
   t.after(() => {controller.abort();});
   return {engine, network, subject, proof, claimed, controller, dependencies, events, faults, hooks, state, v4Storage,
     custodyStorage, custodyJournal,
-    physical, policies, routeAdmissions, route, publishedFirstWrites, syntheticLease, readback, lifecycle, engineCall,
+    listener, physical, policies, routeAdmissions, route, publishedFirstWrites, syntheticLease, readback, lifecycle, engineCall,
     get journal() {return journal;}};
 };

@@ -29,7 +29,7 @@ import {
   delegatedStartAbortError,
   NodeCustodiedSdkProcess,
 } from "./host-custody-process-tree.js";
-import type { OperationResidueAuthorityFactory } from "./host-custody-cgroup-v2.js";
+import { OperationResidueNotAllocatedError, type OperationResidueAuthorityFactory } from "./host-custody-cgroup-v2.js";
 import { bindCooperativeProcessGroupGuardian } from "./host-custody-posix-process-group.js";
 import { DescriptorAuthorityAcquisitionError } from "./host-custody-launch-failure.js";
 import { launchGuardedProvider } from "./node-provider-process-custody-launch.js";
@@ -310,7 +310,18 @@ export class NodeProviderProcessCustodyCore implements
         this.#byAttempt.delete(live.attemptId);
         this.#byRef.delete(live.custodyRef);
       },
-      residueAuthorityFactory: this.#residueAuthorityFactory,
+      residueAuthorityFactory: {create: async reference => {
+        live.residueAllocation = "uncertain";
+        try {
+          const authority = await this.#residueAuthorityFactory.create(reference);
+          live.residueAuthority = authority;
+          live.residueAllocation = "retained";
+          return authority;
+        } catch (error) {
+          if (error instanceof OperationResidueNotAllocatedError) {live.residueAllocation = "not-allocated";}
+          throw error;
+        }
+      }},
       expectedContainmentProfile: this.#runtimeProfile.containmentProfile,
       ...(requiredSpawnMode === undefined ? {} : { requiredSpawnMode }),
       resolveOpening,
@@ -420,9 +431,9 @@ export class NodeProviderProcessCustodyCore implements
       throw new Error("Host Custody launch reservation is incomplete");
     }
     if (live.retainedWorkspaceAuthority !== undefined) {assertRetainedWorkspaceAuthority(live);}
-    // A thrown delegated launch cannot itself prove that no process started.
+    // A thrown admitted launch cannot itself prove that no process started.
     const spawnStatusBeforeLaunch = live.spawnStatus;
-    if (live.plan.spawnMode === "sdk-delegated") {live.spawnStatus = "ambiguous";}
+    live.spawnStatus = "ambiguous";
     let launched: ReturnType<typeof launchGuardedProvider>;
     try {
       launched = launchGuardedProvider({
@@ -513,12 +524,15 @@ export class NodeProviderProcessCustodyCore implements
     live.httpReservation.cutoff();
     live.containmentDeadline ??= this.#monotonicNow() + this.#containmentAfterMs;
     try {
-      if (live.startIdentitySha256 !== undefined && live.spawnStatus === "ambiguous" && live.guardian === undefined) {
+      if (live.spawnStatus === "ambiguous" && live.guardian === undefined) {
         // Reentrant abort may precede the synchronous launch's resource return.
         // If it throws instead, keep custody for reconciliation: the no-guardian
         // no-start cleanup path has no evidence for this admitted launch.
         await Promise.resolve();
         if (live.guardian === undefined) {return unprovenResult("stable-guardian-unavailable", input, live);}
+      }
+      if (live.residueAllocation === "uncertain") {
+        return unprovenResult("operation-cgroup-release-unproven", input, live);
       }
       return await containCustody(live, input, {
         containmentAfterMs: this.#containmentAfterMs,

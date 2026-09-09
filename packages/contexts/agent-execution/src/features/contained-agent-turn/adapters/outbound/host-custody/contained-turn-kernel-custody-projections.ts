@@ -11,7 +11,7 @@ import type { ContainedTurnProof } from "../../../domain/contained-turn-proofs.j
 import type {
   ContainedTurnKernelCustodyPort,
 } from "../../../application/ports/outbound/contained-turn-ports.js";
-import type { HostCustodyEvidence } from "./custodied-provider-process.js";
+import type { HostCustodyEvidence, HostCustodyReservationInput } from "./custodied-provider-process.js";
 
 type KernelOpenInput = Parameters<ContainedTurnKernelCustodyPort["open"]>[0];
 type StartProof = Extract<ContainedTurnProof, { readonly kind: "provider_process_start" }>;
@@ -85,6 +85,19 @@ export const exactRecord = (
   const expected = [...keys].toSorted();
   return actual.length === expected.length &&
     actual.every((key, index) => key === expected[index]);
+};
+
+export const projectProviderBinding = (
+  input: KernelOpenInput,
+): HostCustodyReservationInput["providerBinding"] => {
+  return Object.freeze({
+    adapterRevision: input.adapterSnapshot.adapterRevision,
+    binaryRevision: input.adapterSnapshot.binaryRevision,
+    capabilityManifestRevision: input.adapterSnapshot.capabilityManifestRevision,
+    credentialBindingDigest: input.providerAccessSnapshot.credentialBindingDigest,
+    provider: input.adapterSnapshot.provider,
+    providerRouteRef: input.providerAccessSnapshot.providerRouteRef,
+  });
 };
 
 export const projectProviderObservation = (value: unknown): ProjectedProviderObservation => {

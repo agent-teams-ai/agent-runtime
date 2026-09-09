@@ -252,14 +252,15 @@ export const copyInput = (
     const expectedProvider = copyProviderIdentity(input.expectedProvider);
     const intent = input.intent;
     const prompt = copyPrompt(intent.prompt);
+    const mode = intent.mode;
     if (commandId === undefined || expectedProvider === undefined || prompt === undefined ||
-      (intent.mode !== "analysis" && intent.mode !== "workspace-write")) {
+      (mode !== "analysis" && mode !== "workspace-write")) {
       return;
     }
     return Object.freeze({
       commandId,
       expectedProvider,
-      intent: Object.freeze({ mode: intent.mode, prompt }),
+      intent: Object.freeze({ mode, prompt }),
     });
   } catch {
     return;
@@ -394,7 +395,7 @@ export const copySubmitOutcome = (
   if (status === "conflict" && code === "command_fingerprint_conflict") {
     return Object.freeze({ outcome: Object.freeze({ code, status: "conflict" as const }) });
   }
-  if (status === "unsupported" && (code === "mode_unsupported" ||
+  if (status === "unsupported" && (code === "caller_invalid" || code === "mode_unsupported" ||
     code === "provider_mismatch" || code === "provider_unsupported")) {
     return Object.freeze({ outcome: Object.freeze({ code, status: "unsupported" as const }) });
   }

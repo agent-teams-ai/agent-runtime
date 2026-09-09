@@ -55,7 +55,7 @@ test("the network is allocated before the container and the listener binds the o
   // The listener recipe was built from the gateway Docker assigned, not a constant.
   assert.deepEqual(f.physical.recipes, ["192.168.77.1"]);
   assert.equal(f.physical.opens, 1);
-  assert.equal(f.physical.consumption, 1);
+  assert.equal(f.physical.consumption, 0);
   // Authenticated init readiness is reached; the provider is still not executable.
   assert.ok(f.events.includes("host-handshake"));
   assert.equal(f.events.includes("provider-exec"), false);
@@ -320,11 +320,18 @@ test("joined owners are required before allocation", async t => {
   assert.deepEqual(f.events, []); assert.deepEqual(f.network.state.calls, []);
 });
 
-test("success retains exact one-use handoff and cleanup after take", async t => {
-  const j = await joinedFixture(t); const {f} = j;
-  const owner = createDockerLinuxPostClaimOwner(f.dependencies, j.join);
+test("success waits for workspace capture then retains exact one-use handoff and cleanup after take", async t => {
+  const j = await joinedFixture(t); const {f} = j; const entered = deferred(); const gate = deferred();
+  t.after(() => gate.resolve());
+  const owner = createDockerLinuxPostClaimOwner(f.dependencies, {...j.join, async afterInit() {
+    assert.ok(f.events.includes("host-handshake"));
+    entered.resolve(); await gate.promise;
+  }});
+  const preparing = owner.preparation.prepareClaimed(f.claimed);
+  await entered.promise;
+  assert.equal(j.counts().finishes, 0); assert.equal(f.events.includes("provider-exec"), false);
   assert.throws(() => owner.takePrepared(f.claimed));
-  assert.deepEqual(await owner.preparation.prepareClaimed(f.claimed), {kind: "prepared"});
+  gate.resolve(); assert.deepEqual(await preparing, {kind: "prepared"});
   assert.throws(() => owner.takePrepared({...f.claimed}));
   const handoff = owner.takePrepared(f.claimed);
   assert.equal(handoff.providerIo, j.io); assert.equal(handoff.launch, j.launch); assert.equal(handoff.plan, j.plan);
@@ -349,10 +356,12 @@ test("unknown container absence keeps route ownership sticky", async t => {
   assert.throws(() => owner.takePrepared(f.claimed));
 });
 
-for (const failure of ["throw", "unissued-plan"] as const) {
-  test(`finish hook ${failure} prevents publication and retains cleanup`, async t => {
+for (const failure of ["throw", "unissued-plan", "workspace-capture"] as const) {
+  test(`preparation hook ${failure} prevents publication and retains cleanup`, async t => {
     const j = await joinedFixture(t); const {f} = j;
-    const owner = createDockerLinuxPostClaimOwner(f.dependencies, {...j.join, async finishClaimed() {
+    const owner = createDockerLinuxPostClaimOwner(f.dependencies, {...j.join, async afterInit() {
+      if (failure === "workspace-capture") {throw new Error("mounted roots unproven");}
+    }, async finishClaimed() {
       if (failure === "throw") {throw new Error("lost finalization acknowledgement");}
       return {plan: {...j.plan}};
     }});
@@ -615,4 +624,100 @@ test("failed cleanup cannot renew its original observation lifetime", async t =>
   assert.deepEqual(f.events, events);
   assert.equal(lifetime.observation.deadlineEpochMs, deadline);
   assert.notEqual(f.network.state.network, undefined);
+});
+
+test("route observations precede consumption and first-write publication", async t => {
+  const f = await postClaimFixture(t); f.route.lease = f.syntheticLease();
+  const preparation = createDockerLinuxPostClaimPreparation(f.dependencies);
+  f.hooks["consumption-prepare"] = () => {
+    assert.equal(kinds(f.v4Storage.journal).at(-1), "route_installed");
+    assert.equal(f.publishedFirstWrites.length, 0);
+  };
+  assert.deepEqual(await preparation.prepareClaimed(f.claimed), {kind: "prepared"});
+  assert.deepEqual(f.events.filter(event => ["listener-open", "host-handshake", "route-admission",
+    "consumption-observations", "consumption-prepare", "route-first-write"].includes(event)),
+  ["listener-open", "host-handshake", "route-admission", "consumption-observations", "consumption-prepare", "route-first-write"]);
+  assert.equal(f.events.filter(event => event === "attach").length, 1);
+});
+
+for (const failure of ["consumption-observations", "consumption-prepare"] as const) {
+  test(`route succeeds then ${failure} fails: no first write and retained cleanup unwinds`, {timeout: 5000}, async t => {
+    const f = await postClaimFixture(t); f.route.lease = f.syntheticLease();
+    f.hooks[failure] = () => {throw new Error("synthetic consumption failure");};
+    const preparation = createDockerLinuxPostClaimPreparation(f.dependencies);
+    assert.notEqual((await preparation.prepareClaimed(f.claimed)).kind, "prepared");
+    assert.equal(f.publishedFirstWrites.length, 0);
+    assert.ok(kinds(f.v4Storage.journal).includes("route_installed"));
+    assert.ok(f.events.includes("remove")); assert.ok(f.events.includes("route-release"));
+    assert.equal(f.physical.closes, 1);
+  });
+}
+
+test("joined finalizer waits for ready consumption and never publishes after its failure", async t => {
+  const j = await joinedFixture(t); const {f} = j; const gate = deferred(); const entered = deferred();
+  const original = f.dependencies.resources.consumption;
+  const owner = createDockerLinuxPostClaimOwner({...f.dependencies, resources: {...f.dependencies.resources,
+    consumption: {async prepare(references) {
+      entered.resolve(); await gate.promise;
+      return original.prepare(references);
+    }}}}, j.join);
+  const pending = owner.preparation.prepareClaimed(f.claimed);
+  await entered.promise;
+  assert.deepEqual(j.counts(), {opens: 1, finishes: 0});
+  assert.throws(() => owner.takePrepared(f.claimed));
+  gate.resolve(); assert.deepEqual(await pending, {kind: "prepared"});
+  assert.deepEqual(j.counts(), {opens: 1, finishes: 1});
+});
+
+test("joined consumption failure after route installation leaves finalizer unused", async t => {
+  const j = await joinedFixture(t); const {f} = j;
+  f.hooks["consumption-prepare"] = () => {throw new Error("synthetic journal failure");};
+  const owner = createDockerLinuxPostClaimOwner(f.dependencies, j.join);
+  assert.notEqual((await owner.preparation.prepareClaimed(f.claimed)).kind, "prepared");
+  assert.deepEqual(j.counts(), {opens: 1, finishes: 0});
+  assert.ok(f.events.includes("remove")); assert.equal(f.physical.closes, 1);
+});
+
+test("uncertain deployment listener cleanup prevents operation network release", async t => {
+  const f = await postClaimFixture(t);
+  const resources = f.dependencies.resources;
+  const preparation = createDockerLinuxPostClaimPreparation({...f.dependencies,
+    resources: {...resources, listenerFor(host) {
+      const listener = resources.listenerFor(host);
+      return {...listener, async close() {
+        await listener.close();
+        // A deployment prerequisite still owns cleanup debt after native close.
+        return {state: "unknown" as const};
+      }};
+    }},
+  });
+  assert.notEqual((await preparation.prepareClaimed(f.claimed)).kind, "prepared");
+  assert.ok(f.physical.closes > 0);
+  assert.equal(f.network.state.calls.some(call => call.startsWith("DELETE ")), false);
+  assert.notEqual(f.network.state.network, undefined);
+  assert.equal(kinds(f.v4Storage.journal).includes("network_release"), false);
+});
+
+test("launch ownership reaches the join even when cutoff wins its return continuation", async t => {
+  const j = await joinedFixture(t); const {f} = j;
+  const launch = f.lifecycle.launch.bind(f.lifecycle);
+  let actual: Awaited<ReturnType<typeof launch>> | undefined;
+  f.lifecycle.launch = async input => {
+    actual = await launch(input);
+    f.controller.abort();
+    return actual;
+  };
+  let retained = 0;
+  const owner = createDockerLinuxPostClaimOwner(f.dependencies, {...j.join, afterLaunch(input) {
+    retained += 1;
+    assert.strictEqual(input.launch, actual);
+    assert.strictEqual(input.claimed, f.claimed);
+    assert.equal(input.claimed.signal.aborted, true);
+  }});
+  assert.notEqual((await owner.preparation.prepareClaimed(f.claimed)).kind, "prepared");
+  assert.equal(retained, 1);
+  assert.equal(f.physical.opens, 0);
+  assert.equal(f.events.includes("host-handshake"), false);
+  assert.ok(actual);
+  assert.equal(f.lifecycle.observeLaunch(actual).journal.state, "closed");
 });

@@ -7,6 +7,40 @@ import { authority as dispatchHead, harness as dispatchHarness } from "./contain
 import { applicationBytes, dispatch, frame, harness, host, keys, observation, policy, receipt, request, route, sha, signer,
   v4, wire } from "./fixtures/contained-turn-egress.ts";
 
+test("signer constructor rejects root proxies and expected-key accessors without effects", () => {
+  const identity = {keyId: "key-1", keyGeneration: "key-gen-1", signerRevision: "signer-1", ...keys};
+  let effects = 0;
+  const trap = () => {effects += 1; throw new Error("identity reflection trap");};
+  assert.throws(() => createNodeEd25519EgressSigner(new Proxy(identity, {
+    get: trap, ownKeys: trap, getOwnPropertyDescriptor: trap, getPrototypeOf: trap,
+  })), {name: "TypeError", message: "invalid Ed25519 signer identity"});
+  for (const key of Object.keys(identity)) {
+    const accessor = {...identity};
+    Object.defineProperty(accessor, key, {get: trap});
+    assert.throws(() => createNodeEd25519EgressSigner(accessor),
+      {name: "TypeError", message: "invalid Ed25519 signer identity"}, key);
+  }
+  assert.equal(effects, 0);
+});
+
+test("signer constructor captures own identity data with null and custom prototypes", async () => {
+  const expected = {keyId: "key-1", keyGeneration: "key-gen-1", signerRevision: "signer-1"};
+  const body = new Uint8Array([1, 2, 3]);
+  for (const prototype of [null, {keyId: "inherited-key", unrelated: "synthetic"}]) {
+    const identity = Object.assign(Object.create(prototype), expected, keys);
+    const captured = createNodeEd25519EgressSigner(identity);
+    assert.equal(Object.isFrozen(identity), false);
+    identity.keyId = "changed-key";
+    identity.privateKey = undefined;
+    identity.publicKey = undefined;
+    const envelope = await captured.sign(body, expected);
+    assert.equal(envelope.keyId, expected.keyId);
+    assert.equal(envelope.keyGeneration, expected.keyGeneration);
+    assert.equal(envelope.signerRevision, expected.signerRevision);
+    assert.equal(await captured.verify(body, envelope), true);
+  }
+});
+
 test("committed receipt cannot follow another same-provider route, account or credential authority", async () => {
   for (const change of [{providerRouteRef: "route-2"}, {providerAccountRef: "account-2"},
     {credentialBindingRef: "credential-binding-2"}, {credentialBindingDigest: sha("credential-2")},
