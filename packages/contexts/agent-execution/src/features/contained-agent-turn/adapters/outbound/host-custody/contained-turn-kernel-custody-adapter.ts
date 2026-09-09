@@ -33,6 +33,7 @@ import {
   openIdentity,
   physicalEvidenceIsClosed,
   positiveInteger,
+  projectProviderBinding,
   projectProviderObservation,
   proofId,
   reservationIdentity,
@@ -135,23 +136,13 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
         workspaceAuthority.identity.mountId.length === 0 || input.intentMode !== "analysis" && input.intentMode !== "workspace-write") {
       throw new TypeError("Host Custody scoped workspace authority is unavailable");
     }
-    const providerBinding = this.#providerBinding(input);
+    const providerBinding = projectProviderBinding(input);
     const plan = await this.#attemptOwner.prepare({ kernel: input, providerBinding, workspaceAuthority });
     const authority = Object.freeze({ intentMode: input.intentMode, workspaceRef: workspaceAuthority.canonicalPath });
     if (attempt.closed) {throw new TypeError("Host Custody open was cut off before acquisition");}
     // From this point even a rejected or malformed raw response may own resources.
     attempt.acquisitionPossible = true;
     return this.#reserve(input, authority, providerBinding, plan, workspaceAuthority);
-  }
-  #providerBinding(input: KernelOpenInput): HostCustodyReservationInput["providerBinding"] {
-    return Object.freeze({
-      adapterRevision: input.adapterSnapshot.adapterRevision,
-      binaryRevision: input.adapterSnapshot.binaryRevision,
-      capabilityManifestRevision: input.adapterSnapshot.capabilityManifestRevision,
-      credentialBindingDigest: input.providerAccessSnapshot.credentialBindingDigest,
-      provider: input.adapterSnapshot.provider,
-      providerRouteRef: input.providerAccessSnapshot.providerRouteRef,
-    });
   }
   async #reserve(
     input: KernelOpenInput,

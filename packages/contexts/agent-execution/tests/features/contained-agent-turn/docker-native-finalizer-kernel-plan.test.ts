@@ -69,8 +69,7 @@ const {hostProviderProbe} = hostModule as typeof hostModule & {
     execute(input: unknown): Promise<unknown>;
   };
 };
-const observerUrl = "synthetic:host-constructor-observer";
-const constructorObserver = await import(observerUrl);
+const constructorObserver = await import("synthetic:host-constructor-observer");
 hooks.deregister();
 
 test("component evidence: kernel retains the original finalizer receiver, callback and finalizable plan", {skip: process.platform !== "linux"}, async t => {
