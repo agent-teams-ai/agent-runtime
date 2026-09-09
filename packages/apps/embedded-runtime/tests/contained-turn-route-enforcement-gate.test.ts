@@ -233,3 +233,51 @@ test("deployment promotion also admits, and the registry is re-read on every att
     dependencies(held) as never, probe.factories, probe.featureFactory, PRODUCT_QUALIFICATION_REGISTRY,
   ));
 });
+
+// Explicit synthetic Darwin observation and fixture registry only; never Mac evidence.
+test("Darwin nominal route binds the existing owner and seven ports; product registry still refuses", async t => {
+  const {darwinRouteFixture} = await import("../../../contexts/agent-execution/tests/features/contained-agent-turn/support/darwin-route-capability-fixture.ts");
+  const f = darwinRouteFixture(); const route = f.mint();
+  const {hostCustody, ...owner} = f.input.owner;
+  const deps = {...dependencies(route), hostCustody, selectedProvider: {kind: "codex", owner}};
+  const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+  const arch = Object.getOwnPropertyDescriptor(process, "arch")!;
+  Object.defineProperty(process, "platform", {...platform, value: "darwin"});
+  Object.defineProperty(process, "arch", {...arch, value: "arm64"});
+  t.after(() => {Object.defineProperty(process, "platform", platform); Object.defineProperty(process, "arch", arch);});
+  const probe = harness();
+  assert.equal(registryQualifiesRouteTarget(PRODUCT_QUALIFICATION_REGISTRY, f.input.qualificationTarget), false);
+  assertRefused(() => createHostCustodiedContainedTurn(deps as never));
+  assertRefused(() => composeQualifiedHostCustodiedContainedTurn(deps as never, probe.factories, probe.featureFactory, PRODUCT_QUALIFICATION_REGISTRY));
+  assert.equal(probe.calls.owner, 0);
+  await withFixtureRegistry("implementation", f.input.qualificationTarget, url => {
+    const factories = {...probe.factories, codex: ((options: typeof f.input.owner & {postClaimPreparation: unknown}) => {
+      assert.equal(options.hostCustody, hostCustody);
+      assert.equal(options.postClaimPreparation, route.postClaimPreparation);
+      assert.deepEqual(options.platformTarget, {platform: "darwin", architecture: "arm64"});
+      return probe.factories.codex(options);
+    }) as never};
+    const result = composeQualifiedHostCustodiedContainedTurn(deps as never, factories, probe.featureFactory, url);
+    assert.equal(result.feature, capability); result.dispose();
+    assert.deepEqual(probe.calls, {owner: 1, feature: 1, dispose: 1});
+    for (const change of [{hostCustody: {}}, {selectedProvider: {kind: "codex", owner: {...owner, hostBootId: "other"}}},
+      {selectedProvider: {kind: "codex", owner: {...owner, hostInstanceId: "other"}}},
+      {selectedProvider: {kind: "codex", owner: {...owner, platformTarget: {platform: "linux", architecture: "x64"}}}},
+      {selectedProvider: {kind: "codex", owner: {...owner, launchRecords: {resolve: async () => undefined}}}},
+      {selectedProvider: {kind: "codex", owner: {...owner, postClaimPreparation: {prepareClaimed: async () => ({kind: "prepared"})}}}},
+      {selectedProvider: {kind: "codex", owner: {...owner, postClaimPreparation: {...route.postClaimPreparation}}}},
+      {selectedProvider: {kind: "codex", owner: new Proxy(owner, {})}}]) {
+      assert.throws(() => composeQualifiedHostCustodiedContainedTurn({...deps, ...change} as never, factories, probe.featureFactory, url), TypeError);
+    }
+    let reads = 0;
+    const getter = () => {reads++; throw new Error("getter invoked");};
+    for (const malformed of [{...deps, get hostCustody() {return getter();}},
+      {...deps, selectedProvider: {kind: "codex", owner: {...owner, get postClaimPreparation() {return getter();}}}}]) {
+      assert.throws(() => composeQualifiedHostCustodiedContainedTurn(malformed as never, factories, probe.featureFactory, url), TypeError);
+    }
+    assert.equal(reads, 0); assert.equal(probe.calls.owner, 1);
+    assertRefused(() => composeQualifiedHostCustodiedContainedTurn({...deps, selectedProvider: {kind: "claude", owner}} as never,
+      factories, probe.featureFactory, url));
+  });
+  assert.equal(f.resolves(), 0); assert.equal(f.egress.observations.opens, 0);
+});

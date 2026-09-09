@@ -103,3 +103,7 @@ export {createCodexNativeBrokerFileInstaller, type CodexNativeBrokerFileInstalle
 
 export {createDeferredCodexNativeBrokerFiles, type DeferredCodexNativeBrokerFiles,
   type DeferredCodexNativeBrokerFilesOptions} from "./features/contained-agent-turn/internal.js";
+
+export {createDarwinCodexRouteEnforcement, bindDarwinCodexRouteEnforcement,
+  type DarwinCodexRouteEnforcementCapability, type DarwinCodexRouteEnforcementInput,
+  type DarwinCodexHostPreparationInput} from "./features/contained-agent-turn/internal.js";

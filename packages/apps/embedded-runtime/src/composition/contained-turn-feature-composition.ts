@@ -6,6 +6,8 @@ import {
   createCodexCurrentKernelOwner,
   createContainedTurnFeature,
   readContainedTurnRouteEnforcementTarget,
+  bindDarwinCodexRouteEnforcement,
+  type DarwinCodexRouteEnforcementCapability,
   createContainedTurnRuntimeSecurityPort,
   type ClaudeCurrentKernelOwner,
   type CodexCurrentKernelOwner,
@@ -58,12 +60,12 @@ export type HostCustodiedContainedTurnDependencies =
   readonly selectedProvider: ContainedTurnHostProviderSelection;
   /**
    * The enforced-route capability, obtainable only from Agent Execution's
-   * Linux exclusive route owner factory. It is optional in this type because
+   * Linux or Darwin route owner factory. It is optional in this type because
    * absence is a normal, honest state of this repository, not a caller
    * convenience: the product entrypoint refuses every dependency set without
    * an authentic one.
    */
-  readonly routeEnforcement?: ContainedTurnRouteEnforcementCapability;
+  readonly routeEnforcement?: ContainedTurnRouteEnforcementCapability | DarwinCodexRouteEnforcementCapability;
   /** Trusted private deployment composition only; never read from workspace configuration. */
   readonly linuxCodex?: LinuxCodexContainedTurnResources;
   /** Production infrastructure for the private acknowledged resource assembly. */
@@ -190,6 +192,7 @@ const createSelectedProviderOwner = (
   snapshot: ContainedTurnProviderSelectionSnapshot,
   hostCustody: HostCustodyAuthority,
   factories: ContainedTurnProviderOwnerFactories,
+  routeEnforcement?: unknown,
 ): ClaudeCurrentKernelOwner | CodexCurrentKernelOwner => {
   const selection = snapshot.selection;
   switch (selection.kind) {
@@ -199,7 +202,16 @@ const createSelectedProviderOwner = (
       return captureProviderOwner(factories.claude(options));
     }
     case "codex": {
-      const options = {...selection.owner, hostCustody};
+      const target = readContainedTurnRouteEnforcementTarget(routeEnforcement);
+      // A nominal Darwin capability owns the complete non-Linux preparation.
+      // Inspect owner data before spreading so accessors/proxies cannot run.
+      let options: CreateCodexCurrentKernelOwnerOptions;
+      if (target?.platform === "darwin-arm64") {
+        if (trustedIsProxy(selection.owner) || selection.owner === null || typeof selection.owner !== "object") {throw invalidProviderOwner();}
+        const fields = trustedGetOwnPropertyDescriptors(selection.owner);
+        if (trustedOwnKeys(fields).some(key => !("value" in fields[key as string]!)) || Object.hasOwn(fields, "hostCustody")) {throw invalidProviderOwner();}
+        options = bindDarwinCodexRouteEnforcement(routeEnforcement, {...selection.owner, hostCustody});
+      } else {options = {...selection.owner, hostCustody};}
       snapshot.assertStable();
       return captureProviderOwner(factories.codex(options));
     }
@@ -243,7 +255,15 @@ export const composeHostCustodiedContainedTurn = (
   const {selection: authority} = snapshotContainedTurnAuthority(dependencies);
   const selectedProvider = snapshotContainedTurnProviderSelection(dependencies);
   const owner = createSelectedProviderOwner(
-    selectedProvider, dependencies.hostCustody, ownerFactories,
+    selectedProvider, (() => {
+      const route = trustedGetOwnPropertyDescriptor(dependencies, "routeEnforcement");
+      if (route !== undefined && "value" in route && readContainedTurnRouteEnforcementTarget(route.value)?.platform === "darwin-arm64") {
+        const host = trustedGetOwnPropertyDescriptor(dependencies, "hostCustody");
+        if (host === undefined || !("value" in host)) {throw invalidProviderOwner();}
+        return host.value as HostCustodyAuthority;
+      }
+      return dependencies.hostCustody;
+    })(), ownerFactories, trustedGetOwnPropertyDescriptor(dependencies, "routeEnforcement")?.value,
   );
   let feature: ContainedTurnCapabilityBundle;
   try {
@@ -287,9 +307,7 @@ export const composeCandidateHostCustodiedContainedTurnForImplementationEvidence
   createContainedTurnFeatureFromProviderAccess,
 );
 
-/** The observed Host platform tuple. The exclusive route is a Linux namespace
- * effect, so a registry tuple promoted for another platform never matches here
- * and Darwin stays refused without a platform special case. */
+/** The observed Host platform must match the exact capability target. */
 const observedPlatformTarget = (): string => `${process.platform}-${process.arch}`;
 
 /**
@@ -353,7 +371,7 @@ const selectsClaudeProvider = (dependencies: HostCustodiedContainedTurnDependenc
 /**
  * @internal Registry-gated assembly. Two independent facts admit a product
  * composition, and neither is a caller boolean: an authentic route-enforcement
- * capability, which only the Linux exclusive route owner factory mints, and an
+ * capability from a concrete Linux or Darwin route owner factory, and an
  * exact whole-tuple promotion in the supplied qualification registry. Every
  * other outcome, including any failure while establishing either fact, is the
  * same stable construction refusal. Ahead of both, a provider whose adapter has

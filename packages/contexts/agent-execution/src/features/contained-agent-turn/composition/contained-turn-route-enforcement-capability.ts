@@ -1,3 +1,4 @@
+import {readDarwinCodexRouteEnforcementTarget} from "./darwin-codex-route-enforcement.js";
 import {nodeDockerRoutePolicy, selectNodeDockerRoute} from "./node-docker-route-provenance.js";
 import type {DockerLinuxOperationRouteAdmission, DockerLinuxPostClaimDependencies} from "./docker-linux-post-claim-preparation.js";
 import {custodyDataRecord} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
@@ -76,7 +77,7 @@ const snapshotTarget = (value: unknown): ContainedTurnRouteQualificationTarget =
 };
 
 /**
- * The only producer of a route-enforcement capability. It opens no route by
+ * The Linux producer of a route-enforcement capability. It opens no route by
  * itself: it constructs the Linux exclusive route admission, which still has to
  * satisfy Linux/x64/root and the exact tool pins before any kernel effect, and
  * binds the promoted target tuple to that admission's own route binding. The
@@ -109,7 +110,7 @@ export const createContainedTurnRouteEnforcement = (
 export const readContainedTurnRouteEnforcementTarget = (
   value: unknown,
 ): ContainedTurnRouteQualificationTarget | undefined =>
-  value !== null && typeof value === "object" ? minted.get(value)?.target : undefined;
+  value !== null && typeof value === "object" ? minted.get(value)?.target ?? readDarwinCodexRouteEnforcementTarget(value) : undefined;
 
 type Recipe = Parameters<typeof selectNodeDockerRoute>[0];
 
