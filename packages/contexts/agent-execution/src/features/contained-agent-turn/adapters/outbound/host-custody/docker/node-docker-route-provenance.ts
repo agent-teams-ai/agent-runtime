@@ -1,6 +1,5 @@
 import {types} from "node:util";
-import {canonicalJsonSha256} from "./engine/docker-engine-composition.js";
-import {snapshotDockerEngineCall, snapshotDockerEnginePolicy} from "./engine/docker-engine-composition.js";
+import {canonicalJsonSha256, snapshotDockerEngineCall, snapshotDockerEnginePolicy} from "./engine/docker-engine-composition.js";
 import type {openNodeLinuxExclusiveRoute} from "./node-linux-exclusive-route.js";
 import type {LinuxExclusiveRouteBinding} from "./linux-exclusive-route-owner.js";
 import type {DockerEnginePolicy, DockerEngineCall} from "./engine/docker-engine-port.js";
