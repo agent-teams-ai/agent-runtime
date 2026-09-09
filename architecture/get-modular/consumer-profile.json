@@ -227,7 +227,7 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.ts"
       ],
       "status": "not-adopted",
-      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules. Reviewed at 291684ed9: Node Docker route provenance owns private one-use recipe identity and snapshots Engine policy through the existing Docker Engine boundary. It remains not-adopted Host custody; local snapshot functions are helpers, not independently selected capabilities. Docker workspace capture and Linux route privilege validation are fixed helpers of residue and route custody, not separately composed owners.",
       "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
       "relationships": [
         {
@@ -396,6 +396,16 @@
           "mode": "type-only"
         },
         {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/node-docker-route-provenance.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-composition.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/node-docker-route-provenance.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.ts",
+          "mode": "type-only"
+        },
+        {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/node-linux-docker-residue-custody.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-composition.ts",
           "mode": "runtime"
@@ -465,7 +475,7 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts"
       ],
       "status": "not-adopted",
-      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules. Reviewed at 291684ed9: KernelOpenAttempts is an owner-local lifetime fencing helper using the existing kernel custody port type; it introduces no independent lifecycle or Assembly handle. NodeHttpEgressBoundaryIds, NodeHttpEgressTrustedResolver and PostgresHttpEgressEvidence are explicitly not-adopted Host HTTP port implementations selected by Embedded Runtime; receipt codecs and transaction mechanics stay local to the evidence adapter and the database pool remains borrowed.",
       "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
       "relationships": [
         {
@@ -500,6 +510,11 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-execution-attestation.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-open-attempts.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
           "mode": "type-only"
         },
@@ -657,7 +672,7 @@
         "packages/apps/embedded-runtime/src/composition.ts"
       ],
       "status": "adopted",
-      "rationale": "Only createDefaultAgentRuntimeHost passive setup is adopted. Host-custodied contained-turn composition remains direct under its existing owner; exact retained relationships are censused, not exempted.",
+      "rationale": "Only createDefaultAgentRuntimeHost passive setup is adopted. Host-custodied contained-turn composition remains direct under its existing owner; exact retained relationships are censused, not exempted. Reviewed at 291684ed9: current-authority selection and Linux Codex contained-turn owner, deployment authority, deployment resources and Node recipe are explicit not-adopted Host composition seams. Node recipe consumption is a local subject/signer binding helper with a type-only Agent Execution relationship. Claim, resource custody and cleanup remain Host-owned; none of these seams extends passive Assembly scope.",
       "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
       "relationships": [
         {
@@ -816,6 +831,11 @@
           "mode": "type-only"
         },
         {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-current-authority.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
           "from": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
           "to": "@agent-teams/agent-execution/composition",
           "mode": "runtime"
@@ -916,6 +936,46 @@
           "mode": "runtime"
         },
         {
+          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
+          "to": "@agent-teams/runtime-security/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
+          "to": "@agent-teams/provider-access/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
+          "to": "@agent-teams/runtime-security/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
           "from": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
           "to": "@agent-teams/agent-execution/composition",
           "mode": "runtime"
@@ -998,7 +1058,7 @@
         "packages/contexts/agent-execution/src/index.ts"
       ],
       "status": "not-adopted",
-      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules. Reviewed at 291684ed9: native broker installation and deferred binding, route enforcement, Docker kernel/effect custody and Node deployment recipe remain not-adopted contained-turn owners. The private route provenance composition shares one issuance/selection registry; consumption observations are an owner-local projection helper. Their exact Codex adapter and Host/Docker custody relationships are retained without transferring resource cleanup or containment authority to Assembly. Retained launch workspace is a private descriptor resource owner under existing workspace custody; Docker native-start diagnostics are local readback helpers, never admission or cleanup authority.",
       "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
       "relationships": [
         {
@@ -1009,6 +1069,16 @@
         {
           "from": "packages/contexts/agent-execution/src/composition.ts",
           "to": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/internal.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-native-files/codex-native-broker-file-installer.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-native-files/codex-native-broker-file-installer.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
           "mode": "runtime"
         },
         {
@@ -1567,6 +1637,11 @@
           "mode": "type-only"
         },
         {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-native-broker-file-installer.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
+          "mode": "type-only"
+        },
+        {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/contained-turn-intent-cancellation.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-engine.ts",
           "mode": "runtime"
@@ -1579,6 +1654,16 @@
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/contained-turn-intent-cancellation.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/contained-turn-route-enforcement-capability.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/deferred-codex-native-broker-files.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
           "mode": "type-only"
         },
         {
@@ -1628,6 +1713,11 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/docker-codex-current-kernel-owner.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/docker-codex-current-kernel-owner.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.ts",
           "mode": "runtime"
         },
@@ -1639,6 +1729,16 @@
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/docker-codex-current-kernel-owner.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-codecs.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/docker-codex-effect-custody-owner.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-effect-custody.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/docker-codex-effect-custody-owner.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.ts",
           "mode": "runtime"
         },
         {
@@ -1678,6 +1778,11 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/docker-codex-native-broker-finalizer.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/docker-consumption-observations.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.ts",
           "mode": "runtime"
         },
@@ -1800,6 +1905,31 @@
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-private-root-owner.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
           "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/node-docker-deployment-recipe.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/node-docker-deployment-recipe.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/node-docker-route-provenance.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/node-docker-route-provenance.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/node-docker-route-provenance.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.ts",
+          "mode": "type-only"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",

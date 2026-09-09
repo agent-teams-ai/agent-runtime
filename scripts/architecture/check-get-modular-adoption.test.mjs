@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import test from 'node:test';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -249,6 +250,54 @@ test('active profile retains the two direct contained-turn seams without claimin
   assert.match(composition.rationale, /contained-turn.*remains direct/);
   assert.equal(pending.compositions.length, 1);
   assert.equal(pending.compositions[0].factorySymbol, 'createDefaultAgentRuntimeHost');
+});
+
+test('PR71 reviewed owners and helpers retain exact live relationships without expanding adoption', async () => {
+  const root = fileURLToPath(new URL('../../', import.meta.url));
+  const policy = await loadCapabilityConfig(root, 'architecture/foundation/source-dependencies.yaml');
+  const census = await readSourceCensus(root, policy);
+  verifySourceCensus(pending, census);
+  // Explicit semantic review subjects, not a regenerated list from the live graph.
+  const subjects = {
+    'adapter.agent-execution.docker-custody': ['node-docker-route-provenance'],
+    'adapter.agent-execution.host-custody': ['contained-turn-kernel-custody-open-attempts'],
+    'composition.embedded-runtime': [
+      'contained-turn-current-authority', 'linux-codex-contained-turn-owner',
+      'linux-codex-deployment-authority', 'linux-codex-deployment',
+      'linux-codex-node-recipe-consumption', 'linux-codex-node-recipe',
+    ],
+    'production.agent-execution': [
+      'codex-native-broker-file-installer', 'contained-turn-route-enforcement-capability',
+      'deferred-codex-native-broker-files', 'docker-codex-current-kernel-owner',
+      'docker-codex-effect-custody-owner', 'docker-consumption-observations',
+      'node-docker-deployment-recipe', 'node-docker-route-provenance',
+    ],
+  };
+  for (const [id, sources] of Object.entries(subjects)) {
+    const boundary = pending.boundaries.find(b => b.id === id);
+    assert.equal(boundary.status, id === 'composition.embedded-runtime' ? 'adopted' : 'not-adopted');
+    for (const source of sources) {
+      const edges = boundary.relationships.filter(edge => basename(edge.from) === `${source}.ts`);
+      assert.ok(edges.length, `missing reviewed subject: ${id}/${source}`);
+      for (const edge of edges) {
+        for (const mutation of ['omitted', 'mode-changed']) {
+          const profile = structuredClone(pending);
+          const retained = profile.boundaries.find(b => b.id === id).relationships;
+          const index = boundary.relationships.indexOf(edge);
+          if (mutation === 'omitted') {retained.splice(index, 1);}
+          else {retained[index].mode = edge.mode === 'runtime' ? 'type-only' : 'runtime';}
+          assert.throws(() => verifySourceCensus(profile, census), /live relationships drift/,
+            `${mutation}: ${edge.from} -> ${edge.to}`);
+        }
+      }
+    }
+  }
+  const helper = pending.boundaries.find(b => b.id === 'composition.embedded-runtime').relationships
+    .filter(edge => edge.from.endsWith('/linux-codex-node-recipe-consumption.ts'));
+  assert.deepEqual(helper.map(edge => [edge.to, edge.mode]), [['@agent-teams/agent-execution/composition', 'type-only']]);
+  assert.deepEqual(pending.boundaries.filter(b => b.status === 'adopted').map(b => b.id), ['composition.embedded-runtime']);
+  assert.deepEqual(pending.compositions.map(c => c.factorySymbol), ['createDefaultAgentRuntimeHost']);
+  assert.deepEqual(pending.exceptions, []);
 });
 
 for (const direction of ['export-new-host', 'wrap-existing-entrypoint']) {

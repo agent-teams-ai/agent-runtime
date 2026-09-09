@@ -33,7 +33,7 @@ and local adoption authority are distinct. The profile retains the approved publ
 Core and Assembly 0.1.0 archives, verifies their SHA-256 and lock integrity,
 and requires exact catalog versions. It records actual blocking commands,
 without `conformant: true` for the repository. Upstream main was rechecked on
-2026-09-08 at `03a7df64bc5e9939f7b51694a80a7f3d61453f98`. The complete
+2026-09-09 at `03a7df64bc5e9939f7b51694a80a7f3d61453f98`. The complete
 standard still has the SHA-256 recorded above, so the accepted pin remains
 content-current; no normative standard delta needs migration.
 
@@ -75,6 +75,45 @@ cross-feature edges inside an existing policy boundary. Fixed helpers within
 one feature remain ordinary imports. The two retained Host-custodied
 contained-turn composition seams are enumerated explicitly. New capabilities
 hidden inside existing functions still require semantic ownership review.
+
+### PR71 incoming composition review
+
+The profile reconciliation at `291684ed93df4f7b6cbe1d9776e55fe4082c8c3a`
+reviews the incoming `e411638c0dfb460f0a869d2bc9a7c45229873e98` source
+against the earlier `be69d71` profile census. The exported `readSourceCensus`
+reports 26 added relationships, no removed relationships and unchanged package,
+production and feature roots. The complete upstream standard is byte-identical
+to the retained pin; neither the standard pin nor its evidence needs migration.
+
+| Boundary and added relationships | Reviewed owner classification |
+| --- | --- |
+| Docker custody (2) | `node-docker-route-provenance.ts` retains private one-use recipe identity, sharing Engine policy snapshots through the existing Docker Engine boundary. Its snapshot helpers remain local. This contained-turn owner is not adopted. |
+| Host custody (1) | `KernelOpenAttempts` fences attempts for the existing kernel owner's lifetime. Its kernel port dependency is type-only; the helper has no separate lifecycle or handle. |
+| Embedded Runtime composition (9) | Current-authority selection, Linux Codex contained-turn owner, deployment authority, deployment resources and Node recipe are meaningful direct Host composition seams, explicitly not adopted. `linux-codex-node-recipe-consumption.ts` only binds operation subjects and signer references inside that composition; its Agent Execution dependency is type-only. |
+| Agent Execution production (14) | Native broker installer/deferred binding, route enforcement, Docker current-kernel/effect custody and Node deployment recipe remain direct contained-turn owners. The route-provenance composition creates one private registry shared by issuance and selection. `docker-consumption-observations.ts` only projects observations from existing owners. Exact Codex adapter and Host/Docker custody edges remain enforced. |
+
+Review of newly added production files also covers owners whose local imports
+do not add census edges. `NodeHttpEgressBoundaryIds`,
+`NodeHttpEgressTrustedResolver` and `PostgresHttpEgressEvidence` implement
+existing Host HTTP ports selected by Embedded Runtime and remain not adopted;
+the evidence codec and transaction mechanics are local implementation helpers,
+with the database pool borrowed from Host. `retainLaunchWorkspace` owns a
+retained descriptor within existing workspace custody. Docker workspace capture,
+Linux route privilege validation and native-start diagnostic readback remain
+fixed local helpers of their existing owners, not separate composition nodes.
+
+These classifications cover meaningful owners even when the source census folds
+their local wiring into an existing policy boundary. They do not create one
+Assembly handle per file or an exemption for future direct edges. The profile
+retains every observed source, target and dependency mode, including dependencies
+from local helpers that cross a policy or package boundary. Rejecting tests
+remove each reviewed incoming relationship and change its dependency mode
+against the live census; both mutations must fail.
+
+Only passive setup remains adopted. Contained-turn claim/start fencing,
+authority selection, route admission, private-root and resource custody,
+cleanup and reconciliation remain with their existing Host owners. This
+reconciliation changes no runtime behavior and grants no new qualification.
 
 ## Evidence and executable references
 
