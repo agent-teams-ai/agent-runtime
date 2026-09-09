@@ -4,7 +4,8 @@ export type NativeStartPhase = "preflight" | "recipe-create" | "ingress-open" | 
   "recipe-validate" | "bind-session" | "return-validate" | "return" |
   "native-plan-recognition" | "mount-path-projection" | "process-input-projection" |
   "process-input-tmpdir" | "process-input-executable" | "reservation-evidence-finalize" |
-  "plan-publication" | "prepared-handoff" | "plan-root-validation" | "bridge-open";
+  "plan-publication" | "prepared-handoff" | "plan-root-validation" | "bridge-open" |
+  "preparation-construction" | "host-attach";
 export interface NativeStartDiagnostic {
   readonly lastCompleted: NativeStartPhase | null;
   readonly failingPhase: NativeStartPhase | null;
@@ -43,7 +44,7 @@ export const retainNativeStartDiagnostic = (files: object) => {
   };
 };
 
-/** Post-finalizer phases continue the same files-owned readback. No thrown value is inspected. */
+/** Host preparation and post-finalizer phases continue the same files-owned readback. No thrown value is inspected. */
 export const recordNativeStart = (key: object, event: "begin" | "complete" | "fail", phase?: NativeStartPhase): void => {
   try {
     const files = identity(key);

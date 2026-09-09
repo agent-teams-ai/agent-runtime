@@ -176,80 +176,84 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
     const filesOwner = selected.nativeFiles;
     retained.nativeFiles = filesOwner;
     try {
-      if (selected.workspaceBackingTreeOwnership?.kind !== "exclusive-host-owned-disposable-tree" ||
-        !/^urn:[^\s]{1,1000}$/u.test(selected.workspaceBackingTreeOwnership.evidenceRef)) {
-        throw new TypeError("Docker requires deployment evidence excluding uncontrolled workspace writers");
-      }
-      const backingTreeOwnership = Object.freeze({...selected.workspaceBackingTreeOwnership});
-      const nativeFiles = captureNativeFiles(filesOwner);
-      linkNativeStartDiagnostic(nativeFiles, filesOwner);
-      retained.nativeFiles = nativeFiles;
-      const subscription = hostHttpAbortOperations.subscribe(claimed.signal, () => {retained.effectOwner?.cutoff(); nativeFiles.cutoff();});
-      retained.removeAbort = () => hostHttpAbortOperations.remove(subscription);
-      if (disposed || hostHttpAbortOperations.aborted(claimed.signal)) {throw new TypeError("Docker selection closed");}
-      const {nativeFiles: _nativeFiles, workspaceBackingTreeOwnership: _ownership, ...dependencies} = selected;
-      const deadlineEpochMs = Date.now() + dependencies.deadlines.routeLifetimeMs;
-      const hostOwners = createDockerHostReservationOwners({roots, raw, custodyRef: claimed.underlyingCustodyRef,
-        dependencies, nativeFiles, signal: claimed.signal, lock: imageInitLock, cutoffProvider: () => {retained.effectOwner?.cutoff(); retained.provider?.dispose();}});
-      let lifecycle: DockerHostCustodyLifecycle | undefined;
-      const owner = createDockerLinuxPostClaimOwner({...dependencies,
-        openLifecycle(policy) {
-          if (lifecycle !== undefined) {throw new TypeError("Docker lifecycle selection is one-use");}
-          lifecycle = dependencies.openLifecycle(policy);
-          if (!isConcreteLinuxDockerLifecycle(lifecycle)) {throw new TypeError("Docker requires the concrete Linux residue owner");}
-          return lifecycle;
-        }}, {
-        ...hostOwners.hooks,
-        afterLaunch({launch}) {
-          if (lifecycle === undefined) {throw new TypeError("Docker lifecycle unavailable");}
-          raw.reservation(claimed.underlyingCustodyRef).evidence.attachLifecycle(lifecycle, launch);
-        },
-        async afterInit({launch}) {
-          if (lifecycle === undefined) {throw new TypeError("Docker lifecycle unavailable");}
-          const binding = await hostOwners.capturedRoot();
-          const proof = await captureDockerWorkspaceCustody(lifecycle, launch, {signal: claimed.signal, deadlineEpochMs});
-          await hostOwners.capturedRoot();
-          if (disposed || claimed.signal.aborted) {throw new TypeError("Docker workspace capture closed");}
-          retained.effectOwner = createDockerCodexEffectCustodyOwner({proof, launch,
-            root: roots.get(claimed.underlyingCustodyRef)!, reservationCustodyRef: claimed.underlyingCustodyRef,
-            hostLifecycleGenerationSha256: binding.hostLifecycleGenerationSha256,
-            workspaceWritable: retained.kernel.intentMode === "workspace-write", backingTreeOwnership,
-            execution: Object.freeze({operationId: retained.kernel.operationId, attemptId: retained.kernel.attemptId,
-              effectId: retained.kernel.effectId, custodyRef: launch.key.custodyId, workspaceRef: retained.record.boundary.workspaceRef})});
-        },
-        prepareProviderIo({launch, init}) {
-          if (lifecycle === undefined) {throw new TypeError("Docker lifecycle unavailable");}
-          const process = {launch, init, expected: Object.freeze({authority: launch.authority, custodyRef: launch.key.custodyId,
-            generation: init.authority.generation, workspaceAuthorityPath: retained.record.boundary.workspaceRef}),
-            call: Object.freeze({signal: claimed.signal, deadlineEpochMs}),
-            exec: Object.freeze({requestId: randomUUID(), uid: Number(dependencies.enginePolicy.user.split(":")[0]),
-              gid: Number(dependencies.enginePolicy.user.split(":")[1]), wallDeadlineUnixMs: deadlineEpochMs,
-              argv: Object.freeze([]), environment: Object.freeze([]), executableSha256: ""})};
-          const providerIo = prepareDockerProviderProcessIo(process);
-          retained.process = Object.freeze({...process, preparedIo: providerIo});
-          raw.reservation(claimed.underlyingCustodyRef).evidence.attachProviderIo(providerIo);
-          return providerIo;
-        },
-        async finishClaimed(input) {
-          const result = await apply(finishClaimed, value, [{...input, record: retained.record, originalPlan: retained.originalPlan}]);
-          nativeStartStep(nativeFiles, "native-plan-recognition", () => {
-            if (!isCodexNativeBrokerLaunchPlan(result.plan)) {throw new TypeError("Docker native broker finalization unavailable");}
-          });
-          linkNativeStartDiagnostic(result.plan, nativeFiles);
-          const process = retained.process!;
-          linkNativeStartDiagnostic(process, nativeFiles);
-          const paths = nativeStartStep(nativeFiles, "mount-path-projection", () =>
-            createCodexDockerPathProjection(dockerProviderProcessMountFacts(input.launch), retained.record.boundary));
-          const actual = nativeStartStep(nativeFiles, "process-input-projection", () =>
-            captureDockerCodexProcessInput(process, result.plan, paths, claimed.signal, () => !disposed));
-          nativeStartStep(nativeFiles, "reservation-evidence-finalize", () =>
-            raw.reservation(claimed.underlyingCustodyRef).evidence.finalize(result.plan, actual.exec));
-          return result;
-        },
+      // Files identity exists only after selection. This step is synchronous; inner preparation is not.
+      const constructed = nativeStartStep(filesOwner, "preparation-construction", () => {
+        if (selected.workspaceBackingTreeOwnership?.kind !== "exclusive-host-owned-disposable-tree" ||
+          !/^urn:[^\s]{1,1000}$/u.test(selected.workspaceBackingTreeOwnership.evidenceRef)) {
+          throw new TypeError("Docker requires deployment evidence excluding uncontrolled workspace writers");
+        }
+        const backingTreeOwnership = Object.freeze({...selected.workspaceBackingTreeOwnership});
+        const nativeFiles = captureNativeFiles(filesOwner);
+        linkNativeStartDiagnostic(nativeFiles, filesOwner);
+        retained.nativeFiles = nativeFiles;
+        const subscription = hostHttpAbortOperations.subscribe(claimed.signal, () => {retained.effectOwner?.cutoff(); nativeFiles.cutoff();});
+        retained.removeAbort = () => hostHttpAbortOperations.remove(subscription);
+        if (disposed || hostHttpAbortOperations.aborted(claimed.signal)) {throw new TypeError("Docker selection closed");}
+        const {nativeFiles: _nativeFiles, workspaceBackingTreeOwnership: _ownership, ...dependencies} = selected;
+        const deadlineEpochMs = Date.now() + dependencies.deadlines.routeLifetimeMs;
+        const hostOwners = createDockerHostReservationOwners({roots, raw, custodyRef: claimed.underlyingCustodyRef,
+          dependencies, nativeFiles, signal: claimed.signal, lock: imageInitLock, cutoffProvider: () => {retained.effectOwner?.cutoff(); retained.provider?.dispose();}});
+        let lifecycle: DockerHostCustodyLifecycle | undefined;
+        const owner = createDockerLinuxPostClaimOwner({...dependencies,
+          openLifecycle(policy) {
+            if (lifecycle !== undefined) {throw new TypeError("Docker lifecycle selection is one-use");}
+            lifecycle = dependencies.openLifecycle(policy);
+            if (!isConcreteLinuxDockerLifecycle(lifecycle)) {throw new TypeError("Docker requires the concrete Linux residue owner");}
+            return lifecycle;
+          }}, {
+          ...hostOwners.hooks,
+          afterLaunch({launch}) {
+            if (lifecycle === undefined) {throw new TypeError("Docker lifecycle unavailable");}
+            raw.reservation(claimed.underlyingCustodyRef).evidence.attachLifecycle(lifecycle, launch);
+          },
+          async afterInit({launch}) {
+            if (lifecycle === undefined) {throw new TypeError("Docker lifecycle unavailable");}
+            const binding = await hostOwners.capturedRoot();
+            const proof = await captureDockerWorkspaceCustody(lifecycle, launch, {signal: claimed.signal, deadlineEpochMs});
+            await hostOwners.capturedRoot();
+            if (disposed || claimed.signal.aborted) {throw new TypeError("Docker workspace capture closed");}
+            retained.effectOwner = createDockerCodexEffectCustodyOwner({proof, launch,
+              root: roots.get(claimed.underlyingCustodyRef)!, reservationCustodyRef: claimed.underlyingCustodyRef,
+              hostLifecycleGenerationSha256: binding.hostLifecycleGenerationSha256,
+              workspaceWritable: retained.kernel.intentMode === "workspace-write", backingTreeOwnership,
+              execution: Object.freeze({operationId: retained.kernel.operationId, attemptId: retained.kernel.attemptId,
+                effectId: retained.kernel.effectId, custodyRef: launch.key.custodyId, workspaceRef: retained.record.boundary.workspaceRef})});
+          },
+          prepareProviderIo({launch, init}) {
+            if (lifecycle === undefined) {throw new TypeError("Docker lifecycle unavailable");}
+            const process = {launch, init, expected: Object.freeze({authority: launch.authority, custodyRef: launch.key.custodyId,
+              generation: init.authority.generation, workspaceAuthorityPath: retained.record.boundary.workspaceRef}),
+              call: Object.freeze({signal: claimed.signal, deadlineEpochMs}),
+              exec: Object.freeze({requestId: randomUUID(), uid: Number(dependencies.enginePolicy.user.split(":")[0]),
+                gid: Number(dependencies.enginePolicy.user.split(":")[1]), wallDeadlineUnixMs: deadlineEpochMs,
+                argv: Object.freeze([]), environment: Object.freeze([]), executableSha256: ""})};
+            const providerIo = prepareDockerProviderProcessIo(process);
+            retained.process = Object.freeze({...process, preparedIo: providerIo});
+            raw.reservation(claimed.underlyingCustodyRef).evidence.attachProviderIo(providerIo);
+            return providerIo;
+          },
+          async finishClaimed(input) {
+            const result = await apply(finishClaimed, value, [{...input, record: retained.record, originalPlan: retained.originalPlan}]);
+            nativeStartStep(nativeFiles, "native-plan-recognition", () => {
+              if (!isCodexNativeBrokerLaunchPlan(result.plan)) {throw new TypeError("Docker native broker finalization unavailable");}
+            });
+            linkNativeStartDiagnostic(result.plan, nativeFiles);
+            const process = retained.process!;
+            linkNativeStartDiagnostic(process, nativeFiles);
+            const paths = nativeStartStep(nativeFiles, "mount-path-projection", () =>
+              createCodexDockerPathProjection(dockerProviderProcessMountFacts(input.launch), retained.record.boundary));
+            const actual = nativeStartStep(nativeFiles, "process-input-projection", () =>
+              captureDockerCodexProcessInput(process, result.plan, paths, claimed.signal, () => !disposed));
+            nativeStartStep(nativeFiles, "reservation-evidence-finalize", () =>
+              raw.reservation(claimed.underlyingCustodyRef).evidence.finalize(result.plan, actual.exec));
+            return result;
+          },
+        });
+        retained.owner = owner;
+        return {owner, hostOwners};
       });
-      retained.owner = owner;
-      hostOwners.attach(owner);
-      const flight = owner.preparation.prepareClaimed(claimed);
+      nativeStartStep(filesOwner, "host-attach", () => constructed.hostOwners.attach(constructed.owner));
+      const flight = constructed.owner.preparation.prepareClaimed(claimed);
       raw.reservation(claimed.underlyingCustodyRef).evidence.trackPreparation(flight);
       return await flight;
     } catch (error) {
