@@ -165,7 +165,7 @@ export const changes = Object.freeze([
   }),
   Object.freeze({
     id: "runtime-setup-current-product-anchor",
-    revision: "a484a35a2b21fd0414151fd0a17993e254243580",
+    revision: "e615369d50ed73cac6e00909fcc8f6705b0d6973",
   }),
 ]);
 
@@ -178,11 +178,11 @@ export const sourceRevisionArtifactDigests = Object.freeze({
   }),
   sources: Object.freeze({
     fileCount: 597,
-    sha256: "7fa6ecc833589bc6a3477f0a1c83f315634858c7b5faf8d84d7aa32223f8b1ad",
+    sha256: "cd5d24caf5a8385b6c4249c2588c71a2c74e6b474573f9de644394fdd3ab50fe",
   }),
   tests: Object.freeze({
-    fileCount: 551,
-    sha256: "9a04ccf12bb0f0a2038390924764109c585c163542a34065c64b966ed83593d7",
+    fileCount: 553,
+    sha256: "ca4366ba19394483798602ac8af171e15509ceb72dcd7543128c10395838a757",
   }),
 });
 
