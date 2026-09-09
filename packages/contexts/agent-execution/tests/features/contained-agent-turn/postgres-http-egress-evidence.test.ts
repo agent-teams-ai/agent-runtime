@@ -12,7 +12,7 @@ const scope = {tenantId: "tenant-1", projectId: "project-1", deploymentId: "depl
 const receipt = () => ({schema: "agent-runtime.host-http-egress-receipt/v1" as const,
   operationId: "operation-1", attemptId: "attempt-1", requestId: "request-1", ...initialHttpEgressState()});
 const fakePool = () => {
-  const rows = new Map<string, string>();
+  const rows = new Map<string, unknown>();
   const calls: string[] = []; const releases: boolean[] = [];
   let loseCommit = false; let failRead = false; let unique = true; let format = HTTP_EVIDENCE_FENCE;
   const pool = {connect: async () => ({query: async (sql: string, values: unknown[] = []) => {
@@ -71,6 +71,43 @@ test("complete canonical replay ignores field order and conflicts on changed evi
   for (const sql of inserts) {assert.match(sql, /ON CONFLICT \(receipt_key\) DO NOTHING/);}
 });
 
+test("invalid retained winners remain unchanged and cannot establish a conflict", async t => {
+  const canonical = (value: unknown) => JSON.stringify(Object.fromEntries(Object.entries(value as object).sort(
+    ([left], [right]) => left < right ? -1 : left > right ? 1 : 0)));
+  const original = receipt(); const valid = canonical(original);
+  const cases: [string, unknown][] = [
+    ["null", null], ["undefined", undefined], ["number", 42], ["object", original],
+    ["empty", ""], ["malformed", "{invalid}"], ["truncated", valid.slice(0, -1)],
+    ["JSON null", "null"], ["array", "[]"],
+    ["invalid field", canonical({...original, attemptCount: 2})],
+    ["missing field", valid.replace(/"attemptCount":0,/, "")],
+    ["extra field", canonical({...original, extra: "synthetic"})],
+    ["wrong operation", canonical({...original, operationId: "other-operation"})],
+    ["wrong attempt", canonical({...original, attemptId: "other-attempt"})],
+    ["wrong request", canonical({...original, requestId: "other-request"})],
+    ["whitespace", ` ${valid}`], ["field order", JSON.stringify(original)],
+    ["duplicate field", valid.replace("{", '{"attemptCount":0,')],
+    ["oversized ASCII", " ".repeat(32_769) + valid],
+    ["oversized UTF8", JSON.stringify({...original, requestDigest: "é".repeat(16_384)})],
+  ];
+  assert.ok((cases.at(-1)![1] as string).length < 32_768);
+  assert.ok(Buffer.byteLength(cases.at(-1)![1] as string, "utf8") > 32_768);
+  for (const [name, retained] of cases) {
+    await t.test(name, async () => {
+      const fake = fakePool(); const owner = new PostgresHttpEgressEvidence(fake.pool, scope);
+      const key = JSON.stringify([...Object.values(scope), original.operationId, original.attemptId, original.requestId]);
+      fake.rows.set(key, retained);
+      assert.equal(await owner.record(original), "unknown");
+      assert.equal(await owner.record({...original, inboundRequestBytes: 1}), "unknown");
+      assert.equal(fake.rows.size, 1); assert.strictEqual(fake.rows.get(key), retained);
+      assert.equal(fake.calls.filter(sql => sql.includes("INSERT INTO host_http_egress.receipt")).length, 2);
+      assert.equal(fake.calls.some(sql => /UPDATE|DELETE/.test(sql)), false);
+      assert.ok(fake.calls.filter(sql => sql.includes("INSERT INTO host_http_egress.receipt"))
+        .every(sql => sql.includes("ON CONFLICT (receipt_key) DO NOTHING")));
+    });
+  }
+});
+
 test("rejects accessors, proxies, unknown fields, raw payload and unsafe values before I/O", async () => {
   const fake = fakePool(); const owner = new PostgresHttpEgressEvidence(fake.pool, scope);
   let touched = false;
@@ -110,7 +147,7 @@ test("broker acknowledgement loss does not rewrite original or retry provider", 
   assert.equal(result.anomalyCode, "evidence_ack_lost");
   assert.equal(result.outcome, "reconcile_required");
   assert.equal(fixture.observations.dispatches, 1);
-  const original = JSON.parse([...fake.rows.values()][0]!);
+  const original = JSON.parse([...fake.rows.values()][0] as string);
   assert.equal(original.anomalyCode, "none");
   assert.equal(await owner.record(original), "recorded");
   assert.equal(await owner.record(result), "conflict");

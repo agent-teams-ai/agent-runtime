@@ -84,7 +84,18 @@ export class PostgresHttpEgressEvidence implements HttpEgressEvidence {
         const stored = await query(`SELECT canonical_receipt FROM host_http_egress.receipt WHERE
           tenant_id=$1 AND project_id=$2 AND deployment_id=$3 AND operation_id=$4 AND attempt_id=$5 AND request_id=$6 AND receipt_key=$7`, [...key, keyDigest]);
         if (stored.rows.length !== 1) {throw new Error("HTTP evidence read uncertain");}
-        return stored.rows[0].canonical_receipt === canonical ? "recorded" : "conflict";
+        const retained: unknown = stored.rows[0].canonical_receipt;
+        // Retained DB text is untrusted: bound bytes before parsing, then verify
+        // the complete canonical receipt and its binding to the selected key.
+        if (typeof retained !== "string" || Buffer.byteLength(retained, "utf8") > 32_768) {
+          throw new Error("HTTP evidence retained text invalid");
+        }
+        const validated = canonicalHttpEvidenceReceipt(JSON.parse(retained));
+        if (validated.canonical !== retained || validated.receipt.operationId !== receipt.operationId
+          || validated.receipt.attemptId !== receipt.attemptId || validated.receipt.requestId !== receipt.requestId) {
+          throw new Error("HTTP evidence retained receipt invalid");
+        }
+        return retained === canonical ? "recorded" : "conflict";
       });
     } catch {return "unknown";}
   }
