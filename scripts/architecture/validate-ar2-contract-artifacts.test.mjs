@@ -14,9 +14,7 @@ import {
   assertAr2EvidenceCustodyCapability,
   readCustodiedRepositoryFile,
 } from "./ar2-evidence-custody.mjs";
-import {
-  registerAr2EvidenceCustodyRaceTests,
-} from "./ar2-evidence-custody-races.test-cases.mjs";
+import { registerAr2EvidenceCustodyRaceTests } from "./ar2-evidence-custody-races.test-cases.mjs";
 import {
   auditLegacyInventoryEvidence,
   readAr2CoverageTestSource,
@@ -27,6 +25,8 @@ import {
   validateInventory,
   validateOfficialSemantics,
 } from "./validate-ar2-contract-artifacts.mjs";
+
+import { ar2InventoryExecutes, readAr2TestExecutionInventory } from "./ar2-test-execution-inventory.mjs";
 
 const readRepositoryBytes = (path, allowedRoot = ".") =>
   readCustodiedRepositoryFile(path, { allowedRoot });
@@ -51,15 +51,14 @@ const loadCoverageInputs = async () => {
     await readRepositoryText(testFile, /^(packages\/[^/]+\/[^/]+\/tests)\//u.exec(testFile)[1]),
   ])));
   const packageRoots = [...new Set(testFiles.map(testFile => /^(packages\/[^/]+\/[^/]+)\//u.exec(testFile)[1]))];
-  const packageTestScripts = new Map(await Promise.all(packageRoots.map(async packageRoot => {
-    const packageManifest = await readJson(`${packageRoot}/package.json`, packageRoot);
-    return [packageRoot, packageManifest.scripts.test];
+  const packageTestInventories = new Map(await Promise.all(packageRoots.map(async packageRoot => {
+    return [packageRoot, await readAr2TestExecutionInventory(packageRoot)];
   })));
   return {
     contractCoverage,
     fixtureMatrix: freeze.fixtureMatrix,
     negativeGroups: negatives.groups,
-    packageTestScripts,
+    packageTestInventories,
     testSources,
   };
 };
@@ -475,4 +474,65 @@ test("AR-2 CLI failure boundary emits only its stable repository diagnostic", as
     "AR-2 contract artifact validation failed\n",
   );
   assert.doesNotMatch(Buffer.concat(stderr).toString("utf8"), /private|secret|Error| at /u);
+});
+
+test("AR-2 coverage rejects removal of a required launcher test file", async () => {
+  const inputs = await loadCoverageInputs();
+  validateContractCoverage(inputs);
+  const owner = "packages/apps/embedded-runtime";
+  inputs.packageTestInventories.set(owner, inputs.packageTestInventories.get(owner)
+    .filter(path => path !== "tests/claude-code-setup.e2e.test.ts"));
+  assert.throws(() => validateContractCoverage(inputs), /test file must be executed/u);
+});
+
+test("AR-2 inventory binds the manifest to the canonical launcher", async t => {
+  const evidenceRoot = await mkdtemp(join(tmpdir(), "ar2-launcher-binding-"));
+  t.after(() => rm(evidenceRoot, { recursive: true, force: true }));
+  const owner = "packages/apps/embedded-runtime";
+  const directory = join(evidenceRoot, owner);
+  await mkdir(join(directory, "scripts"), { recursive: true });
+  const manifest = await readJson(`${owner}/package.json`, owner);
+  const launcher = await readRepositoryText(`${owner}/scripts/run-package-tests.mjs`, owner);
+  await writeFile(join(directory, "scripts/run-package-tests.mjs"), launcher);
+  const save = () => writeFile(join(directory, "package.json"), JSON.stringify(manifest));
+  await save();
+  const inventory = await readAr2TestExecutionInventory(owner, { evidenceRoot });
+  assert.ok(ar2InventoryExecutes(inventory, "tests/claude-code-setup.e2e.test.ts"));
+  assert.ok(ar2InventoryExecutes(inventory, "tests/support/linux-http-completion-negative.mjs"));
+  for (const script of ["echo scripts/run-package-tests.mjs",
+    "node scripts/run-package-tests.mjs --check", "node scripts/other.mjs",
+    "node scripts/run-package-tests.mjs || true",
+    "node scripts/run-package-tests.mjs # tests/claude-code-setup.e2e.test.ts",
+  ]) {
+    manifest.scripts.test = script;
+    await save();
+    await assert.rejects(readAr2TestExecutionInventory(owner, { evidenceRoot }), /altered test launcher/u);
+  }
+  manifest.scripts.test = "node scripts/run-package-tests.mjs";
+  await save();
+  await writeFile(join(directory, "scripts/run-package-tests.mjs"), launcher.replace(
+    '"tests/claude-code-setup.e2e.test.ts",', "",
+  ));
+  await assert.rejects(readAr2TestExecutionInventory(owner, { evidenceRoot }), /altered test launcher source/u);
+  await rm(join(directory, "scripts/run-package-tests.mjs"));
+  await assert.rejects(readAr2TestExecutionInventory(owner, { evidenceRoot }), /custody rejected/u);
+});
+
+test("AR-2 direct Node inventory rejects shell text and matches whole paths", async t => {
+  const evidenceRoot = await mkdtemp(join(tmpdir(), "ar2-direct-inventory-"));
+  t.after(() => rm(evidenceRoot, { recursive: true, force: true }));
+  const owner = "packages/contexts/example";
+  await mkdir(join(evidenceRoot, owner), { recursive: true });
+  const save = script => writeFile(join(evidenceRoot, owner, "package.json"), JSON.stringify({ scripts: { test: script } }));
+  await save("node --test --test-concurrency=1 tests/*.test.ts");
+  const inventory = await readAr2TestExecutionInventory(owner, { evidenceRoot });
+  for (const [path, expected] of [["tests/example.test.ts", true],
+    ["tests/nested/example.test.ts", false], ["tests/example.test.ts.extra", false]]) {
+    assert.equal(ar2InventoryExecutes(inventory, path), expected);
+  }
+  for (const script of ["echo tests/example.test.ts", "node --test tests/example.test.ts || true",
+    "node --test # tests/example.test.ts", "node --test tests/example.test.ts; exit 0"]) {
+    await save(script);
+    await assert.rejects(readAr2TestExecutionInventory(owner, { evidenceRoot }), /unsupported test command/u);
+  }
 });
