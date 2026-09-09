@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test, after } from "node:test";
 import { EventEmitter } from "node:events";
+import { runInNewContext } from "node:vm";
 import { PassThrough } from "node:stream";
-import { fixture, file, directory, sessionDependencies, guarded, controlDarwinChildObservations } from "./darwin-native-finalization-fixture.ts";
+import { fixture, file, directory, sessionDependencies, guarded, controlDarwinChildObservations, syntheticNodeModule, mutate } from "./darwin-native-finalization-fixture.ts";
 const {DarwinSeatbeltRouteOwner} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-seatbelt-route-owner.js");
 const {DarwinRouteLifecycleJournal} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-route-lifecycle-journal.js");
 const {pinDarwinExecutable, createDarwinSeatbeltProjection} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-seatbelt-launch-projection.js");
@@ -12,6 +13,8 @@ const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
 Object.defineProperty(process, "platform", {...platform, value: "darwin"});
 after(() => {Object.defineProperty(process, "platform", platform); controlDarwinChildObservations();});
 
+const flush = async () => {for (let i = 0; i < 16; i++) {await Promise.resolve();}};
+
 const setup = async () => {
   const f = fixture("analysis", true); const reservation = await f.reserve(); const records: string[] = [];
   let now = 0; let epoch = "epoch-1"; let reentrant: (() => void) | undefined;
@@ -20,7 +23,7 @@ const setup = async () => {
   const pin = (path: string) => pinDarwinExecutable(path, darwinDigest("pinned tool"));
   const node = pin(process.execPath); const observer = pin("/owned/observer"); const launcher = pin("/usr/bin/sandbox-exec");
   const provider = pinDarwinExecutable(f.options.executablePath, f.plan.executableSha256);
-  const journal = new DarwinRouteLifecycleJournal({append: (_file: string, kind: string) => {records.push(kind);}, assertIntact() {}} as never, reservation.lifetime);
+  const journal = new DarwinRouteLifecycleJournal({append: (_file: string, kind: string) => {records.push(kind);}, assertIntact() {}, close: async () => true} as never, reservation.lifetime);
   const localCut = {expectedClock: {authorityId: "clock-authority", epoch: "epoch-1"}, operationDeadline: 100,
     clock: {read: () => {reentrant?.(); return {authorityId: "clock-authority", epoch, controlTime: now};},
       within: async <T>(_deadline: number, operation: () => Promise<T>) => operation()}};
@@ -151,4 +154,127 @@ test("same reservation retains pending route flight through abort and refuses it
   gate.resolve(); await rejected; await pending;
   assert.equal(finished, true); assert.equal(f.owner.state, "cut");
   assert.equal(f.records.includes("launch_profile_authorized"), false);
+});
+
+
+test("executable pin rejects matching bytes owned by a foreign UID and rechecks retained UID", async t => {
+  const f = await setup(); t.after(f.close);
+  const {recheckDarwinExecutable} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-seatbelt-launch-projection.js");
+  mutate("/owned/observer", {uid: process.getuid!() + 1});
+  assert.throws(() => pinDarwinExecutable("/owned/observer", darwinDigest("pinned tool")), /trusted executable/u);
+  assert.throws(() => recheckDarwinExecutable(f.projection.observer));
+  mutate("/owned/observer", {uid: process.getuid!() === 0 ? 1 : 0});
+  assert.throws(() => recheckDarwinExecutable(f.projection.observer));
+  mutate("/owned/observer", {uid: process.getuid!()});
+});
+
+test("bootstrap operations are explicit and do not widen execution, network or operation writes", async t => {
+  const f = await setup(); t.after(f.close); const profile = f.projection.profile;
+  for (const required of ['(allow sysctl-read)', '(mac-policy-name "vnguard")',
+    '(require-all (mac-policy-name "Sandbox") (mac-syscall-number 67))',
+    '(allow file-map-executable (subpath "/usr/lib"))',
+    `(allow file-map-executable (literal "${f.options.executablePath}"))`,
+    `(path-ancestors "${f.options.tmpDir}")`, `(path-ancestors "${f.boundary.workspaceRef}")`,
+    '(deny process-fork)', '(deny network-inbound)', '(deny file-read* file-write* (subpath "/durable"))']) {
+    assert.ok(profile.includes(required), required);
+  }
+  assert.deepEqual(profile.split("\n").filter(line => line.startsWith("(allow process-exec")),
+    [`(allow process-exec (literal "${f.options.executablePath}"))`]);
+  assert.deepEqual(profile.split("\n").filter(line => line.startsWith("(allow network")),
+    ['(allow network-outbound (require-all (remote tcp "localhost:32123") (socket-domain AF_INET)))']);
+  for (const forbidden of ['(allow process-exec)', 'mach-lookup', 'mach-register', '(remote tcp "127.0.0.1:',
+    '(subpath "/System")', '(subpath "/usr")', '(subpath "/Library")', '(subpath "/")',
+    `(allow file-read* file-write* (subpath "${f.boundary.workspaceRef}")`,
+    `(allow file-read* file-write* (subpath "${f.boundary.codexHome}")`]) {assert.equal(profile.includes(forbidden), false, forbidden);}
+});
+
+test("actual outer guardian, embedded program and route cleanup join through cutoff and pending identity abort", async t => {
+  for (const mode of ["normal", "pending", "disconnect", "timeout"] as const) {
+    const pending = mode === "pending";
+    const f = await setup(); t.after(f.close); await f.prepare();
+    const timers = new Map<object, {callback: () => void; delay: number}>();
+    const pipelines: (() => void)[] = []; const delivered: string[] = []; const calls: string[] = [];
+    let embedded = ""; let inherited: unknown[] = []; let heldDelivery: (() => void) | undefined;
+    const provider = Object.assign(new EventEmitter(), {pid: 502, exitCode: null, signalCode: null as string | null,
+      stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(),
+      kill() {calls.push("direct-child-kill"); return true;}});
+    const remote = Object.assign(new EventEmitter(), {pid: 501, getuid: process.getuid,
+      argv: ["node", "100"], connected: true, stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(),
+      send(message: {type: string; stream?: string}, callback?: (error: null) => void) {
+        queueMicrotask(() => {if (child.connected) {
+          child.emit("message", message); delivered.push(message.type);
+          if (mode === "normal" && message.type === "stream-final" && message.stream === "stderr") {
+            heldDelivery = () => callback?.(null);
+          } else {callback?.(null);}
+        }});
+      },
+      kill(pid: number, signal: string) {assert.equal(pid, 0); calls.push("guardian-kill");
+        child.signalCode = signal; child.emit("exit", null, signal); child.emit("close");},
+      exit() {assert.fail("unexpected guardian exit fallback");}});
+    const child = Object.assign(new EventEmitter(), {pid: 501, connected: true, exitCode: null, signalCode: null as string | null,
+      stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(),
+      send(message: {type: string}, callback?: (error: null) => void) {
+        queueMicrotask(() => {remote.emit("message", message); callback?.(null);});
+      }, disconnect() {calls.push("disconnect"); child.connected = false; remote.connected = false; remote.emit("disconnect");},
+      kill() {assert.fail("Host must not bypass direct-child shutdown");}});
+    controlDarwinChildObservations((_command, args, options) => {embedded = (args as string[])[1]!; inherited = (options as {stdio: unknown[]}).stdio; return child;},
+      () => JSON.stringify(image(501, process.pid, 501, f.node)));
+    f.live.residueAuthority = {attachGuardian: async () => true} as never;
+    f.live.launchBinding.firstStart(f.live);
+    const launched = guarded.launchGuardedProvider({live: f.live, arguments: f.live.plan!.arguments,
+      environment: f.live.plan!.environment, maxDiagnosticBytes: 256, maxStderrBytes: 1024, maxStdinBytes: 1024,
+      maxStdoutBytes: 1024, stdoutHighWaterBytes: 256, monotonicNow: () => 0, writeAfterMs: 100,
+      spawnAcknowledgementAfterMs: 100, onAbort() {}, onOverflow() {}});
+    f.live.guardian = launched.guardian; t.after(() => launched.authority.close());
+    runInNewContext(embedded, {process: remote, require: (name: string) => {
+      if (name === "node:child_process") {return {spawn: () => provider,
+        execFileSync: () => JSON.stringify(image(502, 501, 501, f.projection.provider))};}
+      if (name === "node:fs") {const fs = syntheticNodeModule(name); return {...fs,
+        fstatSync: (fd: number, options: unknown) => (fs.fstatSync as (fd: unknown, options: unknown) => unknown)(inherited[fd], options)};}
+      if (name === "node:stream") {return {pipeline: (_source: unknown, _dest: unknown, callback: () => void) => pipelines.push(callback)};}
+      return syntheticNodeModule(name);
+    }, setTimeout: (callback: () => void, delay: number) => {const key = {}; timers.set(key, {callback, delay}); return key;},
+    clearTimeout: (key: object) => timers.delete(key)});
+    await flush(); provider.emit("spawn");
+    if (!pending) {
+      const entry = [...timers].find(([, value]) => value.delay === 1)!; assert.ok(entry);
+      timers.delete(entry[0]); entry[1].callback(); await flush();
+      assert.equal((await launched.guardian.start).status, "acknowledged");
+    }
+    const retainedPending = f.live.httpReservation.pending;
+    if (pending) {f.controller.abort();} else {f.owner.cutoff();}
+    await flush(); assert.deepEqual(calls, ["direct-child-kill"]);
+    assert.equal(f.live.httpReservation.pending, retainedPending);
+    let resourcesClosed = 0;
+    const cleanup = f.owner.cleanup(async () => {resourcesClosed++; return true;});
+    if (mode === "disconnect" || mode === "timeout") {
+      if (mode === "disconnect") {
+        child.disconnect(); provider.signalCode = "SIGKILL"; provider.emit("exit", null, "SIGKILL");
+      } else {
+        const timer = [...timers].find(([, value]) => value.delay === 1000)!; assert.ok(timer);
+        timers.delete(timer[0]); timer[1].callback();
+      }
+      await flush(); assert.equal(await cleanup, false); assert.equal(resourcesClosed, 0);
+      assert.equal(launched.guardian.providerExit, undefined);
+      assert.equal(await launched.guardian.streamFinal("stdout"), "incomplete");
+      assert.equal(await launched.guardian.streamFinal("stderr"), "incomplete");
+      assert.notEqual(f.owner.state, "released"); continue;
+    }
+    provider.signalCode = "SIGKILL"; provider.emit("exit", null, "SIGKILL"); await flush();
+    assert.equal(resourcesClosed, 0); assert.equal(calls.includes("guardian-kill"), false);
+    pipelines[0]!(); await flush(); assert.equal(calls.includes("guardian-kill"), false);
+    pipelines[1]!(); await flush();
+    if (mode === "normal") {
+      assert.ok(heldDelivery); assert.equal(calls.includes("guardian-kill"), false);
+      heldDelivery(); await flush();
+    }
+    assert.ok(delivered.includes("provider-exit")); assert.equal(delivered.filter(type => type === "stream-final").length, 2);
+    assert.deepEqual(calls, ["direct-child-kill", "guardian-kill"]);
+    assert.deepEqual(launched.guardian.providerExit, {code: null, signal: "SIGKILL"});
+    assert.equal(await launched.guardian.streamFinal("stdout"), "complete");
+    assert.equal(await launched.guardian.streamFinal("stderr"), "complete");
+    assert.equal(await cleanup, true); assert.equal(resourcesClosed, 1); assert.equal(f.owner.state, "released");
+    if (pending) {assert.equal((await launched.guardian.start).status, "ambiguous");}
+    launched.authority.close();
+  }
 });

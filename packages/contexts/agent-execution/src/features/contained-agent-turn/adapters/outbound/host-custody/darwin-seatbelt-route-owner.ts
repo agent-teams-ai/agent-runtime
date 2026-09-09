@@ -1,3 +1,4 @@
+import { lstatSync, realpathSync } from "node:fs";
 import type { NodeCustodyHttpLifetime } from "./node-provider-process-custody-http-reservation.js";
 import type { LiveCustody } from "./node-provider-process-custody-state.js";
 import type { FinalHostLaunch } from "./host-launch-finalization.js";
@@ -39,6 +40,18 @@ export class DarwinSeatbeltRouteOwner {
         live.httpReservation.executionSessionIdentity !== this.lifetime.executionSessionIdentity) {rejected();}
     live.httpReservation.assertPreparation(this.lifetime); this.#live = live;
   }
+  /** Compare the supplied name with the actual reservation's retained directory.
+   * This remains name-bound observation, not same-UID namespace exclusion. */
+  public assertWritableTmp(path: string): void {
+    const live = this.#live; const plan = live?.plan;
+    const retained = live?.privatePaths?.byEnvironmentKey.TMPDIR;
+    const overlaps = (other: string) => path === other || path.startsWith(`${other}/`) || other.startsWith(`${path}/`);
+    if (plan === undefined || retained === undefined || path !== plan.environment.TMPDIR || path !== retained.path ||
+        overlaps(plan.environment.CODEX_HOME ?? "/") || overlaps(live!.workspaceRef) || realpathSync(path) !== path) {return rejected();}
+    const current = lstatSync(path, {bigint: true});
+    if (!current.isDirectory() || current.isSymbolicLink() || current.dev !== retained.dev || current.ino !== retained.ino ||
+        current.uid !== retained.uid || current.mode !== retained.mode || current.ctimeNs !== retained.ctimeNs) {rejected();}
+  }
   public run<T>(operation: () => Promise<T>): Promise<T> {
     if (this.#preparation !== undefined || this.#live === undefined) {return Promise.reject(new TypeError("Darwin route preparation conflicts"));}
     const done = Promise.withResolvers<void>(); this.#preparation = done.promise;
@@ -61,6 +74,8 @@ export class DarwinSeatbeltRouteOwner {
   public authorize(projection: DarwinSeatbeltProjection): void {
     this.assertActive();
     if (this.#state !== "reserved" || this.#projection !== undefined || !isIssuedDarwinSeatbeltProjection(projection)) {rejected();}
+    if (projection.writePaths.length !== 1) {rejected();}
+    this.assertWritableTmp(projection.writePaths[0]!);
     const plan = this.#live!.plan!;
     if (projection.provider.path !== plan.executablePath || projection.provider.sha256 !== plan.executableSha256) {rejected();}
     this.journal.record("launch_profile_authorized", {projectionDigest: projection.digest,
@@ -77,6 +92,8 @@ export class DarwinSeatbeltRouteOwner {
   public bindFinal(final: FinalHostLaunch): void {
     this.assertLaunch();
     if (this.#final !== undefined || this.#session === undefined) {rejected();}
+    this.assertWritableTmp(this.projection.writePaths[0]!);
+    if (final.plan.environment.TMPDIR !== this.projection.writePaths[0]) {rejected();}
     const native = codexNativeBrokerLaunchInput(final.plan);
     if (native.recipe.endpoint !== `http://127.0.0.1:${this.projection.endpoint.port}/backend-api/codex`) {rejected();}
     this.journal.record("finalized", {fingerprint: final.fingerprint.fingerprintSha256, material: final.materialSha256});

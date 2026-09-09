@@ -75,6 +75,7 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
       const owner = route;
       files = new DarwinCodexNativeFiles(options.boundary, options.catalogSource, journal, () => owner.assertActive());
       preparation.retainDarwinRoute(lifetime, owner);
+      owner.assertWritableTmp(options.tmpDir);
       if (options.localCut.hostShutdownSignal !== undefined) {addAbortListener(options.localCut.hostShutdownSignal, () => owner.cutoff());}
       return await owner.run(async () => {
         await journal.prepare(); owner.assertActive();

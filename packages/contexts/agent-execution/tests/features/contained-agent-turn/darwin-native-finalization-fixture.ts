@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as fsPromises from "node:fs/promises";
 import * as crypto from "node:crypto";
+import * as net from "node:net";
+import { EventEmitter } from "node:events";
 import * as childProcess from "node:child_process";
 import { registerHooks } from "node:module";
 import { dirname } from "node:path";
@@ -22,7 +24,7 @@ for (const name of ["models.json", "input-config.analysis.toml", "capture.darwin
 const configUrl = new URL("codex-native-config-0.153.4/config-read.darwin-analysis.json", fixtureRoot);
 retained.set(configUrl.href, fs.readFileSync(configUrl));
 export const retainedBytes = (name: string) => retained.get(new URL(`codex-native-broker-0.153.4/${name}`, fixtureRoot).href)!;
-interface Entry { ino: number; mode: number; directory: boolean; bytes: Buffer; revision: number }
+interface Entry { nlink?: number; uid?: number; ino: number; mode: number; directory: boolean; bytes: Buffer; revision: number }
 const entries = new Map<string, Entry>();
 const descriptors = new Map<number, Entry>();
 export const descriptorIsOpen = (descriptor: number) => descriptors.has(descriptor);
@@ -30,17 +32,21 @@ let sequence = 0; let nextInode = 10; let nextDescriptor = 100;
 export const observedPaths: string[] = [];
 export const materialPreimages: string[] = [];
 const forbidden = () => {throw new Error("unexpected real filesystem, socket or process operation");};
+let preparationOS = false;
+export const preparationEffects: string[] = [];
+export const enablePreparationOS = () => {preparationOS = true;};
 const entry = (path: string): Entry => {
   observedPaths.push(path);
   const descriptor = /^\/dev\/fd\/(\d+)$/u.exec(path);
   const value = descriptor === null ? entries.get(path) : descriptors.get(Number(descriptor[1]));
+  if (value === undefined && preparationOS) {throw Object.assign(new Error(`missing synthetic path ${path}`), {code: "ENOENT"});}
   assert.ok(value, `unexpected in-memory path: ${path}`);
   return value;
 };
 const stats = (value: Entry, options?: {bigint?: boolean}) => {
   const number = (input: number) => options?.bigint === true ? BigInt(input) : input;
-  return {dev: number(1), ino: number(value.ino), mode: number(value.mode), uid: number(process.getuid!()),
-    nlink: number(1), size: number(value.bytes.length), ctimeNs: BigInt(value.revision), mtimeNs: BigInt(value.revision),
+  return {dev: number(1), ino: number(value.ino), mode: number(value.mode), uid: number(value.uid ?? process.getuid!()),
+    nlink: number(value.nlink ?? 1), size: number(value.bytes.length), ctimeNs: BigInt(value.revision), mtimeNs: BigInt(value.revision),
     isDirectory: () => value.directory, isFile: () => !value.directory, isSymbolicLink: () => false};
 };
 export const directory = (path: string): void => {
@@ -52,7 +58,15 @@ export const file = (path: string, bytes: Buffer, mode = 0o100600): void => {
   entries.set(path, {ino: nextInode++, mode, directory: false, bytes, revision: 1});
 };
 export const mutate = (path: string, changes: Partial<Entry>) => {Object.assign(entry(path), changes);};
-const openSync = (path: string) => {const fd = nextDescriptor++; descriptors.set(fd, entry(path)); return fd;};
+const openSync = (path: string, flags = 0, mode = 0o600) => {
+  if (preparationOS && (flags & fs.constants.O_CREAT) !== 0) {
+    assert.ok(path.startsWith("/private/tmp/ar69-r213-memory-") || path.startsWith("/durable/"));
+    if (entries.has(path) && (flags & fs.constants.O_EXCL) !== 0) {throw Object.assign(new Error("exists"), {code: "EEXIST"});}
+    preparationEffects.push(`create:${path}`); file(path, Buffer.alloc(0), 0o100000 | mode);
+    entry(dirname(path)).revision++;
+  }
+  const fd = nextDescriptor++; descriptors.set(fd, entry(path)); return fd;
+};
 const closeSync = (fd: number) => {assert.equal(descriptors.delete(fd), true);};
 const canonical = (path: string) => {entry(path); return path;};
 let heldPath: string | undefined;
@@ -70,6 +84,14 @@ modules.set("node:fs", {...blockedFunctions(fs), constants: fs.constants,
   lstatSync: (path: string, options: {bigint?: boolean}) => stats(entry(path), options),
   statSync: (path: string, options: {bigint?: boolean}) => stats(entry(path), options),
   realpathSync: canonical, openSync, closeSync,
+  fsyncSync: (fd: number) => {assert.ok(preparationOS && descriptors.has(fd)); preparationEffects.push("fsync");},
+  writeSync: (fd: number, bytes: Buffer, offset: number, length: number, position: number) => {
+    assert.ok(preparationOS); const value = descriptors.get(fd)!; assert.ok(value && !value.directory);
+    const next = Buffer.alloc(Math.max(value.bytes.length, position + length)); value.bytes.copy(next);
+    bytes.copy(next, position, offset, offset + length); value.bytes = next; value.revision++; return length;
+  },
+  unlinkSync: (path: string) => {assert.ok(preparationOS); const value = entry(path); value.nlink = 0;
+    assert.equal(entries.delete(path), true); entry(dirname(path)).revision++; preparationEffects.push(`unlink:${path}`);},
   fstatSync: (fd: number, options: {bigint?: boolean}) => stats(descriptors.get(fd)!, options),
   readFileSync: (path: string | number | URL, encoding?: string) => {
     const bytes = path instanceof URL ? retained.get(path.href)
@@ -96,6 +118,13 @@ modules.set("node:fs/promises", {...blockedFunctions(fsPromises),
     };
   },
 });
+class MemoryServer extends EventEmitter {
+  listening = false;
+  listen() {assert.ok(preparationOS); preparationEffects.push("listen"); this.listening = true; queueMicrotask(() => this.emit("listening")); return this;}
+  address() {return this.listening ? {address: "127.0.0.1", family: "IPv4", port: 32123} : null;}
+  close() {this.listening = false; preparationEffects.push("listener-close"); queueMicrotask(() => this.emit("close")); return this;}
+}
+modules.set("node:net", {...blockedFunctions(net), isIPv4: net.isIPv4, Server: MemoryServer});
 const darwinBinary = Buffer.from("synthetic Darwin executable bytes; never executable");
 const linuxBinary = Buffer.from("synthetic Linux executable bytes; never executable");
 modules.set("node:crypto", {...crypto,
@@ -188,6 +217,8 @@ export const fixture = (mode: "analysis" | "workspace-write" = "analysis", darwi
     providerBinding: {...snapshot, credentialBindingDigest: access("codex").credentialBindingDigest,
       providerRouteRef: access("codex").providerRouteRef}};
   return {options, boundary, recipe, plan, input, identity, kernelInput,
+    workspaceAuthority: () => ({canonicalPath: workspaceRef, descriptorPath: workspaceRef,
+      identity: {dev: 1n, ino: BigInt(entry(workspaceRef).ino), mountId: "darwin-statfs:synthetic"}}),
     async install() {
       file(`${codexHome}/config.toml`, Buffer.from(recipes.renderCodexNativeBrokerConfig(recipe)));
       file(recipe.catalogPath, retainedBytes("models.json")); entry(codexHome).revision += 1;
@@ -233,4 +264,9 @@ export const sessionDependencies = (f: Awaited<ReturnType<ReturnType<typeof fixt
   return {...egress.ports, identity: {operationId: proof.operationId, attemptId: proof.attemptId,
     custodyId: proof.custodyId, hostBootId: proof.hostBootId, liveProcessSessionIdentity: f.lifetime.executionSessionIdentity},
     providerAccessSnapshot: {...egress.ports.providerAccessSnapshot, ...access("codex")}};
+};
+
+/** In-memory OS observations for the actual embedded guardian VM. */
+export const syntheticNodeModule = (name: string) => {
+  const value = modules.get(name); assert.ok(value, name); return value;
 };

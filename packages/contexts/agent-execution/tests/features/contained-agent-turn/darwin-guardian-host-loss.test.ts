@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { readFileSync } from "node:fs";
 import { PassThrough } from "node:stream";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
@@ -11,9 +10,7 @@ import { StableProcessGroupGuardian } from "../../../dist/features/contained-age
 
 // Exercise the actual embedded program in THIS workspace's emitted AE build.
 // All OS effects below are controlled observations, not native Darwin evidence.
-const compiled = readFileSync(new URL("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-stable-guardian.js", import.meta.url), "utf8");
-const source = /const GUARDIAN_SOURCE = String.raw\s*`([\s\S]*?)`;/u.exec(compiled)?.[1];
-assert.ok(source);
+const {GUARDIAN_SOURCE: source} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-guardian-program.js");
 
 const fixture = (darwin = true, route = false) => {
   const calls: string[] = [];
@@ -25,7 +22,7 @@ const fixture = (darwin = true, route = false) => {
     kill(signal: string) {calls.push(`provider:${signal}`); return true;},
   });
   const host = Object.assign(new EventEmitter(), {
-    pid: 88, argv: darwin ? ["node", "100"] : ["node"], connected: true,
+    pid: 88, getuid: () => 1000, argv: darwin ? ["node", "100"] : ["node"], connected: true,
     stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(),
     send: ((message: Record<string, unknown>, callback?: (error: Error | null) => void) => {
       messages.push(message); callback?.(null);
@@ -34,7 +31,7 @@ const fixture = (darwin = true, route = false) => {
     exit(code: number) {calls.push(`exit:${code}`);},
   });
   let spawnOptions: {stdio: unknown[]} | undefined;
-  const stat = {dev: 1n, ino: 2n, nlink: 1n, isSymbolicLink: () => false, isFile: () => true, isDirectory: () => true};
+  const stat = {dev: 1n, ino: 2n, uid: 1000n, mode: 0o100755n, nlink: 1n, isSymbolicLink: () => false, isFile: () => true, isDirectory: () => true};
   let nativeImage: unknown = {protocol: "ae-darwin-owned-image/v1", pid: 99, ppid: 88, pgid: 88,
     birthSeconds: "1000", birthMicros: "1", dev: "1", ino: "2"};
   let observeError = false;
@@ -56,9 +53,9 @@ const fixture = (darwin = true, route = false) => {
     type: "launch", command: "/owned/codex", cwd: "/owned/workspace",
     ...(route ? {darwinRoute: {
       profile: "pinned", profileSha256: createHash("sha256").update("pinned").digest("hex"),
-      provider: {path: "/owned/codex", dev: "1", ino: "2", sha256: createHash("sha256").update("pinned").digest("hex")},
-      observer: {path: "/owned/observer", dev: "1", ino: "2", sha256: createHash("sha256").update("pinned").digest("hex")},
-      launcher: {path: "/usr/bin/sandbox-exec", dev: "1", ino: "2", sha256: createHash("sha256").update("pinned").digest("hex")},
+      provider: {path: "/owned/codex", dev: "1", ino: "2", uid: "1000", sha256: createHash("sha256").update("pinned").digest("hex")},
+      observer: {path: "/owned/observer", dev: "1", ino: "2", uid: "1000", sha256: createHash("sha256").update("pinned").digest("hex")},
+      launcher: {path: "/usr/bin/sandbox-exec", dev: "1", ino: "2", uid: "1000", sha256: createHash("sha256").update("pinned").digest("hex")},
     }} : {}),
     arguments: [], environment: {}, inheritedDescriptors: [4, 5, 6],
     ...(darwin ? {canonicalAuthority: {
@@ -164,6 +161,8 @@ test("actual emitted Host guardian refuses late beforeLaunch after its admission
   attached.resolve(true); await Promise.resolve(); await Promise.resolve();
   assert.equal(sent.some(message => message.type === "launch"), false);
   assert.equal(sent.some(message => message.type === "shutdown"), true);
+  assert.equal(child.connected, true);
+  t.mock.timers.tick(1500);
   assert.equal(child.connected, false);
   const argv = spawn.mock.calls[0]!.arguments[1];
   assert.ok(Array.isArray(argv)); assert.equal(argv.at(-1), "100");
