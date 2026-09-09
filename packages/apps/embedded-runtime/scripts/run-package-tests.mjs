@@ -1,0 +1,111 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// The two original manifest argv lists, in their original order. No discovery/filtering.
+export const testProcesses = [
+  [
+    "--test",
+    "--test-concurrency=1",
+    "tests/assembly-reference.test.ts",
+    "tests/assembly-packed-consumer.test.ts",
+    "tests/runtime-setup-assembly.test.ts",
+    "tests/capability-bundle-contract.test.ts",
+    "tests/codex-setup.e2e.test.ts",
+    "tests/claude-code-setup.e2e.test.ts",
+    "tests/claude-code-semantic-correction.e2e.test.ts",
+    "tests/contained-turn.e2e.test.ts",
+    "tests/contained-turn-authority-join.test.ts",
+    "tests/postgres-authority-join.test.ts",
+    "tests/contained-turn-acceptance-uncertainty.e2e.test.ts",
+    "tests/contained-turn-access-authority.test.ts",
+    "tests/contained-turn-provider-access-integration.test.ts",
+    "tests/contained-turn-http-egress-provider-access-integration.test.ts",
+    "tests/contained-turn-http-provider-access.test.ts",
+    "tests/contained-turn-current-egress-owners.test.ts",
+    "tests/contained-turn-http-credential-materialization.test.ts",
+    "tests/contained-turn-http-egress-authorities.test.ts",
+    "tests/contained-turn-http-egress-upstream.test.ts",
+    "tests/contained-turn-linux-route-binding.test.ts",
+    "tests/contained-turn-route-qualification.test.ts",
+    "tests/contained-turn-route-enforcement-gate.test.ts",
+    "tests/contained-turn-host-custody-integration.test.ts",
+    "tests/linux-codex-deployment.test.ts",
+    "tests/linux-codex-deployment-publication.test.ts",
+    "tests/linux-codex-node-recipe.test.ts",
+    "tests/linux-codex-node-recipe-owners.test.ts",
+    "tests/linux-joined-peer.test.mjs",
+    "tests/contained-turn-provider-selection-construction.test.ts",
+    "tests/provider-candidate-route-gate.test.ts",
+    "tests/claude-route-enforcement-unsupported.test.ts",
+    "tests/contained-turn-disposal-races.e2e.test.ts",
+    "tests/contained-turn-malformed-custody.e2e.test.ts",
+    "tests/contained-turn-nonterminal-custody.e2e.test.ts",
+    "tests/runtime-access-boundaries.e2e.test.ts",
+    "tests/agent-runtime-host-disposal.unit.test.ts",
+    "tests/host-shutdown-admission.test.ts",
+    "tests/host-custodied-agent-runtime-host-disposal-quarantine.test.ts",
+    "tests/contained-turn-cancellation-proof.unit.test.ts",
+    "tests/contained-turn-runtime-validation.unit.test.ts",
+    "tests/contained-turn-construction-failure.unit.test.ts",
+    "tests/trusted-runtime-access-scope.unit.test.ts",
+    "tests/public-api.test.ts",
+    "tests/claude-code-contract.test.ts",
+    "tests/live/linux-codex-pa-rendering.test.ts",
+    "tests/live/linux-codex-node-selection.test.ts",
+    "tests/live/linux-codex-live-admin-directories.test.ts",
+    "tests/live/linux-codex-live-admin.test.ts",
+    "tests/live/linux-codex-live-admin-route.test.ts",
+    "tests/live/linux-codex-live-canary-config.test.ts",
+    "tests/live/linux-codex-live-admin-firewall.test.ts",
+    "tests/live/linux-codex-live-firewall-wiring.test.ts",
+    "tests/contained-turn-http-digest-alignment.test.ts",
+    "tests/live/run-linux-codex-live-canary.test.mjs",
+    "tests/live/run-linux-codex-live-canary-cli.test.mjs",
+    "tests/node-docker-route-provenance-integration.test.ts"
+  ],
+  [
+    "--experimental-test-module-mocks",
+    "--test",
+    "tests/support/linux-http-completion-negative.mjs"
+  ]
+];
+export const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+export const packagePath = "packages/apps/embedded-runtime";
+export const checkStages = ["clean", "typecheck", "build", "test"];
+export const checkCommand = "node scripts/run-package-tests.mjs --check";
+export const testCommand = "node scripts/run-package-tests.mjs";
+export const reporterArg = "--test-reporter=./scripts/adoption-test-reporter.mjs";
+
+function run(check) {
+  const capture = process.env.AE_ADOPTION_CAPTURE_DIR;
+  const records = [];
+  const commands = check ? checkStages.map(stage => ["pnpm", ["run", stage]])
+    : testProcesses.map(args => [process.execPath, [reporterArg, ...args]]);
+  let failed = false;
+  for (const [index, [executable, argv]] of commands.entries()) {
+    const start = new Date().toISOString();
+    const result = spawnSync(executable, argv, {cwd: packageRoot, env: process.env,
+      encoding: "utf8", maxBuffer: 128 * 1024 * 1024});
+    const prefix = `${check ? "stage" : "process"}-${index}`;
+    if (capture) {
+      for (const stream of ["stdout", "stderr"]) {
+        writeFileSync(resolve(capture, `${prefix}.${stream}`), result[stream] ?? "", {flag: "wx"});
+      }
+    }
+    process.stdout.write(result.stdout ?? ""); process.stderr.write(result.stderr ?? "");
+    records.push({index, cwd: packagePath, executable: check ? "pnpm" : "node", argv,
+      start, end: new Date().toISOString(), exitCode: result.status, signal: result.signal,
+      stdout: `${prefix}.stdout`, stderr: `${prefix}.stderr`});
+    if (result.error || result.status !== 0 || result.signal) { failed = true; break; }
+  }
+  if (capture) writeFileSync(resolve(capture, check ? "stages.json" : "processes.json"),
+    JSON.stringify(records, null, 2)+"\n", {flag: "wx"});
+  process.exitCode = failed ? 1 : 0;
+}
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  assert.ok(process.argv.length === 2 || (process.argv.length === 3 && process.argv[2] === "--check"));
+  run(process.argv[2] === "--check");
+}

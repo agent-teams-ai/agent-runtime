@@ -138,3 +138,6 @@ test("rejects drift even when historical values cannot be recomputed", () => {
     /historicalChanges\[0\]\.composition fields drifted/u,
   );
 });
+
+// Keep paired-platform rejecting fixtures on the existing architecture gate.
+import "./runtime-setup-l0-evidence-v2.test.mjs";

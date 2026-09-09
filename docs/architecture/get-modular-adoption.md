@@ -151,20 +151,100 @@ following bounded transition contract:
    shape/digests to make current source pass. Current artifact equality cannot
    require changed composition bytes to equal historical capture bytes.
 4. Preserve all unchanged behavior gates, source-boundary prohibitions, full
-   input closure, and zero-skips capture rules. Add rejecting fixtures for
+   input closure, and strict capture rules. Adoption v2 requires zero skipped
+   applicable tests and zero unaccounted platform skips across the required pair.
+   Historical validators retain their original zero-skip rules. Add rejecting fixtures for
    missing/wrong adoption authority, trace drift, altered historical evidence,
    bypassed command chain, and inward Core/Assembly imports. No unconditional
    skip of L0 validation or permissive fallback is acceptable.
-5. Capture new current-source evidence on a supported disposable platform only
+5. Capture new current-source evidence on paired disposable Linux x64 and Darwin arm64 targets only
    after atomic package/API/caller integration. The new owner decision permits
    this static slice without asserting that historical L1 promotion passed.
    Broader L1 retains its two-of-three rule; L2-L5 remain no-go.
 
-The retained [current adoption capture](../spikes/runtime-setup-assembly-adoption-evidence.json)
-records its exact source revision and complete zero-skip embedded-runtime
-test result. The checker authenticates its package
-closure against current inputs; a later unrelated commit does not fabricate a
-new capture or change historical HOLD verdicts.
+The retained [schema-v1 adoption capture](../spikes/runtime-setup-assembly-adoption-evidence.json)
+is immutable historical evidence, validated against its own exact source closure.
+It is never fallback evidence for changed inputs. The original L0 and incoming
+qualification-branch snapshot also remain separate, unchanged records. The original
+L0 report and its specification/envelopes are read from retained commit
+`15f92b38d0fec8a56fbd6d6324d02de2566cccb7`; its product digests retain the
+original source closure. Current specification counts cannot redefine that record.
+
+### Paired adoption capture v2
+
+The current gate requires a new `runtime-setup-assembly-adoption-v2-evidence.json`
+under `docs/spikes`. Its absence keeps current evidence pending. V2 binds ADR-0015,
+the historical records, current construction traces and the full tracked source
+input closure to exactly two receipts: Linux x64 and Darwin arm64, both using
+Node `v24.18.0` and pnpm `11.18.0`. The two original explicit Node test argv lists
+are retained in the package-local `scripts/run-package-tests.mjs`; ordinary
+package checks and capture share that launcher. It runs clean, typecheck, build
+and both test processes, stopping on failure. No test subset or alternative
+legacy capture path can satisfy this gate.
+
+Each receipt retains job/run identity, observed target and tools, start/end times,
+exit/signal, command ledger and hashed stdout/stderr artifacts. The Node reporter
+records suite input, source location, full ancestry/title, duplicate disambiguator,
+terminal status and skip reason. The merger recomputes counts from these events
+and requires completed streams for every explicit manifest file and both processes.
+A later process cannot overwrite an earlier process's summary. Failure,
+cancellation, TODO, missing processes/files and unexplained inventory differences
+all reject acceptance.
+
+Portable tests must pass on both targets. Only the existing exact registration
+sites in `runtime-setup-l0-evidence-platform-sites.mjs` admit platform skips; the
+table records source location, predicate, required target and original skip value.
+A skipped parent requires its passing peer, and only that approved restriction
+can account for the peer's complete subtree. Both-skipped tests, unknown reasons
+and generic infrastructure skips reject acceptance. PostgreSQL is required on
+Linux x64 only: provision a fresh loopback disposable database named
+`ar69_pa_test_[a-z0-9]+`, then set `AE_ACL_POSTGRES_DISPOSABLE_URL` locally. The
+receipt records prerequisite presence, never the connection URL. The existing
+PostgreSQL test must actually pass on Linux, including its fresh-schema checks.
+Darwin skips this exact registration with the explicit Linux descriptor-custody
+reason; the merger requires the successful Linux counterpart. Connection URLs
+accept only `127.0.0.1` or `[::1]`, with no query or fragment.
+
+In clean disposable checkouts of the same final implementation commit, install
+with `pnpm install --frozen-lockfile`, then run
+`pnpm --filter './packages/**' -r run clean` and `pnpm product:build` with native
+prerequisites available. Run this command separately on each required target:
+
+```sh
+node scripts/architecture/runtime-setup-l0-evidence.mjs \
+  --capture-adoption-receipt --output "$CAPTURE_OUTPUT" --run-id "$CAPTURE_RUN_ID"
+```
+
+`CAPTURE_OUTPUT` must be a fresh absolute receipt path outside the checkout,
+with an existing parent directory. The command itself executes
+`pnpm --filter @agent-teams/embedded-runtime check`; it retains sibling
+`<receipt>.artifacts/` files even when the execution is rejected. Do not reuse an
+output path or artifact directory. Retain each receipt and its artifact directory
+together when transferring them. After both successful captures, on the same
+source checkout:
+
+```sh
+node scripts/architecture/runtime-setup-l0-evidence.mjs \
+  --merge-adoption-receipts "$LINUX_RECEIPT" "$DARWIN_RECEIPT" \
+  --output docs/spikes/runtime-setup-assembly-adoption-v2-evidence.json
+node scripts/architecture/runtime-setup-l0-evidence.mjs --check
+```
+
+The report references both receipt paths and SHA-256 values. Preserve those
+relative paths and all artifact bytes for subsequent checks; hashes authenticate
+retained bytes, not independent execution. The new output alone is excluded
+from the source closure to avoid self-reference. Other tracked inputs, including
+tools' source, locks, manifests, tests and native recipes, must match the captured
+commit. The existing architecture gate also runs the v2 rejecting fixtures via
+`runtime-setup-l0-evidence-validation.test.mjs`.
+
+Implementation review re-read the pinned Consumer Module Standard and compared
+it with the locally retained upstream `03a7df64bc5e9939f7b51694a80a7f3d61453f98`
+snapshot: both complete documents retain SHA-256
+`ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d`.
+Live upstream refresh was unavailable in the implementation sandbox; delivery
+must recheck it before claiming a current upstream comparison. V2 changes evidence
+collection only, with no new composition boundary or shared contract.
 
 Delivery remains pending until focused gates, fast/full integrated-source checks,
 independent review, exact artifacts, and before/after benefit measurements pass.
