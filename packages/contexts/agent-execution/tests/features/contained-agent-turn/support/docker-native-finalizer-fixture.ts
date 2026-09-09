@@ -18,7 +18,7 @@ type FinishInput = Parameters<NonNullable<CreateDockerCodexHostKernelOwnerOption
 /** Component evidence only: new disposable native files plus the actual Docker
  * lifecycle/sole init reader, HTTP resources, V4, native issuers and broker.
  * Engine, listener, route enforcement, PA/RS and upstream IO are synthetic. */
-export const nativeFinalizerFixture = async (t: TestContext) => {
+export const nativeFinalizerFixture = async (t: TestContext, executablePath = "/usr/local/bin/codex") => {
   const f = await postClaimFixture(t);
   const root = realpathSync(mkdtempSync("/tmp/ar69-native-finalizer-component-"));
   t.after(() => rmSync(root, {recursive: true, force: true}));
@@ -43,7 +43,7 @@ export const nativeFinalizerFixture = async (t: TestContext) => {
       {name: "chatgpt-account-id", valueBytes: Buffer.from("synthetic-account")},
     ];}},
   };
-  const options = {boundary, executablePath: "/usr/local/bin/codex", intentMode: "analysis" as const,
+  const options = {boundary, executablePath, intentMode: "analysis" as const,
     platformTarget: {architecture: "x64", platform: "linux"} as const, privateRootPath, tmpDir};
   const originalPlan = createCodexAppServerFinalizableLaunchPlan(options, snapshot);
   const record = {...options, credentialOutputInventory: {credentialBindingDigest: "synthetic-binding",
