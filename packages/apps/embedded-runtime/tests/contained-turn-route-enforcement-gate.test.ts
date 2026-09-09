@@ -40,7 +40,7 @@ const dependencies = (routeEnforcement?: unknown) => Object.freeze({
 const harness = () => {
   const calls = {dispose: 0, feature: 0, owner: 0};
   const owner = Object.freeze({
-    custody: Object.freeze({}), dispose() {calls.dispose += 1;}, provider: Object.freeze({}),
+    custody: Object.freeze({}), sealAdmission() {}, dispose() {calls.dispose += 1;}, provider: Object.freeze({}),
   });
   return {
     calls,

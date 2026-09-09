@@ -72,6 +72,7 @@ export type HostCustodiedContainedTurnDependencies =
 
 export interface HostCustodiedContainedTurnComposition {
   readonly feature: ContainedTurnCapabilityBundle;
+  sealAdmission(): void;
   dispose(): void;
 }
 
@@ -138,8 +139,8 @@ const isExactProviderOwnerRecord = (value: unknown): value is object => {
     return false;
   }
   const keys = trustedOwnKeys(value);
-  if (keys.length !== 3) {return false;}
-  const expectedKeys = ["custody", "dispose", "provider"] as const;
+  if (keys.length !== 4) {return false;}
+  const expectedKeys = ["custody", "dispose", "provider", "sealAdmission"] as const;
   for (let index = 0; index < keys.length; index += 1) {
     const key = keys[index];
     if (typeof key !== "string" || !expectedKeys.includes(key as never)) {return false;}
@@ -173,9 +174,11 @@ const captureProviderOwner = (
     const custody = stableDataValue(descriptors.custody);
     const dispose = captureProviderOwnerDispose(value, stableDataValue(descriptors.dispose));
     const provider = stableDataValue(descriptors.provider);
+    const sealAdmission = captureProviderOwnerDispose(value, stableDataValue(descriptors.sealAdmission));
     return trustedFreeze({
       custody,
       dispose,
+      sealAdmission,
       provider,
     }) as ClaudeCurrentKernelOwner | CodexCurrentKernelOwner;
   } catch {
@@ -258,6 +261,7 @@ export const composeHostCustodiedContainedTurn = (
   let disposed = false;
   return Object.freeze({
     feature,
+    sealAdmission: owner.sealAdmission,
     dispose() {
       if (disposed) {return;}
       try {
@@ -408,7 +412,7 @@ const createLinuxCodexDeployment = (
     }) satisfies ContainedTurnFeatureDependencies);
   }, PRODUCT_QUALIFICATION_REGISTRY);
   } catch (error) {deployment.dispose(); throw error;}
-  return Object.freeze({feature: composition.feature, dispose(): void {
+  return Object.freeze({feature: composition.feature, sealAdmission: composition.sealAdmission, dispose(): void {
     try {composition.dispose();} finally {deployment.dispose();}
   }});
 };

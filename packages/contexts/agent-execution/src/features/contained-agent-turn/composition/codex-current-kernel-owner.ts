@@ -81,6 +81,7 @@ export interface CreateCodexCurrentKernelOwnerOptions {
 export interface CodexCurrentKernelOwner {
   readonly custody: ContainedTurnKernelCustodyPort;
   readonly provider: ContainedTurnKernelProviderPort;
+  sealAdmission(): void;
   dispose(): void;
 }
 
@@ -146,6 +147,7 @@ export const createCodexCurrentKernelOwner = (
       let created = false;
       return Object.freeze({
         createProcess: () => {
+          if (disposed) {throw new TypeError("Codex current-kernel owner is disposed");}
           if (created) {throw new TypeError("Codex prepared attempt is one-use");}
           created = true;
           const provider = new CodexAppServerContainedTurnProvider({
@@ -230,9 +232,11 @@ export const createCodexCurrentKernelOwner = (
     attemptOwner, hostBootId: options.hostBootId, hostInstanceId: options.hostInstanceId,
     workspaceOwner: options.workspaceOwner,
   });
+  const sealAdmission = (): void => {disposed = true; custody.sealAdmission();};
   return Object.freeze({
     custody,
-    dispose() {disposed = true; records.clear();},
+    sealAdmission,
+    dispose() {sealAdmission();},
     provider: new CodexAppServerCurrentKernelAdapter({ attempts, platformTarget }),
   });
 };

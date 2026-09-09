@@ -270,7 +270,7 @@ export const createLinuxCodexContainedTurnOwner = (
       return result;
     },
   });
-  return Object.freeze({custody, provider, dispose() {
+  return Object.freeze({custody, provider, sealAdmission: owner.sealAdmission, dispose() {
     // A failing Host disposal keeps the borrowed lifetimes reachable for retry.
     owner.dispose();
     for (const joined of retained.values()) {joined.dispose();}

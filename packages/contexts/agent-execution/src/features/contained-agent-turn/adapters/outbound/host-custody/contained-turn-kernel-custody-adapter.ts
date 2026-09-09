@@ -69,6 +69,7 @@ type ContainmentInput = Parameters<ContainedTurnKernelCustodyPort["attestContain
  * operating-system exit status is never interpreted as a logical outcome.
  */
 export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCustodyPort {
+  #admissionClosed = false;
   readonly #preparation: ContainedTurnKernelCustodyAdapterOptions["postClaimPreparation"];
   readonly #preparing = new Map<string, AbortController>();
   readonly #completionAfterMs: number;
@@ -102,7 +103,15 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     this.#hostBootId = containedTurnIdentity("host_boot", options.hostBootId);
     this.#hostInstanceId = containedTurnIdentity("host_instance", options.hostInstanceId);
   }
+  /** Host-private lifecycle fence; it neither releases custody nor proves closure. */
+  public sealAdmission(): void {
+    this.#admissionClosed = true;
+    this.#openAttempts.sealAdmission();
+    for (const reservation of this.#reservations.values()) {reservation.startBoundaryCutoff = true;}
+    for (const preparation of this.#preparing.values()) {preparation.abort();}
+  }
   public async open(input: KernelOpenInput): ReturnType<ContainedTurnKernelCustodyPort["open"]> {
+    if (this.#admissionClosed) {throw new TypeError("Host Custody admission is unavailable");}
     const existing = this.#reservations.get(input.custodyId);
     if (existing !== undefined) {
       const identity = openIdentity(input, {
@@ -247,6 +256,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     return boundary;
   }
   public async start(input: StartInput): ReturnType<ContainedTurnKernelCustodyPort["start"]> {
+    if (this.#admissionClosed) {throw new TypeError("Host Custody admission is unavailable");}
     const reservation = this.#reservation(input);
     const hostCustodyProof = this.#openOutcome(reservation).hostCustodyProof;
     admitCommittedDispatchStart(input, reservation, {

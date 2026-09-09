@@ -28,7 +28,7 @@ for (const property of ["bind", "name", "length"] as const) {
     t.after(() => owner.dispose());
     assert.equal(Object.isFrozen(finishClaimed), true);
     assert.equal(reads, 0); assert.equal(calls, 0);
-    assert.deepEqual(Object.keys(owner).toSorted(), ["custody", "dispose", "provider"]);
+    assert.deepEqual(Object.keys(owner).toSorted(), ["custody", "dispose", "provider", "sealAdmission"]);
   });
 }
 
@@ -53,7 +53,7 @@ test("private Docker owner construction is synchronous and inert; provider use c
     platformTarget: {platform: "linux", architecture: "x64"}, workspaceOwner: {withLaunchAuthority: unused},
     launchRecords: {resolve: unused}, effectCustody: {admit: unused}, preparation: unused} as CreateDockerCodexHostKernelOwnerOptions;
   const owner = createDockerCodexHostKernelOwner(options);
-  assert.deepEqual(Object.keys(owner).toSorted(), ["custody", "dispose", "provider"]);
+  assert.deepEqual(Object.keys(owner).toSorted(), ["custody", "dispose", "provider", "sealAdmission"]);
   assert.equal(owner.provider.adapterSnapshot.provider, "codex");
   await assert.rejects(owner.provider.execute({custodyId: "missing"} as never), /prepared attempt/);
   let reads = 0;

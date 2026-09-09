@@ -20,6 +20,10 @@ export class KernelOpenAttempts {
   readonly #openAttempts = new Map<string, KernelOpenAttempt>();
   readonly #consumedOperationAttempts = new Set<string>();
 
+  public sealAdmission(): void {
+    for (const attempt of this.#openAttempts.values()) {attempt.closed = true;}
+  }
+
   public async open(
     input: KernelOpenInput,
     workspaceOwner: ContainedTurnKernelWorkspaceOwner,

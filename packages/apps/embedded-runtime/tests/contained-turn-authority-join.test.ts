@@ -357,7 +357,7 @@ test("private current selection binds actual owners through accepted engine prep
   }) as never, Object.freeze({
     codex: ((options: {hostCustody: unknown}) => {
       constructed++; assert.equal(options.hostCustody, hostCustody);
-      return Object.freeze({custody: h.ae.dependencies.custody, provider: h.ae.dependencies.provider, dispose() {disposed++;}});
+      return Object.freeze({custody: h.ae.dependencies.custody, provider: h.ae.dependencies.provider, sealAdmission() {}, dispose() {disposed++;}});
     }) as never,
     claude: (() => {throw new Error("unselected provider");}) as never,
   }), createContainedTurnFeatureFromProviderAccess);
@@ -465,7 +465,7 @@ test("private current selection rejects missing, mixed, mutable and hostile conf
 test("current host composition preserves selection and construction cleanup failure semantics", async () => {
   const h = await productFixture(); let disposed = 0;
   const owner = Object.freeze({custody: h.ae.dependencies.custody, provider: h.ae.dependencies.provider,
-    dispose() {disposed++; throw new Error("synthetic cleanup failure");}});
+    sealAdmission() {}, dispose() {disposed++; throw new Error("synthetic cleanup failure");}});
   const factories = Object.freeze({codex: (() => owner) as never, claude: (() => {throw new Error("wrong provider");}) as never});
   const input = Object.freeze({...h.input, hostCustody: Object.freeze({}),
     selectedProvider: Object.freeze({kind: "codex" as const, owner: Object.freeze({})}),

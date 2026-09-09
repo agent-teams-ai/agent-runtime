@@ -154,7 +154,8 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
     },
     retain(input: Parameters<ContainedTurnKernelCustodyAttemptOwner["retain"]>[0]) {
       const retained = records.get(input.kernel.custodyId);
-      if (disposed || retained === undefined || retained.ref !== undefined || !sameHostCustodyBinding(retained.kernel, input.kernel)) {
+      // A reservation already in flight still transfers custody after admission closes.
+      if (retained === undefined || retained.ref !== undefined || !sameHostCustodyBinding(retained.kernel, input.kernel)) {
         throw new TypeError("Docker reservation binding conflict");
       }
       retained.ref = input.underlyingCustodyRef;
@@ -259,8 +260,9 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
   const custody = new ContainedTurnKernelCustodyAdapter(raw, {attemptOwner, workspaceOwner: options.workspaceOwner,
     hostBootId: options.hostBootId, hostInstanceId: options.hostInstanceId, postClaimPreparation: preparation});
   const provider = createProvider(records, options, () => disposed);
-  return Object.freeze({custody, provider, dispose() {
-    disposed = true;
+  const sealAdmission = (): void => {disposed = true; custody.sealAdmission();};
+  return Object.freeze({custody, provider, sealAdmission, dispose() {
+    sealAdmission();
     let failed = false;
     let failure: unknown;
     const close = (action: () => void) => {try {action();} catch (error) {failed = true; failure ??= error;}};
