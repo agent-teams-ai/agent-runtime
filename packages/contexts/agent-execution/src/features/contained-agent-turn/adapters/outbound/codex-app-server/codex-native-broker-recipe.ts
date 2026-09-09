@@ -50,7 +50,7 @@ export const snapshotCodexNativeInput = (input: unknown, keys: readonly string[]
   return data;
 };
 
-const endpoint = (input: unknown): string => {
+const endpoint = (input: unknown, darwinLoopback = false): string => {
   if (typeof input !== "string" || input.length > 128) {throw rejected();}
   // Parse the original spelling, without URL normalization accepting traversal,
   // numeric aliases, credentials, escapes, whitespace, query or fragments.
@@ -59,7 +59,7 @@ const endpoint = (input: unknown): string => {
   const octets = match[1]!.split(".").map(Number);
   if (octets.join(".") !== match[1] || octets.some(value => value > 255)
     || Number(match[2]) > 65535
-    || !(octets[0] === 10 || (octets[0] === 172 && octets[1]! >= 16 && octets[1]! <= 31)
+    || !(darwinLoopback && match[1] === "127.0.0.1" || octets[0] === 10 || (octets[0] === 172 && octets[1]! >= 16 && octets[1]! <= 31)
       || (octets[0] === 192 && octets[1] === 168))) {throw rejected();}
   return input;
 };
@@ -67,12 +67,12 @@ const endpoint = (input: unknown): string => {
 /** Pure: the Host supplies an already-created boundary; no filesystem allocation,
  * endpoint allocation, credential lookup or preparation occurs here.
  */
-export const createCodexNativeBrokerRecipe = (input: {
+const createRecipe = (input: {
   readonly boundary: CodexAppServerPermissionBoundary;
   readonly endpoint: string;
   readonly profile: "codex-chatgpt";
   readonly dockerMounts?: Parameters<typeof createCodexDockerPathProjection>[0];
-}): CodexNativeBrokerRecipe => {
+}, darwinLoopback = false): CodexNativeBrokerRecipe => {
   const data = snapshotCodexNativeInput(input, ["boundary", "endpoint", "profile"], ["dockerMounts"]);
   const boundary = data.boundary as CodexAppServerPermissionBoundary;
   assertIssuedCodexPermissionBoundary(boundary);
@@ -81,12 +81,21 @@ export const createCodexNativeBrokerRecipe = (input: {
     : createCodexDockerPathProjection(data.dockerMounts as Parameters<typeof createCodexDockerPathProjection>[0], boundary);
   const recipe: CodexNativeBrokerRecipe = Object.freeze({
     kind: "codex-native-broker-config/v1", profile: "codex-chatgpt",
-    endpoint: endpoint(data.endpoint), catalogPath: `${(paths ?? boundary).codexHome}/models.json`,
+    endpoint: endpoint(data.endpoint, darwinLoopback), catalogPath: `${(paths ?? boundary).codexHome}/models.json`,
     catalogSha256: CODEX_NATIVE_CATALOG_SHA256,
   });
   boundaries.set(recipe, boundary);
   if (paths !== undefined) {dockerPaths.set(recipe, paths);}
   return recipe;
+};
+
+export const createCodexNativeBrokerRecipe = (input: Parameters<typeof createRecipe>[0]): CodexNativeBrokerRecipe => createRecipe(input);
+
+/** Private Darwin composition only; existing Docker recipe acceptance is unchanged. */
+export const createDarwinCodexNativeBrokerRecipe = (input: Omit<Parameters<typeof createRecipe>[0], "dockerMounts">): CodexNativeBrokerRecipe => {
+  if (!/^http:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}\/backend-api\/codex$/u.test(input.endpoint) ||
+      Object.hasOwn(input, "dockerMounts")) {throw rejected();}
+  return createRecipe(input, true);
 };
 
 export const codexNativeBrokerBoundary = (recipe: CodexNativeBrokerRecipe): CodexAppServerPermissionBoundary => {
