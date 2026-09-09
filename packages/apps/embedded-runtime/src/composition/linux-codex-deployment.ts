@@ -108,6 +108,8 @@ export const createLinuxCodexDeploymentResources = (infrastructure: LinuxCodexDe
       if (subject.hostBootId !== hostBootId || subject.hostInstanceId !== hostInstanceId) {
         throw new TypeError("Linux Codex acknowledged Host binding mismatch");
       }
+      // Refuse foreign deployment bindings before any policy, recipe or rendering callback.
+      bindContainedTurnRouteEnforcement(routeEnforcement, acknowledged.binding);
       const policy = infrastructure.currentPolicy(acknowledged);
       const suppliedRecipe = infrastructure.recipe(input);
       if (suppliedRecipe === null || typeof suppliedRecipe !== "object" || types.isProxy(suppliedRecipe)) {

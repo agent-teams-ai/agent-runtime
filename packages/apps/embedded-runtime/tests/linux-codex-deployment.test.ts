@@ -54,6 +54,7 @@ const setup = async (dynamicOperations = false, closure = {providerAdapter: "ada
     return {rows: []};
   }, release() {calls.push("release");}};}};
   let recipes = 0;
+  const selectionCallbacks: string[] = [];
   const renderingOwners: {closed: boolean; disposals: number; cancel(): void; expire(): void}[] = [];
   const factoryState = {fail: false, malformed: false, reuse: false};
   let previousOwner: ReturnType<LinuxCodexDeploymentInfrastructure["createProviderAccess"]> | undefined;
@@ -66,6 +67,7 @@ const setup = async (dynamicOperations = false, closure = {providerAdapter: "ada
     dns: {resolverIdentity: "resolver", resolverEpoch: "epoch-1", timeoutMs: 1000},
     transport: {certificateAuthorities: [SYNTHETIC_LOOPBACK_CA]}, currentAuthority: {runtimeSecurity: rsReader, providerAccess: f.pa},
     currentPolicy(ack) {
+      selectionCallbacks.push("policy");
       const {scope: rsScope, operationId, providerId, authorityGeneration, claimBindingDigest, ...facts} = ack.acceptedDispatch.authority!;
       const operation = {scope: {...rsScope, operationId}, providerId, authorityGeneration, claimBindingDigest};
       const acceptedDispatch = {headVersion: ack.acceptedDispatch.headVersion, authority: {...facts, operation}};
@@ -74,6 +76,7 @@ const setup = async (dynamicOperations = false, closure = {providerAdapter: "ada
         bindingDigest: digest(canonicalEgressValue({domain: "rs-current-egress-rule/v1", operation, acceptedDispatch, rule: f.input.rule}))}};
     },
     createProviderAccess(selectedInput, acknowledged) {
+      selectionCallbacks.push("rendering");
       assert.equal(this, infrastructure);
       assert.equal(selectedInput.kernel.operationId, acknowledged.input.subject.operationId);
       assert.equal(selectedInput.kernel.custodyId, acknowledged.input.subject.custodyId);
@@ -97,6 +100,7 @@ const setup = async (dynamicOperations = false, closure = {providerAdapter: "ada
       clock: {read: () => ({authorityId: "control", epoch: "epoch-1", controlTime: 1000})}},
     clock: {now: () => 100, within: async (_deadline, work) => work()},
     recipe({kernel: selectedKernel}) {
+      selectionCallbacks.push("recipe");
       recipes++;
       const node = createNodeDockerDeploymentRecipe({enginePolicy: dockerPolicy("/synthetic"),
         routeSubject: {operationId: selectedKernel.operationId, attemptId: selectedKernel.attemptId,
@@ -136,7 +140,7 @@ const setup = async (dynamicOperations = false, closure = {providerAdapter: "ada
   const pa = () => ports.providerAccess.consumeForDispatch({...input, grantRequestId: "pa-grant"} as never);
   const rs = async () => {const outcome = await ports.security.consumeForDispatch(input as never); await claim(); return outcome;};
   const select = (value = kernel) => deployment.resources.select({kernel: value, record: {}} as never);
-  return {renderingOwners, factoryState, f, calls, rows, outcomes, input, kernel, pa, rs, claim, ports, store, infrastructure, deployment, routeEnforcement, select, recipes: () => recipes};
+  return {selectionCallbacks, renderingOwners, factoryState, f, calls, rows, outcomes, input, kernel, pa, rs, claim, ports, store, infrastructure, deployment, routeEnforcement, select, recipes: () => recipes};
 };
 
 test("simulation: selection needs both acknowledgements before any recipe and binds concrete HTTP owners", async () => {
@@ -148,6 +152,8 @@ test("simulation: selection needs both acknowledgements before any recipe and bi
     await t.rs();
     const selected = t.select();
     assert.equal(t.recipes(), 1);
+    assert.deepEqual(t.selectionCallbacks, ["policy", "recipe", "rendering"]);
+    assert.equal(selected.preparation, selected.route.preparation);
     assert.ok(readContainedTurnSelectedRouteAdmission(selected.route));
     assert.equal(selected.route.binding.operationId, t.kernel.operationId);
     assert.equal(selected.route.binding.attemptId, t.kernel.attemptId);
@@ -329,6 +335,7 @@ for (const dimension of ["providerAdapter", "binaryClosure"] as const) {
       await t.pa(); await t.rs();
       assert.throws(() => t.select(), /route qualification/u);
       assert.equal(t.recipes(), 0); assert.deepEqual(t.calls, []);
+      assert.deepEqual(t.selectionCallbacks, []);
     } finally {t.deployment.dispose(); t.f.dispose();}
   });
 }
@@ -374,7 +381,8 @@ for (const field of ["providerRouteRef", "providerAccountRef", "accessRef", "bin
     try {
       await t.pa(); await t.rs();
       assert.throws(() => t.select(), /qualification/u);
-      assert.equal(t.recipes(), 1); assert.deepEqual(t.calls, []);
+      assert.equal(t.recipes(), 0); assert.deepEqual(t.calls, []);
+      assert.deepEqual(t.selectionCallbacks, []);
     } finally {t.deployment.dispose(); t.f.dispose();}
   });
 }
