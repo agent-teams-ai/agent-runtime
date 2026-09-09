@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "evidenceKind": "runtime-setup-l0-direct-composition",
-  "sourceRevision": "8f950626eb670c1356faf8f36d0764735ef2ef15",
+  "sourceRevision": "a484a35a2b21fd0414151fd0a17993e254243580",
   "authority": "ADR-0008",
   "productOutcome": "detached-safe-runtime-setup-preview",
   "taxonomyAuthority": "experiment-local-non-qualification-rubric",
@@ -40,7 +40,7 @@
   "capture": {
     "command": "pnpm --filter @agent-teams/embedded-runtime check",
     "exitCode": 0,
-    "outputSha256": "657c9e773f4db95322bbb9fe9528ac70d9de8364e5e6f4559e05e77f336fb8b4",
+    "outputSha256": "e1b45ef50540abae14a859e51e769c8bd918806c4eca9f2088b1d363c4b70b0a",
     "architecture": "x64",
     "nodeVersion": "v24.18.0",
     "platform": "linux",
@@ -63,7 +63,7 @@
     },
     "tests": {
       "fileCount": 551,
-      "sha256": "46a3dd193f5c900c0d43a941e53f2e5222034a73e8c129eb962b587f9b9a4c1c"
+      "sha256": "9a04ccf12bb0f0a2038390924764109c585c163542a34065c64b966ed83593d7"
     }
   },
   "historicalChanges": [
@@ -1258,10 +1258,10 @@
     },
     {
       "id": "runtime-setup-current-product-anchor",
-      "revision": "8f950626eb670c1356faf8f36d0764735ef2ef15",
-      "files": 3,
-      "additions": 63,
-      "deletions": 15,
+      "revision": "a484a35a2b21fd0414151fd0a17993e254243580",
+      "files": 1,
+      "additions": 2,
+      "deletions": 1,
       "binaryFiles": 0,
       "composition": {
         "files": 0,
@@ -1274,9 +1274,9 @@
         "deletions": 0
       },
       "tests": {
-        "files": 3,
-        "additions": 63,
-        "deletions": 15
+        "files": 1,
+        "additions": 2,
+        "deletions": 1
       },
       "behaviorFixtures": {
         "before": 358,
