@@ -139,44 +139,102 @@ test("the actual launcher records all four stages and both full test processes i
   }
 });
 
-test("strict merger binds real receipt bytes, artifacts and committed inputs without a v1 fallback", t => {
-  const root = mkdtempSync(resolve(tmpdir(), "adoption-v2-merge-"));
+test("self-contained report-only delivery validates in a clean clone after deleting original captures", async t => {
+  const root = mkdtempSync(resolve(tmpdir(), "adoption-v2-delivery-"));
   t.after(() => rmSync(root, {recursive: true, force: true}));
-  const checkout = resolve(root, "checkout"); fs.mkdirSync(checkout);
-  const paths = new Set([
-    `${packagePath}/package.json`, `${packagePath}/scripts/run-package-tests.mjs`,
-    `${packagePath}/scripts/adoption-test-reporter.mjs`,
-    "docs/spikes/runtime-setup-l0-dogfooding-evidence.json",
-    "docs/spikes/runtime-setup-assembly-adoption-evidence.json",
-    ...platformSites.map(s => s.file),
-  ]);
-  for (const path of paths) {
-    fs.mkdirSync(resolve(checkout, path, ".."), {recursive: true});
-    fs.copyFileSync(path, resolve(checkout, path));
+  const producer = resolve(root, "producer"), captures = resolve(root, "captures"), consumer = resolve(root, "consumer");
+  const git = (cwd, ...argv) => execFileSync("git", argv, {cwd, encoding: "utf8", stdio: "pipe"}).trim();
+  const commit = cwd => git(cwd, "-c", "user.name=Capture fixture", "-c", "user.email=capture-fixture@example.invalid",
+    "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "synthetic delivery fixture");
+  git(root, "clone", "--quiet", "--no-local", process.cwd(), producer);
+  // Exercise this implementation even when the caller's changes are uncommitted.
+  for (const path of ["scripts/architecture/runtime-setup-l0-evidence-v2-capture.mjs",
+    "scripts/architecture/runtime-setup-l0-evidence-v2.test.mjs", "docs/architecture/get-modular-adoption.md"]) {
+    fs.copyFileSync(resolve(path), resolve(producer, path));
   }
-  const git = (...argv) => execFileSync("git", argv, {cwd: checkout, stdio: "pipe"});
-  git("init", "--quiet"); git("add", ".");
-  git("-c", "user.name=Capture fixture", "-c", "user.email=capture-fixture@example.invalid", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "synthetic merger inputs");
-  const current = identity(checkout);
+  rmSync(resolve(producer, v2ReportPath), {force: true});
+  git(producer, "add", ".");
+  if (git(producer, "diff", "--cached", "--name-only")) commit(producer);
+  const current = identity(producer);
+  fs.mkdirSync(captures);
+  const originals = new Map();
   const pathsToMerge = targets.map(target => {
     const f = fixture(); f.receipt.target = target; [f.receipt.platform, f.receipt.architecture] = target.split("-"); f.receipt.identity = current;
     f.receipt.postgres = {required: target === "linux-x64", configured: target === "linux-x64"};
     f.receipt.artifactDirectory = `${target}.artifacts`;
-    fs.mkdirSync(resolve(root, f.receipt.artifactDirectory));
+    // Non-UTF8 output proves byte preservation beyond JSON text round trips.
+    f.artifacts["check.stderr"] = Buffer.from([0, 255, 128, 13, 10]);
+    fs.mkdirSync(resolve(captures, f.receipt.artifactDirectory));
     for (const [name, bytes] of Object.entries(f.artifacts)) {
-      writeFileSync(resolve(root, f.receipt.artifactDirectory, name), bytes);
+      writeFileSync(resolve(captures, f.receipt.artifactDirectory, name), bytes);
       f.receipt.artifacts[name] = sha256(bytes);
     }
-    const path = resolve(root, `${target}.json`); writeFileSync(path, json(f.receipt)); return path;
+    const bytes = Buffer.from(json(f.receipt) + " \n");
+    originals.set(target, {bytes, artifacts: f.artifacts});
+    const path = resolve(captures, `${target}.json`); writeFileSync(path, bytes); return path;
   });
-  const report = resolve(checkout, v2ReportPath);
-  mergeReceipts(checkout, pathsToMerge, report); checkV2(checkout, report);
-  const bytes = readFileSync(pathsToMerge[0]);
-  writeFileSync(pathsToMerge[0], bytes.toString() + " ");
-  assert.throws(() => checkV2(checkout, report), /Assertion/);
-  writeFileSync(pathsToMerge[0], bytes);
-  writeFileSync(resolve(checkout, packagePath, "scripts/adoption-test-reporter.mjs"), "// changed reporter\n");
-  assert.throws(() => checkV2(checkout, report), /clean/);
+  const output = resolve(producer, v2ReportPath);
+  const report = mergeReceipts(producer, pathsToMerge, output);
+  checkV2(producer, output);
+  for (const ref of report.receipts) {
+    const original = originals.get(ref.target);
+    assert.deepEqual(Buffer.from(ref.receiptBase64, "base64"), original.bytes);
+    assert.equal(ref.sha256, sha256(original.bytes));
+    for (const [name, bytes] of Object.entries(original.artifacts)) {
+      assert.deepEqual(Buffer.from(ref.artifacts[name], "base64"), Buffer.from(bytes));
+    }
+  }
+  git(producer, "add", v2ReportPath); commit(producer);
+  const delivery = git(producer, "rev-parse", "HEAD");
+  assert.equal(git(producer, "diff", "--name-only", current.sourceRevision, delivery), v2ReportPath);
+  // Historical experiment commits can be unreachable from source HEAD. Retain
+  // explicit refs so an ordinary clone carries their objects without alternates.
+  const {loadHistoricalSpec, historicalSpecRevision} = await import("./runtime-setup-l0-evidence-historical.mjs");
+  const historical = await loadHistoricalSpec((revision, path) => execFileSync("git", ["show", `${revision}:${path}`]));
+  const revisions = new Set([historicalSpecRevision, ...historical.changes.map(c => c.revision)]);
+  git(producer, "fetch", "--quiet", process.cwd(), ...[...revisions].map(revision => `${revision}:refs/heads/fixture-history-${revision}`));
+  git(root, "clone", "--quiet", "--no-local", producer, consumer);
+  rmSync(captures, {recursive: true}); rmSync(producer, {recursive: true});
+  assert.equal(fs.existsSync(captures), false);
+  assert.equal(git(consumer, "status", "--porcelain"), "");
+  assert.deepEqual(identity(consumer, current.sourceRevision), current);
+  await loadHistoricalSpec((revision, path) => execFileSync("git", ["show", `${revision}:${path}`], {cwd: consumer}));
+  for (const {revision} of historical.changes) git(consumer, "cat-file", "-e", `${revision}^{commit}`);
+  const delivered = resolve(consumer, v2ReportPath);
+  const {checkV2: deliveredCheck} = await import(resolve(consumer, "scripts/architecture/runtime-setup-l0-evidence-v2-capture.mjs"));
+  deliveredCheck(consumer, delivered);
+  const flip = encoded => {const bytes = Buffer.from(encoded, "base64"); bytes[0] ^= 1; return bytes.toString("base64");};
+  for (const [name, mutate, reason] of [
+    ["missing receipt", r => {r.receipts.pop();}, /Assertion/],
+    ["missing receipt bytes", r => {delete r.receipts[0].receiptBase64;}, /missing base64/],
+    ["mutated receipt", r => {r.receipts[0].receiptBase64 = flip(r.receipts[0].receiptBase64);}, /receipt hash mismatch/],
+    ["missing artifact", r => {delete r.receipts[0].artifacts["process-0.stdout"];}, /inventory mismatch/],
+    ["mutated artifact", r => {r.receipts[0].artifacts["process-0.stdout"] = flip(r.receipts[0].artifacts["process-0.stdout"]);}, /artifact hash mismatch/],
+    ["extra artifact", r => {r.receipts[0].artifacts["extra.stdout"] = "";}, /inventory mismatch/],
+    ["invalid encoding", r => {r.receipts[0].receiptBase64 += "!";}, /noncanonical base64/],
+    ["mixed source", r => {
+      const ref = r.receipts[0], receipt = JSON.parse(Buffer.from(ref.receiptBase64, "base64"));
+      receipt.identity.sourceRevision = delivery;
+      const bytes = Buffer.from(json(receipt)); ref.receiptBase64 = bytes.toString("base64"); ref.sha256 = sha256(bytes);
+    }, /identity mismatch/],
+  ]) await t.test(`rejects ${name}`, () => {
+    const changed = structuredClone(report); mutate(changed); writeFileSync(delivered, json(changed));
+    assert.throws(() => deliveredCheck(consumer, delivered), reason);
+    writeFileSync(delivered, json(report));
+  });
+  for (const [name, mutate] of [
+    ["tracked byte change", () => fs.appendFileSync(resolve(consumer, "README.md"), "\nchanged\n")],
+    ["tracked addition", () => writeFileSync(resolve(consumer, "extra-input.txt"), "extra")],
+    ["tracked removal", () => rmSync(resolve(consumer, "README.md"))],
+    ["tracked path change", () => fs.renameSync(resolve(consumer, "README.md"), resolve(consumer, "RENAMED.md"))],
+    ["tracked mode change", () => {git(consumer, "config", "core.fileMode", "true"); fs.chmodSync(resolve(consumer, "README.md"), 0o755);}],
+  ]) await t.test(`rejects ${name} even when committed`, () => {
+    mutate(); git(consumer, "add", "-A"); commit(consumer);
+    assert.equal(git(consumer, "status", "--porcelain"), "");
+    assert.throws(() => deliveredCheck(consumer, delivered), /source\/input mismatch/);
+    git(consumer, "reset", "--hard", delivery);
+  });
+  deliveredCheck(consumer, delivered);
 });
 
 

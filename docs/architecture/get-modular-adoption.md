@@ -230,12 +230,25 @@ node scripts/architecture/runtime-setup-l0-evidence.mjs \
 node scripts/architecture/runtime-setup-l0-evidence.mjs --check
 ```
 
-The report references both receipt paths and SHA-256 values. Preserve those
-relative paths and all artifact bytes for subsequent checks; hashes authenticate
-retained bytes, not independent execution. The new output alone is excluded
-from the source closure to avoid self-reference. Other tracked inputs, including
-tools' source, locks, manifests, tests and native recipes, must match the captured
-commit. The existing architecture gate also runs the v2 rejecting fixtures via
+The single report embeds each original receipt and every referenced artifact as
+base64 bytes, retaining the original receipt SHA-256 and its artifact hashes.
+Receipt paths and execution directories remain provenance metadata only: checks
+decode the bundled bytes and run the existing strict receipt, stream and paired
+coverage validators without reading external capture paths. Hashes authenticate
+retained bytes, not independent execution. No external artifact service or
+additional input exclusion is required.
+
+Commit the complete implementation as source revision R before either final
+capture. Capture both targets at R, then create delivery revision D by adding
+only the report. The report alone is excluded from the source closure to avoid
+self-reference; every other tracked path, mode and byte, including tools' source,
+locks, manifests, tests and native recipes, must still match R. Clean CI needs
+only the delivered report and full Git object closure for R and the required
+historical revisions. Bundled receipts do not replace historical source readback.
+The rejecting fixtures deliver a report-only commit into a fresh clone, delete
+the original capture tree and validate against R. Missing or mutated bundled
+bytes, mixed source receipts and other tracked input changes must fail. The
+existing architecture gate runs these fixtures via
 `runtime-setup-l0-evidence-validation.test.mjs`.
 
 Implementation review re-read the pinned Consumer Module Standard and compared

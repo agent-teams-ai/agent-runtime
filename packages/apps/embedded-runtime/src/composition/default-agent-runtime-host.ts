@@ -62,9 +62,13 @@ export async function createRuntimeSetupAttempt(
     ownedHost = undefined;
     return host;
   } catch (cause) {
+    // Cancellation metadata is best effort: a hostile accessor must not replace
+    // the primary private cause or prevent release of this attempt's Host.
+    let cancellationObserved = false;
+    try { cancellationObserved = signal?.aborted === true; } catch { /* Preserve the primary cause. */ }
     let failure = ownedFailures.get(cause) ?? new AgentRuntimeHostCreationError(
       phase === "options" ? "invalid_options" : phase === "bind" ? "invalid_composition" : "internal_failure",
-      phase, { cancellationObserved: signal?.aborted, cause });
+      phase, { cancellationObserved, cause });
     if (ownedHost !== undefined) {
       const host = ownedHost;
       ownedHost = undefined;

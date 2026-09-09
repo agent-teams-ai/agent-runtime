@@ -28,6 +28,32 @@ test("already cancelled bootstrap performs zero product work", async () => {
   assert.equal(calls, 0);
 });
 
+test("hostile genuine signal accessor at preflight rejects safely without product work", async () => {
+  const controller = new AbortController();
+  let reasonReads = 0;
+  let calls = 0;
+  const getterCause = { secret: "test-fixture-literal" };
+  Object.defineProperty(controller.signal, "aborted", { get() { throw getterCause; } });
+  Object.defineProperty(controller.signal, "reason", { get() { reasonReads += 1; throw "TEST-reason-secret"; } });
+  await assert.rejects(createRuntimeSetupAttempt({ signal: controller.signal }, (platform) => {
+    calls += 1;
+    return createRuntimeSetupFactories(platform);
+  }), (error: unknown) => {
+    assert.ok(error instanceof AgentRuntimeHostCreationError);
+    assert.notEqual(error, getterCause);
+    assert.equal(error.code, "invalid_options");
+    assert.equal(error.phase, "options");
+    assert.equal(error.cancellationObserved, false);
+    assert.equal(error.cleanupFailed, false);
+    assert.deepEqual(error.diagnostics, []);
+    assert.equal(Object.hasOwn(error, "cause"), false);
+    assert.doesNotMatch(JSON.stringify(error) + String(error), /test-fixture-literal|TEST-reason-secret/);
+    return true;
+  });
+  assert.equal(calls, 0);
+  assert.equal(reasonReads, 0);
+});
+
 test("abort during preflight is checked before run and options signal is captured once", async () => {
   const controller = new AbortController();
   let reads = 0;
@@ -379,6 +405,48 @@ test("abort after actual Assembly success but before caller handoff disposes the
   assert.equal(observed, true);
   assert.equal(disposed, 1);
 });
+
+for (const failObservation of [false, true]) {
+  test(`hostile signal at failed handoff cleans owned Host exactly once (primary failure=${failObservation})`, async () => {
+    const controller = new AbortController();
+    let disposed = 0;
+    let reasonReads = 0;
+    let observed = false;
+    const getterCause = { secret: "test-fixture-literal" };
+    const primaryCause = new Error("TEST-primary-secret");
+    await assert.rejects(createRuntimeSetupAttempt({ signal: controller.signal }, (platform) => {
+      const factories = createRuntimeSetupFactories(platform);
+      return { ...factories, host: (dependencies) => {
+        const host = factories.host(dependencies);
+        return { ...host, dispose: async () => { disposed += 1; await host.dispose(); } };
+      } };
+    }, { observeOutcome: (outcome) => {
+      assert.equal(outcome.status, "succeeded");
+      assert.ok(outcome.status === "succeeded");
+      assert.equal(outcome.created.at(-1)?.instance, outcome.roots.host);
+      observed = true;
+      Object.defineProperty(controller.signal, "aborted", { get() { throw getterCause; } });
+      Object.defineProperty(controller.signal, "reason", { get() { reasonReads += 1; throw "TEST-reason-secret"; } });
+      if (failObservation) { throw primaryCause; }
+    } }), (error: unknown) => {
+      assert.ok(error instanceof AgentRuntimeHostCreationError);
+      assert.equal(error.code, "internal_failure");
+      assert.notEqual(error, getterCause);
+      assert.notEqual(error, primaryCause);
+      assert.equal(error.phase, failObservation ? "run" : "handoff");
+      assert.equal(error.cancellationObserved, false);
+      assert.equal(error.cleanupFailed, false);
+      assert.deepEqual(error.diagnostics, []);
+      assert.equal(Object.hasOwn(error, "cause"), false);
+      assert.doesNotMatch(JSON.stringify(error) + String(error), /test-fixture-literal|TEST-reason-secret|TEST-primary-secret/);
+      assert.equal(disposed, 1);
+      return true;
+    });
+    assert.equal(observed, true);
+    assert.equal(reasonReads, 0);
+    assert.equal(disposed, 1);
+  });
+}
 
 test("factory owns and awaits release of a resource acquired before rejection", async () => {
   const entered = deferred<void>();

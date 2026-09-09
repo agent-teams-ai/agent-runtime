@@ -74,8 +74,13 @@ export function captureReceipt(root, output, runId) {
 function loadReceipt(path, current) {
   const bytes = readFileSync(path), receipt = JSON.parse(bytes);
   const artifacts = resolve(dirname(path), receipt.artifactDirectory);
-  const events = validateReceipt(receipt, current, name => readFileSync(resolve(artifacts, name)));
-  return {receipt, events, sha256: sha256(bytes)};
+  const artifactBytes = {};
+  const events = validateReceipt(receipt, current, name => {
+    const value = readFileSync(resolve(artifacts, name));
+    artifactBytes[name] = value.toString("base64");
+    return value;
+  });
+  return {receipt, events, sha256: sha256(bytes), receiptBase64: bytes.toString("base64"), artifacts: artifactBytes};
 }
 function reportBody(root, current, references) {
   const historical = JSON.parse(readFileSync(resolve(root, adoptionPaths.historical)));
@@ -95,20 +100,34 @@ export function mergeReceipts(root, paths, output) {
   const current = identity(root);
   const loaded = paths.map(path => loadReceipt(resolve(path), current));
   validateCoverage(loaded.map(({receipt, events}) => ({target: receipt.target, events})));
-  const refs = loaded.map(({receipt, sha256}, i) => ({target: receipt.target,
-    path: relative(dirname(resolve(output)), resolve(paths[i])), sha256})).sort((a, b) => a.target.localeCompare(b.target));
+  const refs = loaded.map(({receipt, sha256, receiptBase64, artifacts}, i) => ({target: receipt.target,
+    path: relative(dirname(resolve(output)), resolve(paths[i])), sha256, receiptBase64, artifacts})).sort((a, b) => a.target.localeCompare(b.target));
   const report = reportBody(root, current, refs);
   writeFileSync(output, json(report), {flag: "wx"});
   return report;
+}
+function decodeBytes(encoded) {
+  assert.equal(typeof encoded, "string", "missing base64 bytes");
+  const bytes = Buffer.from(encoded, "base64");
+  assert.equal(bytes.toString("base64"), encoded, "noncanonical base64 bytes");
+  return bytes;
 }
 export function checkV2(root, path) {
   const report = JSON.parse(readFileSync(path));
   const current = identity(root, report.identity.sourceRevision);
   assert.equal(report.receipts.length, 2);
   const loaded = report.receipts.map(ref => {
-    const result = loadReceipt(resolve(dirname(path), ref.path), current);
-    assert.equal(result.sha256, ref.sha256); assert.equal(result.receipt.target, ref.target);
-    return {target: ref.target, events: result.events};
+    // Paths retain execution provenance only. Checking never opens receipt paths.
+    const bytes = decodeBytes(ref.receiptBase64);
+    assert.equal(sha256(bytes), ref.sha256, "receipt hash mismatch");
+    const receipt = JSON.parse(bytes);
+    assert.equal(receipt.target, ref.target);
+    assert.deepEqual(Object.keys(ref.artifacts).sort(), Object.keys(receipt.artifacts).sort(), "bundled artifact inventory mismatch");
+    const events = validateReceipt(receipt, current, name => {
+      assert.ok(Object.hasOwn(ref.artifacts, name), `missing bundled artifact: ${name}`);
+      return decodeBytes(ref.artifacts[name]);
+    });
+    return {target: ref.target, events};
   });
   validateCoverage(loaded);
   assert.deepEqual(report, reportBody(root, current, report.receipts));
