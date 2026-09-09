@@ -86,12 +86,27 @@ test("raw rejection prototype traps are never inspected", async () => {
 
 for (const key of ["security", "discovery", "codexConfiguration", "claudeConfiguration", "codexPlanner", "claudePlanner", "host"] as const) {
   test(`factory failure remains primary: ${key}`, async () => {
-    let hostCalls = 0;
+    const calls: string[] = [];
+    const composition = await compileComposition({ declarations: runtimeSetupDeclarations, profile: runtimeSetupProfile });
+    assert.ok(composition.ok);
+    const moduleIds = { security: "agent-runtime/setup-security", discovery: "agent-runtime/installation-discovery", codexConfiguration: "agent-runtime/codex-configuration", claudeConfiguration: "agent-runtime/claude-configuration", codexPlanner: "agent-runtime/codex-planner", claudePlanner: "agent-runtime/claude-planner", host: "agent-runtime/runtime-host" } as const;
+    const expected = composition.plan.dependencyOrder;
     const secret = { toJSON() { throw new Error("raw cause executed"); } };
     await assert.rejects(createRuntimeSetupAttempt(undefined, (platform) => {
       const factories = createRuntimeSetupFactories(platform);
-      return { ...factories, host: (dependencies) => { hostCalls += 1; return factories.host(dependencies); },
-        [key]: () => { throw secret; } };
+      const record = (called: keyof typeof moduleIds) => {
+        calls.push(moduleIds[called]);
+        if (called === key) { throw secret; }
+      };
+      return {
+        security: () => { record("security"); return factories.security(); },
+        discovery: () => { record("discovery"); return factories.discovery(); },
+        codexConfiguration: () => { record("codexConfiguration"); return factories.codexConfiguration(); },
+        claudeConfiguration: () => { record("claudeConfiguration"); return factories.claudeConfiguration(); },
+        codexPlanner: () => { record("codexPlanner"); return factories.codexPlanner(); },
+        claudePlanner: () => { record("claudePlanner"); return factories.claudePlanner(); },
+        host: (dependencies) => { record("host"); return factories.host(dependencies); },
+      };
     }), (error: unknown) => {
       assert.ok(error instanceof AgentRuntimeHostCreationError);
       assert.equal(error.code, "factory_failed");
@@ -100,7 +115,9 @@ for (const key of ["security", "discovery", "codexConfiguration", "claudeConfigu
       assert.doesNotMatch(JSON.stringify(error), /raw cause/);
       return true;
     });
-    assert.equal(hostCalls, 0);
+    // Sibling order belongs to the compiled plan; failure must stop its exact prefix.
+    assert.ok(expected.includes(moduleIds[key]));
+    assert.deepEqual(calls, expected.slice(0, expected.indexOf(moduleIds[key]) + 1));
   });
 }
 
@@ -474,3 +491,98 @@ test("pinned compiler enforces the positive and negative Assembly consumer contr
   assert.equal(result.error, undefined);
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
 });
+
+test("default import and bootstrap remain passive under effect traps", () => {
+  // A fresh process keeps import-time effects observable and traps out of other tests.
+  const result = spawnSync(process.execPath, ["--input-type=module", "--eval", `
+    import assert from 'node:assert/strict';
+    import childProcess from 'node:child_process';
+    import fs from 'node:fs';
+    import dns from 'node:dns';
+    import http from 'node:http';
+    import https from 'node:https';
+    import net from 'node:net';
+    import tls from 'node:tls';
+    import dgram from 'node:dgram';
+    import { syncBuiltinESMExports } from 'node:module';
+    const attempts = [];
+    const install = (target, members) => {
+      for (const member of members) {
+        assert.equal(typeof target[member], 'function', member);
+        target[member] = () => { attempts.push(member); throw new Error('TEST passive effect: ' + member); };
+      }
+    };
+    install(globalThis, ['fetch']);
+    install(childProcess, ['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork']);
+    for (const target of [dns, dns.promises]) install(target, ['lookup', 'resolve', 'resolve4', 'resolve6', 'resolveAny', 'reverse']);
+    for (const target of [http, https]) install(target, ['request', 'get']);
+    install(net, ['connect', 'createConnection']);
+    install(net.Socket.prototype, ['connect']);
+    install(net.Server.prototype, ['listen']);
+    install(tls, ['connect']);
+    install(dgram, ['createSocket']);
+    install(dgram.Socket.prototype, ['bind', 'connect', 'send']);
+    // Keep loader reads available; product adapters use fs.promises for observations.
+    install(fs.promises, ['access', 'open', 'readFile', 'readdir', 'readlink', 'realpath', 'stat', 'lstat', 'writeFile', 'appendFile', 'mkdir', 'rm', 'rename', 'unlink']);
+    install(fs, ['writeFile', 'writeFileSync', 'appendFile', 'appendFileSync', 'mkdir', 'mkdirSync', 'rm', 'rmSync', 'rename', 'renameSync', 'unlink', 'unlinkSync', 'createWriteStream', 'watch']);
+    syncBuiltinESMExports();
+    const { createDefaultAgentRuntimeHost } = await import(${JSON.stringify(new URL("../dist/composition.js", import.meta.url).href)});
+    assert.deepEqual(attempts, []);
+    const host = await createDefaultAgentRuntimeHost();
+    try { assert.deepEqual(attempts, []); }
+    finally { await host.dispose(); }
+    assert.deepEqual(attempts, []);
+  `], { encoding: "utf8", timeout: 30_000 });
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+});
+
+for (const concurrent of [false, true]) {
+  test(`configuration identities are stable within and isolated between attempts (concurrent=${concurrent})`, async t => {
+    type Dependencies = Parameters<ReturnType<typeof createRuntimeSetupFactories>["host"]>[0];
+    const bundles: Dependencies[] = [];
+    const create = () => createRuntimeSetupAttempt(undefined, platform => {
+      const factories = createRuntimeSetupFactories(platform);
+      return { ...factories, host: dependencies => {
+        bundles.push(dependencies);
+        const host = factories.host(dependencies);
+        t.after(() => host.dispose());
+        return host;
+      } };
+    });
+    if (concurrent) { await Promise.all([create(), create()]); }
+    else { await create(); await create(); }
+    assert.equal(bundles.length, 2);
+    // Stale/rejected TEST evidence yields keyed identities without filesystem reads.
+    const codexInput = {
+      dialect: "codex-0.134", identityScope: "TEST-attempt", observationEpoch: "current",
+      sources: [{ absolutePath: "/TEST/config.toml", canonicalPath: "/TEST/config.toml",
+        custodyRoot: { absolutePath: "/TEST", canonicalPath: "/TEST" },
+        displayPath: "TEST/config.toml", kind: "user", observationEpoch: "previous" }],
+    } as const;
+    const claudeInput = {
+      dialect: "claude-code-settings@2026-08-28", identityScope: "TEST-attempt",
+      sourcePlan: { claim: "observed-files-only", contract: "claude-code-observed-source-plan/v1",
+        collector: { bundleId: "TEST-bundle", id: "TEST-collector", observationEpoch: "current", platform: "darwin", version: "TEST-v1" },
+        roots: [{ absolutePath: "/TEST", canonicalPath: "/TEST", rootId: "TEST-root" }],
+        sources: [{ access: "rejected", custodyRootRef: "TEST-root", displayPath: "TEST/settings.json",
+          observationEpoch: "current", role: "user", selectionBasis: "home-default", sourceId: "TEST-source", trust: "user" }],
+      },
+    } as const;
+    const observe = async (bundle: Dependencies) => {
+      const codex = await bundle.codexSetup.inspectCodexConfiguration.execute(codexInput);
+      const claude = await bundle.claudeCodeSetup.inspectClaudeCodeConfiguration.execute(claudeInput);
+      assert.deepEqual(codex.sources.map(source => source.status), ["stale"]);
+      assert.deepEqual(claude.sources.map(source => source.status), ["rejected"]);
+      assert.equal(typeof codex.sources[0]?.sourceRef, "string");
+      assert.equal(typeof claude.sources[0]?.sourceRef, "string");
+      return [codex.sources[0]!.sourceRef, claude.sources[0]!.sourceRef];
+    };
+    const first = await observe(bundles[0]!);
+    const second = await observe(bundles[1]!);
+    assert.deepEqual(await observe(bundles[0]!), first);
+    assert.deepEqual(await observe(bundles[1]!), second);
+    assert.notEqual(first[0], second[0], "Codex must not reuse another attempt's identity key");
+    assert.notEqual(first[1], second[1], "Claude must not reuse another attempt's identity key");
+  });
+}
