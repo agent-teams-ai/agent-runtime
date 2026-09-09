@@ -24,7 +24,17 @@ function stream(files) {
     {kind: "file", suite: e.suite, counts: counts([e]), success: true}]),
   {kind: "summary", counts: counts(events), success: true}, {kind: "end"}].map(e => JSON.stringify(e)).join("\n") + "\n";
 }
-const git = (cwd, ...argv) => execFileSync("git", argv, {cwd, encoding: "utf8", stdio: "pipe"}).trim();
+const gitWithEnv = env => (cwd, ...argv) => execFileSync("git", argv, {cwd, env, encoding: "utf8", stdio: "pipe"}).trim();
+const git = gitWithEnv(process.env);
+
+function callerIdentity(cwd, runGit = git) {
+  return Object.fromEntries(["AUTHOR", "COMMITTER"].flatMap(role => {
+    const ident = runGit(cwd, "var", `GIT_${role}_IDENT`);
+    const match = /^(.*) <([^<>]*)> \d+ [+-]\d{4}$/.exec(ident);
+    assert.ok(match, `Git must resolve the caller's ${role.toLowerCase()} identity`);
+    return [[`GIT_${role}_NAME`, match[1]], [`GIT_${role}_EMAIL`, match[2]]];
+  }));
+}
 
 const flip = encoded => {const bytes = Buffer.from(encoded, "base64"); bytes[0] ^= 1; return bytes.toString("base64");};
 
@@ -145,21 +155,56 @@ test("the actual launcher records all four stages and both full test processes i
   }
 });
 
-test("self-contained report-only delivery validates in a clean clone after deleting original captures", async t => {
+test("self-contained report-only delivery validates in a clean clone after deleting original captures", deliveryFixture);
+
+test("repository-local identity without global or environment identity reaches delivery and rejecting assertions", async t => {
+  const root = mkdtempSync(resolve(tmpdir(), "adoption-v2-local-identity-"));
+  t.after(() => rmSync(root, {recursive: true, force: true}));
+  const caller = resolve(root, "caller"), globalConfig = resolve(root, "empty.gitconfig");
+  const identity = callerIdentity(process.cwd());
+  writeFileSync(globalConfig, "");
+  const env = {...process.env, GIT_CONFIG_GLOBAL: globalConfig, GIT_CONFIG_NOSYSTEM: "1"};
+  for (const key of Object.keys(env)) {
+    if (/^GIT_(AUTHOR_|COMMITTER_|CONFIG_(COUNT$|KEY_|VALUE_|PARAMETERS$))/.test(key) || key === "EMAIL") {delete env[key];}
+  }
+  const localGit = gitWithEnv(env);
+  localGit(root, "clone", "--quiet", "--no-local", process.cwd(), caller);
+  localGit(caller, "config", "user.name", identity.GIT_AUTHOR_NAME);
+  localGit(caller, "config", "user.email", identity.GIT_AUTHOR_EMAIL);
+  for (const role of ["AUTHOR", "COMMITTER"]) {
+    for (const field of ["NAME", "EMAIL"]) {
+      localGit(caller, "config", `${role.toLowerCase()}.${field.toLowerCase()}`, identity[`GIT_${role}_${field}`]);
+    }
+  }
+  assert.equal(localGit(caller, "config", "--global", "--list"), "");
+  assert.deepEqual(callerIdentity(caller, localGit), identity);
+  await deliveryFixture(t, caller, env);
+  assert.equal(readFileSync(globalConfig, "utf8"), "");
+});
+
+async function deliveryFixture(t, caller = process.cwd(), env = process.env) {
   const root = mkdtempSync(resolve(tmpdir(), "adoption-v2-delivery-"));
   t.after(() => rmSync(root, {recursive: true, force: true}));
   const producer = resolve(root, "producer"), captures = resolve(root, "captures"), consumer = resolve(root, "consumer");
-  // Disposable commits inherit the caller's author identity and configured hooks.
-  const commit = cwd => git(cwd, "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "synthetic delivery fixture");
-  git(root, "clone", "--quiet", "--no-local", process.cwd(), producer);
+  const runGit = gitWithEnv(env);
+  // Clone does not copy repository-local config. Carry Git's effective caller
+  // author and committer into each disposable commit without changing hook policy.
+  const identity = callerIdentity(caller, runGit);
+  const commitGit = gitWithEnv({...env, ...identity});
+  const commit = cwd => {
+    commitGit(cwd, "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "synthetic delivery fixture");
+    assert.equal(runGit(cwd, "log", "-1", "--format=%an%n%ae%n%cn%n%ce"),
+      [identity.GIT_AUTHOR_NAME, identity.GIT_AUTHOR_EMAIL, identity.GIT_COMMITTER_NAME, identity.GIT_COMMITTER_EMAIL].join("\n"));
+  };
+  runGit(root, "clone", "--quiet", "--no-local", caller, producer);
   // Exercise this implementation even when the caller's changes are uncommitted.
   for (const path of ["scripts/architecture/runtime-setup-l0-evidence-v2-capture.mjs",
     "scripts/architecture/runtime-setup-l0-evidence-v2.test.mjs", "docs/architecture/get-modular-adoption.md"]) {
     fs.copyFileSync(resolve(path), resolve(producer, path));
   }
   rmSync(resolve(producer, v2ReportPath), {force: true});
-  git(producer, "add", ".");
-  if (git(producer, "diff", "--cached", "--name-only")) {commit(producer);}
+  runGit(producer, "add", ".");
+  if (runGit(producer, "diff", "--cached", "--name-only")) {commit(producer);}
   const current = getIdentity(producer);
   fs.mkdirSync(captures);
   const originals = new Map();
@@ -189,22 +234,22 @@ test("self-contained report-only delivery validates in a clean clone after delet
       assert.deepEqual(Buffer.from(ref.artifacts[name], "base64"), Buffer.from(bytes));
     }
   }
-  git(producer, "add", v2ReportPath); commit(producer);
-  const delivery = git(producer, "rev-parse", "HEAD");
-  assert.equal(git(producer, "diff", "--name-only", current.sourceRevision, delivery), v2ReportPath);
+  runGit(producer, "add", v2ReportPath); commit(producer);
+  const delivery = runGit(producer, "rev-parse", "HEAD");
+  assert.equal(runGit(producer, "diff", "--name-only", current.sourceRevision, delivery), v2ReportPath);
   // Historical experiment commits can be unreachable from source HEAD. Retain
   // explicit refs so an ordinary clone carries their objects without alternates.
   const {loadHistoricalSpec, historicalSpecRevision} = await import("./runtime-setup-l0-evidence-historical.mjs");
   const historical = await loadHistoricalSpec((revision, path) => execFileSync("git", ["show", `${revision}:${path}`]));
   const revisions = new Set([historicalSpecRevision, ...historical.changes.map(c => c.revision)]);
-  git(producer, "fetch", "--quiet", process.cwd(), ...[...revisions].map(revision => `${revision}:refs/heads/fixture-history-${revision}`));
-  git(root, "clone", "--quiet", "--no-local", producer, consumer);
+  runGit(producer, "fetch", "--quiet", process.cwd(), ...[...revisions].map(revision => `${revision}:refs/heads/fixture-history-${revision}`));
+  runGit(root, "clone", "--quiet", "--no-local", producer, consumer);
   rmSync(captures, {recursive: true}); rmSync(producer, {recursive: true});
   assert.equal(fs.existsSync(captures), false);
-  assert.equal(git(consumer, "status", "--porcelain"), "");
+  assert.equal(runGit(consumer, "status", "--porcelain"), "");
   assert.deepEqual(getIdentity(consumer, current.sourceRevision), current);
   await loadHistoricalSpec((revision, path) => execFileSync("git", ["show", `${revision}:${path}`], {cwd: consumer}));
-  for (const {revision} of historical.changes) {git(consumer, "cat-file", "-e", `${revision}^{commit}`);}
+  for (const {revision} of historical.changes) {runGit(consumer, "cat-file", "-e", `${revision}^{commit}`);}
   const delivered = resolve(consumer, v2ReportPath);
   const {checkV2: deliveredCheck} = await import(resolve(consumer, "scripts/architecture/runtime-setup-l0-evidence-v2-capture.mjs"));
   deliveredCheck(consumer, delivered);
@@ -231,15 +276,15 @@ test("self-contained report-only delivery validates in a clean clone after delet
     ["tracked addition", () => writeFileSync(resolve(consumer, "extra-input.txt"), "extra")],
     ["tracked removal", () => rmSync(resolve(consumer, "README.md"))],
     ["tracked path change", () => fs.renameSync(resolve(consumer, "README.md"), resolve(consumer, "RENAMED.md"))],
-    ["tracked mode change", () => {git(consumer, "config", "core.fileMode", "true"); fs.chmodSync(resolve(consumer, "README.md"), 0o755);}],
+    ["tracked mode change", () => {runGit(consumer, "config", "core.fileMode", "true"); fs.chmodSync(resolve(consumer, "README.md"), 0o755);}],
   ]) {await t.test(`rejects ${name} even when committed`, () => {
-    mutate(); git(consumer, "add", "-A"); commit(consumer);
-    assert.equal(git(consumer, "status", "--porcelain"), "");
+    mutate(); runGit(consumer, "add", "-A"); commit(consumer);
+    assert.equal(runGit(consumer, "status", "--porcelain"), "");
     assert.throws(() => deliveredCheck(consumer, delivered), /source\/input mismatch/);
-    git(consumer, "reset", "--hard", delivery);
+    runGit(consumer, "reset", "--hard", delivery);
   });}
   deliveredCheck(consumer, delivered);
-});
+}
 
 
 test("frozen historical L0 uses its original spec closure, never the incoming 42-change spec", async () => {
