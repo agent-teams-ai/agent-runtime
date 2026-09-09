@@ -117,10 +117,17 @@ modules.set("node:crypto", {...crypto,
     return wrapper;
   },
 });
+let controlledSpawn: ((...args: unknown[]) => unknown) | undefined;
+let controlledNative: ((...args: unknown[]) => unknown) | undefined;
+export const controlDarwinChildObservations = (spawn?: (...args: unknown[]) => unknown, native?: (...args: unknown[]) => unknown) => {
+  controlledSpawn = spawn; controlledNative = native;
+};
 let spawnRequest: Readonly<{command: string; options: {env: object; stdio: unknown[]}}> | undefined;
 export const lastSpawnRequest = () => spawnRequest;
-modules.set("node:child_process", {...blockedFunctions(childProcess), spawn(command: string, _args: string[], options: {env: object; stdio: unknown[]}) {
+modules.set("node:child_process", {...blockedFunctions(childProcess),
+  execFileSync: (...args: unknown[]) => controlledNative === undefined ? forbidden() : controlledNative(...args), spawn(command: string, _args: string[], options: {env: object; stdio: unknown[]}) {
   spawnRequest = {command, options};
+  if (controlledSpawn !== undefined) {return controlledSpawn(command, _args, options);}
   throw new Error("synthetic Node spawn refusal; no process created");
 }});
 const slot = Symbol.for("ar69-r213-darwin-native-node-fixture");
@@ -161,13 +168,14 @@ export const captures = await import("../../fixtures/codex-native-broker-0.153.4
 export const legacyCapture = await import("../../fixtures/codex-native-config-0.153.4/fixture.ts");
 export const providerOptions = await import("../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-provider-options.js");
 
-export const fixture = (mode: "analysis" | "workspace-write" = "analysis") => {
+export const fixture = (mode: "analysis" | "workspace-write" = "analysis", darwinLoopback = false) => {
   const root = `/private/tmp/ar69-r213-memory-${sequence++}`;
   const workspaceRef = `${root}/workspace`; const privateRootPath = `${workspaceRef}-host-private`;
   const codexHome = `${privateRootPath}/home`; const tmpDir = `${privateRootPath}/tmp`;
   for (const path of [workspaceRef, codexHome, tmpDir]) {directory(path);}
   const boundary = boundaries.createCodexAppServerPermissionBoundary({codexHome, workspaceRef, intentMode: mode});
-  const recipe = recipes.createCodexNativeBrokerRecipe({boundary, endpoint: captures.fixtureEndpoint, profile: "codex-chatgpt"});
+  const recipe = darwinLoopback ? recipes.createDarwinCodexNativeBrokerRecipe({boundary, endpoint: "http://127.0.0.1:32123/backend-api/codex", profile: "codex-chatgpt"})
+    : recipes.createCodexNativeBrokerRecipe({boundary, endpoint: captures.fixtureEndpoint, profile: "codex-chatgpt"});
   const options = {boundary, executablePath: `${root}/codex`, intentMode: mode, privateRootPath, tmpDir,
     platformTarget: {platform: "darwin", architecture: "arm64"} as const};
   file(options.executablePath, darwinBinary, 0o100700);

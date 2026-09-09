@@ -108,6 +108,17 @@ const observeProviderProcessIdentity = async (
   return observation.proof;
 };
 
+const installDarwinRoute = (live: LiveCustody, guardian: StableProcessGroupGuardian, acknowledgement: SpawnStatus): SpawnStatus => {
+  if (acknowledgement === "acknowledged" && live.httpReservation.darwinRoute !== undefined) {
+    try {live.httpReservation.darwinRoute.install(guardian.darwinProviderImage);}
+    catch {
+      live.httpReservation.cutoff(); live.spawnStatus = "ambiguous"; live.signalAuthorized = false;
+      acknowledgement = "ambiguous";
+    }
+  }
+  return acknowledgement;
+};
+
 export const acknowledgeProviderSpawn = async (
   live: LiveCustody,
   guardian: StableProcessGroupGuardian,
@@ -169,6 +180,7 @@ export const acknowledgeProviderSpawn = async (
       status: acknowledgement === "error-before-start" ? "not-started" : "ambiguous",
     });
   }
+  acknowledgement = installDarwinRoute(live, guardian, acknowledgement);
   if (acknowledgement !== "acknowledged") {
     setTimeout(() => {void dependencies.onStartFailure();}, 0);
   }

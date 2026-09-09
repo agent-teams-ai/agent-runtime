@@ -5,6 +5,10 @@ import type { LiveCustody } from "./node-provider-process-custody-state.js";
 import { NodeCustodyHttpResources, type NodeCustodyHttpResourceInput } from "./node-custody-http-resources.js";
 import type { HostHttpEgressSessionDependencies } from "./egress/host-http-egress-session.js";
 
+import type { DarwinSeatbeltRouteOwner } from "./darwin-seatbelt-route-owner.js";
+
+import { isIssuedDarwinRouteOwner } from "./darwin-route-identity.js";
+
 const nativeRemove = EventTarget.prototype.removeEventListener;
 
 /** Private identity of a reserved execution session, never evidence of a PID or start. */
@@ -24,6 +28,7 @@ export interface NodeCustodyHttpPreparation {
   acquire(input: Handoff): NodeCustodyHttpLifetime;
   prepareResources(lifetime: NodeCustodyHttpLifetime, input: NodeCustodyHttpResourceInput):
     ReturnType<NodeCustodyHttpResources["prepare"]>;
+  retainDarwinRoute(lifetime: NodeCustodyHttpLifetime, owner: DarwinSeatbeltRouteOwner): void;
   finalize(lifetime: NodeCustodyHttpLifetime): import("./host-launch-finalization.js").ClaimedHostLaunchFinalizer;
 }
 
@@ -40,14 +45,28 @@ export class NodeProviderProcessCustodyHttpReservation {
   readonly #controller = new AbortController();
   readonly #resources = new NodeCustodyHttpResources(this, this.#controller);
   readonly #identity = Object.freeze(Object.create(null)) as NodeCustodyExecutionSessionIdentity;
+  #route: DarwinSeatbeltRouteOwner | undefined;
   #claimed = false;
   #cutoff = false;
   #preparationAbort: {readonly signal: AbortSignal; readonly listener: () => void} | undefined;
   #lifetime: NodeCustodyHttpLifetime | undefined;
 
-  public get pending(): Promise<void> | undefined {return this.#resources.pending;}
+  public get pending(): Promise<void> | undefined {
+    // The Darwin flight encloses resource preparation and finalization. Preserve
+    // the original Linux promise identity and avoid allocating per observation.
+    return this.#route?.pending ?? this.#resources.pending;
+  }
+  public get darwinRoute(): DarwinSeatbeltRouteOwner | undefined {return this.#route;}
+  public retainDarwinRoute(live: LiveCustody, lifetime: NodeCustodyHttpLifetime, owner: DarwinSeatbeltRouteOwner): void {
+    this.assertPreparation(lifetime);
+    if (this.#route !== undefined || !isIssuedDarwinRouteOwner(owner) || owner.lifetime !== lifetime ||
+        live.httpReservation !== this || this.#resources.pending !== undefined) {throw new TypeError("Darwin route owner conflicts");}
+    owner.attach(live); this.#route = owner;
+  }
 
-  public cleanup(): Promise<boolean> {this.cutoff(); return this.#resources.cleanup();}
+  public cleanup(): Promise<boolean> {
+    this.cutoff(); return this.#route === undefined ? this.#resources.cleanup() : this.#route.cleanup(() => this.#resources.cleanup());
+  }
 
   public prepareResources(lifetime: NodeCustodyHttpLifetime, input: NodeCustodyHttpResourceInput) {
     this.assertPreparation(lifetime);
@@ -113,7 +132,7 @@ export class NodeProviderProcessCustodyHttpReservation {
     this.#cutoff = true;
     const preparation = this.#preparationAbort;
     this.#preparationAbort = undefined;
-    try {this.#resources.cutoff(); this.#controller.abort();}
+    try {this.#route?.cutoff(); this.#resources.cutoff(); this.#controller.abort();}
     finally {
       // Node's disposable consults a mutable signal property. Retire only our
       // retained listener through the native operation, even during reentrancy.

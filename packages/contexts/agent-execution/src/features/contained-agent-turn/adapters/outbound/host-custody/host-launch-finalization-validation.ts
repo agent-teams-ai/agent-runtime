@@ -47,7 +47,7 @@ export const validateFinalHostLaunch = async (live: LiveCustody, plan: HostCusto
   const verifiedExecutable = Object.freeze(await verifyExecutable(plan));
   sameExecutable(executable, verifiedExecutable);
   assertRetainedWorkspaceAuthority(live);
-  const executionMaterialSha256 = finalHostExecutionMaterialSha256(candidate, verifiedExecutable, materialSha256);
+  const executionMaterialSha256 = finalHostExecutionMaterialSha256(candidate, verifiedExecutable, materialSha256, live.httpReservation.darwinRoute?.projection.digest);
   const fingerprint = createFingerprint({attemptId: live.attemptId, operationId: live.operationId,
     providerBinding: live.providerBinding, workspaceRef: live.workspaceRef, intentMode: plan.intentMode},
     plan, live.workspaceRef, plan.arguments, executionMaterialSha256);

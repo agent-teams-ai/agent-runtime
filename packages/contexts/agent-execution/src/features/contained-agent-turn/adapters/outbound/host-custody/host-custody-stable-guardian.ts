@@ -8,18 +8,52 @@ import {
 } from "./custodied-provider-process.js";
 import type { VerifiedLaunchDescriptors } from "./host-custody-launch.js";
 
+import type { DarwinSeatbeltProjection } from "./darwin-seatbelt-launch-projection.js";
+
 const GUARDIAN_SOURCE = String.raw`
-const { spawn } = require("node:child_process");
+const { spawn, execFileSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
 const { fstatSync, lstatSync, readFileSync } = require("node:fs");
 const { pipeline } = require("node:stream");
 let provider;
 let launchReceived = false;
 let startState = "pending";
+const darwinAdmissionMs = Number(process.argv[1]);
+const darwinCustody = Number.isSafeInteger(darwinAdmissionMs) && darwinAdmissionMs > 0;
+let stopping = false;
+let admissionTimer;
+let shutdownTimer;
+let imageTimer;
+let routeLaunch;
+// The retained ChildProcess is still ours when its process group changes. Do
+// not make local shutdown depend on an IPC acknowledgement from a lost Host.
+const stopLocally = () => {
+  if (!darwinCustody || stopping) { return; }
+  stopping = true;
+  clearTimeout(admissionTimer);
+  clearTimeout(imageTimer);
+  const stopGroup = () => { try { process.kill(0, "SIGKILL"); } catch { process.exit(71); } };
+  if (provider === undefined || provider.exitCode !== null || provider.signalCode !== null) {
+    stopGroup(); return;
+  }
+  provider.once("exit", () => { clearTimeout(shutdownTimer); stopGroup(); });
+  shutdownTimer = setTimeout(stopGroup, 1000);
+  try { provider.kill("SIGKILL"); } catch {}
+};
+if (darwinCustody) {
+  admissionTimer = setTimeout(stopLocally, darwinAdmissionMs);
+  process.on("disconnect", stopLocally);
+}
 const streamReports = new Set();
 const streamSettlements = new Map();
 process.on("SIGTERM", () => {});
 const send = (message, callback) => {
+  if (darwinCustody) {
+    if (!process.connected || typeof process.send !== "function") { stopLocally(); return; }
+    try { process.send(message, error => { if (error) { stopLocally(); } else { callback?.(null); } }); }
+    catch { stopLocally(); }
+    return;
+  }
   if (typeof process.send !== "function") { process.exit(70); return; }
   process.send(message, callback);
 };
@@ -69,7 +103,56 @@ const exactCanonicalAuthority = message => {
       workspacePath.dev === workspaceHeld.dev && workspacePath.ino === workspaceHeld.ino;
   } catch { return false; }
 };
+const exactPin = pin => {
+  const stats = lstatSync(pin.path, {bigint: true});
+  return stats.isFile() && !stats.isSymbolicLink() && stats.nlink === 1n &&
+    String(stats.dev) === pin.dev && String(stats.ino) === pin.ino &&
+    createHash("sha256").update(readFileSync(pin.path)).digest("hex") === pin.sha256;
+};
+const exactRoute = message => {
+  if (message.darwinRoute === undefined) {return true;}
+  const route = message.darwinRoute;
+  try {
+    return darwinCustody && message.canonicalAuthority !== undefined &&
+      route.provider.path === message.command && route.provider.dev === message.canonicalAuthority.executableDev &&
+      route.provider.ino === message.canonicalAuthority.executableIno &&
+      route.provider.sha256 === message.canonicalAuthority.executableSha256 &&
+      route.launcher.path === "/usr/bin/sandbox-exec" &&
+      createHash("sha256").update(route.profile).digest("hex") === route.profileSha256 &&
+      [route.provider, route.launcher, route.observer].every(exactPin);
+  } catch {return false;}
+};
+const observeImage = previous => {
+  if (stopping || !provider || provider.exitCode !== null || provider.signalCode !== null) {stopLocally(); return;}
+  try {
+    if (!exactPin(routeLaunch.observer) || !exactPin(routeLaunch.provider)) {stopLocally(); return;}
+    const text = execFileSync(routeLaunch.observer.path, [String(provider.pid), routeLaunch.provider.path], {
+      encoding: "utf8", timeout: 250, maxBuffer: 2048, env: {PATH: "/usr/bin:/bin"}, stdio: ["ignore", "pipe", "ignore"],
+    });
+    const image = JSON.parse(text);
+    if (image.protocol !== "ae-darwin-owned-image/v1" || image.pid !== provider.pid || image.ppid !== process.pid ||
+        image.pgid !== process.pid || image.dev !== routeLaunch.provider.dev || image.ino !== routeLaunch.provider.ino ||
+        !/^[1-9][0-9]{0,19}$/.test(image.birthSeconds) || !/^[0-9]{1,6}$/.test(image.birthMicros)) {
+      stopLocally(); return;
+    }
+    if (previous === undefined) {imageTimer = setTimeout(() => observeImage(image), 1); return;}
+    if (JSON.stringify(previous) !== JSON.stringify(image)) {stopLocally(); return;}
+    if (stopping || provider.exitCode !== null || provider.signalCode !== null) {stopLocally(); return;}
+    clearTimeout(admissionTimer); startState = "started";
+    send({type: "started", pid: provider.pid, darwinImage: image});
+    publishStream("stdout"); publishStream("stderr");
+  } catch {
+    // Read-only observation retry while wrapper exec is pending, bounded by the
+    // independent admission timer. Never relaunch/replay a provider effect.
+    imageTimer = setTimeout(() => observeImage(previous), 10);
+  }
+};
 const signalGroup = signal => {
+  if (darwinCustody && signal === "SIGKILL") {
+    send({ type: "signal-issued", signal });
+    stopLocally();
+    return;
+  }
   if (signal === "SIGTERM") {
     process.kill(0, signal);
     send({ type: "signal-issued", signal });
@@ -82,6 +165,8 @@ const signalGroup = signal => {
 };
 process.on("message", message => {
   if (message === null || typeof message !== "object") { return; }
+  if (darwinCustody && message.type === "shutdown") { stopLocally(); return; }
+  if (stopping) { return; }
   if (message.type === "provider-signal" && message.signal === "SIGKILL") {
     let sent = false;
     try {
@@ -96,7 +181,7 @@ process.on("message", message => {
   }
   if (message.type !== "launch" || launchReceived) { return; }
   launchReceived = true;
-  if (!exactCanonicalAuthority(message)) {
+  if (!exactCanonicalAuthority(message) || !exactRoute(message)) {
     startState = "failed";
     send({ type: "start-error" });
     publishStream("stdout");
@@ -115,7 +200,9 @@ process.on("message", message => {
   stdio[2] = "pipe";
   for (const descriptor of providerInheritedDescriptors) { stdio[descriptor] = descriptor; }
   try {
-    provider = spawn(message.command, message.arguments, {
+    routeLaunch = message.darwinRoute;
+    provider = spawn(routeLaunch === undefined ? message.command : routeLaunch.launcher.path,
+      routeLaunch === undefined ? message.arguments : ["-p", routeLaunch.profile, message.command, ...message.arguments], {
       cwd: message.cwd,
       detached: false,
       env: message.environment,
@@ -134,6 +221,9 @@ process.on("message", message => {
   handoff("stdout", provider.stdout, process.stdout);
   handoff("stderr", provider.stderr, process.stderr);
   provider.once("spawn", () => {
+    if (stopping) { try { provider.kill("SIGKILL"); } catch {} return; }
+    if (routeLaunch !== undefined) {observeImage(); return;}
+    clearTimeout(admissionTimer);
     startState = "started";
     send({ type: "started", pid: provider.pid });
     publishStream("stdout");
@@ -164,7 +254,7 @@ export type GuardianProviderStreamFinal = "complete" | "error" | "incomplete";
 
 type GuardianMessage =
   | { readonly type: "ready" }
-  | { readonly pid: number; readonly type: "started" }
+  | { readonly pid: number; readonly type: "started"; readonly darwinImage?: unknown }
   | { readonly code?: unknown; readonly type: "start-error" }
   | { readonly code: number | null; readonly signal: NodeJS.Signals | null; readonly type: "provider-exit" }
   | { readonly status: GuardianProviderStreamFinal; readonly stream: GuardianProviderStream; readonly type: "stream-final" }
@@ -181,6 +271,7 @@ export interface GuardianExitObservation extends CustodiedProviderProcessExit {
 }
 
 interface GuardianLaunchInput {
+  readonly darwinRoute?: DarwinSeatbeltProjection;
   readonly arguments: readonly string[];
   readonly descriptors: VerifiedLaunchDescriptors;
   readonly environment: Readonly<Record<string, string>>;
@@ -226,17 +317,26 @@ export class StableProcessGroupGuardian {
   readonly #stderrFinal: Promise<GuardianProviderStreamFinal>;
   readonly #stdoutFinal: Promise<GuardianProviderStreamFinal>;
   #startTimer: ReturnType<typeof setTimeout> | undefined;
+  #startExpired = false;
+  #darwinProviderImage: unknown;
+  public get darwinProviderImage(): unknown {return this.#darwinProviderImage;}
+  public stopDarwin(): void {if (this.#input.canonicalLaunch !== undefined) {this.#stopDarwinGuardian();}}
   #settleStart: ((observation: GuardianStartObservation) => void) | undefined;
   #settleStderrFinal: ((status: GuardianProviderStreamFinal) => void) | undefined;
   #settleStdoutFinal: ((status: GuardianProviderStreamFinal) => void) | undefined;
 
   public constructor(input: GuardianLaunchInput, startAfterMs: number) {
+    if (input.canonicalLaunch !== undefined &&
+        (!Number.isSafeInteger(startAfterMs) || startAfterMs < 1 || startAfterMs > 2_147_483_647)) {
+      throw new TypeError("Darwin guardian admission deadline is invalid");
+    }
     const inherited = [
       input.descriptors.workspaceDescriptor,
       input.descriptors.executableDescriptor,
       ...Object.values(input.descriptors.privatePathDescriptors),
     ].toSorted((left, right) => left.childDescriptor - right.childDescriptor);
-    const child = spawn(input.canonicalLaunch === undefined ? "/proc/self/exe" : process.execPath, ["-e", GUARDIAN_SOURCE], {
+    const child = spawn(input.canonicalLaunch === undefined ? "/proc/self/exe" : process.execPath,
+      ["-e", GUARDIAN_SOURCE, ...(input.canonicalLaunch === undefined ? [] : [String(startAfterMs)])], {
       detached: true,
       env: Object.freeze({ LANG: "C.UTF-8" }),
       shell: false,
@@ -284,14 +384,23 @@ export class StableProcessGroupGuardian {
       if (this.child.listenerCount(PROVIDER_ERROR_EVENT) > 0) {this.child.emit(PROVIDER_ERROR_EVENT, error);}
     });
     this.#startTimer = setTimeout(() => {
+      this.#startExpired = true;
       this.#launchOpen = false;
       if (this.#launchDispatched) {this.#finishStart({ status: "ambiguous" });}
       else {this.#finishNoLaunch();}
-      child.kill("SIGKILL");
+      if (input.canonicalLaunch === undefined) {child.kill("SIGKILL");}
+      else {this.#stopDarwinGuardian();}
     }, startAfterMs);
   }
 
   public get exitCode(): number | null {return this.#exitCode;}
+
+  #stopDarwinGuardian(): void {
+    // Disconnect is the fallback when send throws or its callback never runs;
+    // the embedded guardian also owns an independent admission timer.
+    try {if (this.child.connected) {this.child.send({type: "shutdown"});}} catch {}
+    try {if (this.child.connected) {this.child.disconnect();}} catch {}
+  }
   public get guardianExit(): Promise<GuardianExitObservation> {return this.#guardianExit;}
   public get guardianExitObservation(): GuardianExitObservation | undefined {return this.#guardianExitObservation;}
   public get providerExit(): CustodiedProviderProcessExit | undefined {return this.#providerExit;}
@@ -369,12 +478,17 @@ export class StableProcessGroupGuardian {
     try {
       const guardianPid = this.child.pid;
       const attached = guardianPid !== undefined && await this.#input.beforeLaunch(guardianPid);
-      if (!attached || !this.#input.launchPermitted() || !this.child.connected) {
+      if (!attached || (this.#input.canonicalLaunch !== undefined && this.#startExpired) ||
+          !this.#input.launchPermitted() || !this.child.connected) {
         this.#finishNoLaunch();
         this.child.kill("SIGKILL");
         return;
       }
+      // A Darwin send failure after entry cannot establish that the other
+      // process did not receive the launch. Keep shutdown with that guardian.
+      if (this.#input.canonicalLaunch !== undefined) {this.#launchDispatched = true;}
       this.child.send({
+        ...(this.#input.darwinRoute === undefined ? {} : {darwinRoute: this.#input.darwinRoute}),
         arguments: this.#input.arguments.map(argument => this.#guardianBound(argument, guardianPid)),
         command: this.#input.canonicalLaunch?.command ??
           `/proc/${guardianPid}/fd/${this.#input.descriptors.executableDescriptor.childDescriptor}`,
@@ -397,19 +511,33 @@ export class StableProcessGroupGuardian {
         type: "launch",
       }, error => {
         if (error !== null) {
-          this.#finishStart({ status: "error-before-start" });
-          this.child.kill("SIGKILL");
+          if (this.#input.canonicalLaunch === undefined) {
+            this.#finishStart({ status: "error-before-start" });
+            this.child.kill("SIGKILL");
+          } else {
+            this.#finishStart({ status: "ambiguous" });
+            this.#stopDarwinGuardian();
+          }
         }
       });
       this.#launchDispatched = true;
     } catch {
-      this.#finishNoLaunch();
-      this.child.kill("SIGKILL");
+      if (this.#input.canonicalLaunch !== undefined && this.#launchDispatched) {
+        this.#finishStart({status: "ambiguous"}); this.#stopDarwinGuardian();
+      } else {
+        this.#finishNoLaunch(); this.child.kill("SIGKILL");
+      }
     }
   }
 
   #handleStarted(message: Extract<GuardianMessage, { readonly type: "started" }>): void {
     if (Number.isSafeInteger(message.pid) && message.pid > 0) {
+      if (this.#input.darwinRoute !== undefined) {
+        if (this.#startExpired || message.darwinImage === undefined) {
+          this.#finishStart({status: "ambiguous"}); this.#stopDarwinGuardian(); return;
+        }
+        this.#darwinProviderImage = message.darwinImage;
+      }
       this.#finishStart({ providerPid: message.pid, status: "acknowledged" });
     }
   }
