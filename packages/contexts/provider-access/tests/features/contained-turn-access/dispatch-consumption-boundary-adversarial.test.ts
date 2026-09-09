@@ -115,7 +115,8 @@ test("dispatch data and repository seeds reject cycles, sparse arrays and extra 
   cyclicRecord.self = cyclicRecord;
   const cyclicArray: unknown[] = [];
   cyclicArray.push(cyclicArray);
-  const sparse = [seed(), , seed()];
+  const sparse = [seed(), seed(), seed()];
+  delete sparse[1];
   const cases = [
     ["cyclic record", [cyclicRecord]], ["cyclic array", cyclicArray], ["sparse array", sparse],
     ["extra string key", Object.assign([seed()], {extra: true})],
