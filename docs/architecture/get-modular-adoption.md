@@ -148,3 +148,7 @@ upstream, review its delta and update the exact pin and retained bytes together.
 Never silently follow moving main, rewrite accepted ADRs, or mark a pending
 profile active before its real blocking checks pass. Stale documentation or
 unverified adoption is unfinished work.
+
+## Retained direct capture from the qualification branch
+
+The [direct-composition capture retained from e411638](../spikes/runtime-setup-l0-direct-e411638-evidence.json) records source e615369 and remains byte-identical to the qualification branch (SHA-256 `879b333361889b250fb834c3bfb41a1006c4d0d2adcc5fd56df126de4c3eaf10`). It is a separate ADR-0008 experiment, not an Assembly capture. The original historical L0 report remains at its ADR-0015-authenticated path and digest. Neither capture establishes current Assembly acceptance or measured benefit.
