@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {mock, test} from 'node:test';
-import * as fs from 'node:fs';
+import fs from 'node:fs';
 import {readFileSync} from 'node:fs';
 
 // Built artifacts, exactly as other APP tests. No production source rewriting.
@@ -14,6 +14,8 @@ let acknowledge;
 let privilegeCalls = 0;
 const stub = (url, namedExports) => mock.module(url, {exports: namedExports});
 // Isolated worker: all kernel effects and transport are simulated, never real I/O.
+// Copy the fs API, not its ESM namespace: namespace.default would retain the
+// original object whose nonconfigurable constants Node's mock loader redefines.
 stub('node:fs', {...fs, ...Object.fromEntries(
   ['closeSync', 'fstatSync', 'openSync', 'readFileSync', 'realpathSync', 'statSync'].map(name =>
     [name, (...args) => system[name](...args)]))});

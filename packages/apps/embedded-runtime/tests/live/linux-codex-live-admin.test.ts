@@ -76,8 +76,10 @@ test("route snapshot preserves native cancellation while isolating mutable data"
 
 
 test("deployment requires positive matching container, native and real/effective process identities", t => {
+  const processIdentity = {getuid: 1000, geteuid: 1000, getgid: 1000, getegid: 1000};
   for (const name of ["getuid", "geteuid", "getgid", "getegid"] as const) {
-    t.mock.method(process, name, () => 1000);
+    // Install each mock once so restoration cannot retain an earlier UID mock.
+    t.mock.method(process, name, () => processIdentity[name]);
   }
   const node = {enginePolicy: {user: "1000:1000"}, native: {ownerUid: 1000, ownerGid: 1000}};
   assert.doesNotThrow(() => assertLinuxCodexLiveAdminIdentity(node as never));
@@ -88,9 +90,9 @@ test("deployment requires positive matching container, native and real/effective
     assert.throws(() => assertLinuxCodexLiveAdminIdentity({...node, native} as never));
   }
   for (const name of ["getuid", "geteuid", "getgid", "getegid"] as const) {
-    t.mock.method(process, name, () => 0);
+    processIdentity[name] = 0;
     assert.throws(() => assertLinuxCodexLiveAdminIdentity(node as never));
-    t.mock.method(process, name, () => 1000);
+    processIdentity[name] = 1000;
   }
 });
 
@@ -156,6 +158,8 @@ test("admin preserves every bootstrap stage and its retained cleanup without cau
 import {createContainedTurnProviderAccessPort} from
   "../../../../contexts/agent-execution/dist/features/contained-agent-turn/composition/provider-access-anti-corruption.js";
 import { createHash } from "node:crypto";
+import {statSync} from "node:fs";
+import {getuid} from "node:process";
 import { createCodexCurrentKernelOwner } from "../../../../contexts/agent-execution/dist/composition.js";
 import { CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT } from "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
 import {
@@ -175,6 +179,10 @@ test("admin inventory and real bootstrap resolver carry accepted ACL identity in
   const workspaceRef = codexFixtureBoundary.workspaceRef;
   const privateRootPath = codexFixturePrivateRoot;
   const codexHome = codexFixtureBoundary.codexHome;
+  // The disposable fixture is owned by this user on both Linux and macOS;
+  // a root-owned synthetic stat would bypass the regression on root Linux CI.
+  assert.equal(statSync(codexHome).uid, getuid!());
+  assert.equal(statSync(codexHome).mode & 0o777, 0o700);
   const tmpDir = codexFixtureTmp;
   const oauthToken = "test-fixture-literal";
   const tokenDigest = createHash("sha256").update(oauthToken).digest("hex");
