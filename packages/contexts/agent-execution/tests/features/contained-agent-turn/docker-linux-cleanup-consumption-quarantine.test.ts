@@ -24,6 +24,7 @@ export async function withStableDirectoryProcessLock(directory, action) {
 
 test("actual composition permits physical cleanup for concrete journal-only quarantine", async t => {
   const hook = registerHooks({resolve(specifier, context, next) {
+    if (specifier === "synthetic:cleanup-consumption-storage") {return {url: memoryUrl, shortCircuit: true};}
     if (context.parentURL?.includes("node-host-http-consumption-journal") &&
       ["@agent-teams/filesystem-custody", "./host-http-consumption-storage.js"].includes(specifier)) {
       return {url: memoryUrl, shortCircuit: true};
@@ -31,7 +32,7 @@ test("actual composition permits physical cleanup for concrete journal-only quar
     return next(specifier, context);
   }});
   t.after(() => hook.deregister());
-  const {state} = await import(memoryUrl);
+  const {state} = await import("synthetic:cleanup-consumption-storage");
   const {createNodeHostHttpConsumptionJournal} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-host-http-consumption-journal.js");
   const {postClaimFixture} = await import("./support/docker-linux-post-claim-fixture.ts");
   const {createDockerLinuxPostClaimPreparation} = await import("../../../dist/features/contained-agent-turn/composition/docker-linux-post-claim-preparation.js");
