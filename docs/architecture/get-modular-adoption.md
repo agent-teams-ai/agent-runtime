@@ -270,6 +270,50 @@ records the activation inputs for ADR-0015. Both `check:fast` and `check` execut
 checker itself requires live Foundation source diagnostics to pass before
 comparing the exact census; metadata validation alone cannot activate adoption.
 
+## PR71 measured benefit and cutover checkpoint
+
+At source `57dbc2ffe8db4643b5a8e97c7726bc6342b3239a`, the retained
+matched benchmark compares baseline `ae103a68fcae70f88539e2c4400420afe7d80d49`
+with `08fb1a71b75134b43af52579e8de86a44b2a3815`. Its final report has
+SHA-256 `6e1c173dc7163cf453dead5ce0d6eaaf628140822a7b8875a1a3c3f26189972c`;
+the retained `benchmark-final-evidence.tar.gz` has SHA-256
+`d13e8b35c7758bb1d5cf600e38d892dd528150e6734b965551f516321f339c98`.
+These are external delivery artifacts, separate from historical L0 evidence.
+The delivery owner must retain their provenance with the release decision.
+
+The final benchmark's 400 physical production adapter lines reconcile to 404:
+203 declaration/binding lines, 95 async bootstrap lines and 106 creation-error
+lines. Only the bootstrap changed, by a net four lines for best-effort
+cancellation metadata during failure cleanup. The dependency owner/path and
+observer-only replacement are unchanged. Historical task-wide baseline timing
+is unavailable; command durations cannot reconstruct it. The benchmark proves
+bounded observer and empty-scope passive/disposal behavior, not measured speed,
+reduced wiring or net navigation/diagnostic/maintenance benefit. Benefit remains
+**inconclusive**; `second-consumer-not-admitted`, with no shared extraction claim.
+
+Release disposition remains pending. Retention requires a reasoned owner
+benefit/cost decision, reviewed external consumer/callsite and package-release
+provenance, and the exact final evidence and gates. The retained v2 report at
+this source captures `00899c22faaa0594452a315796fad5caf3e44400`; the CI workflow
+and three parity test/helper files have since changed. Refresh the supported
+paired capture after the complete implementation and documentation checkpoint;
+these changed inputs cannot be covered by the old report-only delivery rule.
+
+A consumer-local rollback must be one governed release replacement. Restore one
+async direct default at the existing private entrypoint, retain the internal
+sync leaf and awaited callers, remove only the admitted Core/Assembly dependency
+pair, and preserve all Host-owned lifetime and contained-turn boundaries. Keep
+historical ADR/evidence bytes intact. Reconcile the profile/schema, exact source
+census, package/layer rejecting checks, current L0 trace and accepted successor
+record in the same delivery. A profile merely marked pending, or deletion of a
+gate, does not make rollback releasable. An old whole-lock/barrel restoration
+also reverts unrelated current work and is not this bounded rollback.
+
+The new release constructs new Hosts through its single chosen default. Already
+published Hosts finish with their original lifetime owner. Construction or
+cleanup failure never triggers same-process direct fallback or automatic retry.
+No release approval or full-gate success is asserted by this checkpoint.
+
 ## Keeping the standard current
 
 Changes to shared module contracts or recommended composition patterns must update
