@@ -505,21 +505,28 @@ test("rejects a malformed assistant stream envelope without emitting its diagnos
 });
 
 test("redacts invented contextual credentials in streamed and fallback assistant output", async () => {
-  for (const streamed of [false, true]) {
-    const output: string[] = [];
-    const text = "Authorization: Bearer InventedAlpha1234 done";
-    const adapter = provider(() => ({
-      close: () => {},
-      interrupt: async () => {},
-      async *[Symbol.asyncIterator]() {
-        if (streamed) {
-          for (const character of text) {yield delta(character);}
-        }
-        yield { ...success(), result: text };
-      },
-    }));
-    const outcome = await adapter.execute({ ...input(), emit: async chunk => { output.push(chunk.text); } });
-    assert.equal(outcome.kind, "completed");
-    assert.equal(output.join(""), "<redacted> <redacted> <redacted> done");
+  for (const [text, expected] of [
+    ["Authorization: Bearer InventedAlpha1234 done", "<redacted> <redacted> <redacted> done"],
+    ['{"padding":"' + "x".repeat(4100) + '","password": "InventedAlpha1234"} done',
+      "<redacted> <redacted> done"],
+    ['{"password": "InventedAlpha1234 InventedBeta5678"} done',
+      "<redacted> <redacted> <redacted> done"],
+  ] as const) {
+    for (const streamed of [false, true]) {
+      const output: string[] = [];
+      const adapter = provider(() => ({
+        close: () => {},
+        interrupt: async () => {},
+        async *[Symbol.asyncIterator]() {
+          if (streamed) {
+            for (const character of text) {yield delta(character);}
+          }
+          yield { ...success(), result: text };
+        },
+      }));
+      const outcome = await adapter.execute({ ...input(), emit: async chunk => { output.push(chunk.text); } });
+      assert.equal(outcome.kind, "completed");
+      assert.equal(output.join(""), expected);
+    }
   }
 });

@@ -24,8 +24,10 @@ const assertAllBoundaries = (value: string, expected: string): void => {
     const redactor = new ClaudeCanonicalOutputRedactor();
     assert.equal(redactor.push(value.slice(0, boundary)) + redactor.push(value.slice(boundary)) + redactor.finish(), expected);
   }
-  const redactor = new ClaudeCanonicalOutputRedactor();
-  assert.equal(Array.from(value, character => redactor.push(character)).join("") + redactor.finish(), expected);
+  for (const characters of [Array.from(value), value.split("")]) {
+    const redactor = new ClaudeCanonicalOutputRedactor();
+    assert.equal(characters.map(character => redactor.push(character)).join("") + redactor.finish(), expected);
+  }
 };
 
 test("retains credential context through whitespace and quoted assignments", () => {
@@ -75,4 +77,49 @@ test("bounds pending token bytes and retains no unbounded whitespace context", (
     assert.equal(redactor.push(" \n".repeat(100)), " \n".repeat(100));
   }
   assert.equal(redactor.push(`Bearer ${credential} public`) + redactor.finish(), "<redacted> <redacted> public");
+});
+
+test("P1 preserves labels after oversized suppressed padding", () => {
+  assertAllBoundaries('{"padding":"' + "x".repeat(4100) + '","password": "InventedAlpha1234"} done',
+    "<redacted> <redacted> done");
+});
+
+test("P1 retains quoted credentials across whitespace until closure", () => {
+  assertAllBoundaries('{"password": "InventedAlpha1234 InventedBeta5678"} done',
+    "<redacted> <redacted> <redacted> done");
+});
+
+
+test("quoted lexical state handles escapes, UTF-8 and prefixed Authorization labels", () => {
+  for (const quote of ["\"", "'", "`"] ) {
+    for (const space of [" ", "\t", "\n", "\r\n", " \n\t"]) {
+      for (const prefix of ["password=", "**Authorization:", ">Authorization:", "note:Authorization:", "'secret' = "]) {
+        const value = `${prefix}${quote}Inventedé😀${space}Beta\\${quote}Still${space}Gamma${quote} public text`;
+        const expectedPrefix = prefix === "'secret' = " ? "'secret' <redacted> " : "";
+        assertAllBoundaries(value, `${expectedPrefix}<redacted>${space}<redacted>${space}<redacted> public text`);
+      }
+    }
+    assertAllBoundaries(`password=${quote}Alpha\\\\${quote} public text`, "<redacted> public text");
+    assertAllBoundaries(`password=${quote}Alpha\\\nBeta Gamma${quote} public text`,
+      "<redacted>\n<redacted> <redacted> public text");
+  }
+  for (const prefix of ["**", ">", "note:", "prose"]) {
+    assertAllBoundaries(`${prefix}Authorization: InventedAlpha1234 done`, "<redacted> <redacted> done");
+    assertAllBoundaries(`${prefix}Authorization: Bearer InventedAlpha1234 done`,
+      "<redacted> <redacted> <redacted> done");
+  }
+});
+
+test("suppressed UTF-8 tokens retain labels and bounded open-quote state", () => {
+  assertAllBoundaries('{"padding":"' + "é😀".repeat(690) + '","password": "Alpha Beta"} done',
+    "<redacted> <redacted> <redacted> done");
+  const redactor = new ClaudeCanonicalOutputRedactor();
+  assert.equal(redactor.push('password="' + "x".repeat(4100)), "<redacted>");
+  for (let index = 0; index < 1000; index += 1) {
+    assert.equal(redactor.push("x".repeat(1000)), "");
+  }
+  assert.equal(redactor.push(' Alpha\nBeta" public text') + redactor.finish(),
+    " <redacted>\n<redacted> public text");
+  assert.equal(redactor.push('password="unfinished') + redactor.finish(), "<redacted>");
+  assert.equal(redactor.push("benign trailing text") + redactor.finish(), "benign trailing text");
 });
