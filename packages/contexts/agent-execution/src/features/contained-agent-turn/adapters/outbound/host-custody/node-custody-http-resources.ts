@@ -171,15 +171,19 @@ export class NodeCustodyHttpResources {
       const prepared = await this.#input!.consumption.prepare();
       if (prepared.kind !== "ready") {this.#journalUncertain = true; this.cutoff(); return;}
       this.#journal = prepared;
-      if (this.#cut) {this.#quarantineJournal();}
+      if (this.#cut) {this.#retireJournal(true);}
     } catch {this.#journalUncertain = true; this.cutoff();}
   }
 
-  #quarantineJournal(): void {
+  #retireJournal(quarantine = false): void {
     if (this.#journal === undefined || this.#retirement !== undefined) {return;}
     const completion = Promise.withResolvers<void>();
     this.#retirement = completion.promise;
-    try {this.#journal.quarantine();} catch {this.#journalUncertain = true;}
+    if (quarantine) {
+      this.#journalUncertain = true;
+      try {this.#journal.quarantine();} catch {this.#journalUncertain = true;}
+    }
+    // Healthy retirement seals synchronously; actual journal uncertainty stays sealed.
     // Own retirement before calling it, including synchronous failures/reentrancy.
     try {
       void this.#journal.retire().then(result => {this.#journalRetired = result === "retired"; return this.#journalRetired;},
@@ -194,7 +198,7 @@ export class NodeCustodyHttpResources {
     try {this.#session?.close();} catch {this.#uncertain = true;}
     try {this.#input?.localCut.close();} catch {this.#uncertain = true;}
     try {this.#input?.listener.sealAdmission();} catch {this.#uncertain = true;}
-    this.#quarantineJournal();
+    this.#retireJournal();
     this.#reservation.cutoff();
   }
 

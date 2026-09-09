@@ -163,7 +163,11 @@ export const createNodeDockerDeploymentRecipe = (input: NodeDockerDeploymentReci
       if (result.kind !== "ready") {consumptionSettled = result.kind !== "unknown"; return result;}
       return Object.freeze({...result, async retire() {
         const outcome = await result.retire();
-        consumptionSettled = outcome === "retired";
+        // Discharge only this local resource gate, never aggregate preparation
+        // or operation truth. A fulfilled unknown or zero uses is insufficient.
+        const evidence = result.disposalEvidence?.();
+        consumptionSettled = evidence?.closed === true &&
+          (evidence.persistedSeal === "retired" || evidence.persistedSeal === "quarantined");
         return outcome;
       }});
     });

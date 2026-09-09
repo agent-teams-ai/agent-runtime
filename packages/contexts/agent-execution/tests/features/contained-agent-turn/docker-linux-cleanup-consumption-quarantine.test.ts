@@ -47,7 +47,11 @@ test("actual composition permits physical cleanup for concrete journal-only quar
         envelope: {tenantId: proof.tenantId, projectId: proof.projectId, operationId: proof.operationId,
           scopeDigest: `sha256:${f.subject.scopeSha256}`, attemptId: proof.attemptId, custodyId: proof.custodyId,
           hostInstanceId: proof.hostInstanceId, hostBootId: proof.hostBootId, executionGenerationId: proof.executionGenerationId,
-          ...references, signerIdentity: "synthetic:signer"}}).prepare();
+          ...references, signerIdentity: "synthetic:signer"}}).prepare().then(result => {
+          // Exercise real uncertainty, independently of ordinary healthy cutoff.
+          if (result.kind === "ready") {result.quarantine();}
+          return result;
+        });
     }},
   }});
   assert.equal((await owner.prepareClaimed(f.claimed)).kind, "quarantined");

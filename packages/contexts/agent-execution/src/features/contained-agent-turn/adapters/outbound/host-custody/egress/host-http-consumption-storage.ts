@@ -277,6 +277,7 @@ export class HostHttpConsumptionStorage {
 
   public persistTombstone(bytes: Buffer): boolean {
     let fd: number | undefined;
+    let persisted = false;
     try {
       // On pathname replacement retain evidence in the pinned old directory.
       // Never follow/recreate the replacement and never truncate old evidence.
@@ -294,9 +295,17 @@ export class HostHttpConsumptionStorage {
           !readBounded(fd, bytes.length).equals(bytes)) { return false; }
       this.rootSnapshot = this.assertHeldRoot();
       this.assertRoot();
-      return true;
+      persisted = true;
     } catch { return false; }
-    finally { if (fd !== undefined) { try { fs.closeSync(fd); } catch { /* Already sealed; no retry. */ } } }
+    finally {
+      if (fd !== undefined) {
+        try { fs.closeSync(fd); }
+        // Close may have consumed the descriptor before failing. Withhold the
+        // seal acknowledgement; never retry a possibly reused descriptor.
+        catch { persisted = false; }
+      }
+    }
+    return persisted;
   }
 
   public async close(): Promise<void> {

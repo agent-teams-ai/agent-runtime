@@ -188,6 +188,8 @@ test("unknown listener cleanup cannot tombstone even after later native close ac
 test("release timeout keeps concrete pending retirement and cannot report released", async () => {
   const f = await fixture(); assert.equal((await f.prepare()).kind, "prepared");
   const retirement = deferred<void>(); f.storage.closeGate = retirement.promise;
+  // Keep this negative case uncertain after physical cleanup acknowledges.
+  f.storage.retiredUnknown = true;
   burn(f); await tick();
   // Exercise the existing bounded release without waiting the default 15 seconds.
   const live = liveFor(f.custodyRef);
@@ -206,6 +208,7 @@ test("release timeout keeps concrete pending retirement and cannot report releas
 
 test("retained endpoint requires V4 cutoff, socket closure, exact removal and a fresh release intent", async () => {
   const f = await fixture(); assert.equal((await f.prepare()).kind, "prepared");
+  f.storage.retiredUnknown = true; // Physical V4 prerequisites cannot repair consumption uncertainty.
   await f.observe("listener_allocated"); await f.observe("container_attached");
   await f.intent("route_intent"); await f.observe("route_installed");
   await f.intent("inbound_intent"); await f.observe("inbound_allocated");
@@ -263,7 +266,7 @@ for (const cancelled of [false, true]) {
     assert.equal(f.servers[0]!.closeCalls, 0);
     assert.equal((await f.release()).kind, "unproven");
     await f.authorizeRelease();
-    assert.equal((await f.release()).kind, cancelled ? "released" : "unproven");
+    assert.equal((await f.release()).kind, "released");
     assert.equal(f.servers[0]!.closeCalls, 1);
   });
 }
@@ -283,3 +286,25 @@ test("unknown deployment close retains the same listener and original release in
   await f.release(); assert.equal(closes, 2);
   assert.equal(f.records().filter(kind => kind === "listener_release").length, 1);
 });
+
+for (const uses of [0, 1]) {
+  test(`healthy concrete owner cleanup seals synchronously and closes once (${uses} uses)`, async () => {
+    const f = await fixture(); const prepared = await f.prepare();
+    assert.equal(prepared.kind, "prepared"); if (prepared.kind !== "prepared") {return;}
+    const proof = f.lifetime.committedDispatchProof;
+    const key = {namespace: "provider-process-egress/v2" as const, tenantId: proof.tenantId,
+      projectId: proof.projectId, operationId: proof.operationId, boundaryUseId: "boundary:healthy"};
+    if (uses === 1) {assert.equal(prepared.journal.consume(key, `sha256:${"a".repeat(64)}`), "consumed");}
+    const bytes = Buffer.from(f.storage.bytes);
+    burn(f);
+    assert.equal(prepared.journal.consume({...key, boundaryUseId: "boundary:late"}, `sha256:${"b".repeat(64)}`), "unknown");
+    assert.match(f.storage.disposition, /"disposition":"retired"/u);
+    assert.ok(f.storage.disposition.includes(`"acknowledgedUses":${uses}`));
+    await f.authorizeRelease();
+    assert.equal((await f.release()).kind, "released");
+    assert.equal((await f.release()).kind, "released");
+    assert.equal(f.storage.closes, 1); assert.equal(f.storage.locks, 0);
+    assert.equal(f.storage.tombstones, 1); assert.equal(f.servers[0]!.closeCalls, 1);
+    assert.deepEqual(f.storage.bytes, bytes);
+  });
+}
