@@ -131,11 +131,12 @@ test("component evidence: kernel retains the original finalizer receiver, callba
   await assert.rejects(owner.custody.start(start)); assert.equal(finishes, 1);
 });
 
-import {nativeStartDiagnostic, retainNativeStartDiagnostic, linkNativeStartDiagnostic, nativeStartStep, recordNativeStart} from "../../../src/features/contained-agent-turn/composition/docker-native-start-diagnostic.ts";
+import {nativeStartDiagnostic, retainNativeStartDiagnostic, linkNativeStartDiagnostic, nativeStartStep, recordNativeStart} from "../../../dist/features/contained-agent-turn/composition/docker-native-start-diagnostic.js";
 import {brokerFixture} from "../../fixtures/codex-native-broker-0.153.4/fixture.ts";
 
 for (const fault of ["native-plan-recognition", "mount-path-projection", "reservation-evidence-finalize"] as const) {
-  test(`actual Host post-finalizer wrapper attributes ${fault} before cutoff`, async t => {
+  // Workspace authority uses Linux directory descriptors before reaching this probe.
+  test(`actual Host post-finalizer wrapper attributes ${fault} before cutoff`, {skip: process.platform !== "linux"}, async t => {
     const f = await connectionFixture(brokerFixture(t)); t.after(() => f.contain());
     let finishes = 0; let ioRefusals = 0; let ioFailure: unknown; let lifecycleFailure: unknown;
     const files = {bindRoot() {}, install() {}, async quiesce() {}, snapshot() {return {};}, cutoff() {recorder.cutoff();}};

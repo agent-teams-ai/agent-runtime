@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import {writeFileSync, rmSync} from "node:fs";
 import test from "node:test";
 import {nativeFinalizerFixture} from "./support/docker-native-finalizer-fixture.ts";
-import {createDeferredCodexNativeBrokerFiles} from "../../../src/features/contained-agent-turn/composition/deferred-codex-native-broker-files.ts";
-import {createDockerCodexNativeBrokerFinalizer} from "../../../src/features/contained-agent-turn/composition/docker-codex-native-broker-finalizer.ts";
+import {createDeferredCodexNativeBrokerFiles} from "../../../dist/features/contained-agent-turn/composition/deferred-codex-native-broker-files.js";
+import {createDockerCodexNativeBrokerFinalizer} from "../../../dist/features/contained-agent-turn/composition/docker-codex-native-broker-finalizer.js";
 
 for (const failure of ["preflight", "install", "after-install", "files-prepare-validate", "recipe-build", "bind-session", "return-validate", "success"] as const) {
   test(`native start readback: ${failure}, no thrown payload retained`, async t => {
@@ -66,10 +66,10 @@ test("existing deferred native file snapshot carries private start evidence", as
 });
 
 import {nativeStartDiagnostic, linkNativeStartDiagnostic, nativeStartStep, recordNativeStart, retainNativeStartDiagnostic,
-  type NativeStartPhase} from "../../../src/features/contained-agent-turn/composition/docker-native-start-diagnostic.ts";
-import {captureDockerCodexProcessInput} from "../../../src/features/contained-agent-turn/composition/docker-codex-current-kernel-owner.ts";
-import {createCodexDockerPathProjection} from "../../../src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.ts";
-import {dockerProviderProcessMountFacts} from "../../../src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.ts";
+  type NativeStartPhase} from "../../../dist/features/contained-agent-turn/composition/docker-native-start-diagnostic.js";
+import {captureDockerCodexProcessInput} from "../../../dist/features/contained-agent-turn/composition/docker-codex-current-kernel-owner.js";
+import {createCodexDockerPathProjection} from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
+import {dockerProviderProcessMountFacts} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import {connectionFixture, installProtocol} from "./support/docker-codex-kernel-fixture.ts";
 
 const postPhases: readonly NativeStartPhase[] = ["native-plan-recognition", "mount-path-projection",
@@ -118,7 +118,10 @@ for (const fault of ["input", "tmpdir", "executable"] as const) {
     const paths = createCodexDockerPathProjection(dockerProviderProcessMountFacts(f.options.process.launch), f.options.boundary);
     const plan = {...f.options.plan, ...(fault === "tmpdir" ? {tmpDir: "/outside-private-root"} : {}),
       ...(fault === "executable" ? {executablePath: "/outside-image"} : {})};
-    if (fault === "input") {f.options.process.init = {...f.options.process.init, isCurrentGeneration: undefined as never};}
+    // Callback validation belongs to the owner constructor; fail the projection itself here.
+    if (fault === "input") {
+      Object.defineProperty(f.options.process, "init", {get() {throw new Error("synthetic input projection failure");}});
+    }
     assert.throws(() => captureDockerCodexProcessInput(f.options.process, plan, paths, new AbortController().signal, () => true));
     assert.deepEqual(nativeStartDiagnostic(files), {phase: fault === "input" ? "process-input-projection" : `process-input-${fault}`,
       failingPhase: fault === "input" ? "process-input-projection" : `process-input-${fault}`,
