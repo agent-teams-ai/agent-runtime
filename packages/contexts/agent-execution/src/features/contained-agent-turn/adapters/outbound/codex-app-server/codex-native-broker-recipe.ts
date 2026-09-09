@@ -1,5 +1,8 @@
+import { createHash } from "node:crypto";
+import { fstatSync, lstatSync, readSync, realpathSync, type BigIntStats } from "node:fs";
 import {createCodexDockerPathProjection, codexProtocolHostBoundary,
   type CodexDockerPathProjection} from "./codex-docker-path-projection.js";
+import { resolve } from "node:path";
 import { types } from "node:util";
 import type { CodexAppServerPermissionBoundary } from "./codex-app-server-permission-boundary.js";
 import { assertIssuedCodexPermissionBoundary } from "./codex-native-broker-boundary.js";
@@ -25,9 +28,41 @@ export interface CodexNativeBrokerRecipe {
   readonly catalogSha256: typeof CODEX_NATIVE_CATALOG_SHA256;
 }
 const boundaries = new WeakMap<CodexNativeBrokerRecipe, CodexAppServerPermissionBoundary>();
+const darwinStateDirectories = new WeakMap<CodexNativeBrokerRecipe, string>();
+export const codexNativeBrokerDarwinStateDirectory = (recipe: CodexNativeBrokerRecipe): string | undefined => darwinStateDirectories.get(recipe);
 const dockerPaths = new WeakMap<CodexNativeBrokerRecipe, CodexDockerPathProjection>();
 export const codexNativeBrokerDockerPaths = (recipe: CodexNativeBrokerRecipe) => dockerPaths.get(recipe);
 const rejected = (): TypeError => new TypeError("Codex native broker recipe rejected");
+
+// Fixed private native recipe observations borrowed from DarwinCodexNativeFiles.
+// The installer alone owns creation/descriptors/cleanup; this map is neither a
+// credentials authority nor another lifecycle owner. No fields enter the public
+// recipe. Linux has no entry and keeps its exact config and material preimage.
+const darwinInstallations = new WeakMap<CodexNativeBrokerRecipe, Readonly<{fd: number; stats: BigIntStats; uuid: string}>>();
+export const retainDarwinCodexInstallation = (recipe: CodexNativeBrokerRecipe, fd: number, stats: BigIntStats, uuid: string): void => {
+  if (!darwinStateDirectories.has(recipe) || darwinInstallations.has(recipe) ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(uuid)) {throw rejected();}
+  darwinInstallations.set(recipe, Object.freeze({fd, stats, uuid}));
+  darwinCodexInstallationMaterial(recipe);
+};
+export const darwinCodexInstallationMaterial = (recipe: CodexNativeBrokerRecipe): readonly string[] | undefined => {
+  if (!darwinStateDirectories.has(recipe)) {return undefined;}
+  const owned = darwinInstallations.get(recipe);
+  if (owned === undefined) {throw new TypeError("Darwin installation owner missing");}
+  const path = `${codexNativeBrokerBoundary(recipe).codexHome}/installation_id`;
+  const named = lstatSync(path, {bigint: true}); const held = fstatSync(owned.fd, {bigint: true});
+  for (const current of [named, held]) {
+    if (!current.isFile() || current.nlink !== 1n || current.dev !== owned.stats.dev || current.ino !== owned.stats.ino ||
+        current.uid !== owned.stats.uid || current.mode !== 0o100644n || current.size !== 36n ||
+        current.mtimeNs !== owned.stats.mtimeNs || current.ctimeNs !== owned.stats.ctimeNs) {throw new TypeError("Darwin installation changed");}
+  }
+  const bytes = Buffer.alloc(37); const count = readSync(owned.fd, bytes, 0, bytes.length, 0);
+  if (count !== 36 || bytes.subarray(0, count).toString() !== owned.uuid || realpathSync(path) !== path) {
+    throw new TypeError("Darwin installation bytes changed");
+  }
+  return Object.freeze([path, String(held.dev), String(held.ino), createHash("sha256").update(owned.uuid).digest("hex")]);
+};
+
 
 /** Descriptor-only reading, never serialization of inputs that may hold secrets. */
 export const snapshotCodexDataRecord = (input: unknown): Record<string, unknown> => {
@@ -92,10 +127,18 @@ const createRecipe = (input: {
 export const createCodexNativeBrokerRecipe = (input: Parameters<typeof createRecipe>[0]): CodexNativeBrokerRecipe => createRecipe(input);
 
 /** Private Darwin composition only; existing Docker recipe acceptance is unchanged. */
-export const createDarwinCodexNativeBrokerRecipe = (input: Omit<Parameters<typeof createRecipe>[0], "dockerMounts">): CodexNativeBrokerRecipe => {
+export const createDarwinCodexNativeBrokerRecipe = (input: Omit<Parameters<typeof createRecipe>[0], "dockerMounts"> & {readonly tmpDir: string}): CodexNativeBrokerRecipe => {
   if (!/^http:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}\/backend-api\/codex$/u.test(input.endpoint) ||
       Object.hasOwn(input, "dockerMounts")) {throw rejected();}
-  return createRecipe(input, true);
+  const data = snapshotCodexNativeInput(input, ["boundary", "endpoint", "profile", "tmpDir"]);
+  const tmpDir = data.tmpDir;
+  if (typeof tmpDir !== "string" || resolve(tmpDir) !== tmpDir || tmpDir === "/" ||
+      [...tmpDir].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) {throw rejected();}
+  const recipe = createRecipe({boundary: input.boundary, endpoint: input.endpoint, profile: input.profile}, true);
+  // Private Darwin recipe metadata only. The reservation validates this exact
+  // name and retained directory identity; Linux recipe shape/bytes stay fixed.
+  darwinStateDirectories.set(recipe, tmpDir);
+  return recipe;
 };
 
 export const codexNativeBrokerBoundary = (recipe: CodexNativeBrokerRecipe): CodexAppServerPermissionBoundary => {
@@ -112,6 +155,7 @@ export const assertCodexNativeBrokerBoundary = (
 export const codexNativeBrokerUserOverrides = (recipe: CodexNativeBrokerRecipe) => {
   codexNativeBrokerBoundary(recipe);
   return {
+    ...(darwinStateDirectories.has(recipe) ? {sqlite_home: darwinStateDirectories.get(recipe)!} : {}),
     model_provider: "ar_broker", model: "gpt-5.4", model_catalog_json: recipe.catalogPath,
     cli_auth_credentials_store: "file", allow_login_shell: false,
     shell_environment_policy: { exclude: [CODEX_LOCAL_BROKER_CAPABILITY_ENV] },
@@ -158,7 +202,7 @@ export const codexNativeBrokerEffectiveOverrides = (recipe: CodexNativeBrokerRec
 export const renderCodexNativeBrokerConfig = (recipe: CodexNativeBrokerRecipe): string => {
   const boundary = codexNativeBrokerBoundary(recipe);
   const quote = JSON.stringify;
-  return `model_provider = "ar_broker"
+  return `${darwinStateDirectories.has(recipe) ? `sqlite_home = ${quote(darwinStateDirectories.get(recipe))}\n` : ""}model_provider = "ar_broker"
 model = "gpt-5.4"
 model_catalog_json = ${quote(recipe.catalogPath)}
 cli_auth_credentials_store = "file"

@@ -272,4 +272,3 @@ process.on("message", message => {
 });
 send({ type: "ready" });
 `;
-

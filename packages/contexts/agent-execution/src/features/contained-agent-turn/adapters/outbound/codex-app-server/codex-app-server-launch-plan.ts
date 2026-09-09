@@ -19,7 +19,7 @@ import {
 import { DISABLED_CODEX_FEATURES } from "./codex-app-server-config-defaults.js";
 
 import {
-  assertCodexNativeBrokerBoundary, CODEX_LOCAL_BROKER_CAPABILITY_ENV,
+  darwinCodexInstallationMaterial, codexNativeBrokerDarwinStateDirectory, assertCodexNativeBrokerBoundary, CODEX_LOCAL_BROKER_CAPABILITY_ENV,
   CODEX_NATIVE_BROKER_DISABLED_FEATURES, renderCodexNativeBrokerConfig, snapshotCodexNativeInput,
   type CodexNativeBrokerRecipe,
 } from "./codex-native-broker-recipe.js";
@@ -55,6 +55,10 @@ const nativeLaunchInput = (options: CodexAppServerLaunchPlanOptions): Readonly<N
   const recipe = data.recipe as CodexNativeBrokerRecipe;
   const files = data.files as CodexNativeBrokerFiles;
   assertCodexNativeBrokerBoundary(recipe, options.boundary);
+  const stateDirectory = codexNativeBrokerDarwinStateDirectory(recipe);
+  if (stateDirectory !== undefined && (options.platformTarget?.platform !== "darwin" || stateDirectory !== options.tmpDir)) {
+    throw new TypeError("Darwin native state differs from reserved TMPDIR");
+  }
   if (typeof data.localCapability !== "string" || data.localCapability.length < 32 || data.localCapability.length > 128
     || /[^A-Za-z0-9_-]/u.test(data.localCapability)) {
     throw new TypeError("Codex native broker capability rejected");
@@ -298,6 +302,7 @@ export const createCodexAppServerFinalizableLaunchPlan = (
       validateCodexAppServerLaunchPlanRoots(base);
       const final = createCodexAppServerLaunchPlan({...captured, nativeBroker: {recipe, files, localCapability}});
       const materialSha256 = createHash("sha256").update(JSON.stringify([
+        ... (darwinCodexInstallationMaterial(recipe) === undefined ? [] : [darwinCodexInstallationMaterial(recipe)]),
         recipe.kind, recipe.profile, recipe.endpoint, renderCodexNativeBrokerConfig(recipe), recipe.catalogSha256,
         recipe.catalogPath, final.workspaceRef, final.codexHome, final.tmpDir, final.executablePath,
         final.containmentProfile,

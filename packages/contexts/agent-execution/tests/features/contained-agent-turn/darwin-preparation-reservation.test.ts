@@ -76,6 +76,31 @@ test("outer preparation binds actual reserved TMPDIR before allocation and at fi
         assert.deepEqual(result, {kind: "prepared"});
         const final = NodeProviderProcessCustodyCore.launchView(owner, reserved.custodyRef)!.readFinal();
         assert.equal(final.plan.environment.TMPDIR, tmpDir);
+        const home = f.boundary.codexHome; const installation = `${home}/installation_id`;
+        const config = fs.readFileSync(`${home}/config.toml`, "utf8");
+        assert.ok(config.startsWith(`sqlite_home = ${JSON.stringify(tmpDir)}\n`));
+        assert.match(fs.readFileSync(installation, "utf8"), /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u);
+        assert.equal(fs.lstatSync(installation).mode & 0o777, 0o644);
+        const generated = live.httpReservation.darwinRoute!.projection.profile;
+        assert.ok(generated.includes('(allow file-read-data (literal "/"))'));
+        assert.ok(generated.includes(`(allow file-write-data (literal "${installation}"))`));
+        assert.deepEqual(generated.split("\n").filter(line => line.startsWith("(allow ") && /file-write/u.test(line)), [
+          '(allow file-read* file-write-data (literal "/dev/null"))',
+          `(allow file-write-data (literal "${installation}"))`,
+          `(allow file-read* file-write* (subpath "${tmpDir}"))`,
+        ]);
+        for (const forbidden of ['(subpath "/")', '(allow file-read* (literal "/"))',
+          `(allow file-read* file-write* (subpath "${home}"))`,
+          `(allow file-read* file-write* (subpath "${f.boundary.workspaceRef}"))`]) {
+          assert.equal(generated.includes(forbidden), false);
+        }
+        live.launchBinding.firstStart(live);
+        assert.equal(live.launchBinding.executionPermitted(live), true);
+        const original = fs.lstatSync(installation).ino;
+        mutate(installation, {ino: 900004});
+        assert.equal(live.launchBinding.executionPermitted(live), false);
+        mutate(installation, {ino: original});
+        assert.equal(live.launchBinding.executionPermitted(live), true);
         assert.deepEqual(live.httpReservation.darwinRoute!.projection.writePaths, [tmpDir]);
         assert.equal(live.httpReservation.darwinRoute!.state, "launch-authorized");
         assert.ok(preparationEffects.slice(before).includes("listen"));
@@ -94,8 +119,26 @@ test("outer preparation binds actual reserved TMPDIR before allocation and at fi
         assert.ok(effects.includes("listener-close"));
         assert.ok(effects.includes(`unlink:${f.boundary.codexHome}/config.toml`));
         assert.ok(effects.includes(`unlink:${f.boundary.codexHome}/models.json`));
+        assert.ok(effects.includes(`unlink:${f.boundary.codexHome}/installation_id`));
       }
       live.launchAuthority?.close(); live.retainedWorkspaceAuthority?.close(); live.privateRootCleanupAuthority?.close();
     }
   }
+});
+
+test("issued Darwin recipe with another state directory cannot stage against the actual reservation", async t => {
+  const f = fixture("analysis", true); const reserved = await f.reserve(); t.after(reserved.close);
+  const {createDarwinCodexNativeBrokerRecipe} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.js");
+  const {DarwinCodexNativeFiles} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-codex-native-files.js");
+  const {prepareCodexNativeBrokerFiles} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-files.js");
+  const recipe = createDarwinCodexNativeBrokerRecipe({boundary: f.boundary, profile: "codex-chatgpt",
+    endpoint: "http://127.0.0.1:32123/backend-api/codex", tmpDir: `${f.options.tmpDir}-foreign`});
+  const installer = new DarwinCodexNativeFiles(f.boundary, retainedBytes("models.json"), {record() {}} as never, () => {});
+  t.after(() => installer.cleanup()); installer.install(recipe);
+  const files = await prepareCodexNativeBrokerFiles(recipe);
+  const {createCodexAppServerLaunchPlan} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.js");
+  assert.throws(() => createCodexAppServerLaunchPlan({...f.options,
+    nativeBroker: {recipe, files, localCapability: "synthetic_broker_capability_0123456789"}}), /state differs from reserved TMPDIR/u);
+  await assert.rejects(reserved.bind().stage({recipe, files}));
+  assert.throws(() => reserved.live.launchBinding.view.readFinal());
 });

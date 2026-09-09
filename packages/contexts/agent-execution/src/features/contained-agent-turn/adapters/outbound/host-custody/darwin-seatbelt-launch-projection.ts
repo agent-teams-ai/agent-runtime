@@ -40,6 +40,19 @@ const literal = (path: string): string => {
   }
   return `"${path}"`;
 };
+// Fixed profile selector validation within existing Host composition, not a new
+// state owner. The native file installer retains the actual descriptor/UUID.
+const assertInstallationSelector = (path: string | undefined, readPaths: readonly string[],
+  writePaths: readonly string[], protectedPaths: readonly string[]): void => {
+  if (path !== undefined) {
+    const stats = lstatSync(path, {bigint: true});
+    if (!path.endsWith("/installation_id") || !readPaths.includes(dirname(path)) ||
+        !stats.isFile() || stats.nlink !== 1n || stats.mode !== 0o100644n || stats.uid !== BigInt(process.getuid!()) ||
+        protectedPaths.some(other => overlap(path, other)) || writePaths.some(other => overlap(dirname(path), other))) {
+      throw new TypeError("Darwin installation write exception conflicts");
+    }
+  }
+};
 const issuedProjections = new WeakSet<object>();
 export const isIssuedDarwinSeatbeltProjection = (value: object): boolean => issuedProjections.has(value);
 
@@ -53,17 +66,19 @@ export const createDarwinSeatbeltProjection = (input: Readonly<{
   launcher: DarwinExecutablePin; observer: DarwinExecutablePin; provider: DarwinExecutablePin;
   endpoint: DarwinSeatbeltProjection["endpoint"]; operationBinding: object;
   readPaths: readonly string[]; writePaths: readonly string[]; protectedRoot: string;
+  installationPath?: string;
 }>): DarwinSeatbeltProjection => {
   const endpoint = Object.freeze({...input.endpoint});
   if (endpoint.address !== "127.0.0.1" || endpoint.family !== "IPv4" || !Number.isSafeInteger(endpoint.port) ||
       endpoint.port < 1 || endpoint.port > 65535 || input.launcher.path !== "/usr/bin/sandbox-exec" ||
-      input.readPaths.length > 32 || input.writePaths.length > 8) {throw new TypeError("Darwin route projection rejected");}
+      input.readPaths.length > 32 || input.readPaths.includes("/") || input.writePaths.length > 8) {throw new TypeError("Darwin route projection rejected");}
   const protectedPaths = [input.protectedRoot, input.launcher.path, input.observer.path, input.provider.path];
   for (const path of input.writePaths) {
     if (protectedPaths.some(protectedPath => overlap(path, protectedPath)) || path === "/" || path === "/tmp") {
       throw new TypeError("Darwin profile writable authority conflicts");
     }
   }
+  assertInstallationSelector(input.installationPath, input.readPaths, input.writePaths, protectedPaths);
   // Operation-specific subset of ROOT-INERT-BASELINE's demonstrated bootstrap
   // operations. Diagnostic blanket filesystem and exec grants are not retained.
   const mappedSystemPaths = ["/Library/Apple/System/Library/Frameworks", "/Library/Apple/System/Library/PrivateFrameworks",
@@ -74,6 +89,7 @@ export const createDarwinSeatbeltProjection = (input: Readonly<{
   // Fixed protected system selectors may be absent on a particular OS; unlike
   // captured operation names they do not require filesystem canonicalization.
   const bootstrap = ["(allow sysctl-read)",
+    '(allow file-read-data (literal "/"))',
     '(allow system-mac-syscall (mac-policy-name "vnguard"))',
     '(allow system-mac-syscall (require-all (mac-policy-name "Sandbox") (mac-syscall-number 67)))',
     '(allow file-read* file-write-data (literal "/dev/null"))',
@@ -88,6 +104,7 @@ export const createDarwinSeatbeltProjection = (input: Readonly<{
   const profile = ["(version 1)", "(deny default)",
     `(allow process-exec (literal ${literal(input.provider.path)}))`,
     ...bootstrap,
+    ...(input.installationPath === undefined ? [] : [`(allow file-write-data (literal ${literal(input.installationPath)}))`]),
     ...input.readPaths.map(path => `(allow file-read* (subpath ${literal(path)}))`),
     ...input.writePaths.map(path => `(allow file-read* file-write* (subpath ${literal(path)}))`),
     `(allow file-read* (literal ${literal(input.provider.path)}))`,

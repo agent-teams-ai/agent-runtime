@@ -1,16 +1,19 @@
-import { constants, openSync, closeSync, lstatSync, fstatSync, fsyncSync, writeSync, unlinkSync, readdirSync, realpathSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { constants, fchmodSync, openSync, closeSync, lstatSync, fstatSync, fsyncSync, writeSync, unlinkSync, readdirSync, realpathSync } from "node:fs";
 import type { BigIntStats } from "node:fs";
 import { renderCodexNativeBrokerConfig, CODEX_NATIVE_CATALOG_SHA256, CODEX_NATIVE_CATALOG_BYTES,
-  codexNativeBrokerBoundary, type CodexNativeBrokerRecipe } from "../codex-app-server/codex-native-broker-recipe.js";
+  codexNativeBrokerBoundary, codexNativeBrokerDarwinStateDirectory, retainDarwinCodexInstallation, darwinCodexInstallationMaterial, type CodexNativeBrokerRecipe } from "../codex-app-server/codex-native-broker-recipe.js";
 import type { CodexAppServerPermissionBoundary } from "../codex-app-server/codex-app-server-permission-boundary.js";
 import { darwinDigest } from "./darwin-route-durable-storage.js";
 import type { DarwinRouteLifecycleJournal } from "./darwin-route-lifecycle-journal.js";
 
-/** Fixed two-file installer under the accepted trusted-Host/name-bound model.
+/** Fixed three-file installer under the accepted trusted-Host/name-bound model.
  * Erases only these retained entries; CODEX_HOME/root closure stays unproven. */
 export class DarwinCodexNativeFiles {
   readonly #catalog: Buffer; readonly #home: BigIntStats;
   readonly #files = new Map<string, {fd: number; stats: BigIntStats; erased: boolean; closed: boolean}>();
+  readonly #installationId = randomUUID();
+  #recipe: CodexNativeBrokerRecipe | undefined;
   #attempted = false; #uncertain = false;
   public constructor(readonly boundary: CodexAppServerPermissionBoundary, catalog: Uint8Array,
     readonly journal: DarwinRouteLifecycleJournal, readonly active: () => void) {
@@ -31,14 +34,20 @@ export class DarwinCodexNativeFiles {
   public install(recipe: CodexNativeBrokerRecipe): void {
     this.active(); this.assertHome();
     if (this.#attempted || codexNativeBrokerBoundary(recipe) !== this.boundary) {throw new TypeError("Darwin native recipe conflicts");}
+    if (codexNativeBrokerDarwinStateDirectory(recipe) === undefined) {throw new TypeError("Darwin state directory missing");}
     this.#attempted = true;
-    for (const [name, bytes] of [["config.toml", Buffer.from(renderCodexNativeBrokerConfig(recipe))], ["models.json", this.#catalog]] as const) {
+    for (const [name, bytes, mode] of [["config.toml", Buffer.from(renderCodexNativeBrokerConfig(recipe)), 0o600], ["models.json", this.#catalog, 0o600],
+      ["installation_id", Buffer.from(this.#installationId), 0o644]] as const) {
       this.active(); this.assertHome(); const path = `${this.boundary.codexHome}/${name}`;
       this.journal.record("native_file_create_intent", {path, sha256: darwinDigest(bytes)});
       try {
-        const fd = openSync(path, constants.O_RDWR | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+        const fd = openSync(path, constants.O_RDWR | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, mode);
         const owned = {fd, stats: fstatSync(fd, {bigint: true}), erased: false, closed: false};
         this.#files.set(path, owned);
+        // Only this retained newly-created descriptor is chmodded by the Host.
+        // Native code needs 0644 even with a restrictive Host umask; the provider
+        // receives file-write-data only, never create/delete/chmod authority.
+        if (name === "installation_id") {fchmodSync(fd, mode);}
         let offset = 0;
         while (offset < bytes.length) {
           const count = writeSync(fd, bytes, offset, bytes.length - offset, offset);
@@ -48,11 +57,25 @@ export class DarwinCodexNativeFiles {
         this.syncHome(); this.active(); this.assertHome();
         const named = lstatSync(path, {bigint: true});
         if (named.ino !== owned.stats.ino || named.dev !== owned.stats.dev || named.nlink !== 1n ||
-            named.size !== BigInt(bytes.length) || named.mode !== 0o100600n) {throw new Error("Darwin native file changed");}
+            named.size !== BigInt(bytes.length) || named.mode !== BigInt(0o100000 | mode)) {throw new Error("Darwin native file changed");}
         this.journal.record("native_file_created", {path, dev: String(named.dev), ino: String(named.ino), sha256: darwinDigest(bytes)});
       } catch (error) {this.#uncertain = true; throw error;}
     }
+    const installation = this.#files.get(`${this.boundary.codexHome}/installation_id`)!;
+    retainDarwinCodexInstallation(recipe, installation.fd, installation.stats, this.#installationId);
+    this.#recipe = recipe; this.installationMaterial();
   }
+  /** A generated nonsecret per-operation UUID, never a user installation ID.
+   * Recheck the retained descriptor AND name before each native launch validation.
+   * This stays within the accepted trusted-Host/name-bound threat model. */
+  public installationMaterial(): readonly string[] {
+    this.assertHome();
+    const path = `${this.boundary.codexHome}/installation_id`; const owned = this.#files.get(path);
+    if (owned === undefined || owned.closed || owned.erased || this.#uncertain) {throw new TypeError("Darwin installation unavailable");}
+    if (this.#recipe === undefined) {throw new TypeError("Darwin installation recipe missing");}
+    return darwinCodexInstallationMaterial(this.#recipe)!;
+  }
+
   private syncHome(): void {
     this.assertHome(); const fd = openSync(this.boundary.codexHome, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
     try {

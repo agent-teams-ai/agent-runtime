@@ -84,6 +84,10 @@ modules.set("node:fs", {...blockedFunctions(fs), constants: fs.constants,
   lstatSync: (path: string, options: {bigint?: boolean}) => stats(entry(path), options),
   statSync: (path: string, options: {bigint?: boolean}) => stats(entry(path), options),
   realpathSync: canonical, openSync, closeSync,
+  fchmodSync: (fd: number, mode: number) => {assert.ok(preparationOS); const value = descriptors.get(fd)!;
+    value.mode = 0o100000 | mode; value.revision++;},
+  readSync: (fd: number, buffer: Buffer, offset: number, length: number, position: number) =>
+    descriptors.get(fd)!.bytes.copy(buffer, offset, position, position + length),
   fsyncSync: (fd: number) => {assert.ok(preparationOS && descriptors.has(fd)); preparationEffects.push("fsync");},
   writeSync: (fd: number, bytes: Buffer, offset: number, length: number, position: number) => {
     assert.ok(preparationOS); const value = descriptors.get(fd)!; assert.ok(value && !value.directory);
@@ -203,7 +207,7 @@ export const fixture = (mode: "analysis" | "workspace-write" = "analysis", darwi
   const codexHome = `${privateRootPath}/home`; const tmpDir = `${privateRootPath}/tmp`;
   for (const path of [workspaceRef, codexHome, tmpDir]) {directory(path);}
   const boundary = boundaries.createCodexAppServerPermissionBoundary({codexHome, workspaceRef, intentMode: mode});
-  const recipe = darwinLoopback ? recipes.createDarwinCodexNativeBrokerRecipe({boundary, endpoint: "http://127.0.0.1:32123/backend-api/codex", profile: "codex-chatgpt"})
+  const recipe = darwinLoopback ? recipes.createDarwinCodexNativeBrokerRecipe({boundary, tmpDir, endpoint: "http://127.0.0.1:32123/backend-api/codex", profile: "codex-chatgpt"})
     : recipes.createCodexNativeBrokerRecipe({boundary, endpoint: captures.fixtureEndpoint, profile: "codex-chatgpt"});
   const options = {boundary, executablePath: `${root}/codex`, intentMode: mode, privateRootPath, tmpDir,
     platformTarget: {platform: "darwin", architecture: "arm64"} as const};
@@ -216,10 +220,18 @@ export const fixture = (mode: "analysis" | "workspace-write" = "analysis", darwi
   const input = {attemptId: identity.attemptId, operationId: identity.operationId, intentMode: mode, workspaceRef,
     providerBinding: {...snapshot, credentialBindingDigest: access("codex").credentialBindingDigest,
       providerRouteRef: access("codex").providerRouteRef}};
+  let nativeFiles: import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-codex-native-files.js").DarwinCodexNativeFiles | undefined;
   return {options, boundary, recipe, plan, input, identity, kernelInput,
     workspaceAuthority: () => ({canonicalPath: workspaceRef, descriptorPath: workspaceRef,
       identity: {dev: 1n, ino: BigInt(entry(workspaceRef).ino), mountId: "darwin-statfs:synthetic"}}),
     async install() {
+      if (darwinLoopback) {
+        enablePreparationOS();
+        const {DarwinCodexNativeFiles} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-codex-native-files.js");
+        nativeFiles = new DarwinCodexNativeFiles(boundary, retainedBytes("models.json"), {record() {}} as never, () => {});
+        nativeFiles.install(recipe);
+        return filesIssuer.prepareCodexNativeBrokerFiles(recipe);
+      }
       file(`${codexHome}/config.toml`, Buffer.from(recipes.renderCodexNativeBrokerConfig(recipe)));
       file(recipe.catalogPath, retainedBytes("models.json")); entry(codexHome).revision += 1;
       return filesIssuer.prepareCodexNativeBrokerFiles(recipe);
@@ -254,6 +266,7 @@ export const fixture = (mode: "analysis" | "workspace-write" = "analysis", darwi
         // This in-memory fixture owns teardown, including the independently
         // retained root handle. Closing it is not a product release or deletion.
         live.privateRootCleanupAuthority?.close();
+        return nativeFiles?.cleanup();
       }, bind() {return live.launchBinding.bind(live, lifetime);}};
     },
   };

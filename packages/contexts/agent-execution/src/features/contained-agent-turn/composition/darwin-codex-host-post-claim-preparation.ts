@@ -129,15 +129,15 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
           },
         });
         owner.assertActive(); if (resources.kind !== "prepared" || resources.address.address !== "127.0.0.1") {throw new Error("Darwin HTTP preparation unproven");}
+        const recipe = createDarwinCodexNativeBrokerRecipe({boundary: options.boundary,
+          endpoint: `http://127.0.0.1:${resources.address.port}/backend-api/codex`, profile: "codex-chatgpt", tmpDir: options.tmpDir});
+        owner.assertWritableTmp(options.tmpDir); files!.install(recipe); owner.assertActive();
         const projection = createDarwinSeatbeltProjection({launcher, observer, provider,
           endpoint: {...resources.address, address: "127.0.0.1"}, operationBinding: {proof: proof.proofDigest,
-            generation: lifetime.hostLifecycleGenerationSha256}, protectedRoot: options.durableRoot.path,
+            generation: lifetime.hostLifecycleGenerationSha256, installation: files!.installationMaterial()}, protectedRoot: options.durableRoot.path,
           readPaths: ["/System/Library", "/usr/lib", options.boundary.workspaceRef, options.boundary.codexHome],
-          writePaths: [options.tmpDir]});
+          writePaths: [options.tmpDir], installationPath: `${options.boundary.codexHome}/installation_id`});
         owner.authorize(projection);
-        const recipe = createDarwinCodexNativeBrokerRecipe({boundary: options.boundary,
-          endpoint: `http://127.0.0.1:${resources.address.port}/backend-api/codex`, profile: "codex-chatgpt"});
-        files!.install(recipe); owner.assertActive();
         const preparedFiles = await prepareCodexNativeBrokerFiles(recipe); owner.assertActive();
         const finalizer = preparation.finalize(lifetime);
         const staged = await finalizer.stage({recipe, files: preparedFiles}); owner.assertActive();
