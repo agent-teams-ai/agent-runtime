@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import {mock, test} from 'node:test';
-import fs from 'node:fs';
-import {readFileSync} from 'node:fs';
+import fs, {readFileSync} from 'node:fs';
 
 // Built artifacts, exactly as other APP tests. No production source rewriting.
 const auditRoot = new URL('../../../../../', import.meta.url);

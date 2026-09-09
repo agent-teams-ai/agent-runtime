@@ -8,6 +8,9 @@ import {initialHttpEgressState} from "../../../dist/features/contained-agent-tur
 import {createStrictHttpEgressBroker} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-egress-broker.js";
 import {createEgressFixture} from "./http-egress-test-fixture.ts";
 
+const canonical = (value: unknown) => JSON.stringify(Object.fromEntries(Object.entries(value as object).toSorted(
+  ([left], [right]) => left < right ? -1 : left > right ? 1 : 0)));
+
 const scope = {tenantId: "tenant-1", projectId: "project-1", deploymentId: "deployment-1"};
 const receipt = () => ({schema: "agent-runtime.host-http-egress-receipt/v1" as const,
   operationId: "operation-1", attemptId: "attempt-1", requestId: "request-1", ...initialHttpEgressState()});
@@ -72,8 +75,6 @@ test("complete canonical replay ignores field order and conflicts on changed evi
 });
 
 test("invalid retained winners remain unchanged and cannot establish a conflict", async t => {
-  const canonical = (value: unknown) => JSON.stringify(Object.fromEntries(Object.entries(value as object).sort(
-    ([left], [right]) => left < right ? -1 : left > right ? 1 : 0)));
   const original = receipt(); const valid = canonical(original);
   const cases: [string, unknown][] = [
     ["null", null], ["undefined", undefined], ["number", 42], ["object", original],
