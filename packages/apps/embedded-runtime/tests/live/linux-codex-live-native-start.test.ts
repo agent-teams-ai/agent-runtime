@@ -81,7 +81,8 @@ test("retention is bounded and release leaves only immutable projected evidence"
 
 for (const phase of ["native-plan-recognition", "mount-path-projection", "process-input-projection",
   "process-input-tmpdir", "process-input-executable", "reservation-evidence-finalize",
-  "plan-publication", "prepared-handoff", "plan-root-validation", "bridge-open"] as const) {
+  "plan-publication", "prepared-handoff", "plan-root-validation", "bridge-open",
+  "preparation-construction", "host-attach"] as const) {
   test(`existing collector emits post-finalizer ${phase} and only allowlisted category`, async () => {
     const nativeStart = {phase, lastCompleted: "return", failingPhase: phase, cutoff: true, errorCode: "unknown"};
     const collector = createLiveNativeStartCollector();
@@ -91,7 +92,17 @@ for (const phase of ["native-plan-recognition", "mount-path-projection", "proces
     await assert.rejects(collector.settle(async () => {throw failure;}), error => error === failure);
     assert.deepEqual(collector.collect(), [{custodyId: "custody:post-finalizer", nativeStart}]);
     assert.equal(projectLiveNativeStart({nativeStart: {...nativeStart, errorCode: "ESECRET"}}), undefined);
-    assert.equal(projectLiveNativeStart({nativeStart: {...nativeStart, failingPhase: "SECRET"}}), undefined);
-    assert.equal(projectLiveNativeStart({nativeStart: {...nativeStart, lastCompleted: "SECRET"}}), undefined);
+    for (const field of ["phase", "lastCompleted", "failingPhase"] as const) {
+      const expected = {...diagnostic, [field]: phase};
+      const projected = projectLiveNativeStart({nativeStart: {...expected, error: failure}});
+      assert.deepEqual(projected, expected);
+      assert.equal(Object.isFrozen(projected), true);
+      assert.equal(JSON.stringify(projected), JSON.stringify(expected));
+      for (const invalid of ["SECRET", `${phase}-unknown`, "", undefined, 42, {}, false]) {
+        assert.equal(projectLiveNativeStart({nativeStart: {...expected, [field]: invalid}}), undefined);
+      }
+    }
+    assert.equal(projectLiveNativeStart({nativeStart: {...nativeStart, cutoff: "true"}}), undefined);
+    assert.equal(projectLiveNativeStart({nativeStart: {...nativeStart, errorCode: failure}}), undefined);
   });
 }

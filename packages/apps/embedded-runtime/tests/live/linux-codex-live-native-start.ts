@@ -6,7 +6,8 @@ const phases = ["preflight", "recipe-create", "ingress-open", "install", "after-
   "files-prepare-validate", "after-files", "recipe-build", "recipe-validate", "bind-session",
   "return-validate", "return", "native-plan-recognition", "mount-path-projection",
   "process-input-projection", "process-input-tmpdir", "process-input-executable",
-  "reservation-evidence-finalize", "plan-publication", "prepared-handoff", "plan-root-validation", "bridge-open"] as const;
+  "reservation-evidence-finalize", "plan-publication", "prepared-handoff", "plan-root-validation", "bridge-open",
+  "preparation-construction", "host-attach"] as const;
 // Read only named own data fields; never enumerate or invoke diagnostic accessors.
 const field = (value: unknown, key: string): unknown => {
   if (value === null || typeof value !== "object" || types.isProxy(value)) {return undefined;}
