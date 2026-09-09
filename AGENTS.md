@@ -18,6 +18,11 @@ Use [.agents/skills/docs-authoring/SKILL.md](.agents/skills/docs-authoring/SKILL
 
 Guardrails:
 
+- Every new production feature, including in excluded packages or legacy files,
+  must follow Feature Module Standard v1 and deliver scoped adoption and blocking
+  conformance evidence. Follow the
+  [new-feature requirements](docs/architecture/feature-module-standard-v1-candidate.md#new-production-features)
+  before implementation; current exclusions do not exempt new capabilities.
 - Treat accepted ADRs and promoted architecture rules as normative. Evidence
   and spike documents do not independently authorize production behavior.
 - Do not run live provider or agent commands on user projects. Use only

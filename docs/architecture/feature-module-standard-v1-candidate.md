@@ -3,7 +3,7 @@ id: runtime.architecture.feature-module-standard-v1-candidate
 type: architecture
 status: active
 owner: architecture
-summary: Defines scoped active conformance for three Feature Module Standard v1 features.
+summary: Defines scoped active conformance and mandatory standards for every new production feature.
 related:
   - ADR-0005
   - ADR-0007
@@ -29,6 +29,85 @@ owned by `agent-teams-ai/.github` at
 This is scoped active conformance for exactly three named features. It is not a
 claim of repository-wide conformance, and no unlisted package, application,
 feature, experiment, or bounded context is included.
+
+## New production features
+
+Every new production feature MUST strictly follow organization Feature Module
+Standard v1, including in currently excluded packages. This is a prospective
+repository-wide authoring obligation, separate from the existing active
+conformance claim for exactly three features in two roots under ADR-0013.
+Existing exclusions describe existing unqualified code; they do not permit new
+nonconforming capabilities. The authoring obligation does not itself widen the
+active profile or certify existing non-adopted behavior.
+
+The obligation covers real new capabilities in every context, platform,
+integration, SDK, and testing module, and application-owned behavior. Application
+executables should remain thin composition roots, without absorbing behavior
+owned by a production module. Adding a capability inside an existing legacy
+feature, function, or file does not evade this rule. Review semantic behavior,
+not just new directories. Ordinary helpers and behavior-preserving refactors
+are not automatically new features or composition graph nodes.
+
+Before implementation, record the semantic owner, module architectural role,
+feature boundary, and the current standard ID, version, canonical path and
+content digest from the identity above. Identify concrete topology and scope
+changes, dependency edges, public surfaces, and compatibility decisions. Compare
+the consumer pin with the canonical standard. Identity changes require explicit
+review and retained pin/delta evidence before adoption.
+
+Use the smallest substantive layers appropriate to the role. Domain invariants
+and domain types stay in domain; transport-independent inputs and outputs are
+application models; external contracts stay outer. Domain and application must
+not import transport or SDK DTOs. Preserve feature-owned ports, adapters, tests,
+and curated entrypoints. Do not invent ceremonial aggregates, empty layers,
+one feature per class, or a new module merely to isolate a folder.
+
+The same feature delivery MUST adopt the feature in the appropriate local
+profile and topology, with actual blocking enforcement and disposable positive
+and rejecting fixtures in both fast and full gates. Evidence must cover the
+adopted role and ownership, allowed layers and entrypoints, and rejection of
+unowned production behavior, deep imports, undeclared edges or cycles, empty
+layers, and undeclared modules or exceptions. Include semantic review because
+static discovery alone cannot detect every capability hidden in legacy code.
+
+The existing three-feature checker does not automatically scan excluded roots.
+Its reviewed feature identities and roots are hardcoded. A new feature outside
+that scope, or one requiring checker evolution, needs explicit scoped adoption
+through a new or superseding accepted ADR, with exact paths, ownership,
+compatibility decisions, and deterministic evidence. Preserve ADR-0013 bytes
+and its historical scope; merely appending to its fixed profile is insufficient.
+Implement the necessary checker and gate changes in that feature delivery.
+Do not suppress diagnostics, widen blanket exclusions, grandfather new code, or
+use green CI for the old scope as proof that the new feature conforms.
+
+A new feature MUST NOT be called implemented or merge-ready until its declared
+conformance gate passes for the actual delivered scope. Record exact commands,
+results, fixtures, authority and profile identities, and remaining limitations.
+If adoption or enforcement is unproven, record the exact outstanding work and
+keep the feature pending; pending is not permission to ship a violating feature.
+Dependencies on existing non-adopted behavior require narrow explicit boundaries,
+with honest ownership and scope evidence. They do not require migrating every
+legacy capability, and cannot exempt the new capability from conformance.
+
+For meaningful composition boundaries, also read the canonical Get Modular
+[Consumer Module Standard](https://github.com/agent-teams-ai/get-modular/blob/03a7df64bc5e9939f7b51694a80a7f3d61453f98/docs/architecture/common-assembly.md#consumer-module-standard).
+Its composition requirements apply inside an explicitly accepted Host scope;
+this authoring rule does not mandate installing Assembly everywhere. Review
+current upstream against the consumer pin before adoption or boundary changes,
+retain exact revision/digest and delta evidence, and update affected profiles,
+guidance and rejecting tests together. Keep adoption pending until any required
+migration and enforcement are complete. Meaningful boundaries must be adopted
+or explicitly classified under that contract; fixed feature-local helpers remain
+static imports and typed factories.
+
+At the 2026-09-09 review, Runtime main `245dcb05206b53f7727786d5a94236350e5ca194`
+had no Consumer Module Standard/Assembly adoption pin. The linked Get Modular
+revision was reviewed with whole-document SHA-256
+`ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d`;
+the central Feature Module Standard v1 matched the existing pin above. These are
+review facts, not Assembly adoption. Initial composition adoption must record
+the absence of a prior pin and accept the reviewed revision through a scoped ADR,
+consumer profile and actual conformance evidence.
 
 ## Ownership boundary
 
