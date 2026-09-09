@@ -6,7 +6,7 @@ import test from "node:test";
 import { createDefaultAgentRuntimeHost, AgentRuntimeHostCreationError } from "../dist/composition.js";
 import { createRuntimeSetupAttempt } from "../dist/composition/default-agent-runtime-host.js";
 import { bindRuntimeSetup, runtimeSetupDeclarations, runtimeSetupProfile, createRuntimeSetupFactories } from "../dist/composition/runtime-setup-assembly.js";
-import { registerPassiveSetupScenarios } from "./helpers/assembly-direct-reference.ts";
+import { createExactParityHost, fixtureScope, registerPassiveSetupScenarios } from "./helpers/assembly-direct-reference.ts";
 
 registerPassiveSetupScenarios("Assembly", () => createDefaultAgentRuntimeHost());
 
@@ -654,3 +654,28 @@ for (const concurrent of [false, true]) {
     assert.notEqual(first[1], second[1], "Claude must not reuse another attempt's identity key");
   });
 }
+
+// A valid capability with the wrong platform binding: preparation and all seven
+// factories succeed, but the planner changes observable behavior. No plan or
+// digest corruption and no fabricated dependency outcome is involved.
+test("independent oracle rejects a materialized wrong-platform planner binding", async t => {
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { createCodexSetupInspectionPlanner } = await import("../dist/composition/codex-setup-inspection-planner.js");
+  const root = await mkdtemp(join(tmpdir(), "ar-assembly-mutant-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  let succeeded = false;
+  const host = await createExactParityHost(() => createRuntimeSetupAttempt(undefined, platform => ({
+    ...createRuntimeSetupFactories(platform),
+    codexPlanner: async () => createCodexSetupInspectionPlanner(platform === "darwin" ? "linux" : "darwin"),
+  }), { observeOutcome(outcome) {
+    assert.equal(outcome.status, "succeeded");
+    assert.equal(outcome.created.length, 7);
+    succeeded = true;
+  } }));
+  t.after(() => host.dispose());
+  assert.equal(succeeded, true);
+  await assert.rejects(host.bindAccess(fixtureScope(root)).codexSetup.inspect({}),
+    { code: "ERR_ASSERTION", message: /complete direct\/Assembly observable parity/u });
+});
