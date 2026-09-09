@@ -177,7 +177,7 @@ import { composeHostCustodiedAgentRuntimeHost } from "../dist/composition/host-c
 import {createAgentRuntimeHostDisposalLifecycle, AgentRuntimeHostDisposalIncompleteError} from "../dist/composition/agent-runtime-host-disposal.js";
 import {composeHostCustodiedContainedTurn} from "../dist/composition/contained-turn-feature-composition.js";
 const openedOutcomes = new WeakMap<ContainedTurnKernelCustodyAdapter, Awaited<ReturnType<ContainedTurnKernelCustodyPort["open"]>>>();
-const deferred = () => { let resolve!: () => void; const promise = new Promise<void>(r => {resolve = r;}); return {promise, resolve}; };
+const deferred = () => Promise.withResolvers<void>();
 const shutdown = (harness: ReturnType<typeof createHarness>) => {
   const cancellation = deferred();
   let releases = 0;
@@ -203,7 +203,7 @@ const shutdown = (harness: ReturnType<typeof createHarness>) => {
       return {bindAccess() {throw new Error("unused bindAccess");}, dispose: lifecycle.dispose, [Symbol.asyncDispose]: lifecycle.dispose};
     });
   const disposal = host.dispose();
-  void disposal.then(() => {durablePending = false;}, () => {durablePending = false;});
+  void disposal.then(() => {durablePending = false; return null;}, () => {durablePending = false; return null;});
   return {entered: cancellationEntered.promise, host,
     finish: async () => {
       cancellation.resolve();

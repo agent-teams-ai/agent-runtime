@@ -263,18 +263,22 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
   const sealAdmission = (): void => {disposed = true; custody.sealAdmission();};
   return Object.freeze({custody, provider, sealAdmission, dispose() {
     sealAdmission();
-    let failed = false;
-    let failure: unknown;
-    const close = (action: () => void) => {try {action();} catch (error) {failed = true; failure ??= error;}};
-    for (const record of records.values()) {
-      close(() => record.effectOwner?.cutoff());
-      close(() => record.nativeFiles?.cutoff());
-      close(() => record.owner?.cutoff());
-      close(() => record.provider?.dispose());
-      close(() => record.removeAbort?.());
-      delete record.removeAbort;
-    }
-    close(() => raw.dispose());
-    if (failed) {throw failure;}
+    disposeDockerCustodyRecords(records, raw);
   }});
 };
+
+function disposeDockerCustodyRecords(records: ReadonlyMap<string, Retained>, raw: DockerKernelHostCustody): void {
+  let failed = false;
+  let failure: unknown;
+  const close = (action: () => void) => {try {action();} catch (error) {failed = true; failure ??= error;}};
+  for (const record of records.values()) {
+    close(() => record.effectOwner?.cutoff());
+    close(() => record.nativeFiles?.cutoff());
+    close(() => record.owner?.cutoff());
+    close(() => record.provider?.dispose());
+    close(() => record.removeAbort?.());
+    delete record.removeAbort;
+  }
+  close(() => raw.dispose());
+  if (failed) {throw failure;}
+}
