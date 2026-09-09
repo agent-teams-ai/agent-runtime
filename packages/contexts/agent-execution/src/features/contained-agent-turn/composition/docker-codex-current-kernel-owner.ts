@@ -1,3 +1,4 @@
+import {isHostCustodyDataCallback} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import {linkNativeStartDiagnostic, nativeStartStep, recordNativeStart} from "./docker-native-start-diagnostic.js";
 import {createCodexDockerPathProjection, codexDockerProjectionSource, projectCodexDockerExecutable,
   projectCodexDockerPrivatePath, type CodexDockerPathProjection,
@@ -44,6 +45,9 @@ const attemptDigest = (input: AttemptInput) => digestContainedTurnCanonicalValue
   providerAccessSnapshot: {...input.providerAccessSnapshot}, workspaceId: input.workspaceId,
 });
 
+const applyCallback = Reflect.apply;
+// Keep callback identities intact for prepared-IO validation while retaining their receiver.
+const initReceivers = new WeakMap<DockerProviderProcessInput["init"], DockerProviderProcessInput["init"]>();
 const inert = <T extends object>(value: T): T => Object.freeze(snapshotCodexDataRecord(value)) as T;
 /** Capture data before validation or any callback. Issued plan, boundary and
  * launch capabilities retain their identity; getters/proxies are never read. */
@@ -52,6 +56,11 @@ const captureOptions = (input: CreateDockerCodexCurrentKernelOwnerOptions): Crea
   const process = inert(options.process);
   const expected = inert(process.expected);
   const init = inert(process.init);
+  if (!isHostCustodyDataCallback(init.isCurrentGeneration)
+    || (init.isObservationActive !== undefined && !isHostCustodyDataCallback(init.isObservationActive))
+    || (init.monotonicNow !== undefined && !isHostCustodyDataCallback(init.monotonicNow))) {
+    throw new TypeError("Docker Codex requires inert callbacks");
+  }
   const authority = inert(init.authority);
   const attempt = inert(options.attempt);
   const captured = Object.freeze({...options, platformTarget: inert(options.platformTarget),
@@ -59,10 +68,10 @@ const captureOptions = (input: CreateDockerCodexCurrentKernelOwnerOptions): Crea
       intent: inert(attempt.intent), providerAccessSnapshot: inert(attempt.providerAccessSnapshot)}),
     process: Object.freeze({...process, call: inert(process.call), exec: inert(process.exec),
       expected: Object.freeze({...expected, authority: inert(expected.authority)}),
-      init: Object.freeze({...init, authority: Object.freeze({...authority, expectedIdentity: inert(authority.expectedIdentity)}),
-        ...(process.preparedIo !== undefined || init.isObservationActive === undefined ? {} : {isObservationActive: init.isObservationActive.bind(process.init)})}),
+      init: Object.freeze({...init, authority: Object.freeze({...authority, expectedIdentity: inert(authority.expectedIdentity)})}),
     }),
   });
+  initReceivers.set(captured.process.init, process.init);
   linkNativeStartDiagnostic(captured.process, options.process);
   return captured;
 };
@@ -71,7 +80,8 @@ export const captureDockerCodexProcessInput = (input: DockerProviderProcessInput
   paths: CodexDockerPathProjection, admissionSignal: AbortSignal, isAdmitted: () => boolean): DockerProviderProcessInput => {
   return nativeStartStep(input, "process-input-projection", () => {
   const init = input.init;
-  const isCurrentGeneration = init.isCurrentGeneration.bind(init);
+  const receiver = initReceivers.get(init) ?? init;
+  const isCurrentGeneration = (generation: string) => applyCallback(init.isCurrentGeneration, receiver, [generation]);
   const environment = {...plan.environment, HOME: paths.codexHome, CODEX_HOME: paths.codexHome,
     TMPDIR: nativeStartStep(input, "process-input-tmpdir", () => projectCodexDockerPrivatePath(paths, plan.tmpDir), "process-input-projection")};
   return Object.freeze({
@@ -88,9 +98,9 @@ export const captureDockerCodexProcessInput = (input: DockerProviderProcessInput
       maximumStderrBytes: init.maximumStderrBytes, maximumStdoutBytes: init.maximumStdoutBytes,
       authority: Object.freeze({...init.authority, expectedIdentity: Object.freeze({...init.authority.expectedIdentity})}),
       isCurrentGeneration: (generation: string) => isCurrentGeneration(generation) && isAdmitted(),
-      ...(init.isObservationActive === undefined ? {} : {isObservationActive: init.isObservationActive.bind(init)}),
+      ...(init.isObservationActive === undefined ? {} : {isObservationActive: () => applyCallback(init.isObservationActive!, receiver, [])}),
       ...(init.signal === undefined ? {} : {signal: init.signal}),
-      ...(init.monotonicNow === undefined ? {} : {monotonicNow: init.monotonicNow.bind(init)}),
+      ...(init.monotonicNow === undefined ? {} : {monotonicNow: () => applyCallback(init.monotonicNow!, receiver, [])}),
     }),
   });
   });
@@ -176,7 +186,7 @@ export const createDockerCodexCurrentKernelOwner = (
   const assertOpen = () => {
     if (disposed || processInput.call.signal.aborted || processInput.init.signal?.aborted === true
       || Date.now() >= processInput.call.deadlineEpochMs
-      || !processInput.init.isCurrentGeneration(processInput.expected.generation)) {
+      || !applyCallback(processInput.init.isCurrentGeneration, initReceivers.get(processInput.init) ?? processInput.init, [processInput.expected.generation])) {
       throw new TypeError("Docker Codex attempt admission is closed");
     }
   };
