@@ -1,6 +1,5 @@
-import {isHostCustodyDataCallback} from "../host-custody-inert-record.js";
 import {captureDockerHttpResourceRecord} from "./docker-http-network-resources.js";
-import {isDeepStrictEqual} from "node:util";
+import {isDeepStrictEqual, types} from "node:util";
 import {assertDockerProviderProcessClaimActive, prepareDockerProviderProcessLaunch, claimDockerProviderProcessLaunch, type DockerHostCustodyLifecycle} from "./docker-host-custody-lifecycle.js";
 import {sameDockerAuthority} from "./docker-host-custody-lifecycle-guards.js";
 import type {DockerContainedTurnInitOptions, DockerContainedTurnInitSession} from "./docker-contained-turn-host-custody.js";
@@ -166,9 +165,9 @@ const prepared = new WeakMap<PreparedDockerProviderIo, Readonly<{
 const applyCallback = Reflect.apply;
 const captureInit = (value: DockerProviderProcessInput["init"]): DockerProviderProcessInput["init"] => {
   const options = captureDockerHttpResourceRecord(value);
-  if (!isHostCustodyDataCallback(options.isCurrentGeneration)
-    || (options.isObservationActive !== undefined && !isHostCustodyDataCallback(options.isObservationActive))
-    || (options.monotonicNow !== undefined && !isHostCustodyDataCallback(options.monotonicNow))) {
+  if ((typeof options.isCurrentGeneration !== "function" || types.isProxy(options.isCurrentGeneration))
+    || (options.isObservationActive !== undefined && (typeof options.isObservationActive !== "function" || types.isProxy(options.isObservationActive)))
+    || (options.monotonicNow !== undefined && (typeof options.monotonicNow !== "function" || types.isProxy(options.monotonicNow)))) {
     throw new TypeError("Docker provider IO requires inert callbacks");
   }
   const authority = captureDockerHttpResourceRecord(options.authority);

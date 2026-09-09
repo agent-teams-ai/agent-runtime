@@ -35,3 +35,6 @@ export {HostHttpEgressV4NodeStorage} from "./journal/host-http-egress-v4-node-st
 export {HostHttpEgressV4Journal} from "./journal/host-http-egress-v4-journal.js";
 
 export {captureDockerWorkspaceCustody, readDockerWorkspaceCustody} from "./node-linux-docker-residue-custody.js";
+
+export {createNodeDockerRouteProvenance} from "./node-docker-route-provenance.js";
+export type {NodeDockerRouteSubject} from "./node-docker-route-provenance.js";

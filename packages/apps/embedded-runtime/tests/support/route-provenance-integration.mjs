@@ -26,7 +26,9 @@ const snapshot = await import(new URL('engine/docker-boundary-snapshot.js', dock
 const networkCleanup = await import(new URL('engine/docker-operation-network-codec.js', docker));
 const guards = await import(new URL('docker-host-custody-lifecycle-guards.js', docker));
 const opener = await import(new URL('node-linux-exclusive-route.js', docker));
+const provenance = await import(new URL('node-docker-route-provenance.js', docker));
 stub(new URL('docker-provider-process-entrypoint.js', docker), {
+  createNodeDockerRouteProvenance: provenance.createNodeDockerRouteProvenance,
   NodeUnixSocketDockerEngine: engine.NodeUnixSocketDockerEngine,
   snapshotDockerEnginePolicy: snapshot.snapshotDockerEnginePolicy,
   awaitNetworkCleanupWork: networkCleanup.awaitNetworkCleanupWork,
