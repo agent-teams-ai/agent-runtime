@@ -101,8 +101,8 @@ function run(check) {
       stdout: `${prefix}.stdout`, stderr: `${prefix}.stderr`});
     if (result.error || result.status !== 0 || result.signal) { failed = true; break; }
   }
-  if (capture) writeFileSync(resolve(capture, check ? "stages.json" : "processes.json"),
-    JSON.stringify(records, null, 2)+"\n", {flag: "wx"});
+  if (capture) {writeFileSync(resolve(capture, check ? "stages.json" : "processes.json"),
+    JSON.stringify(records, null, 2)+"\n", {flag: "wx"});}
   process.exitCode = failed ? 1 : 0;
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { relative, resolve } from "node:path";
 
+const skipReason = skip => skip ? (typeof skip === "string" ? skip : "registration skip option evaluated true") : null;
+
 // Node 24's ordered start/pass/fail stream preserves ancestry even for concurrent tests.
 // Per-file summaries bind helper registrations to the explicit manifest input suite.
 export default async function* reporter(source) {
@@ -25,14 +27,14 @@ export default async function* reporter(source) {
       const event = stack.pop();
       assert.equal(event?.title, d.name); assert.equal(stack.length, d.nesting);
       pending.push({...event, status: d.todo ? "todo" : type === "test:fail" ? "failed"
-        : d.skip ? "skipped" : "passed", skip: d.skip ?? null, skipReason: d.skip ? (typeof d.skip === "string" ? d.skip : "registration skip option evaluated true") : null, type: d.details.type});
+        : d.skip ? "skipped" : "passed", skip: d.skip ?? null, skipReason: skipReason(d.skip), type: d.details.type});
     } else if (type === "test:complete" && d.details.passed === false) {
       yield JSON.stringify({kind: "failure", file: d.file ? path(d.file) : null}) + "\n";
     } else if (type === "test:summary") {
       assert.equal(stack.length, 0);
       if (d.file) {
         const suite = path(d.file);
-        for (const event of pending) yield JSON.stringify({kind: "test", suite, ...event}) + "\n";
+        for (const event of pending) {yield JSON.stringify({kind: "test", suite, ...event}) + "\n";}
         yield JSON.stringify({kind: "file", suite, counts: d.counts, success: d.success}) + "\n";
         pending = []; occurrences = new Map();
       } else {

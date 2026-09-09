@@ -58,8 +58,8 @@ export function captureReceipt(root, output, runId) {
     encoding: "utf8", maxBuffer: 256 * 1024 * 1024,
   });
   const end = new Date().toISOString();
-  for (const stream of ["stdout", "stderr"]) writeFileSync(resolve(artifactRoot, `check.${stream}`), result[stream] ?? "");
-  const artifacts = Object.fromEntries(readdirSync(artifactRoot).sort().map(name => [name, sha256(readFileSync(resolve(artifactRoot, name)))]));
+  for (const stream of ["stdout", "stderr"]) {writeFileSync(resolve(artifactRoot, `check.${stream}`), result[stream] ?? "");}
+  const artifacts = Object.fromEntries(readdirSync(artifactRoot).toSorted().map(name => [name, sha256(readFileSync(resolve(artifactRoot, name)))]));
   const receipt = {schemaVersion: 2, evidenceKind: "runtime-setup-adoption-platform-receipt",
     identity: before, target, platform: process.platform, architecture: process.arch,
     cwd: root, nodeExecutable: process.execPath, tools: observed, postgres, command, runId, start, end,
@@ -100,8 +100,8 @@ export function mergeReceipts(root, paths, output) {
   const current = identity(root);
   const loaded = paths.map(path => loadReceipt(resolve(path), current));
   validateCoverage(loaded.map(({receipt, events}) => ({target: receipt.target, events})));
-  const refs = loaded.map(({receipt, sha256, receiptBase64, artifacts}, i) => ({target: receipt.target,
-    path: relative(dirname(resolve(output)), resolve(paths[i])), sha256, receiptBase64, artifacts})).sort((a, b) => a.target.localeCompare(b.target));
+  const refs = loaded.map(({receipt, sha256: receiptSha256, receiptBase64, artifacts}, i) => ({target: receipt.target,
+    path: relative(dirname(resolve(output)), resolve(paths[i])), sha256: receiptSha256, receiptBase64, artifacts})).toSorted((a, b) => a.target.localeCompare(b.target));
   const report = reportBody(root, current, refs);
   writeFileSync(output, json(report), {flag: "wx"});
   return report;
@@ -122,7 +122,7 @@ export function checkV2(root, path) {
     assert.equal(sha256(bytes), ref.sha256, "receipt hash mismatch");
     const receipt = JSON.parse(bytes);
     assert.equal(receipt.target, ref.target);
-    assert.deepEqual(Object.keys(ref.artifacts).sort(), Object.keys(receipt.artifacts).sort(), "bundled artifact inventory mismatch");
+    assert.deepEqual(Object.keys(ref.artifacts).toSorted(), Object.keys(receipt.artifacts).toSorted(), "bundled artifact inventory mismatch");
     const events = validateReceipt(receipt, current, name => {
       assert.ok(Object.hasOwn(ref.artifacts, name), `missing bundled artifact: ${name}`);
       return decodeBytes(ref.artifacts[name]);

@@ -280,12 +280,14 @@ test('PR71 reviewed owners and helpers retain exact live relationships without e
       const edges = boundary.relationships.filter(edge => basename(edge.from) === `${source}.ts`);
       assert.ok(edges.length, `missing reviewed subject: ${id}/${source}`);
       for (const edge of edges) {
-        for (const mutation of ['omitted', 'mode-changed']) {
+        for (const [mutation, mutate] of [
+          ['omitted', (retained, index) => retained.splice(index, 1)],
+          ['mode-changed', (retained, index) => {retained[index].mode = edge.mode === 'runtime' ? 'type-only' : 'runtime';}],
+        ]) {
           const profile = structuredClone(pending);
           const retained = profile.boundaries.find(b => b.id === id).relationships;
           const index = boundary.relationships.indexOf(edge);
-          if (mutation === 'omitted') {retained.splice(index, 1);}
-          else {retained[index].mode = edge.mode === 'runtime' ? 'type-only' : 'runtime';}
+          mutate(retained, index);
           assert.throws(() => verifySourceCensus(profile, census), /live relationships drift/,
             `${mutation}: ${edge.from} -> ${edge.to}`);
         }

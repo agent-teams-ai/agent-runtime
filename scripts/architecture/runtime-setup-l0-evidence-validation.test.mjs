@@ -140,4 +140,4 @@ test("rejects drift even when historical values cannot be recomputed", () => {
 });
 
 // Keep paired-platform rejecting fixtures on the existing architecture gate.
-import "./runtime-setup-l0-evidence-v2.test.mjs";
+await import("./runtime-setup-l0-evidence-v2.test.mjs");

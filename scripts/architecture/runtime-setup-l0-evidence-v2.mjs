@@ -18,8 +18,8 @@ const zero = {tests: 0, failed: 0, passed: 0, cancelled: 0, skipped: 0, todo: 0,
 function counts(events) {
   const result = {...zero};
   for (const e of events) {
-    if (e.type === "suite") result.suites++; else { result.tests++; result[e.status]++; }
-    if (!e.ancestry.length) result.topLevel++;
+    if (e.type === "suite") {result.suites++;} else { result.tests++; result[e.status]++; }
+    if (!e.ancestry.length) {result.topLevel++;}
   }
   return result;
 }
@@ -44,7 +44,7 @@ export function validateStream(bytes, expectedFiles) {
       assert.ok(typeof row.title === "string" && row.title.length > 0);
       equal(row.segment, [row.file, row.line, row.column, row.title, row.ordinal]);
       if (row.status === "passed") { assert.equal(row.skip, null); assert.equal(row.skipReason, null); }
-      else assert.equal(row.skipReason, typeof row.skip === "string" ? row.skip : "registration skip option evaluated true");
+      else {assert.equal(row.skipReason, typeof row.skip === "string" ? row.skip : "registration skip option evaluated true");}
       assert.ok(!ids.has(eventId(row)), "duplicate test identity"); ids.add(eventId(row));
       events.push(row); pending.push(row);
     } else if (row.kind === "output") {
@@ -63,10 +63,10 @@ export function validateStream(bytes, expectedFiles) {
   equal(files.toSorted(), expectedFiles.toSorted(), "missing/duplicate/changed manifest test input");
   equal(summary.counts, counts(events), "process counts disagree with terminal events");
   const byId = new Map(events.map(e => [eventId(e), e]));
-  for (const e of events) if (parentId(e)) {
+  for (const e of events) {if (parentId(e)) {
     assert.ok(ids.has(parentId(e)), "missing parent");
     assert.equal(byId.get(parentId(e)).status, "passed", "skipped parent cannot prove children");
-  }
+  }}
   return events;
 }
 function success(record) {
@@ -75,7 +75,7 @@ function success(record) {
 }
 export function requirePostgres(env, target = "linux-x64") {
   assert.ok(targets.includes(target));
-  if (target === "darwin-arm64") return {required: false, configured: false};
+  if (target === "darwin-arm64") {return {required: false, configured: false};}
   assert.ok(env.AE_ACL_POSTGRES_DISPOSABLE_URL, "missing PostgreSQL disposable prerequisite");
   const url = new URL(env.AE_ACL_POSTGRES_DISPOSABLE_URL);
   assert.ok(["postgres:", "postgresql:"].includes(url.protocol));
@@ -102,7 +102,7 @@ export function validateReceipt(receipt, current, readArtifact) {
     assert.equal(sha256(bytes), receipt.artifacts[name], `artifact hash mismatch: ${name}`);
     return bytes.toString("utf8");
   };
-  for (const name of Object.keys(receipt.artifacts)) artifact(name);
+  for (const name of Object.keys(receipt.artifacts)) {artifact(name);}
   artifact("check.stdout"); artifact("check.stderr");
   const stages = JSON.parse(artifact("stages.json"));
   const processes = JSON.parse(artifact("processes.json"));
@@ -125,22 +125,22 @@ export function validateReceipt(receipt, current, readArtifact) {
     return validateStream(artifact(p.stdout), testProcesses[i].filter(a => !a.startsWith("--")).map(f => `${packagePath}/${f}`));
   });
   assert.equal(new Set(events.map(eventId)).size, events.length, "duplicate process test identity");
-  for (const event of events) if (event.status === "skipped") {
+  for (const event of events) {if (event.status === "skipped") {
     const site = siteFor(event);
     assert.ok(site, `unknown skip: ${eventId(event)}`);
     assert.notEqual(receipt.target, site.target, "applicable-platform skip");
     equal(event.skip, site.reason, "unknown skip reason");
-  }
+  }}
   return events;
 }
 export function validateCoverage(pair) {
-  equal(pair.map(r => r.target).sort(), targets, "missing or duplicate target");
+  equal(pair.map(r => r.target).toSorted(), targets, "missing or duplicate target");
   const maps = pair.map(r => {
     const map = new Map(r.events.map(e => [eventId(e), e]));
     assert.equal(map.size, r.events.length, "duplicate test identity");
     return map;
   });
-  for (let i = 0; i < 2; i++) for (const [id, event] of maps[i]) {
+  for (let i = 0; i < 2; i++) {for (const [id, event] of maps[i]) {
     const peer = maps[1-i].get(id);
     const site = siteFor(event);
     if (event.status === "skipped") {
@@ -148,23 +148,24 @@ export function validateCoverage(pair) {
       assert.notEqual(pair[i].target, site.target, "applicable-platform skip");
       equal(event.skip, site.reason, "unknown skip reason");
       assert.equal(peer?.status, "passed", "skip requires passing peer");
-    } else {
-      assert.equal(event.status, "passed", "failed/cancelled/todo test");
-      if (peer) {
-        if (site && pair[i].target === site.target) assert.equal(peer.status, "skipped", "platform predicate drift");
-        else assert.equal(peer.status, "passed", "portable test must pass both");
-      } else {
-        let ancestor = parentId(event), covered = false;
-        while (ancestor) {
-          const own = maps[i].get(ancestor); assert.ok(own, "missing parent");
-          const other = maps[1-i].get(ancestor), restriction = siteFor(own);
-          if (other?.status === "skipped" && restriction?.target === pair[i].target) {covered = true; break;}
-          ancestor = parentId(own);
-        }
-        assert.ok(covered, `unexplained inventory difference: ${id}`);
-      }
+      continue;
     }
-  }
+    assert.equal(event.status, "passed", "failed/cancelled/todo test");
+    if (peer) {
+      const platformPeer = site && pair[i].target === site.target;
+      assert.equal(peer.status, platformPeer ? "skipped" : "passed",
+        platformPeer ? "platform predicate drift" : "portable test must pass both");
+      continue;
+    }
+    let ancestor = parentId(event), covered = false;
+    while (ancestor) {
+      const own = maps[i].get(ancestor); assert.ok(own, "missing parent");
+      const other = maps[1-i].get(ancestor), restriction = siteFor(own);
+      covered = other?.status === "skipped" && restriction?.target === pair[i].target;
+      ancestor = covered ? null : parentId(own);
+    }
+    assert.ok(covered, `unexplained inventory difference: ${id}`);
+  }}
   assert.ok(maps.every(m => m.size > 0), "empty inventory");
 }
 export function validatePlatformSites(root) {

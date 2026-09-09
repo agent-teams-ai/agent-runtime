@@ -10,10 +10,7 @@ import { parseSync, Visitor } from "oxc-parser";
 import {historicalSpecRevision, loadHistoricalSpec} from "./runtime-setup-l0-evidence-historical.mjs";
 import * as currentSpec from "./runtime-setup-l0-evidence-spec.mjs";
 import {
-  changes,
-  evidenceFiles,
-  evidenceRoots,
-  traces,
+  changes, evidenceFiles, evidenceRoots, traces,
 } from "./runtime-setup-l0-evidence-spec.mjs";
 import {
   GitCommandFailure,
@@ -293,7 +290,7 @@ const captureProductCheck = () => {
       .map(([, key, value]) => [key, Number(value)])
   );
   const testSummary = {};
-  for (const [key, value] of summaries) testSummary[key] = (testSummary[key] ?? 0) + value;
+  for (const [key, value] of summaries) {testSummary[key] = (testSummary[key] ?? 0) + value;}
   assert.ok(testSummary.tests > 0, "captured embedded-runtime check must execute tests");
   assert.equal(testSummary.pass, testSummary.tests, "captured tests must all pass");
   assert.equal(testSummary.fail, 0, "captured embedded-runtime check must not fail tests");
@@ -393,21 +390,21 @@ const historicalSpec = () => loadHistoricalSpec(readRevisionFile);
 
 const validateStoredReport = async (report, historical = false) => {
   const spec = historical ? await historicalSpec() : currentSpec;
-  const {changes, ownership, traces, sourceRevisionArtifactDigests, benchmarkSourceRevision} = spec;
+  const {changes: specChanges, ownership, traces: specTraces, sourceRevisionArtifactDigests, benchmarkSourceRevision} = spec;
   const specRevision = historical ? historicalSpecRevision : undefined;
   const digests = historical ? await createEvidenceInputs({
     repositoryRoot, git, readRevisionFile, roots: retainedHistoricalEvidenceRoots,
     files: { fixtures: [], sources: [], tests: [] },
   }).artifactDigestsAtRevision(report.sourceRevision) : await artifactDigests();
-  validateStoredReportShape(report, changes);
+  validateStoredReportShape(report, specChanges);
   assert.equal(report.schemaVersion, 3);
   validateCurrentEvidenceIdentity(report, {
-    changes,
+    changes: specChanges,
     currentArtifactDigests: digests,
     sourceRevisionArtifactDigests,
   });
   assert.deepEqual(report.ownership, ownership);
-  assert.deepEqual(report.traces, traces);
+  assert.deepEqual(report.traces, specTraces);
   assert.equal(report.taxonomyAuthority, "experiment-local-non-qualification-rubric");
   assert.equal(report.verdicts.L0, "demonstrated-product-pure-di");
   assert.deepEqual(report.verdicts, {
@@ -419,10 +416,10 @@ const validateStoredReport = async (report, historical = false) => {
     L5: "no-go",
   });
   assert.ok(report.historicalChanges.length >= 3);
-  assert.equal(report.historicalChanges.length, changes.length);
+  assert.equal(report.historicalChanges.length, specChanges.length);
   assert.deepEqual(
     report.historicalChanges.map(({ id, revision }) => ({ id, revision })),
-    changes,
+    specChanges,
   );
   assert.deepEqual(
     report.prospectiveBenchmarks,

@@ -168,7 +168,7 @@ test("verified retained archives are staged as exact consumer file dependencies"
   }, async (consumerRoot, dependencies) => {
     consumed = true;
     assert.equal(consumerRoot, root);
-    assert.deepEqual(Object.keys(dependencies).sort(), ["@get-modular/assembly", "@get-modular/core"]);
+    assert.deepEqual(Object.keys(dependencies).toSorted(), ["@get-modular/assembly", "@get-modular/core"]);
     for (const [name, dependency] of Object.entries(dependencies)) {
       assert.ok(dependency.startsWith(`file:${join(root, "archives")}${sep}`));
       assert.deepEqual(await readFile(dependency.slice(5)), retained.get(name));

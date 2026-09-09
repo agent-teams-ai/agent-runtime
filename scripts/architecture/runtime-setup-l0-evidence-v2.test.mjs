@@ -9,7 +9,7 @@ import { testProcesses, packagePath, checkStages, reporterArg } from "../../pack
 import { targets, tools, command, sha256, json, validateStream, validateReceipt, validateCoverage, requirePostgres, validatePlatformSites } from "./runtime-setup-l0-evidence-v2.mjs";
 
 import {platformSites} from "./runtime-setup-l0-evidence-platform-sites.mjs";
-import {identity, mergeReceipts, checkV2, v2ReportPath} from "./runtime-setup-l0-evidence-v2-capture.mjs";
+import {identity as getIdentity, mergeReceipts, checkV2, v2ReportPath} from "./runtime-setup-l0-evidence-v2-capture.mjs";
 
 const counts = events => ({tests: events.length, failed: 0, passed: events.filter(e => e.status === "passed").length,
   cancelled: 0, skipped: events.filter(e => e.status === "skipped").length, todo: 0,
@@ -24,6 +24,12 @@ function stream(files) {
     {kind: "file", suite: e.suite, counts: counts([e]), success: true}]),
   {kind: "summary", counts: counts(events), success: true}, {kind: "end"}].map(e => JSON.stringify(e)).join("\n") + "\n";
 }
+const git = (cwd, ...argv) => execFileSync("git", argv, {cwd, encoding: "utf8", stdio: "pipe"}).trim();
+
+const flip = encoded => {const bytes = Buffer.from(encoded, "base64"); bytes[0] ^= 1; return bytes.toString("base64");};
+
+const read = (revision, path) => execFileSync("git", ["show", `${revision}:${path}`]);
+
 function fixture() {
   const identity = {sourceRevision: "a".repeat(40), inputs: [{path: "source", sha256: "b".repeat(64)}]};
   const artifacts = {"check.stdout": "", "check.stderr": ""};
@@ -64,14 +70,14 @@ for (const [name, mutate] of [
   ["test-name filter", f => {const p = JSON.parse(f.artifacts["processes.json"]); p[0].argv.push("--test-name-pattern=passive"); f.artifacts["processes.json"] = json(p);}],
   ["cancelled test", f => {f.artifacts["process-0.stdout"] = f.artifacts["process-0.stdout"].replace('"status":"passed"', '"status":"cancelled"');}],
   ["TODO test", f => {f.artifacts["process-0.stdout"] = f.artifacts["process-0.stdout"].replace('"status":"passed"', '"status":"todo"');}],
-]) test(`rejects ${name}`, () => {const f = fixture(); mutate(f); assert.throws(f.validate);});
-const file = `${packagePath}/tests/codex-setup.e2e.test.ts`;
-function pair() {
-  const pass = event(file, 44, "platform");
+]) {test(`rejects ${name}`, () => {const f = fixture(); mutate(f); assert.throws(f.validate);});}
+const platformFile = `${packagePath}/tests/codex-setup.e2e.test.ts`;
+function coveragePair() {
+  const pass = event(platformFile, 44, "platform");
   return [{target: "darwin-arm64", events: [pass]}, {target: "linux-x64", events: [{...pass, status: "skipped", skip: true}]}];
 }
 test("explicit platform parent accounts for its passing peer's complete subtree", () => {
-  const p = pair(); p[0].events.push(event(file, 60, "child", "passed", [p[0].events[0].segment]));
+  const p = coveragePair(); p[0].events.push(event(platformFile, 60, "child", "passed", [p[0].events[0].segment]));
   validateCoverage(p);
 });
 for (const [name, mutate] of [
@@ -80,10 +86,10 @@ for (const [name, mutate] of [
   ["same test skipped both", p => {p[0].events[0].status = "skipped";}],
   ["unknown skip", p => {p[1].events[0].line = 99;}],
   ["unknown skip reason", p => {p[1].events[0].skip = "no database";}],
-  ["unexplained inventory difference", p => {p[0].events.push(event(file, 99, "missing"));}],
-  ["portable skip", p => {for (const r of p) r.events[0].line = 99;}],
-  ["failed child under approved parent", p => {p[0].events.push(event(file, 60, "child", "failed", [p[0].events[0].segment]));}],
-]) test(`coverage rejects ${name}`, () => {const p = pair(); mutate(p); assert.throws(() => validateCoverage(p));});
+  ["unexplained inventory difference", p => {p[0].events.push(event(platformFile, 99, "missing"));}],
+  ["portable skip", p => {for (const r of p) {r.events[0].line = 99;}}],
+  ["failed child under approved parent", p => {p[0].events.push(event(platformFile, 60, "child", "failed", [p[0].events[0].segment]));}],
+]) {test(`coverage rejects ${name}`, () => {const p = coveragePair(); mutate(p); assert.throws(() => validateCoverage(p));});}
 test("PostgreSQL is required, disposable, loopback and never recorded as a URL", () => {
   assert.throws(() => requirePostgres({}), /PostgreSQL/);
   assert.deepEqual(requirePostgres({}, "darwin-arm64"), {required: false, configured: false});
@@ -114,7 +120,7 @@ test("the actual launcher records all four stages and both full test processes i
   t.after(() => rmSync(root, {recursive: true, force: true}));
   const pkg = resolve(root, packagePath), bin = resolve(root, "bin"), artifacts = resolve(root, "artifacts");
   const {mkdirSync, chmodSync, copyFileSync} = fs;
-  for (const dir of [resolve(pkg, "scripts"), bin, artifacts]) mkdirSync(dir, {recursive: true});
+  for (const dir of [resolve(pkg, "scripts"), bin, artifacts]) {mkdirSync(dir, {recursive: true});}
   for (const name of ["run-package-tests.mjs", "adoption-test-reporter.mjs"]) {
     copyFileSync(resolve(packagePath, "scripts", name), resolve(pkg, "scripts", name));
   }
@@ -143,9 +149,8 @@ test("self-contained report-only delivery validates in a clean clone after delet
   const root = mkdtempSync(resolve(tmpdir(), "adoption-v2-delivery-"));
   t.after(() => rmSync(root, {recursive: true, force: true}));
   const producer = resolve(root, "producer"), captures = resolve(root, "captures"), consumer = resolve(root, "consumer");
-  const git = (cwd, ...argv) => execFileSync("git", argv, {cwd, encoding: "utf8", stdio: "pipe"}).trim();
-  const commit = cwd => git(cwd, "-c", "user.name=Capture fixture", "-c", "user.email=capture-fixture@example.invalid",
-    "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "synthetic delivery fixture");
+  // Disposable commits inherit the caller's author identity and configured hooks.
+  const commit = cwd => git(cwd, "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "synthetic delivery fixture");
   git(root, "clone", "--quiet", "--no-local", process.cwd(), producer);
   // Exercise this implementation even when the caller's changes are uncommitted.
   for (const path of ["scripts/architecture/runtime-setup-l0-evidence-v2-capture.mjs",
@@ -154,8 +159,8 @@ test("self-contained report-only delivery validates in a clean clone after delet
   }
   rmSync(resolve(producer, v2ReportPath), {force: true});
   git(producer, "add", ".");
-  if (git(producer, "diff", "--cached", "--name-only")) commit(producer);
-  const current = identity(producer);
+  if (git(producer, "diff", "--cached", "--name-only")) {commit(producer);}
+  const current = getIdentity(producer);
   fs.mkdirSync(captures);
   const originals = new Map();
   const pathsToMerge = targets.map(target => {
@@ -197,13 +202,12 @@ test("self-contained report-only delivery validates in a clean clone after delet
   rmSync(captures, {recursive: true}); rmSync(producer, {recursive: true});
   assert.equal(fs.existsSync(captures), false);
   assert.equal(git(consumer, "status", "--porcelain"), "");
-  assert.deepEqual(identity(consumer, current.sourceRevision), current);
+  assert.deepEqual(getIdentity(consumer, current.sourceRevision), current);
   await loadHistoricalSpec((revision, path) => execFileSync("git", ["show", `${revision}:${path}`], {cwd: consumer}));
-  for (const {revision} of historical.changes) git(consumer, "cat-file", "-e", `${revision}^{commit}`);
+  for (const {revision} of historical.changes) {git(consumer, "cat-file", "-e", `${revision}^{commit}`);}
   const delivered = resolve(consumer, v2ReportPath);
   const {checkV2: deliveredCheck} = await import(resolve(consumer, "scripts/architecture/runtime-setup-l0-evidence-v2-capture.mjs"));
   deliveredCheck(consumer, delivered);
-  const flip = encoded => {const bytes = Buffer.from(encoded, "base64"); bytes[0] ^= 1; return bytes.toString("base64");};
   for (const [name, mutate, reason] of [
     ["missing receipt", r => {r.receipts.pop();}, /Assertion/],
     ["missing receipt bytes", r => {delete r.receipts[0].receiptBase64;}, /missing base64/],
@@ -217,23 +221,23 @@ test("self-contained report-only delivery validates in a clean clone after delet
       receipt.identity.sourceRevision = delivery;
       const bytes = Buffer.from(json(receipt)); ref.receiptBase64 = bytes.toString("base64"); ref.sha256 = sha256(bytes);
     }, /identity mismatch/],
-  ]) await t.test(`rejects ${name}`, () => {
+  ]) {await t.test(`rejects ${name}`, () => {
     const changed = structuredClone(report); mutate(changed); writeFileSync(delivered, json(changed));
     assert.throws(() => deliveredCheck(consumer, delivered), reason);
     writeFileSync(delivered, json(report));
-  });
+  });}
   for (const [name, mutate] of [
     ["tracked byte change", () => fs.appendFileSync(resolve(consumer, "README.md"), "\nchanged\n")],
     ["tracked addition", () => writeFileSync(resolve(consumer, "extra-input.txt"), "extra")],
     ["tracked removal", () => rmSync(resolve(consumer, "README.md"))],
     ["tracked path change", () => fs.renameSync(resolve(consumer, "README.md"), resolve(consumer, "RENAMED.md"))],
     ["tracked mode change", () => {git(consumer, "config", "core.fileMode", "true"); fs.chmodSync(resolve(consumer, "README.md"), 0o755);}],
-  ]) await t.test(`rejects ${name} even when committed`, () => {
+  ]) {await t.test(`rejects ${name} even when committed`, () => {
     mutate(); git(consumer, "add", "-A"); commit(consumer);
     assert.equal(git(consumer, "status", "--porcelain"), "");
     assert.throws(() => deliveredCheck(consumer, delivered), /source\/input mismatch/);
     git(consumer, "reset", "--hard", delivery);
-  });
+  });}
   deliveredCheck(consumer, delivered);
 });
 
@@ -242,7 +246,6 @@ test("frozen historical L0 uses its original spec closure, never the incoming 42
   const {loadHistoricalSpec, historicalSpecRevision} = await import("./runtime-setup-l0-evidence-historical.mjs");
   const {validateStoredReportShape, validateCurrentEvidenceIdentity} = await import("./runtime-setup-l0-evidence-validation.mjs");
   const current = await import("./runtime-setup-l0-evidence-spec.mjs");
-  const read = (revision, path) => execFileSync("git", ["show", `${revision}:${path}`]);
   const spec = await loadHistoricalSpec(read);
   const path = "docs/spikes/runtime-setup-l0-dogfooding-evidence.json";
   const bytes = readFileSync(path);
