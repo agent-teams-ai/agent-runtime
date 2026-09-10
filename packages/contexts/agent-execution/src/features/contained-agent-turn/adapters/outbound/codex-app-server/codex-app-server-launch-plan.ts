@@ -374,4 +374,3 @@ export {DarwinCodexNativeFiles} from "./darwin-codex-native-files.js";
 export {createDarwinCodexNativeBrokerRecipe} from "./codex-native-broker-recipe.js";
 
 export {installCodexDarwinNativeBrokerFiles} from "./codex-native-broker-files.js";
-export type {CodexNativeBrokerRecipe} from "./codex-native-broker-recipe.js";
