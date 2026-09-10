@@ -1,4 +1,4 @@
-import { openStablePath } from "@agent-teams/filesystem-custody";
+import { openStablePath } from "@agent-teams/filesystem-custody/composition";
 import { realpath, type FileHandle } from "node:fs/promises";
 
 import type {

@@ -1,4 +1,4 @@
-import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody";
+import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody/composition";
 import { constants } from "node:fs";
 import { mkdir, open } from "node:fs/promises";
 

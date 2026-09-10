@@ -1,4 +1,4 @@
-import { withStableDirectoryProcessLock } from "@agent-teams/filesystem-custody";
+import { withStableDirectoryProcessLock } from "@agent-teams/filesystem-custody/composition";
 
 import type { HostHttpConsumptionJournal } from "./http-egress-ports.js";
 import {

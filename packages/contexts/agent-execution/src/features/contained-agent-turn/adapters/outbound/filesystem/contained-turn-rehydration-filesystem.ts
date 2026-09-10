@@ -1,5 +1,5 @@
 
-import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody";
+import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody/composition";
 
 import {
   isMissingFilesystemEntry,

@@ -52,7 +52,8 @@
         "packageName": "@agent-teams/filesystem-custody",
         "ownerDocument": "ADR-0017",
         "curatedExports": [
-          "."
+          ".",
+          "./composition"
         ],
         "adoption": "pending"
       },

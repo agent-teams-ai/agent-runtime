@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import type { StableFilesystemHandle as FileHandle } from "@agent-teams/filesystem-custody";
+import type { StableFilesystemHandle as FileHandle } from "@agent-teams/filesystem-custody/composition";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { withStableDirectoryProcessLock } from "@agent-teams/filesystem-custody";
+import { withStableDirectoryProcessLock } from "@agent-teams/filesystem-custody/composition";
 
 import {
   parseContainedTurnResultUrnDigest,

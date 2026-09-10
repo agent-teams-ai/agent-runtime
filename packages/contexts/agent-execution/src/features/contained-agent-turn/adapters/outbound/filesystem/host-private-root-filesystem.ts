@@ -1,4 +1,4 @@
-import type { StableFilesystemHandle, StableFilesystemStats } from "@agent-teams/filesystem-custody";
+import type { StableFilesystemHandle, StableFilesystemStats } from "@agent-teams/filesystem-custody/composition";
 import { constants } from "node:fs";
 import { lstat, open, rmdir, unlink } from "node:fs/promises";
 import {
