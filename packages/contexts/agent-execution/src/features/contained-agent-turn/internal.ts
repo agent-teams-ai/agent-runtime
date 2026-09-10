@@ -144,3 +144,9 @@ export {createDarwinCodexRouteEnforcement, bindDarwinCodexRouteEnforcement,
   type DarwinCodexRouteEnforcementCapability, type DarwinCodexRouteEnforcementInput}
   from "./composition/darwin-codex-route-enforcement.js";
 export {type DarwinCodexHostPreparationInput} from "./composition/darwin-codex-host-post-claim-preparation.js";
+export {containedTurnPreparationToken} from "./application/contained-turn-preparation-cleanup.js";
+export {captureRootDarwinAttemptWorkspace}
+  from "./adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
+export type {NativePreparedAttemptBinding, RetainedNativeAttemptAuthority,
+  DarwinAttemptRetainedOwners, DarwinAttemptRetainedCompletion}
+  from "./adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";

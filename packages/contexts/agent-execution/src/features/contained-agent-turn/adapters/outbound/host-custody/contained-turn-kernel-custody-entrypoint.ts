@@ -67,3 +67,6 @@ export type {
   DarwinNativeExecutionLease, NativePreparedAttemptBinding,
   RetainedNativeAttemptAuthority, NativeDirectoryFact, NativeFileFact,
 } from "./darwin-attempt-owner-selection.js";
+export type {
+  DarwinAttemptRetainedOwners, DarwinAttemptRetainedCompletion,
+} from "./darwin-attempt-owner-bridge.js";

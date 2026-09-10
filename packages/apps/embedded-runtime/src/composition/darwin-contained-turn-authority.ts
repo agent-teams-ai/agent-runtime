@@ -2,7 +2,8 @@
 // Fixed direct owner; no Module Kit node or Consumer Standard adoption claim.
 import {createContainedTurnHttpEgressRoute} from "./contained-turn-http-egress-upstream.js";
 import {isDeepStrictEqual, types} from "node:util";
-import type {ContainedTurnFeatureDependencies, DarwinCodexRouteEnforcementInput} from "@agent-teams/agent-execution/composition";
+import {containedTurnPreparationToken, type ContainedTurnFeatureDependencies, type DarwinCodexRouteEnforcementInput,
+  type NativePreparedAttemptBinding, type RetainedNativeAttemptAuthority} from "@agent-teams/agent-execution/composition";
 import {snapshotDispatchAuthorityHead} from "@agent-teams/runtime-security/composition";
 import {snapshotRouteSelectionCurrent} from "@agent-teams/provider-access/composition";
 import type {ContainedTurnCurrentEgressOwnersInput} from "./contained-turn-current-egress-owners.js";
@@ -18,6 +19,9 @@ type Head = ContainedTurnCurrentEgressOwnersInput["acceptedDispatch"];
 type Route = Awaited<ReturnType<typeof snapshotRouteSelectionCurrent>>;
 type Retained = {input: Input; pa?: PaReceipt; rs?: RsReceipt; head?: Head; route?: Route; upstream?: Awaited<ReturnType<typeof createContainedTurnHttpEgressRoute>>; proof?: CommittedDispatchProofV1; generation?: number; selected?: boolean; claimed?: boolean};
 const unavailable = (): never => {throw new TypeError("Mac assembly acknowledged deployment authority unavailable");};
+
+const STORE_METHODS = ["accept", "appendOutput", "commit", "preventIntent", "requestCancellation", "terminalProof", "prepareCancellation", "claimPreparedDispatch", "identifyAcceptance", "prepareDispatch", "proofsForPrevention", "proofsForProcessNoStart", "proofsForAcceptedEffect", "read", "retireDispatchPreparation", "recordDispatchPreparationCleanup"] as const;
+const OPTIONAL_STORE_METHODS = ["listDispatchPreparations", "proveDispatchPreparationClosure"] as const;
 
 // Snapshot configuration without executing accessors or Proxy traps. Methods
 // retain their borrowed receiver; snapshots never freeze or dispose that owner.
@@ -73,6 +77,64 @@ export const captureDarwinDeploymentPort = <T extends object, K extends keyof T>
     result[key] = deploymentMethod(field.value, owner) as T[K];
   }
   return Object.freeze(result);
+};
+const captureDarwinOperationStore = (store: Store): Store => {
+  const required = captureDarwinDeploymentPort(store, STORE_METHODS);
+  const optional: Partial<Pick<Store, typeof OPTIONAL_STORE_METHODS[number]>> = {};
+  for (const key of OPTIONAL_STORE_METHODS) {
+    let prototype: object | null = store;
+    let field: PropertyDescriptor | undefined;
+    while (prototype !== null && field === undefined) {
+      if (types.isProxy(prototype)) {return unavailable();}
+      field = Object.getOwnPropertyDescriptor(prototype, key);
+      prototype = Object.getPrototypeOf(prototype);
+    }
+    if (field === undefined) {continue;}
+    if (!("value" in field)) {return unavailable();}
+    optional[key] = deploymentMethod(field.value, store) as never;
+  }
+  return Object.freeze({...required, ...optional}) as Store;
+};
+
+/** Direct private Darwin join between the actual durable operation store and
+ * the retained native attempt owner. It decorates the store without adding an
+ * eighth feature port or manufacturing native authority from caller data. */
+export const bindDarwinNativeAttemptAuthority = (
+  store: Store,
+  attemptAuthority: RetainedNativeAttemptAuthority,
+): Store => {
+  const captured = captureDarwinOperationStore(store);
+  const authority = captureDarwinDeploymentPort(attemptAuthority, ["bindPreparedAttempt", "confirmCommittedClaim"]);
+  const prepare = captured.prepareDispatch;
+  const claim = captured.claimPreparedDispatch;
+  return Object.freeze({...captured,
+    async prepareDispatch(input: Parameters<Store["prepareDispatch"]>[0]): ReturnType<Store["prepareDispatch"]> {
+      const result = await prepare(input);
+      const workspaceId = input.operation.workspaceId;
+      if (typeof workspaceId !== "string" || workspaceId.length === 0) {
+        throw new TypeError("actual durable preparation requires workspace identity");
+      }
+      const binding: NativePreparedAttemptBinding = Object.freeze({
+        operationId: input.operation.operationId,
+        attemptId: result.attemptId,
+        custodyId: result.custodyId,
+        executionGenerationId: result.executionGenerationId,
+        workspaceId,
+        preparationToken: containedTurnPreparationToken({
+          attemptId: result.attemptId, custodyId: result.custodyId, operationId: input.operation.operationId,
+        }),
+        writerFence: result.writerFence,
+        scope: Object.freeze({tenantId: input.authority.scope.tenantId, projectId: input.authority.scope.projectId}),
+      });
+      await authority.bindPreparedAttempt(binding);
+      return result;
+    },
+    async claimPreparedDispatch(input: Parameters<Store["claimPreparedDispatch"]>[0]): ReturnType<Store["claimPreparedDispatch"]> {
+      const result = await claim(input);
+      if (result.kind === "claimed") {await authority.confirmCommittedClaim(result.committedDispatchProof);}
+      return result;
+    },
+  });
 };
 
 const validateConsumedPair = (pa: PaReceipt, rs: RsReceipt, subject: Input["subject"], accepted: Input["accepted"]): void => {
@@ -191,7 +253,7 @@ export const createDarwinContainedTurnAuthority = (readers: Readers): DarwinCont
       for (const key of retained.keys()) {release(key);}
     },
     bindStore(store: Store): Store {
-      const captured = captureDarwinDeploymentPort(store, STORE_METHODS);
+      const captured = captureDarwinOperationStore(store);
       const claim = captured.claimPreparedDispatch;
       const retire = captured.retireDispatchPreparation;
       return Object.freeze({...captured,
@@ -269,5 +331,3 @@ export const createDarwinContainedTurnAuthority = (readers: Readers): DarwinCont
     },
   });
 };
-
-const STORE_METHODS = ["accept", "appendOutput", "commit", "preventIntent", "requestCancellation", "terminalProof", "prepareCancellation", "claimPreparedDispatch", "identifyAcceptance", "prepareDispatch", "proofsForPrevention", "proofsForProcessNoStart", "proofsForAcceptedEffect", "read", "retireDispatchPreparation", "recordDispatchPreparationCleanup", "listDispatchPreparations", "proveDispatchPreparationClosure"] as const;
