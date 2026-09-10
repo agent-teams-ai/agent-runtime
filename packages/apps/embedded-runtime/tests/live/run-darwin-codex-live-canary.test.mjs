@@ -1,0 +1,96 @@
+import assert from "node:assert/strict";
+import {mkdir, mkdtemp, readFile, rm, writeFile} from "node:fs/promises";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {fileURLToPath} from "node:url";
+import test from "node:test";
+import {createHash} from "node:crypto";
+
+import {createDarwinLiveActivationManifest} from "./darwin-live-activation-manifest.mjs";
+import {consumeAttempt, loadAndVerifyActivation, main} from "./run-darwin-codex-live-canary.mjs";
+import {executeOnePublicContainedTurn} from "./full-public-runtime.mjs";
+
+const sha = bytes => createHash("sha256").update(bytes).digest("hex");
+const fixture = async () => {
+  const root = await mkdtemp(join(tmpdir(), "ar69-runner-"));
+  const launcher = join(root, "launcher"), owner = join(root, "native-owner");
+  const live = fileURLToPath(new URL(".", import.meta.url));
+  const runtime = join(live, "full-public-runtime.mjs"), entrypoint = join(live, "host-child-entrypoint.mjs"), peer = join(root, "peer.node"), codex = join(root, "codex");
+  await writeFile(launcher, "launcher", {mode: 0o700});
+  await writeFile(owner, "owner", {mode: 0o700});
+  await writeFile(peer, "peer"); await writeFile(codex, "codex", {mode: 0o700});
+  const evidenceDirectory = join(root, "evidence");
+  const activation = await createDarwinLiveActivationManifest({
+    sourceRevision: "a".repeat(40), closure: [
+      {role: "runner", path: join(live, "run-darwin-codex-live-canary.mjs")}, {role: "host-entrypoint", path: entrypoint},
+      {role: "full-public-runtime", path: runtime},
+      {role: "root-launcher", path: launcher},
+      {role: "native-owner", path: owner},
+      {role: "codex", path: codex}, {role: "host-peer-addon", path: peer},
+    ], consumerStandardRevision: "b".repeat(40),
+    codexPath: codex, codexSha256: sha("codex"), native: {rootLauncherPath: launcher, ownerPath: owner},
+    database: {identitySha256: "d".repeat(64)}, source: {inventorySha256: "e".repeat(64)},
+    evidenceDirectory,
+  });
+  const activationPath = join(root, "activation.json");
+  await writeFile(activationPath, JSON.stringify(activation));
+  return {root, activation, activationPath, evidenceDirectory};
+};
+
+test("preflight refuses while the exact production root is absent", async () => {
+  const value = await fixture();
+  try {
+    await assert.rejects(loadAndVerifyActivation(value.activationPath), /closure role production-root is missing/);
+    await assert.rejects(main(["--preflight", value.activationPath]), /closure role production-root is missing/);
+    await assert.rejects(readFile(join(value.evidenceDirectory, "attempt-consumed.json")), {code: "ENOENT"});
+  } finally {await rm(value.root, {recursive: true, force: true});}
+});
+
+test("attempt marker is exclusive and cannot be replayed", async () => {
+  const value = await fixture();
+  try {
+    await mkdir(value.evidenceDirectory, {mode: 0o700});
+    await consumeAttempt(value.activation, value.evidenceDirectory);
+    await assert.rejects(consumeAttempt(value.activation, value.evidenceDirectory));
+  } finally {await rm(value.root, {recursive: true, force: true});}
+});
+
+test("accepted observation failure persists the operation for reconciliation", async () => {
+  const root = await mkdtemp(join(tmpdir(), "ar69-uncertain-"));
+  let acceptedOperation;
+  const host = {bindAccess: () => ({containedTurn: {
+    submit: async () => ({status: "accepted", operationId: "op:uncertain"}),
+    observe: async () => {throw new Error("channel lost");},
+  }})};
+  try {
+    const result = await executeOnePublicContainedTurn({host, scope: {tenantId: "t", projectId: "p"}, evidenceDirectory: root,
+      maximumObservations: 1, observeTimeoutMs: 1000, onAccepted: operationId => {acceptedOperation = operationId;}});
+    assert.equal(acceptedOperation, "op:uncertain");
+    assert.equal(result.uncertainty.operationId, "op:uncertain");
+    assert.match(await readFile(join(root, "reconciliation-debt.json"), "utf8"), /op:uncertain/);
+  } finally {await rm(root, {recursive: true, force: true});}
+});
+
+test("public handle submits once and observes serially to terminal truth", async () => {
+  const root = await mkdtemp(join(tmpdir(), "ar69-public-"));
+  let submits = 0, active = 0, maximumActive = 0, observations = 0;
+  const turn = {status: "succeeded", provider: "codex", resultRef: "result:1", artifactManifestRef: "artifact:1", output: []};
+  const host = {bindAccess: scope => {
+    assert.deepEqual(scope, {containedTurn: {tenantId: "t", projectId: "p"}});
+    return {containedTurn: {
+      submit: async input => {submits += 1; assert.equal(input.intent.mode, "workspace-write"); assert.equal(input.expectedProvider, "codex"); return {status: "accepted", operationId: "op:1"};},
+      observe: async (_id, {signal}) => {assert.equal(signal.aborted, false); active += 1; maximumActive = Math.max(maximumActive, active); observations += 1; active -= 1; return {status: "observed", turn};},
+    }};
+  }};
+  try {
+    const result = await executeOnePublicContainedTurn({host, scope: {tenantId: "t", projectId: "p"}, evidenceDirectory: root, maximumObservations: 2, observeTimeoutMs: 1000});
+    assert.equal(result.terminal.turn.status, "succeeded");
+    assert.deepEqual({submits, observations, maximumActive}, {submits: 1, observations: 1, maximumActive: 1});
+  } finally {await rm(root, {recursive: true, force: true});}
+});
+
+test("activation generator pins exact closure bytes", async () => {
+  const value = await fixture();
+  try {assert.equal(value.activation.files[0].sha256, sha(await readFile(value.activation.files[0].path)));}
+  finally {await rm(value.root, {recursive: true, force: true});}
+});
