@@ -128,6 +128,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "bindContainedTurnRouteEnforcement",
       "bindDarwinCodexRouteEnforcement",
       "captureRootDarwinAttemptWorkspace",
+      "createDarwinCodexEffectCustodyOwner",
       "containedTurnPreparationToken",
       "containedTurnPreventionDigest",
       "createClaudeCurrentKernelOwner",

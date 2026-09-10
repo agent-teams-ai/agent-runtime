@@ -145,6 +145,8 @@ export {createDarwinCodexRouteEnforcement, bindDarwinCodexRouteEnforcement,
   from "./composition/darwin-codex-route-enforcement.js";
 export {prepareDarwinCodexNativeLaunchInput, createDarwinCodexHostPostClaimPreparation,
   type DarwinCodexHostPreparationInput} from "./composition/darwin-codex-host-post-claim-preparation.js";
+export {createDarwinCodexEffectCustodyOwner, type DarwinCodexEffectCustodyOwner}
+  from "./composition/darwin-codex-effect-custody-owner.js";
 export {containedTurnPreparationToken} from "./application/contained-turn-preparation-cleanup.js";
 export {captureRootDarwinAttemptWorkspace}
   from "./adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
