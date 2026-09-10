@@ -18,7 +18,9 @@ interface Retained {
   readonly selection: DarwinNativeWorkspaceSelection;
   readonly observation: DarwinNativeLaunchObservation;
 }
-const issued = new WeakMap<object, Retained>();
+// Keep weak identity tombstones after retirement: a native grant must never
+// become descriptor authority when the kernel discriminates again after prepare.
+const issued = new WeakMap<object, Retained | undefined>();
 export const isNativeHostCustodyWorkspaceAuthority = (value: object): value is NativeHostCustodyWorkspaceAuthority => issued.has(value);
 export const inspectNativeHostCustodyWorkspaceAuthority = (
   authority: NativeHostCustodyWorkspaceAuthority, ids: Readonly<{operationId: string; attemptId: string; workspaceId: string}>,
@@ -48,10 +50,10 @@ export const withNativeHostCustodyWorkspaceAuthority = async <Result>(
     identity: Object.freeze({dev: facts.workspace.dev, ino: facts.workspace.ino})}) as NativeHostCustodyWorkspaceAuthority;
   issued.set(authority, Object.freeze({ids: captured, selection, observation}));
   try {return await consume(authority);}
-  catch (error) {issued.delete(authority); throw error;}
+  catch (error) {issued.set(authority, undefined); throw error;}
 };
 
-/** Failure retirement can remove authority only; it cannot issue or revive it. */
+/** Failure retirement clears retained authority but preserves its native kind; it cannot issue or revive it. */
 export const retireNativeHostCustodyWorkspaceAuthority = (authority: NativeHostCustodyWorkspaceAuthority): void => {
-  issued.delete(authority);
+  if (issued.has(authority)) {issued.set(authority, undefined);}
 };

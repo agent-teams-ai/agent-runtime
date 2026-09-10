@@ -41,7 +41,8 @@ export const nodeKernelWorkspaceAuthority = (
       } catch (error) {
         closed = true;
         if (authority !== undefined) {retireNativeHostCustodyWorkspaceAuthority(authority);}
-        await scoped?.catch(() => {});
+        // KernelOpenAttempts must fence acquisition before draining preparation.
+        void scoped?.catch(() => {});
         throw error;
       } finally {closed = true;}
     },

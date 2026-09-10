@@ -19,7 +19,7 @@ registerHooks({resolve(specifier, context, next) {
     return {url: producer, shortCircuit: true};
   }
   if (specifier.startsWith(".") && specifier.endsWith(".js") && context.parentURL?.startsWith("file:")) {
-    const source = new URL(specifier.slice(0, -3) + ".ts", context.parentURL);
+    const source = new URL(new URL(specifier.slice(0, -3) + ".ts", context.parentURL).href.replace("/agent-execution/dist/", "/agent-execution/src/"));
     if (existsSync(source)) {return {url: source.href, shortCircuit: true};}
   }
   return next(specifier, context);
@@ -76,6 +76,7 @@ test("native authority has no descriptor; raw Linux rejects before allocation; a
     assert.equal(authority.inspectNativeHostCustodyWorkspaceAuthority(value, ids).selection, selection);
     assert.throws(() => authority.inspectNativeHostCustodyWorkspaceAuthority(value, {...ids, attemptId: "other"}));
     for (const fake of [{...value}, new Proxy(value, {})]) {
+      authority.retireNativeHostCustodyWorkspaceAuthority(fake);
       assert.equal(authority.isNativeHostCustodyWorkspaceAuthority(fake), false);
       assert.throws(() => authority.inspectNativeHostCustodyWorkspaceAuthority(fake, ids));
     }
@@ -237,7 +238,7 @@ test("native authority retires on callback failure or owner failure after callba
       if (!ownerFails) {throw new Error("synthetic preparation failure");}
     }));
     assert.notEqual(captured, undefined);
-    assert.equal(authority.isNativeHostCustodyWorkspaceAuthority(captured), false);
+    assert.equal(authority.isNativeHostCustodyWorkspaceAuthority(captured), true);
     assert.throws(() => authority.inspectNativeHostCustodyWorkspaceAuthority(captured, ids), /provenance/u);
   }
 });
@@ -313,7 +314,7 @@ test("native owner rejection during pending preparation revokes grant and retire
   });
   await entered;
   await new Promise<void>(resolve => {setImmediate(resolve);});
-  assert.equal(authority.isNativeHostCustodyWorkspaceAuthority(captured), false);
+  assert.equal(authority.isNativeHostCustodyWorkspaceAuthority(captured), true);
   assert.equal(retires, 0);
   finish(); await assert.rejects(result, /owner asynchronous failure/u);
   assert.equal(retires, 1);
@@ -334,10 +335,11 @@ test("native owner failure cuts off issuance while authenticated observation rea
     void consume().catch(() => {});
     throw new Error("synthetic early owner failure");
   });
-  const result = nodeKernelWorkspaceAuthority(owner).withLaunchAuthority(ids, async () => {calls++;});
+  const result = assert.rejects(nodeKernelWorkspaceAuthority(owner).withLaunchAuthority(ids, async () => {calls++;}), /early owner failure/u);
   await new Promise<void>(resolve => {setImmediate(resolve);});
   assert.equal(calls, 0);
-  release(); await assert.rejects(result, /early owner failure/u);
+  await result; release();
+  await new Promise<void>(resolve => {setImmediate(resolve);});
   assert.equal(calls, 0);
 });
 
@@ -364,4 +366,84 @@ test("actual kernel checks Host registry before preparation for forged, cloned, 
     await assert.rejects(run(grant), /synthetic preparation reached/u);
     assert.equal(prepares, 1); assert.equal(reserves, 0);
   });
+});
+
+const kernelRegressionInput = async (custodyId: string) => {
+  const fixture = await import("../../contained-turn-kernel-fixtures.ts");
+  return {...ids, custodyId, intentMode: "analysis", adapterSnapshot: fixture.adapterSnapshot,
+    providerAccessSnapshot: fixture.providerAccessSnapshot, authorityVectorDigest: fixture.authorityDigest,
+    commandId: fixture.commandId, effectId: fixture.effectId, operationCutoffRevision: 0,
+    operationRevision: 1, preparationToken: fixture.preparationToken};
+};
+
+test("actual kernel drains successful preparation after owner rejection without acquisition or replay", async () => {
+  const {ContainedTurnKernelCustodyAdapter} = await import(root + "host-custody/contained-turn-kernel-custody-adapter.ts");
+  const {selection} = await setup(); const owner = synthetic.issueSyntheticOwner(selection);
+  const entered = Promise.withResolvers<void>(); const preparation = Promise.withResolvers<object>();
+  const failure = new Error("synthetic original owner rejection");
+  synthetic.setSyntheticOwnerBehavior(owner, async consume => {
+    void consume().catch(() => {}); await entered.promise; throw failure;
+  });
+  const counts = {prepare: 0, reserve: 0, retain: 0, retire: 0};
+  const kernel = new ContainedTurnKernelCustodyAdapter({reserve: async () => {
+    counts.reserve++; return {custodyRef: "synthetic:unexpected-reservation"};
+  }}, {
+    postClaimPreparation: "current-owner", hostBootId: "host-boot:synthetic", hostInstanceId: "host-instance:synthetic",
+    workspaceOwner: nodeKernelWorkspaceAuthority(owner),
+    attemptOwner: {
+      prepare: async () => {counts.prepare++; entered.resolve(); return preparation.promise;},
+      retain() {counts.retain++;}, retire() {counts.retire++;},
+    },
+  });
+  const input = await kernelRegressionInput("synthetic-successful-pending");
+  const rejected = assert.rejects(kernel.open(input), error => error === failure);
+  await entered.promise;
+  await new Promise<void>(resolve => {setImmediate(resolve);});
+  assert.deepEqual(counts, {prepare: 1, reserve: 0, retain: 0, retire: 0});
+  preparation.resolve(Object.freeze({provider: "codex", arguments: [], environment: {},
+    binaryRevision: "synthetic", containmentProfile: "strict-linux-cgroup-v2", executablePath: "/synthetic/provider",
+    executableSha256: "3".repeat(64), intentMode: "analysis", privateRootPath: "/synthetic/private", spawnMode: "sdk-delegated"}));
+  await rejected;
+  assert.deepEqual(counts, {prepare: 1, reserve: 0, retain: 0, retire: 1});
+  await assert.rejects(kernel.open(input), /already consumed/u);
+  assert.deepEqual(counts, {prepare: 1, reserve: 0, retain: 0, retire: 1});
+});
+
+test("actual kernel rechecks revoked native kind after successful preparation with owner still active", async () => {
+  const {ContainedTurnKernelCustodyAdapter} = await import(root + "host-custody/contained-turn-kernel-custody-adapter.ts");
+  const {selection} = await setup(); const counts = {reserve: 0, retain: 0, retire: 0};
+  await nodeKernelWorkspaceAuthority(synthetic.issueSyntheticOwner(selection)).withLaunchAuthority(ids, async grant => {
+    const kernel = new ContainedTurnKernelCustodyAdapter({reserve: async () => {
+      counts.reserve++; return {custodyRef: "synthetic:unexpected-reservation"};
+    }}, {
+      postClaimPreparation: "current-owner", hostBootId: "host-boot:synthetic", hostInstanceId: "host-instance:synthetic",
+      workspaceOwner: {withLaunchAuthority: async (_: unknown, consume: any) => consume(grant)},
+      attemptOwner: {
+        prepare: async () => {authority.retireNativeHostCustodyWorkspaceAuthority(grant); return {};},
+        retain() {counts.retain++;}, retire() {counts.retire++;},
+      },
+    });
+    const input = await kernelRegressionInput("synthetic-revoked-during-prepare");
+    await assert.rejects(kernel.open(input), /provenance or attempt mismatch/u);
+    assert.equal(authority.isNativeHostCustodyWorkspaceAuthority(grant), true);
+    assert.throws(() => authority.inspectNativeHostCustodyWorkspaceAuthority(grant, ids), /provenance/u);
+    await assert.rejects(kernel.open(input), /already consumed/u);
+    assert.deepEqual(counts, {reserve: 0, retain: 0, retire: 1});
+  });
+});
+
+test("private wiring propagates original owner rejection before scoped preparation settles", async () => {
+  const {selection} = await setup(); const owner = synthetic.issueSyntheticOwner(selection);
+  const entered = Promise.withResolvers<void>(); const preparation = Promise.withResolvers<void>();
+  const failure = new Error("synthetic immediate owner rejection");
+  synthetic.setSyntheticOwnerBehavior(owner, async consume => {
+    void consume().catch(() => {}); await entered.promise; throw failure;
+  });
+  let rejected = false;
+  const result = assert.rejects(nodeKernelWorkspaceAuthority(owner).withLaunchAuthority(ids, async () => {
+    entered.resolve(); await preparation.promise;
+  }), error => {rejected = true; return error === failure;});
+  await entered.promise;
+  await new Promise<void>(resolve => {setImmediate(resolve);});
+  try {assert.equal(rejected, true);} finally {preparation.resolve(); await result;}
 });
