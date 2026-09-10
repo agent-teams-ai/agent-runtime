@@ -1,5 +1,6 @@
+import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody";
 import { createHash, randomUUID } from "node:crypto";
-import { open, realpath, rmdir, type FileHandle } from "node:fs/promises";
+import { open, realpath, rmdir } from "node:fs/promises";
 import { constants } from "node:fs";
 import { basename, dirname, sep } from "node:path";
 import { publishStableDirectoryNoReplace } from "@agent-teams/filesystem-custody";
@@ -71,9 +72,9 @@ interface Capture {
   readonly root: BoundContainedTurnRoot;
   readonly parent: BoundContainedTurnRoot;
   readonly workspace: BoundContainedTurnRoot;
-  readonly rootHandle: FileHandle;
-  readonly parentHandle: FileHandle;
-  readonly workspaceHandle: FileHandle;
+  readonly rootHandle: StableFilesystemHandle;
+  readonly parentHandle: StableFilesystemHandle;
+  readonly workspaceHandle: StableFilesystemHandle;
   readonly binding: HostPrivateRootBinding;
 }
 
@@ -83,7 +84,7 @@ const hash = (value: unknown): string => createHash("sha256")
 /** Concrete Linux descriptor custody, deliberately independent of Docker and
  * Node LiveCustody. The constructor acquires no filesystem resources. */
 export class NodeHostPrivateRootOwner implements HostPrivateRootOwner {
-  readonly #handles = new Map<FileHandle, Promise<void> | undefined>();
+  readonly #handles = new Map<StableFilesystemHandle, Promise<void> | undefined>();
   readonly #history: string[] = [];
   #status: HostCustodyPrivateRootClosureEvidence["status"] = "unproven";
   #identity = "";
@@ -102,8 +103,8 @@ export class NodeHostPrivateRootOwner implements HostPrivateRootOwner {
       history: Object.freeze([...this.#history]), debt: this.#debt, retainedHandles: this.#handles.size });
   }
 
-  private retain = (handle: FileHandle): FileHandle => {this.#handles.set(handle, undefined); return handle;};
-  private close = async (handle: FileHandle): Promise<void> => {
+  private retain = <Handle extends StableFilesystemHandle>(handle: Handle): Handle => {this.#handles.set(handle, undefined); return handle;};
+  private close = async (handle: StableFilesystemHandle): Promise<void> => {
     // A rejected close is retained and never attempted again: its FD may have
     // been released and reused even though the acknowledgement failed.
     let closing = this.#handles.get(handle);
@@ -125,7 +126,7 @@ export class NodeHostPrivateRootOwner implements HostPrivateRootOwner {
   }
 
   private async validateSeparation(
-    parent: BoundContainedTurnRoot, rootHandle: FileHandle, workspaceHandle: FileHandle,
+    parent: BoundContainedTurnRoot, rootHandle: StableFilesystemHandle, workspaceHandle: StableFilesystemHandle,
   ): Promise<ReadonlySet<string>> {
     const parentIdentity = privateRootDirectoryIdentity(parent.identity);
     const workspaceIdentities = new Set([privateRootDirectoryIdentity(await inspectFileHandle(workspaceHandle))]);

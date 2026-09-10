@@ -1,6 +1,7 @@
+import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody";
 import {createHash} from "node:crypto";
 import {constants} from "node:fs";
-import {open, type FileHandle} from "node:fs/promises";
+import {open} from "node:fs/promises";
 import {isAbsolute, relative, sep} from "node:path";
 import {codexNativeBrokerBoundary, renderCodexNativeBrokerConfig,
   CODEX_NATIVE_CATALOG_BYTES, CODEX_NATIVE_CATALOG_SHA256, type CodexNativeBrokerRecipe}
@@ -31,7 +32,7 @@ const rejected = (): TypeError => new TypeError("Codex native file installation 
 /** Descriptor-relative writes only, with all residue left to the captured Host
  * root owner. No path from the rendered Docker projection is ever opened. */
 export class NodeCodexNativeBrokerFileInstaller {
-  readonly #handles = new Map<FileHandle, Promise<void> | undefined>();
+  readonly #handles = new Map<StableFilesystemHandle, Promise<void> | undefined>();
   #flight: Promise<void> | undefined;
   #closing = false;
   #installing = false;
@@ -44,8 +45,8 @@ export class NodeCodexNativeBrokerFileInstaller {
       debt: this.#handles.size > 0 || (this.#fileDebt && !this.options.deleted()), retainedHandles: this.#handles.size});
   }
   private active(): void {if (this.#closing) {throw rejected();}}
-  private retain(handle: FileHandle): FileHandle {this.#handles.set(handle, undefined); return handle;}
-  private async close(handle: FileHandle): Promise<void> {
+  private retain<Handle extends StableFilesystemHandle>(handle: Handle): Handle {this.#handles.set(handle, undefined); return handle;}
+  private async close(handle: StableFilesystemHandle): Promise<void> {
     if (!this.#handles.has(handle)) {return;}
     // A failed close remains debt; never retry an ambiguously released FD.
     let flight = this.#handles.get(handle);
@@ -84,7 +85,7 @@ export class NodeCodexNativeBrokerFileInstaller {
     validateCodexDirectoryIdentity("codexHome", this.options.boundary.codexHomeIdentity);
     return Buffer.from(renderCodexNativeBrokerConfig(recipe));
   }
-  private async home(): Promise<FileHandle> {
+  private async home(): Promise<StableFilesystemHandle> {
     const binding = this.options.binding();
     const boundary = this.options.boundary;
     const path = relative(binding.canonicalBindSourcePath, boundary.codexHome);
@@ -106,7 +107,7 @@ export class NodeCodexNativeBrokerFileInstaller {
     if (stat.dev !== BigInt(boundary.codexHomeIdentity.device) || stat.ino !== BigInt(boundary.codexHomeIdentity.inode)) {throw rejected();}
     return handle;
   }
-  private async write(home: FileHandle, name: "config.toml" | "models.json", bytes: Buffer): Promise<void> {
+  private async write(home: StableFilesystemHandle, name: "config.toml" | "models.json", bytes: Buffer): Promise<void> {
     this.active();
     // Mark the attempted creation before awaiting an acknowledgement. Partial
     // writes and ambiguous errors cannot be mistaken for a clean operation.

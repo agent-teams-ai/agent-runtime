@@ -1,5 +1,6 @@
+import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody";
 import { constants } from "node:fs";
-import { mkdir, open, type FileHandle } from "node:fs/promises";
+import { mkdir, open } from "node:fs/promises";
 
 import {
   assertSameMountIdentity,
@@ -14,7 +15,7 @@ import {
 
 export const materializeCanonicalProject = async (
   canonicalProjectRoot: string,
-  workspace: FileHandle,
+  workspace: StableFilesystemHandle,
   limits: ContainedTurnWorkspaceTreeLimits,
 ): Promise<string> => {
   const source = await scanContainedTurnWorkspace(canonicalProjectRoot, limits, {
