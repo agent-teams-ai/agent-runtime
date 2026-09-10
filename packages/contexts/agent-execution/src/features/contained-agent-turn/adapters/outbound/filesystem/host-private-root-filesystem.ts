@@ -1,6 +1,6 @@
+import type { StableFilesystemHandle, StableFilesystemStats } from "@agent-teams/filesystem-custody";
 import { constants } from "node:fs";
-import type { BigIntStats } from "node:fs";
-import { lstat, open, rmdir, unlink, type FileHandle } from "node:fs/promises";
+import { lstat, open, rmdir, unlink } from "node:fs/promises";
 import {
   assertSameMountIdentity, descriptorChildPath, fsyncDirectoryHandle,
   inspectFileHandle, isMissingFilesystemEntry, openDirectoryEntry,
@@ -19,16 +19,16 @@ export interface PrivateRootTraversal {
   readonly directoryIdentities: Set<string>;
   readonly forbiddenDirectoryIdentities: ReadonlySet<string>;
   check(): void;
-  retain(handle: FileHandle): FileHandle;
-  close(handle: FileHandle): Promise<void>;
+  retain(handle: StableFilesystemHandle): StableFilesystemHandle;
+  close(handle: StableFilesystemHandle): Promise<void>;
 }
 
 // Mount IDs qualify descriptor custody, but cannot distinguish bind aliases of
 // the same inode. Separation must compare device/inode pairs across mounts.
-export const privateRootDirectoryIdentity = (identity: Pick<BigIntStats, "dev" | "ino">): string =>
+export const privateRootDirectoryIdentity = (identity: Pick<StableFilesystemStats, "dev" | "ino">): string =>
   `${identity.dev}:${identity.ino}`;
 
-const inspectTraversalDirectory = async (root: FileHandle, budget: PrivateRootTraversal): Promise<void> => {
+const inspectTraversalDirectory = async (root: StableFilesystemHandle, budget: PrivateRootTraversal): Promise<void> => {
   const observed = await inspectFileHandle(root);
   const identity = privateRootDirectoryIdentity(observed);
   if (!observed.isDirectory || observed.nlink === 0n || budget.forbiddenDirectoryIdentities.has(identity)) {
@@ -37,7 +37,7 @@ const inspectTraversalDirectory = async (root: FileHandle, budget: PrivateRootTr
   budget.directoryIdentities.add(identity);
 };
 
-export const assertPrivateRootHandle = async (handle: FileHandle, root: BoundContainedTurnRoot): Promise<void> => {
+export const assertPrivateRootHandle = async (handle: StableFilesystemHandle, root: BoundContainedTurnRoot): Promise<void> => {
   const observed = await inspectFileHandle(handle);
   if (!observed.isDirectory || observed.nlink === 0n ||
       !sameFilesystemIdentity(observed, root.identity) || observed.mode !== root.identity.mode ||
@@ -48,7 +48,7 @@ export const assertPrivateRootHandle = async (handle: FileHandle, root: BoundCon
 };
 
 export const assertPrivateRootEntry = async (
-  parent: FileHandle, name: string, expected: BoundContainedTurnRoot, budget: PrivateRootTraversal,
+  parent: StableFilesystemHandle, name: string, expected: BoundContainedTurnRoot, budget: PrivateRootTraversal,
 ): Promise<void> => {
   budget.check();
   const entry = budget.retain(await openDirectoryEntry(parent, name));
@@ -56,7 +56,7 @@ export const assertPrivateRootEntry = async (
   budget.check();
 };
 
-export const assertPrivateRootAbsent = async (parent: FileHandle, name: string): Promise<void> => {
+export const assertPrivateRootAbsent = async (parent: StableFilesystemHandle, name: string): Promise<void> => {
   try {await lstat(descriptorChildPath(parent, name));} catch (error) {
     if (isMissingFilesystemEntry(error)) {return;}
     throw error;
@@ -64,7 +64,7 @@ export const assertPrivateRootAbsent = async (parent: FileHandle, name: string):
   throw new Error("Private root entry is still present");
 };
 
-const inspectLeaf = async (parent: FileHandle, name: string, budget: PrivateRootTraversal): Promise<FileHandle> => {
+const inspectLeaf = async (parent: StableFilesystemHandle, name: string, budget: PrivateRootTraversal): Promise<StableFilesystemHandle> => {
   const handle = budget.retain(await open(descriptorChildPath(parent, name), LINUX_O_PATH | constants.O_NOFOLLOW));
   await assertSameMountIdentity(parent, handle);
   const observed = await inspectFileHandle(handle);
@@ -75,7 +75,7 @@ const inspectLeaf = async (parent: FileHandle, name: string, budget: PrivateRoot
 };
 
 const traverseLeaf = async (
-  parent: FileHandle, name: string, budget: PrivateRootTraversal, input: Readonly<{ remove: boolean; expected: BigIntStats }>,
+  parent: StableFilesystemHandle, name: string, budget: PrivateRootTraversal, input: Readonly<{ remove: boolean; expected: StableFilesystemStats }>,
 ): Promise<void> => {
   const handle = await inspectLeaf(parent, name, budget);
   try {
@@ -96,8 +96,8 @@ const traverseLeaf = async (
 };
 
 const traverseChildDirectory = async (
-  parent: FileHandle, name: string, budget: PrivateRootTraversal,
-  input: Readonly<{ depth: number; remove: boolean; expected: BigIntStats }>,
+  parent: StableFilesystemHandle, name: string, budget: PrivateRootTraversal,
+  input: Readonly<{ depth: number; remove: boolean; expected: StableFilesystemStats }>,
 ): Promise<void> => {
   const child = budget.retain(await openDirectoryEntry(parent, name));
   try {
@@ -121,7 +121,7 @@ const traverseChildDirectory = async (
 /** Only called under the private quiescence owner for mutation. Every child is
  * opened relative to a retained descriptor; links themselves are unlinked. */
 export const traversePrivateRoot = async (
-  root: FileHandle, budget: PrivateRootTraversal,
+  root: StableFilesystemHandle, budget: PrivateRootTraversal,
   input: Readonly<{ depth: number; remove: boolean }> = { depth: 0, remove: false },
 ): Promise<void> => {
   budget.check();

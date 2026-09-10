@@ -1,4 +1,4 @@
-import type { FileHandle } from "node:fs/promises";
+import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody";
 
 import {
   type BoundContainedTurnRoot,
@@ -7,14 +7,14 @@ import {
 
 export const openBoundDirectories = async <
   const Roots extends readonly BoundContainedTurnRoot[],
->(roots: Roots): Promise<{ -readonly [Index in keyof Roots]: FileHandle }> => {
+>(roots: Roots): Promise<{ -readonly [Index in keyof Roots]: StableFilesystemHandle }> => {
   const settled = await Promise.allSettled(roots.map(openBoundDirectory));
   const primaryFailure = settled.find(
     (result): result is PromiseRejectedResult => result.status === "rejected",
   );
   if (primaryFailure === undefined) {
-    return settled.map(result => (result as PromiseFulfilledResult<FileHandle>).value) as {
-      -readonly [Index in keyof Roots]: FileHandle;
+    return settled.map(result => (result as PromiseFulfilledResult<StableFilesystemHandle>).value) as {
+      -readonly [Index in keyof Roots]: StableFilesystemHandle;
     };
   }
   const opened = settled.flatMap(result =>

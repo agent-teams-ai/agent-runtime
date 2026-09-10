@@ -128,10 +128,10 @@ nativeTest("regular files and invalid descriptors never invoke a lock callback",
   });
 });
 
-test("Darwin process locking does not admit Linux directory mutation or publication", { skip: process.platform !== "darwin" }, async () => {
+test("Darwin publication rejects invalid descriptors independently of process locking", { skip: process.platform !== "darwin" }, async () => {
   assert.equal(stableDirectoryMutationCapability().kind, "unsupported");
   await assert.rejects(publishStableDirectoryNoReplace({
-    destinationDirectory: { fd: 0 }, destinationName: "target", expectedSourceIdentity: { dev: 1n, ino: 1n },
-    sourceDirectory: { fd: 0 }, sourceName: "source",
-  }), /qualified only on Linux/u);
+    destinationDirectory: { fd: -1 }, destinationName: "target", expectedSourceIdentity: { dev: 1n, ino: 1n },
+    sourceDirectory: { fd: -1 }, sourceName: "source",
+  }), /arguments are invalid/u);
 });

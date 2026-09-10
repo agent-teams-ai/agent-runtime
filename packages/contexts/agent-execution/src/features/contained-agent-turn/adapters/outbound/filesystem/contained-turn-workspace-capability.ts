@@ -1,3 +1,4 @@
+import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody";
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { open, type FileHandle } from "node:fs/promises";
@@ -28,7 +29,7 @@ export const claimResolvedWorkspaceAuthority = (authority: ResolvedWorkspaceLaun
 
 interface RetainedAuthority {
   readonly canonicalPath: string;
-  readonly handle: FileHandle;
+  readonly handle: StableFilesystemHandle;
   readonly identity: Readonly<{ readonly dev: bigint; readonly ino: bigint }>;
   readonly mountId: string;
   readonly name: string;
@@ -42,7 +43,7 @@ export interface RetainWorkspaceCapabilityInput {
   readonly canonicalPath: string;
   readonly name: string;
   readonly operationId: string;
-  readonly parent: FileHandle;
+  readonly parent: StableFilesystemHandle;
   readonly scope: ContainedTurnScope;
   readonly workspaceRef: string;
 }
@@ -101,7 +102,7 @@ export const createWorkspaceCapabilityRetention = (): WorkspaceCapabilityRetenti
       await parent.close();
       throw error;
     }
-    let handle: FileHandle;
+    let handle: StableFilesystemHandle;
     try {handle = await openDirectoryEntry(parent, input.name);} catch (error) {
       await parent.close();
       throw error;

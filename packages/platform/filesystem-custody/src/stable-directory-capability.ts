@@ -1,9 +1,15 @@
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 
+import { hasDarwinHostDescriptors, nativeHostMount, type StableFilesystemHandle } from "./host-descriptor.js";
+
 const MAX_FDINFO_BYTES = 16 * 1_024;
 
-export interface StableDirectoryMutationCapability {
+export type StableDirectoryMutationCapability = LinuxStableDirectoryMutationCapability | {
+  readonly kind: "supported"; readonly platform: "darwin"; readonly version: 1;
+};
+
+interface LinuxStableDirectoryMutationCapability {
   readonly descriptorRoot: "/proc/self/fd";
   readonly kind: "supported";
   readonly platform: "linux";
@@ -22,6 +28,7 @@ export type StableDirectoryMutationCapabilityDisposition =
   | UnsupportedStableDirectoryMutationCapability;
 
 export const resolveStableDirectoryMutationCapability = (input: Readonly<{
+  hasNativeHostDescriptors?: boolean;
   hasDirectoryOpen: boolean;
   hasNoFollowOpen: boolean;
   platform: NodeJS.Platform;
@@ -36,6 +43,9 @@ export const resolveStableDirectoryMutationCapability = (input: Readonly<{
         version: 1,
       });
     }
+    if (input.platform === "darwin" && input.hasNativeHostDescriptors === true) {
+      return Object.freeze({ kind: "supported", platform: "darwin", version: 1 });
+    }
     return Object.freeze({
       kind: "unsupported",
       platform: input.platform,
@@ -47,16 +57,22 @@ export const resolveStableDirectoryMutationCapability = (input: Readonly<{
 export const stableDirectoryMutationCapability =
   (): StableDirectoryMutationCapabilityDisposition =>
     resolveStableDirectoryMutationCapability({
+      hasNativeHostDescriptors: hasDarwinHostDescriptors(),
       hasDirectoryOpen: typeof constants.O_DIRECTORY === "number",
       hasNoFollowOpen: typeof constants.O_NOFOLLOW === "number",
       platform: process.platform,
     });
 
-export const readStableDirectoryMountIdentity = async (fd: number): Promise<string> => {
+export const readStableDirectoryMountIdentity = async (descriptor: number | StableFilesystemHandle): Promise<string> => {
   const capability = stableDirectoryMutationCapability();
   if (capability.kind === "unsupported") {
     throw new Error("stable directory mount identity is unsupported on this platform");
   }
+  if (capability.platform === "darwin") {
+    if (typeof descriptor === "number") {throw new TypeError("Darwin mount observation requires an owned handle");}
+    return nativeHostMount(descriptor);
+  }
+  const fd = typeof descriptor === "number" ? descriptor : descriptor.fd;
   if (!Number.isSafeInteger(fd) || fd < 0) {
     throw new TypeError("stable directory descriptor is invalid");
   }
@@ -87,7 +103,8 @@ export const assertSameStableDirectoryMountIdentity = (
   parentMountId: string,
   childMountId: string,
 ): void => {
-  if (!/^\d+$/u.test(parentMountId) || !/^\d+$/u.test(childMountId)) {
+  if (!/^(?:\d+|darwin:[a-f0-9]{8}:[a-f0-9]{8}:(?:[a-f0-9]{2})+)$/u.test(parentMountId) ||
+      !/^(?:\d+|darwin:[a-f0-9]{8}:[a-f0-9]{8}:(?:[a-f0-9]{2})+)$/u.test(childMountId)) {
     throw new TypeError("stable directory mount identity is invalid");
   }
   if (parentMountId !== childMountId) {

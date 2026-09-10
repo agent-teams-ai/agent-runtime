@@ -3,11 +3,14 @@ import {
   mkdir,
   open,
   realpath,
-  type FileHandle,
+  unlink,
 } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import {
   assertSameStableDirectoryMountIdentity,
+  type StableFilesystemHandle as FileHandle,
+  isNativeHostDescriptor, openNativeHostRoot, openNativeHostEntry,
+  duplicateNativeHostDescriptor, nativeHostPath, nativeHostMkdir, nativeHostUnlink,
   readStableDirectoryMountIdentity,
   stableDirectoryMutationCapability,
 } from "@agent-teams/filesystem-custody";
@@ -75,12 +78,12 @@ export interface ContainedTurnFilesystemObservation extends ContainedTurnFilesys
 }
 
 export const readFilesystemMountIdentity = async (
-  handle: Pick<FileHandle, "fd">,
-): Promise<string> => readStableDirectoryMountIdentity(handle.fd);
+  handle: FileHandle,
+): Promise<string> => readStableDirectoryMountIdentity(handle);
 
 export const assertSameMountIdentity = async (
-  parent: Pick<FileHandle, "fd">,
-  child: Pick<FileHandle, "fd">,
+  parent: FileHandle,
+  child: FileHandle,
 ): Promise<void> => {
   const parentMount = await readFilesystemMountIdentity(parent);
   const childMount = await readFilesystemMountIdentity(child);
@@ -136,6 +139,7 @@ const descriptorRoot = (): string => {
   if (capability.kind === "unsupported") {
     throw new ContainedTurnFilesystemUnsupportedError(capability.reason);
   }
+  if (capability.platform !== "linux") {throw new ContainedTurnFilesystemUnsupportedError("native Host descriptors have no pathname substitution");}
   return capability.descriptorRoot;
 };
 
@@ -161,7 +165,7 @@ const assertEntryName = (name: string): void => {
 };
 
 export const descriptorChildPath = (
-  handle: Pick<FileHandle, "fd">,
+  handle: FileHandle,
   name?: string,
 ): string => {
   assertLinuxDescriptorSupport();
@@ -184,7 +188,8 @@ export const openDirectoryEntry = async (
   allowMountBoundary = false,
 ): Promise<FileHandle> => {
   assertEntryName(name);
-  const child = await open(descriptorChildPath(parent, name), directoryOpenFlags());
+  const child = isNativeHostDescriptor(parent) ? openNativeHostEntry(parent, name, "directory") :
+    await open(descriptorChildPath(parent, name), directoryOpenFlags());
   try {
     const observation = await observationFromHandle(child);
     if (!observation.isDirectory || observation.isSymbolicLink) {
@@ -229,6 +234,11 @@ const pathComponents = (path: string): readonly string[] =>
   path.split(sep).filter(component => component.length > 0);
 
 const assertDescriptorAnchor = async (handle: FileHandle): Promise<void> => {
+  if (isNativeHostDescriptor(handle)) {
+    const retained = duplicateNativeHostDescriptor(handle);
+    await retained.close();
+    return;
+  }
   let anchored: FileHandle;
   try {
     anchored = await open(
@@ -258,7 +268,7 @@ const createPrivateDirectoryEntry = async (
   component: string,
 ): Promise<FileHandle> => {
   try {
-    await mkdir(descriptorChildPath(parent, component), { mode: Number(PRIVATE_DIRECTORY_MODE) });
+    await mkdirDirectoryEntry(parent, component);
     await fsyncDirectoryHandle(parent);
   } catch (error) {
     if (!isAlreadyPresent(error)) {throw error;}
@@ -278,7 +288,7 @@ const openDirectoryNoFollow = async (
 ): Promise<FileHandle> => {
   assertLinuxDescriptorSupport();
   assertNormalizedAbsolutePath(path);
-  let current = await open(sep, directoryOpenFlags());
+  let current = process.platform === "darwin" ? openNativeHostRoot() : await open(sep, directoryOpenFlags());
   try {
     await assertDescriptorAnchor(current);
     assertSafeAncestor(await observationFromHandle(current));
@@ -325,9 +335,9 @@ const bindExistingRoot = async (
   const handle = await openDirectoryNoFollow(path, false);
   try {
     const observation = await observationFromHandle(handle);
-    const mountId = await readStableDirectoryMountIdentity(handle.fd);
+    const mountId = await readStableDirectoryMountIdentity(handle);
     if (requirePrivate) {assertPrivateObservation(observation);}
-    const canonicalPath = await realpath(descriptorChildPath(handle));
+    const canonicalPath = await canonicalDescriptorPath(handle);
     if (canonicalPath !== path) {
       throw new Error("contained turn filesystem root is a symlink or non-canonical alias");
     }
@@ -361,7 +371,7 @@ export const bindContainedTurnDirectoryEntry = async (
   try {
     if (options.create === true) {
       try {
-        await mkdir(descriptorChildPath(parent, name), { mode: Number(PRIVATE_DIRECTORY_MODE) });
+        await mkdirDirectoryEntry(parent, name);
         await fsyncDirectoryHandle(parent);
       } catch (error) {if (!isAlreadyPresent(error)) {throw error;}}
     }
@@ -369,7 +379,7 @@ export const bindContainedTurnDirectoryEntry = async (
     try {
       const observation = await observationFromHandle(child);
       if (options.private === true) {assertPrivateObservation(observation);}
-      const canonicalPath = await realpath(descriptorChildPath(child));
+      const canonicalPath = await canonicalDescriptorPath(child);
       if (canonicalPath !== `${parentRoot.canonicalPath}${sep}${name}`) {
         throw new Error("contained turn filesystem child is a non-canonical alias");
       }
@@ -475,7 +485,7 @@ export const openBoundDirectory = async (
   const handle = await openDirectoryNoFollow(root.canonicalPath, false);
   try {
     const observation = await observationFromHandle(handle);
-    const mountId = await readStableDirectoryMountIdentity(handle.fd);
+    const mountId = await readStableDirectoryMountIdentity(handle);
     if (root.private) {assertPrivateObservation(observation);}
     if (
       !sameFilesystemIdentity(observation, root.identity) ||
@@ -530,7 +540,7 @@ export const ensurePrivateDirectory = async (path: string): Promise<string> => {
   try {
     const observation = await observationFromHandle(handle);
     assertPrivateObservation(observation);
-    const canonicalPath = await realpath(descriptorChildPath(handle));
+    const canonicalPath = await canonicalDescriptorPath(handle);
     if (canonicalPath !== path) {
       throw new Error("contained turn filesystem custody root is a non-canonical alias");
     }
@@ -541,3 +551,25 @@ export const ensurePrivateDirectory = async (path: string): Promise<string> => {
 };
 
 export const inspectFileHandle = observationFromHandle;
+
+export const canonicalDescriptorPath = async (handle: FileHandle): Promise<string> =>
+  isNativeHostDescriptor(handle) ? nativeHostPath(handle) : realpath(descriptorChildPath(handle));
+
+export const mkdirDirectoryEntry = async (parent: FileHandle, name: string): Promise<void> => {
+  assertEntryName(name);
+  if (isNativeHostDescriptor(parent)) {nativeHostMkdir(parent, name);}
+  else {await mkdir(descriptorChildPath(parent, name), { mode: 0o700 });}
+};
+export const unlinkFileEntry = async (parent: FileHandle, name: string): Promise<void> => {
+  assertEntryName(name);
+  if (isNativeHostDescriptor(parent)) {nativeHostUnlink(parent, name);}
+  else {await unlink(descriptorChildPath(parent, name));}
+};
+export const openFileEntry = async (
+  parent: FileHandle, name: string, create = false,
+): Promise<FileHandle> => {
+  assertEntryName(name);
+  if (isNativeHostDescriptor(parent)) {return openNativeHostEntry(parent, name, create ? "create" : "inspect");}
+  return open(descriptorChildPath(parent, name), constants.O_NOFOLLOW | constants.O_NONBLOCK |
+    (create ? constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY : constants.O_RDONLY), 0o600);
+};
