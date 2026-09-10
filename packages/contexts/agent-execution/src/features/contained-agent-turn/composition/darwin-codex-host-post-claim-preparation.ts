@@ -47,6 +47,8 @@ import {
   DarwinCodexNativeFiles, codexNativeBrokerLaunchInput,
   createDarwinCodexNativeBrokerRecipe, prepareCodexNativeBrokerFiles,
 } from "../adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
+import {codexDarwinNativeMaterialIdentity} from
+  "../adapters/outbound/codex-app-server/codex-native-broker-files.js";
 
 export interface DarwinCodexHostPreparationInput {
   readonly hostCustody: unknown;
@@ -181,9 +183,14 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
         if (nativeLease !== undefined) {await installCodexDarwinNativeBrokerFiles(nativeLease, recipe, options.catalogSource);}
         else {files!.install(recipe);}
         owner.assertActive();
+        const installation = nativeLease === undefined
+          ? files!.installationMaterial()
+          : codexDarwinNativeMaterialIdentity(recipe);
+        if (installation === undefined) {throw new Error("Darwin native installation material unavailable");}
         const projection = createDarwinSeatbeltProjection({launcher, observer, provider,
           endpoint: {...resources.address, address: "127.0.0.1"}, operationBinding: {proof: proof.proofDigest,
-            generation: lifetime.hostLifecycleGenerationSha256, installation: files!.installationMaterial()}, protectedRoot: options.durableRoot.path,
+            generation: lifetime.hostLifecycleGenerationSha256, installation},
+          protectedRoot: options.durableRoot.path,
           readPaths: ["/System/Library", "/usr/lib", options.boundary.workspaceRef, options.boundary.codexHome],
           writePaths: [options.tmpDir], installationPath: `${options.boundary.codexHome}/installation_id`});
         owner.authorize(projection);
