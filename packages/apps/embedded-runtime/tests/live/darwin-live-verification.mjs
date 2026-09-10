@@ -1,4 +1,5 @@
 import {createHash} from "node:crypto";
+import {constants} from "node:fs";
 import {lstat, open, readFile} from "node:fs/promises";
 import {join} from "node:path";
 
@@ -103,7 +104,27 @@ function verification(input) {
   });
 }
 
-async function retainSnapshot(input, result) {
+async function syncExistingSnapshot(openFile, path, bytes) {
+  const file = await openFile(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const before = await file.stat();
+    if (!before.isFile() || await file.readFile("utf8") !== bytes) {
+      throw refused("existing reconciliation snapshot differs (EEXIST)");
+    }
+    const after = await file.stat();
+    if (before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) {
+      throw refused("existing reconciliation snapshot changed during read");
+    }
+    await file.sync();
+    const linked = await lstat(path);
+    if (!linked.isFile() || linked.dev !== after.dev || linked.ino !== after.ino ||
+        linked.size !== after.size || linked.mtimeMs !== after.mtimeMs || linked.ctimeMs !== after.ctimeMs) {
+      throw refused("existing reconciliation snapshot identity changed");
+    }
+  } finally {await file.close();}
+}
+
+async function retainSnapshot(input, result, openFile) {
   const operation = await readOperation(input);
   if (result.accepted?.operationId !== undefined && result.accepted.operationId !== operation.operationId) {
     throw refused("reconciliation result operation differs");
@@ -119,14 +140,13 @@ async function retainSnapshot(input, result) {
   const path = join(directory, "reconciliation-owner-snapshot.json");
   let file;
   try {
-    file = await open(path, "wx", 0o600);
+    file = await openFile(path, "wx", 0o600);
     await file.writeFile(bytes); await file.sync();
   } catch (error) {
     if (error.code !== "EEXIST") {throw error;}
-    const stat = await lstat(path);
-    if (!stat.isFile() || stat.isSymbolicLink() || await readFile(path, "utf8") !== bytes) {throw error;}
+    await syncExistingSnapshot(openFile, path, bytes);
   } finally {await file?.close();}
-  const parent = await open(directory, "r");
+  const parent = await openFile(directory, "r");
   try {await parent.sync();} finally {await parent.close();}
   if (await readFile(path, "utf8") !== bytes) {throw refused("retained reconciliation readback differs");}
   return Object.freeze({status: "retained", path, sha256: hash(bytes), operationRevision: operation.revision});
@@ -134,10 +154,10 @@ async function retainSnapshot(input, result) {
 
 /** Feature-local projection. No launch, SQL codecs, owner mutation or inferred
  * cleanup success. Missing public evidence is a bounded qualification gap. */
-export function createDarwinLiveVerification(input) {
+export function createDarwinLiveVerification(input, {openFile = open} = {}) {
   const failures = [];
   return Object.freeze({verification: verification(input),
-    reconciliation: Object.freeze({retain: result => retainSnapshot(input, result)}),
+    reconciliation: Object.freeze({retain: result => retainSnapshot(input, result, openFile)}),
     cleanup: Object.freeze({
       recordFailure(error) {failures.push(String(error));},
       async readback() {

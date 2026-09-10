@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
-import {mkdtemp, readFile, rm} from "node:fs/promises";
+import {mkdtemp, open, readFile, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {createDarwinLiveVerification} from "./darwin-live-verification.mjs";
@@ -107,4 +107,49 @@ test("source inventory requires a concrete reader", async () => {
   await assert.rejects(createDarwinLiveVerification(input).verification.verifySourceInventory(), /owner read unavailable/u);
   input.verifySourceInventory = async () => false;
   assert.equal(await createDarwinLiveVerification(input).verification.verifySourceInventory(), false);
+});
+
+
+test("replay fsyncs an existing snapshot after the original file fsync failed, before syncing its parent", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "ar69-test-verification-fsync-"));
+  try {
+    const {input} = fixture(); input.activation.evidenceDirectory = directory;
+    const events = []; let fail = true;
+    const openFile = async (path, flags, mode) => {
+      const file = await open(path, flags, mode);
+      return {writeFile: (...args) => file.writeFile(...args), readFile: (...args) => file.readFile(...args),
+        stat: () => file.stat(), close: () => file.close(), async sync() {
+          const kind = path === directory ? "directory" : "file";
+          events.push(kind);
+          if (kind === "file" && fail) {fail = false; throw new Error("injected file fsync failure");}
+          return file.sync();
+        }};
+    };
+    const {reconciliation} = createDarwinLiveVerification(input, {openFile});
+    const result = {accepted: {operationId: "op"}};
+    await assert.rejects(reconciliation.retain(result), /injected file fsync failure/u);
+    assert.equal(JSON.parse(await readFile(join(directory, "reconciliation-owner-snapshot.json"), "utf8")).revision, 7);
+    assert.deepEqual(events, ["file"]);
+    assert.equal((await reconciliation.retain(result)).status, "retained");
+    assert.deepEqual(events, ["file", "file", "directory"]);
+  } finally {await rm(directory, {recursive: true, force: true});}
+});
+
+test("concurrent exact replays each synchronize their opened snapshot before acknowledging retention", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "ar69-test-verification-replay-"));
+  try {
+    const {input} = fixture(); input.activation.evidenceDirectory = directory;
+    const result = {accepted: {operationId: "op"}};
+    const original = await createDarwinLiveVerification(input).reconciliation.retain(result);
+    let syncedFiles = 0;
+    const openFile = async (path, flags, mode) => {
+      const file = await open(path, flags, mode);
+      return {readFile: (...args) => file.readFile(...args), stat: () => file.stat(), close: () => file.close(),
+        async sync() {await file.sync(); if (path !== directory) {syncedFiles += 1;}}};
+    };
+    const replays = await Promise.all(Array.from({length: 4}, () =>
+      createDarwinLiveVerification(input, {openFile}).reconciliation.retain(result)));
+    assert.equal(syncedFiles, 4);
+    for (const replay of replays) {assert.deepEqual(replay, original);}
+  } finally {await rm(directory, {recursive: true, force: true});}
 });
