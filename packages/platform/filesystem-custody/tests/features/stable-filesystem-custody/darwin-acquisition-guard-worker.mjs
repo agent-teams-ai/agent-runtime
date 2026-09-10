@@ -3,9 +3,9 @@ import { openSync, closeSync, constants, lstatSync, readlinkSync } from "node:fs
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 import { initializeDarwinHostAcquisitionGuard, hasDarwinHostDescriptors,
-  openNativeHostRoot, duplicateNativeHostDescriptor } from "../dist/index.js";
+  openNativeHostRoot, duplicateNativeHostDescriptor } from "../../../dist/composition.js";
 const loaded = { exports: {} };
-process.dlopen(loaded, fileURLToPath(new URL("../dist/rename-no-replace.node", import.meta.url)));
+process.dlopen(loaded, fileURLToPath(new URL("../../../dist/rename-no-replace.node", import.meta.url)));
 const native = loaded.exports;
 const [mode, root] = process.argv.slice(2);
 assert.equal(process.platform, "darwin");

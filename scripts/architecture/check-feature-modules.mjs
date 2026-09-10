@@ -427,6 +427,7 @@ export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath 
     root: rootIdentity,
     productionRoots,
     declaredModules,
+    declaredModuleEdges,
     features,
     issue,
     productionFiles: allFiles,

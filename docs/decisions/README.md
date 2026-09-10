@@ -20,6 +20,7 @@ related:
   - ADR-0015
   - ADR-0017
   - ADR-0018
+  - ADR-0019
 blocked_by: []
 code_anchors:
   - enforcement: required
@@ -80,6 +81,9 @@ immutable evidence; a later change uses an explicit superseding decision.
 - [ADR-0018: Declared production module edges](0018-declared-production-module-edges.md)
   requires a declared acyclic module edge, a curated assembly entry, and an
   outward-integration layer for every dependency between governed modules.
+- [ADR-0019: Stable filesystem custody feature activation](0019-stable-filesystem-custody-feature-activation.md)
+  activates the Filesystem Custody platform module as one cohesive feature with
+  a contracts-only public entry and its runtime behind the composition entry.
 ## Superseded
 
 No superseded decisions.

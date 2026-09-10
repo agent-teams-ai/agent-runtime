@@ -1,6 +1,6 @@
 import { StableDirectoryPublicationUnsupportedError, StableDirectoryPublicationAmbiguousResidueError } from "./stable-directory-publication.js";
 import type { BigIntStats } from "node:fs";
-import { join } from "node:path";
+import { stableFilesystemNativeArtifactPath } from "../native/stable-filesystem-native-artifact.js";
 
 export type StableFilesystemStats = Pick<BigIntStats,
   "dev" | "ino" | "mode" | "uid" | "nlink" | "size" | "ctimeNs" | "mtimeNs" |
@@ -41,7 +41,7 @@ let binding: HostBinding | undefined;
 const load = (): HostBinding => {
   if (binding !== undefined) {return binding;}
   const module = { exports: {} } as NodeModule;
-  process.dlopen(module, join(import.meta.dirname, "rename-no-replace.node"));
+  process.dlopen(module, stableFilesystemNativeArtifactPath());
   const candidate = module.exports as Partial<HostBinding>;
   const keys: readonly (keyof HostBinding)[] = ["initializeDarwinHostAcquisitionGuard", "isDarwinHostAcquisitionGuardInstalled", "hostRoot", "hostOpen", "hostClose", "hostFd",
     "hostDuplicate", "hostStat", "hostNames", "hostRead", "hostWrite", "hostSync",

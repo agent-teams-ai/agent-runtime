@@ -55,7 +55,8 @@
           ".",
           "./composition"
         ],
-        "adoption": "pending"
+        "adoption": "active",
+        "activationAuthority": "ADR-0019"
       },
       {
         "id": "provider-access",
@@ -100,13 +101,13 @@
     ],
     "productionRoots": [
       "packages/contexts/agent-execution/src",
-      "packages/contexts/provider-access/src"
+      "packages/contexts/provider-access/src",
+      "packages/platform/filesystem-custody/src"
     ],
     "outOfScope": [
       "Embedded Runtime",
       "Runtime Configuration",
       "Runtime Security",
-      "Filesystem Custody",
       "Module Kit",
       "experiments",
       "tooling other than scripts/architecture/check-feature-modules.mjs"
@@ -163,16 +164,39 @@
         "public": "packages/contexts/provider-access/src/features/contained-turn-access/index.ts",
         "internal": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts"
       }
+    },
+    {
+      "id": "stable-filesystem-custody",
+      "root": "packages/platform/filesystem-custody/src/features/stable-filesystem-custody",
+      "roles": [
+        "contracts",
+        "adapters"
+      ],
+      "entrypoints": {
+        "public": "packages/platform/filesystem-custody/src/features/stable-filesystem-custody/index.ts",
+        "internal": "packages/platform/filesystem-custody/src/features/stable-filesystem-custody/internal.ts"
+      }
     }
   ],
   "assemblyFiles": [
     "packages/contexts/agent-execution/src/index.ts",
     "packages/contexts/agent-execution/src/composition.ts",
     "packages/contexts/provider-access/src/index.ts",
-    "packages/contexts/provider-access/src/composition.ts"
+    "packages/contexts/provider-access/src/composition.ts",
+    "packages/platform/filesystem-custody/src/index.ts",
+    "packages/platform/filesystem-custody/src/composition.ts"
   ],
   "featureEdges": [],
-  "moduleEdges": [],
+  "moduleEdges": [
+    {
+      "from": "agent-execution",
+      "to": "filesystem-custody",
+      "kinds": [
+        "runtime",
+        "type"
+      ]
+    }
+  ],
   "extensions": [],
   "deviations": [],
   "exceptions": [],
@@ -204,15 +228,15 @@
   "adoption": {
     "moduleRoots": [
       "packages/contexts/agent-execution",
-      "packages/contexts/provider-access"
+      "packages/contexts/provider-access",
+      "packages/platform/filesystem-custody"
     ],
     "applicationRoots": [],
     "excludedRoots": [
       "experiments",
       "packages/apps/embedded-runtime",
       "packages/contexts/runtime-configuration",
-      "packages/contexts/runtime-security",
-      "packages/platform/filesystem-custody"
+      "packages/contexts/runtime-security"
     ],
     "abstractLayout": {
       "modules": [
@@ -235,6 +259,16 @@
           "testRoot": "packages/contexts/provider-access/tests",
           "featureTestsRoot": "packages/contexts/provider-access/tests/features",
           "moduleTestsRoot": "packages/contexts/provider-access/tests/package"
+        },
+        {
+          "moduleRoot": "packages/platform/filesystem-custody",
+          "sourceRoot": "packages/platform/filesystem-custody/src",
+          "featuresRoot": "packages/platform/filesystem-custody/src/features",
+          "moduleComposition": "packages/platform/filesystem-custody/src/composition.ts",
+          "publicEntrypoint": "packages/platform/filesystem-custody/src/index.ts",
+          "testRoot": "packages/platform/filesystem-custody/tests",
+          "featureTestsRoot": "packages/platform/filesystem-custody/tests/features",
+          "moduleTestsRoot": "packages/platform/filesystem-custody/tests/package"
         }
       ],
       "applications": []

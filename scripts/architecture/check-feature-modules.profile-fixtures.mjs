@@ -20,6 +20,44 @@ const productionModule = (overrides = {}) => ({
   ...overrides,
 });
 
+const nestedModule = (id, moduleRoot, packageName) => ({
+  id,
+  role: "bounded-context",
+  moduleRoot,
+  sourceRoot: `${moduleRoot}/src`,
+  packageName,
+  ownerDocument: "ADR-0005",
+  curatedExports: [".", "./composition"],
+  adoption: "active",
+  activationAuthority: "ADR-0005",
+});
+
+const nestedFeature = (id, moduleRoot, roles) => ({
+  id,
+  root: `${moduleRoot}/src/features/${id}`,
+  roles,
+  entrypoints: { public: `${moduleRoot}/src/features/${id}/index.ts`, internal: `${moduleRoot}/src/features/${id}/internal.ts` },
+});
+
+// Two modules that both sit below the repository root, which is the shape the
+// real workspace has. The single-root fixture cannot express a cross-package
+// reach, because the root package's own inventory already contains every file.
+export const nestedModuleProfile = (fixture) => ({
+  productionModules: [
+    nestedModule("fixture-alpha-module", "packages/a", "@fixture/alpha-module"),
+    nestedModule("fixture-gamma-module", "packages/b", "@fixture/gamma-module"),
+  ],
+  productionRoots: ["packages/a/src", "packages/b/src"],
+  features: [
+    nestedFeature("alpha", "packages/a", fixture.alphaRoles ?? ["contracts", "adapters"]),
+    nestedFeature("gamma", "packages/b", fixture.gammaRoles ?? ["contracts", "adapters"]),
+  ],
+  assemblyFiles: [
+    "packages/a/src/index.ts", "packages/a/src/composition.ts",
+    "packages/b/src/index.ts", "packages/b/src/composition.ts",
+  ],
+});
+
 export const secondModule = () => ({
   id: "fixture-other",
   role: "platform",
@@ -126,17 +164,21 @@ export const fixtureProfile = (fixture) => {
     scope: {
       workspaceContainers: fixture.workspaceContainers ?? [],
       productionModules: fixture.productionModules
-        ?? (fixture.secondModule ? [productionModule(), secondModule()] : [productionModule()]),
-      productionRoots: fixture.secondModule ? ["src", "other/src"] : ["src"],
+        ?? (fixture.nestedModules ? nestedModuleProfile(fixture).productionModules
+          : fixture.secondModule ? [productionModule(), secondModule()] : [productionModule()]),
+      productionRoots: fixture.nestedModules ? nestedModuleProfile(fixture).productionRoots
+        : fixture.secondModule ? ["src", "other/src"] : ["src"],
       outOfScope: ["everything else"],
     },
     moduleRoles: ["contracts", "domain", "application", "adapters", "composition"],
-    features: fixture.secondModule
-      ? [feature("alpha", fixture.alphaRoles), secondModuleFeature(fixture.gammaRoles)]
-      : [feature("alpha", fixture.alphaRoles)],
-    assemblyFiles: fixture.secondModule
-      ? ["src/index.ts", "src/composition.ts", "other/src/index.ts", "other/src/composition.ts"]
-      : ["src/index.ts", "src/composition.ts"],
+    features: fixture.nestedModules ? nestedModuleProfile(fixture).features
+      : fixture.secondModule
+        ? [feature("alpha", fixture.alphaRoles), secondModuleFeature(fixture.gammaRoles)]
+        : [feature("alpha", fixture.alphaRoles)],
+    assemblyFiles: fixture.nestedModules ? nestedModuleProfile(fixture).assemblyFiles
+      : fixture.secondModule
+        ? ["src/index.ts", "src/composition.ts", "other/src/index.ts", "other/src/composition.ts"]
+        : ["src/index.ts", "src/composition.ts"],
     featureEdges: fixture.edges ?? [],
     moduleEdges: fixture.moduleEdges ?? [],
     extensions: fixture.extensions ?? [], deviations: fixture.deviations ?? [], exceptions: fixture.exceptions ?? [],

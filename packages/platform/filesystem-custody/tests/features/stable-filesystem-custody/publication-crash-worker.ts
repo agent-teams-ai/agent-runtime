@@ -28,7 +28,7 @@ await candidate.close();
 const destinationName = "published";
 const incompleteName = `.ar-publish-v1-${identity.dev.toString(16)}-${identity.ino.toString(16)}-${destinationName}.incomplete`;
 const loaded = { exports: {} } as NodeModule;
-process.dlopen(loaded, join(import.meta.dirname, "../dist/rename-no-replace.node"));
+process.dlopen(loaded, join(import.meta.dirname, "../../../dist/rename-no-replace.node"));
 (loaded.exports as CrashBinding).testCrashAfterCapture(
   source.fd,
   "candidate",

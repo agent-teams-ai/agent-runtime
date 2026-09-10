@@ -71,6 +71,11 @@
       "id": "ADR-0018",
       "path": "docs/decisions/0018-declared-production-module-edges.md",
       "immutableDigest": "sha256:30047bd8af157f3190ed149d55a972bbccf8d5dd4ad8b72857099c53c8151843"
+    },
+    {
+      "id": "ADR-0019",
+      "path": "docs/decisions/0019-stable-filesystem-custody-feature-activation.md",
+      "immutableDigest": "sha256:0d14957269756e25a91fa3598b42034d335b1f27eddedd18c267d8069d7612b4"
     }
   ]
 }
