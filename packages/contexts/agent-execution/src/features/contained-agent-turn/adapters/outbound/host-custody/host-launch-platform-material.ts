@@ -13,11 +13,12 @@ const directoryIdentity = (path: string, observation: WorkspaceObservation) => [
  * retains observations but executes canonical names, never Linux descriptor paths.
  */
 export const finalHostExecutionMaterialSha256 = (
-  candidate: LaunchCandidate, executable: ExecutableObservation, materialSha256: string,
+  candidate: LaunchCandidate, executable: ExecutableObservation, materialSha256: string, darwinRouteProjection?: string,
 ): string => {
   const {plan, privatePaths} = candidate;
   if (plan.containmentProfile === "cooperative-darwin-posix-process-group") {
     return sha256(canonicalJson([materialSha256, {
+      ...(darwinRouteProjection === undefined ? {} : {routeProjection: darwinRouteProjection}),
       platform: "darwin",
       profile: plan.containmentProfile,
       limitations: DARWIN_COOPERATIVE_CUSTODY_LIMITATIONS,

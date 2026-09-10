@@ -139,3 +139,8 @@ export {createCodexNativeBrokerFileInstaller, type CodexNativeBrokerFileInstalle
 
 export {createDeferredCodexNativeBrokerFiles, type DeferredCodexNativeBrokerFiles,
   type DeferredCodexNativeBrokerFilesOptions} from "./composition/deferred-codex-native-broker-files.js";
+
+export {createDarwinCodexRouteEnforcement, bindDarwinCodexRouteEnforcement,
+  type DarwinCodexRouteEnforcementCapability, type DarwinCodexRouteEnforcementInput}
+  from "./composition/darwin-codex-route-enforcement.js";
+export {type DarwinCodexHostPreparationInput} from "./composition/darwin-codex-host-post-claim-preparation.js";

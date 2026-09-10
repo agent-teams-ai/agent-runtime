@@ -1,0 +1,144 @@
+import assert from "node:assert/strict";
+import {test, after} from "node:test";
+import {fixture, directory, file, retainedBytes, sessionDependencies, syntheticNodeModule,
+  enablePreparationOS, preparationEffects, mutate} from "./darwin-native-finalization-fixture.ts";
+
+const {NodeProviderProcessCustodyCore} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-core.js");
+const {NodeProviderProcessCustodyHttpReservation} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-http-reservation.js");
+const {createDarwinCodexHostPostClaimPreparation} = await import("../../../dist/features/contained-agent-turn/composition/darwin-codex-host-post-claim-preparation.js");
+const {darwinDigest} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-route-durable-storage.js");
+const {DarwinSeatbeltRouteOwner} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-seatbelt-route-owner.js");
+const {nativeHttpRequestProfile} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/native-http-request-profile.js");
+const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+Object.defineProperty(process, "platform", {...platform, value: "darwin"});
+after(() => Object.defineProperty(process, "platform", platform));
+enablePreparationOS();
+const native = process.dlopen;
+const locked = new Set<number>();
+process.dlopen = (module, path) => {
+  assert.equal(path, new URL("../../../../../platform/filesystem-custody/dist/rename-no-replace.node", import.meta.url).pathname);
+  module.exports = {tryLockDirectory(fd: number) {assert.equal(locked.has(fd), false); locked.add(fd); return true;},
+    unlockDirectory(fd: number) {assert.equal(locked.delete(fd), true);}};
+};
+after(() => {process.dlopen = native; assert.equal(locked.size, 0);});
+
+// All product owners execute from this workspace's emitted packages. Only the
+// OS (filesystem, native lock and net.Server) is synthetic; no provider starts.
+test("outer preparation binds actual reserved TMPDIR before allocation and at final binding", async t => {
+  for (const mode of ["positive", "foreign", "home", "workspace", "replacement-before", "replacement-final"] as const) {
+    const f = fixture("analysis", true); const reference = await f.reserve();
+    const profile = nativeHttpRequestProfile("codex-chatgpt-responses/v1")!;
+    const session = {...sessionDependencies(reference), route: Object.freeze({requestProfile: profile.id,
+      routeReceiptDigest: "synthetic-route", originHost: profile.originHost, originPort: profile.originPort,
+      upstreamMethod: profile.upstreamMethod, upstreamPath: profile.upstreamPath,
+      forwardedRequestHeaderNames: profile.forwardedRequestHeaderNames, credentialFieldNames: profile.credentialFieldNames})}; const proof = reference.lifetime.committedDispatchProof; reference.close();
+    const owner = new NodeProviderProcessCustodyCore({launchPlans: {resolve: async () => f.plan},
+      residueAuthorityFactory: {create: async () => ({attachGuardian: async () => false, close: async () => false,
+        killAll: async () => false, proveEmpty: async () => "unproven" as const})}},
+      {platform: "darwin", containmentProfile: "cooperative-darwin-posix-process-group",
+        residueAuthorityFactory: {create: async () => {throw new Error("unused");}}});
+    const reserved = await owner.reserve({...f.input, launchPlan: f.plan, workspaceAuthority: f.workspaceAuthority()});
+    let live: Parameters<NodeProviderProcessCustodyHttpReservation["acquire"]>[0] | undefined;
+    const acquire = NodeProviderProcessCustodyHttpReservation.prototype.acquire;
+    const capture = t.mock.method(NodeProviderProcessCustodyHttpReservation.prototype, "acquire", function (...args) {
+      live = args[0]; return acquire.apply(this, args);
+    });
+    for (const path of ["/System/Library", "/usr/lib", "/usr/bin", "/owned", "/durable", "/foreign/tmp",
+      process.execPath.slice(0, process.execPath.lastIndexOf("/"))]) {directory(path);}
+    for (const path of ["/owned/observer", "/usr/bin/sandbox-exec", process.execPath]) {file(path, Buffer.from("pinned tool"), 0o100700);}
+    const fs = syntheticNodeModule("node:fs") as typeof import("node:fs");
+    const s = fs.lstatSync("/durable");
+    const tmpDir = mode === "foreign" ? "/foreign/tmp" : mode === "home" ? f.boundary.codexHome
+      : mode === "workspace" ? f.boundary.workspaceRef : f.options.tmpDir;
+    const input = {hostCustody: owner, durableRoot: {path: "/durable", dev: String(s.dev), ino: String(s.ino)},
+      boundary: f.boundary, executable: {path: f.options.executablePath, sha256: f.plan.executableSha256},
+      observer: {path: "/owned/observer", sha256: darwinDigest("pinned tool")},
+      launcherSha256: darwinDigest("pinned tool"), nodeSha256: darwinDigest("pinned tool"),
+      catalogSource: retainedBytes("models.json"), tmpDir, session,
+      limits: {deadline: 100, closureDeadline: 200, maxInboundHeaderBytes: 16000, maxInboundBodyBytes: 1024,
+        maxUpstreamHeaderBytes: 16000, maxOutputBytes: 1024, maxBufferedBytes: 1024, maxUpstreamWireBytes: 20000},
+      localCut: {operationDeadline: 100, expectedClock: {authorityId: "clock", epoch: "epoch"},
+        clock: {read: () => ({authorityId: "clock", epoch: "epoch", controlTime: 0}),
+          within: async <T>(_deadline: number, operation: () => Promise<T>) => operation()}}};
+    const before = preparationEffects.length;
+    if (mode === "replacement-before") {mutate(tmpDir, {ino: 900001});}
+    const originalBind = DarwinSeatbeltRouteOwner.prototype.bindFinal;
+    const binding = t.mock.method(DarwinSeatbeltRouteOwner.prototype, "bindFinal", function (final) {
+      if (mode === "replacement-final") {mutate(tmpDir, {ino: 900002});}
+      return originalBind.call(this, final);
+    });
+    const result = await createDarwinCodexHostPostClaimPreparation(input).prepareClaimed({
+      committedDispatchProof: proof, signal: new AbortController().signal, underlyingCustodyRef: reserved.custodyRef});
+    capture.mock.restore(); binding.mock.restore();
+    assert.ok(live, "factory must acquire the actual Host reservation");
+    try {
+      if (mode === "positive") {
+        assert.deepEqual(result, {kind: "prepared"});
+        const final = NodeProviderProcessCustodyCore.launchView(owner, reserved.custodyRef)!.readFinal();
+        assert.equal(final.plan.environment.TMPDIR, tmpDir);
+        const home = f.boundary.codexHome; const installation = `${home}/installation_id`;
+        const config = fs.readFileSync(`${home}/config.toml`, "utf8");
+        assert.ok(config.startsWith(`sqlite_home = ${JSON.stringify(tmpDir)}\n`));
+        assert.match(fs.readFileSync(installation, "utf8"), /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u);
+        assert.equal(fs.lstatSync(installation).mode & 0o777, 0o644);
+        const generated = live.httpReservation.darwinRoute!.projection.profile;
+        assert.ok(generated.includes('(allow file-read-data (literal "/"))'));
+        assert.ok(generated.includes(`(allow file-write-data (literal "${installation}"))`));
+        assert.deepEqual(generated.split("\n").filter(line => line.startsWith("(allow ") && /file-write/u.test(line)), [
+          '(allow file-read* file-write-data (literal "/dev/null"))',
+          `(allow file-write-data (literal "${installation}"))`,
+          `(allow file-read* file-write* (subpath "${tmpDir}"))`,
+        ]);
+        for (const forbidden of ['(subpath "/")', '(allow file-read* (literal "/"))',
+          `(allow file-read* file-write* (subpath "${home}"))`,
+          `(allow file-read* file-write* (subpath "${f.boundary.workspaceRef}"))`]) {
+          assert.equal(generated.includes(forbidden), false);
+        }
+        live.launchBinding.firstStart(live);
+        assert.equal(live.launchBinding.executionPermitted(live), true);
+        const original = fs.lstatSync(installation).ino;
+        mutate(installation, {ino: 900004});
+        assert.equal(live.launchBinding.executionPermitted(live), false);
+        mutate(installation, {ino: original});
+        assert.equal(live.launchBinding.executionPermitted(live), true);
+        assert.deepEqual(live.httpReservation.darwinRoute!.projection.writePaths, [tmpDir]);
+        assert.equal(live.httpReservation.darwinRoute!.state, "launch-authorized");
+        assert.ok(preparationEffects.slice(before).includes("listen"));
+      } else {
+        assert.equal(result.kind, "quarantined", mode);
+        assert.throws(() => NodeProviderProcessCustodyCore.launchView(owner, reserved.custodyRef)!.readFinal());
+        if (mode !== "replacement-final") {
+          assert.equal(preparationEffects.slice(before).some(effect => effect === "listen" || effect.startsWith("create:")), false, mode);
+        }
+      }
+    } finally {
+      const cleaned = await live.httpReservation.cleanup();
+      if (mode === "positive") {
+        assert.equal(cleaned, true);
+        const effects = preparationEffects.slice(before);
+        assert.ok(effects.includes("listener-close"));
+        assert.ok(effects.includes(`unlink:${f.boundary.codexHome}/config.toml`));
+        assert.ok(effects.includes(`unlink:${f.boundary.codexHome}/models.json`));
+        assert.ok(effects.includes(`unlink:${f.boundary.codexHome}/installation_id`));
+      }
+      live.launchAuthority?.close(); live.retainedWorkspaceAuthority?.close(); live.privateRootCleanupAuthority?.close();
+    }
+  }
+});
+
+test("issued Darwin recipe with another state directory cannot stage against the actual reservation", async t => {
+  const f = fixture("analysis", true); const reserved = await f.reserve(); t.after(reserved.close);
+  const {createDarwinCodexNativeBrokerRecipe} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.js");
+  const {DarwinCodexNativeFiles} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/darwin-codex-native-files.js");
+  const {prepareCodexNativeBrokerFiles} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-files.js");
+  const recipe = createDarwinCodexNativeBrokerRecipe({boundary: f.boundary, profile: "codex-chatgpt",
+    endpoint: "http://127.0.0.1:32123/backend-api/codex", tmpDir: `${f.options.tmpDir}-foreign`});
+  const installer = new DarwinCodexNativeFiles(f.boundary, retainedBytes("models.json"), {record() {}} as never, () => {});
+  t.after(() => installer.cleanup()); installer.install(recipe);
+  const files = await prepareCodexNativeBrokerFiles(recipe);
+  const {createCodexAppServerLaunchPlan} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.js");
+  assert.throws(() => createCodexAppServerLaunchPlan({...f.options,
+    nativeBroker: {recipe, files, localCapability: "synthetic_broker_capability_0123456789"}}), /state differs from reserved TMPDIR/u);
+  await assert.rejects(reserved.bind().stage({recipe, files}));
+  assert.throws(() => reserved.live.launchBinding.view.readFinal());
+});

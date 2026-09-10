@@ -6,7 +6,7 @@ import { codexDisabledFeatures, codexNativeConfigDefaults, DISABLED_CODEX_FEATUR
 import type { CodexAppServerPermissionBoundary } from "./codex-app-server-permission-boundary.js";
 
 import {
-  assertCodexNativeBrokerBoundary, codexNativeBrokerUserOverrides, codexNativeBrokerEffectiveOverrides,
+  codexNativeBrokerDarwinStateDirectory, assertCodexNativeBrokerBoundary, codexNativeBrokerUserOverrides, codexNativeBrokerEffectiveOverrides,
   CODEX_NATIVE_BROKER_DISABLED_FEATURES, CODEX_NATIVE_BROKER_USER_LEAVES,
   type CodexNativeBrokerRecipe,
 } from "./codex-native-broker-recipe.js";
@@ -187,6 +187,7 @@ export const validateCodexConfigEvidence = (
   const permissionPrefix = `permissions.${profileId}`;
   const userLeaves = [
     ...(nativeBrokerRecipe === undefined ? [] : CODEX_NATIVE_BROKER_USER_LEAVES),
+    ...(nativeBrokerRecipe !== undefined && codexNativeBrokerDarwinStateDirectory(nativeBrokerRecipe) !== undefined ? ["sqlite_home"] : []),
     `${permissionPrefix}.extends`, `${permissionPrefix}.network.enabled`,
     ...[codexProtocolPaths(boundary).codexHome, ":tmpdir", ":slash_tmp"].map(path => `${permissionPrefix}.filesystem.${path}`),
   ];

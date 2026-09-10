@@ -100,7 +100,10 @@ export const launchGuardedProvider = (options: GuardedProviderLaunchOptions): Gu
   let guardian: StableProcessGroupGuardian;
   try {
     const cooperative = live.plan?.containmentProfile === "cooperative-darwin-posix-process-group";
+    const route = live.httpReservation.darwinRoute;
+    route?.guardianIntent();
     guardian = new StableProcessGroupGuardian({
+      ...(route === undefined ? {} : {darwinRoute: route.projection}),
       arguments: cooperative
         ? options.arguments
         : descriptorBoundArguments(options.arguments, live.workspaceRef, authority.workspaceDescriptor.childDescriptor),
@@ -108,7 +111,10 @@ export const launchGuardedProvider = (options: GuardedProviderLaunchOptions): Gu
       environment: cooperative
         ? options.environment
         : descriptorBoundEnvironment(options.environment, authority.privatePathDescriptors),
-      beforeLaunch: pid => live.residueAuthority?.attachGuardian(pid) ?? Promise.resolve(false),
+      beforeLaunch: async pid => {
+        const attached = await (live.residueAuthority?.attachGuardian(pid) ?? Promise.resolve(false));
+        return attached && (route === undefined || route.beforeLaunch());
+      },
       ...(cooperative ? { canonicalLaunch: {
         command: live.plan!.executablePath,
         cwd: live.workspaceRef,
@@ -119,7 +125,7 @@ export const launchGuardedProvider = (options: GuardedProviderLaunchOptions): Gu
         workspaceIno: live.workspace!.ino.toString(),
       } } : {}),
       launchPermitted: () => live.launchBinding.executionPermitted(live),
-    }, options.spawnAcknowledgementAfterMs);
+    }, route?.admissionMilliseconds(options.spawnAcknowledgementAfterMs) ?? options.spawnAcknowledgementAfterMs);
   } catch {authority.close(); throw new GuardianConstructionError();}
   const child = guardian.child;
   const stdout = new HostStdoutIngress(options.stdoutHighWaterBytes, options.maxStdoutBytes, options.onOverflow);

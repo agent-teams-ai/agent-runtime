@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { lstatSync, readdirSync, type BigIntStats } from "node:fs";
 import { capturePathLineage, openStablePath, pathLineagesEqual } from "@agent-teams/filesystem-custody";
 import {
-  CODEX_NATIVE_CATALOG_BYTES, CODEX_NATIVE_CATALOG_SHA256,
+  darwinCodexInstallationMaterial, CODEX_NATIVE_CATALOG_BYTES, CODEX_NATIVE_CATALOG_SHA256,
   codexNativeBrokerBoundary, renderCodexNativeBrokerConfig,
   type CodexNativeBrokerRecipe,
 } from "./codex-native-broker-recipe.js";
@@ -17,9 +17,10 @@ interface PreparedFiles {
 }
 const prepared = new WeakMap<CodexNativeBrokerFiles, PreparedFiles>();
 const rejected = (): TypeError => new TypeError("Codex native broker files rejected");
-const assertEmptyNativeState = (home: string): void => {
+const assertEmptyNativeState = (home: string, recipe: CodexNativeBrokerRecipe): void => {
   const entries = readdirSync(home).toSorted();
-  if (entries.length !== 2 || entries[0] !== "config.toml" || entries[1] !== "models.json") {throw rejected();}
+  const expected = darwinCodexInstallationMaterial(recipe) === undefined ? ["config.toml", "models.json"] : ["config.toml", "installation_id", "models.json"];
+  if (entries.length !== expected.length || entries.some((entry, index) => entry !== expected[index])) {throw rejected();}
 };
 const same = (a: BigIntStats, b: BigIntStats): boolean =>
   a.dev === b.dev && a.ino === b.ino && a.mode === b.mode && a.nlink === b.nlink
@@ -53,7 +54,7 @@ export const prepareCodexNativeBrokerFiles = async (recipe: CodexNativeBrokerRec
   const boundary = codexNativeBrokerBoundary(recipe);
   try {
     validateCodexDirectoryIdentity("codexHome", boundary.codexHomeIdentity);
-    assertEmptyNativeState(boundary.codexHome);
+    assertEmptyNativeState(boundary.codexHome, recipe);
     const config = Buffer.from(renderCodexNativeBrokerConfig(recipe));
     const observations = [
       await observeFile(boundary.codexHome, `${boundary.codexHome}/config.toml`, {
@@ -78,7 +79,7 @@ export const validateCodexNativeBrokerFiles = (files: CodexNativeBrokerFiles, re
   try {
     const boundary = codexNativeBrokerBoundary(recipe);
     validateCodexDirectoryIdentity("codexHome", boundary.codexHomeIdentity);
-    assertEmptyNativeState(boundary.codexHome);
+    assertEmptyNativeState(boundary.codexHome, recipe);
     for (const file of state.observations) {
       if (!same(file.stats, lstatSync(file.path, { bigint: true }))) {throw rejected();}
     }

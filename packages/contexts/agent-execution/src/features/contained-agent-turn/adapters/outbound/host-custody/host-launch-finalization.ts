@@ -56,6 +56,7 @@ export class HostLaunchBinding {
     if (this.#recipe === undefined) {return;}
     if (this.#started || this.#final === undefined) {throw rejected();}
     this.#validate!();
+    live.httpReservation.darwinRoute?.assertLaunch(this.#final);
     recheckFinalHostLaunch(live, this.#final);
     live.httpReservation.assertActive();
     if (live.sealed || live.abortRequested) {throw rejected();}
@@ -72,6 +73,7 @@ export class HostLaunchBinding {
         this.#validate!(); recheckFinalHostLaunch(live, this.#final);
         live.httpReservation.assertActive();
       }
+      live.httpReservation.darwinRoute?.assertLaunch(this.#final);
       return !live.sealed && !live.abortRequested;
     } catch {return false;}
   }
@@ -123,6 +125,7 @@ export class HostLaunchBinding {
         try {
           active(this);
           if (staged === undefined || session !== undefined) {throw rejected();}
+          live.httpReservation.darwinRoute?.bindSession(dependencies);
           session = live.httpReservation.bindSession(lifetime, retainFinalizationHttpResources(dependencies, recipe.providerAccess));
           active(this);
           return session;
@@ -134,6 +137,7 @@ export class HostLaunchBinding {
           if (candidate !== staged || launch === undefined || session === undefined || validate === undefined) {throw rejected();}
           // No callbacks or awaits between the final check and the one publication.
           validate(); recheckFinalHostLaunch(live, launch); active(this);
+          live.httpReservation.darwinRoute?.bindFinal(launch);
           publish(launch, validate);
           return launch;
         } catch {return fail();}
