@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
-import { isNativeHostDescriptor, openNativeHostEntry, duplicateNativeHostDescriptor, type StableFilesystemHandle as FileHandle } from "@agent-teams/filesystem-custody";
+import { isNativeHostDescriptor, openNativeHostEntry, duplicateNativeHostDescriptor, type StableFilesystemHandle as FileHandle } from "@agent-teams/filesystem-custody/composition";
 import { join } from "node:path";
 
 import {

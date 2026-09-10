@@ -1,4 +1,4 @@
-import { openStablePath as openPathUnderCustody } from "@agent-teams/filesystem-custody";
+import { openStablePath as openPathUnderCustody } from "@agent-teams/filesystem-custody/composition";
 import { realpath, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, parse } from "node:path";
 

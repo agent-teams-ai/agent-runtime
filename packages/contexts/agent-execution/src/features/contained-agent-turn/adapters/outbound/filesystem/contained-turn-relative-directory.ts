@@ -1,4 +1,4 @@
-import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody";
+import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody/composition";
 
 import { openDirectoryEntry } from "./contained-turn-filesystem-custody.js";
 

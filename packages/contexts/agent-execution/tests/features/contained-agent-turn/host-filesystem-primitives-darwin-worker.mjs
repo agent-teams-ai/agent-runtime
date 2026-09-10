@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { hasDarwinHostDescriptors, initializeDarwinHostAcquisitionGuard } from "@agent-teams/filesystem-custody";
+import { hasDarwinHostDescriptors, initializeDarwinHostAcquisitionGuard } from "@agent-teams/filesystem-custody/composition";
 
 initializeDarwinHostAcquisitionGuard();
 assert.equal(hasDarwinHostDescriptors(), true);

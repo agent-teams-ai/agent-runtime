@@ -8,7 +8,7 @@ import {
   isNativeHostDescriptor, openNativeHostEntry, quarantineNativeHostEntry,
   StableDirectoryPublicationUnsupportedError,
   withStableDirectoryProcessLock,
-} from "@agent-teams/filesystem-custody";
+} from "@agent-teams/filesystem-custody/composition";
 import { ContainedTurnFilesystemUnsupportedError } from "./contained-turn-filesystem-error.js";
 
 import {

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody";
+import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody/composition";
 import { join } from "node:path";
-import { withStableDirectoryProcessLock } from "@agent-teams/filesystem-custody";
+import { withStableDirectoryProcessLock } from "@agent-teams/filesystem-custody/composition";
 
 import type { ContainedTurnKernelWorkspacePort } from "../../../application/ports/outbound/contained-turn-ports.js";
 import {

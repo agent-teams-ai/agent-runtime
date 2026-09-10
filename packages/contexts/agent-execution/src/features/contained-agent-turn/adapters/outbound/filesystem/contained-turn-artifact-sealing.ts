@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody";
+import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody/composition";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
 import type { ContainedTurnFilesystemArtifactPort as ContainedTurnArtifactPort } from "./contained-turn-filesystem-port.js";

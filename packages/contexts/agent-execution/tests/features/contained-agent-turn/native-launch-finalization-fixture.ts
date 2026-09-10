@@ -97,7 +97,7 @@ modules.set("node:fs/promises", {
   lstat: async (path: string, options: { bigint?: boolean }) => stats(path, options),
   realpath: async (path: string) => canonical(path),
 });
-modules.set("@agent-teams/filesystem-custody", {
+modules.set("@agent-teams/filesystem-custody/composition", {
   withStableDirectoryProcessLock: async (...args: unknown[]) => {
     const lock = modules.get("retention-lock")?.withStableDirectoryProcessLock;
     if (typeof lock !== "function") {throw new Error("filesystem access forbidden");}

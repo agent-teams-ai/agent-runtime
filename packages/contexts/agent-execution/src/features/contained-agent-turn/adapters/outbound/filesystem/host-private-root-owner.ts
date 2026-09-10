@@ -1,9 +1,9 @@
-import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody";
+import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody/composition";
 import { createHash, randomUUID } from "node:crypto";
 import { open, realpath, rmdir } from "node:fs/promises";
 import { constants } from "node:fs";
 import { basename, dirname, sep } from "node:path";
-import { publishStableDirectoryNoReplace } from "@agent-teams/filesystem-custody";
+import { publishStableDirectoryNoReplace } from "@agent-teams/filesystem-custody/composition";
 import {
   assertDisjointNonAncestorRoots, bindContainedTurnRoot, descriptorChildPath,
   fsyncDirectoryHandle, inspectFileHandle, openBoundDirectory, openDirectoryEntry,

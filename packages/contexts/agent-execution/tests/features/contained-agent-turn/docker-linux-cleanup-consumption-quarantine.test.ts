@@ -26,7 +26,7 @@ test("actual composition permits physical cleanup for concrete journal-only quar
   const hook = registerHooks({resolve(specifier, context, next) {
     if (specifier === "synthetic:cleanup-consumption-storage") {return {url: memoryUrl, shortCircuit: true};}
     if (context.parentURL?.includes("node-host-http-consumption-journal") &&
-      ["@agent-teams/filesystem-custody", "./host-http-consumption-storage.js"].includes(specifier)) {
+      ["@agent-teams/filesystem-custody/composition", "./host-http-consumption-storage.js"].includes(specifier)) {
       return {url: memoryUrl, shortCircuit: true};
     }
     return next(specifier, context);

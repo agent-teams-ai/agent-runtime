@@ -1,6 +1,6 @@
-import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody";
+import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody/composition";
 import { join } from "node:path";
-import { withStableDirectoryProcessLock } from "@agent-teams/filesystem-custody";
+import { withStableDirectoryProcessLock } from "@agent-teams/filesystem-custody/composition";
 
 import type { ContainedTurnArtifactStoreRoots } from "./contained-turn-artifact-store.js";
 import {

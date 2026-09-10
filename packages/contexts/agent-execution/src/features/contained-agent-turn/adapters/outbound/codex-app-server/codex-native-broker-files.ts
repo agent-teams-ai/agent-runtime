@@ -8,7 +8,7 @@ import { validateCodexDirectoryIdentity } from "./codex-app-server-permission-bo
 import { codexDarwinNativeLaunchObservation, acceptCodexDarwinNativeMaterialObservation, retainCodexDarwinNativeMaterialReader } from "./codex-native-observations.js";
 import { createHash, randomUUID } from "node:crypto";
 import { lstatSync, readdirSync, type BigIntStats } from "node:fs";
-import { capturePathLineage, openStablePath, pathLineagesEqual } from "@agent-teams/filesystem-custody";
+import { capturePathLineage, openStablePath, pathLineagesEqual } from "@agent-teams/filesystem-custody/composition";
 import {
   darwinCodexInstallationMaterial, CODEX_NATIVE_CATALOG_BYTES, CODEX_NATIVE_CATALOG_SHA256,
   codexNativeBrokerBoundary, renderCodexNativeBrokerConfig,

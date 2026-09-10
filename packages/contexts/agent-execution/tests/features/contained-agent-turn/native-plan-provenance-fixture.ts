@@ -99,7 +99,7 @@ modules.set("node:fs/promises", {
   lstat: async (path: string, options: { bigint?: boolean }) => stats(path, options),
   realpath: async (path: string) => canonical(path),
 });
-modules.set("@agent-teams/filesystem-custody", {
+modules.set("@agent-teams/filesystem-custody/composition", {
   withStableDirectoryProcessLock: async () => {throw new Error("filesystem lock forbidden");},
   capturePathLineage: async (path: string) => {entry(path); return path;},
   pathLineagesEqual: (left: string, right: string) => left === right,
