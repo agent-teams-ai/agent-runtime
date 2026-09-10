@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { captureDarwinWorkspaceTree } from "../../../src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-protocol.ts";
+import { captureDarwinWorkspaceTree } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-protocol.js";
 
 const hash = (bytes: string | Buffer): string => createHash("sha256").update(bytes).digest("hex");
 const limits = { maxDepth: 32, maxEntries: 4096, maxFileBytes: 8388608, maxTotalBytes: 33554432 };
@@ -59,7 +59,7 @@ test("native materializer creates full tree in original inode and burns partial 
 // implementation. The minimal custody record replaces Darwin-only bootstrap;
 // this exercises actual descriptor ownership, not Mac privilege admission.
 test("cutoff settles native writers once and preserves close uncertainty", () => {
-  const temporary = mkdtempSync(join(process.cwd(), "node_modules/.cache/native-producers/settlement-"));
+  const temporary = mkdtempSync(join(tmpdir(), "darwin-settlement-"));
   try {
     const native = fileURLToPath(new URL("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/native/", import.meta.url));
     const custody = readFileSync(join(native, "darwin-attempt-owner-custody.c"), "utf8");

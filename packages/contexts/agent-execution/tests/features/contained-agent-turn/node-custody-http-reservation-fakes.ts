@@ -30,6 +30,7 @@ const capture = (value: LiveCustody) => {live = value;};
 // Only I/O/OS seams are synthetic. Core maps, createLiveCustody, open, replay,
 // delegated fingerprint/start, no-start containment and release remain real.
 const privateReservation = {
+    descriptorWorkspaceAuthority: (value: any) => value,
     assertRetainedWorkspaceAuthority: capture, assertReservedWorkspaceAuthority: capture,
     closeRetainedWorkspaceAuthority: (value: LiveCustody) => value.retainedWorkspaceAuthority?.close(),
     bindPrivateHostCustodyReservation: async (input: any) => {
@@ -83,7 +84,7 @@ export const retainPrivateRootCleanupAuthority = (value: LiveCustody): number =>
 const privateRoot = {quarantinePrivateRoot: () => true, quarantinePrivateRootForReconciliation: () => true};
 
 export const {assertRetainedWorkspaceAuthority, assertReservedWorkspaceAuthority,
-  closeRetainedWorkspaceAuthority, bindPrivateHostCustodyReservation} = privateReservation;
+  closeRetainedWorkspaceAuthority, bindPrivateHostCustodyReservation, descriptorWorkspaceAuthority} = privateReservation;
 export const {verifyExecutable, resolveLaunchCandidate} = launchObservation;
 export const {launchGuardedProvider} = providerLaunch;
 export const {acknowledgeProviderSpawn} = spawnAcknowledgement;

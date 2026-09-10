@@ -1,6 +1,11 @@
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #endif
+#ifdef __APPLE__
+#ifndef _DARWIN_C_SOURCE
+#define _DARWIN_C_SOURCE
+#endif
+#endif
 #include "darwin-attempt-owner-tree.h"
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -41,11 +46,21 @@ static int tree_sync(int fd) {
 #endif
 }
 static int fail(ae_tree_transaction *t) { if (t) t->failed=1; return 0; }
+#ifdef __APPLE__
+static int supported_xattrs(int fd) {
+  static const char provenance[]="com.apple.provenance";
+  char names[sizeof(provenance)];
+  ssize_t length=flistxattr(fd,NULL,0,0);
+  if (length==0) return 1;
+  return length==(ssize_t)sizeof(provenance) && flistxattr(fd,names,sizeof(names),0)==length &&
+    memcmp(names,provenance,sizeof(provenance))==0;
+}
+#endif
 static int supported_metadata(int fd,const struct stat *st) {
 #ifdef __APPLE__
-  if (st->st_flags || flistxattr(fd,NULL,0,0)!=0) return 0;
+  if (st->st_flags || !supported_xattrs(fd)) return 0;
   acl_t acl=acl_get_fd_np(fd,ACL_TYPE_EXTENDED);
-  if (!acl) return 0;
+  if (!acl) return errno==ENOENT;
   int empty=0;
   if (acl_valid(acl)==0) {
     acl_entry_t entry;

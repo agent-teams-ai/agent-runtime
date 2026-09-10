@@ -10,6 +10,8 @@ export { modules };
 // Read only the pinned fixture catalog. Product filesystem/process operations
 // use in-memory observations before importing any reservation or provider code.
 const catalog = readFileSync(new URL("../../fixtures/codex-native-broker-0.153.4/models.json", import.meta.url));
+const protocolHeaderUrl = new URL("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/native/darwin-attempt-owner-protocol.h", import.meta.url);
+const protocolHeader = readFileSync(protocolHeaderUrl);
 const slot = Symbol.for("ar69-r205-native-launch-finalization-fixture");
 Reflect.set(globalThis, slot, modules);
 const hooks = registerHooks({
@@ -80,7 +82,10 @@ modules.set("node:fs", {
     assert.match(descriptors.get(descriptor)!, /^\/proc\/self\/fdinfo\/\d+$/u);
     return buffer.write("mnt_id:\t7\n");
   },
-  readFileSync: () => {throw new Error("unexpected product sync read");},
+  readFileSync: (path: string | number | URL, encoding?: string) => {
+    if (!(path instanceof URL) || path.href !== protocolHeaderUrl.href) {throw new Error("unexpected product sync read");}
+    return encoding === "utf8" ? protocolHeader.toString("utf8") : Buffer.from(protocolHeader);
+  },
 });
 modules.get("node:fs")!.default = modules.get("node:fs")!;
 modules.set("node:fs/promises", {

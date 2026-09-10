@@ -23,6 +23,8 @@ for (const name of ["models.json", "input-config.analysis.toml", "capture.darwin
 }
 const configUrl = new URL("codex-native-config-0.153.4/config-read.darwin-analysis.json", fixtureRoot);
 retained.set(configUrl.href, fs.readFileSync(configUrl));
+const protocolHeaderUrl = new URL("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/native/darwin-attempt-owner-protocol.h", import.meta.url);
+retained.set(protocolHeaderUrl.href, fs.readFileSync(protocolHeaderUrl));
 export const retainedBytes = (name: string) => retained.get(new URL(`codex-native-broker-0.153.4/${name}`, fixtureRoot).href)!;
 interface Entry { nlink?: number; uid?: number; ino: number; mode: number; directory: boolean; bytes: Buffer; revision: number }
 const entries = new Map<string, Entry>();

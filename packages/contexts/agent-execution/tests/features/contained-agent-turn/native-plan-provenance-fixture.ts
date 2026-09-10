@@ -7,6 +7,8 @@ import { after } from "node:test";
 // Read only the pinned catalog and these exact source files for import-direction
 // assertions. Product filesystem imports are replaced before any product import.
 const catalog = readFileSync(new URL("../../fixtures/codex-native-broker-0.153.4/models.json", import.meta.url));
+const protocolHeaderUrl = new URL("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/native/darwin-attempt-owner-protocol.h", import.meta.url);
+const protocolHeader = readFileSync(protocolHeaderUrl);
 const sourceRoot = new URL("../../../src/features/contained-agent-turn/adapters/outbound/", import.meta.url);
 export const boundarySources = Object.freeze({
   codex: readFileSync(new URL("codex-app-server/codex-app-server-launch-plan.ts", sourceRoot), "utf8"),
@@ -82,7 +84,10 @@ modules.set("node:fs", {
     assert.match(descriptors.get(descriptor)!, /^\/proc\/self\/fdinfo\/\d+$/u);
     return buffer.write("mnt_id:\t7\n");
   },
-  readFileSync: () => {throw new Error("unexpected product sync read");},
+  readFileSync: (path: string | number | URL, encoding?: string) => {
+    if (!(path instanceof URL) || path.href !== protocolHeaderUrl.href) {throw new Error("unexpected product sync read");}
+    return encoding === "utf8" ? protocolHeader.toString("utf8") : Buffer.from(protocolHeader);
+  },
 });
 modules.get("node:fs")!.default = modules.get("node:fs")!;
 modules.set("node:fs/promises", {
