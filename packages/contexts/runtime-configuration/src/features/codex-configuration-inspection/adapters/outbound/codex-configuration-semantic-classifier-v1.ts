@@ -1,4 +1,4 @@
-import type { PortableCodexSettingKey } from "../../contracts/codex-configuration-inspection.js";
+import type { CodexSettingKey } from "../../application/models/codex-inspection-models.js";
 import {
   codexConfigurationSemanticClassifierContract,
   type CodexConfigurationSemanticClassification,
@@ -7,7 +7,7 @@ import {
 import { isSecretShapedValue } from "../../application/safe-semantic-boundary.js";
 
 const dialect = "codex-0.134";
-const portableKeys = new Set<PortableCodexSettingKey>([
+const portableKeys = new Set<CodexSettingKey>([
   "model",
   "model_reasoning_effort",
   "personality",
@@ -66,7 +66,7 @@ const diagnosticForSetting = (
 };
 
 const isSupportedPortableValue = (
-  key: PortableCodexSettingKey,
+  key: CodexSettingKey,
   value: string,
 ): boolean => {
   if (key === "model") {
@@ -93,7 +93,7 @@ export const createCodexConfigurationSemanticClassifierV1 =
       const settings: CodexConfigurationSemanticClassification["settings"][number][] = [];
       for (const key of Object.keys(document).toSorted()) {
         const value = document[key];
-        if (!portableKeys.has(key as PortableCodexSettingKey)) {
+        if (!portableKeys.has(key as CodexSettingKey)) {
           diagnostics.push(diagnosticForSetting(key));
           continue;
         }
@@ -105,7 +105,7 @@ export const createCodexConfigurationSemanticClassifierV1 =
           diagnostics.push({ code: "secret_setting_ignored" });
           continue;
         }
-        const portableKey = key as PortableCodexSettingKey;
+        const portableKey = key as CodexSettingKey;
         if (!isSupportedPortableValue(portableKey, value)) {
           diagnostics.push({ code: "setting_value_unsupported", setting: key });
           continue;

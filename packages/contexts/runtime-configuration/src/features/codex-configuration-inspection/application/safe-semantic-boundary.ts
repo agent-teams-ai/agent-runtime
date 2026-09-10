@@ -1,7 +1,7 @@
 import type {
-  CodexConfigurationDiagnostic,
-  PortableCodexSettingKey,
-} from "../contracts/codex-configuration-inspection.js";
+  CodexInspectionDiagnostic,
+  CodexSettingKey,
+} from "./models/codex-inspection-models.js";
 import type { CodexConfigurationSemanticClassification } from "./ports/outbound/codex-configuration-semantic-classifier.js";
 
 const maximumDepth = 16;
@@ -14,12 +14,12 @@ const maximumClassifierSettings = 256;
 const maximumClassifierDiagnostics = maximumObjectKeys;
 const maximumClassifierStringLength = 256;
 
-const portableSettingKeys = new Set<PortableCodexSettingKey>([
+const portableSettingKeys = new Set<CodexSettingKey>([
   "model",
   "model_reasoning_effort",
   "personality",
 ]);
-const classifierDiagnosticCodes = new Set<CodexConfigurationDiagnostic["code"]>([
+const classifierDiagnosticCodes = new Set<CodexInspectionDiagnostic["code"]>([
   "executable_setting_deferred",
   "provider_access_setting_deferred",
   "secret_setting_ignored",
@@ -277,7 +277,7 @@ const validateDiagnostic = (
   const code = diagnostic.code;
   if (
     typeof code !== "string" ||
-    !classifierDiagnosticCodes.has(code as CodexConfigurationDiagnostic["code"])
+    !classifierDiagnosticCodes.has(code as CodexInspectionDiagnostic["code"])
   ) {
     return invalidClassification();
   }
@@ -286,7 +286,7 @@ const validateDiagnostic = (
     return invalidClassification();
   }
   return {
-    code: code as CodexConfigurationDiagnostic["code"],
+    code: code as CodexInspectionDiagnostic["code"],
     ...(setting === undefined ? {} : { setting }),
   };
 };
@@ -312,7 +312,7 @@ const validateSetting = (
   const settingValue = setting.value;
   if (
     typeof key !== "string" ||
-    !portableSettingKeys.has(key as PortableCodexSettingKey) ||
+    !portableSettingKeys.has(key as CodexSettingKey) ||
     typeof settingValue !== "string" ||
     settingValue.length === 0 ||
     settingValue.length > maximumClassifierStringLength ||
@@ -321,7 +321,7 @@ const validateSetting = (
   ) {
     return invalidClassification();
   }
-  return { key: key as PortableCodexSettingKey, value: settingValue };
+  return { key: key as CodexSettingKey, value: settingValue };
 };
 
 const validateDiagnostics = (
@@ -339,7 +339,7 @@ const validateSettings = (
   rawSettings: readonly unknown[],
 ): CodexConfigurationSemanticClassification["settings"] => {
   const settings: CodexConfigurationSemanticClassification["settings"][number][] = [];
-  const keys = new Set<PortableCodexSettingKey>();
+  const keys = new Set<CodexSettingKey>();
   for (const raw of rawSettings) {
     const setting = validateSetting(raw);
     if (keys.has(setting.key)) {
