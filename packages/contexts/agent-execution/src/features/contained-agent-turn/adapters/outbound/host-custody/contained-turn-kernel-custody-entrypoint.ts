@@ -4,6 +4,13 @@ export {
   type ContainedTurnKernelCustodyAttemptOwner,
   type ContainedTurnKernelWorkspaceOwner,
 } from "./contained-turn-kernel-custody-adapter.js";
+import {ContainedTurnKernelCustodyAdapter} from "./contained-turn-kernel-custody-adapter.js";
+import type {ContainedTurnKernelCustodyPort} from "../../../application/ports/outbound/contained-turn-ports.js";
+import type {ContainedTurnHostCustodyPort, ContainedTurnKernelCustodyAdapterOptions} from "./contained-turn-kernel-custody-contracts.js";
+export const createContainedTurnKernelCustodyPort = (
+  hostCustody: ContainedTurnHostCustodyPort,
+  options: ContainedTurnKernelCustodyAdapterOptions,
+): ContainedTurnKernelCustodyPort => new ContainedTurnKernelCustodyAdapter(hostCustody, options);
 export {
   createHostHttpEgressSession,
   type HostHttpEgressSessionDependencies,

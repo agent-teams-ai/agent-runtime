@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { access, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import test from "node:test";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
 const protocolHeaderPath = "dist/features/contained-agent-turn/adapters/outbound/host-custody/native/darwin-attempt-owner-protocol.h";
@@ -84,10 +84,12 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       await readFile(join(installedPackage, protocolHeaderPath)),
       await readFile(join(packageRoot, "src/features/contained-agent-turn/adapters/outbound/host-custody/native/darwin-attempt-owner-protocol.h")),
     );
-    const protocol = await import(pathToFileURL(join(installedPackage, protocolModulePath)).href) as {
-      readonly darwinAttemptOwnerFrameBytes: number;
-    };
-    assert.ok(protocol.darwinAttemptOwnerFrameBytes > 0);
+    const protocolInspectionPath = join(installedPackage, "inspect-protocol.mjs");
+    await writeFile(protocolInspectionPath, [
+      `import { darwinAttemptOwnerFrameBytes } from "./${protocolModulePath}";`,
+      "process.stdout.write(String(darwinAttemptOwnerFrameBytes));",
+    ].join("\n"));
+    assert.ok(Number(run(process.execPath, [protocolInspectionPath], installedPackage)) > 0);
 
     const consumerPath = join(temporaryRoot, "consumer", "consume.mjs");
     await writeFile(consumerPath, [
@@ -125,6 +127,8 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "applyContainedTurnPostgresSchema",
       "bindContainedTurnRouteEnforcement",
       "bindDarwinCodexRouteEnforcement",
+      "captureRootDarwinAttemptWorkspace",
+      "containedTurnPreparationToken",
       "containedTurnPreventionDigest",
       "createClaudeCurrentKernelOwner",
       "createCodexAppServerPermissionBoundary",

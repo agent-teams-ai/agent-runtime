@@ -53,15 +53,14 @@ registerHooks({resolve(specifier, context, next) {
   }
   return next(url, context);
 }});
-const root = "../../../src/features/contained-agent-turn/adapters/outbound/";
-const permission = await import(root + "codex-app-server/codex-app-server-permission-boundary.ts");
-const authority = await import(root + "host-custody/native-host-custody-workspace-authority.ts");
+const permission = await import("../../../src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts");
+const authority = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/native-host-custody-workspace-authority.ts");
 const {nodeKernelWorkspaceAuthority} = await import("../../../src/features/contained-agent-turn/composition/node-kernel-workspace-authority.ts");
-const {KernelOpenAttempts} = await import(root + "host-custody/contained-turn-kernel-custody-open-attempts.ts");
-const raw = await import(root + "host-custody/private-host-custody-reservation.ts");
-const files = await import(root + "codex-app-server/codex-native-broker-files.ts");
-const recipes = await import(root + "codex-app-server/codex-native-broker-recipe.ts");
-const launch = await import(root + "codex-app-server/codex-app-server-launch-plan.ts");
+const {KernelOpenAttempts} = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-open-attempts.ts");
+const raw = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/private-host-custody-reservation.ts");
+const files = await import("../../../src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-files.ts");
+const recipes = await import("../../../src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.ts");
+const launch = await import("../../../src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts");
 const catalog = readFileSync(new URL("../../fixtures/codex-native-broker-0.153.4/models.json", import.meta.url));
 const ids = {operationId: "synthetic-operation", attemptId: "synthetic-attempt", workspaceId: "synthetic-workspace"};
 const setup = async (facts = synthetic.syntheticFacts(), mutate?: (facts: any) => void) => {
@@ -118,7 +117,7 @@ test("Docker reserve rejects genuine native authority before retaining or alloca
   Object.defineProperty(globalThis, dockerCustodyEffects, {value: effects, configurable: true});
   try {
     const {DockerKernelHostCustody} = await import("../../../src/features/contained-agent-turn/composition/docker-kernel-host-custody.ts");
-    const custody = await import(root + "host-custody/custodied-provider-process.ts");
+    const custody = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts");
     const {selection} = await setup();
     await nodeKernelWorkspaceAuthority(synthetic.issueSyntheticOwner(selection)).withLaunchAuthority(ids, async workspaceAuthority => {
       const host = new DockerKernelHostCustody(1000);
@@ -186,7 +185,7 @@ test("synchronous native finalizer cannot manufacture material, clone files, or 
     privateRootPath: "/synthetic/private", tmpDir: "/synthetic/private/tmp"};
   const plan = launch.createCodexAppServerFinalizableLaunchPlan(options, {provider: "codex", providerRouteRef: "synthetic-route",
     credentialGeneration: 1, credentialBindingRef: "synthetic-binding", ownerAuthorityDigest: "synthetic-authority"});
-  const {hostLaunchFinalizationRecipe} = await import(root + "host-custody/host-custody-finalizable-plan.ts");
+  const {hostLaunchFinalizationRecipe} = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-finalizable-plan.ts");
   const finalizer = hostLaunchFinalizationRecipe(plan)!;
   assert.throws(() => finalizer.build({recipe, files: {kind: "codex-native-broker-prepared-files/v1"}}, "s".repeat(32)));
   const installed = await files.installCodexDarwinNativeBrokerFiles(selection, recipe, catalog);
@@ -221,7 +220,7 @@ test("authenticated material advances boundary generation; synchronous final bui
   const installed = await files.installCodexDarwinNativeBrokerFiles(selection, recipe, catalog);
   assert.notEqual(permission.codexDarwinNativeLaunchObservation(boundary), observation);
   assert.throws(() => synthetic.assertDarwinNativeLaunchObservationCurrent(observation));
-  const {hostLaunchFinalizationRecipe} = await import(root + "host-custody/host-custody-finalizable-plan.ts");
+  const {hostLaunchFinalizationRecipe} = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-finalizable-plan.ts");
   hostLaunchFinalizationRecipe(plan)!.build({recipe, files: installed}, "s".repeat(32)).validate();
 });
 
@@ -275,7 +274,7 @@ test("native material preparation never falls back to the legacy Host-UID instal
   // These protected synthetic paths do not exist on the Host. Failure must be
   // a consumer refusal, never an attempted lstat reported as ENOENT/EACCES.
   await assert.rejects(files.prepareCodexNativeBrokerFiles(recipe), /Codex native broker files rejected/u);
-  const {DarwinCodexNativeFiles} = await import(root + "codex-app-server/darwin-codex-native-files.ts");
+  const {DarwinCodexNativeFiles} = await import("../../../src/features/contained-agent-turn/adapters/outbound/codex-app-server/darwin-codex-native-files.ts");
   assert.throws(() => new DarwinCodexNativeFiles(boundary, catalog, {}, () => {}), /requires the native material installer/u);
   const installed = await files.installCodexDarwinNativeBrokerFiles(selection, recipe, catalog);
   assert.equal(await files.prepareCodexNativeBrokerFiles(recipe), installed);
@@ -401,7 +400,7 @@ test("native owner failure cuts off issuance while authenticated observation rea
 });
 
 test("actual kernel checks Host registry before preparation for forged, cloned, proxy and mismatched grants", async () => {
-  const {ContainedTurnKernelCustodyAdapter} = await import(root + "host-custody/contained-turn-kernel-custody-adapter.ts");
+  const {ContainedTurnKernelCustodyAdapter} = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.ts");
   const {selection} = await setup(); let prepares = 0; let reserves = 0; let reads = 0;
   await nodeKernelWorkspaceAuthority(synthetic.issueSyntheticOwner(selection)).withLaunchAuthority(ids, async grant => {
     const input = {...ids, custodyId: "synthetic-registry", intentMode: "analysis", adapterSnapshot: {}, providerAccessSnapshot: {}};
@@ -434,7 +433,7 @@ const kernelRegressionInput = async (custodyId: string) => {
 };
 
 test("actual kernel drains successful preparation after owner rejection without acquisition or replay", async () => {
-  const {ContainedTurnKernelCustodyAdapter} = await import(root + "host-custody/contained-turn-kernel-custody-adapter.ts");
+  const {ContainedTurnKernelCustodyAdapter} = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.ts");
   const {selection} = await setup(); const owner = synthetic.issueSyntheticOwner(selection);
   const entered = Promise.withResolvers<void>(); const preparation = Promise.withResolvers<object>();
   const failure = new Error("synthetic original owner rejection");
@@ -467,7 +466,7 @@ test("actual kernel drains successful preparation after owner rejection without 
 });
 
 test("actual kernel rechecks revoked native kind after successful preparation with owner still active", async () => {
-  const {ContainedTurnKernelCustodyAdapter} = await import(root + "host-custody/contained-turn-kernel-custody-adapter.ts");
+  const {ContainedTurnKernelCustodyAdapter} = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.ts");
   const {selection} = await setup(); const counts = {reserve: 0, retain: 0, retire: 0};
   await nodeKernelWorkspaceAuthority(synthetic.issueSyntheticOwner(selection)).withLaunchAuthority(ids, async grant => {
     const kernel = new ContainedTurnKernelCustodyAdapter({reserve: async () => {
