@@ -241,6 +241,7 @@ boundaries:
         - node:fs/promises
         - node:path
         - node:timers/promises
+        - node:util
       runtimeReferences: []
   - id: production.provider-access
     dependencyMode: runtime
@@ -252,7 +253,8 @@ boundaries:
     allow:
       boundaries: []
       packages: []
-      builtins: []
+      builtins:
+        - node:util
       runtimeReferences: []
   - id: production.runtime-configuration
     dependencyMode: runtime
@@ -349,6 +351,7 @@ boundaries:
       builtins:
         - node:crypto
         - node:timers/promises
+        - node:util
       runtimeReferences: []
   - id: experiments.typescript-evidence
     dependencyMode: development

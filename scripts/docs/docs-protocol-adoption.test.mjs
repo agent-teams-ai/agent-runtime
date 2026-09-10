@@ -34,17 +34,20 @@ test("canonical qualification v2 covers every Runtime authorable type exactly on
     readFile(join(repositoryRoot, "architecture/foundation/document-authoring.yaml"), "utf8"),
     readFile(join(repositoryRoot, "package.json"), "utf8").then(JSON.parse),
   ]);
-  assert.equal(integration.schemaVersion, 2);
-  assert.equal(integration.cohort.cohortId, "docs-2026-08-31-stable10");
+  assert.equal(integration.schemaVersion, 3);
+  assert.equal(integration.cohort.schemaVersion, 2);
+  assert.equal(integration.cohort.cohortId, "docs-2026-09-10-stable18");
   assert.deepEqual(integration.qualification, {
     contractPath: "architecture/foundation/docs-protocol-qualification.json",
     gateCommand: "pnpm docs:protocol:check"
   });
-  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol"], "0.4.1");
-  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "0.21.0");
-  assert.match(protocolProfileSource, /^schemaVersion: 2$/mu);
+  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol"], "0.6.0");
+  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol-agent-teams"], "0.2.3");
+  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.1.1");
+  assert.match(protocolProfileSource, /^schemaVersion: 3$/mu);
   assert.match(protocolProfileSource, /^  path: architecture\/foundation\/document-authoring\.yaml$/mu);
   assert.match(protocolProfileSource, /^  schemaVersion: 3$/mu);
+  assert.match(protocolProfileSource, /^  adoption: portable-v1$/mu);
   assert.match(authoringProfileSource, /^schemaVersion: 3$/mu);
   assert.match(authoringProfileSource, /^  ownerSets:$/mu);
   assert.equal(qualification.schemaVersion, 2);
@@ -85,10 +88,14 @@ async function addRequiredAnchorFixtures(root) {
     join(root, "architecture/decisions/accepted-decisions.json")
   );
   for (const path of [
+    "architecture/feature-module-standard/candidate-profile.json",
+    "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/contained-turn-v1-contract.json",
     "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/README.md",
     "experiments/rust-system-boundaries/README.md",
     "experiments/sandbox-backend-hosting/README.md",
-    "packages/apps/embedded-runtime/src/index.ts"
+    "packages/apps/embedded-runtime/src/index.ts",
+    "packages/contexts/agent-execution/tests/live/claude-contained-turn-live-canary.mjs",
+    "scripts/architecture/check-feature-modules.mjs"
   ]) {
     const destination = join(root, path);
     await mkdir(dirname(destination), { recursive: true });
@@ -220,6 +227,7 @@ test("qualifies Runtime authoring with the strongest published runner", async ()
   await disposableRepository(async (root) => {
     const receipt = await docsQualification.runDocsProtocolQualification({
       fixtureRoot: root,
+      profilePath: protocolProfile,
       scenario: {
         find: { query: { id: "ADR-0001" }, expectedIds: ["ADR-0001"] },
         newDocument: {
