@@ -13,6 +13,8 @@ import {
   createClaudeCodeConfigurationSourceReaderAdapter,
   createCodexConfigurationInspectionFeature,
   createCodexConfigurationSemanticClassifierV1,
+  createNodeClaudeCodeConfigurationDigest,
+  createNodeCodexConfigurationDigest,
   createNodeConfigurationSourceReader,
   createSmolTomlParser,
   createStrictClaudeCodeJsonParser,
@@ -392,12 +394,14 @@ export const createDefaultAgentRuntimeHost = (): AgentRuntimeHost => {
   });
   const nodeConfigurationSourceReader = createNodeConfigurationSourceReader();
   const configuration = createCodexConfigurationInspectionFeature({
+    digest: createNodeCodexConfigurationDigest(),
     parser: createSmolTomlParser(),
     semanticClassifier: createCodexConfigurationSemanticClassifierV1(),
     sourceIdentityKey: randomBytes(32),
     sourceReader: nodeConfigurationSourceReader,
   });
   const claudeConfiguration = createClaudeCodeConfigurationInspectionFeature({
+    digest: createNodeClaudeCodeConfigurationDigest(),
     parser: createStrictClaudeCodeJsonParser(),
     semanticClassifier: createClaudeCodeConfigurationSemanticClassifierV2(),
     sourceIdentityKey: randomBytes(32),

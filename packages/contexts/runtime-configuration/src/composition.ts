@@ -1,4 +1,6 @@
 export { createNodeConfigurationSourceReader } from "./features/codex-configuration-inspection/adapters/outbound/node-configuration-source-reader.js";
+export { createNodeConfigurationDigest as createNodeCodexConfigurationDigest } from "./features/codex-configuration-inspection/adapters/outbound/node-configuration-digest.js";
+export type { ConfigurationDigest as CodexConfigurationDigest } from "./features/codex-configuration-inspection/application/ports/outbound/configuration-digest.js";
 export { createCodexConfigurationSemanticClassifierV1 } from "./features/codex-configuration-inspection/adapters/outbound/codex-configuration-semantic-classifier-v1.js";
 export { createSmolTomlParser } from "./features/codex-configuration-inspection/adapters/outbound/smol-toml-parser.js";
 export {
@@ -13,6 +15,8 @@ export {
   type CodexConfigurationInspectionDependencies,
 } from "./features/codex-configuration-inspection/composition/feature-module-factory.js";
 export { createStrictClaudeCodeJsonParser } from "./features/claude-code-configuration-inspection/adapters/outbound/strict-claude-code-json-parser.js";
+export { createNodeConfigurationDigest as createNodeClaudeCodeConfigurationDigest } from "./features/claude-code-configuration-inspection/adapters/outbound/node-configuration-digest.js";
+export type { ConfigurationDigest as ClaudeCodeConfigurationDigest } from "./features/claude-code-configuration-inspection/application/ports/outbound/configuration-digest.js";
 export { createClaudeCodeConfigurationSemanticClassifierV2 } from "./features/claude-code-configuration-inspection/adapters/outbound/claude-code-configuration-semantic-classifier-v2.js";
 export { createClaudeCodeConfigurationSourceReaderAdapter } from "./features/claude-code-configuration-inspection/adapters/outbound/claude-code-configuration-source-reader-adapter.js";
 export {

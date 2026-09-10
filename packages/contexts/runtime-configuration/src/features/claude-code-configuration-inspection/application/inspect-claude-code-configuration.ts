@@ -1,5 +1,3 @@
-import { createHash, createHmac } from "node:crypto";
-
 import {
   CLAUDE_CODE_CONFIGURATION_BUDGETS, CLAUDE_CODE_OBSERVED_SOURCE_PLAN_CONTRACT,
   CLAUDE_CODE_SETTINGS_DIALECT, type ClaudeCodeConfigurationDiagnostic,
@@ -15,12 +13,14 @@ import {
   type PortableClaudeCodeDefinition,
 } from "./ports/outbound/claude-code-configuration-semantic-classifier.js";
 import type { ClaudeCodeConfigurationSourceReader } from "./ports/outbound/claude-code-configuration-source-reader.js";
+import type { ConfigurationDigest } from "./ports/outbound/configuration-digest.js";
 import {
   normalizeParsedClaudeCodeDocument, validateClaudeCodeJsonParseResult,
   validateClaudeCodeSemanticClassification,
 } from "./safe-semantic-boundary.js";
 
 interface Dependencies {
+  readonly digest: ConfigurationDigest;
   readonly parser: ClaudeCodeJsonParser;
   readonly semanticClassifier: ClaudeCodeConfigurationSemanticClassifier;
   readonly sourceIdentityKey: Uint8Array;
@@ -55,8 +55,8 @@ const exactObjectKeys = (value: unknown, allowed: readonly string[], required = 
   Object.getOwnPropertySymbols(value).length === 0 &&
   Object.keys(value).every(key => allowed.includes(key)) && required.every(key => Object.hasOwn(value, key));
 
-const hmac = (key: Uint8Array, domain: string, value: unknown): string =>
-  `${domain}:hmac-sha256:${createHmac("sha256", key).update(JSON.stringify(value)).digest("hex")}`;
+const hmac = (digest: ConfigurationDigest, key: Uint8Array, domain: string, value: unknown): string =>
+  `${domain}:hmac-sha256:${digest.hmacSha256Hex(key, JSON.stringify(value))}`;
 
 const collectorPreimage = (plan: TrustedClaudeCodeObservedSourcePlan) => ({
   bundleId: plan.collector.bundleId, id: plan.collector.id,
@@ -230,6 +230,7 @@ const validatePlan = (plan: TrustedClaudeCodeObservedSourcePlan): PlanDiagnostic
 };
 
 const semanticDigest = (
+  digest: ConfigurationDigest,
   definitions: readonly PortableClaudeCodeDefinition[],
   deferredObservations: readonly DeferredClaudeCodeDefinition[],
   dialect: string,
@@ -243,8 +244,7 @@ const semanticDigest = (
     deferredObservations: deferredObservations.map(item => ({ form: item.form, key: item.key, status: item.status })),
     dialect, digestSchema: "claude-code-configuration-semantic-digest/v2", settings,
   };
-  return `claude-code-configuration-semantic-digest/v2:sha256:${createHash("sha256")
-    .update(JSON.stringify(preimage)).digest("hex")}`;
+  return `claude-code-configuration-semantic-digest/v2:sha256:${digest.sha256Hex(JSON.stringify(preimage))}`;
 };
 
 const normalizeReadResult = (value: unknown):
@@ -380,6 +380,7 @@ const evaluateSource = async (
     deferredObservations: classification.deferredObservations,
     definitions: classification.definitions,
     observation: statusObservation(source, "applied", semanticDigest(
+      dependencies.digest,
       classification.definitions, classification.deferredObservations,
       input.dialect, dependencies.semanticClassifier,
     )),
@@ -476,20 +477,21 @@ export const createInspectClaudeCodeConfiguration = (dependencies: Dependencies)
       options?.signal?.throwIfAborted();
       if (!identifier.test(input.identityScope)) {throw new TypeError("identityScope must be a stable identifier");}
       const planDiagnostic = validatePlan(input.sourcePlan);
-      const invalidTopologyRef = hmac(key, "claude-code-topology/v2", [input.identityScope, planDiagnostic ?? "invalid"]);
+      const invalidTopologyRef = hmac(dependencies.digest, key, "claude-code-topology/v2",
+        [input.identityScope, planDiagnostic ?? "invalid"]);
       if (planDiagnostic !== undefined) {
-        const invalidCollectorRef = hmac(key, "claude-code-collector/v2", [input.identityScope, "unobserved"]);
+        const invalidCollectorRef = hmac(dependencies.digest, key, "claude-code-collector/v2", [input.identityScope, "unobserved"]);
         return buildResult({
           classifierRevision: dependencies.semanticClassifier.revision,
           collectorRef: invalidCollectorRef, diagnostics: [{ code: planDiagnostic }],
           evaluated: [], input, topologyRef: invalidTopologyRef,
         });
       }
-      const collectorRef = hmac(key, "claude-code-collector/v2", collectorPreimage(input.sourcePlan));
-      const topologyRef = hmac(key, "claude-code-topology/v2", topologyPreimage(input.sourcePlan));
+      const collectorRef = hmac(dependencies.digest, key, "claude-code-collector/v2", collectorPreimage(input.sourcePlan));
+      const topologyRef = hmac(dependencies.digest, key, "claude-code-topology/v2", topologyPreimage(input.sourcePlan));
       const bound = input.sourcePlan.sources.map(source => Object.freeze({
         ...source,
-        sourceRef: hmac(key, "claude-code-source/v2", [input.identityScope, topologyRef, source.sourceId]),
+        sourceRef: hmac(dependencies.digest, key, "claude-code-source/v2", [input.identityScope, topologyRef, source.sourceId]),
       })).toSorted((a, b) => compareText(a.sourceId, b.sourceId));
       if (input.dialect !== CLAUDE_CODE_SETTINGS_DIALECT || !dependencies.semanticClassifier.supportsDialect(input.dialect)) {
         return buildResult({

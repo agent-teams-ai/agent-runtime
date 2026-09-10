@@ -10,6 +10,7 @@ import {
   codexConfigurationSemanticClassifierContract,
   createCodexConfigurationInspectionFeature,
   createCodexConfigurationSemanticClassifierV1,
+  createNodeCodexConfigurationDigest,
   createNodeConfigurationSourceReader,
   createSmolTomlParser,
 } from "../dist/composition.js";
@@ -20,6 +21,7 @@ const createFeature = (maximumBytes = 128 * 1024) =>
   createCodexConfigurationInspectionFeature({
     parser: createSmolTomlParser(),
     semanticClassifier: createCodexConfigurationSemanticClassifierV1(),
+    digest: createNodeCodexConfigurationDigest(),
     sourceIdentityKey: Buffer.alloc(32, 7),
     sourceReader: createNodeConfigurationSourceReader(maximumBytes),
   });
@@ -53,6 +55,7 @@ test("uses the injected versioned semantic-classifier capability", async () => {
       },
       supportsDialect: selectedDialect => selectedDialect === "codex-0.134",
     },
+    digest: createNodeCodexConfigurationDigest(),
     sourceIdentityKey: Buffer.alloc(32, 7),
     sourceReader: {
       async read() {
@@ -462,6 +465,7 @@ test("rejects parser documents with inherited object properties", async () => {
       },
     },
     semanticClassifier: createCodexConfigurationSemanticClassifierV1(),
+    digest: createNodeCodexConfigurationDigest(),
     sourceIdentityKey: Buffer.alloc(32, 7),
     sourceReader: {
       async read() {
