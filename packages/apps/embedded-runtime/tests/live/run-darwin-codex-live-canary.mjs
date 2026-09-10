@@ -11,6 +11,7 @@ const loadedModules = Object.freeze({
   "host-entrypoint": resolvePath(dirname(fileURLToPath(import.meta.url)), "host-child-entrypoint.mjs"),
   "full-public-runtime": resolvePath(dirname(fileURLToPath(import.meta.url)), "full-public-runtime.mjs"),
   "production-root": resolvePath(dirname(fileURLToPath(import.meta.url)), "darwin-live-production-root.mjs"),
+  "root-packet-builder": resolvePath(dirname(fileURLToPath(import.meta.url)), "darwin-native-root-packet.mjs"),
 });
 const fail = message => {throw new Error(`DARWIN_LIVE_PREFLIGHT: ${message}`);};
 const regular = async path => {const stat = await lstat(path); if (!stat.isFile() || stat.isSymbolicLink()) {fail(`${path} is not a regular file`);}};
@@ -24,7 +25,7 @@ export async function loadAndVerifyActivation(path) {
   if (manifest.platform !== "darwin-arm64") {fail("platform is not darwin-arm64");}
   if (!Array.isArray(manifest.files) || manifest.files.length === 0) {fail("file closure is empty");}
   const roles = new Set(manifest.files.map(entry => entry.role));
-  for (const required of ["runner", "host-entrypoint", "full-public-runtime", "production-root", "root-launcher", "native-owner", "codex", "host-peer-addon"]) {
+  for (const required of ["runner", "host-entrypoint", "full-public-runtime", "production-root", "root-packet-builder", "root-launcher", "native-owner", "codex", "host-peer-addon"]) {
     if (!roles.has(required)) {fail(`closure role ${required} is missing`);}
   }
   for (const entry of manifest.files) {

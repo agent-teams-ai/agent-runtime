@@ -8,7 +8,7 @@ import {createHash} from "node:crypto";
 
 import {createDarwinLiveActivationManifest} from "./darwin-live-activation-manifest.mjs";
 import {consumeAttempt, loadAndVerifyActivation, main} from "./run-darwin-codex-live-canary.mjs";
-import {executeOnePublicContainedTurn} from "./full-public-runtime.mjs";
+import {executeOnePublicContainedTurn, verifyReleasedCleanup} from "./full-public-runtime.mjs";
 
 const sha = bytes => createHash("sha256").update(bytes).digest("hex");
 const fixture = async () => {
@@ -24,6 +24,7 @@ const fixture = async () => {
     sourceRevision: "a".repeat(40), closure: [
       {role: "runner", path: join(live, "run-darwin-codex-live-canary.mjs")}, {role: "host-entrypoint", path: entrypoint},
       {role: "full-public-runtime", path: runtime},
+      {role: "root-packet-builder", path: join(live, "darwin-native-root-packet.mjs")},
       {role: "root-launcher", path: launcher},
       {role: "native-owner", path: owner},
       {role: "codex", path: codex}, {role: "host-peer-addon", path: peer},
@@ -71,6 +72,40 @@ test("accepted observation failure persists the operation for reconciliation", a
   } finally {await rm(root, {recursive: true, force: true});}
 });
 
+for (const [name, observation, expected] of [
+  ["not found", {status: "not_found"}, "observation_not_found"],
+  ["reconcile required", {status: "observed", turn: {status: "reconcile_required"}}, "reconcile_required"],
+  ["exhausted running", {status: "observed", turn: {status: "running"}}, "observation_exhausted"],
+]) {
+  test(`accepted ${name} observation retains reconciliation debt`, async () => {
+    const root = await mkdtemp(join(tmpdir(), "ar69-observe-debt-"));
+    const host = {bindAccess: () => ({containedTurn: {
+      submit: async () => ({status: "accepted", operationId: "op:debt"}), observe: async () => observation,
+    }})};
+    try {
+      const result = await executeOnePublicContainedTurn({host, scope: {}, evidenceDirectory: root, maximumObservations: 1, observeTimeoutMs: 1000});
+      assert.equal(result.uncertainty.reason, expected);
+    } finally {await rm(root, {recursive: true, force: true});}
+  });
+}
+
+test("potential acceptance is never treated as a retryable refusal", async () => {
+  const root = await mkdtemp(join(tmpdir(), "ar69-potential-"));
+  const host = {bindAccess: () => ({containedTurn: {submit: async () => ({status: "potential_acceptance", candidateOperationId: "op:candidate"})}})};
+  try {
+    const result = await executeOnePublicContainedTurn({host, scope: {}, evidenceDirectory: root, maximumObservations: 1, observeTimeoutMs: 1000});
+    assert.equal(result.uncertainty.reason, "potential_acceptance");
+  } finally {await rm(root, {recursive: true, force: true});}
+});
+
+test("unbounded observation is rejected before submit", async () => {
+  let submits = 0;
+  const host = {bindAccess: () => ({containedTurn: {submit: async () => {submits += 1;}}})};
+  await assert.rejects(executeOnePublicContainedTurn({host, scope: {}, maximumObservations: Infinity, observeTimeoutMs: 1000}), /bounds are invalid/);
+  await assert.rejects(executeOnePublicContainedTurn({host, scope: {}, maximumObservations: 1, observeTimeoutMs: 30_001}), /bounds are invalid/);
+  assert.equal(submits, 0);
+});
+
 test("public handle submits once and observes serially to terminal truth", async () => {
   const root = await mkdtemp(join(tmpdir(), "ar69-public-"));
   let submits = 0, active = 0, maximumActive = 0, observations = 0;
@@ -93,4 +128,13 @@ test("activation generator pins exact closure bytes", async () => {
   const value = await fixture();
   try {assert.equal(value.activation.files[0].sha256, sha(await readFile(value.activation.files[0].path)));}
   finally {await rm(value.root, {recursive: true, force: true});}
+});
+
+test("cleanup predicate requires released resources and checksum readback", () => {
+  assert.doesNotThrow(() => verifyReleasedCleanup({status: "released", processes: {survivingDescendants: 0, openWriterFds: 0},
+    routes: {remaining: 0}, listeners: {remaining: 0}, database: {sessions: 0, preparedTransactions: 0},
+    filesystem: {executionRootPresent: false}, checksums: {verified: true}, providerAccess: {disposeCount: 1},
+    pool: {closed: true}, storage: {closed: true}, native: {closureAcknowledged: true},
+    host: {identityCurrent: true, streamsDrained: true}, evidence: {retainedTreeVerified: true}}));
+  assert.throws(() => verifyReleasedCleanup({status: "released", processes: {survivingDescendants: 1}}), /cleanup release/);
 });

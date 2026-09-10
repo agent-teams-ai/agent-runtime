@@ -72,6 +72,10 @@ export {
 } from "./composition/contained-turn-http-egress-upstream.js";
 export {bindDarwinNativeAttemptAuthority} from "./composition/darwin-contained-turn-authority.js";
 export {
+  createDarwinContainedTurnDeployment,
+  type DarwinContainedTurnDeploymentInput,
+} from "./composition/darwin-contained-turn-deployment.js";
+export {
   createContainedTurnLinuxRouteBinding,
   type ContainedTurnLinuxRouteCampaign,
 } from "./composition/contained-turn-linux-route-binding.js";

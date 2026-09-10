@@ -1,12 +1,17 @@
 import {createHash, randomUUID} from "node:crypto";
-import {readFile, writeFile} from "node:fs/promises";
+import {lstat, readFile, writeFile} from "node:fs/promises";
 
 const digest = value => createHash("sha256").update(value).digest("hex");
 const terminal = new Set(["succeeded", "failed", "cancelled", "reconcile_required"]);
 
 const writeJson = (path, value) => writeFile(path, `${JSON.stringify(value, null, 2)}\n`, {flag: "wx", mode: 0o600});
 
+// oxlint-disable-next-line complexity -- every ambiguous public outcome is classified without retry
 export async function executeOnePublicContainedTurn(input) {
+  if (!Number.isInteger(input.maximumObservations) || input.maximumObservations < 1 || input.maximumObservations > 128 ||
+      !Number.isInteger(input.observeTimeoutMs) || input.observeTimeoutMs < 1 || input.observeTimeoutMs > 30_000) {
+    throw new TypeError("public observation bounds are invalid");
+  }
   const commandId = input.commandId ?? randomUUID();
   const handle = input.host.bindAccess({containedTurn: input.scope});
   let submitEntered = false;
@@ -21,11 +26,16 @@ export async function executeOnePublicContainedTurn(input) {
       intent: {mode: "workspace-write", prompt: "Follow TASK.md in the provided workspace."},
     });
   } catch (error) {
-    return {accepted, terminal: undefined, submitEntered, uncertainty: {reason: "submit_unresolved", message: String(error)}};
+    return {accepted, commandId, terminal: undefined, submitEntered, uncertainty: {reason: "submit_unresolved", message: String(error)}};
   }
   if (accepted.status !== "accepted") {
     await writeJson(`${input.evidenceDirectory}/submit.json`, accepted);
-    return {accepted, terminal: undefined, submitEntered};
+    if (accepted.status === "potential_acceptance") {
+      const uncertainty = {operationId: accepted.candidateOperationId, reason: "potential_acceptance"};
+      await writeJson(`${input.evidenceDirectory}/reconciliation-debt.json`, uncertainty);
+      return {accepted, commandId, terminal: undefined, submitEntered, uncertainty};
+    }
+    return {accepted, commandId, terminal: undefined, submitEntered};
   }
   let observed;
   try {
@@ -40,16 +50,24 @@ export async function executeOnePublicContainedTurn(input) {
           clearTimeout(timeout);
         }
         await writeJson(`${input.evidenceDirectory}/observe-${String(sequence + 1).padStart(4, "0")}.json`, observed);
-        if (observed.status !== "observed" || terminal.has(observed.turn.status)) {break;}
+      if (observed.status !== "observed" || terminal.has(observed.turn.status)) {break;}
     }
-    return {accepted, terminal: observed, submitEntered};
+    if (observed?.status !== "observed" || observed.turn.status === "reconcile_required" || !terminal.has(observed.turn.status)) {
+      const uncertainty = {operationId: accepted.operationId, reason: observed?.status === "not_found"
+        ? "observation_not_found" : observed?.status === "unsupported" ? "observation_unsupported"
+          : observed?.turn.status === "reconcile_required" ? "reconcile_required" : "observation_exhausted"};
+      await writeJson(`${input.evidenceDirectory}/reconciliation-debt.json`, uncertainty);
+      return {accepted, commandId, terminal: observed, submitEntered, uncertainty};
+    }
+    return {accepted, commandId, terminal: observed, submitEntered};
   } catch (error) {
     const uncertainty = {operationId: accepted.operationId, reason: "accepted_operation_unresolved", message: String(error)};
     try {await writeJson(`${input.evidenceDirectory}/reconciliation-debt.json`, uncertainty);} catch {}
-    return {accepted, terminal: observed, submitEntered, uncertainty};
+    return {accepted, commandId, terminal: observed, submitEntered, uncertainty};
   }
 }
 
+// oxlint-disable-next-line complexity -- the qualification predicate is intentionally conjunctive and fail-closed
 export async function verifySuccessfulPublicResult(input, result) {
   if (result.uncertainty !== undefined || result.accepted?.status !== "accepted" || result.terminal?.status !== "observed" ||
       result.terminal.turn.status !== "succeeded" || result.terminal.turn.provider !== "codex") {
@@ -57,14 +75,55 @@ export async function verifySuccessfulPublicResult(input, result) {
   }
   const assistant = result.terminal.turn.output?.find(item => item.kind === "assistant" && item.text === input.expectedMarker);
   const cursors = result.terminal.turn.output?.map(item => item.cursor) ?? [];
-  if (cursors.some((cursor, index) => cursor !== index)) {throw new Error("terminal output cursors are not contiguous");}
+  if (cursors.length === 0 || cursors.some((cursor, index) => cursor !== cursors[0] + index)) {throw new Error("terminal output cursors are not contiguous");}
   if (!assistant || !result.terminal.turn.resultRef || !result.terminal.turn.artifactManifestRef) {
     throw new Error("terminal result is missing exact assistant output or linked artifacts");
+  }
+  if (result.terminal.turn.operationId !== result.accepted.operationId ||
+      result.terminal.turn.commandId !== result.commandId || result.terminal.turn.effectId !== input.effectId) {
+    throw new Error("terminal public identities differ from the accepted attempt");
+  }
+  const manifest = await input.verifyArtifactManifest(result.terminal.turn.artifactManifestRef, result.terminal.turn.resultRef);
+  const receiptKinds = new Set(manifest.receipts?.map(receipt => receipt.kind));
+  const requiredReceipts = ["workspace-creation", "workspace-seal", "result-publication", "output-drain", "terminal-truth"];
+  if (manifest.status !== "verified" || manifest.files?.some(file => file.path === "result.txt") !== true ||
+      manifest.receipts?.every(receipt => receipt.operationId === result.accepted.operationId &&
+        receipt.attemptId === input.attemptId && receipt.executionGenerationId === input.executionGenerationId) !== true ||
+      requiredReceipts.some(kind => !receiptKinds.has(kind))) {
+    throw new Error("artifact manifest or retained receipt identity is incomplete");
+  }
+  await input.rehydrateArtifact(result.terminal.turn.artifactManifestRef, input.frozenWorkspacePath);
+  const resultStat = await lstat(input.resultPath);
+  if (!resultStat.isFile() || resultStat.isSymbolicLink() || !input.resultPath.endsWith("/frozen-workspace/result.txt")) {
+    throw new Error("result path is not the fixed regular frozen artifact");
   }
   const bytes = await readFile(input.resultPath);
   const expected = Buffer.from(`${input.expectedMarker}\n`);
   if (!bytes.equals(expected) || digest(bytes) !== input.expectedResultSha256) {
     throw new Error("result.txt bytes do not match the accepted marker");
+  }
+  if (!input.sourceMessagePath.endsWith("/input/nested/message.txt") || !input.taskPath.endsWith("/TASK.md")) {
+    throw new Error("source fixture paths differ from the fixed inventory");
+  }
+  const sourceBytes = await readFile(input.sourceMessagePath);
+  if (!sourceBytes.equals(expected) || digest(sourceBytes) !== input.expectedResultSha256) {
+    throw new Error("source message bytes do not match the accepted marker");
+  }
+  if (digest(await readFile(input.taskPath)) !== input.expectedTaskSha256 || await input.verifySourceInventory() !== true) {
+    throw new Error("source inventory or TASK.md identity differs from activation");
+  }
+}
+
+// oxlint-disable-next-line complexity -- released means every retained owner and readback is proven closed
+export function verifyReleasedCleanup(cleanup) {
+  if (cleanup?.status !== "released" || cleanup.processes?.survivingDescendants !== 0 ||
+      cleanup.processes?.openWriterFds !== 0 || cleanup.routes?.remaining !== 0 ||
+      cleanup.listeners?.remaining !== 0 || cleanup.database?.sessions !== 0 ||
+      cleanup.database?.preparedTransactions !== 0 || cleanup.filesystem?.executionRootPresent !== false ||
+      cleanup.checksums?.verified !== true || cleanup.providerAccess?.disposeCount !== 1 ||
+      cleanup.pool?.closed !== true || cleanup.storage?.closed !== true || cleanup.native?.closureAcknowledged !== true ||
+      cleanup.host?.identityCurrent !== true || cleanup.host?.streamsDrained !== true || cleanup.evidence?.retainedTreeVerified !== true) {
+    throw new Error("cleanup release readback is incomplete");
   }
 }
 
@@ -78,10 +137,17 @@ export async function runDarwinPublicRuntimeHostChild() {
   // RuntimeAccessHandle-owning Host; capabilities never cross JSON.
   const runtime = await createDarwinLiveRuntime(input);
   let result;
+  let cleanup;
   try {
     result = await executeOnePublicContainedTurn({...input, ...runtime});
+    if (result.uncertainty !== undefined) {
+      await runtime.sealAdmission();
+      await runtime.retainForReconciliation(result);
+      throw new Error("accepted operation requires reconciliation");
+    }
     await verifySuccessfulPublicResult({...input, ...runtime}, result);
   } finally {
-    await runtime.dispose(result);
+    cleanup = await runtime.dispose(result);
   }
+  verifyReleasedCleanup(cleanup);
 }
