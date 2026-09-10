@@ -197,7 +197,11 @@ export const changes = Object.freeze([
   }),
   Object.freeze({
     id: "claude-code-vocabulary-parity",
-    revision: "216273dc20b8e13156b9162124bea964ec8f6591",
+    revision: "24755bd012239973ef043459c2dd2960406baa33",
+  }),
+  Object.freeze({
+    id: "codex-boundary-test-hardening",
+    revision: "65fb9b836862f82ab8bc905cb6e244168505c868",
   }),
 ]);
 
@@ -210,11 +214,11 @@ export const sourceRevisionArtifactDigests = Object.freeze({
   }),
   sources: Object.freeze({
     fileCount: 661,
-    sha256: "e9af86e3be98ebf03bdd6363b755a89561f27d48067bcc8a357b09c4b1ba2dbc",
+    sha256: "ce31be82d931ca2de943fc16e2b6a6be9f822902ee9dd8352332cd866cf6dad0",
   }),
   tests: Object.freeze({
     fileCount: 610,
-    sha256: "a88ddf0c6e5e62f609a26e6d0c0bb5f89248c43a18ede7c7172260ad34311c3b",
+    sha256: "a81f56010117ed0e89d9bfb5b68ab3239ff00930bbaa9b46f2a35b3221668282",
   }),
 });
 
