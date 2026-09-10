@@ -285,6 +285,17 @@ test("existing Host and SDK capabilities retain their exact ownership", async ()
   }), []);
 });
 
+test("Darwin retained-owner consumers use the narrow workspace entrypoint", async () => {
+  const hostRoot = boundariesById.get("adapter.agent-execution.host-custody").roots[0];
+  assert.deepEqual(await analyzeFixture({
+    [paths.composition]: `import type {DarwinAttemptRetainedOwners} from './features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-workspace-entrypoint.js';\n`,
+  }), []);
+  assert.deepEqual(rules(await analyzeFixture({
+    [paths.composition]: `import type {DarwinAttemptRetainedOwners} from './features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-bridge.js';\n`,
+    [`${hostRoot}/darwin-attempt-owner-bridge.ts`]: "export interface DarwinAttemptRetainedOwners {}\n",
+  })), ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"]);
+});
+
 test("Codex evidence utilities do not grant spawn or network ownership", async () => {
   const codex = boundariesById.get("adapter.agent-execution.codex-app-server");
   const path = `${codex.roots[0]}/negative-fixture.ts`;
