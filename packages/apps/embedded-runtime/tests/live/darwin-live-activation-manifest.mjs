@@ -39,7 +39,7 @@ const digestFile = async ({path, role}) => {
   return {role, path, sha256: createHash("sha256").update(await readFile(path)).digest("hex")};
 };
 
-export async function createDarwinLiveActivationManifest(input) {
+const validateActivationInput = input => {
   const turn = input.turn;
   const textFields = ["operationId", "commandId", "effectId", "attemptId", "executionGenerationId", "expectedMarker",
     "frozenWorkspacePath", "resultPath", "sourceMessagePath", "taskPath"];
@@ -51,6 +51,11 @@ export async function createDarwinLiveActivationManifest(input) {
       !Number.isInteger(turn.observeTimeoutMs) || turn.observeTimeoutMs < 1 || turn.observeTimeoutMs > 30000) {
     throw new TypeError("invalid activation source, closure or turn identity");
   }
+};
+
+export async function createDarwinLiveActivationManifest(input) {
+  validateActivationInput(input);
+  const turn = input.turn;
   const infrastructure = plainJson(input.infrastructure);
   for (const key of ["identities", "database", "providerAccess", "runtimeSecurity", "filesystem", "host", "deployment", "verification", "native"]) {
     if (infrastructure[key] === null || typeof infrastructure[key] !== "object") {throw new TypeError(`activation infrastructure ${key} is required`);}

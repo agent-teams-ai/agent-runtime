@@ -85,7 +85,7 @@ for (const field of Object.keys(inertReadback())) {
 
 test("inert preflight rejects missing readback", async () => {
   await assert.rejects(main(["--preflight", "/fixed/activation.json"],
-    preflightDependencies(undefined)), /inert infrastructure readback refused/);
+    preflightDependencies()), /inert infrastructure readback refused/);
 });
 
 test("failed packet validation prevents infrastructure inspection", async () => {

@@ -3,7 +3,9 @@ import {chmod, mkdtemp, mkdir, rm, writeFile} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import test from "node:test";
-import {createDarwinPacketDescriptors, prepareDarwinRootLaunch} from "./darwin-root-launcher.mjs";
+import {createConnection, createServer} from "node:net";
+import {once} from "node:events";
+import {createDarwinPacketDescriptors, prepareDarwinRootLaunch, statDarwinRouteSocket} from "./darwin-root-launcher.mjs";
 
 const packet = () => ({hostUid: 501, hostGid: 20, uid: 50_000, gid: 50_000, termMs: 10_000, runMs: 300_000,
   bindings: Array.from({length: 8}, (_, index) => String(index + 1).repeat(64)),
@@ -41,4 +43,33 @@ test("manifest descriptor identities are exactly FD5-7/9/10", () => {
     ({name, dev: 10 + index, ino: 20 + index}));
   assert.deepEqual(createDarwinPacketDescriptors(stats), stats.map((value, index) =>
     ({dev: value.dev, ino: value.ino, right: index < 3 ? 1 : index === 3 ? 2 : 3})));
+});
+
+
+test("route socket identity readback retains the exact live descriptor", async () => {
+  const root = await mkdtemp(join(tmpdir(), "darwin-route-stat-"));
+  const server = createServer();
+  let client, socket;
+  try {
+    server.listen(join(root, "route.sock"));
+    await once(server, "listening");
+    const connected = once(server, "connection");
+    client = createConnection(join(root, "route.sock"));
+    [socket] = await connected;
+    const before = await statDarwinRouteSocket(socket);
+    assert.equal(before.isSocket(), true);
+    const received = once(socket, "data");
+    client.write("still-owned");
+    assert.equal((await received)[0].toString(), "still-owned");
+    const after = await statDarwinRouteSocket(socket);
+    assert.equal(after.dev, before.dev);
+    assert.equal(after.ino, before.ino);
+    socket.destroy();
+    await assert.rejects(statDarwinRouteSocket(socket), /route socket unavailable/);
+    await assert.rejects(statDarwinRouteSocket({}), /route socket unavailable/);
+  } finally {
+    client?.destroy(); socket?.destroy();
+    await new Promise(resolve => {server.close(resolve);});
+    await rm(root, {recursive: true, force: true});
+  }
 });

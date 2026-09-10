@@ -1,13 +1,10 @@
 #!/usr/bin/env node
 import {createHash} from "node:crypto";
-import {execFile} from "node:child_process";
-import {promisify} from "node:util";
 import {constants} from "node:fs";
 import {access, chown, lstat, mkdir, open, readFile, readdir, realpath, writeFile} from "node:fs/promises";
 import {dirname, isAbsolute, resolve as resolvePath} from "node:path";
 import {fileURLToPath, pathToFileURL} from "node:url";
 
-const immutable = async path => /(^|,)\s*(uchg|schg)(,|$)/u.test((await promisify(execFile)("/usr/bin/stat", ["-f", "%Sf", path], {env: {PATH: "/usr/bin:/bin"}})).stdout.trim());
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
 const loadedModules = Object.freeze({
   runner: fileURLToPath(import.meta.url),

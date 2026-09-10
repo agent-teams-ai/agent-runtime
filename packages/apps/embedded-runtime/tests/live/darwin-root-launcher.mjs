@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import {execFile, spawn} from "node:child_process";
 import {promisify} from "node:util";
-import {constants} from "node:fs";
+import {constants, fstat} from "node:fs";
 import {chmod, lstat, mkdtemp, open, readFile, realpath, rm} from "node:fs/promises";
 import {createServer, createConnection} from "node:net";
-import {dirname, join} from "node:path";
+import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {encodeDarwinNativeRootPacket, validateDarwinNativeRootPacketTemplate} from "./darwin-native-root-packet.mjs";
 
@@ -27,6 +27,15 @@ export const createDarwinPacketDescriptors = stats => {
   return stats.map((value, index) => descriptor(value, index < 3 ? 1 : index === 3 ? 2 : 3));
 };
 
+const validateNativeImageClosure = (activation, native) => {
+  const fixedRoles = ["native-owner", "sandbox-exec", "codex", "node", "seatbelt-profile", "host-entrypoint", "host-peer-addon"];
+  const imageRoles = native.packet.images.map((_, index) => fixedRoles[index] ?? `native-loader-${index}`);
+  for (const [index, role] of imageRoles.entries()) {
+    const image = native.packet?.images?.[index], entry = activation.files?.find(file => file.role === role);
+    if (!image || !entry || image.path !== entry.path || image.sha256 !== entry.sha256) {fail("native fixed image closure refused");}
+  }
+};
+
 /** Reads the adjacent immutable activation and constructs the exact packet bytes.
  * This function is inert: it never creates paths, opens provider routes or starts a process. */
 export async function prepareDarwinRootLaunch(activationPath = join(import.meta.dirname, "activation.json"), expectedOwnerUid = 0, requireImmutable = true) {
@@ -41,12 +50,7 @@ export async function prepareDarwinRootLaunch(activationPath = join(import.meta.
   const ownerStat = await regular(native.ownerPath);
   if (ownerStat.uid !== expectedOwnerUid || !(ownerStat.mode & 0o111) ||
       (requireImmutable && process.platform === "darwin" && !await immutable(native.ownerPath))) {fail("native owner custody refused");}
-  const fixedRoles = ["native-owner", "sandbox-exec", "codex", "node", "seatbelt-profile", "host-entrypoint", "host-peer-addon"];
-  const imageRoles = native.packet.images.map((_, index) => fixedRoles[index] ?? `native-loader-${index}`);
-  for (const [index, role] of imageRoles.entries()) {
-    const image = native.packet?.images?.[index], entry = activation.files?.find(file => file.role === role);
-    if (!image || !entry || image.path !== entry.path || image.sha256 !== entry.sha256) {fail("native fixed image closure refused");}
-  }
+  validateNativeImageClosure(activation, native);
   await Promise.all([native.namespaceParent, native.leaseRegistry, native.journal].map(directory));
   const packetInput = {...native.packet};
   validateDarwinNativeRootPacketTemplate(packetInput);
@@ -62,8 +66,20 @@ const socketPair = async root => new Promise((resolve, reject) => {
   });
 });
 
-export async function launchDarwinRoot(input) {
+const requireRootDarwin = () => {
   if (process.platform !== "darwin" || process.arch !== "arm64" || process.getuid?.() !== 0 || process.geteuid?.() !== 0 || process.getgid?.() !== 0 || process.getegid?.() !== 0) {fail("root Darwin execution required");}
+};
+
+// Node exposes no public descriptor accessor for net.Socket. Read the retained
+// native handle once, without duplicating or changing ownership of its descriptor.
+export const statDarwinRouteSocket = async socket => {
+  const fd = Reflect.get(socket, "_handle")?.fd;
+  if (!Number.isInteger(fd) || fd < 0) {fail("route socket unavailable");}
+  return promisify(fstat)(fd);
+};
+
+export async function launchDarwinRoot(input) {
+  requireRootDarwin();
   const prepared = await prepareDarwinRootLaunch(input?.activationPath);
   const scratch = await mkdtemp("/var/tmp/agent-runtime-darwin-launch-");
   const held = [];
@@ -85,8 +101,7 @@ export async function launchDarwinRoot(input) {
     try {await fifoWriter.write(Buffer.alloc(4));} finally {await fifoWriter.close();}
     const route = await socketPair(scratch); held.push(route.client, route.socket);
     const packetStats = await Promise.all([namespace.stat(), leases.stat(), journal.stat(), fifo.stat(),
-      new Promise((resolve, reject) => route.socket._handle?.fd === undefined ? reject(fail("route socket unavailable")) :
-        import("node:fs").then(fs => fs.fstat(route.socket._handle.fd, (error, stat) => error ? reject(error) : resolve(stat))))]);
+      statDarwinRouteSocket(route.socket)]);
     const packet = encodeDarwinNativeRootPacket({...prepared.packetInput,
       fds: createDarwinPacketDescriptors(packetStats)});
     await manifestWriter.writeFile(packet.manifest); await manifestWriter.sync(); await chmod(manifestPath, 0o400);
@@ -101,7 +116,7 @@ export async function launchDarwinRoot(input) {
     return await new Promise((resolve, reject) => {child.once("error", reject); child.once("exit", (code, signal) => resolve({code, signal}));});
   } finally {
     try {await executeFile("/usr/bin/chflags", ["nouchg", join(scratch, "manifest.bin"), join(scratch, "grant.bin")], {env: {PATH: "/usr/bin:/bin"}});} catch {}
-    for (const owner of held.reverse()) {
+    for (const owner of held.toReversed()) {
       if (typeof owner.close === "function") {try {await owner.close();} catch {}}
       else if (typeof owner.destroy === "function") {owner.destroy();}
     }
