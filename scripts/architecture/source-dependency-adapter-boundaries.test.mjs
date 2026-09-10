@@ -133,9 +133,10 @@ test("contained-turn domain and application remain dependency-free core", async 
   })).includes("architecture.source-dependencies.forbidden-package-dependency"));
 });
 
-test("production sources retain expected Node imports and the installed parser accepts them", async () => {
+test("the real parser observes every retained Node import in composition and TLS support", async () => {
   const composition = "packages/apps/embedded-runtime/src/composition";
   const host = boundariesById.get("adapter.agent-execution.host-custody");
+  const parser = new OxcSourceDependencyParser();
   for (const [path, builtins] of [
     [`${composition}/agent-runtime-host.ts`, ["node:crypto", "node:util"]],
     [`${composition}/contained-turn-access-authority.ts`, ["node:util"]],
@@ -150,11 +151,14 @@ test("production sources retain expected Node imports and the installed parser a
       ["node:crypto", "node:util"]],
   ]) {
     const source = await readFile(join(repositoryRoot, path), "utf8");
-    const observed = [...source.matchAll(/(?:from|import)\s+["'](node:[^"']+)["']/gu)]
-      .map(match => match[1]).toSorted();
-    assert.deepEqual(observed, builtins, path);
+    const parsed = parser.parse({ path, source });
+    assert.equal(parsed.parseErrorCount, 0, path);
+    assert.deepEqual(parsed.unresolved, [], path);
+    const observed = parsed.references.filter(reference => reference.specifier.startsWith("node:"));
+    assert.deepEqual(observed.map(reference => reference.specifier).toSorted(), builtins, path);
+    assert.ok(observed.every(reference => reference.kind === "static"), path);
     assert.deepEqual(await analyzeFixture({
-      [path]: observed.map(specifier => `import '${specifier}';`).join("\n"),
+      [path]: observed.map(reference => `import '${reference.specifier}';`).join("\n"),
     }), [], path);
   }
 });
@@ -441,6 +445,9 @@ test("Docker process composition uses its narrow entrypoint and a type-only Host
   const entry = `${base}/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.ts`;
   const internal = entry.replace("docker-provider-process-entrypoint.ts", "docker-provider-process-bridge.ts");
   const source = await readFile(join(repositoryRoot, composition), "utf8");
+  const parsed = new OxcSourceDependencyParser().parse({path: composition, source});
+  assert.equal(parsed.parseErrorCount, 0);
+  assert.deepEqual(parsed.unresolved, []);
   assert.deepEqual(await analyzeFixture({[composition]: source}), []);
   assert.match(source, /import type \{CustodiedProviderProcess, CustodiedProviderProcessRegistry\}/u);
   assert.deepEqual(rules(await analyzeFixture({[paths.host]: "import './docker/docker-provider-process-entrypoint.js';\n"})),
