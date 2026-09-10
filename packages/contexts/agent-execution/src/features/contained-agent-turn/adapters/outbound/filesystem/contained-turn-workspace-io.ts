@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
-import { unlink, type FileHandle } from "node:fs/promises";
+import type { StableFilesystemHandle as FileHandle } from "@agent-teams/filesystem-custody";
 import { basename, dirname, isAbsolute, resolve } from "node:path";
 
 import type { ContainedTurnScope } from "../../../contracts/contained-agent-turn.js";
 import {
-  descriptorChildPath,
+  unlinkFileEntry,
   fsyncDirectoryHandle,
   inspectFileHandle,
   isMissingFilesystemEntry,
@@ -75,7 +75,7 @@ export const readOptionalWorkspaceFileAt = async (
 
 export const unlinkOptionalAt = async (parent: FileHandle, name: string): Promise<void> => {
   try {
-    await unlink(descriptorChildPath(parent, name));
+    await unlinkFileEntry(parent, name);
     await fsyncDirectoryHandle(parent);
   } catch (error) {
     if (!isMissingFilesystemEntry(error)) {throw error;}

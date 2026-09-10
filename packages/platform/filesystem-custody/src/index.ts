@@ -23,3 +23,9 @@ export {
   type StableDirectoryPublicationOutcome,
 } from "./stable-directory-publication.js";
 export { withStableDirectoryProcessLock } from "./stable-directory-process-lock.js";
+export {
+  hasDarwinHostDescriptors, isNativeHostDescriptor, openNativeHostRoot, openNativeHostEntry,
+  duplicateNativeHostDescriptor, nativeHostPath, nativeHostMount, nativeHostMkdir,
+  nativeHostUnlink, nativeHostNames,
+  type StableFilesystemHandle, type StableFilesystemStats,
+} from "./host-descriptor.js";

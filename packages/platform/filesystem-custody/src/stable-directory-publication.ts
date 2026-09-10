@@ -32,7 +32,7 @@ interface NativePublicationBinding {
 let nativeBinding: NativePublicationBinding | undefined;
 
 const assertEntryName = (name: string): void => {
-  if (name.length === 0 || name === "." || name === ".." || name.includes("/") || name.includes("\0")) {
+  if (name.length === 0 || name === "." || name === ".." || name.includes("/") || name.includes("\0") || Buffer.byteLength(name) > 255) {
     throw new TypeError("stable directory publication entry name is invalid");
   }
 };
@@ -66,9 +66,9 @@ export const publishStableDirectoryNoReplace = async (input: {
 }): Promise<StableDirectoryPublicationOutcome> => {
   assertEntryName(input.sourceName);
   assertEntryName(input.destinationName);
-  if (process.platform !== "linux") {
+  if (process.platform !== "linux" && process.platform !== "darwin") {
     throw new StableDirectoryPublicationUnsupportedError(
-      "no-replace stable directory publication is qualified only on Linux",
+      "no-replace stable directory publication requires Linux or Darwin native primitives",
     );
   }
   const incompleteName = `.ar-publish-v1-${input.expectedSourceIdentity.dev.toString(16)}-${input.expectedSourceIdentity.ino.toString(16)}-${input.destinationName}.incomplete`;
@@ -90,7 +90,7 @@ export const publishStableDirectoryNoReplace = async (input: {
   if (status === 73) {return "existing";}
   if (status === 74) {
     throw new StableDirectoryPublicationUnsupportedError(
-      "the current Linux filesystem cannot prove no-replace directory publication",
+      "the current filesystem cannot prove no-replace directory publication",
     );
   }
   if (status === 76) {throw new Error("stable directory publication source identity changed");}

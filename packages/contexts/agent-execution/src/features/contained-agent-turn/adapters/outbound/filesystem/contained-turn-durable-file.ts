@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { constants, type BigIntStats } from "node:fs";
-import { open, unlink, type FileHandle } from "node:fs/promises";
+import { constants } from "node:fs";
+import { open, type FileHandle as NodeFileHandle } from "node:fs/promises";
 import {
   publishStableDirectoryNoReplace,
+  type StableFilesystemHandle as FileHandle,
+  type StableFilesystemStats as BigIntStats,
+  isNativeHostDescriptor, openNativeHostEntry,
   StableDirectoryPublicationUnsupportedError,
   withStableDirectoryProcessLock,
 } from "@agent-teams/filesystem-custody";
@@ -11,11 +14,12 @@ import { ContainedTurnFilesystemUnsupportedError } from "./contained-turn-filesy
 import {
   assertSameMountIdentity,
   descriptorChildPath,
+  openFileEntry, unlinkFileEntry,
   fsyncDirectoryHandle,
 } from "./contained-turn-filesystem-custody.js";
 import { readDirectoryNamesBounded } from "./contained-turn-filesystem-reads.js";
 
-type DurableOpenFile = (path: string, flags: number, mode: number) => Promise<FileHandle>;
+type DurableOpenFile = (path: string, flags: number, mode: number) => Promise<NodeFileHandle>;
 
 export interface ContainedTurnFilesystemFaults {
   checkpoint(point: string): Promise<void> | void;
@@ -46,10 +50,7 @@ export const readStableFileAt = async (
   }
   const noFollow = constants.O_NOFOLLOW;
   if (typeof noFollow !== "number") {throw new Error("contained turn no-follow reads are unsupported");}
-  const handle = await open(
-    descriptorChildPath(parent, name),
-    constants.O_RDONLY | constants.O_NONBLOCK | noFollow,
-  );
+  const handle = await openFileEntry(parent, name);
   try {
     await assertSameMountIdentity(parent, handle);
     const before = await handle.stat({ bigint: true });
@@ -75,10 +76,7 @@ export const readStableFileAt = async (
     ) {
       throw new Error("contained turn stable file changed while it was read");
     }
-    const current = await open(
-      descriptorChildPath(parent, name),
-      constants.O_RDONLY | constants.O_NONBLOCK | noFollow,
-    );
+    const current = await openFileEntry(parent, name);
     try {
       await assertSameMountIdentity(parent, current);
       const currentObservation = await current.stat({ bigint: true });
@@ -138,7 +136,7 @@ const cleanupStagedWrite = async (input: {
   }
   if (input.temporaryCreated) {
     try {
-      await unlink(descriptorChildPath(input.stagingDirectory, input.temporaryName));
+      await unlinkFileEntry(input.stagingDirectory, input.temporaryName);
     } catch (error) {
       if (!isFilesystemCode(error, "ENOENT")) {cleanup.push(error);}
     }
@@ -201,14 +199,18 @@ const writeImmutableFileUnderLock = async (input: {
   let temporaryCreated = false;
   try {
     await input.faults?.checkpoint(`${input.temporaryKind}.before-open`);
-    handle = await openFile(
+    if (isNativeHostDescriptor(input.stagingDirectory) && input.faults?.openFile !== undefined) {
+      throw new Error("pathname open fault injection is unavailable for native Host descriptors");
+    }
+    handle = isNativeHostDescriptor(input.stagingDirectory) ?
+      openNativeHostEntry(input.stagingDirectory, temporaryName, "create") : await openFile(
       descriptorChildPath(input.stagingDirectory, temporaryName),
       constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | noFollow,
       0o600,
     );
-    await assertSameMountIdentity(input.stagingDirectory, handle);
     temporaryCreated = true;
     stagingModified = true;
+    await assertSameMountIdentity(input.stagingDirectory, handle);
     await input.faults?.checkpoint(`${input.temporaryKind}.opened`);
     await writeTemporaryBytes(input.faults, handle, input.bytes);
     await input.faults?.checkpoint(`${input.temporaryKind}.written`);
@@ -231,7 +233,7 @@ const writeImmutableFileUnderLock = async (input: {
     await input.faults?.checkpoint(`${input.temporaryKind}.published`);
     await input.faults?.checkpoint(`${input.temporaryKind}.before-unlink`);
     if (temporaryCreated) {
-      await unlink(descriptorChildPath(input.stagingDirectory, temporaryName));
+      await unlinkFileEntry(input.stagingDirectory, temporaryName);
       temporaryCreated = false;
     }
     await input.faults?.checkpoint(`${input.temporaryKind}.unlinked`);
@@ -291,7 +293,7 @@ export const quarantineAmbiguousStagingEntry = async (
   quarantineDirectory: FileHandle,
   name: string,
 ): Promise<void> => {
-  const handle = await open(
+  const handle = isNativeHostDescriptor(stagingDirectory) ? openNativeHostEntry(stagingDirectory, name, "inspect") : await open(
     descriptorChildPath(stagingDirectory, name),
     LINUX_O_PATH | constants.O_NOFOLLOW,
   );

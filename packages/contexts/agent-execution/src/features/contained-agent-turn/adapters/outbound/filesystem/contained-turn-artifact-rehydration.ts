@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { constants } from "node:fs";
-import { mkdir, open, type FileHandle } from "node:fs/promises";
+import type { StableFilesystemHandle as FileHandle } from "@agent-teams/filesystem-custody";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { withStableDirectoryProcessLock } from "@agent-teams/filesystem-custody";
@@ -12,7 +11,7 @@ import {
 } from "./contained-turn-artifact-manifest.js";
 import type { VerifiedStoredArtifact } from "./contained-turn-artifact-store.js";
 import {
-  descriptorChildPath,
+  mkdirDirectoryEntry, openFileEntry,
   assertSameMountIdentity,
   fsyncDirectoryHandle,
   isMissingFilesystemEntry,
@@ -72,18 +71,14 @@ const reconstruct = async (
     const parent = openedParent ?? root;
     try {
       if (entry.kind === "directory") {
-        await mkdir(descriptorChildPath(parent, name), { mode: 0o700 });
+        await mkdirDirectoryEntry(parent, name);
         directories.push(entry);
       } else {
         const bytes = verified.blobs.get(entry.digest);
         if (bytes === undefined || bytes.length !== entry.size) {
           throw new Error("contained turn reconstruction is missing a verified blob");
         }
-        const file = await open(
-          descriptorChildPath(parent, name),
-          constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW,
-          0o600,
-        );
+        const file = await openFileEntry(parent, name, true);
         try {
           await assertSameMountIdentity(parent, file);
           await file.writeFile(bytes);
@@ -266,7 +261,7 @@ const buildStagedRehydration = async (input: {
   const { context, staging, stagingName, state, verified } = input;
   let materializationOwner = false;
   try {
-    await mkdir(descriptorChildPath(staging, stagingName), { mode: 0o700 });
+    await mkdirDirectoryEntry(staging, stagingName);
     materializationOwner = true;
     await fsyncDirectoryHandle(staging);
     await context.faults?.checkpoint("artifact.rehydrate.created");
