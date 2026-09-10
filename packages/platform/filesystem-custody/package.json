@@ -10,7 +10,13 @@
     "test": "node --test --test-concurrency=1 tests/stable-path-custody.test.ts tests/stable-directory-process-lock.test.ts tests/host-descriptors.test.mjs tests/darwin-acquisition-guard.test.mjs tests/host-errno.test.mjs",
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"
   },
-  "files": ["dist"],
+  "agentTeamsArchitecture": {
+    "role": "platform",
+    "ownerDocument": "ADR-0017"
+  },
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

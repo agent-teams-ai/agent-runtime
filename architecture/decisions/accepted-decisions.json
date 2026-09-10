@@ -61,6 +61,11 @@
       "id": "ADR-0014",
       "path": "docs/decisions/0014-darwin-provider-candidate-platform-qualification.md",
       "immutableDigest": "sha256:b923c5f780461715861e829391fd7a01f7f7cb81586760655f5f8218c6d9b7e3"
+    },
+    {
+      "id": "ADR-0017",
+      "path": "docs/decisions/0017-feature-module-production-scope-roles.md",
+      "immutableDigest": "sha256:a7b5030f94eeb3ec1abaab0919237f8359c7d0b24c997abf133d9007b8d0a86f"
     }
   ]
 }

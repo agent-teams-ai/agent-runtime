@@ -11,6 +11,92 @@
     "sha256": "851653f96643cf0466b67ab22963661976b00de44840fa3144a48a8c054f95fa"
   },
   "scope": {
+    "workspaceContainers": [
+      "packages/apps",
+      "packages/contexts",
+      "packages/platform"
+    ],
+    "productionModules": [
+      {
+        "id": "agent-execution",
+        "role": "bounded-context",
+        "moduleRoot": "packages/contexts/agent-execution",
+        "sourceRoot": "packages/contexts/agent-execution/src",
+        "packageName": "@agent-teams/agent-execution",
+        "ownerDocument": "ADR-0005",
+        "curatedExports": [
+          ".",
+          "./composition"
+        ],
+        "adoption": "active",
+        "activationAuthority": "ADR-0013"
+      },
+      {
+        "id": "embedded-runtime",
+        "role": "host-app",
+        "moduleRoot": "packages/apps/embedded-runtime",
+        "sourceRoot": "packages/apps/embedded-runtime/src",
+        "packageName": "@agent-teams/embedded-runtime",
+        "ownerDocument": "ADR-0008",
+        "curatedExports": [
+          ".",
+          "./composition"
+        ],
+        "adoption": "pending"
+      },
+      {
+        "id": "filesystem-custody",
+        "role": "platform",
+        "moduleRoot": "packages/platform/filesystem-custody",
+        "sourceRoot": "packages/platform/filesystem-custody/src",
+        "packageName": "@agent-teams/filesystem-custody",
+        "ownerDocument": "ADR-0017",
+        "curatedExports": [
+          "."
+        ],
+        "adoption": "pending"
+      },
+      {
+        "id": "provider-access",
+        "role": "bounded-context",
+        "moduleRoot": "packages/contexts/provider-access",
+        "sourceRoot": "packages/contexts/provider-access/src",
+        "packageName": "@agent-teams/provider-access",
+        "ownerDocument": "ADR-0005",
+        "curatedExports": [
+          ".",
+          "./composition"
+        ],
+        "adoption": "active",
+        "activationAuthority": "ADR-0013"
+      },
+      {
+        "id": "runtime-configuration",
+        "role": "bounded-context",
+        "moduleRoot": "packages/contexts/runtime-configuration",
+        "sourceRoot": "packages/contexts/runtime-configuration/src",
+        "packageName": "@agent-teams/runtime-configuration",
+        "ownerDocument": "ADR-0005",
+        "curatedExports": [
+          ".",
+          "./composition"
+        ],
+        "adoption": "pending"
+      },
+      {
+        "id": "runtime-security",
+        "role": "bounded-context",
+        "moduleRoot": "packages/contexts/runtime-security",
+        "sourceRoot": "packages/contexts/runtime-security/src",
+        "packageName": "@agent-teams/runtime-security",
+        "ownerDocument": "ADR-0005",
+        "curatedExports": [
+          ".",
+          "./composition"
+        ],
+        "adoption": "pending"
+      }
+    ],
     "productionRoots": [
       "packages/contexts/agent-execution/src",
       "packages/contexts/provider-access/src"
@@ -195,6 +281,11 @@
         {
           "id": "ADR-0013",
           "path": "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md",
+          "owner": "architecture"
+        },
+        {
+          "id": "ADR-0017",
+          "path": "docs/decisions/0017-feature-module-production-scope-roles.md",
           "owner": "architecture"
         }
       ]

@@ -17,13 +17,16 @@ const SOURCE_EXTENSIONS = new Set([".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx",
 const TEST_FILE = /(?:^|\/)[^/]+\.(?:test|spec)\.(?:[cm]?[jt]sx?)$/u;
 const compareText = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 
-const curatedPackageExports = (exports) => {
-  if (!exports || Object.keys(exports).toSorted(compareText).join(",") !== ".,./composition") {return false;}
+const EXPORT_STEMS = Object.freeze({ ".": "index", "./composition": "composition" });
+
+const curatedPackageExports = (exports, curated) => {
+  if (!exports || !curated?.length) {return false;}
+  if (Object.keys(exports).toSorted(compareText).join(",") !== [...curated].toSorted(compareText).join(",")) {return false;}
   const matches = (entry, stem) => entry
     && Object.keys(entry).toSorted(compareText).join(",") === "import,types"
     && entry.types === `./dist/${stem}.d.ts`
     && entry.import === `./dist/${stem}.js`;
-  return matches(exports["."], "index") && matches(exports["./composition"], "composition");
+  return curated.every((key) => matches(exports[key], EXPORT_STEMS[key]));
 };
 
 const importBindingNames = (program, sourceSpecifier) => (program.body ?? [])
@@ -204,8 +207,9 @@ const packageIssues = async (context, productionRoot) => {
   const parent = posix.dirname(productionRoot), packageRoot = parent === "." ? "" : parent;
   const packagePath = posix.join(packageRoot, "package.json");
   const ownedPackage = context.localPackageImports.packages.find((candidate) => candidate.productionRoot === productionRoot);
-  const issues = curatedPackageExports(ownedPackage?.packageJson?.exports) ? []
-    : [context.issue("FM_PACKAGE_EXPORT_MAP", packagePath, 1, "package exports must expose only the public and composition assembly files")];
+  const curated = context.declaredModules.get(productionRoot)?.curatedExports;
+  const issues = curatedPackageExports(ownedPackage?.packageJson?.exports, curated) ? []
+    : [context.issue("FM_PACKAGE_EXPORT_MAP", packagePath, 1, `package exports must expose only the curated assembly files declared for this module: ${(curated ?? []).join(" ")}`)];
   const inventory = await inventoryRepositoryFiles({
     root: context.root,
     startPath: packageRoot,

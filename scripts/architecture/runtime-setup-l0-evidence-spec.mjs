@@ -171,6 +171,10 @@ export const changes = Object.freeze([
     id: "custody-test-seam-relocation",
     revision: "c75940cccc7f0d03ffd776dbe2efee9446a90fa8",
   }),
+  Object.freeze({
+    id: "production-module-role-classification",
+    revision: "01dc2418c963586d43e92221a01ebcdb11e756f4",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -182,7 +186,7 @@ export const sourceRevisionArtifactDigests = Object.freeze({
   }),
   sources: Object.freeze({
     fileCount: 647,
-    sha256: "78c1b7ea7eec7f9109d4594b5ff713e521f3eec3b5e707e3cbff102d17ae2c23",
+    sha256: "a5ec000e281393af6458654fc6da29dc6499fa323587e839a8ad104b7a0e5ba2",
   }),
   tests: Object.freeze({
     fileCount: 606,
