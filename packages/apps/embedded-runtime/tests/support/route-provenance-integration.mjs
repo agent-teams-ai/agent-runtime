@@ -43,6 +43,10 @@ stub(new URL('docker-provider-process-entrypoint.js', docker), {
   HostHttpEgressV4NodeStorage: function HostHttpEgressV4NodeStorage() {},
   HostHttpEgressV4Journal: function HostHttpEgressV4Journal() {},
 });
+// This scenario qualifies Linux provenance only; no Darwin capability is minted.
+stub(new URL('composition/darwin-codex-route-enforcement.js', feature), {
+  readDarwinCodexRouteEnforcementTarget: () => undefined,
+});
 const capability = await import(new URL('composition/contained-turn-route-enforcement-capability.js', feature));
 stub('@agent-teams/agent-execution/composition', {...capability,
   NodeHttpEgressBoundaryIds: class {fresh = unused;},
