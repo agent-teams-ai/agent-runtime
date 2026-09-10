@@ -15,6 +15,7 @@ Object.defineProperty(process, "platform", {...platform, value: "darwin"});
 after(() => Object.defineProperty(process, "platform", platform));
 const originalDlopen = process.dlopen;
 const originalLstat = fs.lstatSync;
+const canonicalTemp = fs.realpathSync(os.tmpdir());
 const locked = new Set<string>();
 process.dlopen = module => {module.exports = {
   tryLockDirectory(fd: number) {const s = fs.fstatSync(fd); const key = `${s.dev}:${s.ino}`;
@@ -23,13 +24,13 @@ process.dlopen = module => {module.exports = {
 };};
 fs.lstatSync = ((file: fs.PathLike, options?: {bigint?: boolean}) => {
   const result = originalLstat(file, options as never);
-  if (file === os.tmpdir()) {Object.defineProperty(result, "mode", {value: options?.bigint ? 0o40755n : 0o40755});}
+  if (file === canonicalTemp) {Object.defineProperty(result, "mode", {value: options?.bigint ? 0o40755n : 0o40755});}
   return result;
 }) as typeof fs.lstatSync;
 syncBuiltinESMExports();
 after(() => {process.dlopen = originalDlopen; fs.lstatSync = originalLstat; syncBuiltinESMExports(); assert.equal(locked.size, 0);});
 const fixture = () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ar69-darwin-store-test-")); fs.chmodSync(root, 0o700);
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ar69-darwin-store-test-"))); fs.chmodSync(root, 0o700);
   const s = fs.lstatSync(root); const pin = {path: root, dev: String(s.dev), ino: String(s.ino)};
   const store = new DarwinRouteDurableStorage(pin, darwinDigest("operation-1"));
   return {root, pin, store, cleanup: () => fs.rmSync(root, {recursive: true, force: true})};
@@ -159,7 +160,7 @@ test("lost retained FD and replaced ancestor are refused without reopening a gen
       const s = original(fd, options as never); if (s.isFile()) {throw Object.assign(new Error("lost FD"), {code: "EBADF"});} return s;
     }) : t.mock.method(fs, "lstatSync", (file, options) => {
       const s = originalLstat(file, options as never);
-      if (file === os.tmpdir()) {Object.defineProperty(s, "mode", {value: options?.bigint ? 0o40755n : 0o40755});}
+      if (file === canonicalTemp) {Object.defineProperty(s, "mode", {value: options?.bigint ? 0o40755n : 0o40755});}
       if (file === f.root) {Object.defineProperty(s, "ino", {value: options?.bigint ? 999999n : 999999});}
       return s;
     });
