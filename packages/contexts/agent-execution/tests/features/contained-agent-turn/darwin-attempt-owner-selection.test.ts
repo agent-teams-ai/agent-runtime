@@ -147,6 +147,10 @@ async function exercise(mode: "normal" | "refused" | "foreign" | "material" | "m
       if (specifier.endsWith("darwin-attempt-owner-selection.js")) {
         return next(specifier.slice(0, -3) + `.ts?${mode}`, context);
       }
+      if (context.parentURL?.includes("/host-custody/darwin-attempt-owner-") &&
+          (specifier === "./darwin-attempt-owner-bridge.js" || specifier === "./darwin-attempt-owner-protocol.js")) {
+        return next(specifier.slice(0, -3) + ".ts", context);
+      }
       return next(specifier, context);
     },
     load(url, context, next) {

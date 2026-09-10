@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { registerHooks } from "node:module";
+import { registerHooks, stripTypeScriptTypes } from "node:module";
 import { existsSync, readFileSync, mkdtempSync, mkdirSync, rmSync, openSync, closeSync, fstatSync, constants } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as synthetic from "./synthetic-native-custody-producer.fixture.ts";
+
+const linuxTest = process.platform === "linux" ? test : test.skip;
 
 // Explicit independent source-loaded SYNTHETIC producer, never a build shim.
 const producer = new URL("./synthetic-native-custody-producer.fixture.ts", import.meta.url).href;
@@ -45,6 +47,11 @@ registerHooks({resolve(specifier, context, next) {
     if (existsSync(source)) {return {url: source.href, shortCircuit: true};}
   }
   return next(specifier, context);
+}, load(url, context, next) {
+  if (url.includes("/agent-execution/src/") && url.endsWith(".ts")) {
+    return {format: "module", source: stripTypeScriptTypes(readFileSync(new URL(url), "utf8"), {mode: "transform"}), shortCircuit: true};
+  }
+  return next(url, context);
 }});
 const root = "../../../src/features/contained-agent-turn/adapters/outbound/";
 const permission = await import(root + "codex-app-server/codex-app-server-permission-boundary.ts");
@@ -81,7 +88,7 @@ test("synthetic roots enforce safe identities, normalized paths, leased UID and 
     (f: any) => f.tmpDir.dev = -1n,
   ]) {const f = synthetic.syntheticFacts(); mutate(f); await assert.rejects(setup(f));}
 });
-test("ordinary Linux boundary still validates actual disposable directories", () => {
+linuxTest("ordinary Linux boundary still validates actual disposable directories", () => {
   const dir = mkdtempSync(join(tmpdir(), "ar69-custody-linux-"));
   try {mkdirSync(join(dir, "home"), {mode: 0o700}); mkdirSync(join(dir, "work"), {mode: 0o700});
     const boundary = permission.createCodexAppServerPermissionBoundary({codexHome: join(dir, "home"), workspaceRef: join(dir, "work"), intentMode: "analysis"});
@@ -234,7 +241,7 @@ test("Linux callback failure cannot reopen the same attempt or invoke scoped acq
   assert.equal(calls, 1); assert.equal(retires, 1);
 });
 
-test("Linux reservation retains and rechecks the actual disposable descriptor and mount identity", async () => {
+linuxTest("Linux reservation retains and rechecks the actual disposable descriptor and mount identity", async () => {
   const dir = mkdtempSync(join(tmpdir(), "ar69-custody-descriptor-"));
   let descriptor: number | undefined;
   try {
