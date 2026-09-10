@@ -53,7 +53,7 @@ assert(strcmp(host_errno_name(4095), "UNKNOWN") == 0);
 return 0;
 }`);
     const built = spawnSync("cc", ["-Wall", "-Wextra", "-Werror", "-I",
-      fileURLToPath(new URL("../native", import.meta.url)), source, "-o", join(root, "test")],
+      fileURLToPath(new URL("../../../native", import.meta.url)), source, "-o", join(root, "test")],
     { encoding: "utf8", timeout: 15000 });
     assert.ifError(built.error);
     assert.equal(built.status, 0, built.stderr);

@@ -7,4 +7,4 @@ export type {
   StableDirectoryPublicationOutcome,
   StablePathComponentIdentity,
   UnsupportedStableDirectoryMutationCapability,
-} from "./features/stable-filesystem-custody/index.js";
+} from "./contracts/stable-filesystem-custody.js";

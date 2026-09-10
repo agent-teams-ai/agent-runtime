@@ -303,7 +303,7 @@ const configuredResolver = (packages, names, index) => (fromPath, specifier, res
   const selfTarget = names.get(specifier);
   if (selfTarget) {
     const indexed = resolveIndexedPath(selfTarget, resolutionIndex, { requireExisting: true });
-    return indexed.ok ? { kind: "local", path: indexed.path, self: true } : { kind: "invalid", identity: true, self: true };
+    return indexed.ok ? { kind: "local", path: indexed.path, self: true } : { kind: "invalid", identity: true, self: true, path: selfTarget };
   }
   if ([...names.keys()].some((name) => specifier.startsWith(`${name}/`))) {return { kind: "invalid", alias: true };}
   return { kind: "external" };

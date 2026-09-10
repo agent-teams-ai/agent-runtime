@@ -179,6 +179,10 @@ export const changes = Object.freeze([
     id: "custody-composition-surface",
     revision: "3adac9884ae86d6acbe7fd92c5a5fdadd0119dbd",
   }),
+  Object.freeze({
+    id: "custody-feature-activation",
+    revision: "09cbb717578a39e5788a4f43ca950bcf91e2ef67",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -189,12 +193,12 @@ export const sourceRevisionArtifactDigests = Object.freeze({
     sha256: "2f185db9f8cd0bd29ed28b08d862dbf23846ce19e14c657d8e6afad9c3e769fc",
   }),
   sources: Object.freeze({
-    fileCount: 648,
-    sha256: "52555580b6dedb7cfc4bfd62351b8b4e8af147ff306a81b495e45f0f20471307",
+    fileCount: 653,
+    sha256: "422de41d04002491b49f0e7bc556a991f8161395a3902536072198c9214b9a92",
   }),
   tests: Object.freeze({
-    fileCount: 606,
-    sha256: "9ff147b00b6fda852dd7ddc4187f0b53a7f7df18d968df381d82b6bfc722e3f8",
+    fileCount: 608,
+    sha256: "aeecd96b59fbcf86164437bb0d8f8b3f347670eadabb116a598e8e280eb8783b",
   }),
 });
 

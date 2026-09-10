@@ -59,6 +59,25 @@ const secondModuleFiles = {
   "other/src/composition.ts": "export { gamma } from './features/gamma/internal.js';\n",
 };
 
+const nestedModuleFiles = {
+  "packages/a/package.json": "{\"name\": \"@fixture/alpha-module\", \"agentTeamsArchitecture\": {\"role\": \"bounded-context\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+  "packages/a/src/features/alpha/README.md": "---\ntype: feature\nstatus: accepted\nowner: \"@fixture/alpha-module\"\nowner_document: ADR-0005\n---\n\n# Alpha\n",
+  "packages/a/src/features/alpha/index.ts": "export type { AlphaValue } from './contracts/alpha.js';\n",
+  "packages/a/src/features/alpha/internal.ts": "export { value } from './adapters/alpha.js';\n",
+  "packages/a/src/features/alpha/contracts/alpha.ts": "export interface AlphaValue { readonly value: boolean }\n",
+  "packages/a/src/features/alpha/adapters/alpha.ts": "export const value = true;\n",
+  "packages/a/src/index.ts": "export type { AlphaValue } from './features/alpha/index.js';\n",
+  "packages/a/src/composition.ts": "export { value } from './features/alpha/internal.js';\n",
+  "packages/b/package.json": "{\"name\": \"@fixture/gamma-module\", \"agentTeamsArchitecture\": {\"role\": \"bounded-context\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+  "packages/b/src/features/gamma/README.md": "---\ntype: feature\nstatus: accepted\nowner: \"@fixture/gamma-module\"\nowner_document: ADR-0005\n---\n\n# Gamma\n",
+  "packages/b/src/features/gamma/index.ts": "export type { GammaValue } from './contracts/gamma.js';\n",
+  "packages/b/src/features/gamma/internal.ts": "export { gamma } from './adapters/gamma.js';\n",
+  "packages/b/src/features/gamma/contracts/gamma.ts": "export interface GammaValue { readonly gamma: boolean }\n",
+  "packages/b/src/features/gamma/adapters/gamma.ts": "export const gamma = true;\n",
+  "packages/b/src/index.ts": "export type { GammaValue } from './features/gamma/index.js';\n",
+  "packages/b/src/composition.ts": "export { gamma } from './features/gamma/internal.js';\n"
+};
+
 const makeFixtureRoot = async () => {
   try { return await mkdtemp(join(tmpdir(), "feature-module-check-")); }
   catch (error) {
@@ -292,6 +311,7 @@ const buildFixtureFiles = (fixture, profilePath) => {
     ...fixtureDecisionFiles(fixture),
     ...(fixture.secondFeature ? secondFiles : {}),
     ...(fixture.secondModule ? secondModuleFiles : {}),
+    ...(fixture.nestedModules ? nestedModuleFiles : {}),
     ...fixture.files,
     [profilePath]: profileSource.endsWith("\n") ? profileSource : `${profileSource}\n`,
   };

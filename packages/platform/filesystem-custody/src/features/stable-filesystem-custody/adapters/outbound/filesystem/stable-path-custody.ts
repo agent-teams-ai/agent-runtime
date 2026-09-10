@@ -1,5 +1,10 @@
 import { constants, type BigIntStats } from "node:fs";
 import { lstat, open, realpath, type FileHandle } from "node:fs/promises";
+import type {
+  PathCustodyBoundary,
+  PathLineage,
+  StablePathComponentIdentity,
+} from "../../../contracts/stable-filesystem-custody.js";
 import {
   basename,
   dirname,
@@ -9,26 +14,6 @@ import {
   resolve,
   sep,
 } from "node:path";
-
-interface PathComponentIdentity {
-  readonly ctimeNs: bigint;
-  readonly dev: bigint;
-  readonly ino: bigint;
-  readonly mode: bigint;
-  readonly mtimeNs: bigint;
-  readonly nlink: bigint;
-  readonly path: string;
-  readonly size: bigint;
-}
-
-export interface PathLineage {
-  readonly components: readonly PathComponentIdentity[];
-}
-
-export interface PathCustodyBoundary {
-  readonly absolutePath: string;
-  readonly canonicalPath: string;
-}
 
 export interface OpenedStablePath {
   readonly canonicalLocationPath: string;
@@ -70,7 +55,7 @@ const componentPaths = (
 const componentIdentity = (
   path: string,
   observation: BigIntStats,
-): PathComponentIdentity => ({
+): StablePathComponentIdentity => ({
   ctimeNs: observation.ctimeNs,
   dev: observation.dev,
   ino: observation.ino,
@@ -89,7 +74,7 @@ export const capturePathLineage = async (
   if (!isAbsolute(absolutePath) || !isAbsolute(boundaryPath)) {
     throw new TypeError("Path lineage requires an absolute path");
   }
-  const components: PathComponentIdentity[] = [];
+  const components: StablePathComponentIdentity[] = [];
   for (const path of componentPaths(absolutePath, boundaryPath)) {
     signal?.throwIfAborted();
     components.push(componentIdentity(path, await lstat(path, { bigint: true })));
@@ -98,8 +83,8 @@ export const capturePathLineage = async (
 };
 
 const componentsEqual = (
-  left: PathComponentIdentity,
-  right: PathComponentIdentity,
+  left: StablePathComponentIdentity,
+  right: StablePathComponentIdentity,
 ): boolean =>
   left.path === right.path &&
   left.dev === right.dev &&

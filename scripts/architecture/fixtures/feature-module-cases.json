@@ -1769,6 +1769,47 @@
       "expected": [{ "code": "FM_INVALID_LAYER_DIRECTION", "path": "src/index.ts", "line": 2 }]
     },
     {
+      "name": "declared-module-edge-permits-test-consumption",
+      "nestedModules": true,
+      "moduleEdges": [{ "from": "fixture-alpha-module", "to": "fixture-gamma-module", "kinds": ["runtime"] }],
+      "files": {
+        "packages/a/src/features/alpha/adapters/alpha.ts": "import { gamma } from \"@fixture/gamma-module/composition\";\nexport const value = gamma;\n",
+        "packages/a/tests/features/alpha/value.test.ts": "import { gamma } from \"@fixture/gamma-module/composition\";\nvoid gamma;\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "module-test-consumption-requires-a-declared-module-edge",
+      "nestedModules": true,
+      "files": { "packages/a/tests/features/alpha/value.test.ts": "import { gamma } from \"@fixture/gamma-module/composition\";\nvoid gamma;\n" },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "packages/a/tests/features/alpha/value.test.ts", "line": 1 }]
+    },
+    {
+      "name": "module-test-cannot-reach-another-module-by-relative-path",
+      "nestedModules": true,
+      "moduleEdges": [{ "from": "fixture-alpha-module", "to": "fixture-gamma-module", "kinds": ["runtime"] }],
+      "files": {
+        "packages/a/src/features/alpha/adapters/alpha.ts": "import { gamma } from \"@fixture/gamma-module/composition\";\nexport const value = gamma;\n",
+        "packages/a/tests/features/alpha/value.test.ts": "import { gamma } from \"../../../../b/src/composition.js\";\nvoid gamma;\n"
+      },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "packages/a/tests/features/alpha/value.test.ts", "line": 1 }]
+    },
+    {
+      "name": "module-test-cannot-reach-a-nonexistent-path-outside-its-package",
+      "nestedModules": true,
+      "files": { "packages/a/tests/features/alpha/value.test.ts": "import { ghost } from \"../../../../nowhere/ghost.js\";\nvoid ghost;\n" },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "packages/a/tests/features/alpha/value.test.ts", "line": 1 }]
+    },
+    {
+      "name": "module-production-deep-import-into-a-sibling-module-fails-closed",
+      "nestedModules": true,
+      "moduleEdges": [{ "from": "fixture-alpha-module", "to": "fixture-gamma-module", "kinds": ["runtime"] }],
+      "files": {
+        "packages/a/src/features/alpha/adapters/alpha.ts": "import { gamma } from \"../../../../../b/src/features/gamma/adapters/gamma.js\";\nexport const value = gamma;\n"
+      },
+      "expected": [{ "code": "FM_MODULE_DEEP_IMPORT", "path": "packages/a/src/features/alpha/adapters/alpha.ts", "line": 1 }]
+    },
+    {
       "name": "declared-module-edge-permits-curated-consumption",
       "secondModule": true,
       "alphaRoles": ["domain", "adapters"],
