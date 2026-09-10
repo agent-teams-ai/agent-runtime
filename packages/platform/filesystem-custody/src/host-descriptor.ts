@@ -1,3 +1,4 @@
+import { StableDirectoryPublicationUnsupportedError, StableDirectoryPublicationAmbiguousResidueError } from "./stable-directory-publication.js";
 import type { BigIntStats } from "node:fs";
 import { join } from "node:path";
 
@@ -17,6 +18,7 @@ export interface StableFilesystemHandle {
   chmod(mode: number): Promise<void>;
 }
 interface HostBinding {
+  hostQuarantine(source: object, name: string, destination: object, target: string): number;
   hostRoot(): object;
   hostOpen(parent: object, name: string, kind: number): object;
   hostClose(handle: object): void;
@@ -41,7 +43,7 @@ const load = (): HostBinding => {
   const candidate = module.exports as Partial<HostBinding>;
   const keys: readonly (keyof HostBinding)[] = ["hostRoot", "hostOpen", "hostClose", "hostFd",
     "hostDuplicate", "hostStat", "hostNames", "hostRead", "hostWrite", "hostSync",
-    "hostChmod", "hostMkdir", "hostUnlink", "hostPath", "hostMount"];
+    "hostChmod", "hostMkdir", "hostUnlink", "hostPath", "hostMount", "hostQuarantine"];
   if (keys.some(key => typeof candidate[key] !== "function")) {
     throw new Error("the actual Darwin Host descriptor binding is unavailable");
   }
@@ -115,6 +117,27 @@ export const nativeHostUnlink = (handle: StableFilesystemHandle, name: string): 
   load().hostUnlink(token(handle), name);
 export const nativeHostNames = (handle: StableFilesystemHandle, maximum: number): readonly string[] => {
   const names = load().hostNames(token(handle), maximum);
-  const decoder = new TextDecoder("utf-8", { fatal: true });
+  return decodeHostNameBytes(names);
+};
+
+/** Internal byte decoder shared by Host enumeration; not a package export. */
+export const decodeHostNameBytes = (names: readonly Uint8Array[]): readonly string[] => {
+  const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
   return Object.freeze(names.map(name => decoder.decode(name)));
+};
+
+/** Quarantine one entry by its own no-follow metadata identity, with native
+ * same-mount proof and recoverable no-replace capture. Caller syncs directories.
+ * Only genuine Host descriptors are accepted; this does not grant read access. */
+export const quarantineNativeHostEntry = (
+  source: StableFilesystemHandle, name: string,
+  destination: StableFilesystemHandle, target: string,
+): "created" | "existing" => {
+  const status = load().hostQuarantine(token(source), name, token(destination), target);
+  if (status === 0) {return "created";}
+  if (status === 73) {return "existing";}
+  if (status === 74) {throw new StableDirectoryPublicationUnsupportedError("Host quarantine no-replace is unsupported");}
+  if (status === 76) {throw new Error("Host quarantine source identity changed");}
+  if (status === 77) {throw new StableDirectoryPublicationAmbiguousResidueError("Host quarantine has ambiguous identity-owned residue");}
+  throw new Error("Host quarantine failed closed");
 };

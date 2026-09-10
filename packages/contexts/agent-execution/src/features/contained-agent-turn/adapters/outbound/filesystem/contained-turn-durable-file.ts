@@ -5,7 +5,7 @@ import {
   publishStableDirectoryNoReplace,
   type StableFilesystemHandle as FileHandle,
   type StableFilesystemStats as BigIntStats,
-  isNativeHostDescriptor, openNativeHostEntry,
+  isNativeHostDescriptor, quarantineNativeHostEntry,
   StableDirectoryPublicationUnsupportedError,
   withStableDirectoryProcessLock,
 } from "@agent-teams/filesystem-custody";
@@ -293,7 +293,20 @@ export const quarantineAmbiguousStagingEntry = async (
   quarantineDirectory: FileHandle,
   name: string,
 ): Promise<void> => {
-  const handle = isNativeHostDescriptor(stagingDirectory) ? openNativeHostEntry(stagingDirectory, name, "inspect") : await open(
+  if (isNativeHostDescriptor(stagingDirectory)) {
+    try {
+      const outcome = quarantineNativeHostEntry(stagingDirectory, name, quarantineDirectory,
+        `.ar-ambiguous-${randomUUID()}-${name}.retained`);
+      if (outcome !== "created") {throw new Error("contained turn ambiguous staging quarantine destination exists");}
+    } catch (error) {
+      if (error instanceof StableDirectoryPublicationUnsupportedError) {
+        throw new ContainedTurnFilesystemUnsupportedError(error.message);
+      }
+      throw error;
+    }
+    return;
+  }
+  const handle = await open(
     descriptorChildPath(stagingDirectory, name),
     LINUX_O_PATH | constants.O_NOFOLLOW,
   );

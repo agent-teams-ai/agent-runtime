@@ -7,7 +7,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { scanContainedTurnWorkspace } from "../../../dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-tree.js";
 import { bindContainedTurnRoot, openBoundDirectory } from "../../../dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.js";
-import { writeImmutableFileAt, readStableFileAt } from "../../../dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-durable-file.js";
+import { writeImmutableFileAt, readStableFileAt, quarantineAmbiguousStagingDirectory } from "../../../dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-durable-file.js";
 
 const fixture = async (t: import("node:test").TestContext) => {
   // macOS /tmp is an alias; use its canonical disposable location.
@@ -138,4 +138,19 @@ test("Host staging creation is cleaned when descriptor validation fails", { skip
   }));
   assert.deepEqual(await readdir(directories.stagingPath), []);
   assert.deepEqual(await readdir(directories.finalPath), []);
+});
+
+
+test("Host scanner and staging quarantine preserve BOM and non-ASCII filename identity", async t => {
+  const { stagingPath, finalPath, stagingDirectory, finalDirectory } = await store(t);
+  const names = ["foo", "\uFEFFfoo", "é", "中"];
+  for (const name of names) await writeFile(join(stagingPath, name), "data");
+  const tree = await scanContainedTurnWorkspace(stagingPath, limits);
+  assert.deepEqual(tree.entries.map(entry => entry.relativePath), [...names].sort());
+  assert.equal(await quarantineAmbiguousStagingDirectory(stagingDirectory, finalDirectory, 4), 4);
+  assert.deepEqual(await readdir(stagingPath), []);
+  const retained = await readdir(finalPath);
+  for (const name of names) {
+    assert.equal(retained.filter(entry => entry.endsWith(`-${name}.retained`)).length, 1);
+  }
 });

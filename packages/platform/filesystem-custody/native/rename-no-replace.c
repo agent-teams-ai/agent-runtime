@@ -7,6 +7,7 @@
 #include <linux/fs.h>
 #endif
 #include <node_api.h>
+#include <uv.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -77,42 +78,9 @@ static int read_name(napi_env env, napi_value value, char **output) {
   return 1;
 }
 
-static napi_value publish_no_replace_impl(
-  napi_env env,
-  napi_callback_info info,
-  bool crash_after_capture
-) {
-  size_t argc = 7;
-  napi_value argv[7];
-  if (napi_get_cb_info(env, info, &argc, argv, NULL, NULL) != napi_ok || argc != 7) {
-    napi_throw_type_error(env, NULL, "stable publication arguments are invalid");
-    return NULL;
-  }
-
-  int32_t source_directory;
-  int32_t destination_directory;
-  uint64_t expected_device;
-  uint64_t expected_inode;
-  bool device_lossless;
-  bool inode_lossless;
-  char *source_name = NULL;
-  char *destination_name = NULL;
-  char *incomplete_name = NULL;
-  if (!read_directory(env, argv[0], &source_directory) ||
-      !read_name(env, argv[1], &source_name) ||
-      !read_directory(env, argv[2], &destination_directory) ||
-      !read_name(env, argv[3], &destination_name) ||
-      napi_get_value_bigint_uint64(env, argv[4], &expected_device, &device_lossless) != napi_ok ||
-      napi_get_value_bigint_uint64(env, argv[5], &expected_inode, &inode_lossless) != napi_ok ||
-      !read_name(env, argv[6], &incomplete_name) ||
-      !device_lossless || !inode_lossless) {
-    free(source_name);
-    free(destination_name);
-    free(incomplete_name);
-    napi_throw_type_error(env, NULL, "stable publication arguments are invalid");
-    return NULL;
-  }
-
+static int publish_captured(int source_directory, const char *source_name,
+  int destination_directory, const char *destination_name, uint64_t expected_device,
+  uint64_t expected_inode, const char *incomplete_name, bool crash_after_capture) {
   int result = outcome_failure;
   bool captured_this_call = false;
   struct stat captured;
@@ -188,6 +156,47 @@ static napi_value publish_no_replace_impl(
       result = outcome_ambiguous_residue;
     }
   }
+  return result;
+}
+
+static napi_value publish_no_replace_impl(
+  napi_env env,
+  napi_callback_info info,
+  bool crash_after_capture
+) {
+  size_t argc = 7;
+  napi_value argv[7];
+  if (napi_get_cb_info(env, info, &argc, argv, NULL, NULL) != napi_ok || argc != 7) {
+    napi_throw_type_error(env, NULL, "stable publication arguments are invalid");
+    return NULL;
+  }
+
+  int32_t source_directory;
+  int32_t destination_directory;
+  uint64_t expected_device;
+  uint64_t expected_inode;
+  bool device_lossless;
+  bool inode_lossless;
+  char *source_name = NULL;
+  char *destination_name = NULL;
+  char *incomplete_name = NULL;
+  if (!read_directory(env, argv[0], &source_directory) ||
+      !read_name(env, argv[1], &source_name) ||
+      !read_directory(env, argv[2], &destination_directory) ||
+      !read_name(env, argv[3], &destination_name) ||
+      napi_get_value_bigint_uint64(env, argv[4], &expected_device, &device_lossless) != napi_ok ||
+      napi_get_value_bigint_uint64(env, argv[5], &expected_inode, &inode_lossless) != napi_ok ||
+      !read_name(env, argv[6], &incomplete_name) ||
+      !device_lossless || !inode_lossless) {
+    free(source_name);
+    free(destination_name);
+    free(incomplete_name);
+    napi_throw_type_error(env, NULL, "stable publication arguments are invalid");
+    return NULL;
+  }
+
+  int result = publish_captured(source_directory, source_name, destination_directory,
+    destination_name, expected_device, expected_inode, incomplete_name, crash_after_capture);
   free(source_name);
   free(destination_name);
   free(incomplete_name);
@@ -253,9 +262,23 @@ typedef struct { int fd; } host_descriptor;
 static const napi_type_tag host_descriptor_tag = { 0x4a43cdb6e3264b01ULL, 0xb8c88c4473290ac2ULL };
 
 static napi_value host_error(napi_env env, const char *message) {
-  const char *code = errno == ENOENT ? "ENOENT" : errno == EEXIST ? "EEXIST" :
-    errno == ELOOP ? "ELOOP" : errno == EBADF ? "EBADF" : "EIO";
-  napi_throw_error(env, code, message);
+  /* Capture before any Node-API/libuv call or allocation. errno is positive;
+   * expose that native value, with libuv's symbolic spelling. */
+  const int saved = errno;
+  const char *code = "UNKNOWN";
+  switch (uv_translate_sys_error(saved)) {
+#define HOST_ERRNO_CASE(name, message) case UV_##name: code = #name; break;
+    UV_ERRNO_MAP(HOST_ERRNO_CASE)
+#undef HOST_ERRNO_CASE
+    default: break;
+  }
+  napi_value text, error, number, symbol;
+  if (napi_create_string_utf8(env, message, NAPI_AUTO_LENGTH, &text) != napi_ok ||
+      napi_create_string_utf8(env, code, NAPI_AUTO_LENGTH, &symbol) != napi_ok ||
+      napi_create_error(env, symbol, text, &error) != napi_ok ||
+      napi_create_int32(env, saved, &number) != napi_ok ||
+      napi_set_named_property(env, error, "errno", number) != napi_ok) return NULL;
+  napi_throw(env, error);
   return NULL;
 }
 static void host_finalize(napi_env env, void *data, void *hint) {
@@ -337,7 +360,11 @@ static napi_value host_open(napi_env env, napi_callback_info info) {
   free(name);
   if (fd < 0) { errno = saved; return host_error(env, "Host entry open failed"); }
   struct stat observed;
-  if (fstat(fd, &observed) != 0 || (!S_ISDIR(observed.st_mode) && !S_ISREG(observed.st_mode))) {
+  if (fstat(fd, &observed) != 0) {
+    int saved = errno; close(fd); errno = saved;
+    return host_error(env, "Host entry observation after open failed");
+  }
+  if (!S_ISDIR(observed.st_mode) && !S_ISREG(observed.st_mode)) {
     close(fd); napi_throw_error(env, NULL, "Host entry is not a regular file or directory"); return NULL;
   }
   if (kind != 2 && (before.st_dev != observed.st_dev || before.st_ino != observed.st_ino ||
@@ -345,6 +372,70 @@ static napi_value host_open(napi_env env, napi_callback_info info) {
     close(fd); napi_throw_error(env, NULL, "Host entry changed during open"); return NULL;
   }
   return host_own(env, fd);
+}
+/* Quarantine observes the entry itself, never readable-opens a special file.
+ * Directories alone are opened with O_DIRECTORY (including across replacement)
+ * to prove their mount. rename_exclusive cannot move mounted entries; a raced
+ * replacement is still subject to the shared captured-inode check/restoration. */
+static bool host_same_mount(int left, int right) {
+#ifdef __APPLE__
+  struct statfs a, b;
+  if (fstatfs(left, &a) != 0 || fstatfs(right, &b) != 0) return false;
+  return memcmp(&a.f_fsid, &b.f_fsid, sizeof(a.f_fsid)) == 0 &&
+    strnlen(a.f_mntonname, sizeof(a.f_mntonname)) < sizeof(a.f_mntonname) &&
+    strnlen(b.f_mntonname, sizeof(b.f_mntonname)) < sizeof(b.f_mntonname) &&
+    strcmp(a.f_mntonname, b.f_mntonname) == 0;
+#else
+  struct statx a, b;
+  return statx(left, "", AT_EMPTY_PATH, STATX_MNT_ID, &a) == 0 &&
+    statx(right, "", AT_EMPTY_PATH, STATX_MNT_ID, &b) == 0 &&
+    (a.stx_mask & STATX_MNT_ID) && (b.stx_mask & STATX_MNT_ID) && a.stx_mnt_id == b.stx_mnt_id;
+#endif
+}
+static napi_value host_quarantine(napi_env env, napi_callback_info info) {
+  napi_value args[4], output;
+  if (!host_args(env, info, 4, args)) return NULL;
+  host_descriptor *source = host_get(env, args[0]);
+  if (!source) return NULL;
+  host_descriptor *destination = host_get(env, args[2]);
+  if (!destination) return NULL;
+  char *name = NULL, *target = NULL;
+  if (!read_name(env, args[1], &name) || !read_name(env, args[3], &target)) {
+    free(name); free(target);
+    napi_throw_type_error(env, NULL, "Host quarantine names are invalid"); return NULL;
+  }
+  struct stat before, parent, target_parent;
+  if (fstatat(source->fd, name, &before, AT_SYMLINK_NOFOLLOW) != 0 ||
+      fstat(source->fd, &parent) != 0 || fstat(destination->fd, &target_parent) != 0) {
+    int saved = errno; free(name); free(target); errno = saved;
+    return host_error(env, "Host quarantine observation failed");
+  }
+  bool safe = S_ISDIR(parent.st_mode) && S_ISDIR(target_parent.st_mode) &&
+    before.st_dev == parent.st_dev && host_same_mount(source->fd, destination->fd);
+  if (safe && S_ISDIR(before.st_mode)) {
+    int fd = openat(source->fd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK);
+    struct stat observed;
+    safe = fd >= 0 && fstat(fd, &observed) == 0 &&
+      observed.st_dev == before.st_dev && observed.st_ino == before.st_ino &&
+      host_same_mount(source->fd, fd);
+    if (fd >= 0) close(fd);
+  }
+  if (!safe) {
+    free(name); free(target);
+    napi_throw_error(env, NULL, "Host quarantine mount relationship is unproved"); return NULL;
+  }
+  char incomplete[256];
+  int length = snprintf(incomplete, sizeof(incomplete), ".ar-publish-v1-%llx-%llx-%s.incomplete",
+    (unsigned long long)before.st_dev, (unsigned long long)before.st_ino, target);
+  if (length < 0 || (size_t)length >= sizeof(incomplete)) {
+    free(name); free(target);
+    napi_throw_range_error(env, NULL, "Host quarantine recovery name is too long"); return NULL;
+  }
+  int result = publish_captured(source->fd, name, destination->fd, target,
+    before.st_dev, before.st_ino, incomplete, false);
+  free(name); free(target);
+  if (napi_create_int32(env, result, &output) != napi_ok) return NULL;
+  return output;
 }
 static napi_value host_close(napi_env env, napi_callback_info info) {
   napi_value args[1], result;
@@ -461,7 +552,8 @@ static napi_value host_write(napi_env env, napi_callback_info info) {
   while (offset < size) {
     ssize_t count = write(handle->fd, (char *)data + offset, size - offset);
     if (count < 0 && errno == EINTR) continue;
-    if (count <= 0) return host_error(env, "Host descriptor write failed");
+    if (count < 0) return host_error(env, "Host descriptor write failed");
+    if (count == 0) { napi_throw_error(env, NULL, "Host descriptor write made no progress"); return NULL; }
     offset += count;
   }
   if (napi_get_undefined(env, &result) != napi_ok) return NULL;
@@ -541,7 +633,7 @@ static bool host_exports(napi_env env, napi_value exports) {
     HOST_EXPORT("hostNames", host_names), HOST_EXPORT("hostRead", host_read),
     HOST_EXPORT("hostWrite", host_write), HOST_EXPORT("hostSync", host_sync),
     HOST_EXPORT("hostChmod", host_chmod), HOST_EXPORT("hostMkdir", host_mkdir),
-    HOST_EXPORT("hostUnlink", host_unlink),
+    HOST_EXPORT("hostUnlink", host_unlink), HOST_EXPORT("hostQuarantine", host_quarantine),
 #ifdef __APPLE__
     HOST_EXPORT("hostPath", host_path), HOST_EXPORT("hostMount", host_mount),
 #endif
