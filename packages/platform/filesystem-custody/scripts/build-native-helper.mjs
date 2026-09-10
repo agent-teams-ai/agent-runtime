@@ -40,7 +40,7 @@ if (qualified.length) {
     `-I${headers}`,
     ...(linux ? [...(gcc ? [] : ["--target=x86_64-unknown-linux-gnu"]), "-shared"] :
       ["--target=arm64-apple-darwin", "-arch", "arm64", `-mmacosx-version-min=${deployment}`,
-        "-bundle", "-undefined", "dynamic_lookup"]),
+        "-bundle", "-undefined", "dynamic_lookup", "-lsandbox"]),
     "native/rename-no-replace.c", "-o", "dist/rename-no-replace.node",
   ], {stdio: "inherit", env: {LC_ALL: "C", TZ: "UTC", SOURCE_DATE_EPOCH: process.env.SOURCE_DATE_EPOCH}});
   if (result.error !== undefined) {throw result.error;}
@@ -58,7 +58,7 @@ if (qualified.length) {
   mkdirSync("dist", { recursive: true });
   const result = spawnSync("cc", [
     "-O2", "-Wall", "-Wextra", "-Werror", "-fPIC",
-    ...(process.platform === "darwin" ? ["-bundle", "-undefined", "dynamic_lookup"] : ["-shared"]),
+    ...(process.platform === "darwin" ? ["-bundle", "-undefined", "dynamic_lookup", "-lsandbox"] : ["-shared"]),
     `-I${includeDirectory}`,
     "native/rename-no-replace.c",
     "-o", "dist/rename-no-replace.node",

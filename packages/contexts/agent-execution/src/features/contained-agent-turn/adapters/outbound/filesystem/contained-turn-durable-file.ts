@@ -5,7 +5,7 @@ import {
   publishStableDirectoryNoReplace,
   type StableFilesystemHandle as FileHandle,
   type StableFilesystemStats as BigIntStats,
-  isNativeHostDescriptor, quarantineNativeHostEntry,
+  isNativeHostDescriptor, openNativeHostEntry, quarantineNativeHostEntry,
   StableDirectoryPublicationUnsupportedError,
   withStableDirectoryProcessLock,
 } from "@agent-teams/filesystem-custody";
