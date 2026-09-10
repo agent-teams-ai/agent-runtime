@@ -1,11 +1,28 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {constants} from "node:fs";
 import {createHash} from "node:crypto";
-import {mkdtemp, mkdir, open, readFile, realpath, rm, writeFile} from "node:fs/promises";
+import {mkdtemp, mkdir, open, readFile, readdir, realpath, rename, rm, symlink, writeFile} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
+import {readStableVerificationFile} from "./darwin-live-filesystem-verification.mjs";
 import {verifySuccessfulPublicResult} from "./full-public-runtime.mjs";
-import {createDarwinLiveVerification} from "./darwin-live-verification.mjs";
+import {createDarwinLiveVerification as createProjection} from "./darwin-live-verification.mjs";
+
+// Test-only filesystem capability. Production uses the acquired native openat
+// backend; these controlled hooks simulate hostile mutations without launching it.
+function fixtureFilesystem(hook = async () => {}) {
+  const wrap = (file, path) => ({path, stat: options => file.stat(options), close: () => file.close(),
+    async read(...args) {await hook("before-read", path); const value = await file.read(...args); await hook("after-read", path); return value;}});
+  return {openRoot: async () => wrap(await open("/", constants.O_RDONLY | constants.O_DIRECTORY), "/"),
+    async openEntry(parent, name, kind) {
+      const path = join(parent.path, name); await hook("before-open", path);
+      return wrap(await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK |
+        (kind === "directory" ? constants.O_DIRECTORY : 0)), path);
+    }, async names(handle) {const names = await readdir(handle.path); await hook("after-names", handle.path); return names;}};
+}
+const createDarwinLiveVerification = (input, dependencies = {}) => createProjection(input,
+  {filesystem: fixtureFilesystem(), ...dependencies});
 
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
 const manifestRef = `urn:agent-runtime:artifact-manifest:${"a".repeat(64)}`;
@@ -196,7 +213,7 @@ test("joins genuine workspace records and operation proofs into all five receipt
   await assert.rejects(createDarwinLiveVerification(value.input).verification.verifyArtifactManifest(manifestRef, "result"), /linkage differs/u);
 });
 
-test("cleanup reads native closure after disposal and HTTP receipts before the pool closes", async () => {
+test("DI projection joins supplied native/HTTP evidence before its borrowed pool closes", async () => {
   const {input} = nativeFixture(); let poolClosed = false;
   input.activation.infrastructure = {deployment: {id: "deployment"}};
   input.readHttpRequestIdentities = async () => ({kind: "closed", operationId: "op", attemptId: "attempt", requestIds: ["owned-request"]});
@@ -204,8 +221,9 @@ test("cleanup reads native closure after disposal and HTTP receipts before the p
     async read(identity) {assert.equal(poolClosed, false); assert.equal(identity.requestId, "owned-request");
       return {kind: "found", receipt: {...identity, inboundClosure: "closed", upstreamClosure: "closed"}};}
   };
-  input.hostCustody = {evidence: id => {assert.equal(id, "custody"); return {identity: {status: "proved"}, sealed: true,
-    closure: {profile: "native-darwin-attempt-owner", status: "closed"}, stdout: {status: "complete"}, stderr: {status: "complete"}};}};
+  input.readHostCustodyEvidence = identity => {assert.deepEqual(identity, {operationId: "op", attemptId: "attempt"});
+    return {kind: "found", ...identity, evidence: {identity: {status: "proved"}, sealed: true,
+    closure: {profile: "native-darwin-attempt-owner", status: "closed"}, stdout: {status: "complete"}, stderr: {status: "complete"}}};};
   input.outputOwner = {readback: () => ({closed: true})};
   input.readCleanup = async () => ({status: "released", processes: {survivingDescendants: 0, openWriterFds: 0},
     routes: {remaining: 0}, listeners: {remaining: 0}, database: {sessions: 0, preparedTransactions: 0},
@@ -231,7 +249,7 @@ test("source verification checks the pinned manifest, complete inventory and eve
     const {verification} = createDarwinLiveVerification(input);
     assert.equal(await verification.verifySourceInventory(), true);
     await writeFile(join(sourceRoot, "extra.txt"), "extra");
-    assert.equal(await verification.verifySourceInventory(), false);
+    await assert.rejects(verification.verifySourceInventory(), /unexpected source entry/u);
   } finally {await rm(root, {recursive: true, force: true});}
 });
 
@@ -252,13 +270,19 @@ test("public result verification consumes the owner rehydration path without inv
     input.activation.source = {manifestPath, inventorySha256: sha256(inventory)};
     input.activation.infrastructure = {filesystem: {sourceRoot, rehydrationRoot}};
     const artifacts = input.getArtifacts(); input.getArtifacts = () => ({...artifacts, rehydrate: async () => actual});
+    Object.assign(input.activation.turn, {taskPath, sourceMessagePath});
     const {verification} = createDarwinLiveVerification(input);
-    await verifySuccessfulPublicResult({...input.activation.turn, ...verification, expectedMarker: "ok",
+    const publicInput = {...input.activation.turn, ...verification, expectedMarker: "ok",
       taskPath, sourceMessagePath, expectedTaskSha256: sha256("task"), expectedResultSha256: sha256("ok\n"),
-      frozenWorkspacePath: join(root, "frozen-workspace"), resultPath: join(root, "frozen-workspace", "result.txt")},
-    {commandId: "command", accepted: {status: "accepted", operationId: "op"}, terminal: {status: "observed", turn: {
+      frozenWorkspacePath: join(root, "frozen-workspace"), resultPath: join(root, "frozen-workspace", "result.txt")};
+    const publicResult = {commandId: "command", accepted: {status: "accepted", operationId: "op"}, terminal: {status: "observed", turn: {
       status: "succeeded", provider: "codex", commandId: "command", effectId: "effect", operationId: "op",
-      resultRef: operation.resultRef, artifactManifestRef: manifestRef, output: operation.output.chunks}}});
+      resultRef: operation.resultRef, artifactManifestRef: manifestRef, output: operation.output.chunks}}};
+    await verifySuccessfulPublicResult(publicInput, publicResult);
+    await assert.rejects(verifySuccessfulPublicResult({...publicInput, taskPath: join(root, "unrelated", "TASK.md")}, publicResult),
+      /source fixture paths differ/u);
+    await assert.rejects(verifySuccessfulPublicResult({...publicInput, sourceMessagePath: join(root, "unrelated", "input", "nested", "message.txt")}, publicResult),
+      /source fixture paths differ/u);
     await assert.rejects(readFile(join(root, "frozen-workspace", "result.txt")), /ENOENT/u);
   } finally {await rm(root, {recursive: true, force: true});}
 });
@@ -274,4 +298,89 @@ test("an unrelated closure request ID never becomes an HTTP request identity", a
   const cleanup = await projection.cleanup.readback();
   assert.equal(reads, 0); assert.equal(cleanup.status, "incomplete");
   assert.ok(cleanup.gaps.some(item => item.kind === "http-request-identities"));
+});
+
+
+async function hostileSourceFixture() {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "ar69-test-hostile-source-")));
+  const {input} = fixture(), sourceRoot = join(root, "source"), path = join(sourceRoot, "TASK.md");
+  await mkdir(sourceRoot); await writeFile(path, "task");
+  const bytes = JSON.stringify({version: 1, entries: [{path: "TASK.md", kind: "file", size: 4, sha256: sha256("task")}]});
+  const manifestPath = join(root, "inventory.json"); await writeFile(manifestPath, bytes);
+  input.activation.source = {manifestPath, inventorySha256: sha256(bytes)};
+  input.activation.infrastructure = {filesystem: {sourceRoot}};
+  return {root, sourceRoot, path, input};
+}
+
+test("source symlinks, replacement during read and late extra files cannot qualify", async () => {
+  for (const attack of ["symlink", "manifest-symlink", "directory-replacement", "replacement", "content-change", "late-extra"]) {
+    const value = await hostileSourceFixture(); let performed = false, names = 0;
+    try {
+      if (attack === "symlink") {
+        await rename(value.path, join(value.root, "original")); await symlink(join(value.root, "original"), value.path);
+      }
+      if (attack === "manifest-symlink") {
+        const manifestPath = value.input.activation.source.manifestPath, moved = join(value.root, "original-manifest");
+        await rename(manifestPath, moved); await symlink(moved, manifestPath);
+      }
+      const filesystem = fixtureFilesystem(async (phase, path) => {
+        if (phase === "after-names" && path === value.sourceRoot) {
+          names += 1;
+          if (attack === "directory-replacement" && names === 1) {
+            await rename(value.sourceRoot, join(value.root, "previous-source")); await mkdir(value.sourceRoot); await writeFile(value.path, "task");
+          }
+          if (attack === "late-extra" && names === 3) {await writeFile(join(value.sourceRoot, "extra"), "extra");}
+        }
+        if (phase !== "after-read" || path !== value.path || performed) {return;}
+        performed = true;
+        if (attack === "replacement") {await rename(path, join(value.root, "original")); await writeFile(path, "task");}
+        if (attack === "content-change") {await writeFile(path, "evil");}
+      });
+      await assert.rejects(createProjection(value.input, {filesystem}).verification.verifySourceInventory(),
+        /FILESYSTEM_REFUSED|ELOOP/u, attack);
+    } finally {await rm(value.root, {recursive: true, force: true});}
+  }
+});
+
+test("source manifest rejects unknown fields and excessive inventory before scanning", async () => {
+  for (const manifest of [{version: 1, entries: [], unexpected: true},
+    {version: 1, entries: Array.from({length: 4097}, (_, index) => ({kind: "directory", path: `dir-${index}`}))},
+    {version: 1, entries: [{path: "../outside", kind: "file", size: 0, sha256: sha256("")}]},
+    {version: 1, entries: [{path: "TASK.md", kind: "file", size: 16777217, sha256: sha256("task")}]}]) {
+    const value = await hostileSourceFixture();
+    try {
+      const bytes = JSON.stringify(manifest); await writeFile(value.input.activation.source.manifestPath, bytes);
+      value.input.activation.source.inventorySha256 = sha256(bytes);
+      await assert.rejects(createDarwinLiveVerification(value.input).verification.verifySourceInventory(), /FILESYSTEM_REFUSED/u);
+    } finally {await rm(value.root, {recursive: true, force: true});}
+  }
+});
+
+test("stable result reader refuses a symlink and same-byte inode replacement", async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "ar69-test-hostile-result-")));
+  const path = join(root, "result.txt"), original = join(root, "original");
+  try {
+    await writeFile(original, "ok\n"); await symlink(original, path);
+    await assert.rejects(readStableVerificationFile(path, 1024, fixtureFilesystem()), /ELOOP/u);
+    await rm(path); await writeFile(path, "ok\n"); let replaced = false;
+    const filesystem = fixtureFilesystem(async (phase, current) => {
+      if (phase === "after-read" && current === path && !replaced) {
+        replaced = true; await rename(path, join(root, "previous")); await writeFile(path, "ok\n");
+      }
+    });
+    await assert.rejects(readStableVerificationFile(path, 1024, filesystem), /FILESYSTEM_REFUSED/u);
+  } finally {await rm(root, {recursive: true, force: true});}
+});
+
+test("host custody hook must bind the exact operation and attempt and never uses kernel custodyId", async () => {
+  for (const hook of [undefined, async () => ({kind: "found", operationId: "other", attemptId: "attempt", evidence: {}})]) {
+    const {input} = nativeFixture();
+    input.hostCustody = {evidence() {throw new Error("wrong namespace must never be queried");}};
+    input.readHostCustodyEvidence = hook;
+    const projection = createDarwinLiveVerification(input);
+    await projection.verification.verifyArtifactManifest(manifestRef, "result");
+    const cleanup = await projection.cleanup.readback();
+    assert.equal(cleanup.status, "incomplete"); assert.equal(cleanup.custody, undefined);
+    assert.ok(cleanup.gaps.some(item => item.kind === "host-custody"));
+  }
 });

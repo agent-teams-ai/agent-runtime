@@ -1,5 +1,5 @@
 import {createHash, randomUUID} from "node:crypto";
-import {lstat, readFile, writeFile} from "node:fs/promises";
+import {writeFile} from "node:fs/promises";
 import {join, isAbsolute} from "node:path";
 
 const digest = value => createHash("sha256").update(value).digest("hex");
@@ -95,24 +95,21 @@ export async function verifySuccessfulPublicResult(input, result) {
   }
   const frozenWorkspace = await input.rehydrateArtifact(result.terminal.turn.artifactManifestRef, input.frozenWorkspacePath);
   if (typeof frozenWorkspace !== "string" || !isAbsolute(frozenWorkspace)) {throw new Error("artifact owner returned no materialized workspace");}
-  const resultPath = join(frozenWorkspace, "result.txt");
-  const resultStat = await lstat(resultPath);
-  if (!resultStat.isFile() || resultStat.isSymbolicLink()) {
-    throw new Error("result path is not the fixed regular frozen artifact");
-  }
-  const bytes = await readFile(resultPath);
+  const bytes = await input.readResultBytes(frozenWorkspace);
   const expected = Buffer.from(`${input.expectedMarker}\n`);
   if (!bytes.equals(expected) || digest(bytes) !== input.expectedResultSha256) {
     throw new Error("result.txt bytes do not match the accepted marker");
   }
-  if (!input.sourceMessagePath.endsWith("/input/nested/message.txt") || !input.taskPath.endsWith("/TASK.md")) {
+  if (typeof input.sourceRoot !== "string" || !isAbsolute(input.sourceRoot) ||
+      input.sourceMessagePath !== join(input.sourceRoot, "input", "nested", "message.txt") || input.taskPath !== join(input.sourceRoot, "TASK.md")) {
     throw new Error("source fixture paths differ from the fixed inventory");
   }
-  const sourceBytes = await readFile(input.sourceMessagePath);
+  const source = await input.readSourceFixtureBytes();
+  const sourceBytes = source.message;
   if (!sourceBytes.equals(expected) || digest(sourceBytes) !== input.expectedResultSha256) {
     throw new Error("source message bytes do not match the accepted marker");
   }
-  if (digest(await readFile(input.taskPath)) !== input.expectedTaskSha256 || await input.verifySourceInventory() !== true) {
+  if (digest(source.task) !== input.expectedTaskSha256 || await input.verifySourceInventory() !== true) {
     throw new Error("source inventory or TASK.md identity differs from activation");
   }
 }

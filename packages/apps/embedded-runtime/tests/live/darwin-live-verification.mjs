@@ -1,7 +1,9 @@
 import {createHash} from "node:crypto";
 import {constants} from "node:fs";
-import {lstat, open, readFile, realpath, readdir} from "node:fs/promises";
-import {join, isAbsolute, relative} from "node:path";
+import {lstat, open, readFile, realpath} from "node:fs/promises";
+import {join} from "node:path";
+
+import {readStableVerificationFile, verifyPinnedSource} from "./darwin-live-filesystem-verification.mjs";
 
 const refused = reason => new Error(`DARWIN_LIVE_VERIFICATION_REFUSED: ${reason}`);
 const gap = (kind, capability) => Object.freeze({kind, capability});
@@ -92,49 +94,23 @@ async function workspaceReceipts(input, operation, manifest) {
   return {receipts, records, gaps: []};
 }
 
-async function verifySource(input) {
-  const {source} = input.activation;
-  if (!source?.manifestPath || !/^[a-f0-9]{64}$/u.test(source.inventorySha256 ?? "")) {
-    throw refused("source manifest path and pinned inventorySha256 unavailable");
-  }
-  const stat = await lstat(source.manifestPath), bytes = await readFile(source.manifestPath);
-  if (!stat.isFile() || stat.isSymbolicLink() || hash(bytes) !== source.inventorySha256) {throw refused("source manifest differs");}
-  const manifest = JSON.parse(bytes), root = input.activation.infrastructure.filesystem.sourceRoot;
-  if (manifest.version !== 1 || !Array.isArray(manifest.entries) || await realpath(root) !== root) {
-    throw refused("source manifest format or canonical root differs");
-  }
-  return verifySourceEntries(root, manifest.entries);
-}
-
-function sourceEntries(root, entries) {
-  const expected = new Map();
-  for (const entry of entries) {
-    if (!entry.path || isAbsolute(entry.path) || relative(root, join(root, entry.path)) !== entry.path ||
-        expected.has(entry.path) || !["file", "directory"].includes(entry.kind)) {throw refused("source manifest path invalid");}
-    expected.set(entry.path, entry);
-  }
-  return expected;
-}
-
-async function verifySourceEntries(root, entries) {
-  const expected = sourceEntries(root, entries), observed = new Set(), queue = [root];
-  while (queue.length) {
-    const directory = queue.pop();
-    for (const name of await readdir(directory)) {
-      const path = join(directory, name), key = relative(root, path), entry = expected.get(key), current = await lstat(path);
-      if (!entry || current.isSymbolicLink()) {return false;}
-      observed.add(key);
-      if (entry.kind === "directory" && current.isDirectory()) {queue.push(path);}
-      else if (entry.kind !== "file" || !current.isFile() || current.size !== entry.size || hash(await readFile(path)) !== entry.sha256) {return false;}
-    }
-  }
-  return observed.size === expected.size;
-}
-
-function verification(input, state) {
+function verification(input, state, filesystem) {
   const turn = input.activation.turn;
   let verified;
   return Object.freeze({
+    sourceRoot: input.activation.infrastructure?.filesystem?.sourceRoot,
+    async readResultBytes(root) {
+      if (root !== state.rehydrated) {throw refused("result read root differs from owner rehydration");}
+      return readStableVerificationFile(join(root, "result.txt"), 16 * 1024 * 1024, filesystem);
+    },
+    async readSourceFixtureBytes() {
+      const root = input.activation.infrastructure.filesystem.sourceRoot;
+      if (turn.taskPath !== join(root, "TASK.md") || turn.sourceMessagePath !== join(root, "input", "nested", "message.txt")) {
+        throw refused("source fixture paths differ from canonical source root");
+      }
+      return {task: await readStableVerificationFile(turn.taskPath, 16 * 1024 * 1024, filesystem),
+        message: await readStableVerificationFile(turn.sourceMessagePath, 16 * 1024 * 1024, filesystem)};
+    },
     async verifyArtifactManifest(artifactManifestRef, resultRef) {
       verified = undefined;
       const operation = await readOperation(input);
@@ -160,10 +136,11 @@ function verification(input, state) {
       const root = input.activation.infrastructure?.filesystem?.rehydrationRoot;
       if (!digest || !root || actual !== join(root, "results", digest) || await realpath(actual) !== actual ||
           !(await lstat(actual)).isDirectory()) {throw refused("owner rehydration path differs from verified manifest");}
+      state.rehydrated = actual;
       return actual;
     },
     async verifySourceInventory() {
-      return verifySource(input);
+      return verifyPinnedSource(input.activation, filesystem);
     },
   });
 }
@@ -277,7 +254,13 @@ function releasedFacts(value) {
     value.host?.streamsDrained === true && value.evidence?.retainedTreeVerified === true;
 }
 
-const readCustody = (input, operation) => operation?.custodyId ? input.hostCustody?.evidence(operation.custodyId) : undefined;
+async function readCustody(input, operation) {
+  if (!operation || !input.readHostCustodyEvidence) {return;}
+  const identity = {operationId: operation.operationId, attemptId: operation.dispatch.attemptId};
+  const found = await input.readHostCustodyEvidence(identity);
+  if (found?.kind !== "found" || found.operationId !== identity.operationId || found.attemptId !== identity.attemptId) {return;}
+  return found.evidence;
+}
 
 async function cleanupReadback(input, state, failures) {
   const observed = await input.readCleanup?.(), gaps = [];
@@ -286,7 +269,7 @@ async function cleanupReadback(input, state, failures) {
   if (!operation) {gaps.push(gap("operation-snapshot", "pre-disposal operation owner snapshot unavailable"));}
   const native = await nativeClosure(input, state, gaps);
   const custody = await readCustody(input, operation);
-  if (!custody) {gaps.push(gap("host-custody", "kernel custody identity has no retained host evidence; underlying owner mapping required"));}
+  if (!custody) {gaps.push(gap("host-custody", "attempt-bound host custody evidence hook missing or exact binding differs"));}
   const output = await input.outputOwner?.readback();
   if (output?.closed !== true) {gaps.push(gap("output-owner", "native output owner has not durably closed"));}
   // HTTP must be read while the borrowed DB pool is live, before owner disposal.
@@ -305,12 +288,12 @@ async function cleanupReadback(input, state, failures) {
 }
 
 /** Feature-local projection. Only public owner reads establish qualification. */
-export function createDarwinLiveVerification(input, {openFile = open} = {}) {
+export function createDarwinLiveVerification(input, {openFile = open, filesystem} = {}) {
   const failures = [], state = {};
-  const checks = verification(input, state);
+  const checks = verification(input, state, filesystem);
   return Object.freeze({verification: Object.freeze({...checks,
     async verifyArtifactManifest(...args) {
-      state.operation = undefined; state.workspace = undefined; state.manifest = undefined; state.http = undefined;
+      state.operation = undefined; state.workspace = undefined; state.manifest = undefined; state.http = undefined; state.rehydrated = undefined;
       const result = await checks.verifyArtifactManifest(...args);
       state.http = await readHttpClosure(input, state.operation);
       return result;
