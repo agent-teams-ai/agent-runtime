@@ -506,10 +506,10 @@ export function assertRetainedDarwinNativeHttpExecutionAuthority(
 }
 export async function bindRetainedDarwinNativeHttpLaunch(
   authority: RetainedNativeHttpLaunchAuthority, lease: DarwinNativeExecutionLease,
-  launch: FinalHostLaunch, binding: HostLaunchBinding, material: DarwinNativeCodexMaterial, port: number,
+  input: Readonly<{launch: FinalHostLaunch; binding: HostLaunchBinding; material: DarwinNativeCodexMaterial; port: number}>,
 ): Promise<void> {
   assertRetainedDarwinNativeHttpExecutionAuthority(authority, lease);
-  await authority.bindDarwinNativeFinalLaunch(lease, launch, binding, material, port);
+  await authority.bindDarwinNativeFinalLaunch(lease, input.launch, input.binding, input.material, input.port);
 }
 export type DarwinNativeExecutionStart = Awaited<ReturnType<Bridge["startProcess"]>>;
 /** Parameterless beyond the same issued lease. Nothing caller-shaped can
@@ -520,10 +520,8 @@ export async function startDarwinNativeExecution(lease: DarwinNativeExecutionLea
   const issued = retained.issued, final = issued.final;
   if (!final || issued.started) {throw new Error("native final launch unavailable or already started");}
   issued.started = true;
-  try {
-    assertDarwinNativeExecutionLeaseCurrent(lease);
-    assertDarwinNativeCodexMaterialCurrent(final.material);
-    assertActualFinalBinding(final.bindingClass, final.binding, final.launch);
-    return await issued.bridge.startProcess();
-  } catch (error) {throw error;}
+  assertDarwinNativeExecutionLeaseCurrent(lease);
+  assertDarwinNativeCodexMaterialCurrent(final.material);
+  assertActualFinalBinding(final.bindingClass, final.binding, final.launch);
+  return issued.bridge.startProcess();
 }

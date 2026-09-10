@@ -38,7 +38,7 @@ export function createNodeCustodyHttpPreparation(byRef: ReadonlyMap<string, Live
           live.nativeExecutionLease !== lease || live.launchBinding.view.readFinal() !== launch) {
         throw new TypeError("Host Custody native final launch binding conflicts");
       }
-      await bindRetainedDarwinNativeHttpLaunch(authority, lease, launch, live.launchBinding, material, port);
+      await bindRetainedDarwinNativeHttpLaunch(authority, lease, {launch, binding: live.launchBinding, material, port});
     },
     prepareResources(lifetime: NodeCustodyHttpLifetime, input: Parameters<NodeCustodyHttpPreparation["prepareResources"]>[1]) {
       const live = preparations.get(lifetime);
