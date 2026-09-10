@@ -1,8 +1,15 @@
 import assert from "node:assert/strict";
+import {getEventListeners} from "node:events";
 import {registerHooks} from "node:module";
 import {after, test} from "node:test";
 // Test-local native seam. No provider or native launch is performed.
 const fake = `
+import {addAbortListener} from 'node:events';
+export let abortCallbacks = 0;
+export const hostHttpAbortOperations = {
+ subscribe(signal, callback) {return addAbortListener(signal, () => {abortCallbacks++; callback()})},
+ aborted(signal) {return signal.aborted}, remove(subscription) {subscription[Symbol.dispose]()}
+};
 const states = new WeakMap();
 export const fixture = () => {
  const proof = {operationId:'op',attemptId:'attempt',custodyId:'custody',effectId:'effect',workspaceId:'ws',executionGenerationId:'gen',provider:'codex'};
@@ -79,4 +86,47 @@ test("command execution has a distinct token and successful binding cannot be re
   assert.ok(command);assert.notEqual(command,file);
   assert.equal(f.owner.authority.admit(request(f,{itemId:"command",itemType:"commandExecution",phase:"completed",priorAdmission:command})),command);
   assert.throws(()=>f.owner.bind(f.lease,f.proof,f.execution),/consumed/);
+});
+
+test("hostile execution getters cannot mutate the authenticated claim or lease",()=>{
+  const f=fixture(),owner=create();let invoked=false;
+  const hostile={...f.execution,get effectId(){invoked=true;f.proof.effectId="forged";f.revoke();return "forged";}};
+  assert.throws(()=>owner.bind(f.lease,f.proof,hostile),/own data/);
+  assert.equal(invoked,false);assert.equal(f.proof.effectId,"effect");
+  assert.equal(owner.authority.admit(request(f)),undefined);
+});
+test("execution proxies and extra/accessor fields are rejected without invoking traps",()=>{
+  for(const kind of ["proxy","extra","symbol","prototype"]) {
+    const f=fixture(),owner=create();let invoked=false;
+    const hostile=kind==="proxy"?new Proxy(f.execution,{ownKeys(){invoked=true;f.proof.effectId="forged";return Reflect.ownKeys(f.execution);},getPrototypeOf(){invoked=true;return Object.prototype;}})
+      :kind==="extra"?{...f.execution,extra:true}:kind==="symbol"?{...f.execution,[Symbol()]:true}:Object.create(f.execution);
+    assert.throws(()=>owner.bind(f.lease,f.proof,hostile),/inert data|own data/);
+    assert.equal(invoked,false);assert.equal(f.proof.effectId,"effect");assert.equal(owner.authority.admit(request(f)),undefined);
+  }
+});
+test("committed proof proxies are rejected before comparator traps",()=>{
+  const f=fixture();let invoked=false;
+  const proof=new Proxy(f.proof,{getPrototypeOf(){invoked=true;return Object.prototype;}});
+  assert.throws(()=>create().bind(f.lease,proof,f.execution),/inert data/);assert.equal(invoked,false);
+});
+
+
+test("terminal disposal removes abort listeners and releases prior admissions", async()=>{
+  const f=bound(), claim=new AbortController(), shutdown=new AbortController();
+  const native=await import(fakeUrl), before=native.abortCallbacks;
+  f.owner.observeAbort(claim.signal);f.owner.observeAbort(shutdown.signal);
+  assert.equal(getEventListeners(claim.signal,"abort").length,1);
+  const token=f.owner.authority.admit(request(f));assert.ok(token);
+  f.owner.dispose();f.owner.dispose();
+  assert.equal(getEventListeners(claim.signal,"abort").length,0);
+  assert.equal(getEventListeners(shutdown.signal,"abort").length,0);
+  claim.abort();shutdown.abort();assert.equal(native.abortCallbacks,before);
+  assert.equal(f.owner.authority.admit(request(f,{priorAdmission:token})),undefined);
+  assert.throws(()=>f.owner.observeAbort(new AbortController().signal),/disposed/);
+});
+test("failed preparation disposal removes the genuine production abort subscription",async()=>{
+  const actual=await import("../../../dist/features/contained-agent-turn/composition/darwin-codex-effect-custody-owner.js?production-registry");
+  const owner=actual.createDarwinCodexEffectCustodyOwner(), controller=new AbortController();
+  owner.observeAbort(controller.signal);assert.equal(getEventListeners(controller.signal,"abort").length,1);
+  owner.dispose();assert.equal(getEventListeners(controller.signal,"abort").length,0);controller.abort();
 });

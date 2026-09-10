@@ -81,6 +81,13 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
   return Object.freeze({prepareClaimed: async (claimed: Parameters<ContainedTurnHostPostClaimPreparation["prepareClaimed"]>[0]) => {
     if (entered) {return Object.freeze({kind: "quarantined" as const});} entered = true;
     let route: DarwinSeatbeltRouteOwner | undefined;
+    let routeShutdownSubscription: ReturnType<typeof hostHttpAbortOperations.subscribe> | undefined;
+    const settleAbortSubscriptions = () => {
+      if (routeShutdownSubscription !== undefined) {
+        hostHttpAbortOperations.remove(routeShutdownSubscription); routeShutdownSubscription = undefined;
+      }
+      if (isDarwinCodexEffectCustodyOwner(options.effectCustody)) {options.effectCustody.dispose();}
+    };
     let nativeLease: DarwinNativeExecutionLease | undefined;
     try {
       // Native execution requires the matching retained HTTP and effect owners
@@ -111,9 +118,9 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
         nativeLease = preparation.consumeDarwinNativeExecution(lifetime, native);
         options.effectCustody!.bind(nativeLease, proof, {operationId: proof.operationId, attemptId: proof.attemptId,
           custodyRef: proof.custodyId, effectId: proof.effectId, workspaceRef: options.boundary.workspaceRef});
-        hostHttpAbortOperations.subscribe(claimed.signal, () => options.effectCustody!.cutoff());
+        options.effectCustody!.observeAbort(claimed.signal);
         if (options.localCut.hostShutdownSignal !== undefined) {
-          hostHttpAbortOperations.subscribe(options.localCut.hostShutdownSignal, () => options.effectCustody!.cutoff());
+          options.effectCustody!.observeAbort(options.localCut.hostShutdownSignal);
         }
         if (claimed.signal.aborted) {options.effectCustody!.cutoff(); throw new Error("Darwin effect custody claim aborted");}
       }
@@ -123,14 +130,19 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
       let files: DarwinCodexNativeFiles | undefined;
       route = new DarwinSeatbeltRouteOwner(lifetime, journal, options.localCut, options.limits.closureDeadline,
         {node, nativeLaunch: codexNativeBrokerLaunchInput,
-          files: () => nativeLease === undefined ? files?.cleanup() ?? Promise.resolve(true) : Promise.resolve(true)});
+          files: async () => {
+            settleAbortSubscriptions();
+            return nativeLease === undefined ? files?.cleanup() ?? true : true;
+          }});
       const owner = route;
       if (nativeLease === undefined) {
         files = new DarwinCodexNativeFiles(options.boundary, options.catalogSource, journal, () => owner.assertActive());
       }
       preparation.retainDarwinRoute(lifetime, owner);
       owner.assertWritableTmp(options.tmpDir);
-      if (options.localCut.hostShutdownSignal !== undefined) {hostHttpAbortOperations.subscribe(options.localCut.hostShutdownSignal, () => owner.cutoff());}
+      if (options.localCut.hostShutdownSignal !== undefined) {
+        routeShutdownSubscription = hostHttpAbortOperations.subscribe(options.localCut.hostShutdownSignal, () => owner.cutoff());
+      }
       return await owner.run(async () => {
         await journal.prepare(); owner.assertActive();
         let lastTime = -1;
@@ -215,7 +227,7 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
         return Object.freeze({kind: "prepared" as const});
       });
     } catch {
-      if (isDarwinCodexEffectCustodyOwner(options.effectCustody)) {options.effectCustody.cutoff();}
+      settleAbortSubscriptions();
       route?.cutoff();
       // Once transferred, the Host HTTP reservation is the sole terminal owner.
       // Containment/release preserves and retries each native cleanup phase.
