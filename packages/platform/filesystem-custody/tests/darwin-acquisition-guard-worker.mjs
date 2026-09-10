@@ -27,13 +27,13 @@ if (mode === "guarded") {
   initializeDarwinHostAcquisitionGuard();
   assert.equal(native.isDarwinHostAcquisitionGuardInstalled(), true);
   assert.equal(hasDarwinHostDescriptors(), true);
-} else assert.equal(mode, "control");
+} else {assert.equal(mode, "control");}
 // Raw Node fs opens exercise the kernel, bypassing native hostOpen prechecks.
 // Darwin O_EVTONLY is 0x8000; it is not exported by all Node versions.
 for (const flags of [constants.O_RDONLY, constants.O_WRONLY, constants.O_RDWR, 0x8000]) {
-  if (mode === "guarded") assert.throws(() => openSync("/dev/null", flags),
-    error => error.code === "EPERM" && error.errno === -1);
-  else closeSync(openSync("/dev/null", flags));
+  if (mode === "guarded") {assert.throws(() => openSync("/dev/null", flags),
+    error => error.code === "EPERM" && error.errno === -1);}
+  else {closeSync(openSync("/dev/null", flags));}
   closeSync(openSync(`${root}/regular`, flags));
 }
 closeSync(openSync(root, constants.O_RDONLY | constants.O_DIRECTORY));

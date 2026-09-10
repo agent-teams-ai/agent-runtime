@@ -101,9 +101,11 @@ export const launchGuardedProvider = (options: GuardedProviderLaunchOptions): Gu
   try {
     const cooperative = live.plan?.containmentProfile === "cooperative-darwin-posix-process-group";
     const route = live.httpReservation.darwinRoute;
-    route?.guardianIntent();
+    // The owner records allocation intent only after every clock/pin/storage
+    // preflight succeeds, so a preflight rejection remains proven no-start.
+    const allocation = route?.prepareGuardianAllocation(options.spawnAcknowledgementAfterMs);
     guardian = new StableProcessGroupGuardian({
-      ...(route === undefined ? {} : {darwinRoute: route.projection}),
+      ...(allocation === undefined ? {} : {darwinRoute: allocation.projection}),
       arguments: cooperative
         ? options.arguments
         : descriptorBoundArguments(options.arguments, live.workspaceRef, authority.workspaceDescriptor.childDescriptor),
@@ -125,7 +127,7 @@ export const launchGuardedProvider = (options: GuardedProviderLaunchOptions): Gu
         workspaceIno: live.workspace!.ino.toString(),
       } } : {}),
       launchPermitted: () => live.launchBinding.executionPermitted(live),
-    }, route?.admissionMilliseconds(options.spawnAcknowledgementAfterMs) ?? options.spawnAcknowledgementAfterMs);
+    }, allocation?.acknowledgementAfterMs ?? options.spawnAcknowledgementAfterMs);
   } catch {authority.close(); throw new GuardianConstructionError();}
   const child = guardian.child;
   const stdout = new HostStdoutIngress(options.stdoutHighWaterBytes, options.maxStdoutBytes, options.onOverflow);

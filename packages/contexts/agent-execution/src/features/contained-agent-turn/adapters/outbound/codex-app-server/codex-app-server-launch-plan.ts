@@ -1,5 +1,5 @@
 import { assertIssuedCodexPermissionBoundary } from "./codex-native-broker-boundary.js";
-import { inspectDarwinNativeLaunchObservation, assertDarwinNativeLaunchObservationCurrent, type DarwinNativeLaunchObservation } from "../host-custody/contained-turn-kernel-custody-entrypoint.js";
+import { markDarwinNativeRootLaunchPlan, inspectDarwinNativeLaunchObservation, assertDarwinNativeLaunchObservationCurrent, type DarwinNativeLaunchObservation } from "../host-custody/contained-turn-kernel-custody-entrypoint.js";
 import { createHash } from "node:crypto";
 import { types } from "node:util";
 import { lstatSync, realpathSync, statSync } from "node:fs";
@@ -150,10 +150,14 @@ const validateLaunchEnvironment = (plan: HostCustodyLaunchPlan): void => {
   const native = nativeLaunches.get(plan);
   if (native !== undefined) {validateCodexNativeBrokerFiles(native.files, native.recipe);}
   const roots = plan as CodexAppServerLaunchPlan;
+  const nativeBoundary = nativeRootBoundaries.get(plan);
+  const nativeObservation = nativeBoundary === undefined ? undefined : codexDarwinNativeLaunchObservation(nativeBoundary);
+  const nativeFacts = nativeObservation === undefined ? undefined : inspectDarwinNativeLaunchObservation(nativeObservation);
   const exactEnvironment = {
     ...(native === undefined ? {} : { [CODEX_LOCAL_BROKER_CAPABILITY_ENV]: native.localCapability }),
-    CODEX_HOME: roots.codexHome, HOME: roots.codexHome,
-    LANG: "C.UTF-8", PATH: "/usr/local/bin:/usr/bin:/bin", TMPDIR: roots.tmpDir,
+    CODEX_HOME: roots.codexHome, HOME: nativeFacts?.privateRoot.path ?? roots.codexHome,
+    LANG: "C.UTF-8", PATH: nativeFacts === undefined ? "/usr/local/bin:/usr/bin:/bin" : "/usr/bin:/bin",
+    TMPDIR: roots.tmpDir,
   };
   const environment = snapshotCodexNativeInput(plan.environment, Object.keys(exactEnvironment));
   if (Object.entries(exactEnvironment).some(([key, value]) => environment[key] !== value)) {
@@ -222,6 +226,34 @@ export const validateCodexAppServerLaunchPlanRoots = (
   validateLaunchEnvironment(plan);
 };
 
+const assertLaunchRootData = (executablePath: string, boundary: CodexAppServerPermissionBoundary): void => {
+  if (typeof executablePath !== "string" || typeof boundary.codexHome !== "string"
+    || typeof boundary.workspaceRef !== "string" || typeof boundary.effectivePolicyDigest !== "string") {
+    throw new TypeError("Codex launch roots and executable must contain inert data");
+  }
+};
+
+const validatePrivateRootLayout = (
+  privateRootPath: string, boundary: CodexAppServerPermissionBoundary, tmpDir: string,
+): void => {
+  if (
+    !contains(privateRootPath, boundary.codexHome)
+    || privateRootPath === boundary.codexHome
+    || !contains(privateRootPath, tmpDir)
+    || privateRootPath === tmpDir
+  ) {
+    throw new TypeError("Codex private home and TMPDIR must be strictly within privateRootPath");
+  }
+  const roots = [boundary.workspaceRef, boundary.codexHome, tmpDir] as const;
+  for (let left = 0; left < roots.length; left += 1) {
+    for (let right = left + 1; right < roots.length; right += 1) {
+      if (contains(roots[left]!, roots[right]!) || contains(roots[right]!, roots[left]!)) {
+        throw new TypeError("Codex workspace, private home, and TMPDIR must be pairwise disjoint");
+      }
+    }
+  }
+};
+
 export const createCodexAppServerLaunchPlan = (
   options: CodexAppServerLaunchPlanOptions,
 ): CodexAppServerLaunchPlan => {
@@ -239,10 +271,7 @@ export const createCodexAppServerLaunchPlan = (
     "codexHome", "codexHomeIdentity", "effectivePolicyDigest", "permissionProfile",
     "permissionProfileId", "intentMode", "workspaceRef", "workspaceIdentity",
   ]) as unknown as CodexAppServerPermissionBoundary;
-  if (typeof options.executablePath !== "string" || typeof boundary.codexHome !== "string"
-    || typeof boundary.workspaceRef !== "string" || typeof boundary.effectivePolicyDigest !== "string") {
-    throw new TypeError("Codex launch roots and executable must contain inert data");
-  }
+  assertLaunchRootData(options.executablePath, boundary);
   const codexHomeIdentity = snapshotDirectoryIdentity(boundary.codexHomeIdentity);
   const workspaceIdentity = snapshotDirectoryIdentity(boundary.workspaceIdentity);
   if (boundary.intentMode !== intentMode) {
@@ -259,22 +288,7 @@ export const createCodexAppServerLaunchPlan = (
     device: Number(facts.tmpDir.dev), inode: Number(facts.tmpDir.ino), path: facts.tmpDir.path,
   });
   const privateRootPath = privateRoot(options.privateRootPath, boundary.workspaceRef);
-  if (
-    !contains(privateRootPath, boundary.codexHome)
-    || privateRootPath === boundary.codexHome
-    || !contains(privateRootPath, options.tmpDir)
-    || privateRootPath === options.tmpDir
-  ) {
-    throw new TypeError("Codex private home and TMPDIR must be strictly within privateRootPath");
-  }
-  const roots = [boundary.workspaceRef, boundary.codexHome, options.tmpDir] as const;
-  for (let left = 0; left < roots.length; left += 1) {
-    for (let right = left + 1; right < roots.length; right += 1) {
-      if (contains(roots[left]!, roots[right]!) || contains(roots[right]!, roots[left]!)) {
-        throw new TypeError("Codex workspace, private home, and TMPDIR must be pairwise disjoint");
-      }
-    }
-  }
+  validatePrivateRootLayout(privateRootPath, boundary, options.tmpDir);
   const launchArguments = [
     "app-server",
     "--stdio",
@@ -293,9 +307,9 @@ export const createCodexAppServerLaunchPlan = (
     environment: {
       ...(native === undefined ? {} : { [CODEX_LOCAL_BROKER_CAPABILITY_ENV]: native.localCapability }),
       CODEX_HOME: boundary.codexHome,
-      HOME: boundary.codexHome,
+      HOME: facts?.privateRoot.path ?? boundary.codexHome,
       LANG: "C.UTF-8",
-      PATH: "/usr/local/bin:/usr/bin:/bin",
+      PATH: facts === undefined ? "/usr/local/bin:/usr/bin:/bin" : "/usr/bin:/bin",
       TMPDIR: options.tmpDir,
     },
     executablePath: options.executablePath,
@@ -310,10 +324,11 @@ export const createCodexAppServerLaunchPlan = (
     workspaceRef: boundary.workspaceRef,
     workspaceIdentity,
   });
+  if (facts !== undefined) {markDarwinNativeRootLaunchPlan(plan);}
   if (native !== undefined) {
     nativeLaunches.set(plan, native);
-    const observation = codexDarwinNativeLaunchObservation(options.boundary);
-    if (observation !== undefined) {finalNativeObservations.set(plan, observation);}
+    const finalObservation = codexDarwinNativeLaunchObservation(options.boundary);
+    if (finalObservation !== undefined) {finalNativeObservations.set(plan, finalObservation);}
   }
   if (codexDarwinNativeLaunchObservation(options.boundary) !== undefined) {nativeRootBoundaries.set(plan, options.boundary);}
   issuedLaunchPlans.add(plan);
@@ -356,7 +371,10 @@ export const createCodexAppServerFinalizableLaunchPlan = (
         validate: () => validateCodexAppServerLaunchPlanRoots(final)});
     },
   });
-  if (codexDarwinNativeLaunchObservation(options.boundary) !== undefined) {nativeRootBoundaries.set(plan, options.boundary);}
+  if (codexDarwinNativeLaunchObservation(options.boundary) !== undefined) {
+    nativeRootBoundaries.set(plan, options.boundary);
+    markDarwinNativeRootLaunchPlan(plan);
+  }
   issuedLaunchPlans.add(plan);
   return plan;
 };
@@ -373,4 +391,4 @@ export {codexNativeBrokerBoundary,
 export {DarwinCodexNativeFiles} from "./darwin-codex-native-files.js";
 export {createDarwinCodexNativeBrokerRecipe} from "./codex-native-broker-recipe.js";
 
-export {installCodexDarwinNativeBrokerFiles} from "./codex-native-broker-files.js";
+export {installCodexDarwinNativeBrokerFiles, readCodexDarwinNativeMaterial, codexDarwinNativeMaterialIdentity} from "./codex-native-broker-files.js";

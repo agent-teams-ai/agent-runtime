@@ -276,7 +276,8 @@ export const noStartEvidenceIsClosed = (evidence: HostCustodyEvidence): boolean 
   (evidence.stderr.status === "complete" || evidence.stderr.status === "not-started");
 
 export const physicalEvidenceIsClosed = (evidence: HostCustodyEvidence): boolean =>
-  evidence.closure.profile === "strict-linux-cgroup-v2" &&
+  (evidence.closure.profile === "strict-linux-cgroup-v2" ||
+    evidence.closure.profile === "native-darwin-attempt-owner") &&
   evidence.closure.limitations.length === 0 &&
   evidence.sealed &&
   (evidence.closure.status === "closed" || evidence.closure.status === "not-started");
@@ -286,7 +287,8 @@ export const executionEvidenceIsClosed = (evidence: HostCustodyEvidence): boolea
   (evidence.closure.status === "closed" ||
     (evidence.closure.profile === "cooperative-darwin-posix-process-group" &&
       evidence.closure.status === "unproven")) &&
-  evidence.guardianExit.status === "observed" &&
+  (evidence.guardianExit.status === "observed" ||
+    (evidence.closure.profile === "native-darwin-attempt-owner" && evidence.guardianExit.status === "unobserved")) &&
   evidence.identity.status === "proved" &&
   evidence.providerExit.status === "observed" &&
   evidence.sealed &&

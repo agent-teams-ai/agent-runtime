@@ -326,11 +326,12 @@ contained-turn or introduce shared lifecycle machinery on this evidence.
 
 Release disposition remains pending. Retention requires a reasoned owner
 benefit/cost decision, reviewed external consumer/callsite and package-release
-provenance, and the exact final evidence and gates. The retained v2 report at
-this source captures `00899c22faaa0594452a315796fad5caf3e44400`; the CI workflow
-and three parity test/helper files have since changed. Refresh the supported
-paired capture after the complete implementation and documentation checkpoint;
-these changed inputs cannot be covered by the old report-only delivery rule.
+provenance, and the exact final evidence and gates. The retained v2 report
+records its own exact source identity and platform receipts. Before delivery,
+validate that report against the complete implementation and documentation
+checkpoint with `pnpm architecture:runtime-setup-l0-evidence`. If tracked inputs
+have changed, refresh the supported paired capture. A report-only commit may
+reuse the authenticated source only under the existing validator rules.
 
 A consumer-local rollback must be one governed release replacement. Restore one
 async direct default at the existing private entrypoint, retain the internal

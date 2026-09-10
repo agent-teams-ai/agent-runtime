@@ -2,7 +2,8 @@ import {createHash} from "node:crypto";
 import type {Pool} from "pg";
 import type {HttpEgressReceipt} from "./http-egress-contracts.js";
 import type {HttpEgressEvidence} from "./http-egress-ports.js";
-import {canonicalHttpEvidenceReceipt, snapshotHttpEvidenceScope,
+import {canonicalHttpEvidenceReceipt, snapshotHttpEvidenceIdentity, snapshotHttpEvidenceScope,
+  type PostgresHttpEgressReceiptIdentity,
   type PostgresHttpEgressEvidenceScope} from "./postgres-http-egress-evidence-codec.js";
 import {HTTP_EVIDENCE_FENCE, PostgresHttpEvidenceTransactions} from "./postgres-http-egress-evidence-transactions.js";
 export type {PostgresHttpEgressEvidenceScope} from "./postgres-http-egress-evidence-codec.js";
@@ -62,6 +63,41 @@ export class PostgresHttpEgressEvidence implements HttpEgressEvidence {
     for (const part of parts) {hash.update(part);}
     // Request projections cross into RS before signing and use its algorithm-tagged digest contract.
     return `sha256:${hash.digest("hex")}`;
+  }
+  /** Exact historical HTTP receipt readback, never native listener/execution
+   * generation authority or a cleanup/consume command. Missing is not closure.
+   * The borrowed pool's role/RLS remains authoritative; this adds no SQL surface.
+   */
+  public async read(input: PostgresHttpEgressReceiptIdentity): Promise<
+    Readonly<{kind: "found"; receipt: HttpEgressReceipt}> | Readonly<{kind: "missing" | "unknown"}>
+  > {
+    const identity = snapshotHttpEvidenceIdentity(input);
+    const key = [this.#scope.tenantId, this.#scope.projectId, this.#scope.deploymentId,
+      identity.operationId, identity.attemptId, identity.requestId];
+    const keyDigest = createHash("sha256").update(JSON.stringify(key)).digest("hex");
+    try {
+      return await this.#transactions.run(async (_client, query) => {
+        const fence = await query(`SELECT version, format FROM host_http_egress.version_fence
+          WHERE singleton = true FOR SHARE`);
+        if (fence.rows.length !== 1 || fence.rows[0].version !== 1 || fence.rows[0].format !== HTTP_EVIDENCE_FENCE) {
+          throw new Error("HTTP evidence schema fence mismatch");
+        }
+        const stored = await query(`SELECT canonical_receipt FROM host_http_egress.receipt WHERE
+          tenant_id=$1 AND project_id=$2 AND deployment_id=$3 AND operation_id=$4 AND attempt_id=$5 AND request_id=$6 AND receipt_key=$7 LIMIT 2`, [...key, keyDigest]);
+        if (stored.rows.length === 0) {return Object.freeze({kind: "missing" as const});}
+        if (stored.rows.length !== 1) {throw new Error("HTTP evidence read uncertain");}
+        const retained: unknown = stored.rows[0].canonical_receipt;
+        if (typeof retained !== "string" || Buffer.byteLength(retained, "utf8") > 32_768) {
+          throw new Error("HTTP evidence retained text invalid");
+        }
+        const validated = canonicalHttpEvidenceReceipt(JSON.parse(retained));
+        if (validated.canonical !== retained || validated.receipt.operationId !== identity.operationId
+          || validated.receipt.attemptId !== identity.attemptId || validated.receipt.requestId !== identity.requestId) {
+          throw new Error("HTTP evidence retained receipt invalid");
+        }
+        return Object.freeze({kind: "found" as const, receipt: validated.receipt});
+      });
+    } catch {return Object.freeze({kind: "unknown" as const});}
   }
   public async record(input: HttpEgressReceipt): Promise<"recorded" | "conflict" | "unknown"> {
     const {receipt, canonical} = canonicalHttpEvidenceReceipt(input);

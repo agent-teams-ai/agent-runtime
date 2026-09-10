@@ -1,4 +1,4 @@
-import {} from "node:fs/promises";
+
 import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody";
 
 import {

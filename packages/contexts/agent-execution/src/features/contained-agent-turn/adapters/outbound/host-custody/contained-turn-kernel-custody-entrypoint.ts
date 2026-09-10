@@ -25,6 +25,7 @@ export type { HttpEgressRouteFirstWrite,
 export type { ContainedTurnHostPostClaimPreparation } from "./contained-turn-kernel-custody-contracts.js";
 
 export {custodyDataRecord, sameHostCustodyBinding, isHostCustodyDataCallback} from "./host-custody-inert-record.js";
+export {isNodeProxy} from "./node-inert-record.js";
 export {NodeCustodyHttpResources, type NodeCustodyHttpResourceInput} from "./node-custody-http-resources.js";
 export {readHostCustodyHttpHandoff, hostHttpAbortOperations, type HostCustodyHttpHandoff,
   type HostCustodyHttpResourceLifetime} from "./host-custody-http-resource-lifetime.js";
@@ -61,6 +62,9 @@ export {
   assertDarwinNativeLaunchObservationCurrent,
   installDarwinNativeCodexMaterial, inspectDarwinNativeCodexMaterial,
   assertDarwinNativeCodexMaterialCurrent,
+  inspectDarwinNativeExecutionLease, assertDarwinNativeExecutionClaim,
+  cutoffDarwinNativeExecution, settleDarwinNativeExecutionLaunchRoute,
+  settleDarwinNativeExecutionPrivateMaterial, disposeDarwinNativeExecution,
   type DarwinNativeWorkspaceSelection, type DarwinNativeLaunchObservation,
   type DarwinNativeCodexMaterial,
 } from "./darwin-attempt-owner-selection.js";
@@ -72,8 +76,10 @@ export {
 } from "./darwin-attempt-owner-selection.js";
 export type {
   DarwinNativeExecutionLease, NativePreparedAttemptBinding,
-  RetainedNativeAttemptAuthority, NativeDirectoryFact, NativeFileFact,
+  RetainedNativeAttemptAuthority, RetainedNativeHttpLaunchAuthority, NativeDirectoryFact, NativeFileFact,
 } from "./darwin-attempt-owner-selection.js";
 export type {
-  DarwinAttemptRetainedOwners, DarwinAttemptRetainedCompletion,
+  DarwinAttemptRetainedOwners, DarwinAttemptRetainedCompletion, DarwinAttemptRetainedOwnerFactory,
 } from "./darwin-attempt-owner-bridge.js";
+
+export {markDarwinNativeRootLaunchPlan} from "./host-custody-launch.js";

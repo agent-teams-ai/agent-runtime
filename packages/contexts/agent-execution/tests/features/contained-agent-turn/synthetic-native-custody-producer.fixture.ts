@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 const selections = new WeakMap<object, any>();
 const observations = new WeakMap<object, any>();
 const materials = new WeakMap<object, any>();
+const leases = new WeakMap<object, any>();
 const owners = new WeakMap<object, object>();
 const rejectingOwners = new WeakSet<object>();
 const ownerBehaviors = new WeakMap<object, (consume: () => Promise<unknown>) => Promise<unknown>>();
@@ -51,6 +52,28 @@ export function inspectDarwinNativeLaunchObservation(observation: object) {
 export function assertDarwinNativeLaunchObservationCurrent(observation: object) {
   const state = observations.get(observation); if (!state?.current) {throw new TypeError("synthetic observation expired");}
 }
+export function reserveDarwinNativeExecution(selection: object) {
+  const state = selections.get(selection);
+  if (!state?.current || state.reserved) {throw new TypeError("synthetic execution reservation rejected");}
+  state.reserved = true; const lease = Object.freeze({});
+  state.leaseFacts = Object.freeze({prepared: Object.freeze({kind: "synthetic-prepared"}),
+    custodyRef: "synthetic-custody", hostGenerationBinding: "0".repeat(64), observation: state.observation});
+  leases.set(lease, state);
+  return lease;
+}
+export function inspectDarwinNativeExecutionLease(lease: object) {
+  const state = leases.get(lease);
+  if (!state?.current) {throw new TypeError("synthetic execution lease rejected");}
+  return state.leaseFacts;
+}
+export function assertDarwinNativeSelectionExecutionLease(selection: object, lease: object) {
+  if (selections.get(selection) !== leases.get(lease)) {throw new TypeError("synthetic execution owner mismatch");}
+}
+export async function cutoffDarwinNativeExecution(lease: object) {const state = leases.get(lease); state.cutoff = true;}
+export async function settleDarwinNativeExecutionLaunchRoute(lease: object) {const state = leases.get(lease); state.routeSettled = true;}
+export async function settleDarwinNativeExecutionPrivateMaterial(lease: object) {const state = leases.get(lease); state.materialSettled = true;}
+export async function disposeDarwinNativeExecution(lease: object) {const state = leases.get(lease); state.disposed = true;}
+export const inspectSyntheticSelectionState = (selection: object) => selections.get(selection);
 export function expireSyntheticSelection(selection: object) {selections.get(selection).current = false;}
 export function advanceSyntheticGenerationOnInstall(selection: object) {selections.get(selection).advanceOnInstall = true;}
 export async function installDarwinNativeCodexMaterial(selection: object, input: any) {

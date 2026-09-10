@@ -86,6 +86,27 @@ test("same actual reservation prepares/finalizes before guardian and installs af
   assert.throws(() => f.owner.firstWrite.reserve("request")); assert.equal(f.owner.state, "cut");
 });
 
+test("guardian preflight failure remains no-intent and permits complete route cleanup", async t => {
+  const f = await setup(); t.after(f.close); await f.prepare(); f.live.launchBinding.firstStart(f.live);
+  let constructed = 0; controlDarwinChildObservations(() => {constructed++; throw new Error("forbidden guardian");});
+  f.time(100);
+  assert.throws(() => guarded.launchGuardedProvider({live: f.live, arguments: f.live.plan!.arguments,
+    environment: f.live.plan!.environment, maxDiagnosticBytes: 256, maxStderrBytes: 1024, maxStdinBytes: 1024,
+    maxStdoutBytes: 1024, stdoutHighWaterBytes: 256, monotonicNow: () => 0, writeAfterMs: 100,
+    spawnAcknowledgementAfterMs: 100, onAbort() {}, onOverflow() {}}));
+  assert.equal(constructed, 0); assert.equal(f.records.includes("guardian_allocation_intent"), false);
+  let resources = 0; assert.equal(await f.owner.cleanup(async () => {resources++; return true;}), true);
+  assert.equal(resources, 1); assert.equal(f.owner.state, "released");
+});
+
+test("recorded guardian intent without published guardian remains quarantined", async t => {
+  const f = await setup(); t.after(f.close); await f.prepare(); f.live.launchBinding.firstStart(f.live);
+  f.owner.prepareGuardianAllocation(100);
+  let resources = 0; assert.equal(await f.owner.cleanup(async () => {resources++; return true;}), false);
+  assert.equal(resources, 0); assert.equal(f.records.includes("guardian_allocation_intent"), true);
+  assert.notEqual(f.owner.state, "released");
+});
+
 test("early request cuts preparation permanently; missing/copy route session and wrong lifetime cannot commit", async t => {
   for (const mode of ["early", "missing-route", "copy-route", "copy-lifetime"] as const) {
     const f = await setup(); t.after(f.close);

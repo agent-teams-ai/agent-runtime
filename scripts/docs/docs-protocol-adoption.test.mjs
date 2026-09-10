@@ -88,6 +88,7 @@ async function addRequiredAnchorFixtures(root) {
     join(root, "architecture/decisions/accepted-decisions.json")
   );
   for (const path of [
+    "architecture/consumer-module-standard/contained-turn-profile.json",
     "architecture/feature-module-standard/candidate-profile.json",
     "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/contained-turn-v1-contract.json",
     "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/README.md",
@@ -95,6 +96,7 @@ async function addRequiredAnchorFixtures(root) {
     "experiments/sandbox-backend-hosting/README.md",
     "packages/apps/embedded-runtime/src/index.ts",
     "packages/contexts/agent-execution/tests/live/claude-contained-turn-live-canary.mjs",
+    "scripts/architecture/check-consumer-module-standard.mjs",
     "scripts/architecture/check-feature-modules.mjs"
   ]) {
     const destination = join(root, path);

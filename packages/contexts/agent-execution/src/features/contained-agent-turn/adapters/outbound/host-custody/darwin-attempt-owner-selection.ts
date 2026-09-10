@@ -5,7 +5,7 @@ import { fstatSync } from "node:fs";
 import type { CommittedDispatchProofV1 } from "../../../domain/committed-dispatch-proof-v1.js";
 import type { ContainedTurnWriterFence } from "../../../domain/contained-turn-identities.js";
 import { bindDarwinAttemptOwnerBridge } from "./darwin-attempt-owner-bridge.js";
-import type { DarwinAttemptRetainedOwners } from "./darwin-attempt-owner-bridge.js";
+import type { DarwinAttemptRetainedOwnerFactory } from "./darwin-attempt-owner-bridge.js";
 
 import type { FinalHostLaunch, HostLaunchBinding } from "./host-launch-finalization.js";
 import { darwinNativeArgumentsSha256, type DarwinNativeFinalLaunchData } from "./darwin-attempt-owner-protocol.js";
@@ -134,7 +134,7 @@ const retainAttemptAuthority = (issued: SelectionRecord): RetainedNativeAttemptA
  * The returned receiver belongs ONLY to the actual Lane4 outer store wrapper.
  * It is deliberately absent from the opaque workspace selection. */
 export async function captureRootDarwinAttemptWorkspace(
-  retainedConsumers: DarwinAttemptRetainedOwners,
+  retainedOwnerFactory: DarwinAttemptRetainedOwnerFactory,
 ): Promise<Readonly<{ selection: DarwinNativeWorkspaceSelection; attemptAuthority: RetainedNativeAttemptAuthority;
   httpLaunchAuthority: RetainedNativeHttpLaunchAuthority }>> {
   if (rootConstructorConsumed) {throw new Error("native root constructor already consumed");}
@@ -144,7 +144,7 @@ export async function captureRootDarwinAttemptWorkspace(
     throw new Error("root-selected native Host inherited endpoint unavailable");
   }
   const endpoint = new Socket({ fd: 8, readable: true, writable: true });
-  const bridge = bindDarwinAttemptOwnerBridge(endpoint, retainedConsumers);
+  const bridge = bindDarwinAttemptOwnerBridge(endpoint);
   try {
     await bridge.ready;
     // Fixed trusted dependency in the pinned Host closure, never a caller path
@@ -164,6 +164,9 @@ export async function captureRootDarwinAttemptWorkspace(
     if (bridge.capturedOwner().ppid !== process.pid || manifest.readUInt32BE(16) !== process.getuid() || manifest.readUInt32BE(20) !== process.getgid?.()) {
       throw new Error("native root manifest selected another Host identity");
     }
+    // The factory receives its unforgeable completion capability only after
+    // both channel HELLO and the fixed native peer/manifest checks succeed.
+    bridge.bindRetainedOwners(retainedOwnerFactory);
     const selection = Object.freeze(Object.create(null)) as DarwinNativeWorkspaceSelection;
     const issued: SelectionRecord = { bridge, selected: false, reserved: false, claimStarted: false };
     selections.set(selection, issued);
@@ -315,6 +318,13 @@ export function inspectDarwinNativeExecutionLease(lease: DarwinNativeExecutionLe
   assertDarwinNativeExecutionLeaseCurrent(lease);
   return retained.facts;
 }
+export function assertDarwinNativeSelectionExecutionLease(
+  selection: DarwinNativeWorkspaceSelection, lease: DarwinNativeExecutionLease,
+): void {
+  const issued = selections.get(selection); const retained = leases.get(lease);
+  if (issued === undefined || retained?.issued !== issued) {throw new Error("foreign native execution lease owner");}
+  assertDarwinNativeExecutionLeaseCurrent(lease);
+}
 /** P is retained solely by the actual private PG receiver. Validators detach
  * P to P2/P3; compare every inert field with P, never JS reference identity.
  * This assertion grants no independent lifetime and does not consume a claim. */
@@ -346,6 +356,16 @@ export function readDarwinNativeExecution(lease: DarwinNativeExecutionLease): Da
   const retained = leases.get(lease);
   if (!retained) {throw new Error("foreign native execution lease");}
   return retained.issued.bridge.execution();
+}
+export function readDarwinNativeImage(lease: DarwinNativeExecutionLease): ReturnType<Bridge["image"]> {
+  const retained = leases.get(lease);
+  if (!retained) {throw new Error("foreign native execution lease");}
+  return retained.issued.bridge.image();
+}
+export function readDarwinNativeNoStart(lease: DarwinNativeExecutionLease): ReturnType<Bridge["noStart"]> {
+  const retained = leases.get(lease);
+  if (!retained) {throw new Error("foreign native execution lease");}
+  return retained.issued.bridge.noStart();
 }
 export async function readDarwinNativeExecutionStatus(lease: DarwinNativeExecutionLease): Promise<DarwinNativeExecutionStatus> {
   const retained = leases.get(lease);
@@ -445,7 +465,7 @@ function finalLaunchData(
     argumentsSha256: darwinNativeArgumentsSha256(plan.executablePath, plan.arguments)});
 }
 function retainHttpLaunchAuthority(issued: SelectionRecord): RetainedNativeHttpLaunchAuthority {
-  return Object.freeze({
+  const authority = Object.freeze({
     async bindDarwinNativeFinalLaunch(lease: DarwinNativeExecutionLease, launch: FinalHostLaunch,
       binding: HostLaunchBinding, material: DarwinNativeCodexMaterial, port: number): Promise<void> {
       const retained = leases.get(lease);
@@ -473,6 +493,23 @@ function retainHttpLaunchAuthority(issued: SelectionRecord): RetainedNativeHttpL
       } catch (error) {issued.bridge.lost(); throw error;}
     },
   });
+  httpAuthorities.set(authority, issued);
+  return authority;
+}
+const httpAuthorities = new WeakMap<RetainedNativeHttpLaunchAuthority, SelectionRecord>();
+export function assertRetainedDarwinNativeHttpExecutionAuthority(
+  authority: RetainedNativeHttpLaunchAuthority, lease: DarwinNativeExecutionLease,
+): void {
+  const issued = httpAuthorities.get(authority); const retained = leases.get(lease);
+  if (issued === undefined || retained?.issued !== issued) {throw new Error("foreign native HTTP execution authority");}
+  assertDarwinNativeExecutionLeaseCurrent(lease);
+}
+export async function bindRetainedDarwinNativeHttpLaunch(
+  authority: RetainedNativeHttpLaunchAuthority, lease: DarwinNativeExecutionLease,
+  input: Readonly<{launch: FinalHostLaunch; binding: HostLaunchBinding; material: DarwinNativeCodexMaterial; port: number}>,
+): Promise<void> {
+  assertRetainedDarwinNativeHttpExecutionAuthority(authority, lease);
+  await authority.bindDarwinNativeFinalLaunch(lease, input.launch, input.binding, input.material, input.port);
 }
 export type DarwinNativeExecutionStart = Awaited<ReturnType<Bridge["startProcess"]>>;
 /** Parameterless beyond the same issued lease. Nothing caller-shaped can
@@ -483,10 +520,8 @@ export async function startDarwinNativeExecution(lease: DarwinNativeExecutionLea
   const issued = retained.issued, final = issued.final;
   if (!final || issued.started) {throw new Error("native final launch unavailable or already started");}
   issued.started = true;
-  try {
-    assertDarwinNativeExecutionLeaseCurrent(lease);
-    assertDarwinNativeCodexMaterialCurrent(final.material);
-    assertActualFinalBinding(final.bindingClass, final.binding, final.launch);
-    return await issued.bridge.startProcess();
-  } catch (error) {issued.bridge.lost(); throw error;}
+  assertDarwinNativeExecutionLeaseCurrent(lease);
+  assertDarwinNativeCodexMaterialCurrent(final.material);
+  assertActualFinalBinding(final.bindingClass, final.binding, final.launch);
+  return issued.bridge.startProcess();
 }

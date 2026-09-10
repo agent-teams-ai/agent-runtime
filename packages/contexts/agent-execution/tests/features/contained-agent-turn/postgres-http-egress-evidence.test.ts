@@ -248,3 +248,80 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
     } finally {await fresh.end();}
   } finally {if (!poolEnded) {await pool.end();}}
 });
+
+const identity = () => ({operationId: "operation-1", attemptId: "attempt-1", requestId: "request-1"});
+
+test("exact HTTP readback returns immutable owner receipt without writing or consuming", async () => {
+  const fake = fakePool(); const owner = new PostgresHttpEgressEvidence(fake.pool, scope);
+  const original = {...receipt(), routeGeneration: "route-generation-1", routeReceiptDigest: "route-digest-1",
+    inboundClosure: "closed" as const, upstreamClosure: "closed" as const};
+  assert.equal(await owner.record(original), "recorded");
+  fake.calls.length = 0;
+  const result = await owner.read(identity());
+  assert.deepEqual(result, {kind: "found", receipt: original});
+  assert.ok(Object.isFrozen(result));
+  assert.ok(result.kind === "found" && Object.isFrozen(result.receipt));
+  assert.equal(fake.calls.some(sql => /INSERT|UPDATE|DELETE|CREATE|ALTER/.test(sql)), false);
+  assert.ok(fake.calls.some(sql => /receipt_key=\$7 LIMIT 2/.test(sql)));
+  assert.deepEqual(await owner.read(identity()), result);
+  assert.equal(fake.rows.size, 1);
+});
+
+test("exact HTTP readback isolates every owner/key dimension and missing never proves closure", async () => {
+  const fake = fakePool(); const owner = new PostgresHttpEgressEvidence(fake.pool, scope);
+  await owner.record(receipt());
+  for (const field of ["operationId", "attemptId", "requestId"]) {
+    assert.deepEqual(await owner.read({...identity(), [field]: "other"}), {kind: "missing"});
+  }
+  for (const field of ["tenantId", "projectId", "deploymentId"]) {
+    const other = new PostgresHttpEgressEvidence(fake.pool, {...scope, [field]: "other"});
+    assert.deepEqual(await other.read(identity()), {kind: "missing"});
+  }
+});
+
+test("exact HTTP readback rejects malformed selectors before IO and snapshots before await", async () => {
+  const fake = fakePool(); const owner = new PostgresHttpEgressEvidence(fake.pool, scope);
+  let getterCalls = 0;
+  for (const invalid of [new Proxy(identity(), {}), {...identity(), extra: "field"}, {...identity(), requestId: ""},
+    {...identity(), get operationId() {getterCalls++; return "operation-1";}}]) {
+    await assert.rejects(owner.read(invalid), TypeError);
+  }
+  assert.equal(getterCalls, 0); assert.equal(fake.calls.length, 0);
+  await owner.record(receipt());
+  const mutable = identity(); const pending = owner.read(mutable); mutable.operationId = "mutated";
+  assert.equal((await pending).kind, "found");
+});
+
+test("exact HTTP readback fails closed on corrupt, noncanonical or cross-key retained data", async () => {
+  const fake = fakePool(); const owner = new PostgresHttpEgressEvidence(fake.pool, scope);
+  await owner.record(receipt());
+  const key = [...fake.rows.keys()][0]!;
+  for (const value of [null, "x".repeat(32_769), "{broken", JSON.stringify(receipt()),
+    canonical({...receipt(), operationId: "other"}), canonical({...receipt(), attemptId: "other"}),
+    canonical({...receipt(), requestId: "other"}), canonical({...receipt(), inboundClosure: "invented"})]) {
+    fake.rows.set(key, value);
+    assert.deepEqual(await owner.read(identity()), {kind: "unknown"});
+    assert.equal(fake.rows.get(key), value);
+  }
+});
+
+test("exact HTTP readback never returns proof after fence, read or commit uncertainty", async () => {
+  for (const failure of ["wrongFence", "failRead", "loseCommit"] as const) {
+    const fake = fakePool(); const owner = new PostgresHttpEgressEvidence(fake.pool, scope);
+    await owner.record(receipt()); fake[failure]();
+    assert.deepEqual(await owner.read(identity()), {kind: "unknown"});
+    assert.equal(fake.releases.at(-1), true);
+  }
+});
+
+test("exact HTTP readback rejects duplicate rows instead of selecting a winner", async () => {
+  const fake = fakePool();
+  const pool = {connect: async () => {
+    const client = await fake.pool.connect();
+    return {release: (destroy: boolean) => client.release(destroy), query: (sql: string, values?: unknown[]) =>
+      sql.includes("SELECT canonical_receipt")
+        ? Promise.resolve({rows: [{canonical_receipt: canonical(receipt())}, {canonical_receipt: canonical(receipt())}]})
+        : client.query(sql, values)};
+  }} as unknown as Pool;
+  assert.deepEqual(await new PostgresHttpEgressEvidence(pool, scope).read(identity()), {kind: "unknown"});
+});

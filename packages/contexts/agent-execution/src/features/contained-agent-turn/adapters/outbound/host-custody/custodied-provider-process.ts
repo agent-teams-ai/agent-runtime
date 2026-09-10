@@ -120,9 +120,16 @@ export interface HostCustodyCooperativeClosureEvidence {
   readonly status: "closed" | "not-started" | "unproven";
 }
 
+export interface HostCustodyNativeDarwinClosureEvidence {
+  readonly limitations: readonly [];
+  readonly profile: "native-darwin-attempt-owner";
+  readonly status: "closed" | "unproven";
+}
+
 export type HostCustodyClosureEvidence =
   | HostCustodyStrictClosureEvidence
-  | HostCustodyCooperativeClosureEvidence;
+  | HostCustodyCooperativeClosureEvidence
+  | HostCustodyNativeDarwinClosureEvidence;
 
 export interface HostCustodyPrivateRootClosureEvidence {
   readonly identitySha256: string;

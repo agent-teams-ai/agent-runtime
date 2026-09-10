@@ -33,8 +33,17 @@ export class DarwinSeatbeltRouteOwner {
   public get pending(): Promise<void> | undefined {return this.#preparation;}
   public get projection(): DarwinSeatbeltProjection {if (this.#projection === undefined) {return rejected();} return this.#projection;}
   public get state(): string {return this.#state;}
-  public admissionMilliseconds(maximum: number): number {
-    this.assertActive(); return Math.min(maximum, this.localCut.operationDeadline - this.#lastTime);
+  public prepareGuardianAllocation(maximum: number): Readonly<{
+    acknowledgementAfterMs: number; projection: DarwinSeatbeltProjection;
+  }> {
+    this.assertLaunch(this.#final);
+    if (this.#guardianAttempted || this.#final === undefined) {return rejected();}
+    const acknowledgementAfterMs = Math.min(maximum, this.localCut.operationDeadline - this.#lastTime);
+    if (acknowledgementAfterMs <= 0) {return rejected();}
+    const projection = this.projection;
+    this.journal.storage.assertIntact(); this.assertActive();
+    this.#guardianAttempted = true; this.journal.guardianIntent();
+    return Object.freeze({acknowledgementAfterMs, projection});
   }
   public attach(live: LiveCustody): void {
     if (this.#live !== undefined || live.plan?.provider !== "codex" || live.plan.intentMode !== "analysis" ||
@@ -109,11 +118,6 @@ export class DarwinSeatbeltRouteOwner {
     }
     this.journal.storage.assertIntact(); this.assertActive();
   }
-  public guardianIntent(): void {
-    this.assertLaunch(this.#final);
-    if (this.#guardianAttempted || this.#final === undefined) {rejected();}
-    this.#guardianAttempted = true; this.journal.guardianIntent(); this.assertActive();
-  }
   public beforeLaunch(): boolean {
     try {
       this.assertLaunch(this.#final);
@@ -136,9 +140,16 @@ export class DarwinSeatbeltRouteOwner {
       fingerprint: this.#final!.fingerprint.fingerprintSha256});
     this.assertActive(); this.#providerImage = image; this.#state = "installed";
   }
+  public installNative(): void {
+    this.assertLaunch(this.#final);
+    if (this.#guardianAttempted || this.#providerImage !== undefined || this.#state !== "launch-authorized") {rejected();}
+    this.journal.record("native_final_image_observed", {fingerprint: this.#final!.fingerprint.fingerprintSha256});
+    this.assertActive(); this.#state = "installed";
+  }
   public assertInstalled(): void {
     this.assertActive();
-    if (this.#state !== "installed" || this.#providerImage === undefined || this.#live!.guardian?.providerExit !== undefined ||
+    if (this.#state !== "installed" || this.#guardianAttempted && this.#providerImage === undefined ||
+        this.#live!.guardian?.providerExit !== undefined ||
         this.#live!.launchBinding.view.readFinal() !== this.#final) {this.cutoff(); rejected();}
   }
   public readonly firstWrite: HttpEgressRouteFirstWrite = Object.freeze({reserve: (requestId: string) => {
@@ -156,9 +167,11 @@ export class DarwinSeatbeltRouteOwner {
   public cutoff(): void {
     if (["cut", "released", "quarantined"].includes(this.#state)) {return;}
     this.#state = "cut";
+    // Persist the route cutoff before the reservation abort closes the durable
+    // storage bound to that same lifetime.
+    this.journal.cutoff();
     this.#live?.httpReservation.cutoff();
     this.#live?.guardian?.stopDarwin();
-    this.journal.cutoff();
   }
   public cleanup(resources: () => Promise<boolean>): Promise<boolean> {
     if (this.#cleanup !== undefined) {return this.#cleanup;}

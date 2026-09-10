@@ -2,8 +2,10 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 
 import type {
   CustodiedProviderProcess,
+  CustodiedSdkProcess,
   CustodiedProviderProcessExit,
   HostCustodyClosureEvidence,
+  HostCustodyDrainEvidence,
   HostCustodyEvidence,
   HostCustodyLaunchFingerprintEvidence,
   HostCustodyLaunchPlan,
@@ -23,7 +25,7 @@ import type {
   VerifiedLaunchDescriptors,
   WorkspaceObservation,
 } from "./host-custody-launch.js";
-import type { NodeCustodiedSdkProcess, SpawnStatus } from "./host-custody-process-tree.js";
+import type { SpawnStatus } from "./host-custody-process-tree.js";
 import type { StableProcessGroupGuardian } from "./host-custody-stable-guardian.js";
 import type { OperationResidueAuthority, OperationResidueAuthorityFactory } from "./host-custody-cgroup-v2.js";
 import type { HostStderrIngress, HostStdoutIngress } from "./host-custody-stdio.js";
@@ -54,6 +56,9 @@ export interface LiveCustody {
   readonly workspaceRef: string;
   readonly workspaceAuthority?: HostCustodyWorkspaceAuthority;
   readonly retainedWorkspaceAuthority?: RetainedHostCustodyWorkspaceAuthority;
+  readonly nativeWorkspaceAuthority?: import("./native-host-custody-workspace-authority.js").NativeHostCustodyWorkspaceAuthority;
+  readonly nativeWorkspaceFacts?: import("./darwin-attempt-owner-protocol.js").DarwinNativeLaunchData;
+  readonly nativeExecutionLease?: import("./darwin-attempt-owner-selection.js").DarwinNativeExecutionLease;
   closureEvidence: HostCustodyClosureEvidence;
   containment?: Promise<ContainmentResult>;
   contained?: Extract<ContainmentResult, { readonly kind: "contained" }>;
@@ -80,7 +85,11 @@ export interface LiveCustody {
   providerPid?: number;
   residueAuthority?: OperationResidueAuthority;
   residueAllocation: "not-allocated" | "uncertain" | "retained";
-  sdkProcess?: NodeCustodiedSdkProcess;
+  sdkProcess?: CustodiedSdkProcess;
+  nativeCleanup?: Promise<boolean>;
+  nativeExit?: CustodiedProviderProcessExit;
+  nativeStdout?: HostCustodyDrainEvidence;
+  nativeStderr?: HostCustodyDrainEvidence;
   sealed: boolean;
   signalAuthorized: boolean;
   spawnAcknowledgement?: Promise<SpawnStatus>;
@@ -110,6 +119,9 @@ export const createLiveCustody = (
     containmentProfile: HostCustodyLaunchPlan["containmentProfile"];
     opening: Promise<void>;
     retainedWorkspaceAuthority?: RetainedHostCustodyWorkspaceAuthority;
+    nativeWorkspaceAuthority?: import("./native-host-custody-workspace-authority.js").NativeHostCustodyWorkspaceAuthority;
+    nativeWorkspaceFacts?: import("./darwin-attempt-owner-protocol.js").DarwinNativeLaunchData;
+    nativeExecutionLease?: import("./darwin-attempt-owner-selection.js").DarwinNativeExecutionLease;
     workspaceAuthority?: HostCustodyWorkspaceAuthority;
   }>,
 ): LiveCustody => {
@@ -139,6 +151,9 @@ export const createLiveCustody = (
     ...(options.retainedWorkspaceAuthority === undefined ? {} : {
       retainedWorkspaceAuthority: options.retainedWorkspaceAuthority,
     }),
+    ...(options.nativeWorkspaceAuthority === undefined ? {} : {nativeWorkspaceAuthority: options.nativeWorkspaceAuthority}),
+    ...(options.nativeWorkspaceFacts === undefined ? {} : {nativeWorkspaceFacts: options.nativeWorkspaceFacts}),
+    ...(options.nativeExecutionLease === undefined ? {} : {nativeExecutionLease: options.nativeExecutionLease}),
   };
   return Object.defineProperties(live, {
     launchBinding: {value: launchBinding, writable: false, configurable: false},

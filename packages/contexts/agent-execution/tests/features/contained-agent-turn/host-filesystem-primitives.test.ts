@@ -84,7 +84,7 @@ hostTest("Host scanner rejects namespace mutation after file read", async t => {
   await writeFile(join(root, "a"), "data");
   await assert.rejects(scanContainedTurnWorkspace(root, limits, {
     checkpoint: async event => {
-      if (event.phase === "after-file-read") await writeFile(join(root, "new"), "new");
+      if (event.phase === "after-file-read") {await writeFile(join(root, "new"), "new");}
     },
   }), /directory changed/);
 });
@@ -124,7 +124,7 @@ hostTest("Host durable write failure before publication removes only its own sta
   await assert.rejects(writeImmutableFileAt({
     ...directories, finalName: "receipt.json", bytes: Buffer.from("record"), temporaryKind: "metadata",
     faults: { checkpoint: async point => {
-      if (point !== "metadata.before-publish") return;
+      if (point !== "metadata.before-publish") {return;}
       observedBeforePublish = true;
       assert.deepEqual(await readdir(directories.finalPath), []);
       assert.equal((await readdir(directories.stagingPath)).length, 2);
@@ -160,9 +160,9 @@ linuxTest("Host staging creation is cleaned when descriptor validation fails", a
 hostTest("Host scanner and staging quarantine preserve BOM and non-ASCII filename identity", async t => {
   const { stagingPath, finalPath, stagingDirectory, finalDirectory } = await store(t);
   const names = ["foo", "\uFEFFfoo", "é", "中"];
-  for (const name of names) await writeFile(join(stagingPath, name), "data");
+  for (const name of names) {await writeFile(join(stagingPath, name), "data");}
   const tree = await scanContainedTurnWorkspace(stagingPath, limits);
-  assert.deepEqual(tree.entries.map(entry => entry.relativePath), [...names].sort());
+  assert.deepEqual(tree.entries.map(entry => entry.relativePath), [...names].toSorted());
   assert.equal(await quarantineAmbiguousStagingDirectory(stagingDirectory, finalDirectory, 4), 4);
   assert.deepEqual(await readdir(stagingPath), []);
   const retained = await readdir(finalPath);

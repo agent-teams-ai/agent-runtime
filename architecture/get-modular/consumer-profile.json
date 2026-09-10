@@ -131,7 +131,7 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.ts"
       ],
       "status": "not-adopted",
-      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules. At 81b2833af, DarwinCodexNativeFiles remains an owner-local Codex adapter resource helper; its durable-journal dependency does not make it an independently composed capability or extend passive scope.",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules. At 81b2833af, DarwinCodexNativeFiles remains an owner-local Codex adapter resource helper; its durable-journal dependency does not make it an independently composed capability or extend passive scope. Accepted base 0d7a02451 adds an owner-local native observation projection over the existing kernel custody entrypoint; it does not add a passive Assembly capability or transfer custody ownership.",
       "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
       "relationships": [
         {
@@ -231,6 +231,11 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-observations.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
           "mode": "runtime"
         },
@@ -856,7 +861,7 @@
         "packages/apps/embedded-runtime/src/composition.ts"
       ],
       "status": "adopted",
-      "rationale": "Only createDefaultAgentRuntimeHost passive setup is adopted. Host-custodied contained-turn composition remains direct under its existing owner; exact retained relationships are censused, not exempted. Reviewed at 291684ed9: current-authority selection and Linux Codex contained-turn owner, deployment authority, deployment resources and Node recipe are explicit not-adopted Host composition seams. Node recipe consumption is a local subject/signer binding helper with a type-only Agent Execution relationship. Claim, resource custody and cleanup remain Host-owned; none of these seams extends passive Assembly scope. At 81b2833af, the independently composed Darwin authority and deployment roots remain explicitly outside the adopted passive setup scope. Their direct Agent Execution, Provider Access and Runtime Security composition dependencies are censused but not converted into passive Assembly nodes. Accepted base 981c11314 exposes the existing Darwin native authority binder and preparation token, and types the kernel custody port. These retained contained-turn relationships remain outside passive Assembly construction and transfer no authority or cleanup ownership to Assembly.",
+      "rationale": "Only createDefaultAgentRuntimeHost passive setup is adopted. Host-custodied contained-turn composition remains direct under its existing owner; exact retained relationships are censused, not exempted. Reviewed at 291684ed9: current-authority selection and Linux Codex contained-turn owner, deployment authority, deployment resources and Node recipe are explicit not-adopted Host composition seams. Node recipe consumption is a local subject/signer binding helper with a type-only Agent Execution relationship. Claim, resource custody and cleanup remain Host-owned; none of these seams extends passive Assembly scope. At 81b2833af, the independently composed Darwin authority and deployment roots remain explicitly outside the adopted passive setup scope. Their direct Agent Execution, Provider Access and Runtime Security composition dependencies are censused but not converted into passive Assembly nodes. Accepted base 981c11314 exposes the existing Darwin native authority binder and preparation token, and types the kernel custody port. Accepted base 0d7a02451 publicly wires the existing Darwin contained-turn deployment root; this remains a retained contained-turn composition export and does not extend passive Assembly adoption. These retained contained-turn relationships remain outside passive Assembly construction and transfer no authority or cleanup ownership to Assembly.",
       "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
       "relationships": [
         {
@@ -952,6 +957,11 @@
         {
           "from": "packages/apps/embedded-runtime/src/composition.ts",
           "to": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-authority.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-deployment.ts",
           "mode": "runtime"
         },
         {
@@ -1277,9 +1287,14 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.ts"
       ],
       "status": "not-adopted",
-      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules. Reviewed at 291684ed9: native broker installation and deferred binding, route enforcement, Docker kernel/effect custody and Node deployment recipe remain not-adopted contained-turn owners. The private route provenance composition shares one issuance/selection registry; consumption observations are an owner-local projection helper. Their exact Codex adapter and Host/Docker custody relationships are retained without transferring resource cleanup or containment authority to Assembly. Retained launch workspace is a private descriptor resource owner under existing workspace custody; Docker native-start diagnostics are local readback helpers, never admission or cleanup authority. At 81b2833af, Darwin post-claim preparation and route enforcement remain direct contained-turn owners outside passive scope; the fixed feature-local route helper and its exact adapter, custody and proof imports are not separate graph nodes. At 981c11314, eleven existing same-feature imports enter the newly explicit contained-turn anti-corruption composition boundary; these are retained static relationships outside passive Assembly adoption. Accepted base 981c11314 exposes the existing Darwin native authority binder and preparation token, and types the kernel custody port. These retained contained-turn relationships remain outside passive Assembly construction and transfer no authority or cleanup ownership to Assembly.",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules. Reviewed at 291684ed9: native broker installation and deferred binding, route enforcement, Docker kernel/effect custody and Node deployment recipe remain not-adopted contained-turn owners. The private route provenance composition shares one issuance/selection registry; consumption observations are an owner-local projection helper. Their exact Codex adapter and Host/Docker custody relationships are retained without transferring resource cleanup or containment authority to Assembly. Retained launch workspace is a private descriptor resource owner under existing workspace custody; Docker native-start diagnostics are local readback helpers, never admission or cleanup authority. At 81b2833af, Darwin post-claim preparation and route enforcement remain direct contained-turn owners outside passive scope; the fixed feature-local route helper and its exact adapter, custody and proof imports are not separate graph nodes. At 981c11314, eleven existing same-feature imports enter the newly explicit contained-turn anti-corruption composition boundary; these are retained static relationships outside passive Assembly adoption. Accepted base 981c11314 exposes the existing Darwin native authority binder and preparation token, and types the kernel custody port. Accepted base 0d7a02451 exports the existing workspace owner and adds an owner-local Darwin effect-custody composition over established ports; these are retained contained-turn relationships, not passive Assembly nodes. These retained contained-turn relationships remain outside passive Assembly construction and transfer no authority or cleanup ownership to Assembly.",
       "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
       "relationships": [
+        {
+          "from": "packages/contexts/agent-execution/src/composition.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace-owner.ts",
+          "mode": "runtime"
+        },
         {
           "from": "packages/contexts/agent-execution/src/composition.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
@@ -1824,6 +1839,21 @@
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/postgres-contained-turn-operation-store.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-validation.ts",
           "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/darwin-codex-effect-custody-owner.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-effect-custody.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/darwin-codex-effect-custody-owner.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/darwin-codex-effect-custody-owner.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/committed-dispatch-proof-v1.ts",
+          "mode": "type-only"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/claude-current-kernel-owner.ts",

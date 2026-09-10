@@ -3,8 +3,7 @@ import { mkdtemp, mkdir, rm, rename, symlink, writeFile, stat, readdir, copyFile
 import { execFileSync } from "node:child_process";
 import { constants as osConstants, tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath,pathToFileURL } from "node:url";
 import nodeTest from "node:test";
 import { hasDarwinHostDescriptors, openNativeHostRoot, decodeHostNameBytes } from "../dist/host-descriptor.js";
 
@@ -103,7 +102,7 @@ test("native listing enforces hard and lower limits before proportional JS alloc
     assert.throws(() => native.hostNames(handle, maximum), /bounded enumeration/);
   }
   for (let i = 0; i < 3; i++) {
-    assert.deepEqual(native.hostNames(handle, 2).map(bytes => bytes.toString()).sort(), ["a", "b"]);
+    assert.deepEqual(native.hostNames(handle, 2).map(bytes => bytes.toString()).toSorted(), ["a", "b"]);
   }
 });
 
@@ -158,11 +157,11 @@ test("native exclusive write, bounded pread, mode, sync and unlink preserve byte
 test("Host filename decoder round-trips BOM and non-ASCII native names exactly", async t => {
   const { path, handle } = await fixture(t);
   const names = ["foo", "\uFEFFfoo", "é", "中", "𐀀", "\uE000"];
-  for (const name of names) await writeFile(join(path, name), name);
+  for (const name of names) {await writeFile(join(path, name), name);}
   const raw = native.hostNames(handle, names.length);
   const decoded = decodeHostNameBytes(raw);
-  assert.deepEqual([...decoded].sort(), [...names].sort());
-  for (let i = 0; i < raw.length; i++) assert.deepEqual(Buffer.from(decoded[i]), raw[i]);
+  assert.deepEqual([...decoded].toSorted(), [...names].toSorted());
+  for (let i = 0; i < raw.length; i++) {assert.deepEqual(Buffer.from(decoded[i]), raw[i]);}
   assert.throws(() => decodeHostNameBytes([Buffer.from([0xff])]), /encoded data/);
   for (const name of decoded) {
     const file = native.hostOpen(handle, name, 0);
@@ -178,7 +177,6 @@ test("Host filename decoder round-trips BOM and non-ASCII native names exactly",
 
 test("Host syscall errors preserve actual symbolic and positive native errno", async t => {
   const { handle } = await fixture(t);
-  const check = code => error => error.code === code && error.errno === osConstants.errno[code];
   assert.throws(() => native.hostOpen(handle, "missing", 0), check("ENOENT"));
   const file = native.hostOpen(handle, "file", 2);
   try {
@@ -260,3 +258,5 @@ test("Host quarantine uses pinned parents after directory name replacement", asy
     assert.equal(await readFile(join(path, "parent", "entry"), "utf8"), "replacement");
   } finally {native.hostClose(parent);}
 });
+
+const check = code => error => error.code === code && error.errno === osConstants.errno[code];

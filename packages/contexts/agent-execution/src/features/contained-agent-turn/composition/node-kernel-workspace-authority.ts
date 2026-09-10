@@ -40,7 +40,7 @@ export const nodeKernelWorkspaceAuthority = (
         });
       } catch (error) {
         closed = true;
-        if (authority !== undefined) {retireNativeHostCustodyWorkspaceAuthority(authority);}
+        if (authority !== undefined) {await retireNativeHostCustodyWorkspaceAuthority(authority);}
         // KernelOpenAttempts must fence acquisition before draining preparation.
         void scoped?.catch(() => {});
         throw error;

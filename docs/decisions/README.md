@@ -18,6 +18,7 @@ related:
   - ADR-0013
   - ADR-0014
   - ADR-0015
+  - ADR-0016
 blocked_by: []
 code_anchors:
   - enforcement: required
@@ -31,6 +32,9 @@ immutable evidence; a later change uses an explicit superseding decision.
 
 ## Proposed
 
+- [ADR-0016: Contained-turn Consumer Module Standard pending adoption](0016-contained-turn-consumer-module-standard-adoption.md)
+  classifies the existing seven-port Pure DI boundary as explicitly not adopted
+  until a separate contained-turn Assembly migration is accepted.
 - [ADR-0006: Orthogonal runtime-operation state and effect continuity](0006-orthogonal-runtime-operation-state-and-effect-continuity.md)
   remains the broader design proposal. ADR-0010 accepts only its narrow V1
   subset without mutating this document.
