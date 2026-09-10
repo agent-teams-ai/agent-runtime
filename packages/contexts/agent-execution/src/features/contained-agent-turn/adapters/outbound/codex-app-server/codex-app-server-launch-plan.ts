@@ -226,6 +226,34 @@ export const validateCodexAppServerLaunchPlanRoots = (
   validateLaunchEnvironment(plan);
 };
 
+const assertLaunchRootData = (executablePath: string, boundary: CodexAppServerPermissionBoundary): void => {
+  if (typeof executablePath !== "string" || typeof boundary.codexHome !== "string"
+    || typeof boundary.workspaceRef !== "string" || typeof boundary.effectivePolicyDigest !== "string") {
+    throw new TypeError("Codex launch roots and executable must contain inert data");
+  }
+};
+
+const validatePrivateRootLayout = (
+  privateRootPath: string, boundary: CodexAppServerPermissionBoundary, tmpDir: string,
+): void => {
+  if (
+    !contains(privateRootPath, boundary.codexHome)
+    || privateRootPath === boundary.codexHome
+    || !contains(privateRootPath, tmpDir)
+    || privateRootPath === tmpDir
+  ) {
+    throw new TypeError("Codex private home and TMPDIR must be strictly within privateRootPath");
+  }
+  const roots = [boundary.workspaceRef, boundary.codexHome, tmpDir] as const;
+  for (let left = 0; left < roots.length; left += 1) {
+    for (let right = left + 1; right < roots.length; right += 1) {
+      if (contains(roots[left]!, roots[right]!) || contains(roots[right]!, roots[left]!)) {
+        throw new TypeError("Codex workspace, private home, and TMPDIR must be pairwise disjoint");
+      }
+    }
+  }
+};
+
 export const createCodexAppServerLaunchPlan = (
   options: CodexAppServerLaunchPlanOptions,
 ): CodexAppServerLaunchPlan => {
@@ -243,10 +271,7 @@ export const createCodexAppServerLaunchPlan = (
     "codexHome", "codexHomeIdentity", "effectivePolicyDigest", "permissionProfile",
     "permissionProfileId", "intentMode", "workspaceRef", "workspaceIdentity",
   ]) as unknown as CodexAppServerPermissionBoundary;
-  if (typeof options.executablePath !== "string" || typeof boundary.codexHome !== "string"
-    || typeof boundary.workspaceRef !== "string" || typeof boundary.effectivePolicyDigest !== "string") {
-    throw new TypeError("Codex launch roots and executable must contain inert data");
-  }
+  assertLaunchRootData(options.executablePath, boundary);
   const codexHomeIdentity = snapshotDirectoryIdentity(boundary.codexHomeIdentity);
   const workspaceIdentity = snapshotDirectoryIdentity(boundary.workspaceIdentity);
   if (boundary.intentMode !== intentMode) {
@@ -263,22 +288,7 @@ export const createCodexAppServerLaunchPlan = (
     device: Number(facts.tmpDir.dev), inode: Number(facts.tmpDir.ino), path: facts.tmpDir.path,
   });
   const privateRootPath = privateRoot(options.privateRootPath, boundary.workspaceRef);
-  if (
-    !contains(privateRootPath, boundary.codexHome)
-    || privateRootPath === boundary.codexHome
-    || !contains(privateRootPath, options.tmpDir)
-    || privateRootPath === options.tmpDir
-  ) {
-    throw new TypeError("Codex private home and TMPDIR must be strictly within privateRootPath");
-  }
-  const roots = [boundary.workspaceRef, boundary.codexHome, options.tmpDir] as const;
-  for (let left = 0; left < roots.length; left += 1) {
-    for (let right = left + 1; right < roots.length; right += 1) {
-      if (contains(roots[left]!, roots[right]!) || contains(roots[right]!, roots[left]!)) {
-        throw new TypeError("Codex workspace, private home, and TMPDIR must be pairwise disjoint");
-      }
-    }
-  }
+  validatePrivateRootLayout(privateRootPath, boundary, options.tmpDir);
   const launchArguments = [
     "app-server",
     "--stdio",
@@ -317,8 +327,8 @@ export const createCodexAppServerLaunchPlan = (
   if (facts !== undefined) {markDarwinNativeRootLaunchPlan(plan);}
   if (native !== undefined) {
     nativeLaunches.set(plan, native);
-    const observation = codexDarwinNativeLaunchObservation(options.boundary);
-    if (observation !== undefined) {finalNativeObservations.set(plan, observation);}
+    const finalObservation = codexDarwinNativeLaunchObservation(options.boundary);
+    if (finalObservation !== undefined) {finalNativeObservations.set(plan, finalObservation);}
   }
   if (codexDarwinNativeLaunchObservation(options.boundary) !== undefined) {nativeRootBoundaries.set(plan, options.boundary);}
   issuedLaunchPlans.add(plan);
