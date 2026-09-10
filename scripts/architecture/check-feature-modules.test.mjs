@@ -48,6 +48,17 @@ const secondFiles = {
   "src/features/beta/domain/value.ts": "export const beta = true;\n",
 };
 
+const secondModuleFiles = {
+  "other/package.json": "{\"name\": \"@fixture/other\", \"agentTeamsArchitecture\": {\"role\": \"platform\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+  "other/src/features/gamma/README.md": "---\ntype: feature\nstatus: accepted\nowner: \"@fixture/other\"\nowner_document: ADR-0005\n---\n\n# Gamma\n",
+  "other/src/features/gamma/index.ts": "export type { GammaValue } from './contracts/gamma.js';\n",
+  "other/src/features/gamma/internal.ts": "export { gamma } from './adapters/gamma.js';\n",
+  "other/src/features/gamma/contracts/gamma.ts": "export interface GammaValue { readonly gamma: boolean }\n",
+  "other/src/features/gamma/adapters/gamma.ts": "export const gamma = true;\n",
+  "other/src/index.ts": "export type { GammaValue } from './features/gamma/index.js';\n",
+  "other/src/composition.ts": "export { gamma } from './features/gamma/internal.js';\n",
+};
+
 const makeFixtureRoot = async () => {
   try { return await mkdtemp(join(tmpdir(), "feature-module-check-")); }
   catch (error) {
@@ -280,6 +291,7 @@ const buildFixtureFiles = (fixture, profilePath) => {
     ...baseFiles,
     ...fixtureDecisionFiles(fixture),
     ...(fixture.secondFeature ? secondFiles : {}),
+    ...(fixture.secondModule ? secondModuleFiles : {}),
     ...fixture.files,
     [profilePath]: profileSource.endsWith("\n") ? profileSource : `${profileSource}\n`,
   };

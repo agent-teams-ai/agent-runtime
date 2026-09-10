@@ -16,6 +16,7 @@ export const STRUCTURAL_CODES = new Set([
   "FM_ENTRYPOINT_MISSING",
   "FM_INLINE_BEHAVIOR",
   "FM_INVALID_AUTHORITY",
+  "FM_MODULE_DEEP_IMPORT",
   "FM_MAX_LINES",
   "FM_NONLITERAL_LOADING",
   "FM_PACKAGE_EXPORT_MAP",
@@ -25,6 +26,7 @@ export const STRUCTURAL_CODES = new Set([
   "FM_README_OWNERSHIP",
   "FM_TEST_PLACEMENT",
   "FM_UNCLASSIFIED_MODULE",
+  "FM_UNDECLARED_MODULE_EDGE",
   "FM_UNSUPPORTED_CONFIG",
   "FM_WILDCARD_REEXPORT",
 ]);
@@ -203,11 +205,21 @@ const featureIdentityIssues = (features, productionRoots, profilePath) => {
   return issues;
 };
 
-const featureEdgeDeclarationIssues = (edges, featureIds, profilePath) => {
+// A feature edge describes a relationship inside one module. A relationship
+// between modules is a module edge, so a cross-module feature edge would be
+// unreachable configuration rather than a permission.
+const featureEdgeDeclarationIssues = (edges, features, profilePath) => {
   const issues = [], edgeKeys = edges.map(({ from, to }) => `${from}->${to}`);
+  const rootOf = new Map(features.map((feature) => [feature.id, posix.dirname(posix.dirname(feature.root))]));
   if (duplicateValues(edgeKeys).length) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "feature edge pairs must be unique"));}
   for (const edge of edges) {
-    if (!featureIds.has(edge.from) || !featureIds.has(edge.to) || edge.from === edge.to) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, `feature edge ${edge.from}->${edge.to} must connect two distinct declared features`));}
+    if (!rootOf.has(edge.from) || !rootOf.has(edge.to) || edge.from === edge.to) {
+      issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, `feature edge ${edge.from}->${edge.to} must connect two distinct declared features`));
+      continue;
+    }
+    if (rootOf.get(edge.from) !== rootOf.get(edge.to)) {
+      issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, `feature edge ${edge.from}->${edge.to} must stay inside one production module`));
+    }
   }
   return issues;
 };
@@ -238,6 +250,14 @@ const productionModuleIssues = (profile, profilePath, acceptedDecisions) => {
     }
   }
   const active = modules.filter(({ adoption }) => adoption === "active");
+  const activeIds = new Set(active.map(({ id }) => id));
+  const declaredIds = new Set(modules.map(({ id }) => id));
+  for (const edge of profile.moduleEdges) {
+    if (!declaredIds.has(edge.from) || !declaredIds.has(edge.to)) {continue;}
+    if (!activeIds.has(edge.from) || !activeIds.has(edge.to)) {
+      issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, `module edge ${edge.from}->${edge.to} requires both modules to be active`));
+    }
+  }
   if (!sameValues(profile.scope.productionRoots, active.map(({ sourceRoot }) => sourceRoot))) {
     issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "production roots must be exactly the source roots of the active production modules"));
   }
@@ -254,14 +274,25 @@ const productionModuleIssues = (profile, profilePath, acceptedDecisions) => {
   return issues;
 };
 
+const moduleEdgeDeclarationIssues = (edges, moduleIds, profilePath) => {
+  const issues = [], keys = edges.map(({ from, to }) => `${from}->${to}`);
+  if (duplicateValues(keys).length) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "module edge pairs must be unique"));}
+  for (const edge of edges) {
+    if (!moduleIds.has(edge.from) || !moduleIds.has(edge.to) || edge.from === edge.to) {
+      issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, `module edge ${edge.from}->${edge.to} must connect two distinct declared production modules`));
+    }
+  }
+  return issues;
+};
+
 const profileTopologyIssues = (profile, profilePath) => {
   const issues = [], productionRoots = profile.scope.productionRoots, features = profile.features;
-  const featureIds = new Set(features.map(({ id }) => id));
   const expectedAssembly = productionRoots.flatMap((root) => [`${root}/index.ts`, `${root}/composition.ts`]);
   if (!sameValues(profile.moduleRoles, STANDARD_ROLES)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "moduleRoles must declare the five standard roles exactly"));}
   if (!sameValues(profile.assemblyFiles, expectedAssembly)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "assemblyFiles must contain only index.ts and composition.ts for each production root"));}
   issues.push(...featureIdentityIssues(features, productionRoots, profilePath));
-  issues.push(...featureEdgeDeclarationIssues(profile.featureEdges, featureIds, profilePath));
+  issues.push(...featureEdgeDeclarationIssues(profile.featureEdges, features, profilePath));
+  issues.push(...moduleEdgeDeclarationIssues(profile.moduleEdges, new Set(profile.scope.productionModules.map(({ id }) => id)), profilePath));
   return issues;
 };
 
