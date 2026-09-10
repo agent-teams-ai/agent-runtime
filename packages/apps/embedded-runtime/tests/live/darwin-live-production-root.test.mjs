@@ -10,7 +10,7 @@ const createRoot = compileFunction(`return ${source.slice(source.indexOf("export
   .replace("export async function", "async function").replaceAll("import(", "load(")}`,
 ["process", "load", "pathToFileURL", "refused"]);
 
-function fixture({failPreparation = false} = {}) {
+function fixture({failPreparation = false, disposeHost} = {}) {
   const events = [];
   const native = {selection: {}, httpLaunchAuthority: {}, attemptAuthority: {}};
   const preparation = {}, operationStore = {}, dispatchAuthority = {dispatch: {}};
@@ -42,7 +42,7 @@ function fixture({failPreparation = false} = {}) {
     bindStore: value => {assert.equal(value, operationStore); return operationStore;},
     bindAuthority: value => {assert.equal(value, owned.dispatchAuthority); return dispatchAuthority;},
   };
-  const host = {dispose: async () => events.push("host")};
+  const host = {dispose: async () => {events.push("host"); await disposeHost?.();}};
   const modules = {
     "../../dist/composition.js": {
       bindDarwinNativeAttemptAuthority(store, authority) {
@@ -77,7 +77,7 @@ function fixture({failPreparation = false} = {}) {
     argv: ["node", "inert", "--darwin-attempt-owner-bridge"]},
   async specifier => {assert.ok(Object.hasOwn(modules, specifier)); return modules[specifier];},
   path => new URL(`file://${path}`), () => new Error("refused"));
-  return {run: () => run({runtimeRootModulePath: "/inert-owners.mjs"}), events, host};
+  return {run: () => run({runtimeRootModulePath: "/inert-owners.mjs"}), events, host, owned};
 }
 
 test("native factory and both preparation authorities reach the public Host composition", async () => {
@@ -93,4 +93,28 @@ test("preparation failure seals admission and releases the acquired owners in re
   const value = fixture({failPreparation: true});
   await assert.rejects(value.run(), /preparation refused/);
   assert.deepEqual(value.events, ["seal", "artifacts", "workspace", "owners"]);
+});
+
+
+test("concurrent disposal waits for the same complete cleanup and retains Host failure debt", async () => {
+  let release;
+  const pending = new Promise(resolve => {release = resolve;});
+  const failure = new Error("Host closure unproven"), failures = [];
+  const value = fixture({disposeHost: async () => {await pending; throw failure;}});
+  let reads = 0;
+  value.owned.cleanup = {
+    recordFailure: error => failures.push(error),
+    readback: () => {reads += 1; return {clean: failures.length === 0};},
+  };
+  const runtime = await value.run();
+  const first = runtime.dispose(), second = runtime.dispose();
+  assert.equal(first, second);
+  await Promise.resolve();
+  assert.equal(reads, 0);
+  release();
+  assert.deepEqual(await first, {clean: false});
+  assert.deepEqual(failures, [failure]);
+  assert.equal(reads, 1);
+  assert.equal(runtime.dispose(), first);
+  assert.deepEqual(value.events, ["seal", "host", "deployment", "artifacts", "workspace", "owners"]);
 });

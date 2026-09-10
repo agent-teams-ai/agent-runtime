@@ -36,7 +36,7 @@ export async function createDarwinLiveRuntime(activation) {
   if (typeof factoryModule.acquireDarwinLiveOwners !== "function") {throw refused();}
   const owned = await factoryModule.acquireDarwinLiveOwners(activation);
   const cleanup = [];
-  let host, deployment, sealed = false, disposed = false, reconciled = false;
+  let host, deployment, sealed = false, disposal, reconciled = false;
   try {
     cleanup.push(owned.dispose);
     const native = await captureRootDarwinAttemptWorkspace(owned.nativeConsumers);
@@ -68,14 +68,22 @@ export async function createDarwinLiveRuntime(activation) {
       ...owned.verification,
       sealAdmission,
       async retainForReconciliation(result) {await sealAdmission(); if (!reconciled) {reconciled = true; await owned.reconciliation.retain(result);}},
-      async dispose(result) {
-        if (disposed) {return owned.cleanup.readback();}
-        disposed = true; await sealAdmission();
-        if (result?.uncertainty !== undefined && !reconciled) {reconciled = true; await owned.reconciliation.retain(result);}
-        try {await host.dispose();} finally {
-          for (const action of cleanup.toReversed()) {try {await action?.();} catch (error) {owned.cleanup.recordFailure(error);}}
-        }
-        return owned.cleanup.readback();
+      dispose(result) {
+        if (disposal) {return disposal;}
+        disposal = (async () => {
+          try {
+            await sealAdmission();
+            if (result?.uncertainty !== undefined && !reconciled) {
+              reconciled = true; await owned.reconciliation.retain(result);
+            }
+          } catch (error) {owned.cleanup.recordFailure(error);}
+          try {await host.dispose();} catch (error) {owned.cleanup.recordFailure(error);}
+          for (const action of cleanup.toReversed()) {
+            try {await action?.();} catch (error) {owned.cleanup.recordFailure(error);}
+          }
+          return owned.cleanup.readback();
+        })();
+        return disposal;
       },
     });
   } catch (error) {
