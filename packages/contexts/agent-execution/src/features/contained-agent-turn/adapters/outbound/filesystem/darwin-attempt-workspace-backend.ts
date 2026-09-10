@@ -4,9 +4,9 @@ import { fstatSync } from "node:fs";
 import type { ContainedTurnWorkspaceTree, ContainedTurnWorkspaceTreeLimits } from "./contained-turn-workspace-tree.js";
 import type { DarwinAttemptRetainedOwners } from "../host-custody/darwin-attempt-owner-bridge.ts";
 import type { ContainedTurnKernelDependencies } from "../../../application/ports/outbound/contained-turn-ports.js";
-import { darwinAttemptOwnerStates } from "../host-custody/darwin-attempt-owner-protocol.ts";
-import { bindDarwinAttemptOwnerBridge } from "../host-custody/darwin-attempt-owner-bridge.ts";
-import { createWorkspaceClosureRecord } from "./contained-turn-workspace-state.ts";
+import { darwinAttemptOwnerStates } from "../host-custody/darwin-attempt-owner-protocol.js";
+import { bindDarwinAttemptOwnerBridge } from "../host-custody/darwin-attempt-owner-bridge.js";
+import { createWorkspaceClosureRecord } from "./contained-turn-workspace-state.js";
 import type {
   ContainedTurnWorkspaceCreationRecord, ContainedTurnWorkspaceSealRecord,
   ContainedTurnWorkspaceClosureRecord,

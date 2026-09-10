@@ -5,7 +5,7 @@ import {
   DarwinAttemptOwnerEventReader, encodeDarwinAttemptOwnerRequest, darwinAttemptOwnerStates as native,
   DarwinWorkspaceTreeReceiver, captureDarwinWorkspaceTree, decodeDarwinNativeLaunchData, decodeDarwinNativeMaterialData,
   type DarwinAttemptOwnerCommand, type DarwinAttemptOwnerEvent,
-} from "./darwin-attempt-owner-protocol.ts";
+} from "./darwin-attempt-owner-protocol.js";
 
 /** Selected once by the exact admitted Host composition, before START. There is
  * no submitEvidence/receipt-ID/boolean registration API. Only these retained
