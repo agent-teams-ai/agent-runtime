@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "evidenceKind": "runtime-setup-l0-direct-composition",
-  "sourceRevision": "2184584a8f3fcebfe7721024bcb2e81ce76127bf",
+  "sourceRevision": "6dfffbff6abbe28ffbb8fb528d13647b3e09e013",
   "authority": "ADR-0008",
   "productOutcome": "detached-safe-runtime-setup-preview",
   "taxonomyAuthority": "experiment-local-non-qualification-rubric",
@@ -40,7 +40,7 @@
   "capture": {
     "command": "pnpm --filter @agent-teams/embedded-runtime check",
     "exitCode": 0,
-    "outputSha256": "584e5c793fe4a9e248f24ffc909af14dbf75352432fd6c7de0cf835d49cccef8",
+    "outputSha256": "b3e61ad2171c5e2f585800f5cfd815030ddc8d480f4f54c9d89eb17152ef65bd",
     "architecture": "arm64",
     "nodeVersion": "v24.18.0",
     "platform": "darwin",
@@ -58,12 +58,12 @@
       "sha256": "2f185db9f8cd0bd29ed28b08d862dbf23846ce19e14c657d8e6afad9c3e769fc"
     },
     "sources": {
-      "fileCount": 657,
-      "sha256": "70c7bc39df9ae30a9d4cc2b251fbd24ca4be9b8cc0efc4431d245942b12639f0"
+      "fileCount": 659,
+      "sha256": "6f3fca3471610def651e2ff062ec5659044d4dffb1871de7594359726d4234fa"
     },
     "tests": {
-      "fileCount": 608,
-      "sha256": "5c7133c9c7ed4c157e0aae3c0f7fbf0c4d238408e52c2f988fa9a9aa87f2517c"
+      "fileCount": 609,
+      "sha256": "4a579f7d55ee7829d7560306387b0d08b33b9d7ad0b8d3f04e5756805bd99b50"
     }
   },
   "historicalChanges": [
@@ -1451,6 +1451,35 @@
         "files": 3,
         "additions": 2,
         "deletions": 2
+      },
+      "behaviorFixtures": {
+        "before": 369,
+        "after": 369,
+        "retained": 369,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-application-models",
+      "revision": "6dfffbff6abbe28ffbb8fb528d13647b3e09e013",
+      "files": 9,
+      "additions": 284,
+      "deletions": 50,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 1,
+        "additions": 4,
+        "deletions": 1
+      },
+      "production": {
+        "files": 7,
+        "additions": 184,
+        "deletions": 48
+      },
+      "tests": {
+        "files": 1,
+        "additions": 96,
+        "deletions": 0
       },
       "behaviorFixtures": {
         "before": 369,

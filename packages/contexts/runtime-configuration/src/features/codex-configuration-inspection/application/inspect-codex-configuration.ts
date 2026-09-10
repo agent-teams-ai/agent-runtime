@@ -1,14 +1,14 @@
 import type {
-  CodexConfigurationDiagnostic,
-  CodexConfigurationSource,
-  CodexConfigurationSourceKind,
-  CodexConfigurationSourceObservation,
-  InspectCodexConfiguration,
-  InspectCodexConfigurationInput,
-  InspectCodexConfigurationResult,
-  PortableCodexSettingKey,
-  PortableCodexSettingObservation,
-} from "../contracts/codex-configuration-inspection.js";
+  CodexInspectionDiagnostic,
+  CodexInspectionOutcome,
+  CodexInspectionRequest,
+  CodexSettingKey,
+  CodexSettingObservation,
+  CodexSourceKind,
+  CodexSourceObservation,
+  CodexSourceSelection,
+  InspectCodexConfigurationUseCase,
+} from "./models/codex-inspection-models.js";
 import type { ConfigurationDigest } from "./ports/outbound/configuration-digest.js";
 import type { CodexTomlParser } from "./ports/outbound/codex-toml-parser.js";
 import {
@@ -21,7 +21,7 @@ import {
   validateSemanticClassification,
 } from "./safe-semantic-boundary.js";
 
-interface BoundSource extends CodexConfigurationSource {
+interface BoundSource extends CodexSourceSelection {
   readonly sourceRef: string;
 }
 
@@ -35,10 +35,10 @@ interface SourceBindingPlan {
 }
 
 interface InspectionCollections {
-  readonly diagnostics: CodexConfigurationDiagnostic[];
-  readonly effective: Map<PortableCodexSettingKey, PortableCodexSettingObservation>;
-  readonly safeProjectionBySource: Map<string, Map<PortableCodexSettingKey, string>>;
-  readonly sourceObservations: CodexConfigurationSourceObservation[];
+  readonly diagnostics: CodexInspectionDiagnostic[];
+  readonly effective: Map<CodexSettingKey, CodexSettingObservation>;
+  readonly safeProjectionBySource: Map<string, Map<CodexSettingKey, string>>;
+  readonly sourceObservations: CodexSourceObservation[];
 }
 
 interface InspectionDependencies {
@@ -49,7 +49,7 @@ interface InspectionDependencies {
   readonly sourceReader: ConfigurationSourceReader;
 }
 
-const sourceRanks: Readonly<Record<CodexConfigurationSourceKind, number>> = {
+const sourceRanks: Readonly<Record<CodexSourceKind, number>> = {
   user: 10,
   "external-profile": 20,
   workspace: 30,
@@ -69,7 +69,7 @@ const createSourceRef = (
 
 const semanticDigest = (
   digest: ConfigurationDigest,
-  settings: ReadonlyMap<PortableCodexSettingKey, string> | undefined,
+  settings: ReadonlyMap<CodexSettingKey, string> | undefined,
   dialect: string,
   classifier: CodexConfigurationSemanticClassifier,
 ): string => {
@@ -91,7 +91,7 @@ const rejectSources = (
   setting: string,
   rejectedSourceRefs: Set<string>,
   reportedConflicts: Set<string>,
-  diagnostics: CodexConfigurationDiagnostic[],
+  diagnostics: CodexInspectionDiagnostic[],
 ): void => {
   for (const source of conflicting) {
     rejectedSourceRefs.add(source.sourceRef);
@@ -133,9 +133,9 @@ const hasValidWorkspaceOrder = (sources: readonly BoundSource[]): boolean =>
 
 const bindSources = (
   digest: ConfigurationDigest,
-  input: InspectCodexConfigurationInput,
+  input: CodexInspectionRequest,
   identityKey: Uint8Array,
-  diagnostics: CodexConfigurationDiagnostic[],
+  diagnostics: CodexInspectionDiagnostic[],
 ): SourceBindingPlan => {
   const sources = input.sources
     .map(source => ({
@@ -258,7 +258,7 @@ const createApplySettings = (
 
 const malformedDiagnostic = (
   kind: "bom" | "invalid-utf8" | "malformed",
-): CodexConfigurationDiagnostic["code"] => {
+): CodexInspectionDiagnostic["code"] => {
   if (kind === "bom") {
     return "config_bom_rejected";
   }
@@ -270,7 +270,7 @@ const malformedDiagnostic = (
 
 const prepareSources = async (
   dependencies: InspectionDependencies,
-  input: InspectCodexConfigurationInput,
+  input: CodexInspectionRequest,
   binding: SourceBindingPlan,
   collections: InspectionCollections,
   signal?: AbortSignal,
@@ -388,7 +388,7 @@ const applyPreparedSources = (
   }
 };
 
-const buildResult = (collections: InspectionCollections): InspectCodexConfigurationResult => ({
+const buildResult = (collections: InspectionCollections): CodexInspectionOutcome => ({
   diagnostics: collections.diagnostics.toSorted((left, right) =>
     compareText(
       `${left.code}:${left.sourceRef ?? ""}:${left.setting ?? ""}`,
@@ -406,9 +406,13 @@ const buildResult = (collections: InspectionCollections): InspectCodexConfigurat
 const executeInspection = async (
   dependencies: InspectionDependencies,
   identityKey: Uint8Array,
-  input: InspectCodexConfigurationInput,
+  input: CodexInspectionRequest,
   signal?: AbortSignal,
-): Promise<InspectCodexConfigurationResult> => {
+): Promise<CodexInspectionOutcome> => {
+  // identityScope defines the source identity namespace every sourceRef is bound
+  // to, so an empty one is a degenerate namespace rather than a malformed
+  // transport shape. The invariant stays with the use case that depends on it;
+  // the inbound adapter repeats it only to fail before any port is touched.
   if (input.identityScope.length === 0) {
     throw new TypeError("identityScope must not be empty");
   }
@@ -418,7 +422,7 @@ const executeInspection = async (
     safeProjectionBySource: new Map(),
     sourceObservations: [],
   };
-  const bindingDiagnostics: CodexConfigurationDiagnostic[] = [];
+  const bindingDiagnostics: CodexInspectionDiagnostic[] = [];
   const bound = bindSources(dependencies.digest, input, identityKey, bindingDiagnostics);
   if (!dependencies.semanticClassifier.supportsDialect(input.dialect)) {
     collections.diagnostics.push({ code: "configuration_dialect_unsupported" });
@@ -452,7 +456,7 @@ const executeInspection = async (
 
 export const createInspectCodexConfiguration = (
   dependencies: InspectionDependencies,
-): InspectCodexConfiguration => {
+): InspectCodexConfigurationUseCase => {
   if (
     dependencies.semanticClassifier.contract !==
       codexConfigurationSemanticClassifierContract ||

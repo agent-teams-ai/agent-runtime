@@ -191,6 +191,10 @@ export const changes = Object.freeze([
     id: "reviewed-scope-guard",
     revision: "2184584a8f3fcebfe7721024bcb2e81ce76127bf",
   }),
+  Object.freeze({
+    id: "codex-application-models",
+    revision: "6dfffbff6abbe28ffbb8fb528d13647b3e09e013",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -201,12 +205,12 @@ export const sourceRevisionArtifactDigests = Object.freeze({
     sha256: "2f185db9f8cd0bd29ed28b08d862dbf23846ce19e14c657d8e6afad9c3e769fc",
   }),
   sources: Object.freeze({
-    fileCount: 657,
-    sha256: "70c7bc39df9ae30a9d4cc2b251fbd24ca4be9b8cc0efc4431d245942b12639f0",
+    fileCount: 659,
+    sha256: "6f3fca3471610def651e2ff062ec5659044d4dffb1871de7594359726d4234fa",
   }),
   tests: Object.freeze({
-    fileCount: 608,
-    sha256: "5c7133c9c7ed4c157e0aae3c0f7fbf0c4d238408e52c2f988fa9a9aa87f2517c",
+    fileCount: 609,
+    sha256: "4a579f7d55ee7829d7560306387b0d08b33b9d7ad0b8d3f04e5756805bd99b50",
   }),
 });
 

@@ -1,4 +1,5 @@
 import type { ConfigurationDigest } from "../application/ports/outbound/configuration-digest.js";
+import { createCodexConfigurationInspectionV1 } from "../adapters/inbound/codex-configuration-inspection-v1.js";
 import { createInspectCodexConfiguration } from "../application/inspect-codex-configuration.js";
 import type { CodexConfigurationSemanticClassifier } from "../application/ports/outbound/codex-configuration-semantic-classifier.js";
 import type { CodexTomlParser } from "../application/ports/outbound/codex-toml-parser.js";
@@ -16,5 +17,7 @@ export const createCodexConfigurationInspectionFeature = (
   dependencies: CodexConfigurationInspectionDependencies,
 ) =>
   Object.freeze({
-    inspectCodexConfiguration: createInspectCodexConfiguration(dependencies),
+    inspectCodexConfiguration: createCodexConfigurationInspectionV1(
+      createInspectCodexConfiguration(dependencies),
+    ),
   });
