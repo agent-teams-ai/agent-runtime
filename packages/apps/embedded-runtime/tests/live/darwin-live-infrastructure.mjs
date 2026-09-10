@@ -1,6 +1,7 @@
 import {createHash} from "node:crypto";
-import {lstat, readFile, realpath} from "node:fs/promises";
-import {isAbsolute, join} from "node:path";
+import {lstat, readFile, realpath, open} from "node:fs/promises";
+import {isAbsolute, join, dirname} from "node:path";
+import {lstatSync, readFileSync} from "node:fs";
 import {createConnection} from "node:net";
 import {plainJson} from "./darwin-live-activation-manifest.mjs";
 
@@ -255,4 +256,215 @@ export function createDarwinOperationStore(activation, pool, agentExecution) {
 
 function persistenceAcquisitionFailure(error, cleanupError) {
   return new AggregateError([error, cleanupError], "Darwin persistence acquisition failed", {cause: error});
+}
+
+/** Native output acknowledgment follows fsync, including the first directory
+ * entry. This private binary journal is never projected into public output. */
+export async function createDarwinNativeOutputOwner(path) {
+  if (!isAbsolute(path) || await realpath(dirname(path)) !== dirname(path)) {throw refused("output directory is not canonical");}
+  const directory = await open(dirname(path), "r");
+  let file;
+  try {file = await open(path, "wx", 0o600); await directory.sync();}
+  catch (error) {await file?.close(); throw error;}
+  finally {await directory.close();}
+  let tail = Promise.resolve(), bytes = 0, frames = 0, closed = false, failure;
+  const digest = createHash("sha256");
+  let finalDigest, disposal;
+  return Object.freeze({
+    write(stream, input) {
+      if (closed || failure || !["stdout", "stderr"].includes(stream) || !(input instanceof Uint8Array) ||
+          input.byteLength === 0 || input.byteLength > 16384 || frames >= 65536 ||
+          input.byteLength > 8 * 1024 * 1024 - bytes) {return Promise.reject(refused("native output closed or budget exhausted"));}
+      const captured = Buffer.from(input), header = Buffer.alloc(5);
+      header[0] = stream === "stdout" ? 1 : 2; header.writeUInt32BE(captured.length, 1);
+      bytes += captured.length; frames += 1;
+      const framed = Buffer.concat([header, captured]); captured.fill(0);
+      const write = tail.then(async () => {
+        if (failure) {throw failure;}
+        try {await file.writeFile(framed); await file.sync(); digest.update(framed); return null;}
+        finally {framed.fill(0);}
+      });
+      tail = write.catch(error => {failure = error; throw error;});
+      void tail.catch(() => {});
+      return tail;
+    },
+    dispose() {
+      closed = true;
+      disposal ??= (async () => {
+        try {await tail; await file.sync(); finalDigest = digest.digest("hex");}
+        finally {await file.close();}
+      })();
+      return disposal;
+    },
+    readback: () => Object.freeze({path, bytes, frames, closed: closed && finalDigest !== undefined && !failure,
+      ...(finalDigest === undefined ? {} : {sha256: finalDigest})}),
+  });
+}
+
+/** One runtime clock domain shared by RS signing, HTTP and local cut. */
+export function createDarwinControlClock(identity) {
+  if (typeof identity?.authorityId !== "string" || !identity.authorityId || typeof identity.epoch !== "string" || !identity.epoch) {
+    throw refused("clock identity missing");
+  }
+  const controlTimeAtAnchor = Date.now(), monotonicAtAnchor = performance.now();
+  const now = () => controlTimeAtAnchor + Math.floor(performance.now() - monotonicAtAnchor);
+  const within = (deadline, operation, requestSignal) => new Promise((resolve, reject) => {
+    const remaining = deadline - now();
+    if (!Number.isSafeInteger(deadline) || remaining <= 0 || requestSignal?.aborted) {
+      reject(refused("clock deadline or lifetime ended")); return;
+    }
+    const abort = () => {clearTimeout(timer); detach(); reject(refused("bounded operation aborted"));};
+    const detach = () => {requestSignal?.removeEventListener("abort", abort);};
+    const timer = setTimeout(() => {detach(); reject(refused("bounded operation timed out"));}, remaining);
+    requestSignal?.addEventListener("abort", abort, {once: true});
+    Promise.resolve().then(operation).then(value => {clearTimeout(timer); detach(); resolve(value); return null;},
+      error => {clearTimeout(timer); detach(); reject(error); return null;});
+  });
+  return Object.freeze({now, within, read: () => Object.freeze({authorityId: identity.authorityId, epoch: identity.epoch, controlTime: now()}),
+    controlTimeAtAnchor, monotonicAtAnchor});
+}
+
+function retainedEgressPolicy(activation, clock, lifetime, deadline) {
+  const {runtimeSecurity} = activation.infrastructure;
+  return Object.freeze({currentPolicy(acknowledged) {
+    const identity = runtimeSecurity.policyFile;
+    const stat = lstatSync(identity.path), bytes = readFileSync(identity.path);
+    if (lifetime.signal.aborted || stat.isSymbolicLink() || !stat.isFile() || (stat.mode & 0o022) || hash(bytes) !== identity.sha256) {
+      throw refused("retained egress policy changed");
+    }
+    const policy = plainJson(JSON.parse(bytes));
+    const subject = acknowledged.input.subject;
+    if (policy.tenantId !== subject.scope.tenantId || policy.projectId !== subject.scope.projectId ||
+        subject.operationId !== activation.turn.operationId || policy.policyRevision !== runtimeSecurity.policyRevision ||
+        !Number.isSafeInteger(policy.validFrom) || !Number.isSafeInteger(policy.expiresAt) ||
+        policy.validFrom > Date.now() || policy.expiresAt <= Date.now() || !policy.egress?.rule || !policy.egress.approval) {
+      throw refused("retained egress approval unavailable");
+    }
+    return Object.freeze({rule: policy.egress.rule, approval: policy.egress.approval,
+      timing: Object.freeze({controlTimeAtAnchor: clock.controlTimeAtAnchor, monotonicAtAnchor: clock.monotonicAtAnchor,
+        operationDeadlineMonotonic: clock.monotonicAtAnchor + deadline - clock.controlTimeAtAnchor,
+        readTimeoutMilliseconds: 5000}), monotonicNow: () => performance.now()});
+  }});
+}
+
+async function capturePreparationFiles(activation) {
+  const config = activation.infrastructure.deployment;
+  const catalog = await readFile(config.catalog.path);
+  if (hash(catalog) !== config.catalog.sha256) {throw refused("catalog digest differs");}
+  const directory = await lstat(config.durableRoot, {bigint: true});
+  if (!directory.isDirectory() || directory.isSymbolicLink() || (directory.mode & 0o022n) ||
+      await realpath(config.durableRoot) !== config.durableRoot) {throw refused("route directory custody differs");}
+  return Object.freeze({catalogSource: catalog,
+    durableRoot: Object.freeze({path: config.durableRoot, dev: String(directory.dev), ino: String(directory.ino)})});
+}
+
+function filesystemConfigurations(config) {
+  const filesystem = config.filesystem;
+  const common = {canonicalProjectRoot: filesystem.sourceRoot, disposableRoot: filesystem.disposableRoot};
+  for (const path of [...Object.values(common), filesystem.workspaceRoot, filesystem.artifactRoot, filesystem.rehydrationRoot]) {
+    if (!isAbsolute(path ?? "")) {throw refused("filesystem owner paths incomplete");}
+  }
+  return Object.freeze({workspace: Object.freeze({...common, root: filesystem.workspaceRoot}),
+    artifacts: Object.freeze({...common, root: filesystem.artifactRoot,
+      rehydrationRoot: filesystem.rehydrationRoot, workspaceRoot: filesystem.workspaceRoot})});
+}
+
+async function loadInfrastructureDependencies() {
+  const [agentExecution, runtimeSecurity, postgres, verification] = await Promise.all([
+    import("@agent-teams/agent-execution/composition"), import("@agent-teams/runtime-security/composition"),
+    import("pg"), import("./darwin-live-verification.mjs"),
+  ]);
+  return {agentExecution, runtimeSecurity, Pool: postgres.Pool, verification};
+}
+
+/** The fixed Darwin root owns this one-operation composition. Native capture
+ * alone receives the opaque completion factory; JSON supplies only configuration. */
+export async function acquireDarwinInfrastructureOwners(rawActivation, dependencies) {
+  const activation = plainJson(rawActivation), config = activation.infrastructure;
+  const deps = dependencies ?? await loadInfrastructureDependencies();
+  const filesystem = filesystemConfigurations(config);
+  const persistence = await acquireDarwinPersistenceOwners(activation, deps);
+  const actions = [persistence.dispose], lifetime = new AbortController();
+  let outputOwner, effectOwner, workspaceOwner, artifacts, nativeLaunch, selected, joined, disposal;
+  let compositionEntered = false, preparationEntered = false;
+  const sealAdmission = () => {lifetime.abort(); effectOwner?.cutoff();};
+  const dispose = () => disposal ??= (async () => {
+    sealAdmission(); const failures = [];
+    for (const action of actions.toReversed()) {try {await action();} catch (error) {failures.push(error);}}
+    if (failures.length) {throw new AggregateError(failures, "Darwin infrastructure cleanup failed");}
+  })();
+  try {
+    const operationStore = createDarwinOperationStore(activation, persistence.pool, deps.agentExecution);
+    outputOwner = await createDarwinNativeOutputOwner(join(activation.evidenceDirectory, "native-output.bin"));
+    actions.push(outputOwner.dispose);
+    effectOwner = deps.agentExecution.createDarwinCodexEffectCustodyOwner(); actions.push(effectOwner.dispose);
+    const clock = createDarwinControlClock(config.deployment.clock);
+    const duration = config.deployment.operationTimeoutMs;
+    if (!Number.isSafeInteger(duration) || duration < 1 || duration > 3600000) {throw refused("operation deadline invalid");}
+    const deadline = clock.now() + duration;
+    const capturedFiles = await capturePreparationFiles(activation);
+    // Current-kernel reservations supply the genuine issued launch directly.
+    // The generic fallback resolver cannot launch anything.
+    const hostCustody = new deps.agentExecution.DarwinCooperativeProcessCustody({
+      hostLifecycleGeneration: config.host.lifecycleGeneration,
+      launchPlans: Object.freeze({async resolve() {throw refused("unbound generic launch");}}),
+      monotonicNow: () => performance.now()});
+    const projection = await deps.verification.createDarwinLiveVerification({activation, pool: persistence.pool,
+      operationStore, agentExecution: deps.agentExecution, getWorkspaceOwner: () => workspaceOwner,
+      getArtifacts: () => artifacts, outputOwner, lifetime, hostCustody});
+    let consumersBound = false;
+    const nativeConsumers = completion => {
+      if (consumersBound || lifetime.signal.aborted) {throw refused("native consumers already bound or closed");}
+      consumersBound = true;
+      // Genuine workspace/artifact owners read their durable records before
+      // these calls. Native route owner calls only after quiescence succeeds.
+      const acknowledge = async () => {
+        if (!joined) {throw refused("native consumers not joined");}
+        return completion;
+      };
+      return Object.freeze({workspace: acknowledge, artifactResult: acknowledge,
+        launchRoute: acknowledge, privateMaterial: acknowledge,
+        async output(stream, bytes) {await outputOwner.write(stream, bytes); return completion;}});
+    };
+    const createWorkspaceComposition = async input => {
+      if (compositionEntered || lifetime.signal.aborted || !input.workspaceOwner || !input.artifacts) {throw refused("workspace composition unavailable");}
+      compositionEntered = true;
+      selected = input.selectedNativeWorkspace;
+      nativeLaunch = await deps.agentExecution.prepareDarwinCodexNativeLaunchInput(selected, "workspace-write");
+      workspaceOwner = input.workspaceOwner; artifacts = input.artifacts;
+      const owner = Object.freeze({hostBootId: config.host.bootId, hostInstanceId: config.host.instanceId,
+        hostCustody, workspaceOwner, effectCustody: effectOwner.authority,
+        platformTarget: Object.freeze({platform: "darwin", architecture: "arm64"}),
+        launchRecords: createDarwinLaunchRecords(activation, nativeLaunch, input.withCredentialOutputInventory)});
+      const {hostCustody: _borrowed, ...selectedOwner} = owner;
+      joined = Object.freeze({deployment: Object.freeze({owner,
+        qualificationTarget: config.deployment.qualificationTarget, runtimeSecurity: persistence.repository,
+        deploymentId: config.deployment.id, policyOwner: retainedEgressPolicy(activation, clock, lifetime, deadline),
+        signer: Object.freeze({...config.deployment.signer, clock: Object.freeze({read: clock.read})}),
+        dns: config.deployment.dns, transport: config.deployment.transport,
+        clock: Object.freeze({now: clock.now, within: clock.within})}),
+      host: Object.freeze({authorityRevision: config.host.authorityRevision, capabilities: Object.freeze({}),
+        containedTurn: Object.freeze({authority: "current", hostCustody,
+          selectedProvider: Object.freeze({kind: "codex", owner: Object.freeze(selectedOwner)})})})});
+      return joined;
+    };
+    const createPostClaimPreparation = async (selection, httpLaunchAuthority) => {
+      if (!joined || selected !== selection || !httpLaunchAuthority || lifetime.signal.aborted || preparationEntered) {throw refused("native preparation authority differs");}
+      preparationEntered = true;
+      return Object.freeze({...capturedFiles, boundary: nativeLaunch.boundary, tmpDir: nativeLaunch.tmpDir,
+        hostCustody, effectCustody: effectOwner, httpLaunchAuthority,
+        executable: Object.freeze({path: activation.codex.path, sha256: activation.codex.sha256}), observer: config.deployment.observer,
+        launcherSha256: config.deployment.launcherSha256, nodeSha256: config.deployment.nodeSha256,
+        limits: Object.freeze({...config.deployment.limits, deadline, closureDeadline: deadline + 30000}),
+        localCut: Object.freeze({expectedClock: config.deployment.clock,
+          clock: Object.freeze({read: clock.read, within: clock.within}), operationDeadline: deadline,
+          hostShutdownSignal: lifetime.signal})});
+    };
+    return Object.freeze({...persistence, operationId: activation.turn.operationId, dispose,
+      assembly: Object.freeze({...filesystem, nativeConsumers, operationStore, createWorkspaceComposition,
+        createPostClaimPreparation, sealAdmission, ...projection})});
+  } catch (error) {
+    try {await dispose();} catch (cleanupError) {throw persistenceAcquisitionFailure(error, cleanupError);}
+    throw error;
+  }
 }

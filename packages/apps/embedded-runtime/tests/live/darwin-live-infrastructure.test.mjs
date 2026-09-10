@@ -4,7 +4,8 @@ import {mkdtemp, mkdir, writeFile, rm, realpath} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {createHash} from "node:crypto";
-import {preflightDarwinInfrastructure} from "./darwin-live-infrastructure.mjs";
+import {preflightDarwinInfrastructure, acquireDarwinInfrastructureOwners,
+  createDarwinNativeOutputOwner, createDarwinControlClock} from "./darwin-live-infrastructure.mjs";
 import {plainJson} from "./darwin-live-activation-manifest.mjs";
 
 test("activation rejects nested executable material without invoking accessors", () => {
@@ -115,7 +116,7 @@ test("launch records retain PA credential inventory without expecting a fabricat
   await assert.rejects(acquireDarwinPersistenceOwners({infrastructure: {database: {connection: {
     database: "ar69_test_probe", host: "127.0.0.1", port: 5432, user: "test",
     connectionString: "postgresql://production.example/production"}}}},
-  {Pool: class {constructor() {constructed = true;}}}), /database configuration/);
+  {Pool: function Pool() {constructed = true;}}), /database configuration/);
   assert.equal(constructed, false);
 });
 
@@ -139,7 +140,7 @@ test("operation store binds real methods and fixed one-attempt identities", asyn
     "listDispatchPreparations", "preventIntent", "prepareCancellation", "prepareDispatch",
     "proofsForAcceptedEffect", "proofsForPrevention", "proofsForProcessNoStart", "proveDispatchPreparationClosure",
     "read", "recordDispatchPreparationCleanup", "requestCancellation", "retireDispatchPreparation", "terminalProof"];
-  class Store {constructor(options) {captured = options; for (const name of methods) {this[name] = function() {assert.equal(this instanceof Store, true); return name;};}}}
+  function Store(options) {captured = options; for (const name of methods) {this[name] = function() {assert.equal(this instanceof Store, true); return name;};}}
   const store = createDarwinOperationStore({turn: {operationId: "op", attemptId: "attempt", effectId: "effect", executionGenerationId: "generation"},
     infrastructure: {host: {intentAuthority: {audience: "test"}}}}, {}, {PostgresContainedTurnOperationStore: Store});
   assert.equal(store.read(), "read");
@@ -147,4 +148,128 @@ test("operation store binds real methods and fixed one-attempt identities", asyn
   assert.equal(captured.identities.nextId("proof", "a"), captured.identities.nextId("proof", "a"));
   assert.notEqual(captured.identities.nextId("proof", "a"), captured.identities.nextId("proof", "b"));
   assert.throws(() => captured.identities.nextId("unknown"), /identity domain/);
+});
+
+async function assemblyFixture() {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "ar69-assembly-")));
+  const events = [], catalog = Buffer.from("{}"), policy = {tenantId: "tenant", projectId: "project",
+    policyRevision: "policy-1", validFrom: Date.now() - 1000, expiresAt: Date.now() + 60000,
+    egress: {rule: {revision: "rule-1"}, approval: {ruleRevision: "rule-1", bindingDigest: "approved"}}};
+  await writeFile(join(root, "catalog"), catalog);
+  const policyBytes = Buffer.from(JSON.stringify(policy)); await writeFile(join(root, "policy"), policyBytes, {mode: 0o400});
+  const activation = {evidenceDirectory: root, codex: {path: "/test/codex", sha256: "a".repeat(64)},
+    turn: {operationId: "op", attemptId: "attempt", effectId: "effect", executionGenerationId: "generation",
+      scope: {tenantId: "tenant", projectId: "project"}}, infrastructure: {
+      database: {connection: {database: "ar69_test_assembly", user: "test", host: "127.0.0.1", port: 5432}},
+      runtimeSecurity: {policyRevision: "policy-1", policyFile: {path: join(root, "policy"), sha256: createHash("sha256").update(policyBytes).digest("hex")}},
+      providerAccess: {codexHome: root, sandbox: root, operatorApproval: {}},
+      filesystem: {sourceRoot: root, disposableRoot: root, workspaceRoot: join(root, "workspace"),
+        artifactRoot: join(root, "artifacts"), rehydrationRoot: join(root, "rehydrate")},
+      host: {bootId: "boot", instanceId: "host", lifecycleGeneration: "generation", authorityRevision: "revision", intentAuthority: {}},
+      deployment: {clock: {authorityId: "clock", epoch: "epoch"}, operationTimeoutMs: 30000,
+        catalog: {path: join(root, "catalog"), sha256: createHash("sha256").update(catalog).digest("hex")},
+        durableRoot: root, qualificationTarget: {}, id: "deployment", signer: {}, dns: {}, transport: {},
+        observer: {}, launcherSha256: "b".repeat(64), nodeSha256: "c".repeat(64), limits: {maximumBytes: 1024}}}};
+  class Pool {
+    async connect() {return {release() {}, async query() {return {rows: [{database: "ar69_test_assembly", username: "test", address: "127.0.0.1", port: 5432}]};}};}
+    async query() {return {rows: []};} async end() {events.push("pool closed");}
+  }
+  const methods = ["accept", "appendOutput", "claimPreparedDispatch", "commit", "identifyAcceptance",
+    "listDispatchPreparations", "preventIntent", "prepareCancellation", "prepareDispatch",
+    "proofsForAcceptedEffect", "proofsForPrevention", "proofsForProcessNoStart", "proveDispatchPreparationClosure",
+    "read", "recordDispatchPreparationCleanup", "requestCancellation", "retireDispatchPreparation", "terminalProof"];
+  function Store() {for (const name of methods) {this[name] = () => name;}}
+  const effect = {authority: {}, cutoff() {events.push("effect cut");}, dispose() {events.push("effect closed");}};
+  const native = {boundary: {}, privateRootPath: "/test/private", tmpDir: "/test/tmp"};
+  let projectionInput, custodyInput, selected;
+  const repository = {async migrate() {}, async close() {events.push("repository closed");}, readAuthority() {}};
+  const dependencies = {Pool, agentExecution: {
+    async applyContainedTurnPostgresSchema() {}, async initializePostgresHttpEgressEvidence() {},
+    PostgresContainedTurnOperationStore: Store,
+    createDarwinCodexEffectCustodyOwner: () => effect,
+    DarwinCooperativeProcessCustody: function Custody(input) {custodyInput = input;},
+    async prepareDarwinCodexNativeLaunchInput(selection, mode) {assert.equal(mode, "workspace-write"); selected = selection; return native;},
+  }, runtimeSecurity: {createNodeSha256DispatchDigest: () => ({}),
+    createPostgresDispatchConsumptionRepository: () => repository,
+    createPostgresDispatchAcceptanceStore: () => ({async migrate() {}, async close() {events.push("decisions closed");}}),
+    createDispatchAcceptanceFeature: () => ({})},
+  verification: {createDarwinLiveVerification(input) {projectionInput = input; return {verification: {}, reconciliation: {}, cleanup: {}};}}};
+  return {activation, dependencies, events, root, effect, native, repository,
+    read: () => ({projectionInput, custodyInput, selected})};
+}
+
+test("full assembly joins genuine owners, retained callbacks, shared clocks and native preparation", async () => {
+  const f = await assemblyFixture(); let acquired;
+  try {
+    acquired = await acquireDarwinInfrastructureOwners(f.activation, f.dependencies);
+    const {assembly} = acquired, completion = Object.freeze({}), callbacks = assembly.nativeConsumers(completion);
+    assert.throws(() => assembly.nativeConsumers(completion), /already bound/);
+    await assert.rejects(callbacks.workspace(), /not joined/);
+    const workspaceOwner = {}, artifacts = {}, selectedNativeWorkspace = {}, httpLaunchAuthority = {};
+    const joined = await assembly.createWorkspaceComposition({workspaceOwner, artifacts, selectedNativeWorkspace,
+      withCredentialOutputInventory() {}});
+    const prep = await assembly.createPostClaimPreparation(selectedNativeWorkspace, httpLaunchAuthority);
+    assert.equal(joined.deployment.owner.workspaceOwner, workspaceOwner);
+    assert.equal(joined.deployment.owner.effectCustody, f.effect.authority);
+    assert.equal(prep.effectCustody, f.effect);
+    assert.equal(prep.httpLaunchAuthority, httpLaunchAuthority);
+    assert.equal(prep.boundary, f.native.boundary);
+    assert.equal(joined.host.containedTurn.selectedProvider.owner.workspaceOwner, workspaceOwner);
+    assert.equal(joined.host.containedTurn.authority, "current");
+    assert.equal(joined.host.containedTurn.hostCustody, prep.hostCustody);
+    assert.equal(joined.deployment.owner.hostCustody, prep.hostCustody);
+    assert.equal(joined.deployment.runtimeSecurity, f.repository);
+    assert.equal(f.read().selected, selectedNativeWorkspace);
+    assert.equal(f.read().projectionInput.getWorkspaceOwner(), workspaceOwner);
+    assert.equal(f.read().projectionInput.getArtifacts(), artifacts);
+    assert.deepEqual(prep.catalogSource, Buffer.from("{}"));
+    assert.equal(prep.localCut.clock.read().authorityId, "clock");
+    assert.equal(prep.localCut.clock.read, joined.deployment.signer.clock.read);
+    for (const name of ["workspace", "artifactResult", "launchRoute", "privateMaterial"]) {assert.equal(await callbacks[name](), completion);}
+    assert.equal(await callbacks.output("stdout", Buffer.from("synthetic output")), completion);
+    const approved = joined.deployment.policyOwner.currentPolicy({input: {subject: {scope: f.activation.turn.scope, operationId: "op"}}});
+    assert.equal(approved.approval.bindingDigest, "approved");
+    assert.throws(() => joined.deployment.policyOwner.currentPolicy({input: {subject: {scope: f.activation.turn.scope, operationId: "foreign"}}}), /unavailable/);
+    await assert.rejects(assembly.createPostClaimPreparation({}, httpLaunchAuthority), /authority differs/);
+    await assert.rejects(f.read().custodyInput.launchPlans.resolve(), /unbound generic launch/);
+    await acquired.dispose();
+    assert.equal(f.read().projectionInput.outputOwner.readback().closed, true);
+    assert.equal(acquired.dispose(), acquired.dispose());
+    assert.deepEqual(f.events, ["effect cut", "effect closed", "decisions closed", "repository closed", "pool closed"]);
+  } finally {await acquired?.dispose(); await rm(f.root, {recursive: true, force: true});}
+});
+
+test("full assembly failure cleans persistence and native output; activation functions never execute", async () => {
+  const f = await assemblyFixture();
+  try {
+    f.dependencies.agentExecution.createDarwinCodexEffectCustodyOwner = () => {throw new Error("effect refused");};
+    await assert.rejects(acquireDarwinInfrastructureOwners(f.activation, f.dependencies), /effect refused/);
+    assert.deepEqual(f.events, ["decisions closed", "repository closed", "pool closed"]);
+    let called = false;
+    await assert.rejects(acquireDarwinInfrastructureOwners({...f.activation, get callback() {called = true; return {}; }}, f.dependencies));
+    assert.equal(called, false);
+  } finally {await rm(f.root, {recursive: true, force: true});}
+});
+
+test("native output is durable, bounded, one-owner and rejects writes after close", async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "ar69-output-")));
+  try {
+    const path = join(root, "output"), owner = await createDarwinNativeOutputOwner(path);
+    await owner.write("stdout", Buffer.from("hello"));
+    await assert.rejects(createDarwinNativeOutputOwner(path), /EEXIST/);
+    await assert.rejects(owner.write("unknown", Buffer.from("x")), /budget/);
+    await assert.rejects(owner.write("stderr", Buffer.alloc(8 * 1024 * 1024)), /budget/);
+    await owner.dispose();
+    const result = owner.readback();
+    assert.equal(result.closed, true); assert.equal(result.frames, 1); assert.equal(result.bytes, 5);
+    await assert.rejects(owner.write("stdout", Buffer.from("x")), /closed/);
+  } finally {await rm(root, {recursive: true, force: true});}
+});
+
+test("control clock bounds hung work and cancellation without losing closure clock", async () => {
+  const clock = createDarwinControlClock({authorityId: "clock", epoch: "epoch"});
+  await assert.rejects(clock.within(clock.now() + 5, () => new Promise(() => {})), /timed out/);
+  const controller = new AbortController(); controller.abort();
+  await assert.rejects(clock.within(clock.now() + 100, async () => "unused", controller.signal), /ended/);
+  assert.equal(await clock.within(clock.now() + 100, async () => "closure"), "closure");
 });
