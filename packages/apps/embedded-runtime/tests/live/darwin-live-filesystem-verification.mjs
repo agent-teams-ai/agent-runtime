@@ -21,7 +21,7 @@ export async function nativeVerificationFilesystem() {
   return Object.freeze({openRoot: api.openNativeHostRoot, openEntry: api.openNativeHostEntry, names: api.nativeHostNames});
 }
 
-async function withAbsolute(path, kind, filesystem, consume) {
+async function withAbsolute(path, kind, filesystem, consume, parentIdentity) {
   const parts = components(path), lineage = [];
   const fs = filesystem ?? await nativeVerificationFilesystem(), handles = [await fs.openRoot()];
   try {
@@ -31,6 +31,10 @@ async function withAbsolute(path, kind, filesystem, consume) {
       handles.push(handle);
       const stat = await handle.stat({bigint: true});
       lineage.push({parent, name, handle, stat, kind: entryKind});
+    }
+    if (parentIdentity) {
+      const parent = await handles.at(-2).stat({bigint: true});
+      if (parent.dev !== parentIdentity.dev || parent.ino !== parentIdentity.ino) {throw refused("retained result directory identity differs");}
     }
     const value = await consume(handles.at(-1), fs);
     // Reopen every component through the retained parent descriptors. Ancestor
@@ -65,8 +69,16 @@ async function stableBytes(handle, maximumBytes) {
   return {bytes: bytes.subarray(0, offset), stat: before};
 }
 
-export async function readStableVerificationFile(path, maximumBytes = MAX_FILE_BYTES, filesystem) {
-  return withAbsolute(path, "inspect", filesystem, async handle => (await stableBytes(handle, maximumBytes)).bytes);
+export async function readStableVerificationFile(path, maximumBytes = MAX_FILE_BYTES, filesystem, parentIdentity) {
+  return withAbsolute(path, "inspect", filesystem, async handle => (await stableBytes(handle, maximumBytes)).bytes, parentIdentity);
+}
+
+export async function captureVerificationDirectoryIdentity(path, filesystem) {
+  return withAbsolute(path, "directory", filesystem, async handle => {
+    const stat = await handle.stat({bigint: true});
+    if (!stat.isDirectory()) {throw refused("result directory required");}
+    return Object.freeze({dev: stat.dev, ino: stat.ino});
+  });
 }
 
 function parseManifest(bytes) {

@@ -384,3 +384,20 @@ test("host custody hook must bind the exact operation and attempt and never uses
     assert.ok(cleanup.gaps.some(item => item.kind === "host-custody"));
   }
 });
+
+
+test("result directory replacement between rehydration and reading cannot qualify even with identical bytes", async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "ar69-test-rehydrate-replacement-")));
+  try {
+    const {input} = fixture(), actual = join(root, "results", "a".repeat(64));
+    await mkdir(actual, {recursive: true}); await writeFile(join(actual, "result.txt"), "ok\n");
+    input.activation.infrastructure = {filesystem: {rehydrationRoot: root}};
+    const artifacts = input.getArtifacts(); input.getArtifacts = () => ({...artifacts, rehydrate: async () => actual});
+    const {verification} = createDarwinLiveVerification(input);
+    await verification.verifyArtifactManifest(manifestRef, "result");
+    assert.equal(await verification.rehydrateArtifact(manifestRef), actual);
+    assert.equal((await verification.readResultBytes(actual)).toString(), "ok\n");
+    await rename(actual, join(root, "original-result")); await mkdir(actual); await writeFile(join(actual, "result.txt"), "ok\n");
+    await assert.rejects(verification.readResultBytes(actual), /retained result directory identity differs/u);
+  } finally {await rm(root, {recursive: true, force: true});}
+});

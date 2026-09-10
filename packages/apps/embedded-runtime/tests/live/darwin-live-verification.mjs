@@ -3,7 +3,7 @@ import {constants} from "node:fs";
 import {lstat, open, readFile, realpath} from "node:fs/promises";
 import {join} from "node:path";
 
-import {readStableVerificationFile, verifyPinnedSource} from "./darwin-live-filesystem-verification.mjs";
+import {captureVerificationDirectoryIdentity, readStableVerificationFile, verifyPinnedSource} from "./darwin-live-filesystem-verification.mjs";
 
 const refused = reason => new Error(`DARWIN_LIVE_VERIFICATION_REFUSED: ${reason}`);
 const gap = (kind, capability) => Object.freeze({kind, capability});
@@ -101,7 +101,7 @@ function verification(input, state, filesystem) {
     sourceRoot: input.activation.infrastructure?.filesystem?.sourceRoot,
     async readResultBytes(root) {
       if (root !== state.rehydrated) {throw refused("result read root differs from owner rehydration");}
-      return readStableVerificationFile(join(root, "result.txt"), 16 * 1024 * 1024, filesystem);
+      return readStableVerificationFile(join(root, "result.txt"), 16 * 1024 * 1024, filesystem, state.rehydratedIdentity);
     },
     async readSourceFixtureBytes() {
       const root = input.activation.infrastructure.filesystem.sourceRoot;
@@ -136,6 +136,7 @@ function verification(input, state, filesystem) {
       const root = input.activation.infrastructure?.filesystem?.rehydrationRoot;
       if (!digest || !root || actual !== join(root, "results", digest) || await realpath(actual) !== actual ||
           !(await lstat(actual)).isDirectory()) {throw refused("owner rehydration path differs from verified manifest");}
+      state.rehydratedIdentity = await captureVerificationDirectoryIdentity(actual, filesystem);
       state.rehydrated = actual;
       return actual;
     },
@@ -293,7 +294,7 @@ export function createDarwinLiveVerification(input, {openFile = open, filesystem
   const checks = verification(input, state, filesystem);
   return Object.freeze({verification: Object.freeze({...checks,
     async verifyArtifactManifest(...args) {
-      state.operation = undefined; state.workspace = undefined; state.manifest = undefined; state.http = undefined; state.rehydrated = undefined;
+      state.operation = undefined; state.workspace = undefined; state.manifest = undefined; state.http = undefined; state.rehydrated = undefined; state.rehydratedIdentity = undefined;
       const result = await checks.verifyArtifactManifest(...args);
       state.http = await readHttpClosure(input, state.operation);
       return result;
