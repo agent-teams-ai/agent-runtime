@@ -167,9 +167,11 @@ export class DarwinSeatbeltRouteOwner {
   public cutoff(): void {
     if (["cut", "released", "quarantined"].includes(this.#state)) {return;}
     this.#state = "cut";
+    // Persist the route cutoff before the reservation abort closes the durable
+    // storage bound to that same lifetime.
+    this.journal.cutoff();
     this.#live?.httpReservation.cutoff();
     this.#live?.guardian?.stopDarwin();
-    this.journal.cutoff();
   }
   public cleanup(resources: () => Promise<boolean>): Promise<boolean> {
     if (this.#cleanup !== undefined) {return this.#cleanup;}
