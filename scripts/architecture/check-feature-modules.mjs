@@ -23,6 +23,8 @@ import {
 } from "./feature-module-paths.mjs";
 import { ACCEPTED_DECISIONS, CANDIDATE_MIGRATION_CODES, acceptedDecisionsFromRegistry, applyGovernedRecords, validateProfile } from "./feature-module-profile.mjs";
 import { packagePolicyIssues } from "./feature-module-tests.mjs";
+import { activeGateIssues } from "./feature-module-root-gates.mjs";
+import { pendingModuleManifestIssues, workspaceClassificationIssues } from "./feature-module-workspace.mjs";
 
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const REPOSITORY_IDENTITY = await canonicalRoot(REPOSITORY_ROOT);
@@ -117,8 +119,8 @@ const readProfile = async (root, profilePath) => {
   catch { return { issues: [issue("FM_PROFILE_INVALID", profilePath, 1, "profile cannot be read or parsed deterministically")] }; }
 };
 
-const collectProductionFiles = async (root, productionRoots) => {
-  const files = [], issues = [], identities = new Map(), budget = { entries: 0, files: 0, sourceBytes: 0 };
+const collectProductionFiles = async (root, productionRoots, budget) => {
+  const files = [], issues = [], identities = new Map();
   let overflow = false;
   for (const productionRoot of productionRoots) {
     const inventory = await inventoryRepositoryFiles({
@@ -136,6 +138,8 @@ const collectProductionFiles = async (root, productionRoots) => {
 const profileFilesystemPathIssues = (profile) => {
   const paths = [
     ...profile.scope.productionRoots,
+    ...profile.scope.workspaceContainers,
+    ...profile.scope.productionModules.flatMap(({ moduleRoot, sourceRoot }) => moduleRoot === "." ? [sourceRoot] : [moduleRoot, sourceRoot]),
     ...profile.assemblyFiles,
     ...profile.features.flatMap((feature) => [feature.root, ...Object.values(feature.entrypoints ?? {})]),
   ];
@@ -405,28 +409,6 @@ const acceptedDecisionsForRoot = async (root) => {
   } catch {return new Map();}
 };
 
-const activeGateIssues = async (profile, root) => {
-  if (profile.status !== "active") {return [];}
-  const manifestPath = "package.json";
-  try {
-    const inspected = await inspectRepositoryPath(root, manifestPath);
-    if (!inspected.ok || inspected.metadata.size > CHECKER_LIMITS.sourceFileBytes) {throw new TypeError("invalid manifest");}
-    const manifest = parseDeterministicJson(await readFile(inspected.absolutePath, "utf8"));
-    const requiredPair = ["pnpm test:feature-modules", "pnpm architecture:feature-modules:active"];
-    const invalid = ["check", "check:fast"].some((name) => {
-      const steps = typeof manifest?.scripts?.[name] === "string" ? manifest.scripts[name].split(" && ") : [];
-      const fixtureIndex = steps.indexOf(requiredPair[0]);
-      return fixtureIndex < 0
-        || steps.lastIndexOf(requiredPair[0]) !== fixtureIndex
-        || steps[fixtureIndex + 1] !== requiredPair[1]
-        || steps.lastIndexOf(requiredPair[1]) !== fixtureIndex + 1;
-    });
-    return invalid ? [issue("FM_PROFILE_INVALID", manifestPath, 1, "active status requires the active checker immediately after the fixture suite in check and check:fast")] : [];
-  } catch {
-    return [issue("FM_PROFILE_INVALID", manifestPath, 1, "active status requires deterministic root check and check:fast scripts")];
-  }
-};
-
 export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath = DEFAULT_PROFILE, requiredStatus, acceptedDecisions } = {}) => {
   const rootIdentity = await canonicalRoot(root);
   if (!rootIdentity.ok) {return [filesystemIdentityIssue(issue, "<root>")];}
@@ -446,13 +428,17 @@ export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath 
   if (identityIssues.length) {findings.add(identityIssues); return findings.result().toSorted(compareIssues);}
 
   const productionRoots = profile.scope.productionRoots;
+  const declaredModules = new Map(profile.scope.productionModules.map((declared) => [declared.sourceRoot, declared]));
   const features = profile.features.map((feature) => ({ ...feature, root: portableRepositoryPath(feature.root) }));
   const assemblyFiles = new Set(profile.assemblyFiles);
   const declaredEdges = new Map(profile.featureEdges.map((edge) => [`${edge.from}->${edge.to}`, new Set(edge.kinds)]));
   const observedEdges = new Map();
-  findings.add(await activeGateIssues(profile, rootIdentity));
+  findings.add(await activeGateIssues({ profile, root: rootIdentity, issue }));
+  const traversalBudget = { entries: 0, files: 0, sourceBytes: 0 };
+  findings.add(await workspaceClassificationIssues({ profile, root: rootIdentity, issue, budget: traversalBudget }));
+  findings.add(await pendingModuleManifestIssues({ profile, root: rootIdentity, issue }));
   const edgeLocations = new Map();
-  const inventory = await collectProductionFiles(rootIdentity, productionRoots);
+  const inventory = await collectProductionFiles(rootIdentity, productionRoots, traversalBudget);
   const allFiles = inventory.files;
   findings.add(inventory.issues);
   if (inventory.overflow) {findings.overflow("source scan");}
@@ -466,6 +452,7 @@ export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath 
     productionRoots,
     issue,
     pathIndex,
+    declaredModules,
   });
   findings.add(localPackageImports.issues);
   findings.add(await assemblyStructureIssues(profile.assemblyFiles, rootIdentity));
@@ -476,6 +463,7 @@ export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath 
   findings.add(await packagePolicyIssues({
     root: rootIdentity,
     productionRoots,
+    declaredModules,
     features,
     issue,
     productionFiles: allFiles,

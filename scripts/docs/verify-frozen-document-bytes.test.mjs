@@ -50,7 +50,7 @@ test("committed frozen authority preserves all evidence bytes", async () => {
   assert.equal(await verifyFrozenDocumentBytes(repositoryRoot), 38);
 });
 
-test("accepted ADR-0014 is reachable from both canonical documentation indexes", async () => {
+test("every accepted scope decision is reachable from both canonical documentation indexes", async () => {
   const registry = JSON.parse(await readFile(
     join(repositoryRoot, "architecture/decisions/accepted-decisions.json"),
     "utf8"
@@ -68,6 +68,13 @@ test("accepted ADR-0014 is reachable from both canonical documentation indexes",
   });
   assert.match(readingOrder, /decisions\/0014-darwin-provider-candidate-platform-qualification\.md/u);
   assert.match(decisionIndex, /0014-darwin-provider-candidate-platform-qualification\.md/u);
+
+  // ADR-0017 governs which production modules exist and which are checked, so a
+  // reader who follows only the canonical indexes must still reach it.
+  const scopeDecision = registry.decisions.find(({ id }) => id === "ADR-0017");
+  assert.equal(scopeDecision?.path, "docs/decisions/0017-feature-module-production-scope-roles.md");
+  assert.match(readingOrder, /decisions\/0017-feature-module-production-scope-roles\.md/u);
+  assert.match(decisionIndex, /0017-feature-module-production-scope-roles\.md/u);
 });
 
 test("catalog authority has the reviewed type and lifecycle census", async () => {

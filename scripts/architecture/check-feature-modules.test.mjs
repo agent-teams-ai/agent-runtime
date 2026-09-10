@@ -7,30 +7,18 @@ import test, { after } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
+import { parse } from "yaml";
+
 import { checkFeatureModules, formatIssues } from "./check-feature-modules.mjs";
+import { fixtureProfile } from "./check-feature-modules.profile-fixtures.mjs";
 import { CHECKER_LIMITS } from "./feature-module-limits.mjs";
-import { STRUCTURAL_CODES } from "./feature-module-profile.mjs";
+import { REVIEWED_WORKSPACE_CONTAINERS, STRUCTURAL_CODES } from "./feature-module-profile.mjs";
 
 const fixtureManifest = JSON.parse(await readFile(new URL("./fixtures/feature-module-cases.json", import.meta.url), "utf8"));
 const execFileAsync = promisify(execFile);
-const authority = {
-  id: "agent-teams.feature-module-standard",
-  version: "v1",
-  repository: "agent-teams-ai/.github",
-  path: "docs/architecture/feature-module-standard/v1.md",
-  gitBlob: "d0bfff2033faf544fe65268c1dcdfd524d093015",
-  sha256: "851653f96643cf0466b67ab22963661976b00de44840fa3144a48a8c054f95fa",
-};
-
-const feature = (id, roles = ["domain"]) => ({
-  id,
-  root: `src/features/${id}`,
-  roles,
-  entrypoints: { public: `src/features/${id}/index.ts`, internal: `src/features/${id}/internal.ts` },
-});
-
 const baseFiles = {
   "architecture/decisions/accepted-decisions.json": `${JSON.stringify({ decisions: [
+    { id: "ADR-0005", path: "docs/decisions/0005-runtime-context-package-identities.md" },
     { id: "ADR-0007", path: "docs/decisions/0007-deterministic-documentation-governance.md" },
   ] })}\n`,
   "package.json": `${JSON.stringify({
@@ -148,102 +136,14 @@ const releaseFixtureAllocation = async (allocation, state, schedule = scheduleDi
   finally {schedule(state.cleanup);}
 };
 
-const fixtureActivation = (status) => status === "active"
-  ? { blockers: [], acceptance: ["zero diagnostics"], authority: { acceptedAdr: "ADR-0013", decisionPath: "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md", owner: "architecture", governedRecords: [] }, evidence: { fixtureCommand: "pnpm test:feature-modules", candidateCommand: "pnpm architecture:feature-modules:candidate", productionDiagnostics: 0 } }
-  : { blockers: ["fix diagnostics"], acceptance: ["zero diagnostics"], authority: null, evidence: null };
-
-const applyFixtureProfileOverrides = (profile, fixture) => {
-  if (fixture.secondFeature) {profile.features.push(feature("beta", fixture.secondRoles));}
-  if (fixture.activation) {profile.activation = fixture.activation;}
-  if (fixture.activeGovernedRecords) {profile.activation.authority.governedRecords = fixture.activeGovernedRecords;}
-  if (fixture.omitActiveAdoption) {delete profile.adoption;}
-  for (const path of fixture.activeAdoptionOmit ?? []) {omitNestedField(profile.adoption, path);}
-  for (const [path, value] of Object.entries(fixture.activeAdoptionSet ?? {})) {setNestedField(profile.adoption, path, value);}
-  for (const path of fixture.activeAdoptionReverse ?? []) {
-    const segments = path.split("."), key = segments.pop();
-    let parent = profile.adoption;
-    for (const segment of segments) {parent = parent[segment];}
-    parent[key].reverse();
-  }
-  if (fixture.omitSchemaMarker) {delete profile.$schema;}
-};
-
 const structuralFixtureCoverage = new Set();
 
 const checkerPath = fileURLToPath(new URL("./check-feature-modules.mjs", import.meta.url));
 const repositoryRoot = resolve(dirname(checkerPath), "../..");
 
-const fixtureActiveAdoption = () => ({
-  moduleRoots: ["."],
-  applicationRoots: [],
-  excludedRoots: ["excluded"],
-  abstractLayout: {
-    modules: [{
-      moduleRoot: ".",
-      sourceRoot: "src",
-      featuresRoot: "src/features",
-      moduleComposition: "src/composition.ts",
-      publicEntrypoint: "src/index.ts",
-      testRoot: "tests",
-      featureTestsRoot: "tests/features",
-      moduleTestsRoot: "tests/package",
-    }],
-    applications: [],
-  },
-  localExtensions: {
-    language: { sourceExtensions: [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"] },
-    packaging: { manifest: "package.json", curatedExports: [".", "./composition"] },
-    transport: { publicContractRole: "contracts" },
-    composition: {
-      moduleFiles: ["index.ts", "composition.ts"],
-      featureEntrypoints: ["index.ts", "internal.ts"],
-      syntax: "imports-and-named-reexports-only",
-    },
-  },
-  localOwnership: {
-    architectureDocument: { path: "docs/architecture/feature-module-standard-v1-candidate.md", owner: "architecture" },
-    decisionRecords: [{ id: "ADR-0013", path: "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md", owner: "architecture" }],
-  },
-});
-
-const omitNestedField = (object, path) => {
-  const segments = path.split("."), key = segments.pop();
-  let parent = object;
-  for (const segment of segments) {parent = parent[segment];}
-  delete parent[key];
-};
-
-const setNestedField = (object, path, value) => {
-  const segments = path.split("."), key = segments.pop();
-  let parent = object;
-  for (const segment of segments) {parent = parent[segment];}
-  parent[key] = value;
-};
-
-const fixtureProfile = (fixture) => {
-  const status = fixture.status ?? "candidate";
-  const profile = {
-    $schema: fixture.schemaMarker ?? "./profile.schema.json",
-    schemaVersion: 1,
-    status,
-    authority: { ...authority, id: fixture.authorityId ?? authority.id, ...fixture.authorityExtra },
-    scope: { productionRoots: ["src"], outOfScope: ["everything else"] },
-    moduleRoles: ["contracts", "domain", "application", "adapters", "composition"],
-    features: [feature("alpha", fixture.alphaRoles)],
-    assemblyFiles: ["src/index.ts", "src/composition.ts"],
-    featureEdges: fixture.edges ?? [],
-    extensions: fixture.extensions ?? [], deviations: fixture.deviations ?? [], exceptions: fixture.exceptions ?? [],
-    enforcement: { candidate: "pnpm architecture:feature-modules:candidate", active: "pnpm architecture:feature-modules:active", fixtures: "pnpm test:feature-modules" },
-    activation: fixtureActivation(status),
-    adoption: status === "active" ? fixtureActiveAdoption() : undefined,
-    ...fixture.profileExtra,
-  };
-  applyFixtureProfileOverrides(profile, fixture);
-  return profile;
-};
-
 const fixtureDecisionFiles = (fixture) => fixture.acceptActivationAdr ? {
   "architecture/decisions/accepted-decisions.json": `${JSON.stringify({ decisions: [
+    { id: "ADR-0005", path: "docs/decisions/0005-runtime-context-package-identities.md" },
     { id: "ADR-0007", path: "docs/decisions/0007-deterministic-documentation-governance.md" },
     { id: "ADR-0013", path: "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md" },
   ] })}\n`,
@@ -306,7 +206,10 @@ const fixtureRootIdentity = async (root, mode) => {
 };
 
 const fixtureAcceptedDecisions = (fixture) => {
-  const decisions = new Map([["ADR-0007", "docs/decisions/0007-deterministic-documentation-governance.md"]]);
+  const decisions = new Map([
+    ["ADR-0005", "docs/decisions/0005-runtime-context-package-identities.md"],
+    ["ADR-0007", "docs/decisions/0007-deterministic-documentation-governance.md"],
+  ]);
   if (fixture.acceptActivationAdr) {decisions.set("ADR-0013", "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md");}
   return decisions;
 };
@@ -530,6 +433,18 @@ test("root traversal, drive, UNC, and POSIX backslash spellings fail closed", as
       ]);
     }
   } finally {scheduleDisposablePaths([root]);}
+});
+
+test("reviewed workspace containers cover every production workspace glob", async () => {
+  const workspace = parse(await readFile(join(repositoryRoot, "pnpm-workspace.yaml"), "utf8"));
+  const productionGlobs = workspace.packages.filter((pattern) => pattern.startsWith("packages/"));
+  // experiments/* is deliberately outside the governed containers, but a new
+  // production glob must not be able to hide packages from classification.
+  assert.deepEqual(
+    productionGlobs.map((pattern) => pattern.replace(/\/\*$/u, "")).toSorted(),
+    [...REVIEWED_WORKSPACE_CONTAINERS].toSorted(),
+  );
+  assert.ok(productionGlobs.every((pattern) => pattern.endsWith("/*")));
 });
 
 test("CLI structural allowance matrix covers every fatal code", () => {

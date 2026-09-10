@@ -309,7 +309,32 @@ const configuredResolver = (packages, names, index) => (fromPath, specifier, res
   return { kind: "external" };
 };
 
-export const readLocalPackageImports = async ({ root, productionRoots, issue, pathIndex }) => {
+const declaredIdentityMatches = (packageJson, declared) => {
+  const architecture = packageJson.agentTeamsArchitecture, ownerDocument = architecture?.ownerDocument;
+  return Boolean(canonicalPackageName(packageJson.name)
+    && canonicalOwnerDocument(ownerDocument)
+    && declared
+    && packageJson.name === declared.packageName
+    && architecture?.role === declared.role
+    && ownerDocument === declared.ownerDocument);
+};
+
+const registerPackageNames = ({ packageJson, packageRoot, productionRoot, names, findings, issue, packagePath, declared }) => {
+  if (!declaredIdentityMatches(packageJson, declared)) {
+    findings.push(issue("FM_PROFILE_INVALID", packagePath, 1, "owned packages require a canonical name, ADR owner document, and the exact role and identity declared for their production module"));
+    return;
+  }
+  if (names.has(packageJson.name)) {
+    findings.push(stableConfigIssue(issue, packagePath, "package names must be unique canonical values"));
+    return;
+  }
+  const rootTarget = exportedTarget(packageJson, ".", packageRoot, productionRoot) ?? `${productionRoot}/index.ts`;
+  const compositionTarget = exportedTarget(packageJson, "./composition", packageRoot, productionRoot) ?? `${productionRoot}/composition.ts`;
+  names.set(packageJson.name, rootTarget);
+  names.set(`${packageJson.name}/composition`, compositionTarget);
+};
+
+export const readLocalPackageImports = async ({ root, productionRoots, issue, pathIndex, declaredModules = new Map() }) => {
   const names = new Map(), findings = createDiagnosticCollector(issue), packageMetadata = new Map(), packages = [];
   const configBudget = { bytes: 0, files: 0 };
   const context = { root, issues: findings, issue, configBudget };
@@ -331,19 +356,11 @@ export const readLocalPackageImports = async ({ root, productionRoots, issue, pa
     const aliases = await inspectTsconfig(context, posix.join(packageRoot, "tsconfig.json"), true);
     const ownedPackage = { packageRoot, productionRoot, imports, aliases, packageJson };
     packages.push(ownedPackage);
-    const architecture = packageJson.agentTeamsArchitecture, ownerDocument = architecture?.ownerDocument;
-    packageMetadata.set(productionRoot, { name, ownerDocument });
-    if (!canonicalPackageName(name)
-      || architecture?.role !== "bounded-context"
-      || !canonicalOwnerDocument(ownerDocument)) {
-      findings.push(issue("FM_PROFILE_INVALID", packagePath, 1, "owned packages require a canonical name, bounded-context role, and ADR owner document"));
-    } else if (names.has(name)) {
-      findings.push(stableConfigIssue(issue, packagePath, "package names must be unique canonical values"));
-    } else {
-      const rootTarget = exportedTarget(packageJson, ".", packageRoot, productionRoot) ?? `${productionRoot}/index.ts`;
-      const compositionTarget = exportedTarget(packageJson, "./composition", packageRoot, productionRoot) ?? `${productionRoot}/composition.ts`;
-      names.set(name, rootTarget); names.set(`${name}/composition`, compositionTarget);
-    }
+    packageMetadata.set(productionRoot, { name, ownerDocument: packageJson.agentTeamsArchitecture?.ownerDocument });
+    registerPackageNames({
+      packageJson, packageRoot, productionRoot, names, findings, issue, packagePath,
+      declared: declaredModules.get(productionRoot),
+    });
   }
   return {
     issues: findings.result(),

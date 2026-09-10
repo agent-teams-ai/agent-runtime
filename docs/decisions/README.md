@@ -18,6 +18,7 @@ related:
   - ADR-0013
   - ADR-0014
   - ADR-0015
+  - ADR-0017
 blocked_by: []
 code_anchors:
   - enforcement: required
@@ -71,6 +72,10 @@ immutable evidence; a later change uses an explicit superseding decision.
 - [ADR-0014: Darwin provider candidate platform qualification](0014-darwin-provider-candidate-platform-qualification.md)
   accepts exact Codex and Claude Darwin arm64 revisions as unqualified
   candidates without changing Linux authority or ADR-0010 operation semantics.
+- [ADR-0017: Feature Module Standard production scope roles](0017-feature-module-production-scope-roles.md)
+  classifies every production module by its real role, keeps the four
+  unmigrated modules explicitly pending, names the Filesystem Custody platform
+  identity, and rejects unclassified production packages.
 ## Superseded
 
 No superseded decisions.

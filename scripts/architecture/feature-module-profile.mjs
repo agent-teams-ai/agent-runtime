@@ -24,6 +24,7 @@ export const STRUCTURAL_CODES = new Set([
   "FM_PROFILE_STATUS",
   "FM_README_OWNERSHIP",
   "FM_TEST_PLACEMENT",
+  "FM_UNCLASSIFIED_MODULE",
   "FM_UNSUPPORTED_CONFIG",
   "FM_WILDCARD_REEXPORT",
 ]);
@@ -50,24 +51,41 @@ const ACTIVATION_AUTHORITY = Object.freeze({
   decisionPath: "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md",
 });
 const STANDARD_ROLES = ["contracts", "domain", "application", "adapters", "composition"];
-const CANDIDATE_PRODUCTION_ROOTS = Object.freeze(["packages/contexts/agent-execution/src", "packages/contexts/provider-access/src"]);
-const CANDIDATE_OUT_OF_SCOPE = Object.freeze(["Embedded Runtime", "Runtime Configuration", "Runtime Security", "Filesystem Custody", "Module Kit", "experiments", "tooling other than scripts/architecture/check-feature-modules.mjs"]);
-const CANDIDATE_FEATURES = Object.freeze({ "runtime-installation-discovery": { root: "packages/contexts/agent-execution/src/features/runtime-installation-discovery", roles: ["contracts", "application", "adapters", "composition"] }, "contained-agent-turn": { root: "packages/contexts/agent-execution/src/features/contained-agent-turn", roles: STANDARD_ROLES }, "contained-turn-access": { root: "packages/contexts/provider-access/src/features/contained-turn-access", roles: STANDARD_ROLES } });
-const CANDIDATE_MODULE_ROOTS = Object.freeze(["packages/contexts/agent-execution", "packages/contexts/provider-access"]);
-const CANDIDATE_APPLICATION_ROOTS = Object.freeze([]);
-const CANDIDATE_EXCLUDED_ROOTS = Object.freeze([
-  "experiments",
-  "packages/apps/embedded-runtime",
-  "packages/contexts/runtime-configuration",
-  "packages/contexts/runtime-security",
-  "packages/platform/filesystem-custody",
+export const MODULE_ROLES = Object.freeze(["bounded-context", "host-app", "platform"]);
+export const MODULE_ADOPTION_STATES = Object.freeze(["active", "pending"]);
+const CURATED_EXPORT_SET = Object.freeze([".", "./composition"]);
+export const REVIEWED_WORKSPACE_CONTAINERS = Object.freeze(["packages/apps", "packages/contexts", "packages/platform"]);
+// Every production module that exists in the reviewed workspace is named here
+// with its real role and its exact adoption state. The JSON profile must match
+// this reviewed registry, so widening the governed tree is a reviewed source
+// change and never a silent profile edit.
+const REVIEWED_PRODUCTION_MODULES = Object.freeze([
+  { id: "agent-execution", role: "bounded-context", moduleRoot: "packages/contexts/agent-execution", packageName: "@agent-teams/agent-execution", ownerDocument: "ADR-0005", curatedExports: [".", "./composition"], adoption: "active", activationAuthority: "ADR-0013" },
+  { id: "embedded-runtime", role: "host-app", moduleRoot: "packages/apps/embedded-runtime", packageName: "@agent-teams/embedded-runtime", ownerDocument: "ADR-0008", curatedExports: [".", "./composition"], adoption: "pending" },
+  { id: "filesystem-custody", role: "platform", moduleRoot: "packages/platform/filesystem-custody", packageName: "@agent-teams/filesystem-custody", ownerDocument: "ADR-0017", curatedExports: ["."], adoption: "pending" },
+  { id: "provider-access", role: "bounded-context", moduleRoot: "packages/contexts/provider-access", packageName: "@agent-teams/provider-access", ownerDocument: "ADR-0005", curatedExports: [".", "./composition"], adoption: "active", activationAuthority: "ADR-0013" },
+  { id: "runtime-configuration", role: "bounded-context", moduleRoot: "packages/contexts/runtime-configuration", packageName: "@agent-teams/runtime-configuration", ownerDocument: "ADR-0005", curatedExports: [".", "./composition"], adoption: "pending" },
+  { id: "runtime-security", role: "bounded-context", moduleRoot: "packages/contexts/runtime-security", packageName: "@agent-teams/runtime-security", ownerDocument: "ADR-0005", curatedExports: [".", "./composition"], adoption: "pending" },
 ]);
+const REVIEWED_OUT_OF_SCOPE = Object.freeze(["Embedded Runtime", "Runtime Configuration", "Runtime Security", "Filesystem Custody", "Module Kit", "experiments", "tooling other than scripts/architecture/check-feature-modules.mjs"]);
+const REVIEWED_FEATURES = Object.freeze({ "runtime-installation-discovery": { root: "packages/contexts/agent-execution/src/features/runtime-installation-discovery", roles: ["contracts", "application", "adapters", "composition"] }, "contained-agent-turn": { root: "packages/contexts/agent-execution/src/features/contained-agent-turn", roles: STANDARD_ROLES }, "contained-turn-access": { root: "packages/contexts/provider-access/src/features/contained-turn-access", roles: STANDARD_ROLES } });
+const reviewedModules = (predicate) => REVIEWED_PRODUCTION_MODULES.filter(predicate);
+const REVIEWED_PRODUCTION_ROOTS = Object.freeze(reviewedModules(({ adoption }) => adoption === "active").map(({ moduleRoot }) => `${moduleRoot}/src`));
+const REVIEWED_MODULE_ROOTS = Object.freeze(reviewedModules(({ adoption, role }) => adoption === "active" && role !== "host-app").map(({ moduleRoot }) => moduleRoot));
+const REVIEWED_APPLICATION_ROOTS = Object.freeze(reviewedModules(({ adoption, role }) => adoption === "active" && role === "host-app").map(({ moduleRoot }) => moduleRoot));
+const REVIEWED_EXCLUDED_ROOTS = Object.freeze(["experiments", ...reviewedModules(({ adoption }) => adoption === "pending").map(({ moduleRoot }) => moduleRoot)]);
 const LOCAL_SOURCE_EXTENSIONS = Object.freeze([".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"]);
-const LOCAL_PACKAGE_EXPORTS = Object.freeze([".", "./composition"]);
+const LOCAL_CLASSIFICATION_AUTHORITY = Object.freeze({
+  acceptedAdr: "ADR-0017",
+  decisionPath: "docs/decisions/0017-feature-module-production-scope-roles.md",
+});
 const LOCAL_MODULE_FILES = Object.freeze(["index.ts", "composition.ts"]);
 const LOCAL_FEATURE_ENTRYPOINTS = Object.freeze(["index.ts", "internal.ts"]);
 const LOCAL_ARCHITECTURE_DOCUMENT = "docs/architecture/feature-module-standard-v1-candidate.md";
-const LOCAL_DECISION = Object.freeze({ id: "ADR-0013", path: ACTIVATION_AUTHORITY.decisionPath, owner: "architecture" });
+const LOCAL_DECISIONS = Object.freeze([
+  { id: ACTIVATION_AUTHORITY.acceptedAdr, path: ACTIVATION_AUTHORITY.decisionPath, owner: "architecture" },
+  { id: LOCAL_CLASSIFICATION_AUTHORITY.acceptedAdr, path: LOCAL_CLASSIFICATION_AUTHORITY.decisionPath, owner: "architecture" },
+]);
 const GOVERNABLE_CODES = new Set(["FM_MAX_LINES", "FM_PACKAGE_EXPORT_MAP", "FM_README_OWNERSHIP", "FM_TEST_PLACEMENT"]);
 const GOVERNED_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const GOVERNED_CODE_PATTERN = /^FM_[A-Z0-9_]+$/u;
@@ -89,6 +107,11 @@ const sameValues = (actual, expected) => {
   return actual.length === expected.length && actual.toSorted(compareText).every((value, index) => value === sortedExpected[index]);
 };
 const rootPath = (value) => value === "." || Boolean(portableRepositoryPath(value));
+const canonicalModuleName = (value) => typeof value === "string"
+  && value.length > 0
+  && value === value.trim()
+  && value === value.normalize("NFC")
+  && !/[\\\s]/u.test(value);
 const rooted = (root, suffix) => root === "." ? suffix : `${root}/${suffix}`;
 const sourceModuleRoot = (sourceRoot) => posix.dirname(sourceRoot);
 const atOrBelow = (path, root) => root === "." || path === root || path.startsWith(`${root}/`);
@@ -189,6 +212,48 @@ const featureEdgeDeclarationIssues = (edges, featureIds, profilePath) => {
   return issues;
 };
 
+const declaredModuleIsWellFormed = (declared, acceptedDecisions) => Boolean(
+  GOVERNED_ID_PATTERN.test(declared.id)
+  && MODULE_ROLES.includes(declared.role)
+  && MODULE_ADOPTION_STATES.includes(declared.adoption)
+  && rootPath(declared.moduleRoot)
+  && declared.sourceRoot === rooted(declared.moduleRoot, "src")
+  && canonicalModuleName(declared.packageName)
+  && acceptedDecisionPath(declared.ownerDocument, acceptedDecisions.get(declared.ownerDocument))
+  && declared.curatedExports.includes(".")
+  && sameOrderedValues(declared.curatedExports, CURATED_EXPORT_SET.filter((entry) => declared.curatedExports.includes(entry)))
+  && (declared.adoption === "pending"
+    ? declared.activationAuthority === undefined
+    : acceptedDecisionPath(declared.activationAuthority, acceptedDecisions.get(declared.activationAuthority))),
+);
+
+const productionModuleIssues = (profile, profilePath, acceptedDecisions) => {
+  const modules = profile.scope.productionModules, issues = [];
+  for (const field of [modules.map(({ id }) => id), modules.map(({ moduleRoot }) => moduleRoot), modules.map(({ packageName }) => packageName)]) {
+    if (duplicateValues(field).length) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "production module ids, roots, and package names must be unique"));}
+  }
+  for (const declared of modules) {
+    if (!declaredModuleIsWellFormed(declared, acceptedDecisions)) {
+      issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, `production module ${declared.id} requires a canonical identity, a known role, curated exports, an accepted owner document, and an accepted activation decision only when active`));
+    }
+  }
+  const active = modules.filter(({ adoption }) => adoption === "active");
+  if (!sameValues(profile.scope.productionRoots, active.map(({ sourceRoot }) => sourceRoot))) {
+    issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "production roots must be exactly the source roots of the active production modules"));
+  }
+  if (!profile.adoption) {return issues;}
+  const pendingRoots = modules.filter(({ adoption }) => adoption === "pending").map(({ moduleRoot }) => moduleRoot);
+  if (pendingRoots.some((root) => !profile.adoption.excludedRoots.includes(root))) {
+    issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "every pending production module must remain an excluded root until its own reviewed activation"));
+  }
+  const expectedModuleRoots = active.filter(({ role }) => role !== "host-app").map(({ moduleRoot }) => moduleRoot);
+  const expectedApplicationRoots = active.filter(({ role }) => role === "host-app").map(({ moduleRoot }) => moduleRoot);
+  if (!sameValues(profile.adoption.moduleRoots, expectedModuleRoots) || !sameValues(profile.adoption.applicationRoots, expectedApplicationRoots)) {
+    issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "active module and application roots must follow the declared production module roles"));
+  }
+  return issues;
+};
+
 const profileTopologyIssues = (profile, profilePath) => {
   const issues = [], productionRoots = profile.scope.productionRoots, features = profile.features;
   const featureIds = new Set(features.map(({ id }) => id));
@@ -200,20 +265,47 @@ const profileTopologyIssues = (profile, profilePath) => {
   return issues;
 };
 
-const candidateScopeIssues = (profile, profilePath) => {
-  const issues = [];
-  if (!sameValues(profile.scope.productionRoots, CANDIDATE_PRODUCTION_ROOTS)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "candidate production roots must match the reviewed Agent Execution and Provider Access scope exactly"));}
-  if (!sameValues(profile.scope.outOfScope, CANDIDATE_OUT_OF_SCOPE)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "candidate out-of-scope modules must match the reviewed exclusions exactly"));}
-  if (!sameValues(profile.features.map(({ id }) => id), Object.keys(CANDIDATE_FEATURES))) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "candidate features must match the three reviewed feature identities exactly"));}
+const sameModuleRecord = (actual, expected) => actual.id === expected.id
+  && actual.role === expected.role
+  && actual.moduleRoot === expected.moduleRoot
+  && actual.sourceRoot === `${expected.moduleRoot}/src`
+  && actual.packageName === expected.packageName
+  && actual.ownerDocument === expected.ownerDocument
+  && actual.adoption === expected.adoption
+  && actual.activationAuthority === expected.activationAuthority
+  && sameOrderedValues(actual.curatedExports, expected.curatedExports);
+
+const reviewedModuleIssues = (profile, profilePath) => {
+  const declared = profile.scope.productionModules, issues = [];
+  if (declared.length !== REVIEWED_PRODUCTION_MODULES.length
+    || !sameValues(declared.map(({ id }) => id), REVIEWED_PRODUCTION_MODULES.map(({ id }) => id))) {
+    issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "production modules must name every reviewed workspace module exactly once"));
+    return issues;
+  }
+  for (const expected of REVIEWED_PRODUCTION_MODULES) {
+    const actual = declared.find((candidate) => candidate.id === expected.id);
+    if (!sameModuleRecord(actual, expected)) {
+      issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, `production module ${expected.id} must match its reviewed role, identity, packaging, and adoption state exactly`));
+    }
+  }
+  return issues;
+};
+
+const reviewedScopeIssues = (profile, profilePath) => {
+  const issues = [...reviewedModuleIssues(profile, profilePath)];
+  if (!sameOrderedValues(profile.scope.workspaceContainers, REVIEWED_WORKSPACE_CONTAINERS)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "workspace containers must match the reviewed production package directories exactly"));}
+  if (!sameValues(profile.scope.productionRoots, REVIEWED_PRODUCTION_ROOTS)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "production roots must match the reviewed active module source roots exactly"));}
+  if (!sameValues(profile.scope.outOfScope, REVIEWED_OUT_OF_SCOPE)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "out-of-scope modules must match the reviewed exclusions exactly"));}
+  if (!sameValues(profile.features.map(({ id }) => id), Object.keys(REVIEWED_FEATURES))) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "features must match the reviewed feature identities exactly"));}
   for (const feature of profile.features) {
-    const expected = CANDIDATE_FEATURES[feature.id];
-    if (expected && feature.root !== expected.root) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, `candidate feature ${feature.id} root must match the reviewed package ownership exactly`));}
-    if (expected && !sameValues(feature.roles, expected.roles)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, `candidate feature ${feature.id} roles must match the reviewed scope exactly`));}
+    const expected = REVIEWED_FEATURES[feature.id];
+    if (expected && feature.root !== expected.root) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, `feature ${feature.id} root must match the reviewed package ownership exactly`));}
+    if (expected && !sameValues(feature.roles, expected.roles)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, `feature ${feature.id} roles must match the reviewed scope exactly`));}
   }
   if (profile.adoption) {
-    if (!sameValues(profile.adoption.moduleRoots, CANDIDATE_MODULE_ROOTS)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "active candidate module roots must match the reviewed Agent Execution and Provider Access packages exactly"));}
-    if (!sameValues(profile.adoption.applicationRoots, CANDIDATE_APPLICATION_ROOTS)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "active candidate scope must not add application roots"));}
-    if (!sameValues(profile.adoption.excludedRoots, CANDIDATE_EXCLUDED_ROOTS)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "active candidate excluded roots must preserve every reviewed package and experiment exclusion exactly"));}
+    if (!sameValues(profile.adoption.moduleRoots, REVIEWED_MODULE_ROOTS)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "active module roots must match the reviewed active bounded-context and platform packages exactly"));}
+    if (!sameValues(profile.adoption.applicationRoots, REVIEWED_APPLICATION_ROOTS)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "active application roots must match the reviewed active host applications exactly"));}
+    if (!sameValues(profile.adoption.excludedRoots, REVIEWED_EXCLUDED_ROOTS)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "active excluded roots must preserve every pending module and experiment exclusion exactly"));}
   }
   return issues;
 };
@@ -222,7 +314,7 @@ const localExtensionIssues = (adoption, profilePath) => {
   const extensions = adoption.localExtensions, issues = [];
   if (!sameOrderedValues(extensions.language.sourceExtensions, LOCAL_SOURCE_EXTENSIONS)
     || extensions.packaging.manifest !== "package.json"
-    || !sameOrderedValues(extensions.packaging.curatedExports, LOCAL_PACKAGE_EXPORTS)
+    || !sameOrderedValues(extensions.packaging.curatedExports, CURATED_EXPORT_SET)
     || extensions.transport.publicContractRole !== "contracts"
     || !sameOrderedValues(extensions.composition.moduleFiles, LOCAL_MODULE_FILES)
     || !sameOrderedValues(extensions.composition.featureEntrypoints, LOCAL_FEATURE_ENTRYPOINTS)
@@ -234,14 +326,14 @@ const localExtensionIssues = (adoption, profilePath) => {
 
 const localOwnershipIssues = (adoption, profilePath) => {
   const architecture = adoption.localOwnership.architectureDocument;
-  const [decision] = adoption.localOwnership.decisionRecords;
+  const declared = adoption.localOwnership.decisionRecords;
   if (architecture.path === LOCAL_ARCHITECTURE_DOCUMENT
     && architecture.owner === "architecture"
-    && adoption.localOwnership.decisionRecords.length === 1
-    && decision.id === LOCAL_DECISION.id
-    && decision.path === LOCAL_DECISION.path
-    && decision.owner === LOCAL_DECISION.owner) {return [];}
-  return [issue("FM_PROFILE_INVALID", profilePath, 1, "active adoption must name the exact local architecture document and ADR-0013 ownership")];
+    && declared.length === LOCAL_DECISIONS.length
+    && LOCAL_DECISIONS.every((expected, index) => declared[index].id === expected.id
+      && declared[index].path === expected.path
+      && declared[index].owner === expected.owner)) {return [];}
+  return [issue("FM_PROFILE_INVALID", profilePath, 1, "active adoption must name the exact local architecture document and both accepted ownership decisions")];
 };
 
 const moduleLayoutIssues = (profile, profilePath) => {
@@ -330,11 +422,13 @@ const activeProfileIssues = (profile, profilePath, acceptedDecisions) => {
 
 const profileHasWildcardPath = (profile) => [
   ...profile.scope.productionRoots,
+  ...profile.scope.workspaceContainers,
+  ...profile.scope.productionModules.flatMap(({ moduleRoot, sourceRoot }) => [moduleRoot, sourceRoot]),
   ...profile.assemblyFiles,
   ...profile.features.flatMap((feature) => [feature.root, feature.entrypoints.public, feature.entrypoints.internal]),
 ].some((path) => path.includes("*"));
 
-export const validateProfile = (profile, profilePath, enforceCandidateScope, acceptedDecisions) => {
+export const validateProfile = (profile, profilePath, enforceReviewedScope, acceptedDecisions) => {
   const issues = profileShapeIssues(profile, profilePath);
   if (issues.length) {return issues;}
   for (const [key, value] of Object.entries(AUTHORITY)) {
@@ -344,8 +438,9 @@ export const validateProfile = (profile, profilePath, enforceCandidateScope, acc
   issues.push(...governedRecordIdentityIssues(profile, profilePath));
   issues.push(...activeProfileIssues(profile, profilePath, acceptedDecisions));
   issues.push(...profileTopologyIssues(profile, profilePath));
+  issues.push(...productionModuleIssues(profile, profilePath, acceptedDecisions));
   issues.push(...adoptionIssues(profile, profilePath));
-  if (enforceCandidateScope) {issues.push(...candidateScopeIssues(profile, profilePath));}
+  if (enforceReviewedScope) {issues.push(...reviewedScopeIssues(profile, profilePath));}
   if (profileHasWildcardPath(profile)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "scope, feature, assembly, and entrypoint paths must be exact and cannot contain wildcards"));}
   return issues;
 };

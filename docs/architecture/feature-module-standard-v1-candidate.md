@@ -8,6 +8,7 @@ related:
   - ADR-0005
   - ADR-0007
   - ADR-0013
+  - ADR-0017
 code_anchors:
   - enforcement: required
     pattern: architecture/feature-module-standard/**
@@ -29,6 +30,10 @@ owned by `agent-teams-ai/.github` at
 This is scoped active conformance for exactly three named features. It is not a
 claim of repository-wide conformance, and no unlisted package, application,
 feature, experiment, or bounded context is included.
+
+ADR-0017 additionally classifies every production module in the reviewed
+workspace containers by its real role, so the profile now describes what each
+module is even while only two of them are checked.
 
 ## New production features
 
@@ -70,8 +75,11 @@ unowned production behavior, deep imports, undeclared edges or cycles, empty
 layers, and undeclared modules or exceptions. Include semantic review because
 static discovery alone cannot detect every capability hidden in legacy code.
 
-The existing three-feature checker does not automatically scan excluded roots.
-Its reviewed feature identities and roots are hardcoded. A new feature outside
+The existing three-feature checker does not inspect behavior inside excluded
+roots. Its reviewed feature identities and roots are hardcoded. It does detect a
+new production package in a declared workspace container and rejects it until a
+reviewed change classifies it, but classification is not conformance. A new
+feature outside
 that scope, or one requiring checker evolution, needs explicit scoped adoption
 through a new or superseding accepted ADR, with exact paths, ownership,
 compatibility decisions, and deterministic evidence. Preserve ADR-0013 bytes
@@ -127,6 +135,36 @@ Module Kit, experiments, and tooling other than this checker are explicitly
 out of scope. Foundation supplies package-level dependency evidence only; it
 does not implement or prove this feature policy.
 
+## Production module classification
+
+The profile classifies every module under `packages/apps`, `packages/contexts`,
+and `packages/platform` with exactly one role and one adoption state:
+
+| Module | Role | Owner document | Adoption |
+| --- | --- | --- | --- |
+| Agent Execution | `bounded-context` | ADR-0005 | active under ADR-0013 |
+| Provider Access | `bounded-context` | ADR-0005 | active under ADR-0013 |
+| Runtime Configuration | `bounded-context` | ADR-0005 | pending |
+| Runtime Security | `bounded-context` | ADR-0005 | pending |
+| Embedded Runtime | `host-app` | ADR-0008 | pending |
+| Filesystem Custody | `platform` | ADR-0017 | pending |
+
+Filesystem Custody currently exposes only `.`; the other five expose `.` and
+`./composition`.
+
+Each module declares its own curated export set from the two recognized assembly
+entries `.` and `./composition`, matching what its manifest exposes today. Every
+pending module stays an excluded root and is not checked as a feature module,
+but its declared package name, role, owner document and curated export keys are
+still compared with its real manifest, so the classification cannot drift into a
+future-state promise.
+
+A production package that exists inside one of those containers and is not
+classified fails the gate with `FM_UNCLASSIFIED_MODULE`. Activating a pending
+module is a separate reviewed change to both the profile and the reviewed
+registry in `scripts/architecture/feature-module-profile.mjs`, with its own
+accepted authority; a profile edit alone cannot widen the checked tree.
+
 The deterministic syntax-aware checker is
 `scripts/architecture/check-feature-modules.mjs`. Run
 `pnpm test:feature-modules` for disposable positive and negative fixtures,
@@ -181,10 +219,11 @@ remove or reorder the active root gate. The exact candidate command reports
 zero production diagnostics without exceptions, deviations, extensions,
 wildcards, automatic widening, or scope changes.
 
-ADR-0013 is accepted at its exact governed path and is pinned in the immutable
-accepted-decision registry by the final SHA-256 of its accepted bytes. The
-profile is `active`, has no blockers, binds its authority to ADR-0013, records
-an empty exact governed-record set, and records these commands as evidence:
+ADR-0013 and ADR-0017 are accepted at their exact governed paths and are pinned
+in the immutable accepted-decision registry by the final SHA-256 of their
+accepted bytes. The profile is `active`, has no blockers, binds its activation
+authority to ADR-0013, names both ownership decisions, records an empty exact
+governed-record set, and records these commands as evidence:
 
 - fixture evidence: `pnpm test:feature-modules`;
 - zero-diagnostic production evidence: `pnpm architecture:feature-modules:candidate`;
