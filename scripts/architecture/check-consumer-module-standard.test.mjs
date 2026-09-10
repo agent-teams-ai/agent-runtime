@@ -82,7 +82,7 @@ test("rejects slot drift and an unknown production factory caller", async () => 
   const caller = await fresh();
   caller.sources.set("packages/apps/embedded-runtime/src/composition/second-root.ts",
     'import { createContainedTurnFeature as build } from "@agent-teams/agent-execution/composition";\nbuild({});\n');
-  assert.throws(() => validateConsumerModuleStandard(caller), /unknown or missing/u);
+  assert.throws(() => validateConsumerModuleStandard(caller), /unknown or missing|aliases are not classified/u);
 
   const localAlias = await fresh();
   const entrypointPath = localAlias.profile.legacyBoundaries[0].materializedEntrypoint;
@@ -90,7 +90,8 @@ test("rejects slot drift and an unknown production factory caller", async () => 
     "return createContainedTurnFeature(Object.freeze({",
     "const buildContainedTurn = createContainedTurnFeature;\n  // createContainedTurnFeature(\n  return buildContainedTurn(Object.freeze({",
   ));
-  assert.throws(() => validateConsumerModuleStandard(localAlias), /materialization call count drift/u);
+  assert.throws(() => validateConsumerModuleStandard(localAlias),
+    /materialization call count drift|aliases are not classified/u);
 
   const exportAlias = await fresh();
   const publicCompositionPath = "packages/contexts/agent-execution/src/composition.ts";
@@ -101,6 +102,74 @@ test("rejects slot drift and an unknown production factory caller", async () => 
   exportAlias.sources.set("packages/apps/embedded-runtime/src/composition/alias-consumer.ts",
     'import { buildContainedTurn } from "@agent-teams/agent-execution/composition";\nbuildContainedTurn({});\n');
   assert.throws(() => validateConsumerModuleStandard(exportAlias), /reference count drift|aliases are not classified/u);
+
+  const stringNamedAlias = await fresh();
+  stringNamedAlias.sources.set("packages/apps/embedded-runtime/src/composition/string-alias-consumer.ts",
+    'import { "createContainedTurnFeature" as build } from "@agent-teams/agent-execution/composition";\nbuild({});\n');
+  assert.throws(() => validateConsumerModuleStandard(stringNamedAlias), /unknown or missing|aliases are not classified/u);
+
+  const stringNamedReexport = await fresh();
+  stringNamedReexport.sources.set("packages/apps/embedded-runtime/src/composition/string-alias-export.ts",
+    'export { "createContainedTurnFeature" as build } from "@agent-teams/agent-execution/composition";\n');
+  assert.throws(() => validateConsumerModuleStandard(stringNamedReexport), /unknown or missing|aliases are not classified/u);
+
+  const computedMember = await fresh();
+  computedMember.sources.set("packages/apps/embedded-runtime/src/composition/computed-member-consumer.ts",
+    'import * as composition from "@agent-teams/agent-execution/composition";\ncomposition["createContainedTurnFeature"]({});\n');
+  assert.throws(() => validateConsumerModuleStandard(computedMember),
+    /unknown or missing|aliases are not classified/u);
+
+  const destructuredMember = await fresh();
+  destructuredMember.sources.set("packages/apps/embedded-runtime/src/composition/destructured-member-consumer.ts",
+    'import * as composition from "@agent-teams/agent-execution/composition";\nconst {"createContainedTurnFeature": build} = composition;\nbuild({});\n');
+  assert.throws(() => validateConsumerModuleStandard(destructuredMember),
+    /unknown or missing|aliases are not classified/u);
+
+  for (const [name, source] of [
+    ["template-member", 'import * as composition from "@agent-teams/agent-execution/composition";\ncomposition[`createContainedTurnFeature`]({});\n'],
+    ["composed-member", 'import * as composition from "@agent-teams/agent-execution/composition";\ncomposition["createContainedTurn" + "Feature"]({});\n'],
+    ["namespace-alias", 'import * as composition from "@agent-teams/agent-execution/composition";\nconst local = composition;\nlocal["createContainedTurnFeature"]({});\n'],
+    ["import-equals", 'import composition = require("@agent-teams/agent-execution/composition");\ncomposition["createContainedTurnFeature"]({});\n'],
+    ["nested-destructure", 'import * as composition from "@agent-teams/agent-execution/composition";\nfunction make() { const {"createContainedTurnFeature": build} = composition; return build({}); }\n'],
+    ["assigned-destructure", 'import * as composition from "@agent-teams/agent-execution/composition";\nlet build; ({"createContainedTurnFeature": build} = composition); build({});\n'],
+    ["dynamic-member", 'import * as composition from "@agent-teams/agent-execution/composition";\nconst name = "createContainedTurnFeature";\ncomposition[name]({});\n'],
+    ["dynamic-import", 'export async function make() { const composition = await import("@agent-teams/agent-execution/composition"); return composition.createContainedTurnFeature({}); }\n'],
+    ["composed-dynamic-import", 'export async function make() { const composition = await import("@agent-teams/agent-execution/" + "composition"); return composition.createContainedTurnFeature({}); }\n'],
+    ["template-dynamic-import", 'export async function make() { const composition = await import(`@agent-teams/agent-execution/composition`); return composition.createContainedTurnFeature({}); }\n'],
+    ["require", 'const composition = require("@agent-teams/agent-execution/composition");\ncomposition["createContainedTurnFeature"]({});\n'],
+    ["composed-require", 'const composition = require("@agent-teams/agent-execution/" + "composition");\ncomposition.createContainedTurnFeature({});\n'],
+    ["template-require", 'const composition = require(`@agent-teams/agent-execution/composition`);\ncomposition.createContainedTurnFeature({});\n'],
+    ["runtime-import", 'const moduleName = "@agent-teams/agent-execution/composition";\nexport async function make() { const composition = await import(moduleName); return composition.createContainedTurnFeature({}); }\n'],
+    ["runtime-composed-import", 'const moduleName = "@agent-teams/agent-execution/composition";\nexport async function make() { const composition = await import(moduleName + ""); return composition.createContainedTurnFeature({}); }\n'],
+    ["runtime-composed-require", 'const moduleName = "@agent-teams/agent-execution/composition";\nconst composition = require(moduleName + "");\ncomposition.createContainedTurnFeature({});\n'],
+    ["star-export", 'export * from "@agent-teams/agent-execution/composition";\n'],
+    ["namespace-export", 'export * as composition from "@agent-teams/agent-execution/composition";\n'],
+  ]) {
+    const bypass = await fresh();
+    bypass.sources.set(`packages/apps/embedded-runtime/src/composition/${name}.ts`, source);
+    assert.throws(() => validateConsumerModuleStandard(bypass),
+      /unknown or missing|aliases are not classified|non-literal production import/u);
+  }
+
+  const shadowed = await fresh();
+  shadowed.sources.set(entrypointPath, shadowed.sources.get(entrypointPath)
+    .replace("  createContainedTurnFeature,\n", "")
+    .replaceAll("return createContainedTurnFeature(",
+      "const createContainedTurnFeature = (..._args: unknown[]) => ({}) as never;\n  return createContainedTurnFeature("));
+  assert.throws(() => validateConsumerModuleStandard(shadowed), /binding is shadowed/u);
+});
+
+test("ignores same-named exports from unrelated modules", async () => {
+  for (const [name, source] of [
+    ["named", 'import { createContainedTurnFeature } from "./unrelated.js";\ncreateContainedTurnFeature({});\n'],
+    ["namespace", 'import * as unrelated from "./unrelated.js";\nunrelated.createContainedTurnFeature({});\n'],
+    ["local", 'const createContainedTurnFeature = () => 1;\ncreateContainedTurnFeature();\n'],
+    ["parameter", 'export const use = (createContainedTurnFeature: () => number) => createContainedTurnFeature();\n'],
+  ]) {
+    const unrelated = await fresh();
+    unrelated.sources.set(`packages/apps/embedded-runtime/src/composition/unrelated-${name}.ts`, source);
+    assert.deepEqual(validateConsumerModuleStandard(unrelated), {legacyBoundaries: 1, status: "pending"});
+  }
 });
 
 test("rejects stale legacy records, exceptions, and forbidden layer imports", async () => {
