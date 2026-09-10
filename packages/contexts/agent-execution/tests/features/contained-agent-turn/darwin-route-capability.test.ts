@@ -10,14 +10,14 @@ test("Darwin producer is nominal, captured and inert; real preparation retains o
   assert.deepEqual(readContainedTurnRouteEnforcementTarget(capability), f.input.qualificationTarget);
   assert.notEqual(readContainedTurnRouteEnforcementTarget(capability), f.input.qualificationTarget);
   assert.equal(options.postClaimPreparation, capability.postClaimPreparation);
-  assert.equal(f.resolves(), 0); assert.equal(f.egress.observations.opens, 0);
+  assert.equal(f.resolves(), 0); assert.equal(f.acquisitions(), 0); assert.equal(f.egress.observations.opens, 0);
   const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
   // Synthetic non-Darwin observation guarantees no native path can execute.
   Object.defineProperty(process, "platform", {...platform, value: "linux"});
   try {
     const claimed = {signal: new AbortController().signal, underlyingCustodyRef: "synthetic",
       committedDispatchProof: {provider: "codex", hostBootId: f.input.owner.hostBootId, hostInstanceId: f.input.owner.hostInstanceId}};
-    assert.deepEqual(await capability.postClaimPreparation.prepareClaimed(claimed as never), {kind: "unsupported", reason: "owner"});
+    assert.deepEqual(await capability.postClaimPreparation.prepareClaimed(claimed as never), {kind: "quarantined"});
     assert.deepEqual(await capability.postClaimPreparation.prepareClaimed(claimed as never), {kind: "quarantined"});
   } finally {Object.defineProperty(process, "platform", platform);}
   assert.equal(f.egress.observations.opens, 0);
@@ -56,7 +56,10 @@ test("wrong provider, adapter, binary, platform and Host cannot mint or bind", (
 test("accessors and proxies on input, owner, platform and pins are rejected without invocation", () => {
   const f = darwinRouteFixture(); const cap = f.mint(); let reads = 0;
   const trap = () => {reads++; throw new Error("must not read");};
-  for (const input of [new Proxy(f.input, {ownKeys: trap}), {...f.input, get preparation() {return trap();}},
+  for (const input of [new Proxy(f.input, {ownKeys: trap}),
+    {...f.input, sessionOwner: new Proxy(f.input.sessionOwner, {ownKeys: trap})},
+    {...f.input, sessionOwner: {get acquire() {return trap();}}},
+    {...f.input, preparation: {...f.input.preparation, catalogSource: new Proxy(Buffer.alloc(0), {get: trap})}}, {...f.input, get preparation() {return trap();}},
     {...f.input, owner: new Proxy(f.input.owner, {ownKeys: trap})},
     {...f.input, owner: {...f.input.owner, platformTarget: {get platform() {return trap();}, architecture: "arm64"}}},
     {...f.input, preparation: {...f.input.preparation, executable: {get path() {return trap();}, sha256: f.tuple.binarySha256}}}]) {

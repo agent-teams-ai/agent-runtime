@@ -276,8 +276,9 @@ test("Darwin nominal route binds the existing owner and seven ports; product reg
       assert.throws(() => composeQualifiedHostCustodiedContainedTurn(malformed as never, factories, probe.featureFactory, url), TypeError);
     }
     assert.equal(reads, 0); assert.equal(probe.calls.owner, 1);
-    assertRefused(() => composeQualifiedHostCustodiedContainedTurn({...deps, selectedProvider: {kind: "claude", owner}} as never,
-      factories, probe.featureFactory, url));
+    assert.throws(() => composeQualifiedHostCustodiedContainedTurn({...deps, selectedProvider: {kind: "claude", owner}} as never,
+      factories, probe.featureFactory, url), error => error instanceof ProviderRouteEnforcementUnsupportedError &&
+        error.message === "route-enforcement-unqualified: claude-broker-seam-absent");
   });
   assert.equal(f.resolves(), 0); assert.equal(f.egress.observations.opens, 0);
 });

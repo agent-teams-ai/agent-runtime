@@ -1,9 +1,11 @@
+import type { CommittedDispatchProofV1 } from "../domain/committed-dispatch-proof-v1.js";
 import { types } from "node:util";
 import type { ContainedTurnRouteQualificationTarget } from "./contained-turn-route-enforcement-capability.js";
 import type { CreateCodexCurrentKernelOwnerOptions } from "./codex-current-kernel-owner.js";
 import { createDarwinCodexHostPostClaimPreparation, type DarwinCodexHostPreparationInput } from "./darwin-codex-host-post-claim-preparation.js";
 import { custodyDataRecord } from "../adapters/outbound/host-custody/host-custody-inert-record.js";
 import { NodeProviderProcessCustodyCore } from "../adapters/outbound/host-custody/node-provider-process-custody-core.js";
+import { snapshotHttpBytes } from "../adapters/outbound/host-custody/egress/http-byte-intrinsics.js";
 import { retainFinalizationHttpResources } from "../adapters/outbound/host-custody/host-launch-finalization-validation.js";
 import { CODEX_APP_SERVER_DARWIN_ARM64_TUPLE as tuple, selectCodexAppServerPlatformTuple } from "../adapters/outbound/codex-app-server/codex-app-server-platform-tuple.js";
 
@@ -15,8 +17,15 @@ export interface DarwinCodexRouteEnforcementCapability {
   readonly [darwinRoute]: true;
   readonly postClaimPreparation: NonNullable<CreateCodexCurrentKernelOwnerOptions["postClaimPreparation"]>;
 }
+/** Internal consumer port. Embedded Runtime's concrete PA/RS authority assembler
+ * owns acquisition, authenticates the store acknowledgement and burns selection.
+ * This is not a feature DI port or a caller-supplied preparation callback. */
+export interface DarwinCodexClaimedSessionOwner {
+  acquire(proof: CommittedDispatchProofV1): DarwinCodexHostPreparationInput["session"];
+}
 export interface DarwinCodexRouteEnforcementInput {
-  readonly preparation: DarwinCodexHostPreparationInput;
+  readonly sessionOwner: DarwinCodexClaimedSessionOwner;
+  readonly preparation: Omit<DarwinCodexHostPreparationInput, "session">;
   readonly owner: Omit<CreateCodexCurrentKernelOwnerOptions, "postClaimPreparation">;
   readonly qualificationTarget: ContainedTurnRouteQualificationTarget;
 }
@@ -45,13 +54,13 @@ const targetSnapshot = (value: ContainedTurnRouteQualificationTarget): Contained
   return target;
 };
 
-/** Captures deployment facts and constructs the actual existing preparation.
- * There is intentionally no callback/brand injection or native execution here. */
+/** Captures deployment facts and defers actual preparation and session acquisition until claim.
+ * There is intentionally no preparation callback/brand injection or native execution here. */
 export const createDarwinCodexRouteEnforcement = (
   input: DarwinCodexRouteEnforcementInput,
 ): DarwinCodexRouteEnforcementCapability => {
   const captured = data(input);
-  if (Reflect.ownKeys(captured).length !== 3) {throw invalid();}
+  if (Reflect.ownKeys(captured).length !== 4) {throw invalid();}
   const target = targetSnapshot(captured.qualificationTarget);
   const source = data(captured.owner);
   if (Object.hasOwn(source, "postClaimPreparation")) {throw invalid();}
@@ -67,22 +76,37 @@ export const createDarwinCodexRouteEnforcement = (
   if (executable.sha256 !== tuple.binarySha256 || typeof executable.path !== "string" || !executable.path.startsWith("/")) {throw invalid();}
   const localCut = data(prep.localCut); const clock = data(localCut.clock);
   const read = method(clock.read); const within = method(clock.within);
-  const session = data(prep.session);
+  if (Object.hasOwn(prep, "session")) {throw invalid();}
+  const sessionOwner = data(captured.sessionOwner);
+  if (Reflect.ownKeys(sessionOwner).length !== 1) {throw invalid();}
+  const acquire = method(sessionOwner.acquire);
+  const catalogSource = snapshotHttpBytes(prep.catalogSource, Number.MAX_SAFE_INTEGER);
+  if (catalogSource === undefined) {throw invalid();}
   const preparationInput = Object.freeze({...prep, executable, observer: data(prep.observer),
     durableRoot: data(prep.durableRoot), limits: data(prep.limits),
     localCut: Object.freeze({...localCut, expectedClock: data(localCut.expectedClock), clock: Object.freeze({
       read: () => Reflect.apply(read, localCut.clock, []),
       within: within.bind(localCut.clock),
-    })}), session: retainFinalizationHttpResources(session, data(session.providerAccessSnapshot)),
+    })}), catalogSource,
   });
-  const actual = createDarwinCodexHostPostClaimPreparation(preparationInput);
   const postClaimPreparation: NonNullable<Options["postClaimPreparation"]> = Object.freeze({
-    prepareClaimed: (claimed: Parameters<typeof actual.prepareClaimed>[0]) => {
-      const proof = custodyDataRecord(custodyDataRecord(claimed).committedDispatchProof);
-      if (proof.provider !== "codex" || proof.hostBootId !== source.hostBootId || proof.hostInstanceId !== source.hostInstanceId) {
-        return Promise.resolve(Object.freeze({kind: "unsupported" as const, reason: "owner" as const}));
-      }
-      return actual.prepareClaimed(claimed);
+    async prepareClaimed(claimed: Parameters<NonNullable<Options["postClaimPreparation"]>["prepareClaimed"]>[0]) {
+      try {
+        const claimedInput = data(claimed);
+        const proof = data(claimedInput.committedDispatchProof);
+        if (proof.provider !== "codex" || proof.hostBootId !== source.hostBootId || proof.hostInstanceId !== source.hostInstanceId) {
+          return Object.freeze({kind: "unsupported" as const, reason: "owner" as const});
+        }
+        // The concrete outer owner must take this same store-acknowledged proof
+        // before allocating any per-operation current authority, signer or session.
+        const session = data(acquire.call(captured.sessionOwner, proof));
+        const identity = data(session.identity);
+        if (identity.operationId !== proof.operationId || identity.attemptId !== proof.attemptId ||
+            identity.custodyId !== proof.custodyId || identity.hostBootId !== proof.hostBootId) {throw invalid();}
+        const actual = createDarwinCodexHostPostClaimPreparation({...preparationInput,
+          session: retainFinalizationHttpResources(session, data(session.providerAccessSnapshot))});
+        return await actual.prepareClaimed(Object.freeze({...claimedInput, committedDispatchProof: proof}));
+      } catch {return Object.freeze({kind: "quarantined" as const});}
     },
   });
   const records = data(source.launchRecords); const resolve = method(records.resolve);
