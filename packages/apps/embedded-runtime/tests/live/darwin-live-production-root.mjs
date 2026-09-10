@@ -26,8 +26,7 @@ const refused = () => new Error("DARWIN_LIVE_PRODUCTION_ROOT_REFUSED");
  * concrete PA/RS/PG and infrastructure owners; this root retains and joins
  * them to the native workspace, deployment route and one public Host handle. */
 export async function createDarwinLiveRuntime(activation) {
-  if (process.platform !== "darwin" || process.arch !== "arm64" || process.getuid?.() === 0 ||
-      process.argv[2] !== "--darwin-attempt-owner-bridge" || !activation.runtimeRootModulePath) {throw refused();}
+  assertDarwinProcess(activation);
   const [{bindDarwinNativeAttemptAuthority, createDarwinContainedTurnDeployment, createHostCustodiedAgentRuntimeHost}, agentExecution] = await Promise.all([
     import("../../dist/composition.js"), import("@agent-teams/agent-execution/composition"),
   ]);
@@ -36,7 +35,7 @@ export async function createDarwinLiveRuntime(activation) {
   if (typeof factoryModule.acquireDarwinLiveOwners !== "function") {throw refused();}
   const owned = await factoryModule.acquireDarwinLiveOwners(activation);
   const cleanup = [];
-  let host, deployment, sealed = false, disposal, reconciled = false;
+  let host, deployment;
   try {
     cleanup.push(owned.dispose);
     const native = await captureRootDarwinAttemptWorkspace(owned.nativeConsumers);
@@ -62,6 +61,18 @@ export async function createDarwinLiveRuntime(activation) {
       containedTurn: {...joined.host.containedTurn, ...dispatchAuthority, operationStore,
         workspace: workspaceOwner.workspace, artifacts,
         routeEnforcement: deployment.routeEnforcement}});
+    return composeRuntimeLifetime(owned, host, cleanup);
+
+  } catch (error) {
+    try {await owned.sealAdmission?.();} catch (cleanupError) {owned.cleanup.recordFailure(cleanupError);}
+    for (const action of cleanup.toReversed()) {try {await action?.();} catch (cleanupError) {owned.cleanup.recordFailure(cleanupError);}}
+    throw error;
+  }
+}
+
+
+function composeRuntimeLifetime(owned, host, cleanup) {
+  let sealed = false, disposal, reconciled = false;
     const sealAdmission = async () => {if (!sealed) {sealed = true; await owned.sealAdmission?.();}};
     return Object.freeze({
       host,
@@ -86,10 +97,9 @@ export async function createDarwinLiveRuntime(activation) {
         return disposal;
       },
     });
-  } catch (error) {
-    sealed = true;
-    try {await owned.sealAdmission?.();} catch (cleanupError) {owned.cleanup.recordFailure(cleanupError);}
-    for (const action of cleanup.toReversed()) {try {await action?.();} catch (cleanupError) {owned.cleanup.recordFailure(cleanupError);}}
-    throw error;
-  }
+}
+
+function assertDarwinProcess(activation) {
+  if (process.platform !== "darwin" || process.arch !== "arm64" || process.getuid?.() === 0 ||
+      process.argv[2] !== "--darwin-attempt-owner-bridge" || !activation.runtimeRootModulePath) {throw refused();}
 }
