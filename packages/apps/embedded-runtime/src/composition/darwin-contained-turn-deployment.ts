@@ -114,7 +114,7 @@ export const createDarwinContainedTurnDeployment = (raw: DarwinContainedTurnDepl
           ...acknowledged.upstream, ids: {fresh: ids.fresh.bind(ids)}, clock: input.clock,
           resolver: {resolve: resolver.resolve.bind(resolver)}, transport: {beginOpen: transport.beginOpen.bind(transport)},
           evidence: {digest: evidence.digest.bind(evidence), record(receipt) {
-            if (receipt.operationId !== subject.operationId || receipt.attemptId !== subject.attemptId) throw new Error('MAC_RECEIPT_IDENTITY_MISMATCH');
+            if (receipt.operationId !== subject.operationId || receipt.attemptId !== subject.attemptId) {throw new Error('MAC_RECEIPT_IDENTITY_MISMATCH');}
             return evidence.record(receipt);
           }},
           // Explicit inert slots replaced by genuine Host reservation finalizer.
@@ -126,7 +126,10 @@ export const createDarwinContainedTurnDeployment = (raw: DarwinContainedTurnDepl
         return session;
     } catch (error) {
       drain(start);
-      if (cleanupFailures.length > 0) {throw new AggregateError([error, ...cleanupFailures], "Darwin acquisition and cleanup failed");}
+      if (cleanupFailures.length > 0) {
+        // oxlint-disable-next-line eslint/preserve-caught-error -- original error is retained in errors; preserve the existing cause/redaction surface
+        throw new AggregateError([error, ...cleanupFailures], "Darwin acquisition and cleanup failed");
+      }
       throw error;
     }
   }});

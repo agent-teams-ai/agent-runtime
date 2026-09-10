@@ -112,7 +112,7 @@ export const createDarwinCodexRouteEnforcement = (
     if (binding.provider !== "codex" || binding.adapterRevision !== tuple.adapterRevision ||
         binding.binaryRevision !== tuple.binaryRevision || binding.capabilityManifestRevision !== tuple.protocolRevision) {throw invalid();}
     const result = await Reflect.apply(resolve, source.launchRecords, [request]);
-    if (result === undefined) {return undefined;}
+    if (result === undefined) {return;}
     const launch = data(result);
     if (launch.executablePath !== executable.path || launch.boundary !== prep.boundary || launch.tmpDir !== prep.tmpDir) {throw invalid();}
     return launch;

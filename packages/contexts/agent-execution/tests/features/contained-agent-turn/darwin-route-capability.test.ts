@@ -44,7 +44,7 @@ test("wrong provider, adapter, binary, platform and Host cannot mint or bind", (
   assert.throws(() => createDarwinCodexRouteEnforcement({...f.input, preparation: {...f.input.preparation,
     executable: {...f.input.preparation.executable, sha256: "a".repeat(64)}}}), TypeError);
   for (const change of [{hostCustody: {}}, {hostBootId: "foreign"}, {hostInstanceId: "foreign"},
-    {platformTarget: {platform: "linux", architecture: "x64"}}, {launchRecords: {resolve: async () => undefined}},
+    {platformTarget: {platform: "linux", architecture: "x64"}}, {launchRecords: {resolve: async () => {}}},
     {effectCustody: {}}, {workspaceOwner: {}}, {postClaimPreparation: {prepareClaimed: async () => ({kind: "prepared"})}},
     {postClaimPreparation: {...cap.postClaimPreparation}}]) {
     assert.throws(() => bindDarwinCodexRouteEnforcement(cap, {...f.input.owner, ...change} as never), TypeError);

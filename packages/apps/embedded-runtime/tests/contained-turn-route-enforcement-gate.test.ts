@@ -263,7 +263,7 @@ test("Darwin nominal route binds the existing owner and seven ports; product reg
     for (const change of [{hostCustody: {}}, {selectedProvider: {kind: "codex", owner: {...owner, hostBootId: "other"}}},
       {selectedProvider: {kind: "codex", owner: {...owner, hostInstanceId: "other"}}},
       {selectedProvider: {kind: "codex", owner: {...owner, platformTarget: {platform: "linux", architecture: "x64"}}}},
-      {selectedProvider: {kind: "codex", owner: {...owner, launchRecords: {resolve: async () => undefined}}}},
+      {selectedProvider: {kind: "codex", owner: {...owner, launchRecords: {resolve: async () => {}}}}},
       {selectedProvider: {kind: "codex", owner: {...owner, postClaimPreparation: {prepareClaimed: async () => ({kind: "prepared"})}}}},
       {selectedProvider: {kind: "codex", owner: {...owner, postClaimPreparation: {...route.postClaimPreparation}}}},
       {selectedProvider: {kind: "codex", owner: new Proxy(owner, {})}}]) {

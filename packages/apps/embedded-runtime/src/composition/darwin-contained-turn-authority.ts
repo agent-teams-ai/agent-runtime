@@ -2,11 +2,10 @@
 // Fixed direct owner; no Module Kit node or Consumer Standard adoption claim.
 import {createContainedTurnHttpEgressRoute} from "./contained-turn-http-egress-upstream.js";
 import {isDeepStrictEqual, types} from "node:util";
-import type {ContainedTurnFeatureDependencies} from "@agent-teams/agent-execution/composition";
+import type {ContainedTurnFeatureDependencies, DarwinCodexRouteEnforcementInput} from "@agent-teams/agent-execution/composition";
 import {snapshotDispatchAuthorityHead} from "@agent-teams/runtime-security/composition";
 import {snapshotRouteSelectionCurrent} from "@agent-teams/provider-access/composition";
 import type {ContainedTurnCurrentEgressOwnersInput} from "./contained-turn-current-egress-owners.js";
-import type {DarwinCodexRouteEnforcementInput} from "@agent-teams/agent-execution/composition";
 type CommittedDispatchProofV1 = Parameters<DarwinCodexRouteEnforcementInput["sessionOwner"]["acquire"]>[0];
 
 type Store = ContainedTurnFeatureDependencies["operationStore"];

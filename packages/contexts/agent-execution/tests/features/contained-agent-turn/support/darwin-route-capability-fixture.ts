@@ -20,7 +20,7 @@ export const darwinRouteFixture = () => {
       platformTarget: {platform: "darwin", architecture: "arm64"},
       effectCustody: {admit() {throw new Error("no effects");}},
       workspaceOwner: {async withLaunchAuthority() {throw new Error("no workspace");}},
-      launchRecords: {async resolve() {resolves++; return undefined;}},
+      launchRecords: {async resolve() {resolves++; return;}},
     },
     preparation: {hostCustody, durableRoot: {path: "/synthetic-absent-durable", dev: "1", ino: "2"},
       // Boundary is opaque during construction; real preparation validates it after claim.
