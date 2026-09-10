@@ -7,10 +7,10 @@ import type { DarwinNativeWorkspaceSelection, DarwinNativeRetainedWorkspaceOwner
 import {
   decodeDarwinAttemptOwnerRequest, decodeDarwinAttemptOwnerEvent, DarwinAttemptOwnerEventReader,
   type DarwinAttemptOwnerEvent, type DarwinNativeFinalLaunchData,
-} from "../../../src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-protocol.ts";
+} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-protocol.js";
 import {
   DarwinAttemptOwnerEvents, bindDarwinAttemptOwnerBridge,
-} from "../../../src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-bridge.ts";
+} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-bridge.js";
 
 const header = readFileSync(new URL("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/native/darwin-attempt-owner-protocol.h", import.meta.url), "utf8");
 const number = (name: string): number => {
@@ -145,7 +145,7 @@ test("retained callbacks are invoked by the bridge; foreign settlement is never 
 
 
 test("native workspace selection rejects clones before reading caller callbacks", async () => {
-  const {selectDarwinAttemptWorkspaceBackend} = await import("../../../src/features/contained-agent-turn/adapters/outbound/filesystem/darwin-attempt-workspace-backend.ts");
+  const {selectDarwinAttemptWorkspaceBackend} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/filesystem/darwin-attempt-workspace-backend.js");
   let reads = 0;
   const records = { get creation() { reads++; throw new Error("must not read"); } } as unknown as DarwinNativeRetainedWorkspaceOwners;
   for (const selection of [{}, Object.create(null), Object.freeze({ native: true })]) {

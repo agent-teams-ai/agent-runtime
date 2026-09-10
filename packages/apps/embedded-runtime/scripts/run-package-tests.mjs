@@ -9,6 +9,7 @@ export const testProcesses = [
   [
     "--test",
     "--test-concurrency=1",
+    "tests/darwin-native-attempt-authority-join.test.ts",
     "tests/assembly-reference.test.ts",
     "tests/assembly-packed-consumer.test.ts",
     "tests/runtime-setup-assembly.test.ts",

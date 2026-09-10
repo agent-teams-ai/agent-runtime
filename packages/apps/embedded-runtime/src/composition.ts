@@ -70,6 +70,7 @@ export {
   createContainedTurnHttpEgressRoute,
   createContainedTurnHttpUpstreamTransport,
 } from "./composition/contained-turn-http-egress-upstream.js";
+export {bindDarwinNativeAttemptAuthority} from "./composition/darwin-contained-turn-authority.js";
 export {
   createContainedTurnLinuxRouteBinding,
   type ContainedTurnLinuxRouteCampaign,

@@ -150,7 +150,7 @@ Object.defineProperty(process, 'arch', {value:${JSON.stringify(arch)}});`);
       "-isystem", join(inputs.sysroot.path, "usr/include"), `-I${inputs.nodeHeaders.path}`,
       ...(platform === "linux" ? ["--target=x86_64-unknown-linux-gnu", "-shared"] :
         ["--target=arm64-apple-darwin", "-arch", "arm64", "-mmacosx-version-min=13.0",
-          "-bundle", "-undefined", "dynamic_lookup"]),
+          "-bundle", "-undefined", "dynamic_lookup", "-lsandbox"]),
       "native/rename-no-replace.c", "-o", "dist/rename-no-replace.node"]);
     assert.equal(actual.args.includes("-shared"), platform === "linux");
     assert.equal(actual.args.includes("-bundle"), platform === "darwin");

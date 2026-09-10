@@ -31,10 +31,18 @@ static uint32_t word(const uint8_t *p) {return ((uint32_t)p[0]<<24)|((uint32_t)p
 static void put32(uint8_t *p,uint32_t n) {p[0]=(uint8_t)(n>>24);p[1]=(uint8_t)(n>>16);p[2]=(uint8_t)(n>>8);p[3]=(uint8_t)n;}
 static void put64(uint8_t *p,uint64_t n) {put32(p,(uint32_t)(n>>32));put32(p+4,(uint32_t)n);}
 static int close_once(int *fd) {int owned=*fd;*fd=-1;return owned<0 || close(owned)==0;}
+static int supported_xattrs(int fd) {
+  static const char provenance[]="com.apple.provenance";
+  char names[sizeof(provenance)];
+  ssize_t length=flistxattr(fd,NULL,0,0);
+  if (length==0) return 1;
+  return length==(ssize_t)sizeof(provenance) && flistxattr(fd,names,sizeof(names),0)==length &&
+    memcmp(names,provenance,sizeof(provenance))==0;
+}
 static int metadata(int fd,const struct stat *st) {
-  if (st->st_flags || flistxattr(fd,NULL,0,0)!=0) return 0;
+  if (st->st_flags || !supported_xattrs(fd)) return 0;
   acl_t acl=acl_get_fd_np(fd,ACL_TYPE_EXTENDED);
-  if (!acl) return 0;
+  if (!acl) return errno==ENOENT;
   int empty=0;
   if (acl_valid(acl)==0) {
     acl_entry_t entry;

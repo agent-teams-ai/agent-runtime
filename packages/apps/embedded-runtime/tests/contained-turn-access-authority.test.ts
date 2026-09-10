@@ -178,6 +178,46 @@ test("trusted owner composition pins revision and caller methods remain detached
   await host.dispose();
 });
 
+test("observe cancellation reaches the authority-bound owner and remains Host-tracked", async () => {
+  let calls = 0;
+  let ownerSettled = false;
+  let releaseOwner!: () => void;
+  const ownerReleased = new Promise<void>(resolve => { releaseOwner = resolve; });
+  const raw: ContainedTurnCapabilityBundle = {
+    cancel: { async execute() { return { status: "not_found" }; } },
+    observe: { async execute(_ref, options) {
+      calls += 1;
+      assert.ok(options?.signal);
+      await new Promise<void>(resolve => {
+        options.signal!.addEventListener("abort", resolve, { once: true });
+      });
+      await ownerReleased;
+      ownerSettled = true;
+      throw options.signal!.reason;
+    } },
+    submit: { async execute() { return { status: "denied" }; } },
+  };
+  const host = createAgentRuntimeHost({
+    ...setup,
+    containedTurn: bindContainedTurnCapabilityAuthority(raw, authority().authorityRevision),
+  });
+  const access = host.bindAccess({ containedTurn: scope() }).containedTurn;
+  const cancellation = new AbortController();
+  const observation = access.observe("operation:one", { signal: cancellation.signal });
+  cancellation.abort(new DOMException("bounded observation expired", "AbortError"));
+  await assert.rejects(observation, error => error instanceof DOMException && error.name === "AbortError");
+  assert.equal(calls, 1);
+
+  let disposalSettled = false;
+  const disposal = host.dispose().finally(() => { disposalSettled = true; });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(disposalSettled, false);
+  assert.equal(ownerSettled, false);
+  releaseOwner();
+  await disposal;
+  assert.equal(ownerSettled, true);
+});
+
 test("a capability refuses cross-revision or mismatched-scope commands before invoking its owner", async () => {
   let calls = 0;
   const execute = async () => { calls += 1; return observed(); };

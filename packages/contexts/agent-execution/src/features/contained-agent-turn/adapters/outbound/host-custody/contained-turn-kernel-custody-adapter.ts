@@ -323,12 +323,16 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     observation = hostObservation.then(observed => {
       if (observed.kind === "execution_started") {
         return Object.freeze({
-          kind: observed.kind, proof: this.#processStartProof(reservation, observed.evidence),
+          kind: observed.kind, proof: createProcessStartProof(reservation, observed.evidence, {
+            hostBootId: this.#hostBootId, hostInstanceId: this.#hostInstanceId,
+          }),
         });
       }
       if (observed.kind === "proved_no_start") {
         return Object.freeze({
-          kind: observed.kind, proof: this.#processNoStartProof(reservation, observed.evidence),
+          kind: observed.kind, proof: createProcessNoStartProof(reservation, observed.evidence, {
+            hostBootId: this.#hostBootId, hostInstanceId: this.#hostInstanceId,
+          }),
         });
       }
       return Object.freeze({
@@ -361,16 +365,6 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     });
     reservation.providerCompletion = completion;
     reservation.providerCompletionState = "sealed";
-  }
-  #processStartProof(reservation: KernelReservation, evidence: HostCustodyEvidence): StartProof {
-    return createProcessStartProof(reservation, evidence, {
-      hostBootId: this.#hostBootId, hostInstanceId: this.#hostInstanceId,
-    });
-  }
-  #processNoStartProof(reservation: KernelReservation, evidence: HostCustodyEvidence): NoStartProof {
-    return createProcessNoStartProof(reservation, evidence, {
-      hostBootId: this.#hostBootId, hostInstanceId: this.#hostInstanceId,
-    });
   }
   public async attestExecutionClosure(
     input: Parameters<ContainedTurnKernelCustodyPort["attestExecutionClosure"]>[0],
@@ -610,8 +604,3 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     return reservation;
   }
 }
-export const createContainedTurnKernelCustodyPort = (
-  hostCustody: ContainedTurnHostCustodyPort,
-  options: ContainedTurnKernelCustodyAdapterOptions,
-): ContainedTurnKernelCustodyPort =>
-  new ContainedTurnKernelCustodyAdapter(hostCustody, options);

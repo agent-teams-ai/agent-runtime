@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { registerHooks } from "node:module";
+import { registerHooks, stripTypeScriptTypes } from "node:module";
 import { existsSync, readFileSync, mkdtempSync, mkdirSync, rmSync, openSync, closeSync, fstatSync, constants } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as synthetic from "./synthetic-native-custody-producer.fixture.ts";
+
+const linuxTest = process.platform === "linux" ? test : test.skip;
 
 // Explicit independent source-loaded SYNTHETIC producer, never a build shim.
 const producer = new URL("./synthetic-native-custody-producer.fixture.ts", import.meta.url).href;
@@ -45,16 +47,20 @@ registerHooks({resolve(specifier, context, next) {
     if (existsSync(source)) {return {url: source.href, shortCircuit: true};}
   }
   return next(specifier, context);
+}, load(url, context, next) {
+  if (url.includes("/agent-execution/src/") && url.endsWith(".ts")) {
+    return {format: "module", source: stripTypeScriptTypes(readFileSync(new URL(url), "utf8"), {mode: "transform"}), shortCircuit: true};
+  }
+  return next(url, context);
 }});
-const root = "../../../src/features/contained-agent-turn/adapters/outbound/";
-const permission = await import(root + "codex-app-server/codex-app-server-permission-boundary.ts");
-const authority = await import(root + "host-custody/native-host-custody-workspace-authority.ts");
+const permission = await import("../../../src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts");
+const authority = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/native-host-custody-workspace-authority.ts");
 const {nodeKernelWorkspaceAuthority} = await import("../../../src/features/contained-agent-turn/composition/node-kernel-workspace-authority.ts");
-const {KernelOpenAttempts} = await import(root + "host-custody/contained-turn-kernel-custody-open-attempts.ts");
-const raw = await import(root + "host-custody/private-host-custody-reservation.ts");
-const files = await import(root + "codex-app-server/codex-native-broker-files.ts");
-const recipes = await import(root + "codex-app-server/codex-native-broker-recipe.ts");
-const launch = await import(root + "codex-app-server/codex-app-server-launch-plan.ts");
+const {KernelOpenAttempts} = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-open-attempts.ts");
+const raw = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/private-host-custody-reservation.ts");
+const files = await import("../../../src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-files.ts");
+const recipes = await import("../../../src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.ts");
+const launch = await import("../../../src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts");
 const catalog = readFileSync(new URL("../../fixtures/codex-native-broker-0.153.4/models.json", import.meta.url));
 const ids = {operationId: "synthetic-operation", attemptId: "synthetic-attempt", workspaceId: "synthetic-workspace"};
 const setup = async (facts = synthetic.syntheticFacts(), mutate?: (facts: any) => void) => {
@@ -81,7 +87,7 @@ test("synthetic roots enforce safe identities, normalized paths, leased UID and 
     (f: any) => f.tmpDir.dev = -1n,
   ]) {const f = synthetic.syntheticFacts(); mutate(f); await assert.rejects(setup(f));}
 });
-test("ordinary Linux boundary still validates actual disposable directories", () => {
+linuxTest("ordinary Linux boundary still validates actual disposable directories", () => {
   const dir = mkdtempSync(join(tmpdir(), "ar69-custody-linux-"));
   try {mkdirSync(join(dir, "home"), {mode: 0o700}); mkdirSync(join(dir, "work"), {mode: 0o700});
     const boundary = permission.createCodexAppServerPermissionBoundary({codexHome: join(dir, "home"), workspaceRef: join(dir, "work"), intentMode: "analysis"});
@@ -111,7 +117,7 @@ test("Docker reserve rejects genuine native authority before retaining or alloca
   Object.defineProperty(globalThis, dockerCustodyEffects, {value: effects, configurable: true});
   try {
     const {DockerKernelHostCustody} = await import("../../../src/features/contained-agent-turn/composition/docker-kernel-host-custody.ts");
-    const custody = await import(root + "host-custody/custodied-provider-process.ts");
+    const custody = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts");
     const {selection} = await setup();
     await nodeKernelWorkspaceAuthority(synthetic.issueSyntheticOwner(selection)).withLaunchAuthority(ids, async workspaceAuthority => {
       const host = new DockerKernelHostCustody(1000);
@@ -179,7 +185,7 @@ test("synchronous native finalizer cannot manufacture material, clone files, or 
     privateRootPath: "/synthetic/private", tmpDir: "/synthetic/private/tmp"};
   const plan = launch.createCodexAppServerFinalizableLaunchPlan(options, {provider: "codex", providerRouteRef: "synthetic-route",
     credentialGeneration: 1, credentialBindingRef: "synthetic-binding", ownerAuthorityDigest: "synthetic-authority"});
-  const {hostLaunchFinalizationRecipe} = await import(root + "host-custody/host-custody-finalizable-plan.ts");
+  const {hostLaunchFinalizationRecipe} = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-finalizable-plan.ts");
   const finalizer = hostLaunchFinalizationRecipe(plan)!;
   assert.throws(() => finalizer.build({recipe, files: {kind: "codex-native-broker-prepared-files/v1"}}, "s".repeat(32)));
   const installed = await files.installCodexDarwinNativeBrokerFiles(selection, recipe, catalog);
@@ -214,7 +220,7 @@ test("authenticated material advances boundary generation; synchronous final bui
   const installed = await files.installCodexDarwinNativeBrokerFiles(selection, recipe, catalog);
   assert.notEqual(permission.codexDarwinNativeLaunchObservation(boundary), observation);
   assert.throws(() => synthetic.assertDarwinNativeLaunchObservationCurrent(observation));
-  const {hostLaunchFinalizationRecipe} = await import(root + "host-custody/host-custody-finalizable-plan.ts");
+  const {hostLaunchFinalizationRecipe} = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-finalizable-plan.ts");
   hostLaunchFinalizationRecipe(plan)!.build({recipe, files: installed}, "s".repeat(32)).validate();
 });
 
@@ -234,7 +240,7 @@ test("Linux callback failure cannot reopen the same attempt or invoke scoped acq
   assert.equal(calls, 1); assert.equal(retires, 1);
 });
 
-test("Linux reservation retains and rechecks the actual disposable descriptor and mount identity", async () => {
+linuxTest("Linux reservation retains and rechecks the actual disposable descriptor and mount identity", async () => {
   const dir = mkdtempSync(join(tmpdir(), "ar69-custody-descriptor-"));
   let descriptor: number | undefined;
   try {
@@ -268,7 +274,7 @@ test("native material preparation never falls back to the legacy Host-UID instal
   // These protected synthetic paths do not exist on the Host. Failure must be
   // a consumer refusal, never an attempted lstat reported as ENOENT/EACCES.
   await assert.rejects(files.prepareCodexNativeBrokerFiles(recipe), /Codex native broker files rejected/u);
-  const {DarwinCodexNativeFiles} = await import(root + "codex-app-server/darwin-codex-native-files.ts");
+  const {DarwinCodexNativeFiles} = await import("../../../src/features/contained-agent-turn/adapters/outbound/codex-app-server/darwin-codex-native-files.ts");
   assert.throws(() => new DarwinCodexNativeFiles(boundary, catalog, {}, () => {}), /requires the native material installer/u);
   const installed = await files.installCodexDarwinNativeBrokerFiles(selection, recipe, catalog);
   assert.equal(await files.prepareCodexNativeBrokerFiles(recipe), installed);
@@ -394,7 +400,7 @@ test("native owner failure cuts off issuance while authenticated observation rea
 });
 
 test("actual kernel checks Host registry before preparation for forged, cloned, proxy and mismatched grants", async () => {
-  const {ContainedTurnKernelCustodyAdapter} = await import(root + "host-custody/contained-turn-kernel-custody-adapter.ts");
+  const {ContainedTurnKernelCustodyAdapter} = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.ts");
   const {selection} = await setup(); let prepares = 0; let reserves = 0; let reads = 0;
   await nodeKernelWorkspaceAuthority(synthetic.issueSyntheticOwner(selection)).withLaunchAuthority(ids, async grant => {
     const input = {...ids, custodyId: "synthetic-registry", intentMode: "analysis", adapterSnapshot: {}, providerAccessSnapshot: {}};
@@ -427,7 +433,7 @@ const kernelRegressionInput = async (custodyId: string) => {
 };
 
 test("actual kernel drains successful preparation after owner rejection without acquisition or replay", async () => {
-  const {ContainedTurnKernelCustodyAdapter} = await import(root + "host-custody/contained-turn-kernel-custody-adapter.ts");
+  const {ContainedTurnKernelCustodyAdapter} = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.ts");
   const {selection} = await setup(); const owner = synthetic.issueSyntheticOwner(selection);
   const entered = Promise.withResolvers<void>(); const preparation = Promise.withResolvers<object>();
   const failure = new Error("synthetic original owner rejection");
@@ -460,7 +466,7 @@ test("actual kernel drains successful preparation after owner rejection without 
 });
 
 test("actual kernel rechecks revoked native kind after successful preparation with owner still active", async () => {
-  const {ContainedTurnKernelCustodyAdapter} = await import(root + "host-custody/contained-turn-kernel-custody-adapter.ts");
+  const {ContainedTurnKernelCustodyAdapter} = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.ts");
   const {selection} = await setup(); const counts = {reserve: 0, retain: 0, retire: 0};
   await nodeKernelWorkspaceAuthority(synthetic.issueSyntheticOwner(selection)).withLaunchAuthority(ids, async grant => {
     const kernel = new ContainedTurnKernelCustodyAdapter({reserve: async () => {

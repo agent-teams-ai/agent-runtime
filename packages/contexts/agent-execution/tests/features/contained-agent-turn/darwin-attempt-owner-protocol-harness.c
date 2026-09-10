@@ -5,6 +5,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef __APPLE__
+int ae_native_validate_journal(ae_custody *custody) { return custody != NULL; }
+#endif
+
 typedef struct { unsigned writes; int fail; ae_state saved; } storage;
 static int persist(void *p,const ae_state *s) {
   storage *store=p; store->writes++; store->saved=*s; return !store->fail;

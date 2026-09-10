@@ -10,7 +10,7 @@ import {
   darwinNativeArgumentsSha256, type DarwinNativeFinalLaunchData,
   decodeDarwinAttemptOwnerRequest, encodeDarwinAttemptOwnerRequest,
   DarwinAttemptOwnerFrameReader, darwinAttemptOwnerFrameBytes,
-} from "../../../src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-protocol.ts";
+} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-protocol.js";
 
 const native = fileURLToPath(new URL("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/native/", import.meta.url));
 const start = { command: "START_ONCE", sequence: 1, binding: "01".repeat(32), launch: "02".repeat(32), argument: 0 } as const;
@@ -78,7 +78,7 @@ test("portable C pure state/protocol harness uses the exact TS wire vectors", ()
     writeFileSync(join(temporary, "vectors.h"), `static const unsigned char vectors[][AE_FRAME_BYTES]={${vectors.map((v) => `{${v.join(",")}}`).join(",")}};\n`);
     const executable = join(temporary, "protocol-harness");
     const args = ["-std=c11", "-Wall", "-Wextra", "-Werror", "-pedantic", "-I", native, "-I", temporary,
-      join(native, "darwin-attempt-owner-state.c"), join(native, "darwin-attempt-owner-admission.c"), join(native, "darwin-attempt-owner-material.c"), join(native, "darwin-attempt-owner-probes.c"),
+      join(native, "darwin-attempt-owner-state.c"), join(native, "darwin-attempt-owner-admission.c"), join(native, "darwin-attempt-owner-tree.c"), join(native, "darwin-attempt-owner-material.c"), join(native, "darwin-attempt-owner-probes.c"),
       fileURLToPath(new URL("./darwin-attempt-owner-protocol-harness.c", import.meta.url)), "-o", executable];
     const compile = spawnSync("cc", args, { encoding: "utf8" });
     console.log(JSON.stringify({ command: ["cc", ...args], stdout: compile.stdout, stderr: compile.stderr, exit: compile.status }));
@@ -251,16 +251,24 @@ test("Darwin ACL predicates reject ACEs and API uncertainty while accepting vali
       ["tree", "supported_metadata"], ["material", "metadata"]] as const;
     for (const [file, name] of cases) {
       const source = readFileSync(join(native, `darwin-attempt-owner-${file}.c`), "utf8");
-      const begin = source.indexOf(`static int ${name}(`), end = source.indexOf("\n}", begin);
+      const metadata = file === "tree" || file === "material";
+      const begin = source.indexOf(`static int ${metadata ? "supported_xattrs" : name}(`);
+      const predicateBegin = source.indexOf(`static int ${name}(`, begin);
+      const end = source.indexOf("\n}", predicateBegin);
       assert.ok(begin >= 0 && end > begin);
       let predicate = source.slice(begin, end + 2);
-      if (file === "tree") {predicate = predicate.split("#else")[0]!.replace("#ifdef __APPLE__", "") + "}";}
-      const metadata = file === "tree" || file === "material";
+      if (file === "tree") {
+        predicate = predicate.split("#else")[0]!
+          .replaceAll("#ifdef __APPLE__\n", "")
+          .replace("#endif\nstatic int supported_metadata", "static int supported_metadata") + "}";
+      }
       const harness = join(temporary, `${file}.c`), executable = join(temporary, file);
       writeFileSync(harness, `
 #include <assert.h>
 #include <errno.h>
 #include <stddef.h>
+#include <string.h>
+#include <sys/types.h>
 typedef void *acl_t;
 typedef void *acl_entry_t;
 #define ACL_TYPE_EXTENDED 1
@@ -277,7 +285,7 @@ static int acl_get_entry(acl_t acl,int index,acl_entry_t *entry) {
   errno=mode==4 ? EIO : EINVAL; return -1;
 }
 static int acl_free(acl_t acl) { assert(acl==&mode); freed++; errno=ERANGE; return mode==5 ? -1 : 0; }
-${metadata ? "struct stat { unsigned st_flags; }; static int flistxattr(int fd,void *bytes,int length,int options) { (void)fd; (void)bytes; (void)length; (void)options; return 0; }" : ""}
+${metadata ? "struct stat { unsigned st_flags; }; static ssize_t flistxattr(int fd,void *bytes,size_t length,int options) { (void)fd; (void)bytes; (void)length; (void)options; return 0; }" : ""}
 ${predicate}
 int main(void) {
   ${metadata ? "struct stat st={0};" : ""}

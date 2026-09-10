@@ -59,12 +59,14 @@ function fixture() {
   const validate = () => {reseal(); return validateReceipt(receipt, identity, name => Buffer.from(artifacts[name]));};
   return {identity, artifacts, receipt, validate};
 }
-test("both original explicit argv lists are preserved exactly", () => {
+test("original argv lists and accepted native authority test are preserved exactly", () => {
   const original = JSON.parse(execFileSync("git", ["show", "08fb1a71b75134b43af52579e8de86a44b2a3815:packages/apps/embedded-runtime/package.json"], {encoding: "utf8"}));
-  assert.deepEqual(testProcesses, original.scripts.test.split(" && ").map(s => s.split(" ").slice(1)));
+  const expected = original.scripts.test.split(" && ").map(s => s.split(" ").slice(1));
+  expected[0].splice(2, 0, "tests/darwin-native-attempt-authority-join.test.ts");
+  assert.deepEqual(testProcesses, expected);
 });
 test("complete receipts require both entire manifest processes", () => {
-  const f = fixture(); assert.equal(f.validate().length, 57);
+  const f = fixture(); assert.equal(f.validate().length, 58);
 });
 for (const [name, mutate] of [
   ["missing first process", f => {f.artifacts["processes.json"] = json(JSON.parse(f.artifacts["processes.json"]).slice(1));}],

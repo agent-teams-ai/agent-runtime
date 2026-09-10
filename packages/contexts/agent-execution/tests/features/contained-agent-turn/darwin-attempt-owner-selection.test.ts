@@ -147,6 +147,11 @@ async function exercise(mode: "normal" | "refused" | "foreign" | "material" | "m
       if (specifier.endsWith("darwin-attempt-owner-selection.js")) {
         return next(specifier.slice(0, -3) + `.ts?${mode}`, context);
       }
+      if (context.parentURL?.includes("/host-custody/darwin-attempt-owner-") &&
+          ["./darwin-attempt-owner-bridge.js", "./darwin-attempt-owner-final-launch.js",
+            "./darwin-attempt-owner-protocol-definitions.js", "./darwin-attempt-owner-protocol.js"].includes(specifier)) {
+        return next(specifier.slice(0, -3) + ".ts", context);
+      }
       return next(specifier, context);
     },
     load(url, context, next) {
@@ -170,7 +175,7 @@ async function exercise(mode: "normal" | "refused" | "foreign" | "material" | "m
         return true; // Test-only native dependency substitution, not OS evidence.
       }};
     };
-    const helper = await import(new URL(`../../../src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-selection.ts?${mode}`, import.meta.url).href) as typeof import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-selection.ts");
+    const helper = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-selection.js");
     const complete = async () => ({ binding: binding.toString("hex"), launch: launch.toString("hex"), namespace: namespace.toString(), workspaceDev: "1", workspaceIno: "200" });
     const consumers = { launchRoute: complete, artifactResult: complete, workspace: complete, privateMaterial: complete, output: async () => {} };
     if (mode === "peer_refused") {

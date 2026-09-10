@@ -273,7 +273,10 @@ export interface RuntimeContainedTurnAccess {
     operationId: string,
     options?: { readonly signal?: AbortSignal },
   ): Promise<CancelRuntimeContainedTurnOutcome>;
-  observe(operationId: string): Promise<ObserveRuntimeContainedTurnOutcome>;
+  observe(
+    operationId: string,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<ObserveRuntimeContainedTurnOutcome>;
   submit(
     input: SubmitRuntimeContainedTurnInput,
     options?: { readonly signal?: AbortSignal },

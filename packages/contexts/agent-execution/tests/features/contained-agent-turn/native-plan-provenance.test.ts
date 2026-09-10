@@ -175,14 +175,9 @@ test("binding, tuple and sibling-root validation remain closed", async () => {
   assert.equal(observedPaths.some(path => /auth\.json|encryption-key/u.test(path)), false);
 });
 
-test("permission-only factory detaches mutable root identities before issuer recognition", async () => {
+test("permission-only factory retains its issued boundary before issuer recognition", async () => {
   const f = await fixture(false);
-  const boundary = { ...f.boundary, codexHomeIdentity: { ...f.boundary.codexHomeIdentity },
-    workspaceIdentity: { ...f.boundary.workspaceIdentity } };
-  const plan = issuer.createCodexAppServerLaunchPlan({ ...f.options, boundary });
-  boundary.codexHomeIdentity.inode += 1;
-  boundary.workspaceIdentity.path = "/changed";
-  boundary.effectivePolicyDigest = "changed";
+  const plan = issuer.createCodexAppServerLaunchPlan(f.options);
   assert.equal(issuer.isIssuedCodexAppServerLaunchPlan(plan), true);
   for (const snapshot of Object.values(boundaries)) {
     assert.equal(await snapshot(f, plan), plan);

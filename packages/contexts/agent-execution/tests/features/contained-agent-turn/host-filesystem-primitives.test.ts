@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtemp, mkdir, writeFile, rm, chmod, rename, symlink, readFile, readdir, open } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { hasDarwinHostDescriptors } from "@agent-teams/filesystem-custody";
 import { scanContainedTurnWorkspace } from "../../../dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-tree.js";
 import { bindContainedTurnRoot, openBoundDirectory } from "../../../dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.js";
 import { writeImmutableFileAt, readStableFileAt, quarantineAmbiguousStagingDirectory } from "../../../dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-durable-file.js";
@@ -17,8 +19,22 @@ const fixture = async (t: import("node:test").TestContext) => {
   return root;
 };
 const limits = { maxDepth: 2, maxEntries: 4, maxFileBytes: 8, maxTotalBytes: 16 };
+const linuxTest = process.platform === "linux" ? test : test.skip;
+const hostTest = process.platform === "linux" || hasDarwinHostDescriptors() ? test : test.skip;
 
-test("Host scanner preserves exact bytes, UTF16 ordering, modes and digest", async t => {
+test("Darwin Host filesystem primitives run in a fresh guarded child", {
+  skip: process.platform !== "darwin" || hasDarwinHostDescriptors(), timeout: 90_000,
+}, () => {
+  const environment = {...process.env};
+  delete environment.NODE_TEST_CONTEXT;
+  const result = spawnSync(process.execPath, ["--test", "--test-concurrency=1", fileURLToPath(new URL(
+    "./host-filesystem-primitives-darwin-worker.mjs", import.meta.url,
+  ))], {encoding: "utf8", env: environment, timeout: 80_000, maxBuffer: 1024 * 1024});
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, JSON.stringify(result));
+});
+
+hostTest("Host scanner preserves exact bytes, UTF16 ordering, modes and digest", async t => {
   const root = await fixture(t);
   const bytes = Buffer.from([0, 255, 10]);
   await mkdir(join(root, "empty"), { mode: 0o700 });
@@ -36,7 +52,7 @@ test("Host scanner preserves exact bytes, UTF16 ordering, modes and digest", asy
   ])).digest("hex"));
 });
 
-test("Host scanner enforces lower entry, file, total and depth bounds", async t => {
+hostTest("Host scanner enforces lower entry, file, total and depth bounds", async t => {
   const root = await fixture(t);
   await writeFile(join(root, "a"), "12345");
   await writeFile(join(root, "b"), "12345");
@@ -47,7 +63,7 @@ test("Host scanner enforces lower entry, file, total and depth bounds", async t 
   await assert.rejects(scanContainedTurnWorkspace(root, { ...limits, maxDepth: 0 }), /depth/);
 });
 
-test("Host scanner rejects symlink replacement and special files", async t => {
+hostTest("Host scanner rejects symlink replacement and special files", async t => {
   const root = await fixture(t);
   await writeFile(join(root, "a"), "data");
   await assert.rejects(scanContainedTurnWorkspace(root, limits, {
@@ -63,7 +79,7 @@ test("Host scanner rejects symlink replacement and special files", async t => {
   await assert.rejects(scanContainedTurnWorkspace(root, limits), /non-file|not a regular file/);
 });
 
-test("Host scanner rejects namespace mutation after file read", async t => {
+hostTest("Host scanner rejects namespace mutation after file read", async t => {
   const root = await fixture(t);
   await writeFile(join(root, "a"), "data");
   await assert.rejects(scanContainedTurnWorkspace(root, limits, {
@@ -89,7 +105,7 @@ const store = async (t: import("node:test").TestContext) => {
   return { stagingPath, finalPath, stagingDirectory, finalDirectory };
 };
 
-test("Host durable metadata publication preserves duplicates, exact bytes and empty staging", async t => {
+hostTest("Host durable metadata publication preserves duplicates, exact bytes and empty staging", async t => {
   const directories = await store(t);
   const input = { ...directories, finalName: "receipt.json", bytes: Buffer.from('{"version":1}\n'), temporaryKind: "metadata" as const };
   assert.equal(await writeImmutableFileAt(input), "created");
@@ -100,7 +116,7 @@ test("Host durable metadata publication preserves duplicates, exact bytes and em
   assert.deepEqual(await readdir(input.stagingPath), []);
 });
 
-test("Host durable write failure before publication removes only its own staging file", async t => {
+hostTest("Host durable write failure before publication removes only its own staging file", async t => {
   const directories = await store(t);
   const marker = join(directories.stagingPath, "unowned");
   await writeFile(marker, "preserve");
@@ -121,7 +137,7 @@ test("Host durable write failure before publication removes only its own staging
   assert.equal(await readFile(marker, "utf8"), "preserve");
 });
 
-test("Host staging creation is cleaned when descriptor validation fails", { skip: process.platform !== "linux" }, async t => {
+linuxTest("Host staging creation is cleaned when descriptor validation fails", async t => {
   const directories = await store(t);
   // The existing pathname fault hook is Linux-only. Closing the real newly
   // created descriptor forces validation to fail before the opened checkpoint.
@@ -141,7 +157,7 @@ test("Host staging creation is cleaned when descriptor validation fails", { skip
 });
 
 
-test("Host scanner and staging quarantine preserve BOM and non-ASCII filename identity", async t => {
+hostTest("Host scanner and staging quarantine preserve BOM and non-ASCII filename identity", async t => {
   const { stagingPath, finalPath, stagingDirectory, finalDirectory } = await store(t);
   const names = ["foo", "\uFEFFfoo", "é", "中"];
   for (const name of names) await writeFile(join(stagingPath, name), "data");
