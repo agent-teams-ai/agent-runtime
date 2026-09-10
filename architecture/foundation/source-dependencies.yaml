@@ -213,6 +213,32 @@ boundaries:
       packages: []
       builtins: []
       runtimeReferences: []
+  - id: composition.agent-execution.contained-turn
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/authority-owner-boundary.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-credential-output-inventory.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts
+    entrypoints:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/authority-owner-boundary.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-credential-output-inventory.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts
+    allow:
+      boundaries:
+        - adapter.agent-execution.host-custody
+        - core.agent-execution.contained-turn
+      packages: []
+      builtins:
+        - node:util
+      runtimeReferences: []
   - id: production.agent-execution
     dependencyMode: runtime
     roots:
@@ -229,6 +255,7 @@ boundaries:
         - adapter.agent-execution.host-custody
         - adapter.agent-execution.legacy-contained-turn-ports
         - adapter.agent-execution.provider-delegation-ports
+        - composition.agent-execution.contained-turn
         - core.agent-execution.contained-turn
       packages:
         - "@agent-teams/filesystem-custody"
@@ -241,7 +268,6 @@ boundaries:
         - node:fs/promises
         - node:path
         - node:timers/promises
-        - node:util
       runtimeReferences: []
   - id: production.provider-access
     dependencyMode: runtime

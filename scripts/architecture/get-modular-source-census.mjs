@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { FilesystemSourceTreeReader } from '../../node_modules/@agent-teams/engineering-foundation/dist/source-inventory/adapters/outbound/filesystem/filesystem-source-tree-reader.js';
-import { PnpmWorkspaceInventoryReader } from '../../node_modules/@agent-teams/engineering-foundation/dist/workspace-inventory/adapters/outbound/pnpm/pnpm-workspace-inventory-reader.js';
+import { createSourceTreeReader } from '../../node_modules/@agent-teams/engineering-foundation/dist/source-inventory/module.js';
+import { createWorkspaceInventoryReader } from '../../node_modules/@agent-teams/engineering-foundation/dist/workspace-inventory/module.js';
 import { OxcSourceDependencyParser } from '../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/adapters/outbound/oxc/oxc-source-dependency-parser.js';
 import { NodeSourceDependencyResolver } from '../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/adapters/outbound/node/node-source-dependency-resolver.js';
 import { buildObservedSourceGraph } from '../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/application/use-cases/build-observed-source-graph.js';
 import { createSourceDependenciesCapability } from '../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/module.js';
+import { assertSchema } from '../../node_modules/@agent-teams/engineering-foundation/dist/schema-catalog.js';
 
 const within = (path, root) => path === root || path.startsWith(`${root}/`);
 const unique = values => [...new Set(values)].toSorted();
@@ -20,11 +21,12 @@ function boundaryFor(path, boundaries) {
  * the consumer's meaningful topology and exact reviewed dependency relationships.
  */
 export async function readSourceCensus(root, policy) {
-  const inventory = await new PnpmWorkspaceInventoryReader().read(root, policy.workspaceManifestPath);
+  const inventoryReader = createWorkspaceInventoryReader();
+  const inventory = await inventoryReader.read(root, policy.workspaceManifestPath);
   const packages = inventory.packages.filter(pkg => pkg.rootPath.startsWith('packages/'));
   // Discover all conventional production roots independently of governedRoots.
   const productionRoots = packages.map(pkg => `${pkg.rootPath}/src`).toSorted();
-  const files = await new FilesystemSourceTreeReader().read(root, productionRoots);
+  const files = await createSourceTreeReader().read(root, productionRoots);
   const parser = new OxcSourceDependencyParser();
   const classifiedFiles = files.map(file => ({ ...file, boundary: boundaryFor(file.path, policy.boundaries),
     workspacePackage: packages.filter(pkg => within(file.path, pkg.rootPath)).toSorted((a, b) => b.rootPath.length - a.rootPath.length)[0], parsed: parser.parse(file) }));
@@ -57,7 +59,11 @@ export async function readSourceCensus(root, policy) {
 }
 
 export async function requireSourceDiagnostics(root) {
-  const report = await createSourceDependenciesCapability().run({ consumerRoot: root, configPath: 'architecture/foundation/source-dependencies.yaml' });
+  const report = await createSourceDependenciesCapability({
+    inventoryReader: createWorkspaceInventoryReader(),
+    sourceReader: createSourceTreeReader(),
+    assertSchema,
+  }).run({ consumerRoot: root, configPath: 'architecture/foundation/source-dependencies.yaml' });
   assert.equal(report.outcome, 'passed', `source diagnostics failed: ${JSON.stringify(report)}`);
 }
 

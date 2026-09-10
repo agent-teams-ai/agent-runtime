@@ -8,8 +8,13 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { promoteArchitectureDecisionBaseline } from '../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/governance-architecture-decisions/module.js';
 import { readSourceCensus, requireSourceDiagnostics, verifySourceCensus } from './get-modular-source-census.mjs';
-import { loadCapabilityConfig } from '../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/contract/config.js';
+import { loadCapabilityConfig } from '../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/adapters/inbound/configuration/load-capability-config.js';
+import { loadStrictYamlFile } from '../../node_modules/@agent-teams/engineering-foundation/dist/features/configuration-input/node.js';
+import { assertSchema } from '../../node_modules/@agent-teams/engineering-foundation/dist/schema-catalog.js';
 import { checkAdoption, digest, validateProfile, verifyAdoption } from './check-get-modular-adoption.mjs';
+
+const loadSourcePolicy = (root, configPath = 'architecture/foundation/source-dependencies.yaml') =>
+  loadCapabilityConfig({ readYaml: loadStrictYamlFile, assertSchema }, root, configPath);
 
 const pending = JSON.parse(await readFile(new URL('../../architecture/get-modular/consumer-profile.json', import.meta.url)));
 function fixture() {
@@ -114,7 +119,7 @@ architecture/get-modular/consumer-profile.json
   await write(decisionConfig, { schemaVersion: 1, adrRoots: ['docs/decisions'], index: {
     path: 'docs/decisions/README.md', sections: { proposed: 'Proposed', accepted: 'Accepted', superseded: 'Superseded' } },
     acceptedBaselinePath: 'architecture/decisions/accepted-decisions.json' });
-  await promoteArchitectureDecisionBaseline({ consumerRoot: root, configPath: decisionConfig });
+  await promoteArchitectureDecisionBaseline({ consumerRoot: root, configPath: decisionConfig }, assertSchema);
   await write('architecture/foundation/source-dependencies.yaml', { schemaVersion: 1,
     workspace: { kind: 'pnpm', manifest: 'pnpm-workspace.yaml' }, governedRoots: profile.productionRoots,
     boundaries: profile.boundaries.map(b => ({ id: b.id, roots: b.roots, entrypoints: b.entrypoints,
@@ -128,7 +133,7 @@ architecture/get-modular/consumer-profile.json
   await write('pnpm-lock.yaml', lock);
   await write('pnpm-workspace.yaml', { packages: ['packages/test'] });
   await write('packages/test/package.json', { name: '@test/fixture', version: '1.0.0' });
-  const policy = await loadCapabilityConfig(root, 'architecture/foundation/source-dependencies.yaml');
+  const policy = await loadSourcePolicy(root);
   const census = await readSourceCensus(root, policy);
   profile.sourceCensus = { packageRoots: census.packageRoots, featureRoots: census.featureRoots };
   profile.boundaries.forEach(b => { b.relationships = census.relationships[b.id]; });
@@ -208,7 +213,7 @@ test('census rejects new edges and type-to-runtime widening even when policy per
 });
 
 async function retainFixtureCensus(f) {
-  const policy = await loadCapabilityConfig(f.root, 'architecture/foundation/source-dependencies.yaml');
+  const policy = await loadSourcePolicy(f.root);
   const census = await readSourceCensus(f.root, policy);
   f.profile.sourceCensus = { packageRoots: census.packageRoots, featureRoots: census.featureRoots };
   f.profile.boundaries.forEach(b => { b.relationships = census.relationships[b.id]; });
@@ -254,7 +259,7 @@ test('active profile retains the two direct contained-turn seams without claimin
 
 test('PR71 reviewed owners and helpers retain exact live relationships without expanding adoption', async () => {
   const root = fileURLToPath(new URL('../../', import.meta.url));
-  const policy = await loadCapabilityConfig(root, 'architecture/foundation/source-dependencies.yaml');
+  const policy = await loadSourcePolicy(root);
   const census = await readSourceCensus(root, policy);
   verifySourceCensus(pending, census);
   // Explicit semantic review subjects, not a regenerated list from the live graph.

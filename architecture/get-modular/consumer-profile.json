@@ -181,7 +181,17 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
           "mode": "runtime"
         },
         {
@@ -212,6 +222,16 @@
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-files.ts",
           "to": "@agent-teams/filesystem-custody",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-files.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
           "mode": "runtime"
         },
         {
@@ -439,8 +459,8 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine"
       ],
       "entrypoints": [
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-composition.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.ts"
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-composition.ts"
       ],
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
@@ -476,7 +496,9 @@
       "entrypoints": [
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-workspace-entrypoint.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-cooperative-process-custody.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/native-host-custody-workspace-entrypoint.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts"
       ],
       "status": "not-adopted",
@@ -579,6 +601,16 @@
           "mode": "type-only"
         },
         {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-selection.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/committed-dispatch-proof-v1.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-selection.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-identities.ts",
+          "mode": "type-only"
+        },
+        {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-route-durable-storage.ts",
           "to": "@agent-teams/filesystem-custody",
           "mode": "runtime"
@@ -668,6 +700,143 @@
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/provider-delegation-ports/private-directory-custody-port.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts",
           "mode": "type-only"
+        }
+      ]
+    },
+    {
+      "id": "composition.agent-execution.contained-turn",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/authority-owner-boundary.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-credential-output-inventory.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/authority-owner-boundary.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-credential-output-inventory.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "The contained-turn anti-corruption composition boundary was made explicit by reviewed PR69 checkpoints 2cb9b605 and 981c11314 to confine Node utility access. It remains outside the seven-node passive setup Assembly graph. Existing feature factories retain authority, preparation and custody ownership; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": [
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-engine.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-authority.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-codecs.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-dispatch-authority.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-identities.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-record.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/authority-owner-boundary.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-record.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-codecs.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-dispatch-authority.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-record.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-preparation-scope.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/committed-dispatch-proof-v1.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-identities.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-record.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-authority.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-codecs.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-dispatch-authority.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-identities.ts",
+          "mode": "runtime"
         }
       ]
     },
@@ -1061,8 +1230,8 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-preparation-cleanup.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-preparation-recovery.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-preparation-scope.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-operation-store.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-operation-store.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/committed-dispatch-proof-v1.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-authority.ts",
@@ -1093,12 +1262,12 @@
         "packages/contexts/agent-execution/src"
       ],
       "entrypoints": [
+        "packages/contexts/agent-execution/src/index.ts",
         "packages/contexts/agent-execution/src/composition.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.ts",
-        "packages/contexts/agent-execution/src/index.ts"
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.ts"
       ],
       "status": "not-adopted",
-      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules. Reviewed at 291684ed9: native broker installation and deferred binding, route enforcement, Docker kernel/effect custody and Node deployment recipe remain not-adopted contained-turn owners. The private route provenance composition shares one issuance/selection registry; consumption observations are an owner-local projection helper. Their exact Codex adapter and Host/Docker custody relationships are retained without transferring resource cleanup or containment authority to Assembly. Retained launch workspace is a private descriptor resource owner under existing workspace custody; Docker native-start diagnostics are local readback helpers, never admission or cleanup authority. At 81b2833af, Darwin post-claim preparation and route enforcement remain direct contained-turn owners outside passive scope; the fixed feature-local route helper and its exact adapter, custody and proof imports are not separate graph nodes.",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules. Reviewed at 291684ed9: native broker installation and deferred binding, route enforcement, Docker kernel/effect custody and Node deployment recipe remain not-adopted contained-turn owners. The private route provenance composition shares one issuance/selection registry; consumption observations are an owner-local projection helper. Their exact Codex adapter and Host/Docker custody relationships are retained without transferring resource cleanup or containment authority to Assembly. Retained launch workspace is a private descriptor resource owner under existing workspace custody; Docker native-start diagnostics are local readback helpers, never admission or cleanup authority. At 81b2833af, Darwin post-claim preparation and route enforcement remain direct contained-turn owners outside passive scope; the fixed feature-local route helper and its exact adapter, custody and proof imports are not separate graph nodes. At 981c11314, eleven existing same-feature imports enter the newly explicit contained-turn anti-corruption composition boundary; these are retained static relationships outside passive Assembly adoption.",
       "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
       "relationships": [
         {
@@ -1110,6 +1279,11 @@
           "from": "packages/contexts/agent-execution/src/composition.ts",
           "to": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/internal.ts",
           "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-native-files/codex-native-broker-file-installer.ts",
+          "to": "@agent-teams/filesystem-custody",
+          "mode": "type-only"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-native-files/codex-native-broker-file-installer.ts",
@@ -1127,9 +1301,24 @@
           "mode": "runtime"
         },
         {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-custody.ts",
+          "to": "@agent-teams/filesystem-custody",
+          "mode": "type-only"
+        },
+        {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-rehydration.ts",
           "to": "@agent-teams/filesystem-custody",
           "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-rehydration.ts",
+          "to": "@agent-teams/filesystem-custody",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-sealing.ts",
+          "to": "@agent-teams/filesystem-custody",
+          "mode": "type-only"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-verification.ts",
@@ -1142,6 +1331,11 @@
           "mode": "runtime"
         },
         {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-directory-publication.ts",
+          "to": "@agent-teams/filesystem-custody",
+          "mode": "type-only"
+        },
+        {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-durable-file.ts",
           "to": "@agent-teams/filesystem-custody",
           "mode": "runtime"
@@ -1150,6 +1344,11 @@
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.ts",
           "to": "@agent-teams/filesystem-custody",
           "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-handles.ts",
+          "to": "@agent-teams/filesystem-custody",
+          "mode": "type-only"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-port.ts",
@@ -1162,6 +1361,11 @@
           "mode": "type-only"
         },
         {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-reads.ts",
+          "to": "@agent-teams/filesystem-custody",
+          "mode": "runtime"
+        },
+        {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-kernel-closure-record.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-codecs.ts",
           "mode": "runtime"
@@ -1172,8 +1376,33 @@
           "mode": "runtime"
         },
         {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-rehydration-filesystem.ts",
+          "to": "@agent-teams/filesystem-custody",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-relative-directory.ts",
+          "to": "@agent-teams/filesystem-custody",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-capability.ts",
+          "to": "@agent-teams/filesystem-custody",
+          "mode": "type-only"
+        },
+        {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-capability.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-closure.ts",
+          "to": "@agent-teams/filesystem-custody",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-io.ts",
+          "to": "@agent-teams/filesystem-custody",
           "mode": "type-only"
         },
         {
@@ -1182,9 +1411,49 @@
           "mode": "type-only"
         },
         {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-materialization.ts",
+          "to": "@agent-teams/filesystem-custody",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-tree.ts",
+          "to": "@agent-teams/filesystem-custody",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/darwin-attempt-workspace-backend.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/darwin-attempt-workspace-backend.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/darwin-attempt-workspace-backend.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-workspace-entrypoint.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/darwin-attempt-workspace-backend.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-workspace-entrypoint.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/host-private-root-filesystem.ts",
+          "to": "@agent-teams/filesystem-custody",
+          "mode": "type-only"
+        },
+        {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/host-private-root-owner.ts",
           "to": "@agent-teams/filesystem-custody",
           "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/host-private-root-owner.ts",
+          "to": "@agent-teams/filesystem-custody",
+          "mode": "type-only"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/host-private-root-owner.ts",
@@ -1215,6 +1484,11 @@
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace.ts",
           "to": "@agent-teams/filesystem-custody",
           "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace.ts",
+          "to": "@agent-teams/filesystem-custody",
+          "mode": "type-only"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace.ts",
@@ -1542,46 +1816,6 @@
           "mode": "runtime"
         },
         {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-engine.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-authority.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-codecs.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-dispatch-authority.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-identities.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-record.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/authority-owner-boundary.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-record.ts",
-          "mode": "runtime"
-        },
-        {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/claude-current-kernel-owner.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-current-kernel-entrypoint.ts",
           "mode": "runtime"
@@ -1605,6 +1839,11 @@
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/claude-current-kernel-owner.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
           "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/claude-current-kernel-owner.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts",
+          "mode": "runtime"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/claude-current-kernel-owner.ts",
@@ -1673,6 +1912,16 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-current-kernel-owner.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-credential-output-inventory.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-current-kernel-owner.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-current-kernel-owner.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts",
           "mode": "type-only"
         },
@@ -1709,7 +1958,7 @@
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/darwin-codex-host-post-claim-preparation.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
-          "mode": "type-only"
+          "mode": "runtime"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/darwin-codex-host-post-claim-preparation.ts",
@@ -1735,21 +1984,6 @@
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/deferred-codex-native-broker-files.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
           "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-codecs.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-dispatch-authority.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-record.ts",
-          "mode": "runtime"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/docker-codex-current-kernel-owner.ts",
@@ -1795,6 +2029,11 @@
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/docker-codex-current-kernel-owner.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
           "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/docker-codex-current-kernel-owner.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-credential-output-inventory.ts",
+          "mode": "runtime"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/docker-codex-current-kernel-owner.ts",
@@ -1917,6 +2156,11 @@
           "mode": "runtime"
         },
         {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/docker-kernel-host-custody.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/native-host-custody-workspace-entrypoint.ts",
+          "mode": "runtime"
+        },
+        {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/docker-linux-exclusive-route-admission.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.ts",
           "mode": "runtime"
@@ -1963,12 +2207,12 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/feature-module-factory.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts",
-          "mode": "type-only"
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
+          "mode": "runtime"
         },
         {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/feature-module-factory.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts",
           "mode": "type-only"
         },
         {
@@ -2002,53 +2246,8 @@
           "mode": "type-only"
         },
         {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-preparation-scope.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/committed-dispatch-proof-v1.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-identities.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-record.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-authority.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-codecs.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-dispatch-authority.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-identities.ts",
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/node-kernel-workspace-authority.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
           "mode": "runtime"
         },
         {
@@ -2063,6 +2262,21 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/runtime-security-acceptance-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/runtime-security-acceptance-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/authority-owner-boundary.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/runtime-security-acceptance-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/runtime-security-acceptance-anti-corruption.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-authority.ts",
           "mode": "runtime"
         },
@@ -2088,6 +2302,11 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/runtime-security-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/runtime-security-anti-corruption.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-codecs.ts",
           "mode": "runtime"
         },
@@ -2099,6 +2318,11 @@
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/runtime-security-anti-corruption.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-identities.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/security-owner-outcome.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/authority-owner-boundary.ts",
           "mode": "runtime"
         },
         {
@@ -2160,6 +2384,11 @@
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
           "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
+          "mode": "runtime"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
@@ -2310,6 +2539,11 @@
       "relationships": [
         {
           "from": "packages/platform/filesystem-custody/src/index.ts",
+          "to": "packages/platform/filesystem-custody/src/host-descriptor.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/filesystem-custody/src/index.ts",
           "to": "packages/platform/filesystem-custody/src/stable-directory-capability.ts",
           "mode": "runtime"
         },
@@ -2337,8 +2571,8 @@
         "packages/contexts/provider-access/src"
       ],
       "entrypoints": [
-        "packages/contexts/provider-access/src/composition.ts",
-        "packages/contexts/provider-access/src/index.ts"
+        "packages/contexts/provider-access/src/index.ts",
+        "packages/contexts/provider-access/src/composition.ts"
       ],
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
@@ -2368,8 +2602,8 @@
         "packages/contexts/runtime-configuration/src"
       ],
       "entrypoints": [
-        "packages/contexts/runtime-configuration/src/composition.ts",
-        "packages/contexts/runtime-configuration/src/index.ts"
+        "packages/contexts/runtime-configuration/src/index.ts",
+        "packages/contexts/runtime-configuration/src/composition.ts"
       ],
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
@@ -2484,8 +2718,8 @@
         "packages/contexts/runtime-security/src"
       ],
       "entrypoints": [
-        "packages/contexts/runtime-security/src/composition.ts",
-        "packages/contexts/runtime-security/src/index.ts"
+        "packages/contexts/runtime-security/src/index.ts",
+        "packages/contexts/runtime-security/src/composition.ts"
       ],
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",

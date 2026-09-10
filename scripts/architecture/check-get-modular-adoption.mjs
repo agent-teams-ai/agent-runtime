@@ -137,13 +137,14 @@ export async function checkAdoption(root) {
   const profile = await json('architecture/get-modular/consumer-profile.json');
   const status = validateProfile(profile);
   if (status.status === 'pending') { return status; }
-  const { loadCapabilityConfig } = await import('../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/contract/config.js');
+  const { loadCapabilityConfig } = await import('../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/adapters/inbound/configuration/load-capability-config.js');
   const { readAcceptedArchitectureDecisionEvidence } = await import('../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/governance-architecture-decisions/module.js');
-  const { loadStrictYamlFile } = await import('../../node_modules/@agent-teams/engineering-foundation/dist/strict-yaml.js');
-  const policy = await loadCapabilityConfig(consumerRoot, 'architecture/foundation/source-dependencies.yaml');
+  const { loadStrictYamlFile } = await import('../../node_modules/@agent-teams/engineering-foundation/dist/features/configuration-input/node.js');
+  const { assertSchema } = await import('../../node_modules/@agent-teams/engineering-foundation/dist/schema-catalog.js');
+  const policy = await loadCapabilityConfig({ readYaml: loadStrictYamlFile, assertSchema }, consumerRoot, 'architecture/foundation/source-dependencies.yaml');
   const accepted = await readAcceptedArchitectureDecisionEvidence({ consumerRoot,
     configPath: 'architecture/foundation/governance-architecture-decisions.yaml',
-    baselinePath: 'architecture/decisions/accepted-decisions.json' });
+    baselinePath: 'architecture/decisions/accepted-decisions.json' }, assertSchema);
   const registry = await json('architecture/decisions/accepted-decisions.json');
   const decisions = registry.decisions.filter(d => accepted.acceptedDecisionIds.includes(d.id) && accepted.acceptedDecisionPaths.includes(d.path));
   const manifest = await json('package.json');
