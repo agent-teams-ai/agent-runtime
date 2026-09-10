@@ -93,8 +93,10 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
 
     const consumerPath = join(temporaryRoot, "consumer", "consume.mjs");
     await writeFile(consumerPath, [
+      'import assert from "node:assert/strict";',
       'import * as contracts from "@agent-teams/agent-execution";',
       'import * as composition from "@agent-teams/agent-execution/composition";',
+      'assert.throws(() => composition.readNodeContainedTurnNativeWorkspaceClosure({}, {}), /not issued/u);',
       "const rejected = [];",
       'for (const subpath of ["production", "testing"]) {',
       "  try { await import(`@agent-teams/agent-execution/${subpath}`); }",
@@ -128,7 +130,6 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "bindContainedTurnRouteEnforcement",
       "bindDarwinCodexRouteEnforcement",
       "captureRootDarwinAttemptWorkspace",
-      "createDarwinCodexEffectCustodyOwner",
       "containedTurnPreparationToken",
       "containedTurnPreventionDigest",
       "createClaudeCurrentKernelOwner",
@@ -141,6 +142,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "createContainedTurnRouteEnforcement",
       "createContainedTurnRuntimeSecurityPort",
       "createContainedTurnSecurityAcceptancePort",
+      "createDarwinCodexEffectCustodyOwner",
       "createDarwinCodexHostPostClaimPreparation",
       "createDarwinCodexRouteEnforcement",
       "createDeferredCodexNativeBrokerFiles",
@@ -165,6 +167,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "prepareDarwinCodexNativeLaunchInput",
       "readContainedTurnRouteEnforcementTarget",
       "readContainedTurnSelectedRouteAdmission",
+      "readNodeContainedTurnNativeWorkspaceClosure",
       "recoverContainedTurnCommittedGrantSettlements",
       "recoverContainedTurnDispatchPreparations",
       "rollbackContainedTurnPostgresSchemaV4",

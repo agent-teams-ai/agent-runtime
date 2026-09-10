@@ -32,6 +32,7 @@ export {
   createNodeContainedTurnArtifacts,
   createNodeContainedTurnWorkspace,
   createNodeContainedTurnWorkspaceOwner,
+  readNodeContainedTurnNativeWorkspaceClosure,
   type NodeContainedTurnWorkspaceOwner,
   createHostHttpEgressSession,
   createNativeHttpEgressRoute,
