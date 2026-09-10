@@ -45,3 +45,25 @@ export type {HostHttpLocalCutInput} from "./egress/host-http-local-cut-owner.js"
 export type {HttpEgressLimits} from "./egress/http-egress-contracts.js";
 
 export {snapshotHttpBytes} from "./egress/http-byte-intrinsics.js";
+
+export {withNativeHostCustodyWorkspaceAuthority, retireNativeHostCustodyWorkspaceAuthority,
+  type NativeHostCustodyWorkspaceAuthority} from "./native-host-custody-workspace-authority.js";
+
+export {
+  readDarwinNativeLaunchObservation, inspectDarwinNativeLaunchObservation,
+  assertDarwinNativeLaunchObservationCurrent,
+  installDarwinNativeCodexMaterial, inspectDarwinNativeCodexMaterial,
+  assertDarwinNativeCodexMaterialCurrent,
+  type DarwinNativeWorkspaceSelection, type DarwinNativeLaunchObservation,
+  type DarwinNativeCodexMaterial,
+} from "./darwin-attempt-owner-selection.js";
+
+export {darwinAttemptOwnerStates} from "./darwin-attempt-owner-protocol.js";
+export {
+  captureRootDarwinAttemptWorkspace, withDarwinNativeWorkspaceSelection,
+  revokeDarwinNativeWorkspaceSelection, consumeDarwinNativeWorkspaceSelection,
+} from "./darwin-attempt-owner-selection.js";
+export type {
+  DarwinNativeExecutionLease, NativePreparedAttemptBinding,
+  RetainedNativeAttemptAuthority, NativeDirectoryFact, NativeFileFact,
+} from "./darwin-attempt-owner-selection.js";

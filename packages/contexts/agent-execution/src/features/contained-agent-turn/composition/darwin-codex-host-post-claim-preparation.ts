@@ -1,4 +1,27 @@
+import { createDarwinNativeCodexPermissionBoundary, codexDarwinNativeLaunchObservation,
+  type CodexAppServerPermissionBoundary, type CodexContainedTurnMode } from "../adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
+
+/** Before PG prepare: authenticate the native original roots without consuming
+ * the kernel's later workspace selection callback or inventing an attempt. */
+export const prepareDarwinCodexNativeLaunchInput = async (
+  selection: DarwinNativeWorkspaceSelection, intentMode: CodexContainedTurnMode,
+) => {
+  const observation = await readDarwinNativeLaunchObservation(selection);
+  const boundary = createDarwinNativeCodexPermissionBoundary(observation, intentMode);
+  const facts = inspectDarwinNativeLaunchObservation(observation);
+  return Object.freeze({boundary, nativeSelection: selection, privateRootPath: facts.privateRoot.path, tmpDir: facts.tmpDir.path});
+};
+
+/** Assembly calls this after the real committed-claim/session owner, before its
+ * synchronous finalizer. The native producer independently gates installation
+ * on its genuine bound claim. This does not manufacture resource receipts. */
+export const prepareDarwinCodexNativeFixedMaterial = async (
+  selection: DarwinNativeWorkspaceSelection, recipe: CodexNativeBrokerRecipe, catalogSource: Uint8Array,
+) => Object.freeze({recipe, files: await installCodexDarwinNativeBrokerFiles(selection, recipe, catalogSource)});
+
 import {
+  readDarwinNativeLaunchObservation, inspectDarwinNativeLaunchObservation,
+  type DarwinNativeWorkspaceSelection,
   hostHttpAbortOperations,
   type ContainedTurnHostPostClaimPreparation,
   NodeProviderProcessCustodyCore,
@@ -15,10 +38,10 @@ import {
   type HttpEgressLimits,
 } from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import {
+  installCodexDarwinNativeBrokerFiles, type CodexNativeBrokerRecipe,
   DarwinCodexNativeFiles, codexNativeBrokerLaunchInput,
   createDarwinCodexNativeBrokerRecipe, prepareCodexNativeBrokerFiles,
 } from "../adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
-import type { CodexAppServerPermissionBoundary } from "../adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
 
 export interface DarwinCodexHostPreparationInput {
   readonly hostCustody: unknown;
@@ -26,6 +49,7 @@ export interface DarwinCodexHostPreparationInput {
    * Must be the original locator namespace on restart, never a fresh retry tree. */
   readonly durableRoot: DarwinTrustedDirectory;
   readonly boundary: CodexAppServerPermissionBoundary;
+  readonly nativeSelection?: DarwinNativeWorkspaceSelection;
   readonly executable: Readonly<{path: string; sha256: string}>;
   readonly observer: Readonly<{path: string; sha256: string}>;
   readonly launcherSha256: string;
@@ -53,6 +77,12 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
     if (entered) {return Object.freeze({kind: "quarantined" as const});} entered = true;
     let route: DarwinSeatbeltRouteOwner | undefined;
     try {
+      // The legacy route owner below performs Host-UID pathname observations.
+      // Until the native Host preparation owner seam is supplied, refuse before
+      // touching protected roots; a native selection cannot select this route.
+      if (options.nativeSelection !== undefined || codexDarwinNativeLaunchObservation(options.boundary) !== undefined) {
+        return Object.freeze({kind: "unsupported" as const, reason: "owner" as const});
+      }
       const preparation = NodeProviderProcessCustodyCore.httpPreparation(options.hostCustody);
       if (preparation === undefined || process.platform !== "darwin" || claimed.signal.aborted ||
           options.limits.deadline !== options.localCut.operationDeadline || options.limits.closureDeadline <= options.limits.deadline) {

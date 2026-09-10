@@ -1,4 +1,10 @@
-import { createHash } from "node:crypto";
+import {
+  readDarwinNativeLaunchObservation, inspectDarwinNativeLaunchObservation,
+  installDarwinNativeCodexMaterial, inspectDarwinNativeCodexMaterial, assertDarwinNativeCodexMaterialCurrent,
+  type DarwinNativeWorkspaceSelection, type DarwinNativeCodexMaterial,
+} from "../host-custody/contained-turn-kernel-custody-entrypoint.js";
+import { codexDarwinNativeLaunchObservation, acceptCodexDarwinNativeMaterialObservation, validateCodexDirectoryIdentity } from "./codex-app-server-permission-boundary.js";
+import { createHash, randomUUID } from "node:crypto";
 import { lstatSync, readdirSync, type BigIntStats } from "node:fs";
 import { capturePathLineage, openStablePath, pathLineagesEqual } from "@agent-teams/filesystem-custody";
 import {
@@ -6,7 +12,6 @@ import {
   codexNativeBrokerBoundary, renderCodexNativeBrokerConfig,
   type CodexNativeBrokerRecipe,
 } from "./codex-native-broker-recipe.js";
-import { validateCodexDirectoryIdentity } from "./codex-app-server-permission-boundary.js";
 
 export interface CodexNativeBrokerFiles {
   readonly kind: "codex-native-broker-prepared-files/v1";
@@ -52,6 +57,12 @@ const observeFile = async (home: string, path: string, expected: { size: number;
  */
 export const prepareCodexNativeBrokerFiles = async (recipe: CodexNativeBrokerRecipe): Promise<CodexNativeBrokerFiles> => {
   const boundary = codexNativeBrokerBoundary(recipe);
+  if (codexDarwinNativeLaunchObservation(boundary) !== undefined) {
+    const files = nativeRecipes.get(recipe);
+    if (files === undefined) {throw rejected();}
+    validateCodexNativeBrokerFiles(files, recipe);
+    return files;
+  }
   try {
     validateCodexDirectoryIdentity("codexHome", boundary.codexHomeIdentity);
     assertEmptyNativeState(boundary.codexHome, recipe);
@@ -74,6 +85,14 @@ export const prepareCodexNativeBrokerFiles = async (recipe: CodexNativeBrokerRec
 
 /** Called at explicit launch validation, never in a provider constructor. */
 export const validateCodexNativeBrokerFiles = (files: CodexNativeBrokerFiles, recipe: CodexNativeBrokerRecipe): void => {
+  const native = nativeFiles.get(files);
+  if (native !== undefined) {
+    if (native.recipe !== recipe) {throw rejected();}
+    assertDarwinNativeCodexMaterialCurrent(native.material);
+    const boundary = codexNativeBrokerBoundary(recipe);
+    if (codexDarwinNativeLaunchObservation(boundary) !== inspectDarwinNativeCodexMaterial(native.material).observation) {throw rejected();}
+    return;
+  }
   const state = prepared.get(files);
   if (state === undefined || state.recipe !== recipe) {throw rejected();}
   try {
@@ -84,4 +103,74 @@ export const validateCodexNativeBrokerFiles = (files: CodexNativeBrokerFiles, re
       if (!same(file.stats, lstatSync(file.path, { bigint: true }))) {throw rejected();}
     }
   } catch {throw rejected();}
+};
+
+
+interface NativePreparedFiles {
+  readonly recipe: CodexNativeBrokerRecipe;
+  readonly material: DarwinNativeCodexMaterial;
+}
+const nativeFiles = new WeakMap<CodexNativeBrokerFiles, NativePreparedFiles>();
+const nativeRecipes = new WeakMap<CodexNativeBrokerRecipe, CodexNativeBrokerFiles>();
+const attemptedSelections = new WeakSet<DarwinNativeWorkspaceSelection>();
+const digest = (bytes: Uint8Array | string): string => createHash("sha256").update(bytes).digest("hex");
+
+/** Async fixed-three installation after the producer's actual committed claim.
+ * No Host path access, auth file, generic write callback or cleanup receipt. */
+export const installCodexDarwinNativeBrokerFiles = async (
+  selection: DarwinNativeWorkspaceSelection, recipe: CodexNativeBrokerRecipe, catalogSource: Uint8Array,
+): Promise<CodexNativeBrokerFiles> => {
+  const boundary = codexNativeBrokerBoundary(recipe);
+  const observation = codexDarwinNativeLaunchObservation(boundary);
+  if (observation === undefined || attemptedSelections.has(selection) || nativeRecipes.has(recipe)) {throw rejected();}
+  const original = inspectDarwinNativeLaunchObservation(observation);
+  const catalog = Buffer.from(catalogSource);
+  const config = Buffer.from(renderCodexNativeBrokerConfig(recipe));
+  const installationId = randomUUID();
+  if (catalog.length !== CODEX_NATIVE_CATALOG_BYTES || digest(catalog) !== CODEX_NATIVE_CATALOG_SHA256) {throw rejected();}
+  attemptedSelections.add(selection);
+  // The producer authenticates the opaque selection. Compare all retained roots
+  // before asking for the one-use post-claim installation effect.
+  const selected = inspectDarwinNativeLaunchObservation(await readDarwinNativeLaunchObservation(selection));
+  if (selected.operationId !== original.operationId || selected.generation !== original.generation ||
+      selected.leasedUid !== original.leasedUid ||
+      (["privateRoot", "codexHome", "tmpDir", "workspace"] as const).some(key => {
+        const a = selected[key]; const b = original[key];
+        return a.path !== b.path || a.dev !== b.dev || a.ino !== b.ino || a.uid !== b.uid || a.mode !== b.mode;
+      })) {throw rejected();}
+  const material = await installDarwinNativeCodexMaterial(selection, {config, catalog, installationId});
+  const actual = inspectDarwinNativeCodexMaterial(material);
+  assertDarwinNativeCodexMaterialCurrent(material);
+  if (actual.installationId !== installationId) {throw rejected();}
+  const expected = [
+    [actual.config, "config.toml", config, 0o600],
+    [actual.catalog, "models.json", catalog, 0o600],
+    [actual.installation, "installation_id", Buffer.from(installationId), 0o644],
+  ] as const;
+  for (const [fact, name, bytes, mode] of expected) {
+    if (fact.path !== `${boundary.codexHome}/${name}` || fact.uid !== original.leasedUid ||
+        fact.mode !== (0o100000 | mode) || fact.nlink !== 1 || fact.bytes !== bytes.length ||
+        fact.sha256 !== digest(bytes) || fact.dev !== original.codexHome.dev || fact.ino <= 0n) {throw rejected();}
+  }
+  if (new Set(expected.map(([fact]) => `${fact.dev}:${fact.ino}`)).size !== 3) {throw rejected();}
+  acceptCodexDarwinNativeMaterialObservation(boundary, material);
+  const files: CodexNativeBrokerFiles = Object.freeze({kind: "codex-native-broker-prepared-files/v1"});
+  nativeFiles.set(files, Object.freeze({recipe, material}));
+  nativeRecipes.set(recipe, files);
+  validateCodexNativeBrokerFiles(files, recipe);
+  return files;
+};
+
+/** Actual retained file observations, included in the synchronous final hash. */
+export const codexDarwinNativeMaterialIdentity = (recipe: CodexNativeBrokerRecipe): readonly string[] | undefined => {
+  const files = nativeRecipes.get(recipe);
+  if (files === undefined) {return undefined;}
+  validateCodexNativeBrokerFiles(files, recipe);
+  const actual = inspectDarwinNativeCodexMaterial(nativeFiles.get(files)!.material);
+  const roots = inspectDarwinNativeLaunchObservation(actual.observation);
+  return Object.freeze([roots.operationId, roots.generation, String(roots.leasedUid), actual.installationId,
+    ...[roots.privateRoot, roots.codexHome, roots.tmpDir, roots.workspace].flatMap(fact => [fact.path,
+      String(fact.dev), String(fact.ino), String(fact.uid), String(fact.mode)]),
+    ...[actual.config, actual.catalog, actual.installation].flatMap(fact => [fact.path, String(fact.dev),
+      String(fact.ino), String(fact.uid), String(fact.mode), String(fact.nlink), String(fact.bytes), fact.sha256])]);
 };

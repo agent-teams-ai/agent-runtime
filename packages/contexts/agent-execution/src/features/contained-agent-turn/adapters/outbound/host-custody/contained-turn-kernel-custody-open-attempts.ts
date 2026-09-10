@@ -52,17 +52,19 @@ export class KernelOpenAttempts {
     };
     this.#openAttempts.set(input.custodyId, attempt);
     this.#consumedOperationAttempts.add(operationAttempt);
+    let callbackEntered = false;
     let scoped: ReturnType<ContainedTurnKernelCustodyPort["open"]> | undefined;
     try {
-      return await workspaceOwner.withLaunchAuthority({
-        attemptId: input.attemptId, operationId: input.operationId, workspaceId: input.workspaceId,
-      }, authority => {
-        if (attempt.closed || scoped !== undefined) {
+      const ids = {attemptId: input.attemptId, operationId: input.operationId, workspaceId: input.workspaceId};
+      const consume = (authority: HostCustodyReservationInput["workspaceAuthority"]) => {
+        if (attempt.closed || callbackEntered) {
           throw new TypeError("Host Custody workspace authority is already consumed");
         }
+        callbackEntered = true;
         scoped = openScoped(input, authority, attempt);
         return scoped;
-      });
+      };
+      return await workspaceOwner.withLaunchAuthority(ids, consume);
     } catch (error) {
       attempt.closed = true;
       // A workspace owner can reject while its callback is still preparing.

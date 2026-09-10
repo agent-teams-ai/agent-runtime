@@ -1,3 +1,4 @@
+import { descriptorWorkspaceAuthority } from "./private-host-custody-reservation.js";
 import {
   HostCustodyFingerprintConflictError,
   type ContainedTurnCustodyHandle,
@@ -40,12 +41,14 @@ export const replayCustody = async (
 };
 
 /** Replay is input identity, never re-resolution or a final execution identity. */
-export const privateReservationIdentity = (input: HostCustodyReservationInput): string =>
-  sha256(canonicalJson([inputIdentity(input), input.workspaceAuthority.canonicalPath, input.workspaceAuthority.descriptorPath,
-    input.workspaceAuthority.identity.dev.toString(), input.workspaceAuthority.identity.ino.toString(),
-    input.workspaceAuthority.identity.mountId]));
+export const privateReservationIdentity = (input: HostCustodyReservationInput): string => {
+  const authority = descriptorWorkspaceAuthority(input.workspaceAuthority);
+  return sha256(canonicalJson([inputIdentity(input), authority.canonicalPath, authority.descriptorPath,
+    authority.identity.dev.toString(), authority.identity.ino.toString(), authority.identity.mountId]));
+};
 
 export const snapshotPrivateReservationReplayInput = (input: HostCustodyReservationInput): HostCustodyReservationInput => {
+  const authority = descriptorWorkspaceAuthority(input.workspaceAuthority);
   assertInertHostLaunchData(input);
   assertInertHostLaunchData(input.providerBinding);
   assertInertHostLaunchData(input.workspaceAuthority);
@@ -59,14 +62,13 @@ export const snapshotPrivateReservationReplayInput = (input: HostCustodyReservat
       bindingKeys.some(key => typeof input.providerBinding[key as keyof typeof input.providerBinding] !== "string")) {
     throw new TypeError("Host Custody private reservation inputs rejected");
   }
-  const authority = input.workspaceAuthority;
   if (typeof authority.canonicalPath !== "string" || typeof authority.descriptorPath !== "string" ||
       typeof authority.identity.dev !== "bigint" || typeof authority.identity.ino !== "bigint" ||
       typeof authority.identity.mountId !== "string") {throw new TypeError("Host Custody workspace identity rejected");}
   return Object.freeze({...input, launchPlan: snapshotHostCustodyLaunchPlan(input.launchPlan),
     providerBinding: Object.freeze({...input.providerBinding}),
-    workspaceAuthority: Object.freeze({...input.workspaceAuthority,
-      identity: Object.freeze({...input.workspaceAuthority.identity})}),
+    workspaceAuthority: Object.freeze({...authority,
+      identity: Object.freeze({...authority.identity})}),
   });
 };
 

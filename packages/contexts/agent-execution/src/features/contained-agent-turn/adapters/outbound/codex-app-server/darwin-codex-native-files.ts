@@ -3,7 +3,7 @@ import { constants, fchmodSync, openSync, closeSync, lstatSync, fstatSync, fsync
 import type { BigIntStats } from "node:fs";
 import { renderCodexNativeBrokerConfig, CODEX_NATIVE_CATALOG_SHA256, CODEX_NATIVE_CATALOG_BYTES,
   codexNativeBrokerBoundary, codexNativeBrokerDarwinStateDirectory, retainDarwinCodexInstallation, darwinCodexInstallationMaterial, type CodexNativeBrokerRecipe } from "./codex-native-broker-recipe.js";
-import type { CodexAppServerPermissionBoundary } from "./codex-app-server-permission-boundary.js";
+import { codexDarwinNativeLaunchObservation, type CodexAppServerPermissionBoundary } from "./codex-app-server-permission-boundary.js";
 import { darwinDigest, type DarwinRouteLifecycleJournal } from "../host-custody/contained-turn-kernel-custody-entrypoint.js";
 
 /** Fixed three-file installer under the accepted trusted-Host/name-bound model.
@@ -16,6 +16,9 @@ export class DarwinCodexNativeFiles {
   #attempted = false; #uncertain = false;
   public constructor(readonly boundary: CodexAppServerPermissionBoundary, catalog: Uint8Array,
     readonly journal: DarwinRouteLifecycleJournal, readonly active: () => void) {
+    if (codexDarwinNativeLaunchObservation(boundary) !== undefined) {
+      throw new TypeError("Protected native Codex home requires the native material installer");
+    }
     this.#catalog = Buffer.from(catalog); this.#home = lstatSync(boundary.codexHome, {bigint: true});
     if (this.#catalog.length !== CODEX_NATIVE_CATALOG_BYTES || darwinDigest(this.#catalog) !== CODEX_NATIVE_CATALOG_SHA256) {
       throw new TypeError("Darwin native catalog pin rejected");
@@ -102,3 +105,6 @@ export class DarwinCodexNativeFiles {
     } catch {this.#uncertain = true; return false;}
   }
 }
+
+/** Genuine native fixed-three installation; no legacy Host-UID path access. */
+export { installCodexDarwinNativeBrokerFiles } from "./codex-native-broker-files.js";

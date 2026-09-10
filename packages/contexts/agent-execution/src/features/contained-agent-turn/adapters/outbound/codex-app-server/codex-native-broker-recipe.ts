@@ -1,3 +1,6 @@
+import { codexDarwinNativeMaterialIdentity } from "./codex-native-broker-files.js";
+import { codexDarwinNativeLaunchObservation } from "./codex-app-server-permission-boundary.js";
+import { inspectDarwinNativeLaunchObservation } from "../host-custody/contained-turn-kernel-custody-entrypoint.js";
 import { createHash } from "node:crypto";
 import { fstatSync, lstatSync, readSync, realpathSync, type BigIntStats } from "node:fs";
 import {createCodexDockerPathProjection, codexProtocolHostBoundary,
@@ -47,6 +50,11 @@ export const retainDarwinCodexInstallation = (recipe: CodexNativeBrokerRecipe, f
 };
 export const darwinCodexInstallationMaterial = (recipe: CodexNativeBrokerRecipe): readonly string[] | undefined => {
   if (!darwinStateDirectories.has(recipe)) {return undefined;}
+  const native = codexDarwinNativeMaterialIdentity(recipe);
+  if (native !== undefined) {return native;}
+  if (codexDarwinNativeLaunchObservation(codexNativeBrokerBoundary(recipe)) !== undefined) {
+    throw new TypeError("Native Codex fixed material has not been installed");
+  }
   const owned = darwinInstallations.get(recipe);
   if (owned === undefined) {throw new TypeError("Darwin installation owner missing");}
   const path = `${codexNativeBrokerBoundary(recipe).codexHome}/installation_id`;
@@ -111,6 +119,7 @@ const createRecipe = (input: {
   const data = snapshotCodexNativeInput(input, ["boundary", "endpoint", "profile"], ["dockerMounts"]);
   const boundary = data.boundary as CodexAppServerPermissionBoundary;
   assertIssuedCodexPermissionBoundary(boundary);
+  if (codexDarwinNativeLaunchObservation(boundary) !== undefined && (!darwinLoopback || data.dockerMounts !== undefined)) {throw rejected();}
   if (data.profile !== "codex-chatgpt") {throw rejected();}
   const paths = data.dockerMounts === undefined ? undefined
     : createCodexDockerPathProjection(data.dockerMounts as Parameters<typeof createCodexDockerPathProjection>[0], boundary);
@@ -134,6 +143,8 @@ export const createDarwinCodexNativeBrokerRecipe = (input: Omit<Parameters<typeo
   const tmpDir = data.tmpDir;
   if (typeof tmpDir !== "string" || resolve(tmpDir) !== tmpDir || tmpDir === "/" ||
       [...tmpDir].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) {throw rejected();}
+  const observation = codexDarwinNativeLaunchObservation(input.boundary);
+  if (observation !== undefined && inspectDarwinNativeLaunchObservation(observation).tmpDir.path !== tmpDir) {throw rejected();}
   const recipe = createRecipe({boundary: input.boundary, endpoint: input.endpoint, profile: input.profile}, true);
   // Private Darwin recipe metadata only. The reservation validates this exact
   // name and retained directory identity; Linux recipe shape/bytes stay fixed.
