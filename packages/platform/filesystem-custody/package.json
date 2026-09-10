@@ -7,7 +7,7 @@
     "build": "tsc --project tsconfig.json --pretty false && node scripts/build-native-helper.mjs",
     "check": "pnpm run clean && pnpm run typecheck && pnpm run build && pnpm run test",
     "clean": "node -e \"const fs=require('node:fs'); for (const path of ['dist','.cache']) fs.rmSync(path, { recursive: true, force: true })\"",
-    "test": "node --test --test-concurrency=1 tests/stable-path-custody.test.ts tests/stable-directory-process-lock.test.ts",
+    "test": "node --test --test-concurrency=1 tests/stable-path-custody.test.ts tests/stable-directory-process-lock.test.ts tests/host-descriptors.test.mjs tests/darwin-acquisition-guard.test.mjs tests/host-errno.test.mjs",
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"
   },
   "files": ["dist"],

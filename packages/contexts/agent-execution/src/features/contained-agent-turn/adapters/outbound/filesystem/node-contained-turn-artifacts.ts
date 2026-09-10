@@ -1,3 +1,8 @@
+import {
+  attachNodeContainedTurnWorkspaceArtifacts,
+  type NodeContainedTurnWorkspaceOwner,
+} from "./node-contained-turn-workspace-owner.js";
+import type { ContainedTurnArtifactSealingContext } from "./contained-turn-artifact-sealing.js";
 import { join } from "node:path";
 
 import type { ContainedTurnKernelArtifactPort } from "../../../application/ports/outbound/contained-turn-ports.js";
@@ -58,6 +63,7 @@ export type NodeContainedTurnArtifactDigest = (
 ) => string;
 
 export interface NodeContainedTurnArtifactOptions {
+  readonly workspaceOwner?: NodeContainedTurnWorkspaceOwner;
   readonly canonicalProjectRoot: string;
   readonly disposableRoot: string;
   readonly limits?: ContainedTurnWorkspaceTreeLimits;
@@ -98,6 +104,7 @@ type ArtifactCustody = Awaited<ReturnType<typeof bindArtifactCustody>>;
 type ArtifactStore = ReturnType<typeof createContainedTurnArtifactStore>;
 
 interface NodeContainedTurnArtifactRuntime {
+  readonly nativeSource: ContainedTurnArtifactSealingContext["nativeSource"];
   readonly contentDigest: ArtifactStore["contentDigest"];
   readonly custodyRoots: ArtifactCustody["custodyRoots"];
   readonly inflightSeals: Map<string, Readonly<{
@@ -187,6 +194,7 @@ const sealDurably = async (
       contentDigest: runtime.contentDigest,
       custodyRoots: runtime.custodyRoots,
       limits: runtime.limits,
+      nativeSource: runtime.nativeSource,
       resultPublications: runtime.resultPublications,
       testFaults: runtime.options.testFaults,
       verifyArtifact: runtime.verifyArtifact,
@@ -197,7 +205,7 @@ const sealDurably = async (
   );
   runtime.inflightSeals.set(input.workspaceRef, Object.freeze({ fingerprint, promise }));
   try {return await promise;} finally {
-    if (runtime.inflightSeals.get(input.workspaceRef)?.promise === promise) {
+    if (runtime.nativeSource === undefined && runtime.inflightSeals.get(input.workspaceRef)?.promise === promise) {
       runtime.inflightSeals.delete(input.workspaceRef);
     }
   }
@@ -394,6 +402,10 @@ const initializeNodeContainedTurnArtifacts = async (
   const limits = options.limits ?? DEFAULT_CONTAINED_TURN_WORKSPACE_LIMITS;
   assertContainedTurnArtifactLimits(limits);
   const custody = await bindArtifactCustody(options);
+  const nativeSource = options.workspaceOwner === undefined ? undefined
+    : await attachNodeContainedTurnWorkspaceArtifacts(
+      options.workspaceOwner, custody.workspaceRoots, custody.resultPublications,
+    );
   const store = createContainedTurnArtifactStore({
     faults: options.testFaults,
     limits,
@@ -405,6 +417,7 @@ const initializeNodeContainedTurnArtifacts = async (
     custodyRoots: custody.custodyRoots,
     inflightSeals: new Map(),
     limits,
+    nativeSource,
     options,
     rehydrationRoots: custody.rehydrationRoots,
     resultPublications: custody.resultPublications,

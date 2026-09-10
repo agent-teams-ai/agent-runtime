@@ -1,4 +1,4 @@
-import type { FileHandle } from "node:fs/promises";
+import type { StableFilesystemHandle as FileHandle } from "@agent-teams/filesystem-custody";
 import {
   publishStableDirectoryNoReplace,
   StableDirectoryPublicationUnsupportedError,

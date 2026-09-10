@@ -4,6 +4,7 @@ import {custodyDataRecord, createImmutableHostCustodyLaunchPlan, type ContainedT
   from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import {randomUUID, createHash} from "node:crypto";
 import {HostCustodyUnsupportedError, type HostCustodyReservationInput} from "../adapters/outbound/host-custody/custodied-provider-process.js";
+import {isNativeHostCustodyWorkspaceAuthority} from "../adapters/outbound/host-custody/native-host-custody-workspace-authority.js";
 import {DockerKernelEvidence} from "./docker-kernel-evidence.js";
 
 type Containment = Awaited<ReturnType<ContainedTurnHostCustodyPort["requestContainment"]>>;
@@ -42,6 +43,9 @@ export class DockerKernelHostCustody implements ContainedTurnHostCustodyPort {
   public async reserve(value: HostCustodyReservationInput): ReturnType<ContainedTurnHostCustodyPort["reserve"]> {
     if (this.#disposed || this.#records.size >= 64) {throw new HostCustodyUnsupportedError("retention-capacity-exhausted");}
     value = custodyDataRecord(value);
+    if (isNativeHostCustodyWorkspaceAuthority(value.workspaceAuthority)) {
+      throw new HostCustodyUnsupportedError("platform-profile-unavailable");
+    }
     custodyDataRecord(value.workspaceAuthority); custodyDataRecord(value.workspaceAuthority.identity);
     custodyDataRecord(value.providerBinding);
     if (value.launchPlan.spawnMode !== "sdk-delegated" || value.launchPlan.containmentProfile !== "strict-linux-cgroup-v2") {

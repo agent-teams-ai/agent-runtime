@@ -12,6 +12,7 @@ import {
   rename,
   rm,
   stat,
+  symlink,
   type FileHandle,
   writeFile,
 } from "node:fs/promises";
@@ -138,9 +139,9 @@ test("detects a same-device bind mount with a distinct Linux mount identity", as
   } finally {await Promise.all([sourceHandle.close(), mountedHandle.close()]);}
 });
 
-test("Linux no-replace publication preserves inserted destinations and replaced sources", async t => {
-  if (process.platform !== "linux") {
-    t.skip("Linux renameat2 publication is not claimed on this platform");
+test("Native no-replace publication preserves inserted destinations and replaced sources", async t => {
+  if (process.platform !== "linux" && process.platform !== "darwin") {
+    t.skip("Native no-replace publication requires Linux or Darwin");
     return;
   }
   const root = await mkdtemp(join(tmpdir(), "ar-no-replace-"));
@@ -183,9 +184,9 @@ test("Linux no-replace publication preserves inserted destinations and replaced 
   }
 });
 
-test("Linux no-replace publication recovers a durably captured incomplete source", async t => {
-  if (process.platform !== "linux") {
-    t.skip("Linux descriptor publication recovery is not claimed on this platform");
+test("Native no-replace publication recovers a durably captured incomplete source", async t => {
+  if (process.platform !== "linux" && process.platform !== "darwin") {
+    t.skip("Native descriptor publication recovery requires Linux or Darwin");
     return;
   }
   const root = await mkdtemp(join(tmpdir(), "ar-no-replace-recovery-"));
@@ -213,9 +214,9 @@ test("Linux no-replace publication recovers a durably captured incomplete source
   } finally {await Promise.all([sourceParent.close(), destinationParent.close()]);}
 });
 
-test("Linux no-replace publication recovers its identity-bound SIGKILL residue", async t => {
-  if (process.platform !== "linux") {
-    t.skip("Linux descriptor publication recovery is not claimed on this platform");
+test("Native no-replace publication recovers its identity-bound SIGKILL residue", async t => {
+  if (process.platform !== "linux" && process.platform !== "darwin") {
+    t.skip("Native descriptor publication recovery requires Linux or Darwin");
     return;
   }
   const root = await mkdtemp(join(tmpdir(), "ar-no-replace-sigkill-"));
@@ -251,9 +252,9 @@ test("Linux no-replace publication recovers its identity-bound SIGKILL residue",
   assert.equal((await stat(join(destinationRoot, "published"), { bigint: true })).ino, identity.ino);
 });
 
-test("Linux no-replace restart restores owned SIGKILL residue when a destination appeared", async t => {
-  if (process.platform !== "linux") {
-    t.skip("Linux descriptor publication recovery is not claimed on this platform");
+test("Native no-replace restart restores owned SIGKILL residue when a destination appeared", async t => {
+  if (process.platform !== "linux" && process.platform !== "darwin") {
+    t.skip("Native descriptor publication recovery requires Linux or Darwin");
     return;
   }
   const root = await mkdtemp(join(tmpdir(), "ar-no-replace-sigkill-race-"));
@@ -288,9 +289,9 @@ test("Linux no-replace restart restores owned SIGKILL residue when a destination
   assert.equal((await stat(join(sourceRoot, "candidate"), { bigint: true })).ino, identity.ino);
 });
 
-test("Linux no-replace restart fails closed when final, residue, and replacement source coexist", async t => {
-  if (process.platform !== "linux") {
-    t.skip("Linux descriptor publication recovery is not claimed on this platform");
+test("Native no-replace restart fails closed when final, residue, and replacement source coexist", async t => {
+  if (process.platform !== "linux" && process.platform !== "darwin") {
+    t.skip("Native descriptor publication recovery requires Linux or Darwin");
     return;
   }
   const root = await mkdtemp(join(tmpdir(), "ar-no-replace-sigkill-ambiguous-"));
@@ -330,9 +331,9 @@ test("Linux no-replace restart fails closed when final, residue, and replacement
   assert.notEqual(replacement.ino, identity.ino);
 });
 
-test("Linux no-replace recovery never moves arbitrary deterministic-name residue", async t => {
-  if (process.platform !== "linux") {
-    t.skip("Linux descriptor publication recovery is not claimed on this platform");
+test("Native no-replace recovery never moves arbitrary deterministic-name residue", async t => {
+  if (process.platform !== "linux" && process.platform !== "darwin") {
+    t.skip("Native descriptor publication recovery requires Linux or Darwin");
     return;
   }
   const root = await mkdtemp(join(tmpdir(), "ar-no-replace-unowned-"));
@@ -359,6 +360,62 @@ test("Linux no-replace recovery never moves arbitrary deterministic-name residue
   } finally {await Promise.all([source.close(), destination.close()]);}
   assert.equal(await readFile(join(destinationRoot, incomplete, "unknown"), "utf8"), "arbitrary");
   assert.deepEqual(await readdir(sourceRoot), []);
+});
+
+test("native publication rejects malformed names and descriptors before namespace mutation", async t => {
+  if (process.platform !== "linux" && process.platform !== "darwin") {t.skip(); return;}
+  const loaded = { exports: {} } as NodeModule;
+  process.dlopen(loaded, fileURLToPath(new URL("../dist/rename-no-replace.node", import.meta.url)));
+  const binding = loaded.exports as {
+    publishNoReplace(...args: readonly unknown[]): number;
+  };
+  const root = await mkdtemp(join(tmpdir(), "ar-native-publication-reject-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await mkdir(join(root, "candidate"));
+  const identity = await stat(join(root, "candidate"), { bigint: true });
+  const parent = await open(root, constants.O_RDONLY | constants.O_DIRECTORY);
+  try {
+    const args: unknown[] = [parent.fd, "candidate", parent.fd, "published", identity.dev, identity.ino, "residue"];
+    for (const position of [1, 3, 6]) {
+      for (const name of ["", ".", "..", "../candidate", "x/y", "candidate\0suffix", "x".repeat(256)]) {
+        const invalid = [...args];
+        invalid[position] = name;
+        assert.throws(() => binding.publishNoReplace(...invalid), /arguments are invalid/u);
+      }
+    }
+    for (const position of [0, 2]) {
+      for (const fd of [-1, -100, parent.fd + 0.5, 2 ** 32 + parent.fd, NaN, Infinity]) {
+        const invalid = [...args];
+        invalid[position] = fd;
+        assert.throws(() => binding.publishNoReplace(...invalid), /arguments are invalid/u);
+      }
+    }
+    const closed = await open(root, constants.O_RDONLY | constants.O_DIRECTORY);
+    const closedFd = closed.fd;
+    await closed.close();
+    assert.throws(() => binding.publishNoReplace(closedFd, ...args.slice(1)), /arguments are invalid/u);
+    assert.deepEqual(await readdir(root), ["candidate"]);
+  } finally {await parent.close();}
+});
+
+test("native publication restores a symlink replacement without publishing its target", async t => {
+  if (process.platform !== "linux" && process.platform !== "darwin") {t.skip(); return;}
+  const root = await mkdtemp(join(tmpdir(), "ar-native-publication-symlink-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
+  await mkdir(join(root, "candidate"));
+  const identity = await stat(join(root, "candidate"), { bigint: true });
+  await rename(join(root, "candidate"), join(root, "original"));
+  await symlink("original", join(root, "candidate"));
+  const parent = await open(root, constants.O_RDONLY | constants.O_DIRECTORY);
+  try {
+    await assert.rejects(publishStableDirectoryNoReplace({
+      sourceDirectory: parent, sourceName: "candidate",
+      destinationDirectory: parent, destinationName: "published",
+      expectedSourceIdentity: identity,
+    }), /source identity changed/u);
+    assert.deepEqual((await readdir(root)).sort(), ["candidate", "original"]);
+    assert.equal((await stat(join(root, "original"), { bigint: true })).ino, identity.ino);
+  } finally {await parent.close();}
 });
 
 const makeFifo = async (path: string): Promise<void> => {

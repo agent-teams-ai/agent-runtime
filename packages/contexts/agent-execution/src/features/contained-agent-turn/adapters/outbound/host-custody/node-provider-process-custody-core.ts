@@ -1,3 +1,4 @@
+import { descriptorWorkspaceAuthority } from "./private-host-custody-reservation.js";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
@@ -294,7 +295,7 @@ export class NodeProviderProcessCustodyCore implements
         containmentProfile: this.#runtimeProfile.containmentProfile,
         ...("launchPlan" in input ? {privateReservationPlan: snapshotHostCustodyLaunchPlan(input.launchPlan)} : {}),
         opening,
-        ...("workspaceAuthority" in input ? { workspaceAuthority: input.workspaceAuthority } : {}),
+        ...("workspaceAuthority" in input ? { workspaceAuthority: descriptorWorkspaceAuthority(input.workspaceAuthority) } : {}),
         ...(retainedWorkspaceAuthority === undefined ? {} : { retainedWorkspaceAuthority }),
       },
     );

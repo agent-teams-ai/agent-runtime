@@ -1,4 +1,4 @@
-import type { FileHandle } from "node:fs/promises";
+import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody";
 import { join } from "node:path";
 import { withStableDirectoryProcessLock } from "@agent-teams/filesystem-custody";
 
@@ -74,7 +74,7 @@ interface ArtifactCustodyOptions {
 }
 
 export const closeContainedTurnArtifactHandles = async (
-  handles: readonly FileHandle[],
+  handles: readonly StableFilesystemHandle[],
 ): Promise<void> => {
   let failure: unknown;
   for (const handle of handles.toReversed()) {
@@ -100,9 +100,9 @@ const bindPrivateRoots = async <Paths extends Readonly<Record<string, string>>>(
 };
 
 const recoverRehydrationStaging = async (
-  staging: FileHandle,
-  quarantine: FileHandle,
-  records: FileHandle,
+  staging: StableFilesystemHandle,
+  quarantine: StableFilesystemHandle,
+  records: StableFilesystemHandle,
 ): Promise<void> => {
   const names = await readDirectoryNamesBounded(staging, STAGING_ENTRY_LIMIT);
   for (const name of names) {
