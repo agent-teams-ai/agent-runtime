@@ -1,12 +1,9 @@
 import type { CommittedDispatchProofV1 } from "../domain/committed-dispatch-proof-v1.js";
-import { types } from "node:util";
 import type { ContainedTurnRouteQualificationTarget } from "./contained-turn-route-enforcement-capability.js";
 import type { CreateCodexCurrentKernelOwnerOptions } from "./codex-current-kernel-owner.js";
 import { createDarwinCodexHostPostClaimPreparation, type DarwinCodexHostPreparationInput } from "./darwin-codex-host-post-claim-preparation.js";
-import { custodyDataRecord } from "../adapters/outbound/host-custody/host-custody-inert-record.js";
-import { NodeProviderProcessCustodyCore } from "../adapters/outbound/host-custody/node-provider-process-custody-core.js";
-import { snapshotHttpBytes } from "../adapters/outbound/host-custody/egress/http-byte-intrinsics.js";
-import { retainFinalizationHttpResources } from "../adapters/outbound/host-custody/host-launch-finalization-validation.js";
+import {custodyDataRecord, isHostCustodyDataCallback, NodeProviderProcessCustodyCore,
+  snapshotHttpBytes, retainFinalizationHttpResources} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import { CODEX_APP_SERVER_DARWIN_ARM64_TUPLE as tuple, selectCodexAppServerPlatformTuple } from "../adapters/outbound/codex-app-server/codex-app-server-platform-tuple.js";
 
 /** Fixed contained-agent-turn feature-local helper, statically composed by the
@@ -38,7 +35,7 @@ const owners = new WeakMap<object, Readonly<{
 const invalid = (): TypeError => new TypeError("Darwin Codex route owner binding is invalid");
 const data = <T extends object>(value: T): T => Object.freeze({...custodyDataRecord(value)});
 const method = <T extends (...args: never[]) => unknown>(value: T): T => {
-  if (typeof value !== "function" || types.isProxy(value)) {throw invalid();}
+  if (!isHostCustodyDataCallback(value)) {throw invalid();}
   return value;
 };
 const targetSnapshot = (value: ContainedTurnRouteQualificationTarget): ContainedTurnRouteQualificationTarget => {
@@ -86,7 +83,7 @@ export const createDarwinCodexRouteEnforcement = (
     durableRoot: data(prep.durableRoot), limits: data(prep.limits),
     localCut: Object.freeze({...localCut, expectedClock: data(localCut.expectedClock), clock: Object.freeze({
       read: () => Reflect.apply(read, localCut.clock, []),
-      within: within.bind(localCut.clock),
+      within: ((...args: Parameters<typeof within>) => Reflect.apply(within, localCut.clock, args)) as typeof within,
     })}), catalogSource,
   });
   const postClaimPreparation: NonNullable<Options["postClaimPreparation"]> = Object.freeze({
@@ -99,7 +96,7 @@ export const createDarwinCodexRouteEnforcement = (
         }
         // The concrete outer owner must take this same store-acknowledged proof
         // before allocating any per-operation current authority, signer or session.
-        const session = data(acquire.call(captured.sessionOwner, proof));
+        const session = data(Reflect.apply(acquire, captured.sessionOwner, [proof]));
         const identity = data(session.identity);
         if (identity.operationId !== proof.operationId || identity.attemptId !== proof.attemptId ||
             identity.custodyId !== proof.custodyId || identity.hostBootId !== proof.hostBootId) {throw invalid();}

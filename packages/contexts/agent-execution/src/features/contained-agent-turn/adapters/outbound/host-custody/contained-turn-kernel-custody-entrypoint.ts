@@ -43,3 +43,5 @@ export {pinDarwinExecutable, createDarwinSeatbeltProjection} from "./darwin-seat
 export {createDarwinHostHttpConsumptionJournal} from "./egress/darwin-host-http-consumption-journal.js";
 export type {HostHttpLocalCutInput} from "./egress/host-http-local-cut-owner.js";
 export type {HttpEgressLimits} from "./egress/http-egress-contracts.js";
+
+export {snapshotHttpBytes} from "./egress/http-byte-intrinsics.js";

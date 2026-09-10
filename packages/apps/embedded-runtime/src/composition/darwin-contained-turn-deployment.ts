@@ -19,7 +19,13 @@ export interface DarwinContainedTurnDeploymentInput extends Omit<DarwinCodexRout
   readonly rendering: {createRendering(operationRef: string): ReturnType<typeof createPostgresCredentialRenderingOwner>};
   readonly pool: ConstructorParameters<typeof PostgresHttpEgressEvidence>[0];
   readonly deploymentId: string;
-  readonly currentPolicy: Pick<ContainedTurnCurrentEgressOwnersInput, "rule" | "approval" | "timing" | "monotonicNow">;
+  /** Borrow the authorized deployment policy owner, as in Linux deployment infrastructure.
+   * Select an independently approved exact policy AFTER fresh claimed acknowledgement.
+   * This contract does not issue approval or authenticate an arbitrary supplied owner. */
+  readonly policyOwner: {
+    currentPolicy(acknowledged: ReturnType<ReturnType<typeof createDarwinContainedTurnAuthority>["take"]>):
+      Pick<ContainedTurnCurrentEgressOwnersInput, "rule" | "approval" | "timing" | "monotonicNow">;
+  };
   readonly signer: Omit<Signer, "authorityOwner" | "scope" | "hostReservationId">;
   readonly dns: ConstructorParameters<typeof NodeHttpEgressTrustedResolver>[0];
   readonly transport: Parameters<typeof createContainedTurnHttpUpstreamTransport>[0];
@@ -32,33 +38,59 @@ export interface DarwinContainedTurnDeploymentInput extends Omit<DarwinCodexRout
  * acquisition owner. The internal Session-returning port never leaves this root.
  * Construction captures deployment only; acquisition starts with bridge.take. */
 export const createDarwinContainedTurnDeployment = (raw: DarwinContainedTurnDeploymentInput) => {
-  if (raw === null || typeof raw !== "object" || types.isProxy(raw) ||
-      Object.values(Object.getOwnPropertyDescriptors(raw)).some(field => !("value" in field))) {
+  if (raw === null || typeof raw !== "object" || types.isProxy(raw)) {
     throw new TypeError("Invalid Darwin deployment input");
   }
-  const input = Object.freeze({...raw,
-    runtimeSecurity: capturePort(raw.runtimeSecurity, ["readAuthority"]),
-    providerAccess: capturePort(raw.providerAccess, ["readCurrent"]),
-    rendering: capturePort(raw.rendering, ["createRendering"]),
-    pool: capturePort(raw.pool, ["connect"]),
-    currentPolicy: captureData(raw.currentPolicy), signer: captureData(raw.signer),
-    dns: captureData(raw.dns), transport: captureData(raw.transport), clock: captureData(raw.clock),
+  const required = ["owner", "preparation", "qualificationTarget", "runtimeSecurity", "providerAccess",
+    "rendering", "pool", "deploymentId", "policyOwner", "signer", "dns", "transport", "clock"] as const;
+  const record = Object.create(null) as DarwinContainedTurnDeploymentInput;
+  for (const key of Reflect.ownKeys(raw)) {
+    const field = Object.getOwnPropertyDescriptor(raw, key)!;
+    if (typeof key !== "string" || !("value" in field)) {throw new TypeError("Invalid Darwin deployment field");}
+    Object.defineProperty(record, key, {value: field.value, enumerable: true});
+  }
+  if (required.some(key => !Object.hasOwn(record, key))) {throw new TypeError("Missing Darwin deployment field");}
+  const input = Object.freeze({...record,
+    runtimeSecurity: capturePort(record.runtimeSecurity, ["readAuthority"]),
+    providerAccess: capturePort(record.providerAccess, ["readCurrent"]),
+    rendering: capturePort(record.rendering, ["createRendering"]),
+    pool: capturePort(record.pool, ["connect"]),
+    policyOwner: capturePort(record.policyOwner, ["currentPolicy"]), signer: captureData(record.signer),
+    dns: captureData(record.dns), transport: captureData(record.transport), clock: captureData(record.clock),
   });
   const bridge = createDarwinContainedTurnAuthority(input);
   const retained: Array<() => void> = [];
+  const cleanupFailures: unknown[] = [];
   let disposed = false;
+  // Attempt all independent actions once. Unknown outcomes are never retried;
+  // failure debt survives rollback and every subsequent disposal.
+  const drain = (start: number): void => {
+    while (retained.length > start) {
+      const action = retained.pop()!;
+      try {action();} catch (error) {cleanupFailures.push(error);}
+    }
+  };
+  const assertClean = (): void => {
+    if (cleanupFailures.length === 1) {throw cleanupFailures[0];}
+    if (cleanupFailures.length > 1) {throw new AggregateError(cleanupFailures, "Darwin deployment cleanup unproven");}
+  };
   const dispose = (): void => {
-    if (disposed) {return;} disposed = true; bridge.dispose();
-    for (const action of retained.splice(0).reverse()) {action();}
+    if (!disposed) {
+      disposed = true;
+      try {bridge.dispose();} catch (error) {cleanupFailures.push(error);}
+      drain(0);
+    }
+    assertClean();
   };
   const sessionOwner: SessionOwner = Object.freeze({acquire(proof: Parameters<SessionOwner["acquire"]>[0]): Session {
-    if (disposed) {throw new TypeError("Darwin deployment disposed");}
+    if (disposed || cleanupFailures.length > 0) {throw new TypeError("Darwin deployment disposed");}
     const start = retained.length;
     try {
-        const acknowledged = bridge.take(proof);
+        const acknowledged = captureData(bridge.take(proof));
         const {subject} = acknowledged.input;
         const scope = {...subject.scope, scopeDigest: subject.scopeDigest, operationId: subject.operationId};
-        const current = createContainedTurnCurrentEgressOwners({...input.currentPolicy,
+        const policy = captureData(input.policyOwner.currentPolicy(acknowledged));
+        const current = createContainedTurnCurrentEgressOwners({...policy,
           runtimeSecurity: input.runtimeSecurity, providerAccess: input.providerAccess,
           acceptedDispatch: acknowledged.acceptedDispatch,
           operation: {scope, providerId: 'codex', authorityGeneration: acknowledged.acceptedDispatch.authority!.authorityGeneration,
@@ -68,10 +100,12 @@ export const createDarwinContainedTurnDeployment = (raw: DarwinContainedTurnDepl
           authorityOwner: current, scope, hostReservationId: subject.custodyId});
         retained.push(signer.dispose);
         const rendering = input.rendering.createRendering(subject.operationId);
-        retained.push(rendering.owner.dispose);
-        const authorities = bindContainedTurnHttpEgressAuthorities({providerAccess: rendering.owner,
+        const renderingDispose = capturePort(rendering.owner, ["dispose"]).dispose;
+        retained.push(renderingDispose);
+        const authorities = bindContainedTurnHttpEgressAuthorities({providerAccess: captureData(rendering.owner),
           runtimeSecurity: signer, createRequestDigest: createCredentialMaterializationRequestDigest});
-        retained.push(authorities.dispose);
+        // ACL now owns the sole PA disposal path.
+        retained[retained.length - 1] = authorities.dispose;
         const ids = new NodeHttpEgressBoundaryIds();
         const resolver = new NodeHttpEgressTrustedResolver(input.dns, input.clock);
         const transport = createContainedTurnHttpUpstreamTransport(input.transport);
@@ -91,7 +125,8 @@ export const createDarwinContainedTurnDeployment = (raw: DarwinContainedTurnDepl
         });
         return session;
     } catch (error) {
-      for (const action of retained.splice(start).reverse()) {action();}
+      drain(start);
+      if (cleanupFailures.length > 0) {throw new AggregateError([error, ...cleanupFailures], "Darwin acquisition and cleanup failed");}
       throw error;
     }
   }});

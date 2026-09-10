@@ -6,7 +6,8 @@ import type {ContainedTurnFeatureDependencies} from "@agent-teams/agent-executio
 import {snapshotDispatchAuthorityHead} from "@agent-teams/runtime-security/composition";
 import {snapshotRouteSelectionCurrent} from "@agent-teams/provider-access/composition";
 import type {ContainedTurnCurrentEgressOwnersInput} from "./contained-turn-current-egress-owners.js";
-import type {CommittedDispatchProofV1} from "../../../../contexts/agent-execution/src/features/contained-agent-turn/domain/committed-dispatch-proof-v1.js";
+import type {DarwinCodexRouteEnforcementInput} from "@agent-teams/agent-execution/composition";
+type CommittedDispatchProofV1 = Parameters<DarwinCodexRouteEnforcementInput["sessionOwner"]["acquire"]>[0];
 
 type Store = ContainedTurnFeatureDependencies["operationStore"];
 type Ports = Pick<ContainedTurnFeatureDependencies, "providerAccess" | "security">;
@@ -56,6 +57,10 @@ export const captureDarwinDeploymentData = <T>(value: T, depth = 0): T => {
 };
 export const captureDarwinDeploymentPort = <T extends object, K extends keyof T>(owner: T, keys: readonly K[]): Pick<T, K> => {
   if (owner === null || typeof owner !== "object" || types.isProxy(owner)) {return unavailable();}
+  for (const key of Reflect.ownKeys(owner)) {
+    const field = Object.getOwnPropertyDescriptor(owner, key)!;
+    if (!("value" in field)) {return unavailable();}
+  }
   const result = {} as Pick<T, K>;
   for (const key of keys) {
     let prototype: object | null = owner;
