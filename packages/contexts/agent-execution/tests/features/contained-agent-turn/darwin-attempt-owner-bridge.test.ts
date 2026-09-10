@@ -505,6 +505,52 @@ function processBridge() {
   return {bridge, observed, emit};
 }
 
+const finalLaunchInput = (): DarwinNativeFinalLaunchData => {
+  const digest = "a".repeat(64);
+  return {home: "/root/private", codexHome: "/root/private/codex-home", tmpDir: "/root/private/tmp",
+    localCapability: digest, port: 32123, preparedSha256: digest, profileSha256: digest,
+    configSha256: digest, catalogSha256: digest, installationSha256: digest,
+    fingerprintSha256: digest, materialSha256: digest, executableSha256: digest, argumentsSha256: digest};
+};
+
+test("final native transport binds once before the sole start and carries IO through EXIT and STREAMS", async () => {
+  const {bridge, observed, emit} = processBridge();
+  try {
+    await bridge.ready;
+    await bridge.readLaunchObservation();
+    const launchInput = finalLaunchInput();
+    await bridge.captureFinalLaunch(launchInput);
+    await assert.rejects(bridge.captureFinalLaunch({...launchInput}), /already consumed/u);
+    const starting = bridge.startProcess();
+    await new Promise(resolve => {setImmediate(resolve);});
+    emit("PREEXEC", {flags: 1, image: 0}); emit("IMAGE");
+    const process = await starting;
+    await assert.rejects(bridge.startProcess(), /already consumed/u);
+    await process.write(Buffer.from("request")); await process.closeInput();
+    const stdout = process.stdout[Symbol.asyncIterator]();
+    emit("STDOUT", {payload: Buffer.from("reply")});
+    assert.equal(Buffer.from((await stdout.next()).value!).toString(), "reply");
+    emit("EXIT", {phase: 5, flags: 19, code: 0});
+    assert.deepEqual(await process.waitForExit(), {code: 0, signal: null});
+    emit("STREAMS", {phase: 5, flags: 23, code: 0});
+    assert.equal((await stdout.next()).done, true);
+    assert.equal(observed.filter(command => command === "BIND_FINAL_LAUNCH").length, 1);
+    assert.equal(observed.filter(command => command === "START_ONCE").length, 1);
+    assert.deepEqual(observed, ["READ_OBSERVATION", "BIND_FINAL_LAUNCH", "START_ONCE", "WRITE_INPUT", "CLOSE_INPUT"]);
+  } finally {bridge.lost();}
+});
+
+test("cutoff before final binding proves no native start command is emitted", async () => {
+  const {bridge, observed} = processBridge();
+  try {
+    await bridge.ready; await bridge.readLaunchObservation(); await bridge.cutoff();
+    await assert.rejects(bridge.captureFinalLaunch(finalLaunchInput()), /unavailable|closed/u);
+    await assert.rejects(bridge.startProcess(), /consumed|cut off|lost|binding unavailable/u);
+    assert.equal(observed.filter(command => command === "BIND_FINAL_LAUNCH").length, 1);
+    assert.equal(observed.includes("START_ONCE"), false);
+  } finally {bridge.lost();}
+});
+
 test("native process waits for actual image, streams actual bytes and distinguishes exit from drain", async () => {
   const {bridge, observed, emit} = processBridge();
   try {

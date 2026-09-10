@@ -55,7 +55,16 @@ export function assertDarwinNativeLaunchObservationCurrent(observation: object) 
 export function reserveDarwinNativeExecution(selection: object) {
   const state = selections.get(selection);
   if (!state?.current || state.reserved) {throw new TypeError("synthetic execution reservation rejected");}
-  state.reserved = true; const lease = Object.freeze({}); leases.set(lease, state); return lease;
+  state.reserved = true; const lease = Object.freeze({});
+  state.leaseFacts = Object.freeze({prepared: Object.freeze({kind: "synthetic-prepared"}),
+    custodyRef: "synthetic-custody", hostGenerationBinding: "0".repeat(64), observation: state.observation});
+  leases.set(lease, state);
+  return lease;
+}
+export function inspectDarwinNativeExecutionLease(lease: object) {
+  const state = leases.get(lease);
+  if (!state?.current) {throw new TypeError("synthetic execution lease rejected");}
+  return state.leaseFacts;
 }
 export function assertDarwinNativeSelectionExecutionLease(selection: object, lease: object) {
   if (selections.get(selection) !== leases.get(lease)) {throw new TypeError("synthetic execution owner mismatch");}
