@@ -551,6 +551,21 @@ test("cutoff before final binding proves no native start command is emitted", as
   } finally {bridge.lost();}
 });
 
+test("cutoff after START_ONCE preserves the authenticated provider IMAGE", async () => {
+  const {bridge, observed, emit} = processBridge();
+  try {
+    await bridge.ready; await bridge.readLaunchObservation();
+    const starting = bridge.startProcess();
+    await new Promise(resolve => {setImmediate(resolve);});
+    await bridge.cutoff();
+    emit("PREEXEC", {flags: 1, image: 0}); emit("IMAGE");
+    const process = await starting;
+    assert.equal(process.workspaceAuthorityPath, "/root/workspace");
+    assert.equal(bridge.image()?.kind, "IMAGE");
+    assert.deepEqual(observed, ["READ_OBSERVATION", "START_ONCE", "CUTOFF"]);
+  } finally {bridge.lost();}
+});
+
 test("native process waits for actual image, streams actual bytes and distinguishes exit from drain", async () => {
   const {bridge, observed, emit} = processBridge();
   try {

@@ -572,7 +572,9 @@ export function bindDarwinAttemptOwnerBridge(endpoint: Duplex, selected: DarwinA
   };
   const materializeComplete = makeMaterializer(request, readCompleteTree, limits => {treeLimits = limits;}, lose);
   const inputTransport = nativeInput(request, () => startConsumed && !failed && !admissionClosed, lose);
-  const startProcess = nativeProcessStart({request, directories, events, execution, input: inputTransport, current: () => !failed && !admissionClosed});
+  // Once START_ONCE is accepted, an admission cutoff must not erase a later
+  // authenticated IMAGE. Only transport loss invalidates the process facade.
+  const startProcess = nativeProcessStart({request, directories, events, execution, input: inputTransport, current: () => !failed});
   return Object.freeze({
     ready, materializeComplete, readCompleteTree: () => readCompleteTree(), queryClosedWorkspace: () => readCompleteTree("QUERY_CLOSED_WORKSPACE"),
     revokeAdmission: (): void => {admissionClosed = true; observationGeneration++;},

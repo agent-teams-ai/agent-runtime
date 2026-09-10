@@ -522,5 +522,5 @@ export async function startDarwinNativeExecution(lease: DarwinNativeExecutionLea
     assertDarwinNativeCodexMaterialCurrent(final.material);
     assertActualFinalBinding(final.bindingClass, final.binding, final.launch);
     return await issued.bridge.startProcess();
-  } catch (error) {issued.bridge.lost(); throw error;}
+  } catch (error) {throw error;}
 }
