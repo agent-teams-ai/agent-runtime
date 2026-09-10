@@ -283,7 +283,7 @@ interface Pending {
  * no production caller is wired to this factory in this patch. */
 type NativeRequest = (command: DarwinAttemptOwnerCommand, argument?: number, payload?: Buffer) => Promise<DarwinAttemptOwnerEvent>;
 const digest = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
-const installMaterialData = async (request: NativeRequest, generation: () => number, input: Readonly<{config: Uint8Array; catalog: Uint8Array; installationId: string}>) => {
+const installMaterialData = async (request: NativeRequest, generation: (event: DarwinAttemptOwnerEvent) => number, input: Readonly<{config: Uint8Array; catalog: Uint8Array; installationId: string}>) => {
   const configInput = input.config, catalogInput = input.catalog, installationId = input.installationId;
   if (!(configInput instanceof Uint8Array) || !(catalogInput instanceof Uint8Array) ||
       !configInput.byteLength || configInput.byteLength > 65536 || catalogInput.byteLength !== 515145 ||
@@ -304,12 +304,13 @@ const installMaterialData = async (request: NativeRequest, generation: () => num
       await request("MATERIAL_CHUNK", payload.length, payload);
     }
   }
-  const facts = decodeDarwinNativeMaterialData(await request("MATERIAL_FINISH"));
+  const event = await request("MATERIAL_FINISH");
+  const facts = decodeDarwinNativeMaterialData(event);
   for (const [index, file] of [facts.config, facts.catalog, facts.installation].entries()) {
     if (file.sha256 !== hashes[index]) {throw new Error("native material readback differs from immutable source");}
   }
   if (facts.config.bytes !== config.length || facts.catalog.bytes !== catalog.length) {throw new Error("native material readback size mismatch");}
-  return Object.freeze({facts, installationId, generation: generation()});
+  return Object.freeze({facts, installationId, generation: generation(event)});
 };
 const sendTreeSnapshot = async (request: NativeRequest, snapshot: ReturnType<typeof captureDarwinWorkspaceTree>, limits: DarwinNativeWorkspaceTreeLimits): Promise<void> => {
   const begin = Buffer.alloc(16);
@@ -382,8 +383,19 @@ function assertReservable(failed: Error | undefined, closed: boolean, started: b
     throw new Error("native execution reservation requires current directories and acknowledged creation");
   }
 }
+function nativeResponseEpochs() {
+  const captured = new WeakMap<DarwinAttemptOwnerEvent, number>();
+  return Object.freeze({
+    accept: (event: DarwinAttemptOwnerEvent, generation: number): void => {captured.set(event, generation);},
+    get(event: DarwinAttemptOwnerEvent): number {
+      const generation = captured.get(event);
+      if (generation === undefined) {throw new Error("native response epoch unavailable");}
+      return generation;
+    },
+  });
+}
 async function installObservedMaterial(
-  request: NativeRequest, generation: () => number,
+  request: NativeRequest, generation: (event: DarwinAttemptOwnerEvent) => number,
   directories: ReturnType<typeof retainNativeDirectories>,
   input: Readonly<{config: Uint8Array; catalog: Uint8Array; installationId: string}>,
 ) {
@@ -474,10 +486,9 @@ export function bindDarwinAttemptOwnerBridge(endpoint: Duplex, selected: DarwinA
     if (pending) {clearTimeout(pending.timer); pending.reject(failed); pending = undefined;}
     endpoint.destroy();
   };
-  let observationGeneration = 0;
+  let observationGeneration = 0; const responseEpochs = nativeResponseEpochs();
   const directories = retainNativeDirectories();
-  let materialConsumed = false;
-  let creationAcknowledged = false;
+  let materialConsumed = false, creationAcknowledged = false;
   const receive = async (event: DarwinAttemptOwnerEvent): Promise<void> => {
     events.accept(event);
     execution.accept(event);
@@ -497,6 +508,7 @@ export function bindDarwinAttemptOwnerBridge(endpoint: Duplex, selected: DarwinA
       throw new Error("unsolicited or mismatched native response");
     }
     const completing = pending; pending = undefined; clearTimeout(completing.timer);
+    responseEpochs.accept(event, observationGeneration);
     if (event.kind === "REFUSED" || event.result !== native.result.accepted) {completing.reject(new Error("native owner refused command"));}
     else {completing.resolve(event);}
   };
@@ -562,12 +574,12 @@ export function bindDarwinAttemptOwnerBridge(endpoint: Duplex, selected: DarwinA
       if (materialConsumed) {throw new Error("native material installation already consumed");}
       materialConsumed = true; // Burn and snapshot before the first await.
       try {
-        return await installObservedMaterial(request, () => observationGeneration, directories, input);
+        return await installObservedMaterial(request, responseEpochs.get, directories, input);
       } catch (error) {lose(error); throw error;}
     },
     async readLaunchObservation() {
       const event = await request("READ_OBSERVATION");
-      try {return Object.freeze({facts: directories.retain(decodeDarwinNativeLaunchData(event)), generation: observationGeneration});}
+      try {return Object.freeze({facts: directories.retain(decodeDarwinNativeLaunchData(event)), generation: responseEpochs.get(event)});}
       catch (error) {lose(error); throw error;}
     },
     assertObservationCurrent: (generation: number): void => {

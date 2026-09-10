@@ -339,6 +339,68 @@ test("START preserves retained directory epoch while cutoff invalidates it", asy
   } finally {bridge.lost();}
 });
 
+test("observation and material completion retain the epoch accepted with their native response", async () => {
+  const config = Buffer.from("model = \"gpt-5\"\n");
+  const catalog = readFileSync(new URL("../../fixtures/codex-native-broker-0.153.4/models.json", import.meta.url));
+  const installationId = "01234567-89ab-4cde-8012-3456789abcde";
+  const payload = (material: boolean, revision: number): Buffer => {
+    const bytes = Buffer.alloc(material ? 8520 : 5244);
+    const text = (offset: number, value: string): void => {bytes.writeUInt32BE(Buffer.byteLength(value), offset); bytes.write(value, offset + 4);};
+    text(0, "operation"); bytes.writeUInt32BE(70001, 1028); bytes.writeUInt32BE(revision, 1032);
+    const fact = (offset: number, path: string, ino: bigint, mode: number): void => {
+      text(offset, path); bytes.writeBigUInt64BE(1n, offset + 1028); bytes.writeBigUInt64BE(ino, offset + 1036);
+      bytes.writeUInt32BE(70001, offset + 1044); bytes.writeUInt32BE(mode, offset + 1048);
+    };
+    ["/root/private", "/root/private/codex-home", "/root/private/tmp", "/root/workspace"].forEach((path, index) =>
+      fact(1036 + index * 1052, path, index === 3 ? 200n : BigInt(index + 2), 0o700));
+    if (material) {
+      [config, catalog, Buffer.from(installationId)].forEach((content, index) => {
+        const offset = 5244 + index * 1092;
+        fact(offset, `/root/private/codex-home/${["config.toml", "models.json", "installation_id"][index]}`, BigInt(index + 300), index === 2 ? 0o644 : 0o600);
+        bytes.writeUInt32BE(1, offset + 1052); bytes.writeUInt32BE(content.length, offset + 1056);
+        createHash("sha256").update(content).digest().copy(bytes, offset + 1060);
+      });
+    }
+    return bytes;
+  };
+  for (const material of [false, true]) {
+    let serial = 1;
+    let bridge!: ReturnType<typeof bindDarwinAttemptOwnerBridge>;
+    const endpoint = new Duplex({read() {}, write(chunk: Buffer, _encoding, callback) {
+      const request = decodeDarwinAttemptOwnerRequest(chunk.subarray(0, number("FRAME_BYTES")));
+      if (request.command === "READ_OBSERVATION" || request.command === "MATERIAL_FINISH") {
+        const revision = serial + 2;
+        this.push(nativeEvent(material ? "MATERIAL_RESULT" : "OBSERVATION", ++serial,
+          {sequence: request.sequence, command: request.command, payload: payload(material, revision)}));
+      } else {
+        this.push(nativeEvent("STATUS", ++serial, {sequence: request.sequence, command: request.command}));
+      }
+      callback();
+    }});
+    const completion = async () => ({binding: binding.toString("hex"), launch: launch.toString("hex"),
+      namespace: namespace.toString(), workspaceDev: "1", workspaceIno: "200"});
+    bridge = bindDarwinAttemptOwnerBridge(endpoint, {launchRoute: completion, artifactResult: completion,
+      workspace: completion, privateMaterial: completion, output: async () => {}});
+    const original = Buffer.prototype.readUInt32BE;
+    let advanced = false;
+    try {
+      endpoint.push(hello()); await bridge.ready;
+      Buffer.prototype.readUInt32BE = function(offset = 0): number {
+        if (!advanced && offset === 0 && this.length === (material ? 8520 : 5244)) {
+          advanced = true; bridge.revokeAdmission();
+        }
+        return original.call(this, offset);
+      };
+      const result = material
+        ? await bridge.installCodexMaterial({config, catalog, installationId})
+        : await bridge.readLaunchObservation();
+      assert.equal(advanced, true);
+      assert.equal(result.generation, 0);
+      assert.throws(() => bridge.assertObservationCurrent(result.generation), /no longer current/u);
+    } finally {Buffer.prototype.readUInt32BE = original; bridge.lost();}
+  }
+});
+
 
 test("final native capture snapshots finite data once and burns refused or uncertain admission", async () => {
   for (const refuse of [false, true]) {
