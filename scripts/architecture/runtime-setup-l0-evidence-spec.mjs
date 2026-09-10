@@ -183,6 +183,10 @@ export const changes = Object.freeze([
     id: "custody-feature-activation",
     revision: "09cbb717578a39e5788a4f43ca950bcf91e2ef67",
   }),
+  Object.freeze({
+    id: "configuration-digest-port",
+    revision: "b7c5817d93c0d0dd6553739ebb67154dd42251b0",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -193,12 +197,12 @@ export const sourceRevisionArtifactDigests = Object.freeze({
     sha256: "2f185db9f8cd0bd29ed28b08d862dbf23846ce19e14c657d8e6afad9c3e769fc",
   }),
   sources: Object.freeze({
-    fileCount: 653,
-    sha256: "422de41d04002491b49f0e7bc556a991f8161395a3902536072198c9214b9a92",
+    fileCount: 657,
+    sha256: "70c7bc39df9ae30a9d4cc2b251fbd24ca4be9b8cc0efc4431d245942b12639f0",
   }),
   tests: Object.freeze({
     fileCount: 608,
-    sha256: "aeecd96b59fbcf86164437bb0d8f8b3f347670eadabb116a598e8e280eb8783b",
+    sha256: "7505e3bd04e566c5b00174fc79afd93bb5fd2f755a09b514446cbdd4060c6e77",
   }),
 });
 
