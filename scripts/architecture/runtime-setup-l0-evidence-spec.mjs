@@ -175,6 +175,10 @@ export const changes = Object.freeze([
     id: "production-module-role-classification",
     revision: "01dc2418c963586d43e92221a01ebcdb11e756f4",
   }),
+  Object.freeze({
+    id: "custody-composition-surface",
+    revision: "3adac9884ae86d6acbe7fd92c5a5fdadd0119dbd",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -185,12 +189,12 @@ export const sourceRevisionArtifactDigests = Object.freeze({
     sha256: "2f185db9f8cd0bd29ed28b08d862dbf23846ce19e14c657d8e6afad9c3e769fc",
   }),
   sources: Object.freeze({
-    fileCount: 647,
-    sha256: "a5ec000e281393af6458654fc6da29dc6499fa323587e839a8ad104b7a0e5ba2",
+    fileCount: 648,
+    sha256: "52555580b6dedb7cfc4bfd62351b8b4e8af147ff306a81b495e45f0f20471307",
   }),
   tests: Object.freeze({
     fileCount: 606,
-    sha256: "5ecbce14ff84f19b3810ec110c301017f7c63cfa55dd3e211ecf068becd1d316",
+    sha256: "9ff147b00b6fda852dd7ddc4187f0b53a7f7df18d968df381d82b6bfc722e3f8",
   }),
 });
 
