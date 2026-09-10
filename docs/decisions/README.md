@@ -31,6 +31,9 @@ immutable evidence; a later change uses an explicit superseding decision.
 
 ## Proposed
 
+- [ADR-0015: Consumer Module Standard pending adoption](0015-consumer-module-standard-pending-adoption.md)
+  proposes the exact central pin and classifies the existing seven-port Pure DI
+  boundary as explicitly not adopted until Assembly migration evidence exists.
 - [ADR-0006: Orthogonal runtime-operation state and effect continuity](0006-orthogonal-runtime-operation-state-and-effect-continuity.md)
   remains the broader design proposal. ADR-0010 accepts only its narrow V1
   subset without mutating this document.
@@ -68,10 +71,6 @@ immutable evidence; a later change uses an explicit superseding decision.
 - [ADR-0014: Darwin provider candidate platform qualification](0014-darwin-provider-candidate-platform-qualification.md)
   accepts exact Codex and Claude Darwin arm64 revisions as unqualified
   candidates without changing Linux authority or ADR-0010 operation semantics.
-- [ADR-0015: Consumer Module Standard pending adoption](0015-consumer-module-standard-pending-adoption.md)
-  pins the current central standard and classifies the existing seven-port Pure
-  DI boundary as explicitly not adopted until Assembly migration evidence exists.
-
 ## Superseded
 
 No superseded decisions.

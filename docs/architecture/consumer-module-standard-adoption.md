@@ -21,7 +21,7 @@ code_anchors:
 Agent Runtime pins the Get Modular Consumer Module Standard at exact commit
 `f1ec0152c34715395685b349844a7d1c18a2f015` and complete-document SHA-256
 `ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d`.
-ADR-0015 accepts this pin as pending governance only. Agent Runtime does not yet
+ADR-0015 proposes this pin as pending governance only. Agent Runtime does not yet
 claim an adopted Assembly composition.
 
 ## Ownership boundary

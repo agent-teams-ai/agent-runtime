@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, posix, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,7 +30,7 @@ export const EXPECTED_PROFILE = Object.freeze({
       gitBlob: "d0bfff2033faf544fe65268c1dcdfd524d093015",
       sha256: "851653f96643cf0466b67ab22963661976b00de44840fa3144a48a8c054f95fa",
     },
-    acceptedAdr: "ADR-0015",
+    proposedAdr: "ADR-0015",
     decisionPath,
   },
   scope: {
@@ -104,7 +103,6 @@ const requiredPaths = Object.freeze([
   "scripts/architecture/check-consumer-module-standard.test.mjs",
 ]);
 
-const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
 const occurrences = (source, pattern) => [...source.matchAll(pattern)].length;
 const compareText = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 const getModularPackage = /^@get-modular\/(?:core|assembly)(?:\/|$)/u;
@@ -366,14 +364,15 @@ export function validateConsumerModuleStandard(inputs) {
   }
 
   const decision = inputs.decisionRegistry.decisions?.find(record => record.id === "ADR-0015");
-  assert.deepEqual(decision, {
-    id: "ADR-0015",
-    path: decisionPath,
-    immutableDigest: `sha256:${sha256(inputs.decisionBytes)}`,
-  }, "ADR-0015 must be accepted at its exact path and bytes");
+  assert.equal(decision, undefined, "proposed ADR-0015 cannot enter the immutable accepted-decision registry");
   const decisionSource = inputs.decisionBytes.toString("utf8");
-  assert.match(decisionSource, /^status: accepted$/mu, "ADR-0015 frontmatter must be accepted");
-  assert.match(decisionSource, /^Status: accepted$/mu, "ADR-0015 body must be accepted");
+  const frontmatterMatch = /^---\n([\s\S]*?)\n---/u.exec(decisionSource);
+  const frontmatter = frontmatterMatch?.[1] ?? "";
+  assert.deepEqual([...frontmatter.matchAll(/^status:\s*(.+)$/gmu)].map(match => match[1]), ["proposed"],
+    "ADR-0015 frontmatter must declare proposed exactly once");
+  const body = decisionSource.slice(frontmatterMatch?.[0].length ?? 0);
+  assert.deepEqual([...body.matchAll(/^Status:\s*(.+)$/gmu)].map(match => match[1]), ["proposed"],
+    "ADR-0015 body must declare proposed exactly once");
 
   for (const [name, command] of Object.entries(expectedScripts)) {
     assert.equal(inputs.packageManifest.scripts?.[name], command, `${name} must execute the reviewed command`);

@@ -15,7 +15,7 @@
       "gitBlob": "d0bfff2033faf544fe65268c1dcdfd524d093015",
       "sha256": "851653f96643cf0466b67ab22963661976b00de44840fa3144a48a8c054f95fa"
     },
-    "acceptedAdr": "ADR-0015",
+    "proposedAdr": "ADR-0015",
     "decisionPath": "docs/decisions/0015-consumer-module-standard-pending-adoption.md"
   },
   "scope": {

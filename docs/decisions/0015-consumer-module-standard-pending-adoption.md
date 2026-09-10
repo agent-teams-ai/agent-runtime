@@ -1,9 +1,9 @@
 ---
 id: ADR-0015
 type: adr
-status: accepted
+status: proposed
 owner: architecture
-summary: Pins the Consumer Module Standard and governs the existing seven-port composition as explicitly not adopted.
+summary: Proposes the Consumer Module Standard pin and classifies the existing seven-port composition as explicitly not adopted.
 related:
   - ADR-0012
   - ADR-0013
@@ -16,7 +16,7 @@ code_anchors:
 
 # ADR-0015: Consumer Module Standard pending adoption
 
-Status: accepted
+Status: proposed
 
 Date: 2026-09-10
 
@@ -35,9 +35,9 @@ The SHA-256 of the complete document bytes is
 There was no earlier Agent Runtime pin, so this delivery introduces the current
 authority directly and has no retained consumer migration delta.
 
-## Decision
+## Proposal
 
-Accept the exact central pin only as pending adoption governance. The consumer
+Record the exact central pin only as proposed pending-adoption governance. The consumer
 profile records no adopted boundary and no exception. It classifies the current
 Embedded Runtime to Agent Execution composition as one exact legacy boundary,
 `contained-agent-turn-seven-port`, with status `not-adopted` and mechanism
@@ -53,7 +53,7 @@ The blocking checker and rejecting fixtures run in both fast and full gates.
 They reject authority drift, missing paths, inactive or no-op commands, slot or
 call-site drift, unknown callers, unaccepted exceptions, forbidden Get Modular
 imports, and any active-adoption claim while the required artifacts are absent.
-This decision does not authorize a runtime boundary change.
+This proposal does not authorize a runtime boundary change.
 
 ## Consequences
 

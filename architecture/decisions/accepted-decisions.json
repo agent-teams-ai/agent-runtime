@@ -61,11 +61,6 @@
       "id": "ADR-0014",
       "path": "docs/decisions/0014-darwin-provider-candidate-platform-qualification.md",
       "immutableDigest": "sha256:b923c5f780461715861e829391fd7a01f7f7cb81586760655f5f8218c6d9b7e3"
-    },
-    {
-      "id": "ADR-0015",
-      "path": "docs/decisions/0015-consumer-module-standard-pending-adoption.md",
-      "immutableDigest": "sha256:a76898b665f749925fbcff93d458b43179dec4cbbd67533e314f09b72d8b723d"
     }
   ]
 }

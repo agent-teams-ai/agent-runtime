@@ -48,9 +48,9 @@ Read documents in this order:
    accepts only the narrow unqualified Darwin arm64 provider candidate
    direction without changing ADR-0010 operation semantics or Linux authority.
    Finally read
-   `decisions/0015-consumer-module-standard-pending-adoption.md`, which pins the
-   current Consumer Module Standard while keeping the existing seven-port
-   composition explicitly not adopted.
+   proposed `decisions/0015-consumer-module-standard-pending-adoption.md`, which
+   proposes pinning the current Consumer Module Standard while keeping the
+   existing seven-port composition explicitly not adopted.
 2. `architecture/evidence-traceability.md` - canonical mapping from scoped
    observations to the smallest promoted architecture rules.
    Immediately after it, read
@@ -186,9 +186,9 @@ Document status vocabulary:
 - `falsified`: a hypothesis contradicted by later evidence.
 
 Production code must not use an evidence document as its architecture source
-of truth. Accepted ADR-0001 through ADR-0010 and ADR-0012 through ADR-0015,
-excluding proposed ADR-0006 and the unassigned ADR identities, plus the
-promoted-rule column of the traceability matrix are normative for production
+of truth. Accepted ADR-0001 through ADR-0010 and ADR-0012 through ADR-0014,
+excluding proposed ADR-0006, proposed ADR-0015, and the unassigned ADR
+identities, plus the promoted-rule column of the traceability matrix are normative for production
 architecture. ADR-0007 governs deterministic documentation changes.
 Supporting architecture documents are accepted only as amended by the ADRs.
 Readiness status is intentionally separate and cannot change domain ownership. A spike's

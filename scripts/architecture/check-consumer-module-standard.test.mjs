@@ -36,14 +36,27 @@ test("rejects central pin drift and an unsupported active claim", async () => {
   assert.throws(() => validateConsumerModuleStandard(active), /reviewed pending-adoption record/u);
 });
 
-test("rejects missing governed paths and stale decision bytes", async () => {
+test("rejects missing governed paths and proposed decision lifecycle drift", async () => {
   const missing = await fresh();
   missing.pathExistence.set(missing.profile.legacyBoundaries[0].factoryPath, false);
   assert.throws(() => validateConsumerModuleStandard(missing), /required adoption path is missing/u);
 
-  const stale = await fresh();
-  stale.decisionBytes = Buffer.concat([stale.decisionBytes, Buffer.from("\n")]);
-  assert.throws(() => validateConsumerModuleStandard(stale), /exact path and bytes/u);
+  const accepted = await fresh();
+  accepted.decisionBytes = Buffer.from(accepted.decisionBytes.toString("utf8")
+    .replaceAll("status: proposed", "status: accepted")
+    .replaceAll("Status: proposed", "Status: accepted"));
+  assert.throws(() => validateConsumerModuleStandard(accepted), /frontmatter must declare proposed/u);
+
+  const contradictory = await fresh();
+  contradictory.decisionBytes = Buffer.concat([
+    contradictory.decisionBytes,
+    Buffer.from("\nStatus: accepted\n"),
+  ]);
+  assert.throws(() => validateConsumerModuleStandard(contradictory), /body must declare proposed/u);
+
+  const registered = await fresh();
+  registered.decisionRegistry.decisions.push({id: "ADR-0015"});
+  assert.throws(() => validateConsumerModuleStandard(registered), /cannot enter the immutable/u);
 });
 
 test("rejects removed, reordered, and no-op gate commands", async () => {
