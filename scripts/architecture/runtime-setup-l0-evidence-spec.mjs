@@ -167,6 +167,10 @@ export const changes = Object.freeze([
     id: "runtime-setup-current-product-anchor",
     revision: "e615369d50ed73cac6e00909fcc8f6705b0d6973",
   }),
+  Object.freeze({
+    id: "custody-test-seam-relocation",
+    revision: "c75940cccc7f0d03ffd776dbe2efee9446a90fa8",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -177,12 +181,12 @@ export const sourceRevisionArtifactDigests = Object.freeze({
     sha256: "2f185db9f8cd0bd29ed28b08d862dbf23846ce19e14c657d8e6afad9c3e769fc",
   }),
   sources: Object.freeze({
-    fileCount: 597,
-    sha256: "cd5d24caf5a8385b6c4249c2588c71a2c74e6b474573f9de644394fdd3ab50fe",
+    fileCount: 647,
+    sha256: "78c1b7ea7eec7f9109d4594b5ff713e521f3eec3b5e707e3cbff102d17ae2c23",
   }),
   tests: Object.freeze({
-    fileCount: 553,
-    sha256: "ca4366ba19394483798602ac8af171e15509ceb72dcd7543128c10395838a757",
+    fileCount: 606,
+    sha256: "5ecbce14ff84f19b3810ec110c301017f7c63cfa55dd3e211ecf068becd1d316",
   }),
 });
 
