@@ -111,6 +111,7 @@ test("passive setup slice has no process, network, ambient env or write adapter"
   const custodyFeature = join(filesystemCustodyRoot, "features", "stable-filesystem-custody");
   const files: string[] = [
     join(filesystemCustodyRoot, "index.ts"),
+    join(filesystemCustodyRoot, "composition.ts"),
     join(custodyFeature, "adapters", "outbound", "filesystem", "stable-directory-capability.ts"),
     join(custodyFeature, "adapters", "outbound", "filesystem", "stable-path-custody.ts"),
   ];

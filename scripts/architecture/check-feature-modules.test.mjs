@@ -13,6 +13,7 @@ import { checkFeatureModules, formatIssues } from "./check-feature-modules.mjs";
 import { fixtureProfile } from "./check-feature-modules.profile-fixtures.mjs";
 import { CHECKER_LIMITS } from "./feature-module-limits.mjs";
 import { REVIEWED_WORKSPACE_CONTAINERS, STRUCTURAL_CODES } from "./feature-module-profile.mjs";
+import { reviewedScopeCases } from "./check-feature-modules.reviewed-scope-cases.mjs";
 
 const fixtureManifest = JSON.parse(await readFile(new URL("./fixtures/feature-module-cases.json", import.meta.url), "utf8"));
 const execFileAsync = promisify(execFile);
@@ -466,6 +467,9 @@ test("root traversal, drive, UNC, and POSIX backslash spellings fail closed", as
     }
   } finally {scheduleDisposablePaths([root]);}
 });
+
+
+reviewedScopeCases();
 
 test("reviewed workspace containers cover every production workspace glob", async () => {
   const workspace = parse(await readFile(join(repositoryRoot, "pnpm-workspace.yaml"), "utf8"));

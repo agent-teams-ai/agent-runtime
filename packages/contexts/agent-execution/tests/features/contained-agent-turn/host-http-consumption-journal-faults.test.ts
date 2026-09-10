@@ -201,7 +201,7 @@ linuxTest("real kernel lock loss is observed before the next write", async t => 
   t.after(() => prepared.retire());
   t.mock.restoreAll();
   const loaded = { exports: {} } as NodeModule;
-  const entry = fileURLToPath(import.meta.resolve("@agent-teams/filesystem-custody"));
+  const entry = fileURLToPath(import.meta.resolve("@agent-teams/filesystem-custody/composition"));
   process.dlopen(loaded, join(entry, "..", "rename-no-replace.node"));
   (loaded.exports as { unlockDirectory(fd: number): void }).unlockDirectory(lockedFd);
   const before = fs.statSync(f.file).size;
