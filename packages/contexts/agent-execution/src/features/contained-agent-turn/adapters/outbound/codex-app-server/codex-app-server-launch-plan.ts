@@ -1,3 +1,5 @@
+import { assertIssuedCodexPermissionBoundary } from "./codex-native-broker-boundary.js";
+import { inspectDarwinNativeLaunchObservation, assertDarwinNativeLaunchObservationCurrent, type DarwinNativeLaunchObservation } from "../filesystem/darwin-attempt-workspace-backend.js";
 import { createHash } from "node:crypto";
 import { types } from "node:util";
 import { lstatSync, realpathSync, statSync } from "node:fs";
@@ -5,6 +7,7 @@ import { isAbsolute, relative, resolve } from "node:path";
 
 import { createImmutableHostCustodyLaunchPlan, createFinalizableHostCustodyLaunchPlan, type HostCustodyLaunchPlan } from "../host-custody/custodied-provider-process.js";
 import {
+  codexDarwinNativeLaunchObservation,
   CODEX_PERMISSION_PROFILE_ID,
   validateCodexDirectoryIdentity,
   type CodexAppServerPermissionBoundary,
@@ -32,6 +35,8 @@ interface NativeBrokerLaunchInput {
 }
 const nativeLaunches = new WeakMap<HostCustodyLaunchPlan, Readonly<NativeBrokerLaunchInput>>();
 const issuedLaunchPlans = new WeakSet<object>();
+const nativeRootBoundaries = new WeakMap<HostCustodyLaunchPlan, CodexAppServerPermissionBoundary>();
+const finalNativeObservations = new WeakMap<HostCustodyLaunchPlan, DarwinNativeLaunchObservation>();
 
 /** Same-object native protocol selection; the provider rechecks retained material. */
 export const isCodexNativeBrokerLaunchPlan = (plan: HostCustodyLaunchPlan): boolean => nativeLaunches.has(plan);
@@ -164,6 +169,28 @@ const assertInertLaunchPlan = (plan: HostCustodyLaunchPlan): void => {
   }
 };
 
+const validateNativeLaunchRoots = (
+  plan: CodexAppServerLaunchPlan, boundary: CodexAppServerPermissionBoundary, platformOs: string,
+): void => {
+  const observation = codexDarwinNativeLaunchObservation(boundary);
+  if (observation === undefined || platformOs !== "macos") {
+    throw new TypeError("Native Codex launch observation or tuple rejected");
+  }
+  const captured = finalNativeObservations.get(plan);
+  if (captured !== undefined) {
+    assertDarwinNativeLaunchObservationCurrent(captured);
+    if (captured !== observation) {throw new TypeError("Native final launch generation changed");}
+  }
+  const facts = inspectDarwinNativeLaunchObservation(observation);
+  for (const [expected, actual] of [[plan.codexHomeIdentity, facts.codexHome],
+    [plan.tmpDirIdentity, facts.tmpDir], [plan.workspaceIdentity, facts.workspace]] as const) {
+    if (expected.path !== actual.path || expected.device !== Number(actual.dev) || expected.inode !== Number(actual.ino)) {
+      throw new TypeError("Native Codex launch identity changed");
+    }
+  }
+  if (plan.privateRootPath !== facts.privateRoot.path) {throw new TypeError("Native Codex launch root changed");}
+};
+
 export const validateCodexAppServerLaunchPlanRoots = (
   plan: HostCustodyLaunchPlan,
 ): void => {
@@ -184,9 +211,14 @@ export const validateCodexAppServerLaunchPlanRoots = (
     || plan.workspaceIdentity.path !== plan.workspaceRef) {
     throw new TypeError("exact Codex App Server launch plan is missing canonical root identities");
   }
-  validateCodexDirectoryIdentity("codexHome", plan.codexHomeIdentity);
-  validateCodexDirectoryIdentity("tmpDir", plan.tmpDirIdentity);
-  validateCodexDirectoryIdentity("workspaceRef", plan.workspaceIdentity, false);
+  const boundary = nativeRootBoundaries.get(plan);
+  if (boundary === undefined) {
+    validateCodexDirectoryIdentity("codexHome", plan.codexHomeIdentity);
+    validateCodexDirectoryIdentity("tmpDir", plan.tmpDirIdentity);
+    validateCodexDirectoryIdentity("workspaceRef", plan.workspaceIdentity, false);
+  } else {
+    validateNativeLaunchRoots(plan as CodexAppServerLaunchPlan, boundary, platformTuple.platformOs);
+  }
   validateLaunchEnvironment(plan);
 };
 
@@ -198,6 +230,7 @@ export const createCodexAppServerLaunchPlan = (
   ], ["nativeBroker"]) as unknown as CodexAppServerLaunchPlanOptions;
   const platformTarget = snapshotCodexNativeInput(options.platformTarget, ["architecture", "platform"]);
   const platformTuple = selectCodexAppServerPlatformTuple(platformTarget as unknown as CodexAppServerPlatformTarget);
+  assertIssuedCodexPermissionBoundary(options.boundary);
   const native = nativeLaunchInput(options);
   // Both selected 0.153.4 tuples use the captured native config. Darwin keeps
   // canonical paths and cooperative custody; Host selects its execution material.
@@ -215,9 +248,16 @@ export const createCodexAppServerLaunchPlan = (
   if (boundary.intentMode !== intentMode) {
     throw new TypeError("Codex launch intent mode does not match the permission boundary");
   }
-  validateCodexDirectoryIdentity("codexHome", codexHomeIdentity);
-  validateCodexDirectoryIdentity("workspaceRef", workspaceIdentity, false);
-  const tmpDirIdentity = privateTmpIdentity(options.tmpDir);
+  const observation = codexDarwinNativeLaunchObservation(options.boundary);
+  const facts = observation === undefined ? undefined : inspectDarwinNativeLaunchObservation(observation);
+  if (facts === undefined) {
+    validateCodexDirectoryIdentity("codexHome", codexHomeIdentity);
+    validateCodexDirectoryIdentity("workspaceRef", workspaceIdentity, false);
+  } else if (platformTarget.platform !== "darwin" || options.privateRootPath !== facts.privateRoot.path ||
+      options.tmpDir !== facts.tmpDir.path) {throw new TypeError("Native Codex launch selection mismatch");}
+  const tmpDirIdentity = facts === undefined ? privateTmpIdentity(options.tmpDir) : Object.freeze({
+    device: Number(facts.tmpDir.dev), inode: Number(facts.tmpDir.ino), path: facts.tmpDir.path,
+  });
   const privateRootPath = privateRoot(options.privateRootPath, boundary.workspaceRef);
   if (
     !contains(privateRootPath, boundary.codexHome)
@@ -270,7 +310,12 @@ export const createCodexAppServerLaunchPlan = (
     workspaceRef: boundary.workspaceRef,
     workspaceIdentity,
   });
-  if (native !== undefined) {nativeLaunches.set(plan, native);}
+  if (native !== undefined) {
+    nativeLaunches.set(plan, native);
+    const observation = codexDarwinNativeLaunchObservation(options.boundary);
+    if (observation !== undefined) {finalNativeObservations.set(plan, observation);}
+  }
+  if (codexDarwinNativeLaunchObservation(options.boundary) !== undefined) {nativeRootBoundaries.set(plan, options.boundary);}
   issuedLaunchPlans.add(plan);
   return plan;
 };
@@ -311,6 +356,7 @@ export const createCodexAppServerFinalizableLaunchPlan = (
         validate: () => validateCodexAppServerLaunchPlanRoots(final)});
     },
   });
+  if (codexDarwinNativeLaunchObservation(options.boundary) !== undefined) {nativeRootBoundaries.set(plan, options.boundary);}
   issuedLaunchPlans.add(plan);
   return plan;
 };

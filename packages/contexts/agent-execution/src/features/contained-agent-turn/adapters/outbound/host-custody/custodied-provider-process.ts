@@ -1,3 +1,4 @@
+import type { NativeHostCustodyWorkspaceAuthority } from "./native-host-custody-workspace-authority.js";
 import type { ContainedTurnProviderBinding } from "../../../contracts/contained-agent-turn.js";
 
 export { createImmutableHostCustodyLaunchPlan } from "./host-custody-launch-plan-snapshot.js";
@@ -246,7 +247,7 @@ export interface HostCustodyWorkspaceAuthority {
 export type HostCustodyReservationInput = Readonly<
   Parameters<ProviderProcessCustodyPort["open"]>[0] & {
     readonly launchPlan: HostCustodyLaunchPlan;
-    readonly workspaceAuthority: HostCustodyWorkspaceAuthority;
+    readonly workspaceAuthority: HostCustodyWorkspaceAuthority | NativeHostCustodyWorkspaceAuthority;
   }
 >;
 

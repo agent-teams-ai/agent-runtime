@@ -1,3 +1,8 @@
+import {
+  inspectDarwinNativeLaunchObservation, assertDarwinNativeLaunchObservationCurrent,
+  inspectDarwinNativeCodexMaterial, assertDarwinNativeCodexMaterialCurrent,
+  type DarwinNativeCodexMaterial, type DarwinNativeLaunchObservation,
+} from "../filesystem/darwin-attempt-workspace-backend.js";
 import {codexProtocolPaths} from "./codex-docker-path-projection.js";
 import { createHash } from "node:crypto";
 import { lstatSync, realpathSync, statSync } from "node:fs";
@@ -160,12 +165,92 @@ export const createCodexAppServerPermissionBoundary = (input: {
 }): CodexAppServerPermissionBoundary => {
   const privateHome = normalizedAbsoluteDirectory("codexHome", input.codexHome, true);
   const workspace = normalizedAbsoluteDirectory("workspaceRef", input.workspaceRef, false);
+  return issuePermissionBoundary(privateHome, workspace, input.intentMode);
+};
+
+const nativeObservations = new WeakMap<CodexAppServerPermissionBoundary, DarwinNativeLaunchObservation>();
+const nativeOriginals = new WeakMap<CodexAppServerPermissionBoundary, ReturnType<typeof inspectDarwinNativeLaunchObservation>>();
+/** Only authenticated installed material can advance a boundary generation. */
+export const acceptCodexDarwinNativeMaterialObservation = (
+  boundary: CodexAppServerPermissionBoundary, material: DarwinNativeCodexMaterial,
+): void => {
+  const original = nativeOriginals.get(boundary);
+  if (original === undefined) {throw new TypeError("Native Codex boundary provenance rejected");}
+  const installed = inspectDarwinNativeCodexMaterial(material);
+  assertDarwinNativeCodexMaterialCurrent(material);
+  const next = inspectDarwinNativeLaunchObservation(installed.observation);
+  if (next.operationId !== original.operationId || next.leasedUid !== original.leasedUid ||
+      (["privateRoot", "codexHome", "tmpDir", "workspace"] as const).some(key => {
+        const a = original[key]; const b = next[key];
+        return a.path !== b.path || a.dev !== b.dev || a.ino !== b.ino || a.uid !== b.uid || a.mode !== b.mode;
+      })) {throw new TypeError("Native Codex material changed original roots");}
+  assertDarwinNativeLaunchObservationCurrent(installed.observation);
+  nativeObservations.set(boundary, installed.observation);
+};
+/** Same-object lookup precedes observation inspection; this is lifetime validation,
+ * not fresh OS readback. Native START must revalidate descriptors atomically. */
+export const codexDarwinNativeLaunchObservation = (
+  boundary: CodexAppServerPermissionBoundary,
+): DarwinNativeLaunchObservation | undefined => {
+  const observation = nativeObservations.get(boundary);
+  if (observation !== undefined) {assertDarwinNativeLaunchObservationCurrent(observation);}
+  return observation;
+};
+
+const validateNativeDirectories = (facts: ReturnType<typeof inspectDarwinNativeLaunchObservation>): void => {
+  const directories = [facts.privateRoot, facts.codexHome, facts.tmpDir, facts.workspace];
+  if (!Number.isSafeInteger(facts.leasedUid) || facts.leasedUid <= 0) {
+    throw new TypeError("Native Codex leased UID rejected");
+  }
+  for (const fact of directories) {
+    if (!isAbsolute(fact.path) || resolve(fact.path) !== fact.path || fact.path === "/" || fact.path.includes("\0") ||
+        fact.dev < 0n || fact.ino <= 0n || !Number.isSafeInteger(Number(fact.dev)) ||
+        !Number.isSafeInteger(Number(fact.ino)) || fact.uid !== facts.leasedUid ||
+        (fact.mode & 0o170000) !== 0o040000 || (fact.mode & 0o077) !== 0) {
+      throw new TypeError("Native Codex directory observation rejected");
+    }
+  }
+};
+
+export const createDarwinNativeCodexPermissionBoundary = (
+  observation: DarwinNativeLaunchObservation, intentMode: CodexContainedTurnMode,
+): CodexAppServerPermissionBoundary => {
+  const facts = inspectDarwinNativeLaunchObservation(observation);
+  assertDarwinNativeLaunchObservationCurrent(observation);
+  validateNativeDirectories(facts);
+  const {privateRoot, codexHome, tmpDir, workspace} = facts;
+  if (!contains(privateRoot.path, codexHome.path) || privateRoot.path === codexHome.path ||
+      !contains(privateRoot.path, tmpDir.path) || privateRoot.path === tmpDir.path ||
+      contains(privateRoot.path, workspace.path) || contains(workspace.path, privateRoot.path)) {
+    throw new TypeError("Native Codex private roots rejected");
+  }
+  const peers = [codexHome, tmpDir, workspace];
+  for (let i = 0; i < peers.length; i += 1) {
+    for (let j = i + 1; j < peers.length; j += 1) {
+      if (contains(peers[i]!.path, peers[j]!.path) || contains(peers[j]!.path, peers[i]!.path) ||
+          peers[i]!.dev === peers[j]!.dev && peers[i]!.ino === peers[j]!.ino) {
+        throw new TypeError("Native Codex roots must be disjoint");
+      }
+    }
+  }
+  const project = (fact: typeof codexHome) => Object.freeze({path: fact.path,
+    identity: Object.freeze({device: Number(fact.dev), inode: Number(fact.ino), path: fact.path})});
+  const boundary = issuePermissionBoundary(project(codexHome), project(workspace), intentMode);
+  nativeObservations.set(boundary, observation);
+  nativeOriginals.set(boundary, facts);
+  return boundary;
+};
+
+const issuePermissionBoundary = (
+  privateHome: Readonly<{path: string; identity: CodexDirectoryIdentity}>,
+  workspace: Readonly<{path: string; identity: CodexDirectoryIdentity}>,
+  intentMode: CodexContainedTurnMode,
+): CodexAppServerPermissionBoundary => {
   const codexHome = privateHome.path;
   const workspaceRef = workspace.path;
   if (contains(codexHome, workspaceRef) || contains(workspaceRef, codexHome)) {
     throw new TypeError("Codex private home and workspace must be disjoint");
   }
-  const intentMode = input.intentMode;
   if (intentMode !== "analysis" && intentMode !== "workspace-write") {
     throw new TypeError("intentMode must be analysis or workspace-write");
   }
