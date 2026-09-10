@@ -44,7 +44,9 @@ export interface NodeContainedTurnWorkspaceOwner {
 
 type LaunchInput = Parameters<NodeContainedTurnWorkspaceOwner["withLaunchAuthority"]>[0];
 type NativeArtifactSource = NonNullable<ContainedTurnArtifactSealingContext["nativeSource"]>;
+type ClosureInput = Readonly<{operationId: ContainedTurnOperationId; workspaceId: ContainedTurnWorkspaceId}>;
 interface OwnerPrivateFacts {
+  readonly readNativeClosure: (input: ClosureInput) => ReturnType<SelectedNativeWorkspaceBackend["readClosed"]>;
   readonly native: boolean;
   readonly attachArtifacts: (
     roots: ContainedTurnArtifactSealingContext["workspaceRoots"],
@@ -82,6 +84,15 @@ export const withNodeContainedTurnNativeWorkspaceSelection = <Result>(
   const facts = issuedOwners.get(owner);
   if (facts === undefined) {throw new Error("contained turn native workspace owner is not issued");}
   return facts.consumeNative(input, consume);
+};
+
+/** Issued owner only; the native backend requires a genuine RELEASED grant. */
+export const readNodeContainedTurnNativeWorkspaceClosure = (
+  owner: NodeContainedTurnWorkspaceOwner, input: ClosureInput,
+): ReturnType<SelectedNativeWorkspaceBackend["readClosed"]> => {
+  const facts = issuedOwners.get(owner);
+  if (!facts?.native) {throw new Error("contained turn native workspace owner is not issued");}
+  return facts.readNativeClosure(input);
 };
 
 const once = (mutation: () => Promise<void>): (() => Promise<void>) => {
@@ -183,26 +194,34 @@ const createNativeOwnerState = (options: NodeContainedTurnWorkspaceOptions) => {
   };
 };
 
+const initializeOwnerBackend = async (options: NodeContainedTurnWorkspaceOptions,
+  retention: ReturnType<typeof createWorkspaceCapabilityRetention>, nativeState: ReturnType<typeof createNativeOwnerState>) => {
+  try {return await createNodeContainedTurnWorkspaceOwnerBackend(options, retention, nativeState.initialize);}
+  catch (error) {await retention.dispose(); throw error;}
+};
+const nativeClosureReader = (native: SelectedNativeWorkspaceBackend | undefined,
+  operations: ReadonlyMap<ContainedTurnOperationId, ContainedTurnWorkspaceId>,
+  workspaces: ReadonlyMap<ContainedTurnWorkspaceId, ContainedTurnOperationId>) => async (input: ClosureInput) => {
+  if (!native || operations.get(input.operationId) !== input.workspaceId || workspaces.get(input.workspaceId) !== input.operationId) {
+    throw new Error("contained turn native closure identity is not owned by this owner");
+  }
+  return native.readClosed();
+};
+
+const captureOwnerOptions = (configuration: NodeContainedTurnWorkspaceOptions) => Object.freeze({ ...configuration,
+  ...(configuration.limits === undefined ? {} : { limits: Object.freeze({ ...configuration.limits }) }) });
+
 export const createNodeContainedTurnWorkspaceOwner = async (
   configuration: NodeContainedTurnWorkspaceOptions,
 ): Promise<NodeContainedTurnWorkspaceOwner> => {
-  const options = Object.freeze({ ...configuration,
-    ...(configuration.limits === undefined ? {} : { limits: Object.freeze({ ...configuration.limits }) }) });
+  const options = captureOwnerOptions(configuration);
   const darwinWorkspace = options.selectedNativeWorkspace === undefined ? undefined :
     await import("./darwin-attempt-workspace-backend.js");
   const retention = createWorkspaceCapabilityRetention();
   const nativeState = createNativeOwnerState(options);
-  let backend: Awaited<ReturnType<typeof createNodeContainedTurnWorkspaceOwnerBackend>>;
-  try {
-    backend = await createNodeContainedTurnWorkspaceOwnerBackend(options, retention,
-      nativeState.initialize);
-  } catch (error) {
-    await retention.dispose();
-    throw error;
-  }
+  const backend = await initializeOwnerBackend(options, retention, nativeState);
 
-  let disposed = false;
-  let disposal: Promise<void> | undefined;
+  let disposed = false, disposal: Promise<void> | undefined;
   const ownedOperations = new Map<ContainedTurnOperationId, ContainedTurnWorkspaceId>();
   const ownedWorkspaces = new Map<ContainedTurnWorkspaceId, ContainedTurnOperationId>();
   const consumedAttempts = new Set<ContainedTurnAttemptId>();
@@ -336,6 +355,7 @@ export const createNodeContainedTurnWorkspaceOwner = async (
 
   const owner = Object.freeze({ dispose, withLaunchAuthority, workspace });
   issuedOwners.set(owner, Object.freeze<OwnerPrivateFacts>({ native: nativeState.native !== undefined,
+    readNativeClosure: nativeClosureReader(nativeState.native, ownedOperations, ownedWorkspaces),
     attachArtifacts: (roots, results) => nativeState.attachArtifacts(
       roots, results, assertOpen, operationId => ownedOperations.has(operationId),
     ),

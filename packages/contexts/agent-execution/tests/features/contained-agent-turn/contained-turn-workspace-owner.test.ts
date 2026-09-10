@@ -5,7 +5,7 @@ import { after, test, type TestContext } from "node:test";
 import { containedTurnIdentity } from
   "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 import { createNodeContainedTurnWorkspaceOwner, isNodeContainedTurnNativeWorkspaceOwner,
-  withNodeContainedTurnNativeWorkspaceSelection } from
+  withNodeContainedTurnNativeWorkspaceSelection, readNodeContainedTurnNativeWorkspaceClosure } from
   "../../../dist/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace-owner.js";
 import {
   cleanupTrackedFilesystemLayouts,
@@ -354,4 +354,14 @@ linuxTest("durable closure recovery repeats observations and restores a missing 
     assert.deepEqual(await owner.workspace.ensureClosed(request), closed);
     assert.deepEqual(await owner.workspace.queryClosure(request), closed);
   } finally {await owner.dispose();}
+});
+
+test("native closure readback rejects structural owners before observing input", () => {
+  const input = Object.defineProperties({}, {
+    operationId: {get() {throw new Error("caller input accessed");}},
+    workspaceId: {get() {throw new Error("caller input accessed");}},
+  }) as Parameters<typeof readNodeContainedTurnNativeWorkspaceClosure>[1];
+  assert.throws(() => readNodeContainedTurnNativeWorkspaceClosure(
+    {} as Parameters<typeof readNodeContainedTurnNativeWorkspaceClosure>[0], input,
+  ), /not issued/u);
 });

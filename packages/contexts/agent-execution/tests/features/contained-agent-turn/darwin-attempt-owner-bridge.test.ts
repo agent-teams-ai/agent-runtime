@@ -329,7 +329,14 @@ test("bridge materializes and verifies a complete destination tree through bound
   assert.equal(bridge.retainedClosed(), undefined);
   await assert.rejects(bridge.readClosedWorkspace(), /grant unavailable/u);
   phase = 7;
-  endpoint.push(nativeEvent("STATUS", ++serial, { sequence, phase, flags, workspace }));
+  const disposal = bridge.disposePrivate();
+  assert.equal(bridge.disposePrivate(), disposal);
+  let disposed = false;
+  void disposal.then(() => {disposed = true; return null;});
+  await new Promise<void>(resolve => {setImmediate(resolve);});
+  sequence = commands.length;
+  assert.equal(commands.at(-1), "DISPOSE_ONCE");
+  assert.equal(disposed, false, "DISPOSE acknowledgement is not release");
   phase = 8; ticket = Buffer.alloc(number("CLOSED_RECORD_BYTES")); ticket.write("ae-owner-intent-v1");
   binding.copy(ticket, number("RECORD_BINDING_OFFSET")); launch.copy(ticket, number("RECORD_LAUNCH_OFFSET"));
   const put = (name: string, field: number): void => {ticket.writeUInt32BE(field, number(`RECORD_${name}_OFFSET`));};
@@ -340,6 +347,9 @@ test("bridge materializes and verifies a complete destination tree through bound
   endpoint.push(nativeEvent("RELEASED", ++serial, { sequence, phase, flags, workspace, payload: ticket }));
   // Yield only to the synthetic stream reader, not to an external process.
   await new Promise<void>(resolve => {setImmediate(resolve); });
+  await disposal;
+  assert.equal(disposed, true);
+  assert.equal(commands.filter(command => command === "DISPOSE_ONCE").length, 1);
   const observedClosed = await bridge.readClosedWorkspace();
   assert.equal(commands.at(-1), "READ_CLOSED_WORKSPACE");
   assert.equal(observedClosed.tree.treeDigest, treeDigest);
@@ -661,3 +671,30 @@ test("native process enforces the shared output budget without converting overfl
     await assert.rejects(process.stdout[Symbol.asyncIterator]().next(), /output budget exceeded/u);
   } finally {bridge.lost();}
 });
+
+for (const loss of ["timeout", "channel"] as const) {
+  test(`native release ${loss} rejects memoized disposal without replay`, async t => {
+    t.mock.timers.enable({apis: ["setTimeout"]});
+    let commands = 0;
+    const endpoint = new Duplex({read() {}, write(chunk: Buffer, _encoding, callback) {
+      const request = decodeDarwinAttemptOwnerRequest(chunk.subarray(0, number("FRAME_BYTES")));
+      commands++;
+      this.push(nativeEvent("STATUS", 2, {sequence: request.sequence, command: request.command, phase: 7}));
+      callback();
+    }});
+    const bridge = bindDarwinAttemptOwnerBridge(endpoint);
+    endpoint.push(hello()); await readyBridge(bridge);
+    const released = bridge.awaitReleased();
+    assert.equal(bridge.awaitReleased(), released);
+    const disposal = bridge.disposePrivate();
+    const rejected = assert.rejects(disposal, /release timed out|channel|ended/u);
+    const releaseRejected = assert.rejects(released);
+    await new Promise<void>(resolve => {setImmediate(resolve);});
+    if (loss === "timeout") {t.mock.timers.tick(6001);} else {endpoint.push(null);}
+    await rejected; await releaseRejected;
+    assert.equal(bridge.disposePrivate(), disposal);
+    await assert.rejects(bridge.disposePrivate());
+    assert.equal(commands, 1);
+    assert.equal(bridge.retainedClosed(), undefined);
+  });
+}

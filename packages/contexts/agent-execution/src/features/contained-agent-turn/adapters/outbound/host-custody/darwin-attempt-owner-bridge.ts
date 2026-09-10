@@ -422,6 +422,31 @@ function retainedOwnerSettlement(
     },
   };
 }
+function nativeRelease(failure: () => Error | undefined, closed: () => unknown, lose: (error: Error) => void) {
+  let release: Promise<void> | undefined;
+  let resolveRelease: (() => void) | undefined;
+  let rejectRelease: ((error: Error) => void) | undefined;
+  let releaseTimer: ReturnType<typeof setTimeout> | undefined;
+  const awaitReleased = (): Promise<void> => {
+    if (release) {return release;}
+    release = new Promise<void>((resolve, reject) => {
+      const failed = failure();
+      if (failed) {reject(failed); return;}
+      if (closed()) {resolve(); return;}
+      resolveRelease = resolve; rejectRelease = reject;
+      releaseTimer = setTimeout(() => lose(new Error("native owner release timed out; no retry")), 6000);
+    });
+    void release.catch(() => {});
+    return release;
+  };
+  return {
+    awaitReleased,
+    accept: (event: DarwinAttemptOwnerEvent): void => {
+      if (event.kind === "RELEASED") {clearTimeout(releaseTimer); resolveRelease?.();}
+    },
+    lost: (error: Error): void => {clearTimeout(releaseTimer); rejectRelease?.(error);},
+  };
+}
 export function bindDarwinAttemptOwnerBridge(endpoint: Duplex) {
   const events = new DarwinAttemptOwnerEvents();
   const execution = nativeExecution();
@@ -446,15 +471,24 @@ export function bindDarwinAttemptOwnerBridge(endpoint: Duplex) {
     if (failed) {return;}
     failed = cause instanceof Error ? cause : new Error("native owner channel lost");
     events.lost(); execution.lost(failed); rejectInitial?.(failed);
+    release.lost(failed);
     if (pending) {clearTimeout(pending.timer); pending.reject(failed); pending = undefined;}
     endpoint.destroy();
   };
+  const release = nativeRelease(() => failed, () => events.retainedClosed(), lose);
+  let disposal: Promise<DarwinAttemptOwnerEvent> | undefined;
+  const disposePrivate = (): Promise<DarwinAttemptOwnerEvent> => disposal ??= (async () => {
+    const released = release.awaitReleased();
+    const [acknowledgement] = await Promise.all([request("DISPOSE_ONCE"), released]);
+    return acknowledgement;
+  })();
   let observationGeneration = 0; const responseEpochs = nativeResponseEpochs();
   const directories = retainNativeDirectories();
   let materialConsumed = false, creationAcknowledged = false;
   const receive = async (event: DarwinAttemptOwnerEvent): Promise<void> => {
     events.accept(event);
     execution.accept(event);
+    release.accept(event);
     observationGeneration += Number(observationEnds(event));
     if (event.kind === "HELLO") {helloReceived = true; initial?.(); initial = undefined; rejectInitial = undefined; return;}
     if (event.kind === "TREE_ENTRY" || event.kind === "TREE_CHUNK" || event.kind === "TREE_END") {
@@ -563,7 +597,7 @@ export function bindDarwinAttemptOwnerBridge(endpoint: Duplex) {
     settleArtifactResult: () => retained.settle("artifactResult", "SETTLE_ARTIFACT_RESULT"),
     settleWorkspace: () => retained.settle("workspace", "SETTLE_WORKSPACE"),
     settlePrivateMaterial: () => retained.settle("privateMaterial", "SETTLE_PRIVATE"),
-    disposePrivate: () => request("DISPOSE_ONCE"),
+    disposePrivate, awaitReleased: release.awaitReleased,
     lost: () => lose(new Error("Host relinquished channel without consumer settlement")),
   });
 }

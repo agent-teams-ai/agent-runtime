@@ -90,14 +90,15 @@ export class NodeProviderProcessCustodyHttpReservation {
   }
   public cleanup(): Promise<boolean> {
     this.cutoff();
+    if (this.#nativeCleanup !== undefined) {return this.#nativeCleanup;}
     const route = this.#route === undefined ? this.#resources.cleanup() : this.#route.cleanup(() => this.#resources.cleanup());
     if (this.#nativeLease === undefined) {return route;}
-    if (this.#nativeCleanup !== undefined) {return this.#nativeCleanup;}
     const operation = (async () => {
       const lease = this.#nativeLease!;
       let complete = true;
       try {await this.cutoffNativeExecution(lease);} catch {complete = false;}
       let routeClosed = false; try {routeClosed = await route;} catch {complete = false;}
+      if (!complete || !routeClosed) {return false;}
       try {if (!this.#nativeRouteSettled) {await settleDarwinNativeExecutionLaunchRoute(lease); this.#nativeRouteSettled = true;}} catch {complete = false;}
       try {if (!this.#nativePrivateSettled) {await settleDarwinNativeExecutionPrivateMaterial(lease); this.#nativePrivateSettled = true;}} catch {complete = false;}
       try {if (!this.#nativeDisposed) {await disposeDarwinNativeExecution(lease); this.#nativeDisposed = true;}} catch {complete = false;}
