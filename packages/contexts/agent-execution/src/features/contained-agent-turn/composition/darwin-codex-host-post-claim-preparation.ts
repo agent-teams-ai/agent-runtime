@@ -114,9 +114,12 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
       const journal = new DarwinRouteLifecycleJournal(storage, lifetime);
       let files: DarwinCodexNativeFiles | undefined;
       route = new DarwinSeatbeltRouteOwner(lifetime, journal, options.localCut, options.limits.closureDeadline,
-        {node, nativeLaunch: codexNativeBrokerLaunchInput, files: () => files?.cleanup() ?? Promise.resolve(true)});
+        {node, nativeLaunch: codexNativeBrokerLaunchInput,
+          files: () => nativeLease === undefined ? files?.cleanup() ?? Promise.resolve(true) : Promise.resolve(true)});
       const owner = route;
-      files = new DarwinCodexNativeFiles(options.boundary, options.catalogSource, journal, () => owner.assertActive());
+      if (nativeLease === undefined) {
+        files = new DarwinCodexNativeFiles(options.boundary, options.catalogSource, journal, () => owner.assertActive());
+      }
       preparation.retainDarwinRoute(lifetime, owner);
       owner.assertWritableTmp(options.tmpDir);
       if (options.localCut.hostShutdownSignal !== undefined) {hostHttpAbortOperations.subscribe(options.localCut.hostShutdownSignal, () => owner.cutoff());}

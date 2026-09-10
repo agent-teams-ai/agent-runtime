@@ -140,9 +140,16 @@ export class DarwinSeatbeltRouteOwner {
       fingerprint: this.#final!.fingerprint.fingerprintSha256});
     this.assertActive(); this.#providerImage = image; this.#state = "installed";
   }
+  public installNative(): void {
+    this.assertLaunch(this.#final);
+    if (this.#guardianAttempted || this.#providerImage !== undefined || this.#state !== "launch-authorized") {rejected();}
+    this.journal.record("native_final_image_observed", {fingerprint: this.#final!.fingerprint.fingerprintSha256});
+    this.assertActive(); this.#state = "installed";
+  }
   public assertInstalled(): void {
     this.assertActive();
-    if (this.#state !== "installed" || this.#providerImage === undefined || this.#live!.guardian?.providerExit !== undefined ||
+    if (this.#state !== "installed" || this.#guardianAttempted && this.#providerImage === undefined ||
+        this.#live!.guardian?.providerExit !== undefined ||
         this.#live!.launchBinding.view.readFinal() !== this.#final) {this.cutoff(); rejected();}
   }
   public readonly firstWrite: HttpEgressRouteFirstWrite = Object.freeze({reserve: (requestId: string) => {

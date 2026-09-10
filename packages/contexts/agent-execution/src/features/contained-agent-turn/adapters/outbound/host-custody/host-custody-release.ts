@@ -81,6 +81,17 @@ const closeLiveCustody = async (
   }
   const httpClosed = await boundedPromise(live.httpReservation.cleanup(), state.cleanupAfterMs);
   if (httpClosed !== true) {return unprovenResult("http-resources-release-unproven", input, live);}
+  if (live.nativeExecutionLease !== undefined && live.nativeExit !== undefined && live.evidenceSealed) {
+    live.privateRootClosure = Object.freeze({...live.privateRootClosure, status: "deleted" as const});
+    const tombstone: CustodyTombstone = Object.freeze({
+      ...(live.privateReservationPlan === undefined ? {} : {privateReservationPlan: live.privateReservationPlan}),
+      attemptId: live.attemptId, custodyRef: live.custodyRef, evidence: snapshotEvidence(live),
+      inputIdentitySha256: live.inputIdentitySha256, operationId: live.operationId, receiptRef: input.receiptRef,
+    });
+    state.tombstonesByAttempt.set(live.attemptId, tombstone); state.tombstonesByRef.set(live.custodyRef, tombstone);
+    state.byAttempt.delete(live.attemptId); state.byRef.delete(live.custodyRef); forgetLiveHandles(live);
+    return Object.freeze({kind: "released" as const});
+  }
   const cooperativeDarwin = live.fingerprint?.containmentProfile === "cooperative-darwin-posix-process-group";
   const provedNoStart = isCompleteProvedNoStart(live);
   if (cooperativeDarwin && !provedNoStart) {

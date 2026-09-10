@@ -2,8 +2,10 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 
 import type {
   CustodiedProviderProcess,
+  CustodiedSdkProcess,
   CustodiedProviderProcessExit,
   HostCustodyClosureEvidence,
+  HostCustodyDrainEvidence,
   HostCustodyEvidence,
   HostCustodyLaunchFingerprintEvidence,
   HostCustodyLaunchPlan,
@@ -83,7 +85,11 @@ export interface LiveCustody {
   providerPid?: number;
   residueAuthority?: OperationResidueAuthority;
   residueAllocation: "not-allocated" | "uncertain" | "retained";
-  sdkProcess?: NodeCustodiedSdkProcess;
+  sdkProcess?: CustodiedSdkProcess;
+  nativeCleanup?: Promise<boolean>;
+  nativeExit?: CustodiedProviderProcessExit;
+  nativeStdout?: HostCustodyDrainEvidence;
+  nativeStderr?: HostCustodyDrainEvidence;
   sealed: boolean;
   signalAuthorized: boolean;
   spawnAcknowledgement?: Promise<SpawnStatus>;

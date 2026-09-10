@@ -18,7 +18,8 @@ import {
   type HostCustodySpawnAcknowledgement,
   type ProviderProcessCustodyPort,
 } from "./custodied-provider-process.js";
-import { containCustody, snapshotEvidence, unprovenResult, type ContainmentResult } from "./host-custody-evidence.js";
+import { containCustody, containedResult, identityBase, notStartedIdentity, snapshotEvidence, strictClosure,
+  unprovenResult, type ContainmentResult } from "./host-custody-evidence.js";
 import {
   inputIdentity,
   positiveInteger,
@@ -72,7 +73,11 @@ import { startHostCustodyLaunch } from "./host-custody-start-projection.js";
 import { snapshotHostCustodyLaunchPlan } from "./host-custody-launch-plan-snapshot.js";
 import {assertDarwinNativeExecutionClaim, assertRetainedDarwinNativeHttpExecutionAuthority,
   bindRetainedDarwinNativeHttpLaunch,
-  inspectDarwinNativeLaunchObservation} from "./darwin-attempt-owner-selection.js";
+  inspectDarwinNativeLaunchObservation, startDarwinNativeExecution, readDarwinNativeExecution, readDarwinNativeNoStart,
+  readDarwinNativeExecutionStatus,
+  cutoffDarwinNativeExecution} from "./darwin-attempt-owner-selection.js";
+import {DeferredNativeProviderProcess, DeferredNativeSdkProcess} from "./deferred-native-sdk-process.js";
+import {boundedPromise} from "./host-custody-stdio.js";
 import {consumeNativeHostCustodyExecutionLease, inspectNativeHostCustodyExecutionLease,
   inspectNativeHostCustodyReservationAuthority, isNativeHostCustodyWorkspaceAuthority,
   retireNativeHostCustodyWorkspaceAuthority} from "./native-host-custody-workspace-authority.js";
@@ -134,7 +139,9 @@ export class NodeProviderProcessCustodyCore implements
         live.httpReservation.assertPreparation(lifetime);
         assertDarwinNativeExecutionClaim(live.nativeExecutionLease, lifetime.committedDispatchProof);
         assertRetainedDarwinNativeHttpExecutionAuthority(authority, live.nativeExecutionLease);
-        return consumeNativeHostCustodyExecutionLease(live.nativeWorkspaceAuthority, live.nativeExecutionLease);
+        const lease = consumeNativeHostCustodyExecutionLease(live.nativeWorkspaceAuthority, live.nativeExecutionLease);
+        live.httpReservation.retainNativeExecution(lease);
+        return lease;
       },
       async bindDarwinNativeFinalLaunch(
         lifetime: Parameters<NodeCustodyHttpPreparation["bindDarwinNativeFinalLaunch"]>[0],
@@ -436,12 +443,26 @@ export class NodeProviderProcessCustodyCore implements
       admission.abort.subscribe(requestAbort);
       let sdkProcess = admission.replay;
       if (sdkProcess === undefined) {
-        sdkProcess = this.#spawn(live, admission.arguments, admission.environment);
+        if (live.nativeExecutionLease !== undefined) {
+          const provider = new DeferredNativeProviderProcess(live.custodyRef, live.workspaceRef);
+          const sdk = new DeferredNativeSdkProcess(
+            () => {void cutoffDarwinNativeExecution(live.nativeExecutionLease!).catch(() => {});}, provider.stdout,
+          );
+          live.process = provider; live.sdkProcess = sdk; live.spawnStatus = "ambiguous";
+          const started = startDarwinNativeExecution(live.nativeExecutionLease);
+          live.exit = started.then(process => process.waitForExit());
+          live.spawnAcknowledgement = started.then(process => {
+            try {provider.bind(process); sdk.bind(process); live.httpReservation.installNativeExecution(live.nativeExecutionLease!);}
+            catch (error) {provider.fail(error); sdk.fail(error); throw error;}
+            return "ambiguous" as const;
+          }, error => {provider.fail(error); sdk.fail(error); live.spawnStatus = "ambiguous"; throw error;});
+          sdkProcess = sdk;
+        } else {sdkProcess = this.#spawn(live, admission.arguments, admission.environment);}
       }
       if (live.exit === undefined) {throw new HostCustodyLaunchRejectedError();}
       void live.exit.then(disposeAbort, disposeAbort);
       if (admission.abort.aborted) {requestAbort();}
-      return sdkProcess;
+      return sdkProcess!;
     } catch (error) {
       try {live.httpReservation.cutoff();}
       finally {
@@ -486,7 +507,7 @@ export class NodeProviderProcessCustodyCore implements
     live.httpReservation.assertActive();
     if (live.sealed) {throw new Error("Host Custody reservation is sealed");}
     if (live.child !== undefined || live.spawnAcknowledgement !== undefined) {
-      if (live.sdkProcess !== undefined) {return live.sdkProcess;}
+      if (live.sdkProcess instanceof NodeCustodiedSdkProcess) {return live.sdkProcess;}
       throw new Error("Host Custody process start is already in flight");
     }
     if (
@@ -591,6 +612,39 @@ export class NodeProviderProcessCustodyCore implements
     live.httpReservation.cutoff();
     live.containmentDeadline ??= this.#monotonicNow() + this.#containmentAfterMs;
     try {
+      if (live.nativeExecutionLease !== undefined) {
+        const process = live.process;
+        try {
+          await live.httpReservation.cutoffNativeExecution(live.nativeExecutionLease);
+          if (!(process instanceof DeferredNativeProviderProcess) || live.exit === undefined) {
+            const remaining = Math.max(1, live.containmentDeadline - this.#monotonicNow());
+            await boundedPromise(readDarwinNativeExecutionStatus(live.nativeExecutionLease), remaining);
+            if (readDarwinNativeNoStart(live.nativeExecutionLease) === undefined) {
+              return unprovenResult("stable-guardian-unavailable", input, live);
+            }
+            live.spawnStatus = "never-started"; live.guardianNoStartAcknowledged = true;
+            live.identity = notStartedIdentity(this.#hostLifecycleGenerationSha256);
+            live.closureEvidence = strictClosure("not-started", "cooperative-darwin-posix-process-group");
+            live.evidenceSealed = true;
+            const result = containedResult(live, "never-started"); live.contained = result; return result;
+          }
+          const remaining = Math.max(1, live.containmentDeadline - this.#monotonicNow());
+          const completed = await boundedPromise(Promise.all([live.exit, process.drained]), remaining);
+          const execution = readDarwinNativeExecution(live.nativeExecutionLease);
+          if (completed === undefined || execution === undefined || execution.image.child === undefined) {
+            return unprovenResult("posix-process-group-close-unproven", input, live);
+          }
+          const [exit] = completed; const child = execution.image.child;
+          live.nativeExit = exit; live.nativeStdout = process.evidence("stdout"); live.nativeStderr = process.evidence("stderr");
+          live.spawnStatus = "acknowledged"; live.childProcessInstanceSha256 = sha256(JSON.stringify(child));
+          live.identity = Object.freeze({...identityBase(live, this.#hostLifecycleGenerationSha256), pid: child.pid, pgid: child.pgid,
+            proofRef: `native-darwin:${execution.image.attestation}`, status: "proved" as const});
+          live.closureEvidence = Object.freeze({limitations: Object.freeze([] as const),
+            profile: "native-darwin-attempt-owner" as const, status: "closed" as const});
+          live.evidenceSealed = true;
+          const result = containedResult(live, "native-darwin-attempt-owner"); live.contained = result; return result;
+        } catch {return unprovenResult("posix-process-group-close-unproven", input, live);}
+      }
       if (live.spawnStatus === "ambiguous" && live.guardian === undefined) {
         // Reentrant abort may precede the synchronous launch's resource return.
         // If it throws instead, keep custody for reconciliation: the no-guardian

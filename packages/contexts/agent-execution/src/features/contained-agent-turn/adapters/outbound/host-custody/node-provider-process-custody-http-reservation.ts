@@ -9,6 +9,8 @@ import type { DarwinSeatbeltRouteOwner } from "./darwin-seatbelt-route-owner.js"
 import type {DarwinNativeExecutionLease, RetainedNativeHttpLaunchAuthority} from "./darwin-attempt-owner-selection.js";
 import type {DarwinNativeCodexMaterial} from "./darwin-attempt-owner-selection.js";
 import type {FinalHostLaunch} from "./host-launch-finalization.js";
+import {cutoffDarwinNativeExecution, disposeDarwinNativeExecution,
+  settleDarwinNativeExecutionLaunchRoute, settleDarwinNativeExecutionPrivateMaterial} from "./darwin-attempt-owner-selection.js";
 
 import { isIssuedDarwinRouteOwner } from "./darwin-route-identity.js";
 
@@ -57,6 +59,9 @@ export class NodeProviderProcessCustodyHttpReservation {
   #cutoff = false;
   #preparationAbort: {readonly signal: AbortSignal; readonly listener: () => void} | undefined;
   #lifetime: NodeCustodyHttpLifetime | undefined;
+  #nativeLease: DarwinNativeExecutionLease | undefined;
+  #nativeCleanup: Promise<boolean> | undefined;
+  #nativeCutoff = false; #nativeRouteSettled = false; #nativePrivateSettled = false; #nativeDisposed = false;
 
   public get pending(): Promise<void> | undefined {
     // The Darwin flight encloses resource preparation and finalization. Preserve
@@ -71,8 +76,35 @@ export class NodeProviderProcessCustodyHttpReservation {
     owner.attach(live); this.#route = owner;
   }
 
+  public retainNativeExecution(lease: DarwinNativeExecutionLease): void {
+    if (this.#nativeLease !== undefined) {throw new TypeError("Native execution cleanup owner already retained");}
+    this.#nativeLease = lease;
+  }
+  public installNativeExecution(lease: DarwinNativeExecutionLease): void {
+    if (this.#nativeLease !== lease || this.#route === undefined) {throw new TypeError("Native execution route owner conflicts");}
+    this.#route.installNative();
+  }
+  public async cutoffNativeExecution(lease: DarwinNativeExecutionLease): Promise<void> {
+    if (this.#nativeLease !== lease) {throw new TypeError("Native execution cleanup owner conflicts");}
+    if (!this.#nativeCutoff) {await cutoffDarwinNativeExecution(lease); this.#nativeCutoff = true;}
+  }
   public cleanup(): Promise<boolean> {
-    this.cutoff(); return this.#route === undefined ? this.#resources.cleanup() : this.#route.cleanup(() => this.#resources.cleanup());
+    this.cutoff();
+    const route = this.#route === undefined ? this.#resources.cleanup() : this.#route.cleanup(() => this.#resources.cleanup());
+    if (this.#nativeLease === undefined) {return route;}
+    if (this.#nativeCleanup !== undefined) {return this.#nativeCleanup;}
+    const operation = (async () => {
+      const lease = this.#nativeLease!;
+      let complete = true;
+      try {await this.cutoffNativeExecution(lease);} catch {complete = false;}
+      let routeClosed = false; try {routeClosed = await route;} catch {complete = false;}
+      try {if (!this.#nativeRouteSettled) {await settleDarwinNativeExecutionLaunchRoute(lease); this.#nativeRouteSettled = true;}} catch {complete = false;}
+      try {if (!this.#nativePrivateSettled) {await settleDarwinNativeExecutionPrivateMaterial(lease); this.#nativePrivateSettled = true;}} catch {complete = false;}
+      try {if (!this.#nativeDisposed) {await disposeDarwinNativeExecution(lease); this.#nativeDisposed = true;}} catch {complete = false;}
+      return complete && routeClosed;
+    })();
+    this.#nativeCleanup = operation.then(result => {if (!result) {this.#nativeCleanup = undefined;} return result;});
+    return this.#nativeCleanup;
   }
 
   public prepareResources(lifetime: NodeCustodyHttpLifetime, input: NodeCustodyHttpResourceInput) {
@@ -110,7 +142,8 @@ export class NodeProviderProcessCustodyHttpReservation {
     if (live.httpReservation !== this || this.#claimed || this.#cutoff || live.sealed ||
         live.abortRequested || live.spawnStatus !== "never-started" ||
         live.startIdentitySha256 !== undefined || live.fingerprint === undefined ||
-        live.retainedWorkspaceAuthority === undefined || live.plan?.spawnMode !== "sdk-delegated" ||
+        (live.retainedWorkspaceAuthority === undefined) === (live.nativeWorkspaceAuthority === undefined) ||
+        live.plan?.spawnMode !== "sdk-delegated" ||
         handoff.underlyingCustodyRef !== live.custodyRef || proof.attemptId !== live.attemptId ||
         proof.operationId !== live.operationId || proof.provider !== live.providerBinding.provider) {
       throw new TypeError("Host Custody HTTP reservation is unavailable or conflicts");

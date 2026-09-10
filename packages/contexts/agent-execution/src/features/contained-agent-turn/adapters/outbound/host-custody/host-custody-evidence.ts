@@ -66,6 +66,9 @@ export interface HostCustodyEvidenceState {
   readonly fingerprint?: HostCustodyLaunchFingerprintEvidence;
   readonly guardian?: StableProcessGroupGuardian;
   readonly guardianNoStartAcknowledged?: boolean;
+  readonly nativeExit?: CustodiedProviderProcessExit;
+  readonly nativeStdout?: HostCustodyEvidence["stdout"];
+  readonly nativeStderr?: HostCustodyEvidence["stderr"];
   readonly identity: HostCustodyProcessIdentityEvidence;
   readonly operationId: string;
   readonly privateRootClosure: { readonly identitySha256: string; readonly status: "active" | "deleted" | "quarantined" | "unproven" };
@@ -122,19 +125,19 @@ export const snapshotEvidence = (live: HostCustodyEvidenceState): HostCustodyEvi
     providerExit: live.guardianNoStartAcknowledged === true ||
         (live.spawnStatus === "never-started" && live.closureEvidence.status === "not-started")
       ? Object.freeze({ status: "not-started" as const })
-      : providerExit === undefined
+      : (providerExit ?? live.nativeExit) === undefined
         ? Object.freeze({ status: "unobserved" as const })
-        : Object.freeze({ code: providerExit.code, signal: providerExit.signal, status: "observed" as const }),
+        : Object.freeze({ code: (providerExit ?? live.nativeExit)!.code, signal: (providerExit ?? live.nativeExit)!.signal, status: "observed" as const }),
     sealed: live.evidenceSealed,
     spawn: live.spawnStatus,
-    stderr: live.stderr?.snapshot() ?? notStarted,
-    stdout: live.stdout?.snapshot() ?? notStarted,
+    stderr: live.nativeStderr ?? live.stderr?.snapshot() ?? notStarted,
+    stdout: live.nativeStdout ?? live.stdout?.snapshot() ?? notStarted,
   });
 };
 
 export const containedResult = (
   live: HostCustodyEvidenceState,
-  observation: "never-started" | "strict-linux-cgroup-v2",
+  observation: "never-started" | "strict-linux-cgroup-v2" | "native-darwin-attempt-owner",
 ): Extract<ContainmentResult, { readonly kind: "contained" }> => {
   const evidence = snapshotEvidence(live);
   const receiptIdentity = [

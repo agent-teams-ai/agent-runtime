@@ -354,6 +354,11 @@ export function readDarwinNativeExecution(lease: DarwinNativeExecutionLease): Da
   if (!retained) {throw new Error("foreign native execution lease");}
   return retained.issued.bridge.execution();
 }
+export function readDarwinNativeNoStart(lease: DarwinNativeExecutionLease): ReturnType<Bridge["noStart"]> {
+  const retained = leases.get(lease);
+  if (!retained) {throw new Error("foreign native execution lease");}
+  return retained.issued.bridge.noStart();
+}
 export async function readDarwinNativeExecutionStatus(lease: DarwinNativeExecutionLease): Promise<DarwinNativeExecutionStatus> {
   const retained = leases.get(lease);
   if (!retained) {throw new Error("foreign native execution lease");}
