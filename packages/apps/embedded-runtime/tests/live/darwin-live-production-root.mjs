@@ -45,15 +45,21 @@ export async function createDarwinLiveRuntime(activation) {
     cleanup.push(workspaceOwner.dispose);
     const artifacts = await createNodeContainedTurnArtifacts({...owned.artifacts, workspaceOwner});
     cleanup.push(artifacts.dispose);
-    if (typeof owned.createPostClaimPreparation !== "function") {throw refused();}
+    if (typeof owned.createWorkspaceComposition !== "function" ||
+        typeof owned.createPostClaimPreparation !== "function") {throw refused();}
+    const joined = await owned.createWorkspaceComposition({workspaceOwner, artifacts,
+      selectedNativeWorkspace: native.selection, withCredentialOutputInventory: owned.withCredentialOutputInventory});
+    if (!joined?.deployment || !joined?.host) {throw refused();}
+    if (joined.dispose !== undefined) {cleanup.push(joined.dispose);}
+
     const preparation = await owned.createPostClaimPreparation(native.selection, native.httpLaunchAuthority);
-    deployment = createDarwinContainedTurnDeployment({...owned.deployment, preparation,
+    deployment = createDarwinContainedTurnDeployment({...joined.deployment, preparation,
       providerAccess: owned.providerAccess, rendering: owned.rendering, pool: owned.pool});
     cleanup.push(deployment.dispose);
     const operationStore = deployment.bindStore(bindDarwinNativeAttemptAuthority(owned.operationStore, native.attemptAuthority));
     const dispatchAuthority = deployment.bindAuthority(owned.dispatchAuthority);
-    host = createHostCustodiedAgentRuntimeHost({...owned.host,
-      containedTurn: {...owned.host.containedTurn, ...dispatchAuthority, operationStore,
+    host = createHostCustodiedAgentRuntimeHost({...joined.host,
+      containedTurn: {...joined.host.containedTurn, ...dispatchAuthority, operationStore,
         workspace: workspaceOwner.workspace, artifacts,
         routeEnforcement: deployment.routeEnforcement}});
     const sealAdmission = async () => {if (!sealed) {sealed = true; await owned.sealAdmission?.();}};

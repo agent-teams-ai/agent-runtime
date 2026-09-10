@@ -28,11 +28,11 @@ export async function acquireDarwinLiveOwners(activation) {
       typeof agentExecution.createContainedTurnOperationProviderAccessPort !== "function" ||
       typeof agentExecution.createContainedTurnSecurityAcceptancePort !== "function") {throw refused();}
   const infrastructure = await infrastructureModule.acquireDarwinInfrastructureOwners(activation);
-  if (typeof activation.turn?.operationId !== "string" || infrastructure.operationId !== activation.turn.operationId ||
-      infrastructure.privateAuth?.operationRef !== activation.turn.operationId) {throw refused();}
-  const pa = await acquireAndPublish(infrastructure.pool, infrastructure.privateAuth, infrastructure.operatorApproval);
-  let current, disposed = false;
+  let pa, current, disposed = false;
   try {
+    if (typeof activation.turn?.operationId !== "string" || infrastructure.operationId !== activation.turn.operationId ||
+        infrastructure.privateAuth?.operationRef !== activation.turn.operationId) {throw refused();}
+    pa = await acquireAndPublish(infrastructure.pool, infrastructure.privateAuth, infrastructure.operatorApproval);
     const {tenantId, projectId, scopeDigest} = pa.binding;
     current = providerAccess.createPostgresCurrentProviderAccess(infrastructure.pool,
       {tenantId, projectId, provider: "codex", scopeDigest});
@@ -51,14 +51,15 @@ export async function acquireDarwinLiveOwners(activation) {
       pool: infrastructure.pool,
       providerAccess: providerAccessOwner,
       rendering: Object.freeze({createRendering: pa.createRendering.bind(pa)}),
-      dispose() {
+      withCredentialOutputInventory: pa.withCredentialOutputInventory.bind(pa),
+      async dispose() {
         if (disposed) {return;}
         disposed = true;
-        try {current.dispose();} finally {try {pa.dispose();} finally {infrastructure.dispose();}}
+        try {await current.dispose();} finally {try {await pa.dispose();} finally {await infrastructure.dispose();}}
       },
     });
   } catch (error) {
-    try {current?.dispose();} finally {try {pa.dispose();} finally {infrastructure.dispose();}}
+    try {await current?.dispose();} finally {try {await pa?.dispose();} finally {await infrastructure.dispose();}}
     throw error;
   }
 }

@@ -2,15 +2,33 @@ import {createHash} from "node:crypto";
 import {lstat, readFile} from "node:fs/promises";
 import {isAbsolute} from "node:path";
 
-const plainJson = value => {
-  if (value === null || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) {
+export const plainJson = value => {
+  const seen = new Set();
+  const visit = entry => {
+    if (entry === null || typeof entry === "string" || typeof entry === "boolean") {return entry;}
+    if (typeof entry === "number" && Number.isFinite(entry)) {return entry;}
+    if (typeof entry !== "object" || seen.has(entry) ||
+        (!Array.isArray(entry) && Object.getPrototypeOf(entry) !== Object.prototype)) {
+      throw new TypeError("activation infrastructure must contain only plain JSON values");
+    }
+    seen.add(entry);
+    const result = Array.isArray(entry) ? [] : {};
+    for (const key of Reflect.ownKeys(entry)) {
+      if (Array.isArray(entry) && key === "length") {continue;}
+      const descriptor = Object.getOwnPropertyDescriptor(entry, key);
+      if (typeof key !== "string" || !descriptor.enumerable || !("value" in descriptor) ||
+          /^(token|password|cookie|authJson|credentials|sensitiveOutputTokens)$/iu.test(key)) {
+        throw new TypeError("activation infrastructure contains forbidden material");
+      }
+      Object.defineProperty(result, key, {value: visit(descriptor.value), enumerable: true});
+    }
+    seen.delete(entry);
+    return Object.freeze(result);
+  };
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError("activation infrastructure must be a plain JSON record");
   }
-  const encoded = JSON.stringify(value);
-  if (encoded === undefined || /"(?:token|password|cookie|authJson|credentials)"\s*:/iu.test(encoded)) {
-    throw new TypeError("activation infrastructure contains forbidden material");
-  }
-  return JSON.parse(encoded);
+  return visit(value);
 };
 
 const digestFile = async ({path, role}) => {

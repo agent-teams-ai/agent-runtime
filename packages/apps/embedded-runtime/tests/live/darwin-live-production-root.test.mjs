@@ -19,6 +19,14 @@ function fixture({failPreparation = false} = {}) {
   const owned = {
     nativeConsumers, workspace: {}, artifacts: {}, deployment: {}, operationStore: {}, dispatchAuthority: {},
     providerAccess: {}, rendering: {}, pool: {}, host: {containedTurn: {existingPort: {}}},
+    async createWorkspaceComposition(input) {
+      assert.equal(input.workspaceOwner.workspace, workspace);
+      assert.equal(input.artifacts, artifacts);
+      assert.equal(input.selectedNativeWorkspace, native.selection);
+      assert.equal(input.withCredentialOutputInventory, owned.withCredentialOutputInventory);
+      return {deployment: owned.deployment, host: owned.host};
+    },
+    withCredentialOutputInventory() {},
     async createPostClaimPreparation(selection, httpLaunchAuthority) {
       assert.equal(selection, native.selection);
       assert.equal(httpLaunchAuthority, native.httpLaunchAuthority);
