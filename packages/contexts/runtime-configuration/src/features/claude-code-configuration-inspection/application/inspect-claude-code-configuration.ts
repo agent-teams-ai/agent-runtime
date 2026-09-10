@@ -1,10 +1,12 @@
 import {
-  CLAUDE_CODE_CONFIGURATION_BUDGETS, CLAUDE_CODE_OBSERVED_SOURCE_PLAN_CONTRACT,
-  CLAUDE_CODE_SETTINGS_DIALECT, type ClaudeCodeConfigurationDiagnostic,
-  type ClaudeCodeConfigurationSource, type ClaudeCodeDeferredModelObservation,
-  type ClaudeCodeSourceObservation, type InspectClaudeCodeConfiguration,
-  type InspectClaudeCodeConfigurationInput, type InspectClaudeCodeConfigurationResult,
-  type ObservedPortableClaudeCodeIntent, type TrustedClaudeCodeObservedSourcePlan,
+  CLAUDE_CODE_BUDGETS, CLAUDE_CODE_DIALECT, CLAUDE_CODE_SOURCE_PLAN_CONTRACT,
+} from "./models/claude-code-vocabulary.js";
+import type {
+  ClaudeCodeConfigurationDiagnostic,
+  ClaudeCodeConfigurationSource, ClaudeCodeDeferredModelObservation,
+  ClaudeCodeSourceObservation, InspectClaudeCodeConfiguration,
+  InspectClaudeCodeConfigurationInput, InspectClaudeCodeConfigurationResult,
+  ObservedPortableClaudeCodeIntent, TrustedClaudeCodeObservedSourcePlan,
 } from "../contracts/claude-code-configuration-inspection.js";
 import type { ClaudeCodeJsonParser } from "./ports/outbound/claude-code-json-parser.js";
 import {
@@ -88,7 +90,7 @@ const safeDisplayPath = (source: ClaudeCodeConfigurationSource): string =>
 
 const pathValid = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0 &&
-  value.length <= CLAUDE_CODE_CONFIGURATION_BUDGETS.pathLength && !value.includes("\0") && value.startsWith("/");
+  value.length <= CLAUDE_CODE_BUDGETS.pathLength && !value.includes("\0") && value.startsWith("/");
 
 const pathWithin = (root: string, candidate: string): boolean =>
   root === "/" ? candidate.startsWith("/") : candidate === root || candidate.startsWith(`${root}/`);
@@ -137,12 +139,12 @@ const validateSourceEvidence = (
   sourceIds: Set<string>,
 ): PlanDiagnostic | undefined => {
   if (!sourceShapeValid(source) || typeof source.displayPath !== "string") {return "source_plan_invalid";}
-  if (source.displayPath.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.pathLength) {return "source_plan_invalid";}
+  if (source.displayPath.length > CLAUDE_CODE_BUDGETS.pathLength) {return "source_plan_invalid";}
   if (source.locationClaims !== undefined && !Array.isArray(source.locationClaims)) {return "source_plan_invalid";}
   if (!identifier.test(source.sourceId) || sourceIds.has(source.sourceId)) {return "source_plan_invalid";}
   if (source.observationEpoch !== observationEpoch) {return "source_plan_invalid";}
   const claims = source.locationClaims ?? [];
-  if (claims.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.locationClaimsPerSource) {return "source_plan_invalid";}
+  if (claims.length > CLAUDE_CODE_BUDGETS.locationClaimsPerSource) {return "source_plan_invalid";}
   if (new Set(claims).size !== claims.length || claims.some(claim => !identifier.test(claim))) {
     return "source_plan_invalid";
   }
@@ -212,15 +214,15 @@ const validateSources = (
 
 const validatePlan = (plan: TrustedClaudeCodeObservedSourcePlan): PlanDiagnostic | undefined => {
   if (typeof plan !== "object" || plan === null || Array.isArray(plan)) {return "source_plan_unsupported";}
-  if (plan.contract !== CLAUDE_CODE_OBSERVED_SOURCE_PLAN_CONTRACT || plan.claim !== "observed-files-only") {
+  if (plan.contract !== CLAUDE_CODE_SOURCE_PLAN_CONTRACT || plan.claim !== "observed-files-only") {
     return "source_plan_unsupported";
   }
   if (!exactObjectKeys(plan, ["claim", "collector", "contract", "roots", "sources"])) {
     return "source_plan_invalid";
   }
   if (!Array.isArray(plan.roots) || !Array.isArray(plan.sources)) {return "source_plan_invalid";}
-  if (plan.roots.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.rootSlots ||
-      plan.sources.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.sourceSlots) {
+  if (plan.roots.length > CLAUDE_CODE_BUDGETS.rootSlots ||
+      plan.sources.length > CLAUDE_CODE_BUDGETS.sourceSlots) {
     return "source_inventory_overflow";
   }
   const collectorDiagnostic = validateCollector(plan.collector);
@@ -263,7 +265,7 @@ const normalizeReadResult = (value: unknown):
       if (Reflect.apply(typedArrayName, sourceBytes, []) !== "Uint8Array") {return undefined;}
       byteLength = Reflect.apply(typedArrayByteLength, sourceBytes, []);
     } catch {return undefined;}
-    if (byteLength > CLAUDE_CODE_CONFIGURATION_BUDGETS.bytesPerSource) {return { status: "too-large" };}
+    if (byteLength > CLAUDE_CODE_BUDGETS.bytesPerSource) {return { status: "too-large" };}
     const bytes = new Uint8Array(byteLength);
     try {Reflect.apply(uint8ArraySet, bytes, [sourceBytes]);}
     catch {return undefined;}
@@ -292,7 +294,7 @@ const readSource = async (
   let rawRead: unknown;
   try {
     rawRead = await sourceReader.read(
-      source, CLAUDE_CODE_CONFIGURATION_BUDGETS.bytesPerSource,
+      source, CLAUDE_CODE_BUDGETS.bytesPerSource,
       signal === undefined ? undefined : { signal },
     );
   } catch { signal?.throwIfAborted(); }
@@ -336,7 +338,7 @@ const appendClassificationDiagnostics = (
   sourceRef: string,
 ): void => {
   for (const diagnostic of classification.diagnostics) {
-    if (target.length < CLAUDE_CODE_CONFIGURATION_BUDGETS.diagnostics) {
+    if (target.length < CLAUDE_CODE_BUDGETS.diagnostics) {
       target.push({ code: diagnostic.code, safeRef: sourceRef });
     }
   }
@@ -419,7 +421,7 @@ const buildResult = (parts: ResultParts): InspectClaudeCodeConfigurationResult =
       compareText(`${a.sourceRef}:${a.key}`, `${b.sourceRef}:${b.key}`))),
     sourceModel: Object.freeze({
       claim: "observed-files-only", classifierRevision,
-      collectorRef, compatibility: "unqualified", contract: CLAUDE_CODE_OBSERVED_SOURCE_PLAN_CONTRACT,
+      collectorRef, compatibility: "unqualified", contract: CLAUDE_CODE_SOURCE_PLAN_CONTRACT,
       dialect: input.dialect, precedence: "not-evaluated", topologyRef,
     }),
     sources: Object.freeze(sources),
@@ -444,7 +446,7 @@ const measureWithinBudget = async (
     const measurement = await sourceReader.measure(source, signal === undefined ? undefined : { signal });
     if (measurement.status === "measured") {aggregateBytes += measurement.bytes;}
   }
-  return aggregateBytes <= CLAUDE_CODE_CONFIGURATION_BUDGETS.aggregateSourceBytes;
+  return aggregateBytes <= CLAUDE_CODE_BUDGETS.aggregateSourceBytes;
 };
 
 const evaluateSources = async (
@@ -459,7 +461,7 @@ const evaluateSources = async (
   for (const source of sources) {
     const observation = await evaluateSource(source, input, dependencies, diagnostics, signal);
     aggregateBytesRead += observation.bytesRead;
-    if (aggregateBytesRead > CLAUDE_CODE_CONFIGURATION_BUDGETS.aggregateSourceBytes) {return undefined;}
+    if (aggregateBytesRead > CLAUDE_CODE_BUDGETS.aggregateSourceBytes) {return undefined;}
     evaluated.push(observation);
   }
   return evaluated;
@@ -493,7 +495,7 @@ export const createInspectClaudeCodeConfiguration = (dependencies: Dependencies)
         ...source,
         sourceRef: hmac(dependencies.digest, key, "claude-code-source/v2", [input.identityScope, topologyRef, source.sourceId]),
       })).toSorted((a, b) => compareText(a.sourceId, b.sourceId));
-      if (input.dialect !== CLAUDE_CODE_SETTINGS_DIALECT || !dependencies.semanticClassifier.supportsDialect(input.dialect)) {
+      if (input.dialect !== CLAUDE_CODE_DIALECT || !dependencies.semanticClassifier.supportsDialect(input.dialect)) {
         return buildResult({
           classifierRevision: dependencies.semanticClassifier.revision, collectorRef,
           diagnostics: [{ code: "configuration_dialect_unsupported" }],
