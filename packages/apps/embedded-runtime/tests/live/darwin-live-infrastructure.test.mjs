@@ -30,13 +30,15 @@ test("preflight actively reads database, filesystem, policy and socket and await
         filesystem: {sourceRoot: root}, host: {endpointPath: join(root, "host.sock")},
         runtimeSecurity: {policyRevision: "test-v1", policyFile: {path: policyPath, sha256: createHash("sha256").update(policy).digest("hex")}},
         providerAccess: {codexHome: join(root, "auth"), sandbox: join(root, "sandbox")}}};
-    let closed = false, socketRead = false, occupied = false;
+    let closed = false, socketRead = false, occupied = false, bypassRls = true;
     const statements = [];
+    let tables = [{schemaname: "application", tablename: "operations"}];
     class Pool {
       async connect() {return {release() {}, async query(sql) {
         statements.push(sql);
+        if (sql.includes("FROM pg_roles")) {return {rows: [{rolsuper: false, rolbypassrls: bypassRls}]};}
         if (sql.startsWith("SELECT current_database")) {return {rows: [{database: "ar69_test_probe", username: "test"}]};}
-        if (sql.includes("FROM pg_tables")) {return {rows: [{schemaname: "application", tablename: "operations"}]};}
+        if (sql.includes("FROM pg_tables")) {return {rows: tables};}
         if (sql.startsWith("SELECT 1")) {return {rows: occupied ? [{}] : []};}
         return {rows: []};
       }};}
@@ -47,10 +49,42 @@ test("preflight actively reads database, filesystem, policy and socket and await
       hostEndpointReachable: true, databaseEmpty: true, sourceResultAbsent: true, providerAuthoritiesFresh: true, mutated: false});
     assert.equal(closed, true); assert.equal(socketRead, true);
     assert.ok(statements.includes("BEGIN READ ONLY")); assert.ok(statements.includes("ROLLBACK"));
+    bypassRls = false;
+    await assert.rejects(preflightDarwinInfrastructure(activation, deps), /row visibility/);
+    bypassRls = true;
+    assert.ok(statements.includes("SET LOCAL row_security = off"));
     occupied = true; closed = false;
     await assert.rejects(preflightDarwinInfrastructure(activation, deps), /application rows/);
     assert.equal(closed, true);
+    occupied = true;
+    tables = [{schemaname: "agent_execution", tablename: "schema_migration"},
+      {schemaname: "agent_execution", tablename: "schema_migration_history"}];
+    await preflightDarwinInfrastructure(activation, deps);
+    tables = [{schemaname: "arbitrary", tablename: "schema_migration"}];
+    await assert.rejects(preflightDarwinInfrastructure(activation, deps), /application rows/);
+    tables = []; occupied = false;
+    const originalRoot = activation.infrastructure.filesystem.sourceRoot;
+    activation.infrastructure.filesystem.sourceRoot = originalRoot + "/../" + originalRoot.split("/").at(-1);
+    await assert.rejects(preflightDarwinInfrastructure(activation, deps), /result outside test source/);
+    activation.infrastructure.filesystem.sourceRoot = originalRoot;
     occupied = false; await writeFile(activation.turn.resultPath, "already ran");
     await assert.rejects(preflightDarwinInfrastructure(activation, deps), /source result exists/);
   } finally {await rm(root, {recursive: true, force: true});}
+});
+
+test("persistence uses public migrations and closes owners and pool after construction failure", async () => {
+  const {acquireDarwinPersistenceOwners} = await import("./darwin-live-infrastructure.mjs");
+  const events = [];
+  class Pool {async query() {return {rows: []};} async end() {await Promise.resolve(); events.push("pool-end");}}
+  const repository = {async migrate() {events.push("rs-migrate");}, async close() {await Promise.resolve(); events.push("rs-close");}};
+  const decisions = {async migrate() {throw new Error("migration refused");}, async close() {await Promise.resolve(); events.push("decisions-close");}};
+  const dependencies = {Pool, agentExecution: {
+    async applyContainedTurnPostgresSchema() {events.push("ae-migrate");},
+    async initializePostgresHttpEgressEvidence() {events.push("http-migrate");},
+  }, runtimeSecurity: {createNodeSha256DispatchDigest: () => ({}),
+    createPostgresDispatchConsumptionRepository: () => repository,
+    createPostgresDispatchAcceptanceStore: () => decisions}};
+  await assert.rejects(acquireDarwinPersistenceOwners({infrastructure: {
+    database: {connection: {database: "ar69_test_lifecycle", host: "127.0.0.1"}}}}, dependencies), /migration refused/);
+  assert.deepEqual(events, ["ae-migrate", "http-migrate", "rs-migrate", "decisions-close", "rs-close", "pool-end"]);
 });

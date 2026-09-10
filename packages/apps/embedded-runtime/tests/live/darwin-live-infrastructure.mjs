@@ -1,6 +1,6 @@
 import {createHash} from "node:crypto";
 import {lstat, readFile, realpath} from "node:fs/promises";
-import {isAbsolute} from "node:path";
+import {isAbsolute, join} from "node:path";
 import {createConnection} from "node:net";
 import {plainJson} from "./darwin-live-activation-manifest.mjs";
 
@@ -33,6 +33,12 @@ export async function preflightDarwinInfrastructure(activation, dependencies) {
   try {
     client = await pool.connect();
     await client.query("BEGIN READ ONLY");
+    await client.query("SET LOCAL row_security = off");
+    const inspector = await client.query("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user");
+    if (inspector.rows.length !== 1 ||
+        (inspector.rows[0].rolsuper !== true && inspector.rows[0].rolbypassrls !== true)) {
+      throw refused("database inspector cannot prove row visibility");
+    }
     const identity = await client.query("SELECT current_database() AS database, current_user AS username");
     if (identity.rows[0]?.database !== database.connection.database ||
         identity.rows[0]?.username !== database.connection.user) {throw refused("database identity differs");}
@@ -41,15 +47,18 @@ export async function preflightDarwinInfrastructure(activation, dependencies) {
     // The complete dedicated database must be fresh. Metadata tables can carry
     // migrations; every other application table is read, including unknown tables.
     const tables = await client.query("SELECT schemaname, tablename FROM pg_tables WHERE schemaname NOT IN ('pg_catalog', 'information_schema')");
-    const metadata = new Set(["schema_version", "materialization_schema", "dispatch_schema", "dispatch_operation_schema", "route_selection_schema"]);
+    const metadata = new Set(["runtime_security_dispatch_v1.schema_version",
+      "provider_access.materialization_schema", "provider_access.dispatch_schema",
+      "provider_access.dispatch_operation_schema", "provider_access.route_selection_schema",
+      "agent_execution.schema_migration", "agent_execution.schema_migration_history"]);
     for (const {schemaname, tablename} of tables.rows) {
-      if (metadata.has(tablename)) {continue;}
+      if (metadata.has(`${schemaname}.${tablename}`)) {continue;}
       const rows = await client.query(`SELECT 1 FROM ${quote(schemaname)}.${quote(tablename)} LIMIT 1`);
       if (rows.rows.length) {throw refused("dedicated database contains application rows");}
     }
     const root = await realpath(filesystem.sourceRoot);
-    if (root !== filesystem.sourceRoot || !activation.turn.resultPath.startsWith(root + "/")) {throw refused("result outside test source");}
-    try {await lstat(activation.turn.resultPath); throw refused("source result exists");}
+    if (root !== filesystem.sourceRoot) {throw refused("result outside test source");}
+    try {await lstat(join(root, "result.txt")); throw refused("source result exists");}
     catch (error) {if (error.code !== "ENOENT") {throw error;}}
     // Immutable activation identifies policy; freshness comes from the retained
     // file and its bounded clock interval, never an activation boolean.
@@ -75,5 +84,81 @@ export async function preflightDarwinInfrastructure(activation, dependencies) {
       sourceResultAbsent: true, providerAuthoritiesFresh: true, mutated: false});
   } finally {
     try {if (client) {client.release(true);}} finally {await pool.end();}
+  }
+}
+
+/** Persistence and policy owners used by the eventual full infrastructure root.
+ * This is deliberately not exported as acquireDarwinInfrastructureOwners: native
+ * settlement and effect-custody composition must be joined before that contract
+ * can honestly be returned. */
+export async function acquireDarwinPersistenceOwners(activation, dependencies) {
+  const config = plainJson(activation.infrastructure);
+  if (!/^ar69_test_[a-z0-9_]+$/u.test(config.database?.connection?.database ?? "") ||
+      !["127.0.0.1", "::1"].includes(config.database.connection.host)) {throw refused("dedicated test database required");}
+  const deps = dependencies ?? await (async () => {
+    const [agentExecution, runtimeSecurity, postgres] = await Promise.all([
+      import("@agent-teams/agent-execution/composition"),
+      import("@agent-teams/runtime-security/composition"), import("pg"),
+    ]);
+    return {agentExecution, runtimeSecurity, Pool: postgres.Pool};
+  })();
+  const pool = new deps.Pool({...config.database.connection, max: 4, connectionTimeoutMillis: 2000});
+  const actions = [() => pool.end()];
+  const lifetime = new AbortController();
+  let generation = 1, closing;
+  const dispose = () => {
+    if (closing) {return closing;}
+    lifetime.abort(); generation += 1;
+    closing = (async () => {
+      const failures = [];
+      for (const action of actions.toReversed()) {try {await action();} catch (error) {failures.push(error);}}
+      if (failures.length) {throw new AggregateError(failures, "Darwin persistence cleanup failed");}
+    })();
+    return closing;
+  };
+  try {
+    // Acquisition requires a completely unused owner namespace. Preflight is
+    // informative; this fresh read closes the gap before explicit migrations.
+    const existing = await pool.query("SELECT 1 FROM pg_namespace WHERE nspname IN ('agent_execution','provider_access','runtime_security_dispatch_v1','runtime_security_dispatch_acceptance_v1','host_http_egress')");
+    if (existing.rows.length) {throw refused("owner schemas already exist");}
+    await deps.agentExecution.applyContainedTurnPostgresSchema(pool);
+    await deps.agentExecution.initializePostgresHttpEgressEvidence(pool);
+    const digest = deps.runtimeSecurity.createNodeSha256DispatchDigest();
+    const sql = {pool, connectTimeoutMs: 2000, queryTimeoutMs: 5000, transactionTimeoutMs: 10000};
+    const repository = deps.runtimeSecurity.createPostgresDispatchConsumptionRepository({...sql, digest});
+    actions.push(() => repository.close());
+    const decisions = deps.runtimeSecurity.createPostgresDispatchAcceptanceStore(sql);
+    actions.push(() => decisions.close());
+    await repository.migrate(); await decisions.migrate();
+    const policy = Object.freeze({async read(intent) {
+      if (lifetime.signal.aborted || intent.operationId !== activation.turn.operationId ||
+          intent.scope.tenantId !== activation.turn.scope.tenantId ||
+          intent.scope.projectId !== activation.turn.scope.projectId ||
+          intent.policyRevision !== config.runtimeSecurity.policyRevision) {return undefined;}
+      const identity = config.runtimeSecurity.policyFile;
+      const bytes = await readFile(identity.path), stat = await lstat(identity.path);
+      if (lifetime.signal.aborted || !stat.isFile() || stat.isSymbolicLink() ||
+          (stat.mode & 0o022) || hash(bytes) !== identity.sha256) {return undefined;}
+      const retained = JSON.parse(bytes);
+      if (!Number.isSafeInteger(retained.validFrom) || !Number.isSafeInteger(retained.expiresAt) ||
+          retained.validFrom > Date.now() || retained.expiresAt <= Date.now()) {return undefined;}
+      const value = retained.dispatch;
+      if (!value || value.scope?.tenantId !== intent.scope.tenantId ||
+          value.scope?.projectId !== intent.scope.projectId || value.providerId !== intent.providerId ||
+          value.intentDigest !== intent.intentDigest || value.policyRevision !== intent.policyRevision) {return undefined;}
+      return plainJson(value);
+    }});
+    const acceptance = deps.runtimeSecurity.createDispatchAcceptanceFeature({repository, decisions, digest,
+      policy, clock: Object.freeze({now: () => Date.now()})});
+    const privateAuth = Object.freeze({operationRef: activation.turn.operationId,
+      executable: activation.codex.path, codexHome: config.providerAccess.codexHome,
+      sandbox: config.providerAccess.sandbox, generation,
+      readGeneration: () => generation, signal: lifetime.signal, deadline: performance.now() + 60000});
+    return Object.freeze({pool, repository, acceptance, privateAuth,
+      operatorApproval: plainJson(config.providerAccess.operatorApproval),
+      policyRevision: config.runtimeSecurity.policyRevision, dispose});
+  } catch (error) {
+    try {await dispose();} catch (cleanupError) {throw new AggregateError([error, cleanupError], "Darwin persistence acquisition failed");}
+    throw error;
   }
 }
