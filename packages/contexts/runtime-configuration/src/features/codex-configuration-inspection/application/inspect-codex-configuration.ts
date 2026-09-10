@@ -1,4 +1,3 @@
-import { createHash, createHmac } from "node:crypto";
 
 import type {
   CodexConfigurationDiagnostic,
@@ -11,6 +10,7 @@ import type {
   PortableCodexSettingKey,
   PortableCodexSettingObservation,
 } from "../contracts/codex-configuration-inspection.js";
+import type { ConfigurationDigest } from "./ports/outbound/configuration-digest.js";
 import type { CodexTomlParser } from "./ports/outbound/codex-toml-parser.js";
 import {
   codexConfigurationSemanticClassifierContract,
@@ -43,6 +43,7 @@ interface InspectionCollections {
 }
 
 interface InspectionDependencies {
+  readonly digest: ConfigurationDigest;
   readonly parser: CodexTomlParser;
   readonly semanticClassifier: CodexConfigurationSemanticClassifier;
   readonly sourceIdentityKey: Uint8Array;
@@ -59,16 +60,16 @@ const compareText = (left: string, right: string): number =>
   left === right ? 0 : left < right ? -1 : 1;
 
 const createSourceRef = (
+  digest: ConfigurationDigest,
   identityKey: Uint8Array,
   identityScope: string,
   kind: string,
   canonicalPath: string,
 ): string =>
-  `codex-config-source:${createHmac("sha256", identityKey)
-    .update(`${identityScope}\0${kind}\0${canonicalPath}`)
-    .digest("hex")}`;
+  `codex-config-source:${digest.hmacSha256Hex(identityKey, `${identityScope}\0${kind}\0${canonicalPath}`)}`;
 
 const semanticDigest = (
+  digest: ConfigurationDigest,
   settings: ReadonlyMap<PortableCodexSettingKey, string> | undefined,
   dialect: string,
   classifier: CodexConfigurationSemanticClassifier,
@@ -83,9 +84,7 @@ const semanticDigest = (
     digestSchema: "codex-configuration-semantic-digest/v1",
     settings: projection,
   };
-  return `codex-configuration-semantic-digest/v1:sha256:${
-    createHash("sha256").update(JSON.stringify(preimage)).digest("hex")
-  }`;
+  return `codex-configuration-semantic-digest/v1:sha256:${digest.sha256Hex(JSON.stringify(preimage))}`;
 };
 
 const rejectSources = (
@@ -134,6 +133,7 @@ const hasValidWorkspaceOrder = (sources: readonly BoundSource[]): boolean =>
   ) && new Set(sources.map(source => source.workspaceLayer)).size === sources.length;
 
 const bindSources = (
+  digest: ConfigurationDigest,
   input: InspectCodexConfigurationInput,
   identityKey: Uint8Array,
   diagnostics: CodexConfigurationDiagnostic[],
@@ -142,6 +142,7 @@ const bindSources = (
     .map(source => ({
       ...source,
       sourceRef: createSourceRef(
+        digest,
         identityKey,
         input.identityScope,
         source.kind,
@@ -362,6 +363,7 @@ const prepareSources = async (
 };
 
 const applyPreparedSources = (
+  digest: ConfigurationDigest,
   preparedSources: readonly PreparedSource[],
   classifier: CodexConfigurationSemanticClassifier,
   dialect: string,
@@ -376,6 +378,7 @@ const applyPreparedSources = (
       displayPath: source.displayPath,
       kind: source.kind,
       semanticDigest: semanticDigest(
+        digest,
         collections.safeProjectionBySource.get(source.sourceRef),
         dialect,
         classifier,
@@ -417,7 +420,7 @@ const executeInspection = async (
     sourceObservations: [],
   };
   const bindingDiagnostics: CodexConfigurationDiagnostic[] = [];
-  const bound = bindSources(input, identityKey, bindingDiagnostics);
+  const bound = bindSources(dependencies.digest, input, identityKey, bindingDiagnostics);
   if (!dependencies.semanticClassifier.supportsDialect(input.dialect)) {
     collections.diagnostics.push({ code: "configuration_dialect_unsupported" });
     for (const source of bound.sources) {
@@ -439,6 +442,7 @@ const executeInspection = async (
     signal,
   );
   applyPreparedSources(
+    dependencies.digest,
     preparedSources,
     dependencies.semanticClassifier,
     input.dialect,

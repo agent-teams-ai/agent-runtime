@@ -28,7 +28,8 @@ import {currentEgressDigest} from
 import {
   createClaudeCodeConfigurationInspectionFeature, createClaudeCodeConfigurationSemanticClassifierV2,
   createClaudeCodeConfigurationSourceReaderAdapter, createCodexConfigurationInspectionFeature,
-  createCodexConfigurationSemanticClassifierV1, createNodeConfigurationSourceReader,
+  createCodexConfigurationSemanticClassifierV1, createNodeClaudeCodeConfigurationDigest,
+  createNodeCodexConfigurationDigest, createNodeConfigurationSourceReader,
   createSmolTomlParser, createStrictClaudeCodeJsonParser,
 } from "../../../../contexts/runtime-configuration/dist/composition.js";
 import {createClaudeCodeSetupInspectionPlanner} from "../../dist/composition/claude-code-setup-inspection-planner.js";
@@ -127,10 +128,10 @@ const createClock = (authorityId: string, epoch: string) => {
 const createCapabilities = (): Configuration["capabilities"] => {
   const security = createSetupInspectionAuthorizationFeature({pathCanonicalizer: createNodePathCanonicalizer()});
   const execution = createRuntimeInstallationDiscoveryFeature({executableFileObserver: createNodeExecutableFileObserver()});
-  const codex = createCodexConfigurationInspectionFeature({parser: createSmolTomlParser(),
+  const codex = createCodexConfigurationInspectionFeature({digest: createNodeCodexConfigurationDigest(), parser: createSmolTomlParser(),
     semanticClassifier: createCodexConfigurationSemanticClassifierV1(), sourceIdentityKey: randomBytes(32),
     sourceReader: createNodeConfigurationSourceReader()});
-  const claude = createClaudeCodeConfigurationInspectionFeature({parser: createStrictClaudeCodeJsonParser(),
+  const claude = createClaudeCodeConfigurationInspectionFeature({digest: createNodeClaudeCodeConfigurationDigest(), parser: createStrictClaudeCodeJsonParser(),
     semanticClassifier: createClaudeCodeConfigurationSemanticClassifierV2(), sourceIdentityKey: randomBytes(32),
     sourceReader: createClaudeCodeConfigurationSourceReaderAdapter()});
   return {codexSetup: {authorizeSetupInspection: security.authorizeSetupInspection,

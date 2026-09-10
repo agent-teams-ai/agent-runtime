@@ -1,9 +1,11 @@
+import type { ConfigurationDigest } from "../application/ports/outbound/configuration-digest.js";
 import { createInspectCodexConfiguration } from "../application/inspect-codex-configuration.js";
 import type { CodexConfigurationSemanticClassifier } from "../application/ports/outbound/codex-configuration-semantic-classifier.js";
 import type { CodexTomlParser } from "../application/ports/outbound/codex-toml-parser.js";
 import type { ConfigurationSourceReader } from "../application/ports/outbound/configuration-source-reader.js";
 
 export interface CodexConfigurationInspectionDependencies {
+  readonly digest: ConfigurationDigest;
   readonly parser: CodexTomlParser;
   readonly semanticClassifier: CodexConfigurationSemanticClassifier;
   readonly sourceIdentityKey: Uint8Array;

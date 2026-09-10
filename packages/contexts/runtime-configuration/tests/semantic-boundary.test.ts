@@ -1,3 +1,4 @@
+import { createNodeConfigurationDigest } from "../dist/features/codex-configuration-inspection/adapters/outbound/node-configuration-digest.js";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -43,6 +44,7 @@ const inspectWithRevision = async (
       },
       supportsDialect: () => true,
     },
+    digest: createNodeConfigurationDigest(),
     sourceIdentityKey: Buffer.alloc(32, 7),
     sourceReader: syntheticReader,
   });
@@ -77,6 +79,7 @@ test("rejects parser accessors without invoking them", async () => {
       },
       supportsDialect: () => true,
     },
+    digest: createNodeConfigurationDigest(),
     sourceIdentityKey: Buffer.alloc(32, 7),
     sourceReader: syntheticReader,
   });
@@ -110,6 +113,7 @@ test("rejects secret-shaped classifier output without exposing it", async () => 
       },
       supportsDialect: () => true,
     },
+    digest: createNodeConfigurationDigest(),
     sourceIdentityKey: Buffer.alloc(32, 7),
     sourceReader: syntheticReader,
   });
@@ -153,6 +157,7 @@ test("rejects non-record parser roots while keeping nested opaque scalars inert"
         },
         supportsDialect: () => true,
       },
+      digest: createNodeConfigurationDigest(),
       sourceIdentityKey: Buffer.alloc(32, 7),
       sourceReader: syntheticReader,
     });
@@ -176,6 +181,7 @@ test("rejects non-record parser roots while keeping nested opaque scalars inert"
       }),
     },
     semanticClassifier: createCodexConfigurationSemanticClassifierV1(),
+    digest: createNodeConfigurationDigest(),
     sourceIdentityKey: Buffer.alloc(32, 7),
     sourceReader: syntheticReader,
   });
@@ -194,6 +200,7 @@ test("keeps valid TOML opaque scalars and repeated diagnostics observable", asyn
   const feature = createCodexConfigurationInspectionFeature({
     parser: createSmolTomlParser(),
     semanticClassifier: createCodexConfigurationSemanticClassifierV1(),
+    digest: createNodeConfigurationDigest(),
     sourceIdentityKey: Buffer.alloc(32, 7),
     sourceReader: {
       async read() {
@@ -235,6 +242,7 @@ test("keeps the parser and classifier diagnostic budgets aligned", async () => {
   const feature = createCodexConfigurationInspectionFeature({
     parser: { parse: () => ({ document, kind: "parsed" as const }) },
     semanticClassifier: createCodexConfigurationSemanticClassifierV1(),
+    digest: createNodeConfigurationDigest(),
     sourceIdentityKey: Buffer.alloc(32, 7),
     sourceReader: syntheticReader,
   });
@@ -271,4 +279,43 @@ test("binds semantic digests to schema, contract, revision, dialect, and setting
     createHash("sha256").update(JSON.stringify(expectedPreimage)).digest("hex")
   }`;
   assert.equal(first, expected);
+});
+
+test("the digest port is the only identifier source, and a substituted implementation is observed", async () => {
+  const calls: { key: string; preimage: string }[] = [];
+  const recording = Object.freeze({
+    hmacSha256Hex: (key: Uint8Array, preimage: string) => {
+      calls.push({ key: Buffer.from(key).toString("hex"), preimage });
+      return "0".repeat(64);
+    },
+    sha256Hex: (preimage: string) => {
+      calls.push({ key: "", preimage });
+      return "1".repeat(64);
+    },
+  });
+  const feature = createCodexConfigurationInspectionFeature({
+    digest: recording,
+    parser: { parse: () => ({ document: { model: "safe" }, kind: "parsed" as const }) },
+    semanticClassifier: {
+      contract: codexConfigurationSemanticClassifierContract,
+      revision: "v1",
+      classify: () => ({ diagnostics: [], settings: [{ key: "model" as const, value: "safe" }] }),
+      supportsDialect: () => true,
+    },
+    sourceIdentityKey: Buffer.alloc(32, 7),
+    sourceReader: syntheticReader,
+  });
+  const result = await feature.inspectCodexConfiguration.execute({
+    dialect: "codex-0.134",
+    identityScope: "scope-substituted-digest",
+    observationEpoch: "epoch-1",
+    sources: [syntheticSource],
+  });
+  const observed = result.sources[0];
+  // Every identifier the use case publishes comes from the injected port, so the
+  // feature states its dependency on an algorithm instead of reaching for one.
+  assert.equal(observed?.sourceRef, `codex-config-source:${"0".repeat(64)}`);
+  assert.equal(observed?.semanticDigest, `codex-configuration-semantic-digest/v1:sha256:${"1".repeat(64)}`);
+  assert.deepEqual(calls.map(call => call.key), ["07".repeat(32), ""]);
+  assert.equal(calls[0]?.preimage, ["scope-substituted-digest", "user", "/synthetic/config.toml"].join("\u0000"));
 });

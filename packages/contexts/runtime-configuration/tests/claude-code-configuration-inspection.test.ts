@@ -1,3 +1,4 @@
+import { createNodeConfigurationDigest } from "../dist/features/claude-code-configuration-inspection/adapters/outbound/node-configuration-digest.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -54,6 +55,7 @@ const inspector = (reader: ClaudeCodeConfigurationSourceReader, overrides: Recor
   createClaudeCodeConfigurationInspectionFeature({
     parser: createStrictClaudeCodeJsonParser(),
     semanticClassifier: createClaudeCodeConfigurationSemanticClassifierV2(),
+    digest: createNodeConfigurationDigest(),
     sourceIdentityKey: identityKey, sourceReader: reader, ...overrides,
   } as Parameters<typeof createClaudeCodeConfigurationInspectionFeature>[0]);
 
