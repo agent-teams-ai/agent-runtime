@@ -228,7 +228,7 @@ test("transitional boundaries and adapter permissions remain exact", () => {
     "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
   ]);
-  assert.deepEqual(composition.entrypoints, []);
+  assert.deepEqual(composition.entrypoints, composition.roots);
   assert.deepEqual(composition.allowedBoundaries, [
     "adapter.agent-execution.host-custody",
     "core.agent-execution.contained-turn",
@@ -243,6 +243,7 @@ test("transitional boundaries and adapter permissions remain exact", () => {
     "adapter.agent-execution.host-custody",
     "adapter.agent-execution.legacy-contained-turn-ports",
     "adapter.agent-execution.provider-delegation-ports",
+    "composition.agent-execution.contained-turn",
     "core.agent-execution.contained-turn",
   ]);
   assert.ok(!production.allowedBuiltins.includes("node:util"));
