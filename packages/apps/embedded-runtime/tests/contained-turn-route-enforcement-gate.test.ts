@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
-import { createContainedTurnRouteEnforcement } from "@agent-teams/agent-execution/composition";
+import { darwinRouteFixture } from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/darwin-route-capability-fixture.ts";
+
+import { bindDarwinCodexRouteEnforcement, createContainedTurnRouteEnforcement } from "@agent-teams/agent-execution/composition";
 import {
   composeQualifiedHostCustodiedContainedTurn,
   createHostCustodiedContainedTurn,
@@ -71,10 +73,27 @@ const bindingFor = (target: Target) => Object.freeze({
 });
 const pin = Object.freeze({path: "/usr/sbin/nft-that-does-not-exist", sha256: "a".repeat(64)});
 const engine = Object.freeze({inspect: async () => {throw new Error("no route is opened by this gate");}});
-const mint = (target: Target) => createContainedTurnRouteEnforcement({
+const mintLinux = (target: Target) => createContainedTurnRouteEnforcement({
   binding: bindingFor(target) as never, engine: engine as never, nsenter: pin, nft: pin,
   qualificationTarget: target as never,
 });
+
+/** Keep the genuine issuer and its complete owner/Host together. No ambient
+ * owner lookup or preparation substitute: the production binder checks these. */
+const mint = (target: Target) => {
+  if (target.platform === "darwin-arm64") {
+    const fixture = darwinRouteFixture();
+    assert.deepEqual(target, fixture.input.qualificationTarget);
+    const route = fixture.mint();
+    const {hostCustody, ...owner} = fixture.input.owner;
+    return {route, dependencies: (candidate: unknown = route) => Object.freeze({
+      ...dependencies(candidate), hostCustody,
+      selectedProvider: Object.freeze({kind: "codex" as const, owner}),
+    })};
+  }
+  const route = mintLinux(target);
+  return {route, dependencies: (candidate: unknown = route) => dependencies(candidate)};
+};
 
 const readRegistry = async () => JSON.parse(await readFile(PRODUCT_QUALIFICATION_REGISTRY, "utf8")) as {
   readonly matchingPolicy: unknown;
@@ -89,7 +108,7 @@ const shippedScopedTarget = async (): Promise<Target> => {
   return Object.freeze({...entry.targets[0]});
 };
 const hostTarget = async (): Promise<Target> => Object.freeze({
-  ...await shippedScopedTarget(), platform: `${process.platform}-${process.arch}`,
+  ...(process.platform === "darwin" ? darwinRouteFixture().input.qualificationTarget : await shippedScopedTarget()), platform: `${process.platform}-${process.arch}`,
 });
 
 const withFixtureRegistry = async (
@@ -133,7 +152,9 @@ test("the product entrypoint refuses a dependency set that carries no route enfo
 test("a structural twin or proxied capability is refused before any property is read", async () => {
   const probe = harness();
   const target = await hostTarget();
-  const authentic = mint(target);
+  const fixture = mint(target);
+  const authentic = fixture.route;
+  const admission = "admission" in authentic ? authentic.admission : authentic.postClaimPreparation;
   let reads = 0;
   const trap = {
     get() {reads += 1; throw new Error("gate consulted the candidate capability");},
@@ -141,16 +162,16 @@ test("a structural twin or proxied capability is refused before any property is 
     ownKeys() {reads += 1; throw new Error("gate enumerated the candidate capability");},
   };
   const impostors = [
-    Object.freeze({admission: authentic.admission}),
+    Object.freeze({admission}),
     Object.freeze({...authentic}),
     new Proxy(authentic, trap),
     new Proxy({admission: Object.freeze({})}, trap),
-    authentic.admission,
+    admission,
   ];
   await withFixtureRegistry("implementation", target, url => {
     for (const impostor of impostors) {
       assertRefused(() => composeQualifiedHostCustodiedContainedTurn(
-        dependencies(impostor) as never, probe.factories, probe.featureFactory, url,
+        fixture.dependencies(impostor) as never, probe.factories, probe.featureFactory, url,
       ));
     }
   });
@@ -164,7 +185,7 @@ test("an authentic capability outside the registry, or only scoped in it, is ref
   // The repository's own registry: this exact tuple is not in it at all.
   assert.equal(registryQualifiesRouteTarget(PRODUCT_QUALIFICATION_REGISTRY, target as never), false);
   assertRefused(() => composeQualifiedHostCustodiedContainedTurn(
-    dependencies(mint(target)) as never, probe.factories, probe.featureFactory,
+    mint(target).dependencies() as never, probe.factories, probe.featureFactory,
     PRODUCT_QUALIFICATION_REGISTRY,
   ));
   // The shipped tuple this one is derived from is present, and is only scoped.
@@ -173,7 +194,7 @@ test("an authentic capability outside the registry, or only scoped in it, is ref
   for (const qualification of ["unqualified", "scoped"]) {
     await withFixtureRegistry(qualification, target, url => {
       assertRefused(() => composeQualifiedHostCustodiedContainedTurn(
-        dependencies(mint(target)) as never, probe.factories, probe.featureFactory, url,
+        mint(target).dependencies() as never, probe.factories, probe.featureFactory, url,
       ));
     });
   }
@@ -186,7 +207,7 @@ test("a promotion for another platform does not qualify this Host", async () => 
   assert.notEqual(shipped.platform, `${process.platform}-${process.arch}`);
   await withFixtureRegistry("implementation", shipped, url => {
     assertRefused(() => composeQualifiedHostCustodiedContainedTurn(
-      dependencies(mint(shipped)) as never, probe.factories, probe.featureFactory, url,
+      mint(shipped).dependencies() as never, probe.factories, probe.featureFactory, url,
     ));
   });
   assert.deepEqual(probe.calls, {dispose: 0, feature: 0, owner: 0});
@@ -197,7 +218,7 @@ test("only an authentic capability whose exact tuple is promoted admits the comp
   await withFixtureRegistry("implementation", target, url => {
     const probe = harness();
     const product = composeQualifiedHostCustodiedContainedTurn(
-      dependencies(mint(target)) as never, probe.factories, probe.featureFactory, url,
+      mint(target).dependencies() as never, probe.factories, probe.featureFactory, url,
     );
     assert.equal(product.feature, capability);
     assert.deepEqual(probe.calls, {dispose: 0, feature: 1, owner: 1});
@@ -210,7 +231,7 @@ test("only an authentic capability whose exact tuple is promoted admits the comp
     await withFixtureRegistry("implementation", drifted, url => {
       const probe = harness();
       assertRefused(() => composeQualifiedHostCustodiedContainedTurn(
-        dependencies(mint(target)) as never, probe.factories, probe.featureFactory, url,
+        mint(target).dependencies() as never, probe.factories, probe.featureFactory, url,
       ));
       assert.deepEqual(probe.calls, {dispose: 0, feature: 0, owner: 0});
     });
@@ -222,7 +243,7 @@ test("deployment promotion also admits, and the registry is re-read on every att
   await withFixtureRegistry("deployment", target, url => {
     const probe = harness();
     assert.equal(composeQualifiedHostCustodiedContainedTurn(
-      dependencies(mint(target)) as never, probe.factories, probe.featureFactory, url,
+      mint(target).dependencies() as never, probe.factories, probe.featureFactory, url,
     ).feature, capability);
   });
   const probe = harness();
@@ -230,13 +251,24 @@ test("deployment promotion also admits, and the registry is re-read on every att
   // A capability that was admitted against a fixture registry is not admitted
   // against the repository's registry: no verdict is cached on the capability.
   assertRefused(() => composeQualifiedHostCustodiedContainedTurn(
-    dependencies(held) as never, probe.factories, probe.featureFactory, PRODUCT_QUALIFICATION_REGISTRY,
+    held.dependencies() as never, probe.factories, probe.featureFactory, PRODUCT_QUALIFICATION_REGISTRY,
   ));
 });
 
 // Explicit synthetic Darwin observation and fixture registry only; never Mac evidence.
 test("Darwin nominal route binds the existing owner and seven ports; product registry still refuses", async t => {
-  const {darwinRouteFixture} = await import("../../../contexts/agent-execution/tests/features/contained-agent-turn/support/darwin-route-capability-fixture.ts");
+  // Exercise the shared Darwin mint branch inertly even on Linux, before the
+  // existing explicit composition observation below changes platform descriptors.
+  const minted = mint(darwinRouteFixture().input.qualificationTarget);
+  const retained = minted.dependencies();
+  const bound = bindDarwinCodexRouteEnforcement(minted.route, {
+    ...retained.selectedProvider.owner, hostCustody: retained.hostCustody,
+  } as never);
+  assert.equal(bound.hostCustody, retained.hostCustody);
+  assert.equal(bound.postClaimPreparation, "postClaimPreparation" in minted.route ? minted.route.postClaimPreparation : undefined);
+  assert.throws(() => bindDarwinCodexRouteEnforcement(minted.route, {
+    ...retained.selectedProvider.owner, hostCustody: {},
+  } as never), TypeError);
   const f = darwinRouteFixture(); const route = f.mint();
   const {hostCustody, ...owner} = f.input.owner;
   const deps = {...dependencies(route), hostCustody, selectedProvider: {kind: "codex", owner}};
