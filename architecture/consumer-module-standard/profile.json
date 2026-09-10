@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "status": "pending",
+  "authority": {
+    "consumerModuleStandard": {
+      "repository": "agent-teams-ai/get-modular",
+      "path": "docs/architecture/common-assembly.md",
+      "anchor": "consumer-module-standard",
+      "gitCommit": "f1ec0152c34715395685b349844a7d1c18a2f015",
+      "sha256": "ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d"
+    },
+    "featureModuleStandard": {
+      "repository": "agent-teams-ai/.github",
+      "path": "docs/architecture/feature-module-standard/v1.md",
+      "gitBlob": "d0bfff2033faf544fe65268c1dcdfd524d093015",
+      "sha256": "851653f96643cf0466b67ab22963661976b00de44840fa3144a48a8c054f95fa"
+    },
+    "acceptedAdr": "ADR-0015",
+    "decisionPath": "docs/decisions/0015-consumer-module-standard-pending-adoption.md"
+  },
+  "scope": {
+    "owner": "architecture",
+    "productionRoots": [
+      "packages/apps/embedded-runtime/src",
+      "packages/contexts/agent-execution/src"
+    ],
+    "activeWiringScope": [],
+    "profilePath": "architecture/consumer-module-standard/profile.json"
+  },
+  "adoptedBoundaries": [],
+  "legacyBoundaries": [
+    {
+      "id": "contained-agent-turn-seven-port",
+      "status": "not-adopted",
+      "owner": "embedded-runtime-host",
+      "materializedEntrypoint": "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts",
+      "declarationPath": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
+      "factoryPath": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/feature-module-factory.ts",
+      "mechanism": "static-pure-di",
+      "dependencySlots": [
+        "operationStore",
+        "security",
+        "providerAccess",
+        "workspace",
+        "artifacts",
+        "custody",
+        "provider"
+      ],
+      "materializationCallCount": 2,
+      "referencePaths": [
+        "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts",
+        "packages/contexts/agent-execution/src/composition.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/feature-module-factory.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts"
+      ],
+      "referenceCounts": {
+        "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts": 4,
+        "packages/contexts/agent-execution/src/composition.ts": 2,
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/feature-module-factory.ts": 1,
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts": 2
+      },
+      "authority": "ADR-0012",
+      "rationale": "The existing closed seven-port Pure DI boundary predates Consumer Module Standard adoption and has no Get Modular Assembly declaration or profile.",
+      "reviewTrigger": "Any new replaceable or cross-module relationship, or any change to the entrypoint, factory, dependency declaration, or exact slot set."
+    }
+  ],
+  "exceptions": [],
+  "outstandingWork": [
+    "Pin reviewed exact Get Modular Core and Assembly package artifacts under package policy.",
+    "Replace the legacy direct wiring with consumer-owned declarations, profile bindings, and one Assembly composition root.",
+    "Add independent binding parity, preparation failure, cleanup, isolation, typed rejection, and packed-import evidence before changing status to active."
+  ],
+  "enforcement": {
+    "topology": "pnpm foundation:check",
+    "fixtures": "pnpm test:consumer-modules",
+    "check": "pnpm architecture:consumer-modules",
+    "gates": [
+      "check",
+      "check:fast"
+    ]
+  }
+}

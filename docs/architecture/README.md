@@ -21,6 +21,9 @@ independent competing source of truth.
 
 Documents:
 
+- [Consumer Module Standard pending adoption](consumer-module-standard-adoption.md):
+  exact upstream pin, current seven-port legacy classification, activation
+  blockers, and rejecting gate without an active Assembly adoption claim.
 - [Feature Module Standard v1 scoped active adoption](feature-module-standard-v1-candidate.md):
   exact immutable authority binding, narrow Agent Execution and Provider Access
   active scope, deterministic gates, and zero-diagnostic evidence. This is not
