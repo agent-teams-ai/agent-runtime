@@ -1,13 +1,22 @@
+#include "darwin-attempt-owner-bootstrap.h"
 #include <stdio.h>
-/* No CLI flag, manifest FD, peer UID, digest or environment variable can mint
- * root admission. Root's exact launcher, immutable loader/ancestor capture,
- * reserved UID+GID authority and isolated Host channel do not exist in this
- * ownership slice. Even uid 0 refuses BEFORE creating namespace or child.
- * Replacing this gate requires reviewed root integration and qualification;
- * it must not become a structural registerEvidence({trusted:true}) switch. */
-int main(void) {
-  fputs("darwin-attempt-owner: admission unavailable: exact root launcher, "
-        "exclusive UID/GID authority, immutable inputs, isolated Host bridge "
-        "and qualified native preexec policy are not supplied\n",stderr);
+#include <string.h>
+int main(int argc,char **argv) {
+#ifdef __APPLE__
+  if (argc==2 && !strcmp(argv[1],"--preexec")) return ae_native_preexec();
+  if (argc==2 && !strcmp(argv[1],"--read-closed")) return ae_root_read_closed();
+  /* No elevation, pathname/UID/command options or provider activation from
+   * ordinary input. Root supplies the exact fixed descriptor packet already
+   * approved for this binary and attempt. Capture and isolation precede staging
+   * and START; incomplete/deployment-unqualified packets perform no launch. */
+  if (argc==1) {
+    ae_bootstrap bootstrap;
+    if (ae_root_capture(&bootstrap) && ae_root_isolate_host(&bootstrap))
+      return ae_native_owner_loop(&bootstrap);
+  }
+#else
+  (void)argc; (void)argv;
+#endif
+  fputs("darwin-attempt-owner: root admission capture unavailable or refused\n",stderr);
   return 78;
 }

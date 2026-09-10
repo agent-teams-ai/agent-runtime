@@ -23,9 +23,8 @@ typedef struct {
   uint64_t device, inode;
   uint32_t mode;
 } ae_artifact;
-/* Internal effect implementation only; never constructs admission. The missing
- * root bootstrap must capture these descriptors and exclusive range authority.
- * Main remains unconditionally unavailable and does not call this function. */
+/* Internal effect implementation only; root bootstrap captures the exact
+ * descriptors and the immutable reserved-range grant before staging. */
 int ae_native_stage_namespace(ae_custody *);
 int ae_native_persist(void *, const ae_state *);
 int ae_native_workspace_move(ae_custody *, ae_workspace);
@@ -34,5 +33,7 @@ int ae_native_dispose_private(ae_custody *);
 /* Readback requires a separately retained, known-successful closed-state
  * authority. It never reconstructs success from an ambiguous active journal. */
 int ae_native_read_closed(ae_custody *);
+int ae_native_restore_closed(ae_custody *, const uint8_t [AE_CLOSED_RECORD_BYTES]);
+int ae_native_release(ae_custody *, uint8_t [AE_CLOSED_RECORD_BYTES]);
 #endif
 #endif

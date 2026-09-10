@@ -50,17 +50,17 @@ static void be64(uint8_t *b, uint64_t v) { be32(b,(uint32_t)(v>>32)); be32(b+4,(
  * restart must not skip it. This slice intentionally provides no recovery allocator. */
 static void record_bytes(const ae_state *s, uint8_t b[192]) {
   memset(b,0,192);
-  memcpy(b,"ae-owner-intent-v1",18);
-  memcpy(b+24,s->binding,32); memcpy(b+56,s->launch,32);
-  be32(b+88,(uint32_t)s->phase); be32(b+92,(uint32_t)s->workspace);
-  be32(b+96,s->sequence); be32(b+100,s->settlements);
-  be64(b+104,s->workspace_dev); be64(b+112,s->workspace_ino);
-  be32(b+120,(uint32_t)s->cutoff); be32(b+124,(uint32_t)s->streams_sealed);
-  be32(b+128,(uint32_t)s->reaped); be32(b+132,(uint32_t)s->preexec_applied);
-  be32(b+136,(uint32_t)s->exit_code); be32(b+140,(uint32_t)s->exit_signal);
-  be32(b+144,s->revision); be32(b+148,s->pending_effect);
-  be32(b+152,s->pending_argument); be32(b+156,(uint32_t)s->birth_attempted);
-  CC_SHA256(b,160,b+160);
+  memcpy(b,AE_RECORD_MAGIC,AE_RECORD_MAGIC_BYTES);
+  memcpy(b+AE_RECORD_BINDING_OFFSET,s->binding,32); memcpy(b+AE_RECORD_LAUNCH_OFFSET,s->launch,32);
+  be32(b+AE_RECORD_PHASE_OFFSET,(uint32_t)s->phase); be32(b+AE_RECORD_WORKSPACE_OFFSET,(uint32_t)s->workspace);
+  be32(b+AE_RECORD_SEQUENCE_OFFSET,s->sequence); be32(b+AE_RECORD_SETTLEMENTS_OFFSET,s->settlements);
+  be64(b+AE_RECORD_WORKSPACE_DEVICE_OFFSET,s->workspace_dev); be64(b+AE_RECORD_WORKSPACE_INODE_OFFSET,s->workspace_ino);
+  be32(b+AE_RECORD_CUTOFF_OFFSET,(uint32_t)s->cutoff); be32(b+AE_RECORD_STREAMS_OFFSET,(uint32_t)s->streams_sealed);
+  be32(b+AE_RECORD_REAPED_OFFSET,(uint32_t)s->reaped); be32(b+AE_RECORD_PREEXEC_OFFSET,(uint32_t)s->preexec_applied);
+  be32(b+AE_RECORD_EXIT_CODE_OFFSET,(uint32_t)s->exit_code); be32(b+AE_RECORD_EXIT_SIGNAL_OFFSET,(uint32_t)s->exit_signal);
+  be32(b+AE_RECORD_REVISION_OFFSET,s->revision); be32(b+AE_RECORD_PENDING_OFFSET,s->pending_effect);
+  be32(b+AE_RECORD_ARGUMENT_OFFSET,s->pending_argument); be32(b+AE_RECORD_BIRTH_ATTEMPTED_OFFSET,(uint32_t)s->birth_attempted);
+  CC_SHA256(b,AE_RECORD_HASH_OFFSET,b+AE_RECORD_HASH_OFFSET);
 }
 int ae_native_persist(void *context, const ae_state *s) {
   ae_custody *c=context;
@@ -248,6 +248,8 @@ int ae_native_read_closed(ae_custody *c) {
     struct stat st;
     if (fstatat(c->envelope,workspace_names[i],&st,AT_SYMLINK_NOFOLLOW)==0 || errno!=ENOENT) return 0;
   }
+  struct stat private_entry;
+  if (fstatat(c->envelope,"private",&private_entry,AT_SYMLINK_NOFOLLOW)==0 || errno!=ENOENT) return 0;
   char name[40]; uint8_t expected[192],actual[193];
   if (snprintf(name,sizeof(name),"intent-%010u",c->state.revision)<0) return 0;
   record_bytes(&c->state,expected);
@@ -260,5 +262,56 @@ int ae_native_read_closed(ae_custody *c) {
     !memcmp(actual,expected,sizeof(expected));
   if (!close_once(&fd)) return unknown(c);
   return ok && complete_tree(c) && workspace_identity(c);
+}
+static uint32_t read32(const uint8_t *p) {
+  return ((uint32_t)p[0]<<24)|((uint32_t)p[1]<<16)|((uint32_t)p[2]<<8)|p[3];
+}
+static uint64_t read64(const uint8_t *p) { return ((uint64_t)read32(p)<<32)|read32(p+4); }
+int ae_native_restore_closed(ae_custody *c,const uint8_t ticket[AE_CLOSED_RECORD_BYTES]) {
+  if (!c || !ticket || c->unknown || c->envelope<0 || c->workspace<0 || c->journal<0) return 0;
+  uint8_t checksum[32],encoded[AE_CLOSED_RECORD_BYTES]; CC_SHA256(ticket,AE_RECORD_HASH_OFFSET,checksum);
+  if (memcmp(ticket,AE_RECORD_MAGIC,AE_RECORD_MAGIC_BYTES) || memcmp(ticket+AE_RECORD_HASH_OFFSET,checksum,32) ||
+      read32(ticket+AE_RECORD_PHASE_OFFSET)!=AE_RELEASED || read32(ticket+AE_RECORD_WORKSPACE_OFFSET)!=AE_CLOSED || read32(ticket+AE_RECORD_SETTLEMENTS_OFFSET)!=15 ||
+      read32(ticket+AE_RECORD_STREAMS_OFFSET)!=1 || read32(ticket+AE_RECORD_REAPED_OFFSET)>1 || read32(ticket+AE_RECORD_PREEXEC_OFFSET)>1 ||
+      read32(ticket+AE_RECORD_CUTOFF_OFFSET)>1 || !read32(ticket+AE_RECORD_REVISION_OFFSET) || read32(ticket+AE_RECORD_PENDING_OFFSET) || read32(ticket+AE_RECORD_ARGUMENT_OFFSET) ||
+      read32(ticket+AE_RECORD_BIRTH_ATTEMPTED_OFFSET)>1) return 0;
+  ae_state s; ae_init(&s,ticket+AE_RECORD_BINDING_OFFSET,ticket+AE_RECORD_LAUNCH_OFFSET);
+  s.phase=AE_RELEASED; s.workspace=AE_CLOSED; s.sequence=read32(ticket+AE_RECORD_SEQUENCE_OFFSET); s.settlements=15;
+  s.workspace_dev=read64(ticket+AE_RECORD_WORKSPACE_DEVICE_OFFSET); s.workspace_ino=read64(ticket+AE_RECORD_WORKSPACE_INODE_OFFSET);
+  s.cutoff=(int)read32(ticket+AE_RECORD_CUTOFF_OFFSET); s.streams_sealed=1; s.reaped=(int)read32(ticket+AE_RECORD_REAPED_OFFSET);
+  s.preexec_applied=(int)read32(ticket+AE_RECORD_PREEXEC_OFFSET);
+  uint32_t code=read32(ticket+AE_RECORD_EXIT_CODE_OFFSET),signal=read32(ticket+AE_RECORD_EXIT_SIGNAL_OFFSET);
+  if ((code!=UINT32_MAX && code>255) || signal>127 || (code!=UINT32_MAX && signal) ||
+      (!s.reaped && (code!=UINT32_MAX || signal || read32(ticket+AE_RECORD_BIRTH_ATTEMPTED_OFFSET))) ||
+      (s.reaped && (code==UINT32_MAX && !signal))) return 0;
+  s.exit_code=code==UINT32_MAX ? -1 : (int)code; s.exit_signal=(int)signal;
+  s.revision=read32(ticket+AE_RECORD_REVISION_OFFSET); s.birth_attempted=(int)read32(ticket+AE_RECORD_BIRTH_ATTEMPTED_OFFSET);
+  if (s.reaped && !s.birth_attempted) return 0;
+  record_bytes(&s,encoded);
+  if (memcmp(ticket,encoded,sizeof(encoded)) || !s.workspace_ino) return 0;
+  c->state=s; c->device=s.workspace_dev; c->inode=s.workspace_ino;
+  /* No discovery of active journals and no "latest valid record" fallback.
+   * Caller has the exact original successful-close ticket under root grant. */
+  return ae_native_read_closed(c);
+}
+int ae_native_release(ae_custody *c,uint8_t ticket[AE_CLOSED_RECORD_BYTES]) {
+  if (!c || !ticket || c->unknown || c->state.phase!=AE_DISPOSED ||
+      c->state.workspace!=AE_CLOSED || c->state.settlements!=15 ||
+      !c->state.streams_sealed || !workspace_identity(c)) return 0;
+  /* Workspace settlement came from the retained existing receipt owner before
+   * private deletion. Preserve its original inode; relinquish only live FDs.
+   * Root journal remains last so a failed earlier close cannot publish release. */
+  int *handles[]={&c->workspace,&c->envelope,&c->approved_parent,&c->uid_lease,
+    &c->gid_lease,&c->allocation_lock,&c->lease_registry};
+  int ok=1;
+  for (unsigned i=0;i<sizeof(handles)/sizeof(handles[0]);i++) if (!close_once(handles[i])) ok=0;
+  if (!ok) return unknown(c);
+  ae_state next=c->state; next.phase=AE_RELEASED;
+  if (ae_commit(&c->state,&next,ae_native_persist,c)!=AE_ACCEPTED) return 0;
+  record_bytes(&c->state,ticket);
+  if (!close_once(&c->journal)) return unknown(c);
+  /* Only this success is sent over the exclusive channel. A disk RELEASED
+   * record alone cannot prove successful journal close after helper death. */
+  return 1;
 }
 #endif

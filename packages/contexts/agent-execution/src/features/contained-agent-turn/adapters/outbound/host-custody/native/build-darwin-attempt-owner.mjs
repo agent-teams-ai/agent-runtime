@@ -10,9 +10,9 @@ const output = process.argv[2];
 if (!output || !isAbsolute(output) || process.argv.length !== 3) {
   throw new Error("one absolute disposable output path required");
 }
-const sources = ["main", "state", "custody", "namespace"].map((name) =>
+const sources = ["main", "state", "custody", "namespace", "admission", "child"].map((name) =>
   fileURLToPath(new URL(`darwin-attempt-owner-${name}.c`, import.meta.url)));
-const result = spawnSync("cc", ["-std=c11", "-Wall", "-Wextra", "-Werror",
+const result = spawnSync("cc", ["-std=c11", "-D_DARWIN_C_SOURCE", "-Wall", "-Wextra", "-Werror",
   "-Wno-deprecated-declarations", ...sources, "-o", output], { stdio: "inherit" });
 if (result.error) {throw result.error;}
 process.exitCode = result.status ?? 1;

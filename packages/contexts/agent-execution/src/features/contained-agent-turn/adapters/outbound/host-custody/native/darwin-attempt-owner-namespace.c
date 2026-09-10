@@ -1,6 +1,8 @@
 #include "darwin-attempt-owner-custody.h"
 #ifdef __APPLE__
+#include <sys/random.h>
 #include <sys/stat.h>
+#include <CommonCrypto/CommonDigest.h>
 #include <sys/file.h>
 #include <sys/acl.h>
 #include <errno.h>
@@ -9,10 +11,8 @@
 #include <string.h>
 #include <unistd.h>
 
-/* This module performs staging under already captured root descriptors. It is
- * not a root launcher or a range-admission mechanism. The unavailable main
- * cannot construct its input. Vacant account/process observations alone must
- * never be used to satisfy that missing root-controlled range capability. */
+/* Staging consumes descriptors from root capture. Vacancy observations alone
+ * never satisfy the separately captured root-controlled range grant. */
 static int uncertain(ae_custody *c) {
   c->unknown=1; c->state.phase=AE_QUARANTINED; c->state.cutoff=1; return 0;
 }
@@ -111,6 +111,12 @@ int ae_native_stage_namespace(ae_custody *c) {
     c->namespace_name[8+2*i]=digits[random[i]>>4];
     c->namespace_name[9+2*i]=digits[random[i]&15];
   }
+  /* Freeze the actual generated namespace into every subsequent intent and
+   * channel event, along with the root-captured complete manifest binding. */
+  uint8_t binding_bytes[73];
+  memcpy(binding_bytes,c->state.binding,32);
+  memcpy(binding_bytes+32,c->namespace_name,41);
+  CC_SHA256(binding_bytes,sizeof(binding_bytes),c->state.binding);
   c->uid_lease=-1; c->gid_lease=-1; c->envelope=-1; c->workspace=-1;
   if (!allocation_lock(c) || !retire_slot(c,"uid",(unsigned)c->leased_uid,&c->uid_lease) ||
       !retire_slot(c,"gid",(unsigned)c->leased_gid,&c->gid_lease)) return uncertain(c);

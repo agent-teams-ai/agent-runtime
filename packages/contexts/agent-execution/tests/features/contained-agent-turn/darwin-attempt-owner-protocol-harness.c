@@ -179,4 +179,72 @@ static void channel_and_no_start(void) {
   assert(command(&s,AE_DISPOSE_ONCE,&store)==AE_EFFECT_REQUIRED && !s.reaped);
   puts("C: channel loss quarantines every phase without fictional exit; no-start still requires native stream closure");
 }
-int main(void) { frames(); lifecycle(); faults(); pending_effects(); channel_and_no_start(); return 0; }
+static void put_word(uint8_t *b,uint32_t n) {
+  b[0]=(uint8_t)(n>>24); b[1]=(uint8_t)(n>>16); b[2]=(uint8_t)(n>>8); b[3]=(uint8_t)n;
+}
+static void admission(void) {
+  uint8_t b[AE_MANIFEST_BYTES]={0},g[AE_GRANT_BYTES]={0}; ae_manifest m; ae_grant grant;
+  put_word(b,AE_MANIFEST_MAGIC); put_word(b+4,AE_VERSION); put_word(b+8,AE_MANIFEST_BYTES);
+  put_word(b+16,501); put_word(b+20,20); put_word(b+24,70001); put_word(b+28,70002);
+  put_word(b+32,6); put_word(b+36,1); put_word(b+40,1000); put_word(b+44,10000);
+  memset(b+AE_MANIFEST_BINDINGS_OFFSET,1,AE_MANIFEST_BINDINGS*AE_DIGEST_BYTES);
+  for (unsigned i=0;i<6;i++) {
+    uint8_t *entry=b+AE_MANIFEST_IMAGES_OFFSET+i*AE_MANIFEST_IMAGE_BYTES;
+    assert(snprintf((char *)entry,AE_MANIFEST_STRING_BYTES,"/images/image%u",i)>0);
+    memset(entry+AE_MANIFEST_STRING_BYTES,(int)i+1,32);
+  }
+  memcpy(b+AE_MANIFEST_ARGV_OFFSET,b+AE_MANIFEST_IMAGES_OFFSET+2*AE_MANIFEST_IMAGE_BYTES,AE_MANIFEST_STRING_BYTES);
+  for (unsigned i=0;i<AE_MANIFEST_FD_COUNT;i++) {
+    uint8_t *entry=b+AE_MANIFEST_FDS_OFFSET+i*AE_MANIFEST_FD_BYTES;
+    put_word(entry+4,1); put_word(entry+12,i+1); put_word(entry+16,i<3 ? 1 : i==3 ? 2 : 3);
+  }
+  assert(ae_manifest_decode(b,sizeof(b),&m));
+  for (size_t n=0;n<sizeof(b);n++) assert(!ae_manifest_decode(b,n,&m));
+  for (size_t i=AE_MANIFEST_END_OFFSET;i<sizeof(b);i++) {
+    b[i]=1; assert(!ae_manifest_decode(b,sizeof(b),&m)); b[i]=0;
+  }
+  b[AE_MANIFEST_ARGV_OFFSET+AE_MANIFEST_STRING_BYTES]=1;
+  assert(!ae_manifest_decode(b,sizeof(b),&m)); b[AE_MANIFEST_ARGV_OFFSET+AE_MANIFEST_STRING_BYTES]=0;
+  b[AE_MANIFEST_IMAGES_OFFSET+200]=1; assert(!ae_manifest_decode(b,sizeof(b),&m)); b[AE_MANIFEST_IMAGES_OFFSET+200]=0;
+  uint8_t first[AE_MANIFEST_IMAGE_BYTES]; memcpy(first,b+AE_MANIFEST_IMAGES_OFFSET,sizeof(first));
+  memcpy(b+AE_MANIFEST_IMAGES_OFFSET,b+AE_MANIFEST_IMAGES_OFFSET+AE_MANIFEST_IMAGE_BYTES,sizeof(first));
+  assert(!ae_manifest_decode(b,sizeof(b),&m)); memcpy(b+AE_MANIFEST_IMAGES_OFFSET,first,sizeof(first));
+  memcpy(b+AE_MANIFEST_IMAGES_OFFSET,"/images/../bad",14); assert(!ae_manifest_decode(b,sizeof(b),&m));
+  memcpy(b+AE_MANIFEST_IMAGES_OFFSET,first,sizeof(first));
+  put_word(b+24,501); assert(!ae_manifest_decode(b,sizeof(b),&m)); put_word(b+24,70001);
+  assert(ae_manifest_decode(b,sizeof(b),&m));
+  put_word(g,AE_GRANT_MAGIC); put_word(g+4,AE_VERSION); put_word(g+8,AE_GRANT_BYTES);
+  put_word(g+16,70000); put_word(g+20,70010); put_word(g+24,70000); put_word(g+28,70010);
+  memset(g+32,1,96);
+  assert(ae_grant_decode(g,sizeof(g),&grant) && ae_manifest_in_range(&m,&grant));
+  for (size_t n=0;n<sizeof(g);n++) assert(!ae_grant_decode(g,n,&grant));
+  g[255]=1; assert(!ae_grant_decode(g,sizeof(g),&grant)); g[255]=0;
+  grant.uid_last=70000; assert(!ae_manifest_in_range(&m,&grant)); grant.uid_last=70010;
+  grant.gid_last=70001; assert(!ae_manifest_in_range(&m,&grant)); grant.gid_last=70010;
+  grant.qualification[0]=2; assert(!ae_manifest_in_range(&m,&grant));
+  puts("C: exact bounded manifest/grant parser, zero tails, duplicate/ancestor/FD/range/qualification rejection (no root authority simulated)");
+}
+static void native_events(void) {
+  uint8_t binding[32]={1},launch[32]={2}; ae_state s; storage store={0};
+  ae_init(&s,binding,launch); s.phase=AE_STAGED;
+  assert(ae_birth_observed(&s,persist,&store)==AE_REFUSED);
+  assert(command(&s,AE_START_ONCE,&store)==AE_EFFECT_REQUIRED);
+  assert(ae_birth_observed(&s,persist,&store)==AE_REFUSED);
+  assert(ae_begin_birth(&s,persist,&store)==AE_ACCEPTED);
+  assert(ae_birth_observed(&s,persist,&store)==AE_ACCEPTED);
+  assert(ae_birth_observed(&s,persist,&store)==AE_REFUSED);
+  assert(ae_streams_observed(&s,persist,&store)==AE_REFUSED);
+  assert(ae_preexec_observed(&s,persist,&store)==AE_ACCEPTED);
+  assert(ae_preexec_observed(&s,persist,&store)==AE_REFUSED);
+  assert(ae_wait_observed(&s,0,15,persist,&store)==AE_REFUSED);
+  assert(ae_wait_observed(&s,-1,0,persist,&store)==AE_REFUSED);
+  assert(ae_wait_observed(&s,256,0,persist,&store)==AE_REFUSED);
+  assert(ae_wait_observed(&s,-1,15,persist,&store)==AE_ACCEPTED);
+  assert(!ae_may_signal(&s) && !ae_writer_stopped(&s) && s.exit_code==-1 && s.exit_signal==15);
+  assert(ae_wait_observed(&s,0,0,persist,&store)==AE_REFUSED);
+  assert(ae_streams_observed(&s,persist,&store)==AE_ACCEPTED && ae_writer_stopped(&s));
+  assert(s.settlements==0 && s.workspace==AE_ACTIVE);
+  assert(ae_streams_observed(&s,persist,&store)==AE_REFUSED);
+  puts("C: genuine native birth/preexec/wait/stream transitions, invalid wait outcomes and duplicate events rejected");
+}
+int main(void) { admission(); native_events(); frames(); lifecycle(); faults(); pending_effects(); channel_and_no_start(); return 0; }

@@ -123,3 +123,28 @@ ae_result ae_command(ae_state *s, const ae_request *r, ae_persist save, void *ct
       r->kind==AE_READ_CLOSED_WORKSPACE) return AE_EFFECT_REQUIRED;
   return AE_ACCEPTED;
 }
+
+ae_result ae_birth_observed(ae_state *s,ae_persist save,void *ctx) {
+  if (s->phase!=AE_START_CONSUMED || !s->birth_attempted ||
+      s->pending_effect!=AE_START_ONCE || s->reaped) return AE_REFUSED;
+  ae_state next=*s; next.phase=AE_CHILD_OWNED; next.pending_effect=0;
+  return ae_commit(s,&next,save,ctx);
+}
+ae_result ae_preexec_observed(ae_state *s,ae_persist save,void *ctx) {
+  if (s->phase!=AE_CHILD_OWNED || s->reaped || s->preexec_applied || s->cutoff) return AE_REFUSED;
+  ae_state next=*s; next.preexec_applied=1;
+  return ae_commit(s,&next,save,ctx);
+}
+ae_result ae_wait_observed(ae_state *s,int code,int signal,ae_persist save,void *ctx) {
+  if (s->phase!=AE_CHILD_OWNED || s->reaped ||
+      !((code>=0 && code<=255 && signal==0) || (code==-1 && signal>0 && signal<128))) return AE_REFUSED;
+  ae_state next=*s; next.reaped=1; next.exit_code=code; next.exit_signal=signal;
+  next.phase=AE_EXIT_PROVED;
+  return ae_commit(s,&next,save,ctx);
+}
+ae_result ae_streams_observed(ae_state *s,ae_persist save,void *ctx) {
+  if (s->streams_sealed || !((s->phase==AE_EXIT_PROVED && s->reaped) ||
+      (s->phase==AE_NO_START && !s->birth_attempted && !s->reaped))) return AE_REFUSED;
+  ae_state next=*s; next.streams_sealed=1;
+  return ae_commit(s,&next,save,ctx);
+}

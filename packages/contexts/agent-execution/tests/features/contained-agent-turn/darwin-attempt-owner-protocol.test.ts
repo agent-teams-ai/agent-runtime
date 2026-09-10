@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -9,7 +9,6 @@ import {
   decodeDarwinAttemptOwnerRequest, encodeDarwinAttemptOwnerRequest,
   DarwinAttemptOwnerFrameReader, darwinAttemptOwnerFrameBytes,
 } from "../../../src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-protocol.ts";
-import { darwinAttemptOwnerAdmission } from "../../../src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-bridge.ts";
 
 const native = fileURLToPath(new URL("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/native/", import.meta.url));
 const start = { command: "START_ONCE", sequence: 1, binding: "01".repeat(32), launch: "02".repeat(32), argument: 0 } as const;
@@ -17,15 +16,11 @@ const commands = ["START_ONCE", "CUTOFF", "READ_STATUS", "SETTLE_LAUNCH_ROUTE",
   "SETTLE_ARTIFACT_RESULT", "WORKSPACE_FREEZE", "WORKSPACE_CLEANUP", "WORKSPACE_CLOSE",
   "SETTLE_WORKSPACE", "SETTLE_PRIVATE", "READ_ARTIFACT_SLOT", "DISPOSE_ONCE", "READ_CLOSED_WORKSPACE"] as const;
 
-test("all finite commands roundtrip exact owned source and caller values cannot activate", () => {
+test("all finite commands roundtrip exact owned source", () => {
   for (const command of commands) {
     const input = { ...start, command };
     assert.deepEqual(decodeDarwinAttemptOwnerRequest(encodeDarwinAttemptOwnerRequest(input)), input);
   }
-  assert.equal(darwinAttemptOwnerAdmission().status, "unavailable");
-  assert.equal(darwinAttemptOwnerAdmission().missing.length, 6);
-  const source = readFileSync(join(native, "darwin-attempt-owner-main.c"), "utf8");
-  assert.match(source, /return 78/u);
 });
 
 test("shape validation rejects paths, PIDs, duplicate-equivalent extra fields and accessors", () => {
@@ -76,7 +71,7 @@ test("portable C pure state/protocol harness uses the exact TS wire vectors", ()
     writeFileSync(join(temporary, "vectors.h"), `static const unsigned char vectors[][AE_FRAME_BYTES]={${vectors.map((v) => `{${v.join(",")}}`).join(",")}};\n`);
     const executable = join(temporary, "protocol-harness");
     const args = ["-std=c11", "-Wall", "-Wextra", "-Werror", "-pedantic", "-I", native, "-I", temporary,
-      join(native, "darwin-attempt-owner-state.c"),
+      join(native, "darwin-attempt-owner-state.c"), join(native, "darwin-attempt-owner-admission.c"),
       fileURLToPath(new URL("./darwin-attempt-owner-protocol-harness.c", import.meta.url)), "-o", executable];
     const compile = spawnSync("cc", args, { encoding: "utf8" });
     console.log(JSON.stringify({ command: ["cc", ...args], stdout: compile.stdout, stderr: compile.stderr, exit: compile.status }));
