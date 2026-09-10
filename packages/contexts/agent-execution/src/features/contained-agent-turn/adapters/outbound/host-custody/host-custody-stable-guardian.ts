@@ -8,163 +8,16 @@ import {
 } from "./custodied-provider-process.js";
 import type { VerifiedLaunchDescriptors } from "./host-custody-launch.js";
 
-const GUARDIAN_SOURCE = String.raw`
-const { spawn } = require("node:child_process");
-const { createHash } = require("node:crypto");
-const { fstatSync, lstatSync, readFileSync } = require("node:fs");
-const { pipeline } = require("node:stream");
-let provider;
-let launchReceived = false;
-let startState = "pending";
-const streamReports = new Set();
-const streamSettlements = new Map();
-process.on("SIGTERM", () => {});
-const send = (message, callback) => {
-  if (typeof process.send !== "function") { process.exit(70); return; }
-  process.send(message, callback);
-};
-const startCode = code => {
-  if (code === "EACCES" || code === "EPERM") { return "access-denied"; }
-  if (code === "ENOENT") { return "executable-not-found"; }
-  if (code === "EAGAIN" || code === "EMFILE" || code === "ENFILE" || code === "ENOMEM") { return "resource-unavailable"; }
-  return "unknown-start-failure";
-};
-const reportStream = (stream, status, stopGroup) => {
-  if (streamReports.has(stream)) { return; }
-  streamReports.add(stream);
-  send({ status, stream, type: "stream-final" }, error => {
-    if (error || stopGroup) { process.kill(0, "SIGKILL"); }
-  });
-};
-const publishStream = stream => {
-  if (startState === "pending" || streamReports.has(stream)) { return; }
-  if (startState === "failed") {
-    reportStream(stream, "complete", false);
-    return;
-  }
-  const status = streamSettlements.get(stream);
-  if (status !== undefined) { reportStream(stream, status, status === "error"); }
-};
-const handoff = (stream, source, destination) => {
-  pipeline(source, destination, error => {
-    streamSettlements.set(stream, error ? "error" : "complete");
-    publishStream(stream);
-  });
-};
-const exactCanonicalAuthority = message => {
-  if (message.canonicalAuthority === undefined) { return true; }
-  try {
-    const executablePath = lstatSync(message.command, { bigint: true });
-    const executableHeld = fstatSync(message.canonicalAuthority.executableDescriptor, { bigint: true });
-    const workspacePath = lstatSync(message.cwd, { bigint: true });
-    const workspaceHeld = fstatSync(message.canonicalAuthority.workspaceDescriptor, { bigint: true });
-    const executableSha256 = createHash("sha256").update(readFileSync(message.command)).digest("hex");
-    return executablePath.isFile() && workspacePath.isDirectory() && workspaceHeld.isDirectory() &&
-      String(executablePath.dev) === message.canonicalAuthority.executableDev &&
-      String(executablePath.ino) === message.canonicalAuthority.executableIno &&
-      executableSha256 === message.canonicalAuthority.executableSha256 &&
-      executablePath.dev === executableHeld.dev && executablePath.ino === executableHeld.ino &&
-      String(workspacePath.dev) === message.canonicalAuthority.workspaceDev &&
-      String(workspacePath.ino) === message.canonicalAuthority.workspaceIno &&
-      workspacePath.dev === workspaceHeld.dev && workspacePath.ino === workspaceHeld.ino;
-  } catch { return false; }
-};
-const signalGroup = signal => {
-  if (signal === "SIGTERM") {
-    process.kill(0, signal);
-    send({ type: "signal-issued", signal });
-    return;
-  }
-  send({ type: "signal-issued", signal }, error => {
-    if (error) { process.exit(71); return; }
-    process.kill(0, "SIGKILL");
-  });
-};
-process.on("message", message => {
-  if (message === null || typeof message !== "object") { return; }
-  if (message.type === "provider-signal" && message.signal === "SIGKILL") {
-    let sent = false;
-    try {
-      sent = provider !== undefined && provider.exitCode === null && provider.signalCode === null && provider.kill(message.signal);
-    } catch {}
-    send({ sent, signal: message.signal, type: "provider-signal-issued" });
-    return;
-  }
-  if (message.type === "signal" && (message.signal === "SIGTERM" || message.signal === "SIGKILL")) {
-    signalGroup(message.signal);
-    return;
-  }
-  if (message.type !== "launch" || launchReceived) { return; }
-  launchReceived = true;
-  if (!exactCanonicalAuthority(message)) {
-    startState = "failed";
-    send({ type: "start-error" });
-    publishStream("stdout");
-    publishStream("stderr");
-    return;
-  }
-  // Cooperative Darwin uses canonical path authority; proof descriptors stay
-  // with the guardian and are not forwarded into the provider spawn.
-  const providerInheritedDescriptors = message.canonicalAuthority === undefined
-    ? message.inheritedDescriptors
-    : [];
-  const maximumDescriptor = Math.max(2, ...providerInheritedDescriptors);
-  const stdio = Array.from({ length: maximumDescriptor + 1 }, () => "ignore");
-  stdio[0] = "pipe";
-  stdio[1] = "pipe";
-  stdio[2] = "pipe";
-  for (const descriptor of providerInheritedDescriptors) { stdio[descriptor] = descriptor; }
-  try {
-    provider = spawn(message.command, message.arguments, {
-      cwd: message.cwd,
-      detached: false,
-      env: message.environment,
-      shell: false,
-      stdio,
-      windowsHide: true,
-    });
-  } catch {
-    startState = "failed";
-    send({ type: "start-error" });
-    publishStream("stdout");
-    publishStream("stderr");
-    return;
-  }
-  process.stdin.pipe(provider.stdin);
-  handoff("stdout", provider.stdout, process.stdout);
-  handoff("stderr", provider.stderr, process.stderr);
-  provider.once("spawn", () => {
-    startState = "started";
-    send({ type: "started", pid: provider.pid });
-    publishStream("stdout");
-    publishStream("stderr");
-  });
-  provider.once("error", error => {
-    if (startState === "pending") {
-      startState = "failed";
-      send({ code: startCode(error.code), type: "start-error" });
-      publishStream("stdout");
-      publishStream("stderr");
-      return;
-    }
-    streamSettlements.set("stdout", "error");
-    streamSettlements.set("stderr", "error");
-    publishStream("stdout");
-    publishStream("stderr");
-  });
-  provider.once("exit", (code, signal) => {
-    send({ code, signal, type: "provider-exit" });
-  });
-});
-send({ type: "ready" });
-`;
+import type { DarwinSeatbeltProjection } from "./darwin-seatbelt-launch-projection.js";
+
+import { GUARDIAN_SOURCE } from "./host-custody-guardian-program.js";
 
 export type GuardianProviderStream = "stderr" | "stdout";
 export type GuardianProviderStreamFinal = "complete" | "error" | "incomplete";
 
 type GuardianMessage =
   | { readonly type: "ready" }
-  | { readonly pid: number; readonly type: "started" }
+  | { readonly pid: number; readonly type: "started"; readonly darwinImage?: unknown }
   | { readonly code?: unknown; readonly type: "start-error" }
   | { readonly code: number | null; readonly signal: NodeJS.Signals | null; readonly type: "provider-exit" }
   | { readonly status: GuardianProviderStreamFinal; readonly stream: GuardianProviderStream; readonly type: "stream-final" }
@@ -181,6 +34,7 @@ export interface GuardianExitObservation extends CustodiedProviderProcessExit {
 }
 
 interface GuardianLaunchInput {
+  readonly darwinRoute?: DarwinSeatbeltProjection;
   readonly arguments: readonly string[];
   readonly descriptors: VerifiedLaunchDescriptors;
   readonly environment: Readonly<Record<string, string>>;
@@ -226,17 +80,28 @@ export class StableProcessGroupGuardian {
   readonly #stderrFinal: Promise<GuardianProviderStreamFinal>;
   readonly #stdoutFinal: Promise<GuardianProviderStreamFinal>;
   #startTimer: ReturnType<typeof setTimeout> | undefined;
+  #startExpired = false;
+  #shutdownTimer: ReturnType<typeof setTimeout> | undefined;
+  #shutdownRequested = false;
+  #darwinProviderImage: unknown;
+  public get darwinProviderImage(): unknown {return this.#darwinProviderImage;}
+  public stopDarwin(): void {if (this.#input.canonicalLaunch !== undefined) {this.#stopDarwinGuardian();}}
   #settleStart: ((observation: GuardianStartObservation) => void) | undefined;
   #settleStderrFinal: ((status: GuardianProviderStreamFinal) => void) | undefined;
   #settleStdoutFinal: ((status: GuardianProviderStreamFinal) => void) | undefined;
 
   public constructor(input: GuardianLaunchInput, startAfterMs: number) {
+    if (input.canonicalLaunch !== undefined &&
+        (!Number.isSafeInteger(startAfterMs) || startAfterMs < 1 || startAfterMs > 2_147_483_647)) {
+      throw new TypeError("Darwin guardian admission deadline is invalid");
+    }
     const inherited = [
       input.descriptors.workspaceDescriptor,
       input.descriptors.executableDescriptor,
       ...Object.values(input.descriptors.privatePathDescriptors),
     ].toSorted((left, right) => left.childDescriptor - right.childDescriptor);
-    const child = spawn(input.canonicalLaunch === undefined ? "/proc/self/exe" : process.execPath, ["-e", GUARDIAN_SOURCE], {
+    const child = spawn(input.canonicalLaunch === undefined ? "/proc/self/exe" : process.execPath,
+      ["-e", GUARDIAN_SOURCE, ...(input.canonicalLaunch === undefined ? [] : [String(startAfterMs)])], {
       detached: true,
       env: Object.freeze({ LANG: "C.UTF-8" }),
       shell: false,
@@ -262,6 +127,7 @@ export class StableProcessGroupGuardian {
     });
     this.#guardianExit = new Promise(resolve => {
       child.once("exit", (code, signal) => {
+        if (this.#shutdownTimer !== undefined) {clearTimeout(this.#shutdownTimer);}
         const guardianExit = Object.freeze({ code, signal, status: "observed" as const });
         this.#guardianExitObservation = guardianExit;
         this.#launchOpen = false;
@@ -284,14 +150,34 @@ export class StableProcessGroupGuardian {
       if (this.child.listenerCount(PROVIDER_ERROR_EVENT) > 0) {this.child.emit(PROVIDER_ERROR_EVENT, error);}
     });
     this.#startTimer = setTimeout(() => {
+      this.#startExpired = true;
       this.#launchOpen = false;
       if (this.#launchDispatched) {this.#finishStart({ status: "ambiguous" });}
       else {this.#finishNoLaunch();}
-      child.kill("SIGKILL");
+      if (input.canonicalLaunch === undefined) {child.kill("SIGKILL");}
+      else {this.#stopDarwinGuardian();}
     }, startAfterMs);
   }
 
   public get exitCode(): number | null {return this.#exitCode;}
+
+  #stopDarwinGuardian(): void {
+    if (this.#shutdownRequested || this.#guardianExitObservation !== undefined) {return;}
+    this.#shutdownRequested = true;
+    this.#launchOpen = false;
+    const disconnect = () => {try {if (this.child.connected) {this.child.disconnect();}} catch {}};
+    // Healthy IPC survives until real exit + stream finals are acknowledged.
+    // The guardian has its own shorter local deadline; no finality is invented.
+    this.#shutdownTimer = setTimeout(disconnect, 1500);
+    try {if (this.child.connected) {this.child.send({type: "shutdown"}, error => {if (error) {disconnect();}});}}
+    catch {disconnect();}
+  }
+  #acknowledgeDarwinFinality(): void {
+    if (this.#input.canonicalLaunch === undefined || this.#providerExit === undefined ||
+        this.#settleStdoutFinal !== undefined || this.#settleStderrFinal !== undefined) {return;}
+    try {if (this.child.connected) {this.child.send({type: "finality-ack"});}} catch {this.#stopDarwinGuardian();}
+  }
+
   public get guardianExit(): Promise<GuardianExitObservation> {return this.#guardianExit;}
   public get guardianExitObservation(): GuardianExitObservation | undefined {return this.#guardianExitObservation;}
   public get providerExit(): CustodiedProviderProcessExit | undefined {return this.#providerExit;}
@@ -369,12 +255,17 @@ export class StableProcessGroupGuardian {
     try {
       const guardianPid = this.child.pid;
       const attached = guardianPid !== undefined && await this.#input.beforeLaunch(guardianPid);
-      if (!attached || !this.#input.launchPermitted() || !this.child.connected) {
+      if (!attached || (this.#input.canonicalLaunch !== undefined && this.#startExpired) ||
+          !this.#input.launchPermitted() || !this.child.connected) {
         this.#finishNoLaunch();
         this.child.kill("SIGKILL");
         return;
       }
+      // A Darwin send failure after entry cannot establish that the other
+      // process did not receive the launch. Keep shutdown with that guardian.
+      if (this.#input.canonicalLaunch !== undefined) {this.#launchDispatched = true;}
       this.child.send({
+        ...(this.#input.darwinRoute === undefined ? {} : {darwinRoute: this.#input.darwinRoute}),
         arguments: this.#input.arguments.map(argument => this.#guardianBound(argument, guardianPid)),
         command: this.#input.canonicalLaunch?.command ??
           `/proc/${guardianPid}/fd/${this.#input.descriptors.executableDescriptor.childDescriptor}`,
@@ -397,19 +288,33 @@ export class StableProcessGroupGuardian {
         type: "launch",
       }, error => {
         if (error !== null) {
-          this.#finishStart({ status: "error-before-start" });
-          this.child.kill("SIGKILL");
+          if (this.#input.canonicalLaunch === undefined) {
+            this.#finishStart({ status: "error-before-start" });
+            this.child.kill("SIGKILL");
+          } else {
+            this.#finishStart({ status: "ambiguous" });
+            this.#stopDarwinGuardian();
+          }
         }
       });
       this.#launchDispatched = true;
     } catch {
-      this.#finishNoLaunch();
-      this.child.kill("SIGKILL");
+      if (this.#input.canonicalLaunch !== undefined && this.#launchDispatched) {
+        this.#finishStart({status: "ambiguous"}); this.#stopDarwinGuardian();
+      } else {
+        this.#finishNoLaunch(); this.child.kill("SIGKILL");
+      }
     }
   }
 
   #handleStarted(message: Extract<GuardianMessage, { readonly type: "started" }>): void {
     if (Number.isSafeInteger(message.pid) && message.pid > 0) {
+      if (this.#input.darwinRoute !== undefined) {
+        if (this.#startExpired || message.darwinImage === undefined) {
+          this.#finishStart({status: "ambiguous"}); this.#stopDarwinGuardian(); return;
+        }
+        this.#darwinProviderImage = message.darwinImage;
+      }
       this.#finishStart({ providerPid: message.pid, status: "acknowledged" });
     }
   }
@@ -431,6 +336,7 @@ export class StableProcessGroupGuardian {
     this.#signalCode = message.signal;
     this.#providerExit = Object.freeze({ code: message.code, signal: message.signal });
     this.child.emit(PROVIDER_EXIT_EVENT, message.code, message.signal);
+    this.#acknowledgeDarwinFinality();
   }
 
   #handleStreamFinal(message: Extract<GuardianMessage, { readonly type: "stream-final" }>): void {
@@ -439,6 +345,7 @@ export class StableProcessGroupGuardian {
       (message.status === "complete" || message.status === "error")
     ) {
       this.#finishStream(message.stream, message.status);
+      this.#acknowledgeDarwinFinality();
     }
   }
 

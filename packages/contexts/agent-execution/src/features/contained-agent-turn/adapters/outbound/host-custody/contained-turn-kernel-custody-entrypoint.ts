@@ -34,3 +34,12 @@ export {NodeHttpEgressTrustedResolver, type NodeHttpEgressTrustedResolverOptions
 export {PostgresHttpEgressEvidence, initializePostgresHttpEgressEvidence, type PostgresHttpEgressEvidenceScope} from "./egress/postgres-http-egress-evidence.js";
 
 export {createNodeHostHttpConsumptionJournal} from "./egress/node-host-http-consumption-journal.js";
+
+export {NodeProviderProcessCustodyCore} from "./node-provider-process-custody-core.js";
+export {DarwinRouteDurableStorage, darwinDigest, type DarwinTrustedDirectory} from "./darwin-route-durable-storage.js";
+export {DarwinRouteLifecycleJournal} from "./darwin-route-lifecycle-journal.js";
+export {DarwinSeatbeltRouteOwner} from "./darwin-seatbelt-route-owner.js";
+export {pinDarwinExecutable, createDarwinSeatbeltProjection} from "./darwin-seatbelt-launch-projection.js";
+export {createDarwinHostHttpConsumptionJournal} from "./egress/darwin-host-http-consumption-journal.js";
+export type {HostHttpLocalCutInput} from "./egress/host-http-local-cut-owner.js";
+export type {HttpEgressLimits} from "./egress/http-egress-contracts.js";

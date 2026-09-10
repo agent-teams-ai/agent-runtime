@@ -124,6 +124,13 @@ export class NodeProviderProcessCustodyCore implements
         }
         return live.httpReservation.prepareResources(lifetime, input);
       },
+      retainDarwinRoute(lifetime: NodeCustodyHttpLifetime, route: Parameters<NodeCustodyHttpPreparation["retainDarwinRoute"]>[1]) {
+        const live = preparations.get(lifetime);
+        if (this !== capability || live === undefined || byRef.get(live.custodyRef) !== live) {
+          throw new TypeError("Host Custody Darwin route preparation conflicts");
+        }
+        live.httpReservation.retainDarwinRoute(live, lifetime, route);
+      },
       finalize(lifetime: NodeCustodyHttpLifetime) {
         const live = preparations.get(lifetime);
         if (this !== capability || live === undefined || byRef.get(live.custodyRef) !== live) {
