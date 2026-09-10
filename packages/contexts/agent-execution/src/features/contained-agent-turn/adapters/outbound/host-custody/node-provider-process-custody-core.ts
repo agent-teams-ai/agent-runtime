@@ -75,6 +75,7 @@ import {assertDarwinNativeExecutionClaim, assertRetainedDarwinNativeHttpExecutio
   bindRetainedDarwinNativeHttpLaunch,
   inspectDarwinNativeLaunchObservation, startDarwinNativeExecution, readDarwinNativeExecution, readDarwinNativeImage, readDarwinNativeNoStart,
   readDarwinNativeExecutionStatus,
+  inspectDarwinNativeExecutionLease as inspectDarwinNativeLeaseFacts,
   cutoffDarwinNativeExecution} from "./darwin-attempt-owner-selection.js";
 import {DeferredNativeProviderProcess, DeferredNativeSdkProcess} from "./deferred-native-sdk-process.js";
 import {boundedPromise} from "./host-custody-stdio.js";
@@ -82,6 +83,14 @@ import {consumeNativeHostCustodyExecutionLease, inspectNativeHostCustodyExecutio
   inspectNativeHostCustodyReservationAuthority, isNativeHostCustodyWorkspaceAuthority,
   retireNativeHostCustodyWorkspaceAuthority} from "./native-host-custody-workspace-authority.js";
 export type { NodeProviderProcessCustodyOptions } from "./node-provider-process-custody-state.js";
+export const assertDarwinNativeHostGenerationBinding = (
+  leaseHostGenerationBinding: string,
+  hostLifecycleGenerationSha256: string,
+): void => {
+  if (leaseHostGenerationBinding !== hostLifecycleGenerationSha256) {
+    throw new TypeError("Native execution lease belongs to another Host generation");
+  }
+};
 export class NodeProviderProcessCustodyCore implements
   ProviderProcessCustodyPort,
   CustodiedProviderProcessRegistry,
@@ -313,6 +322,13 @@ export class NodeProviderProcessCustodyCore implements
     const nativeAuthority = workspaceAuthority !== undefined && isNativeHostCustodyWorkspaceAuthority(workspaceAuthority)
       ? workspaceAuthority : undefined;
     const native = nativeAuthority === undefined ? undefined : inspectNativeHostCustodyReservationAuthority(nativeAuthority, input);
+    const nativeLease = nativeAuthority === undefined ? undefined : inspectNativeHostCustodyExecutionLease(nativeAuthority);
+    if (nativeLease !== undefined) {
+      assertDarwinNativeHostGenerationBinding(
+        inspectDarwinNativeLeaseFacts(nativeLease).hostGenerationBinding,
+        this.#hostLifecycleGenerationSha256,
+      );
+    }
     const identitySha256 = native !== undefined
       ? sha256(`${baseIdentitySha256}:${nativeAuthority!.canonicalPath}:${nativeAuthority!.identity.dev}:${nativeAuthority!.identity.ino}`)
       : "workspaceAuthority" in input
@@ -355,7 +371,7 @@ export class NodeProviderProcessCustodyCore implements
         ...(native === undefined && "workspaceAuthority" in input ? { workspaceAuthority: descriptorWorkspaceAuthority(input.workspaceAuthority) } : {}),
         ...(native === undefined ? {} : {nativeWorkspaceAuthority: nativeAuthority!,
           nativeWorkspaceFacts: inspectDarwinNativeLaunchObservation(native.observation),
-          nativeExecutionLease: inspectNativeHostCustodyExecutionLease(nativeAuthority!)}),
+          nativeExecutionLease: nativeLease!}),
         ...(retainedWorkspaceAuthority === undefined ? {} : { retainedWorkspaceAuthority }),
       },
     );
@@ -399,7 +415,16 @@ export class NodeProviderProcessCustodyCore implements
         if (facts === undefined || reserved.workspace?.dev !== facts.workspace.dev || reserved.workspace.ino !== facts.workspace.ino ||
             reserved.workspaceRef !== facts.workspace.path || reserved.privatePaths?.root.dev !== facts.privateRoot.dev ||
             reserved.privatePaths.root.ino !== facts.privateRoot.ino || reserved.plan?.environment.TMPDIR !== facts.tmpDir.path ||
-            reserved.plan.environment.CODEX_HOME !== facts.codexHome.path) {throw new TypeError("Native launch plan differs from prepared roots");}
+            reserved.plan.environment.CODEX_HOME !== facts.codexHome.path || reserved.plan.environment.HOME !== facts.privateRoot.path ||
+            reserved.plan.environment.PATH !== "/usr/bin:/bin" ||
+            reserved.privatePaths.byEnvironmentKey.HOME?.dev !== facts.privateRoot.dev ||
+            reserved.privatePaths.byEnvironmentKey.HOME?.ino !== facts.privateRoot.ino ||
+            reserved.privatePaths.byEnvironmentKey.CODEX_HOME?.dev !== facts.codexHome.dev ||
+            reserved.privatePaths.byEnvironmentKey.CODEX_HOME?.ino !== facts.codexHome.ino ||
+            reserved.privatePaths.byEnvironmentKey.TMPDIR?.dev !== facts.tmpDir.dev ||
+            reserved.privatePaths.byEnvironmentKey.TMPDIR?.ino !== facts.tmpDir.ino) {
+          throw new TypeError("Native launch plan differs from prepared roots");
+        }
       }} : reservationLaunchPlans === undefined ? {} : { assertBoundReservation: assertReservedWorkspaceAuthority }),
     });
   }

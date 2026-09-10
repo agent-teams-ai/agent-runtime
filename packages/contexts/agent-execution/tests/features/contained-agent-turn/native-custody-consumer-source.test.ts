@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { registerHooks, stripTypeScriptTypes } from "node:module";
-import { existsSync, readFileSync, mkdtempSync, mkdirSync, rmSync, openSync, closeSync, fstatSync, constants } from "node:fs";
+import { existsSync, readFileSync, mkdtempSync, mkdirSync, rmSync, openSync, closeSync, fstatSync, lstatSync, realpathSync, constants } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as synthetic from "./synthetic-native-custody-producer.fixture.ts";
@@ -179,6 +179,47 @@ test("fixed3 rejects config/catalog/UUID/readback identity mismatches", async ()
   }
 });
 
+test("native execution lease rejects a different Host lifecycle generation", async () => {
+  const {assertDarwinNativeHostGenerationBinding} = await import(
+    "../../../src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-core.ts"
+  );
+  assert.doesNotThrow(() => assertDarwinNativeHostGenerationBinding("0".repeat(64), "0".repeat(64)));
+  assert.throws(() => assertDarwinNativeHostGenerationBinding("0".repeat(64), "1".repeat(64)),
+    /another Host generation/u);
+});
+
+test("finalizable native plan reserves HOME at the retained private root", async () => {
+  const root = mkdtempSync(join(realpathSync(tmpdir()), "ar69-native-root-env-"));
+  const workspace = join(root, "workspace");
+  const privateRoot = `${workspace}-host-private`;
+  const codexHome = join(privateRoot, "home");
+  const temporary = join(privateRoot, "tmp");
+  try {
+    for (const path of [workspace, privateRoot, codexHome, temporary]) {mkdirSync(path, {mode: 0o700});}
+    const identity = (path: string) => {
+      const value = lstatSync(path, {bigint: true});
+      return {path, dev: value.dev, ino: value.ino, uid: Number(value.uid), mode: Number(value.mode)};
+    };
+    const facts = synthetic.syntheticFacts();
+    Object.assign(facts, {leasedUid: Number(lstatSync(workspace, {bigint: true}).uid), workspace: identity(workspace),
+      privateRoot: identity(privateRoot), codexHome: identity(codexHome), tmpDir: identity(temporary)});
+    const {boundary} = await setup(facts);
+    const plan = launch.createCodexAppServerFinalizableLaunchPlan({boundary, executablePath: "/synthetic/codex",
+      intentMode: "analysis", platformTarget: {platform: "darwin", architecture: "arm64"}, privateRootPath: privateRoot,
+      tmpDir: temporary}, {provider: "codex", providerRouteRef: "synthetic-route", credentialGeneration: 1,
+      credentialBindingRef: "synthetic-binding", ownerAuthorityDigest: "synthetic-authority"});
+    assert.equal(plan.environment.HOME, privateRoot);
+    assert.equal(plan.environment.PATH, "/usr/bin:/bin");
+    const {verifyPrivateLaunchPaths} = await import(
+      "../../../src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-launch.ts"
+    );
+    const retained = await verifyPrivateLaunchPaths(plan, workspace, lstatSync(workspace, {bigint: true}));
+    assert.equal(retained.byEnvironmentKey.HOME?.ino, retained.root.ino);
+    assert.equal(retained.byEnvironmentKey.CODEX_HOME?.ino, facts.codexHome.ino);
+    assert.equal(retained.byEnvironmentKey.TMPDIR?.ino, facts.tmpDir.ino);
+  } finally {rmSync(root, {recursive: true, force: true});}
+});
+
 test("synchronous native finalizer cannot manufacture material, clone files, or skip expiry", async () => {
   const {selection, recipe, boundary} = await setup();
   const options = {boundary, executablePath: "/synthetic/codex", intentMode: "analysis", platformTarget: {platform: "darwin", architecture: "arm64"},
@@ -190,6 +231,10 @@ test("synchronous native finalizer cannot manufacture material, clone files, or 
   assert.throws(() => finalizer.build({recipe, files: {kind: "codex-native-broker-prepared-files/v1"}}, "s".repeat(32)));
   const installed = await files.installCodexDarwinNativeBrokerFiles(selection, recipe, catalog);
   const result = finalizer.build({recipe, files: installed}, "s".repeat(32));
+  assert.deepEqual(result.plan.environment, {
+    AR_PRIVATE_BROKER_CAPABILITY: "s".repeat(32), CODEX_HOME: "/synthetic/private/home",
+    HOME: "/synthetic/private", LANG: "C.UTF-8", PATH: "/usr/bin:/bin", TMPDIR: "/synthetic/private/tmp",
+  });
   assert.match(result.materialSha256, /^[a-f0-9]{64}$/u); result.validate();
   assert.throws(() => finalizer.build({recipe, files: {...installed}}, "s".repeat(32)));
   synthetic.expireSyntheticSelection(selection);

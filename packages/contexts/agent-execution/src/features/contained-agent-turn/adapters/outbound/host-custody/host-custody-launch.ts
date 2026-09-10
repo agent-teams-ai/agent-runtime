@@ -26,6 +26,10 @@ import {
 } from "./custodied-provider-process.js";
 import { snapshotHostCustodyLaunchPlan } from "./host-custody-launch-plan-snapshot.js";
 
+const darwinNativeRootPlans = new WeakSet<HostCustodyLaunchPlan>();
+export const markDarwinNativeRootLaunchPlan = (plan: HostCustodyLaunchPlan): void => {darwinNativeRootPlans.add(plan);};
+export const isDarwinNativeRootLaunchPlan = (plan: HostCustodyLaunchPlan): boolean => darwinNativeRootPlans.has(plan);
+
 export interface ExecutableObservation {
   readonly ctimeNs: bigint;
   readonly dev: bigint;
@@ -352,6 +356,17 @@ export const isIntentionalCodexHomeAlias = (
   [leftKey, rightKey].every(key => key === "CODEX_HOME" || key === "HOME") &&
   leftPath === rightPath;
 
+const isDarwinNativePrivateRootContainment = (
+  plan: HostCustodyLaunchPlan,
+  leftKey: string,
+  leftPath: string,
+  rightKey: string,
+  rightPath: string,
+): boolean => isDarwinNativeRootLaunchPlan(plan) && (
+  leftKey === "HOME" && leftPath === plan.privateRootPath && isWithin(rightPath, leftPath) ||
+  rightKey === "HOME" && rightPath === plan.privateRootPath && isWithin(leftPath, rightPath)
+);
+
 const assertDistinctPrivateFilesystemObjects = (
   workspace: FilesystemObjectIdentity,
   root: FilesystemObjectIdentity,
@@ -372,7 +387,9 @@ const assertQualifiedPrivateFilesystemObjects = (
 ): void => {
   assertDistinctPrivateFilesystemObjects(workspace, root, {});
   for (const [key, observation] of Object.entries(environmentPaths)) {
-    if (sameFilesystemObject(workspace, observation) || sameFilesystemObject(root, observation)) {
+    const nativeRootHome = key === "HOME" && isDarwinNativeRootLaunchPlan(plan) &&
+      observation.path === plan.privateRootPath && sameFilesystemObject(root, observation);
+    if (sameFilesystemObject(workspace, observation) || sameFilesystemObject(root, observation) && !nativeRootHome) {
       throw new Error("Host Custody private launch paths must identify distinct filesystem objects");
     }
     for (const [otherKey, other] of Object.entries(environmentPaths)) {
@@ -423,7 +440,7 @@ export const verifyPrivateLaunchPaths = async (
       value === undefined ||
       !isAbsolute(value) ||
       resolvePath(value) !== value ||
-      value === plan.privateRootPath ||
+      (value === plan.privateRootPath && !(key === "HOME" && isDarwinNativeRootLaunchPlan(plan))) ||
       !isWithin(value, plan.privateRootPath)
     ) {
       throw new Error("Host Custody private environment path is absent or escapes private custody");
@@ -443,7 +460,8 @@ export const verifyPrivateLaunchPaths = async (
       if (
         key < otherKey &&
         (isWithin(observation.path, other.path) || isWithin(other.path, observation.path)) &&
-        !isIntentionalCodexHomeAlias(plan, key, observation.path, otherKey, other.path)
+        !isIntentionalCodexHomeAlias(plan, key, observation.path, otherKey, other.path) &&
+        !isDarwinNativePrivateRootContainment(plan, key, observation.path, otherKey, other.path)
       ) {
         throw new Error("Host Custody private environment paths must be pairwise disjoint");
       }

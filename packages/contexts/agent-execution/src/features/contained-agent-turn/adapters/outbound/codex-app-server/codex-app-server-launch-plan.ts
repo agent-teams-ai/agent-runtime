@@ -27,6 +27,7 @@ import {
   type CodexNativeBrokerRecipe,
 } from "./codex-native-broker-recipe.js";
 import { validateCodexNativeBrokerFiles, type CodexNativeBrokerFiles } from "./codex-native-broker-files.js";
+import {markDarwinNativeRootLaunchPlan} from "../host-custody/host-custody-launch.js";
 
 interface NativeBrokerLaunchInput {
   readonly recipe: CodexNativeBrokerRecipe;
@@ -150,10 +151,14 @@ const validateLaunchEnvironment = (plan: HostCustodyLaunchPlan): void => {
   const native = nativeLaunches.get(plan);
   if (native !== undefined) {validateCodexNativeBrokerFiles(native.files, native.recipe);}
   const roots = plan as CodexAppServerLaunchPlan;
+  const nativeBoundary = nativeRootBoundaries.get(plan);
+  const nativeObservation = nativeBoundary === undefined ? undefined : codexDarwinNativeLaunchObservation(nativeBoundary);
+  const nativeFacts = nativeObservation === undefined ? undefined : inspectDarwinNativeLaunchObservation(nativeObservation);
   const exactEnvironment = {
     ...(native === undefined ? {} : { [CODEX_LOCAL_BROKER_CAPABILITY_ENV]: native.localCapability }),
-    CODEX_HOME: roots.codexHome, HOME: roots.codexHome,
-    LANG: "C.UTF-8", PATH: "/usr/local/bin:/usr/bin:/bin", TMPDIR: roots.tmpDir,
+    CODEX_HOME: roots.codexHome, HOME: nativeFacts?.privateRoot.path ?? roots.codexHome,
+    LANG: "C.UTF-8", PATH: nativeFacts === undefined ? "/usr/local/bin:/usr/bin:/bin" : "/usr/bin:/bin",
+    TMPDIR: roots.tmpDir,
   };
   const environment = snapshotCodexNativeInput(plan.environment, Object.keys(exactEnvironment));
   if (Object.entries(exactEnvironment).some(([key, value]) => environment[key] !== value)) {
@@ -293,9 +298,9 @@ export const createCodexAppServerLaunchPlan = (
     environment: {
       ...(native === undefined ? {} : { [CODEX_LOCAL_BROKER_CAPABILITY_ENV]: native.localCapability }),
       CODEX_HOME: boundary.codexHome,
-      HOME: boundary.codexHome,
+      HOME: facts?.privateRoot.path ?? boundary.codexHome,
       LANG: "C.UTF-8",
-      PATH: "/usr/local/bin:/usr/bin:/bin",
+      PATH: facts === undefined ? "/usr/local/bin:/usr/bin:/bin" : "/usr/bin:/bin",
       TMPDIR: options.tmpDir,
     },
     executablePath: options.executablePath,
@@ -310,6 +315,7 @@ export const createCodexAppServerLaunchPlan = (
     workspaceRef: boundary.workspaceRef,
     workspaceIdentity,
   });
+  if (facts !== undefined) {markDarwinNativeRootLaunchPlan(plan);}
   if (native !== undefined) {
     nativeLaunches.set(plan, native);
     const observation = codexDarwinNativeLaunchObservation(options.boundary);
@@ -356,7 +362,10 @@ export const createCodexAppServerFinalizableLaunchPlan = (
         validate: () => validateCodexAppServerLaunchPlanRoots(final)});
     },
   });
-  if (codexDarwinNativeLaunchObservation(options.boundary) !== undefined) {nativeRootBoundaries.set(plan, options.boundary);}
+  if (codexDarwinNativeLaunchObservation(options.boundary) !== undefined) {
+    nativeRootBoundaries.set(plan, options.boundary);
+    markDarwinNativeRootLaunchPlan(plan);
+  }
   issuedLaunchPlans.add(plan);
   return plan;
 };
