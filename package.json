@@ -95,6 +95,7 @@
     "oxc-parser": "catalog:",
     "oxlint": "catalog:",
     "typescript": "catalog:",
+    "yaml": "catalog:",
     "xstate": "catalog:",
     "@agent-teams/docs-protocol-agent-teams": "0.2.3"
   }

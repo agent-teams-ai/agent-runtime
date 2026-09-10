@@ -22,6 +22,7 @@ catalog:
   pg: "8.23.0"
   smol-toml: "1.8.0"
   typescript: "7.0.2"
+  yaml: "2.9.0"
   xstate: "5.32.5"
   zod: "4.4.3"
 allowBuilds:

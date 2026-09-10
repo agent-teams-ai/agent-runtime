@@ -1,17 +1,33 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { parseDocument } from "yaml";
 
-import { createSourceDependenciesCapability } from "../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/module.js";
-import { loadCapabilityConfig } from "../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/contract/config.js";
+const foundationManifestPath = fileURLToPath(import.meta.resolve("@agent-teams/engineering-foundation/package.json"));
+const foundationManifest = JSON.parse(await readFile(foundationManifestPath, "utf8"));
+const foundationCli = join(dirname(foundationManifestPath), foundationManifest.bin["agent-teams-foundation"]);
 
 const repositoryRoot = new URL("../../", import.meta.url).pathname;
 const configPath = "architecture/foundation/source-dependencies.yaml";
 const configSource = await readFile(join(repositoryRoot, configPath), "utf8");
 const manifest = JSON.parse(await readFile(join(repositoryRoot, "package.json"), "utf8"));
-const policy = await loadCapabilityConfig(repositoryRoot, configPath);
+const document = parseDocument(configSource, { uniqueKeys: true });
+assert.deepEqual(document.errors, []);
+const rawPolicy = document.toJS();
+const policy = {
+  ...rawPolicy,
+  boundaries: rawPolicy.boundaries.map(boundary => ({
+    ...boundary,
+    allowedBoundaries: boundary.allow.boundaries ?? [],
+    allowedBuiltins: boundary.allow.builtins ?? [],
+    allowedPackages: boundary.allow.packages ?? [],
+    allowedRuntimeReferences: boundary.allow.runtimeReferences ?? [],
+  })),
+};
 const boundariesById = new Map(policy.boundaries.map(boundary => [boundary.id, boundary]));
 
 const paths = {
@@ -59,14 +75,22 @@ const analyzeFixture = async files => {
       await writeFixtureFile(root, path, source);
     }
 
-    const report = await createSourceDependenciesCapability().run({
-      configPath,
-      consumerRoot: root,
-    });
-    assert.ok(
-      report.outcome === "passed" || report.outcome === "violations",
-      JSON.stringify(report, null, 2),
-    );
+    await writeFixtureFile(root, "foundation.config.yaml", JSON.stringify({
+      schemaVersion: 1,
+      project: { id: "foundation-boundary-fixture" },
+      capabilities: { "architecture.source-dependencies": { configPath } },
+    }));
+    const result = spawnSync(process.execPath, [foundationCli, "check",
+      "architecture.source-dependencies", "--consumer", root, "--json"],
+    { encoding: "utf8", timeout: 60_000, maxBuffer: 8 * 1024 * 1024 });
+    assert.equal(result.error, undefined);
+    assert.equal(result.signal, null);
+    const envelope = JSON.parse(result.stdout);
+    assert.equal(envelope.capabilities.length, 1, JSON.stringify(envelope));
+    const [report] = envelope.capabilities;
+    assert.equal(report.capabilityId, "architecture.source-dependencies");
+    assert.ok(report.outcome === "passed" || report.outcome === "violations", JSON.stringify(envelope));
+    assert.equal(result.status, report.outcome === "passed" ? 0 : 1, result.stderr);
     return report.diagnostics;
   } finally {
     await rm(root, { recursive: true, force: true });
