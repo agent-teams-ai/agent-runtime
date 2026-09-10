@@ -1,4 +1,5 @@
-import { type FileHandle } from "node:fs/promises";
+import {} from "node:fs/promises";
+import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody";
 
 import {
   isMissingFilesystemEntry,
@@ -6,7 +7,7 @@ import {
 } from "./contained-turn-filesystem-custody.js";
 
 export const directoryExistsAt = async (
-  parent: FileHandle,
+  parent: StableFilesystemHandle,
   name: string,
 ): Promise<boolean> => {
   try {
@@ -28,7 +29,7 @@ export const canonicalRehydrationStagingName = (digest: string): string => {
 };
 
 export const closeRehydrationHandles = async (
-  handles: readonly FileHandle[],
+  handles: readonly StableFilesystemHandle[],
 ): Promise<void> => {
   let failure: unknown;
   for (const handle of handles.toReversed()) {
