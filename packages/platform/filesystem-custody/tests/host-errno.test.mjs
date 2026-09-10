@@ -15,6 +15,38 @@ int main(void) {
 #define CHECK(code) assert(strcmp(host_errno_name(code), #code) == 0)
 CHECK(EPERM); CHECK(ENOENT); CHECK(EACCES); CHECK(EEXIST); CHECK(EBADF);
 CHECK(ENOTDIR); CHECK(EISDIR); CHECK(EINVAL); CHECK(EIO); CHECK(EINTR);
+#ifdef EAGAIN
+CHECK(EAGAIN);
+#endif
+#ifdef EWOULDBLOCK
+#if defined(EAGAIN) && EWOULDBLOCK == EAGAIN
+assert(strcmp(host_errno_name(EWOULDBLOCK), "EAGAIN") == 0);
+#else
+CHECK(EWOULDBLOCK);
+#endif
+#endif
+#ifdef ENOTSUP
+CHECK(ENOTSUP);
+#endif
+#ifdef EOPNOTSUPP
+#if defined(ENOTSUP) && EOPNOTSUPP == ENOTSUP
+assert(strcmp(host_errno_name(EOPNOTSUPP), "ENOTSUP") == 0);
+#else
+CHECK(EOPNOTSUPP);
+#endif
+#endif
+#ifdef EDEADLK
+CHECK(EDEADLK);
+#endif
+#ifdef EDEADLOCK
+#if defined(EDEADLK) && EDEADLOCK == EDEADLK
+assert(strcmp(host_errno_name(EDEADLOCK), "EDEADLK") == 0);
+#else
+CHECK(EDEADLOCK);
+#endif
+#endif
+assert(strcmp(host_errno_name(0), "UNKNOWN") == 0);
+assert(strcmp(host_errno_name(-1), "UNKNOWN") == 0);
 assert(strcmp(host_errno_name(999), "UNKNOWN") == 0);
 assert(strcmp(host_errno_name(3000), "UNKNOWN") == 0);
 assert(strcmp(host_errno_name(4095), "UNKNOWN") == 0);

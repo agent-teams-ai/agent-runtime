@@ -278,7 +278,7 @@ static napi_value host_error(napi_env env, const char *message) {
 }
 /* Process-local, irreversible authority; neither exports nor JS handles own it. */
 #ifdef __APPLE__
-static atomic_bool host_guard_installed = ATOMIC_VAR_INIT(false);
+static atomic_bool host_guard_installed = false;
 static atomic_flag host_guard_installing = ATOMIC_FLAG_INIT;
 static const char host_guard_profile[] =
   "(version 1)(allow default)(deny file-read-data file-write-data (require-not (require-any (vnode-type REGULAR-FILE) (vnode-type DIRECTORY))))";

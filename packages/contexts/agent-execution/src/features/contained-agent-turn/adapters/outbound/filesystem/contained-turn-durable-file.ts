@@ -181,6 +181,24 @@ const writeTemporaryBytes = async (
   else {await faults.writeFile(handle, bytes);}
 };
 
+const acquireTemporaryFile = async (
+  stagingDirectory: FileHandle,
+  temporaryName: string,
+  noFollow: number,
+  openFile: DurableOpenFile,
+  faults: ContainedTurnFilesystemFaults | undefined,
+): Promise<FileHandle> => {
+  if (isNativeHostDescriptor(stagingDirectory) && faults?.openFile !== undefined) {
+    throw new Error("pathname open fault injection is unavailable for native Host descriptors");
+  }
+  return isNativeHostDescriptor(stagingDirectory) ?
+    openNativeHostEntry(stagingDirectory, temporaryName, "create") : await openFile(
+      descriptorChildPath(stagingDirectory, temporaryName),
+      constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | noFollow,
+      0o600,
+    );
+};
+
 const writeImmutableFileUnderLock = async (input: {
   readonly bytes: Buffer;
   readonly faults?: ContainedTurnFilesystemFaults | undefined;
@@ -199,15 +217,7 @@ const writeImmutableFileUnderLock = async (input: {
   let temporaryCreated = false;
   try {
     await input.faults?.checkpoint(`${input.temporaryKind}.before-open`);
-    if (isNativeHostDescriptor(input.stagingDirectory) && input.faults?.openFile !== undefined) {
-      throw new Error("pathname open fault injection is unavailable for native Host descriptors");
-    }
-    handle = isNativeHostDescriptor(input.stagingDirectory) ?
-      openNativeHostEntry(input.stagingDirectory, temporaryName, "create") : await openFile(
-      descriptorChildPath(input.stagingDirectory, temporaryName),
-      constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | noFollow,
-      0o600,
-    );
+    handle = await acquireTemporaryFile(input.stagingDirectory, temporaryName, noFollow, openFile, input.faults);
     temporaryCreated = true;
     stagingModified = true;
     await assertSameMountIdentity(input.stagingDirectory, handle);

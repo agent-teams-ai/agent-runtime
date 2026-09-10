@@ -81,6 +81,9 @@ static const char *host_errno_name(int value) {
 #ifdef ECONNRESET
   if (value == ECONNRESET) return "ECONNRESET";
 #endif
+#ifdef EDEADLK
+  if (value == EDEADLK) return "EDEADLK";
+#endif
 #ifdef EDEADLOCK
   if (value == EDEADLOCK) return "EDEADLOCK";
 #endif
@@ -308,6 +311,9 @@ static const char *host_errno_name(int value) {
 #endif
 #ifdef ENOTSUP
   if (value == ENOTSUP) return "ENOTSUP";
+#endif
+#ifdef EOPNOTSUPP
+  if (value == EOPNOTSUPP) return "EOPNOTSUPP";
 #endif
 #ifdef ENOTTY
   if (value == ENOTTY) return "ENOTTY";
