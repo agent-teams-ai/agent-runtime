@@ -119,4 +119,4 @@ export {containedTurnPreparationToken,
   type DarwinAttemptRetainedOwnerFactory}
   from "./features/contained-agent-turn/internal.js";
 
-export {readNodeContainedTurnNativeWorkspaceReceipts} from "./features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace-owner.js";
+export {readNodeContainedTurnNativeWorkspaceReceipts} from "./features/contained-agent-turn/internal.js";

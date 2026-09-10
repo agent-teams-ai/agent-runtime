@@ -1,4 +1,5 @@
-export {createNodeContainedTurnWorkspaceOwner, readNodeContainedTurnNativeWorkspaceClosure, type NodeContainedTurnWorkspaceOwner}
+export {createNodeContainedTurnWorkspaceOwner, readNodeContainedTurnNativeWorkspaceClosure,
+  readNodeContainedTurnNativeWorkspaceReceipts, type NodeContainedTurnWorkspaceOwner}
   from "./adapters/outbound/filesystem/node-contained-turn-workspace-owner.js";
 export {
   createNodeContainedTurnArtifacts,

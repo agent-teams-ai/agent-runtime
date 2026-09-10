@@ -35,7 +35,7 @@ registerHooks({resolve(specifier, context, next) {
   }
   if ((specifier.endsWith("/darwin-attempt-owner-selection.js") && context.parentURL?.endsWith("/native-host-custody-workspace-authority.ts")) || (specifier.endsWith("/contained-turn-kernel-custody-entrypoint.js") && [
     "codex-app-server-launch-plan.ts", "codex-app-server-permission-boundary.ts", "codex-native-broker-files.ts",
-    "codex-native-broker-recipe.ts", "node-kernel-workspace-authority.ts",
+    "codex-native-broker-recipe.ts", "codex-native-observations.ts", "node-kernel-workspace-authority.ts",
   ].some(name => context.parentURL?.endsWith("/" + name))) || specifier.endsWith("/node-contained-turn-workspace-owner.js")) {
     if (specifier.endsWith("/contained-turn-kernel-custody-entrypoint.js")) {
       return {url: new URL("./synthetic-native-kernel-entrypoint.fixture.ts", import.meta.url).href, shortCircuit: true};
