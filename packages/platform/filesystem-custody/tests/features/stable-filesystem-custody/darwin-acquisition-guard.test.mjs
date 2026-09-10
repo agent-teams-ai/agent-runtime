@@ -29,11 +29,11 @@ test("actual Darwin binding installs only in fresh disposable children and denie
 test("Linux exposes no Darwin guard authority and initializer leaves shared acquisition unchanged", {
   skip: process.platform !== "linux",
 }, async () => {
-  const api = await import("../dist/index.js");
+  const api = await import("../../../dist/composition.js");
   assert.equal(api.hasDarwinHostDescriptors(), false);
   assert.throws(() => api.initializeDarwinHostAcquisitionGuard(), /unavailable/);
   const loaded = { exports: {} };
-  process.dlopen(loaded, fileURLToPath(new URL("../dist/rename-no-replace.node", import.meta.url)));
+  process.dlopen(loaded, fileURLToPath(new URL("../../../dist/rename-no-replace.node", import.meta.url)));
   assert.equal(loaded.exports.initializeDarwinHostAcquisitionGuard, undefined);
   assert.equal(loaded.exports.isDarwinHostAcquisitionGuardInstalled, undefined);
   const root = loaded.exports.hostRoot();

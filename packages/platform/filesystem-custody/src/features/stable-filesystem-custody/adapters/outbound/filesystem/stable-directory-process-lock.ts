@@ -1,5 +1,5 @@
 import type { FileHandle } from "node:fs/promises";
-import { join } from "node:path";
+import { stableFilesystemNativeArtifactPath } from "../native/stable-filesystem-native-artifact.js";
 
 interface NativeProcessLockBinding {
   tryLockDirectory(directory: number): boolean;
@@ -14,7 +14,7 @@ const loadNativeBinding = (): NativeProcessLockBinding => {
   if (nativeBinding !== undefined) {return nativeBinding;}
   const loaded = { exports: {} } as NodeModule;
   try {
-    process.dlopen(loaded, join(import.meta.dirname, "rename-no-replace.node"));
+    process.dlopen(loaded, stableFilesystemNativeArtifactPath());
   } catch {
     throw new Error("the qualified stable directory process lock binding is unavailable");
   }

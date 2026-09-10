@@ -1,19 +1,19 @@
 import {
   createCooperativeProcessGroupAuthorityFactory,
   type PosixProcessGroupObserver,
-} from "./host-custody-posix-process-group.js";
-import { createDarwinProcessIdentityObserver } from "./host-custody-process-tree.js";
+} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-posix-process-group.js";
+import { createDarwinProcessIdentityObserver } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-process-tree.js";
 import {
   NodeProviderProcessCustodyCore,
   type NodeProviderProcessCustodyOptions,
-} from "./node-provider-process-custody-core.js";
+} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-core.js";
 
 export interface DarwinCooperativeProcessCustodyTestOptions
   extends Omit<NodeProviderProcessCustodyOptions, "residueAuthorityFactory"> {
   readonly processGroupObserver?: PosixProcessGroupObserver;
 }
 
-/** Private relative-import seam for synthetic Linux tests; never exported by composition or the package. */
+/** Test-owned seam for synthetic Linux coverage of the Darwin cooperative profile; never shipped in the package. */
 export const createDarwinCooperativeProcessCustodyTestSupport = (
   options: DarwinCooperativeProcessCustodyTestOptions,
 ): NodeProviderProcessCustodyCore => {

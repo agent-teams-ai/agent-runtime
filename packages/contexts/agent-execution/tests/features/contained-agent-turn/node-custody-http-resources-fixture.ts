@@ -63,7 +63,7 @@ const lockHook = registerHooks({resolve(specifier, context, next) {
   if (specifier === "node:fs/promises") {
     return {url: "native-finalization-fixture:resource-fs-promises", shortCircuit: true};
   }
-  if (specifier === "@agent-teams/filesystem-custody" && context.parentURL?.includes("node-host-http-consumption-journal")) {
+  if (specifier === "@agent-teams/filesystem-custody/composition" && context.parentURL?.includes("node-host-http-consumption-journal")) {
     return {url: "native-finalization-fixture:retention-lock", shortCircuit: true};
   }
   return next(specifier, context);

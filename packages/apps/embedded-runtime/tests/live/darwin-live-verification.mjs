@@ -1,15 +1,13 @@
 import {createHash} from "node:crypto";
 import {constants} from "node:fs";
-import {lstat, open, readFile} from "node:fs/promises";
+import {lstat, open, readFile, realpath} from "node:fs/promises";
 import {join} from "node:path";
+
+import {captureVerificationDirectoryIdentity, readStableVerificationFile, verifyPinnedSource} from "./darwin-live-filesystem-verification.mjs";
 
 const refused = reason => new Error(`DARWIN_LIVE_VERIFICATION_REFUSED: ${reason}`);
 const gap = (kind, capability) => Object.freeze({kind, capability});
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
-const missingReceipts = Object.freeze([
-  gap("workspace-creation", "NodeContainedTurnWorkspaceOwner has no public creation receipt read"),
-  gap("workspace-seal", "NodeContainedTurnWorkspaceOwner has no public workspace seal receipt read"),
-]);
 
 async function readOperation(input) {
   const turn = input.activation.turn;
@@ -70,10 +68,49 @@ function matchManifest(manifest, operation, turn) {
   })) {throw refused("artifact output differs from operation owner output");}
 }
 
-function verification(input) {
+async function workspaceReceipts(input, operation, manifest) {
+  const reader = input.agentExecution?.readNodeContainedTurnNativeWorkspaceReceipts;
+  if (!reader) {return {receipts: [], gaps: [gap("workspace-receipts", "native workspace receipt reader unavailable")]};}
+  const records = await reader(input.getWorkspaceOwner(), {operationId: operation.operationId, workspaceId: operation.workspaceId});
+  const {creation, seal, publication} = records;
+  const expectedName = operation.workspaceId?.replace(/^workspace:/u, "");
+  for (const record of [creation, seal, publication]) {
+    if (record.operationId !== operation.operationId || record.workspaceName !== expectedName ||
+        record.scope.tenantId !== operation.scope.tenantId || record.scope.projectId !== operation.scope.projectId) {
+      throw refused("native workspace receipt scope differs");
+    }
+  }
+  if (creation.rootIdentity.dev !== seal.rootIdentity.dev || creation.rootIdentity.ino !== seal.rootIdentity.ino ||
+      seal.treeDigest !== manifest.treeDigest || publication.treeDigest !== manifest.treeDigest ||
+      seal.manifestDigest !== publication.manifestDigest || publication.resultRef !== operation.resultRef ||
+      operation.artifactManifestRef !== `urn:agent-runtime:artifact-manifest:${seal.manifestDigest}`) {
+    throw refused("native workspace receipt linkage differs");
+  }
+  const receipts = [["workspace-creation", creation], ["workspace-seal", seal]].map(([kind, record]) => ({kind,
+    operationId: operation.operationId, attemptId: operation.dispatch.attemptId,
+    executionGenerationId: operation.dispatch.executionGenerationId,
+    provenance: {owner: "readNodeContainedTurnNativeWorkspaceReceipts", record, operationRevision: operation.revision,
+      generationSource: "operationStore.read.dispatch.executionGenerationId"}}));
+  return {receipts, records, gaps: []};
+}
+
+function verification(input, state, filesystem) {
   const turn = input.activation.turn;
   let verified;
   return Object.freeze({
+    sourceRoot: input.activation.infrastructure?.filesystem?.sourceRoot,
+    async readResultBytes(root) {
+      if (root !== state.rehydrated) {throw refused("result read root differs from owner rehydration");}
+      return readStableVerificationFile(join(root, "result.txt"), 16 * 1024 * 1024, filesystem, state.rehydratedIdentity);
+    },
+    async readSourceFixtureBytes() {
+      const root = input.activation.infrastructure.filesystem.sourceRoot;
+      if (turn.taskPath !== join(root, "TASK.md") || turn.sourceMessagePath !== join(root, "input", "nested", "message.txt")) {
+        throw refused("source fixture paths differ from canonical source root");
+      }
+      return {task: await readStableVerificationFile(turn.taskPath, 16 * 1024 * 1024, filesystem),
+        message: await readStableVerificationFile(turn.sourceMessagePath, 16 * 1024 * 1024, filesystem)};
+    },
     async verifyArtifactManifest(artifactManifestRef, resultRef) {
       verified = undefined;
       const operation = await readOperation(input);
@@ -84,22 +121,27 @@ function verification(input) {
       const lookup = {operationId: operation.operationId, scope: turn.scope, resultRef};
       const manifest = await input.getArtifacts().verify(lookup);
       matchManifest(manifest, operation, turn);
-      const receipts = retainedReceipts(operation);
+      const workspace = await workspaceReceipts(input, operation, manifest);
+      const receipts = [...workspace.receipts, ...retainedReceipts(operation)];
+      if (workspace.records) {receipts.find(receipt => receipt.kind === "result-publication").provenance.publication = workspace.records.publication;}
       verified = {artifactManifestRef, lookup};
-      // Artifact seal verification authenticates content, not workspace creation
-      // or workspace-seal receipts. The five-receipt gate must stay incomplete.
-      return Object.freeze({status: "incomplete", files: manifest.entries.filter(entry => entry.kind === "file"),
-        receipts, manifest, gaps: missingReceipts});
+      state.operation = operation; state.workspace = workspace.records; state.manifest = manifest;
+      return Object.freeze({status: workspace.gaps.length ? "incomplete" : "verified",
+        files: manifest.entries.filter(entry => entry.kind === "file"), receipts, manifest, gaps: workspace.gaps});
     },
-    async rehydrateArtifact(artifactManifestRef, target) {
+    async rehydrateArtifact(artifactManifestRef) {
       if (verified?.artifactManifestRef !== artifactManifestRef) {throw refused("rehydration requires verified lookup");}
       const actual = await input.getArtifacts().rehydrate(verified.lookup);
-      if (actual !== target) {throw refused("owner rehydration path differs from requested frozen workspace");}
+      const digest = artifactManifestRef.match(/^urn:agent-runtime:artifact-manifest:([a-f0-9]{64})$/u)?.[1];
+      const root = input.activation.infrastructure?.filesystem?.rehydrationRoot;
+      if (!digest || !root || actual !== join(root, "results", digest) || await realpath(actual) !== actual ||
+          !(await lstat(actual)).isDirectory()) {throw refused("owner rehydration path differs from verified manifest");}
+      state.rehydratedIdentity = await captureVerificationDirectoryIdentity(actual, filesystem);
+      state.rehydrated = actual;
       return actual;
     },
     async verifySourceInventory() {
-      if (typeof input.verifySourceInventory !== "function") {throw refused("source inventory owner read unavailable");}
-      return input.verifySourceInventory();
+      return verifyPinnedSource(input.activation, filesystem);
     },
   });
 }
@@ -152,22 +194,113 @@ async function retainSnapshot(input, result, openFile) {
   return Object.freeze({status: "retained", path, sha256: hash(bytes), operationRevision: operation.revision});
 }
 
-/** Feature-local projection. No launch, SQL codecs, owner mutation or inferred
- * cleanup success. Missing public evidence is a bounded qualification gap. */
-export function createDarwinLiveVerification(input, {openFile = open} = {}) {
-  const failures = [];
-  return Object.freeze({verification: verification(input),
+async function readHttpClosure(input, operation) {
+  // Kernel closureRecovery.requestId is NOT an HTTP request identity. An exact
+  // owner inventory must bridge this namespace before using the public reader.
+  if (!input.readHttpRequestIdentities) {return {gaps: [gap("http-request-identities",
+    "operation/proof records expose no HTTP request identity; closed owner inventory required")]};}
+  const identity = {operationId: operation.operationId, attemptId: operation.dispatch.attemptId};
+  const inventory = await input.readHttpRequestIdentities(identity);
+  if (inventory?.kind !== "closed" || inventory.operationId !== identity.operationId ||
+      inventory.attemptId !== identity.attemptId || !Array.isArray(inventory.requestIds) ||
+      new Set(inventory.requestIds).size !== inventory.requestIds.length) {
+    return {gaps: [gap("http-request-identities", "HTTP owner inventory is not closed for this attempt")]};
+  }
+  const reader = new input.agentExecution.PostgresHttpEgressEvidence(input.pool,
+    {...operation.scope, deploymentId: input.activation.infrastructure.deployment.id});
+  const receipts = [];
+  for (const requestId of inventory.requestIds) {
+    const outcome = await reader.read({...identity, requestId});
+    if (outcome.kind !== "found" || outcome.receipt.operationId !== identity.operationId ||
+        outcome.receipt.attemptId !== identity.attemptId || outcome.receipt.requestId !== requestId ||
+        !["closed", "not_opened"].includes(outcome.receipt.inboundClosure) ||
+        !["closed", "not_opened"].includes(outcome.receipt.upstreamClosure)) {
+      return {receipts, gaps: [gap("http-closure", "exact HTTP receipt missing, uncertain or unclosed")]};
+    }
+    receipts.push(outcome.receipt);
+  }
+  return {receipts, gaps: []};
+}
+
+async function nativeClosure(input, state, gaps) {
+  const operation = state.operation;
+  if (!operation || !input.agentExecution?.readNodeContainedTurnNativeWorkspaceClosure) {
+    gaps.push(gap("native-closure", "native closure reader or operation unavailable")); return;
+  }
+  try {
+    const record = await input.agentExecution.readNodeContainedTurnNativeWorkspaceClosure(input.getWorkspaceOwner(),
+      {operationId: operation.operationId, workspaceId: operation.workspaceId});
+    if (record.operationId !== operation.operationId || record.workspaceName !== state.workspace?.seal.workspaceName ||
+        record.manifestDigest !== state.workspace?.seal.manifestDigest || record.treeDigest !== state.manifest.treeDigest ||
+        record.scope.tenantId !== operation.scope.tenantId || record.scope.projectId !== operation.scope.projectId) {
+      throw refused("native closure identity differs");
+    }
+    return {closureAcknowledged: true, record};
+  } catch (error) {gaps.push(gap("native-closure", String(error)));}
+}
+
+function closedCustody(custody) {
+  return custody.identity.status === "proved" && custody.sealed === true &&
+    custody.closure.profile === "native-darwin-attempt-owner" && custody.closure.status === "closed" &&
+    custody.stdout.status === "complete" && custody.stderr.status === "complete";
+}
+
+// oxlint-disable-next-line complexity -- each independently owned release fact must be proved
+function releasedFacts(value) {
+  return value.processes?.survivingDescendants === 0 && value.processes?.openWriterFds === 0 &&
+    value.routes?.remaining === 0 && value.listeners?.remaining === 0 && value.database?.sessions === 0 &&
+    value.database?.preparedTransactions === 0 && value.filesystem?.executionRootPresent === false &&
+    value.checksums?.verified === true && value.providerAccess?.disposeCount === 1 && value.pool?.closed === true &&
+    value.storage?.closed === true && value.native?.closureAcknowledged === true && value.host?.identityCurrent === true &&
+    value.host?.streamsDrained === true && value.evidence?.retainedTreeVerified === true;
+}
+
+async function readCustody(input, operation) {
+  if (!operation || !input.readHostCustodyEvidence) {return;}
+  const identity = {operationId: operation.operationId, attemptId: operation.dispatch.attemptId};
+  const found = await input.readHostCustodyEvidence(identity);
+  if (found?.kind !== "found" || found.operationId !== identity.operationId || found.attemptId !== identity.attemptId) {return;}
+  return found.evidence;
+}
+
+async function cleanupReadback(input, state, failures) {
+  const observed = await input.readCleanup?.(), gaps = [];
+  const operation = state.operation;
+  if (!observed) {gaps.push(gap("cleanup-owner-state", "final DB inspector, pool/storage and route lifecycle readback unavailable"));}
+  if (!operation) {gaps.push(gap("operation-snapshot", "pre-disposal operation owner snapshot unavailable"));}
+  const native = await nativeClosure(input, state, gaps);
+  const custody = await readCustody(input, operation);
+  if (!custody) {gaps.push(gap("host-custody", "attempt-bound host custody evidence hook missing or exact binding differs"));}
+  const output = await input.outputOwner?.readback();
+  if (output?.closed !== true) {gaps.push(gap("output-owner", "native output owner has not durably closed"));}
+  // HTTP must be read while the borrowed DB pool is live, before owner disposal.
+  const http = state.http ?? {gaps: [gap("http-closure", "pre-disposal HTTP owner read unavailable")]};
+  gaps.push(...http.gaps);
+  if (custody && !closedCustody(custody)) {
+    gaps.push(gap("host-custody", "native host identity, closure or stream drain unproved"));
+  }
+  const result = {...observed, native, output, custody, http, gaps, failures: [...failures]};
+  // Raw native closure records do not enumerate process descendants/writer FDs,
+  // route listeners or DB sessions. Those fields must come from final owners.
+  const required = ["processes", "routes", "listeners", "database", "filesystem", "checksums", "providerAccess", "pool", "storage", "host", "evidence"];
+  for (const key of required) {if (!observed?.[key]) {gaps.push(gap(key, `final ${key} owner readback missing`));}}
+  if (observed && !releasedFacts(result)) {gaps.push(gap("cleanup-release", "one or more final release predicates remain unproved"));}
+  return Object.freeze({...result, status: gaps.length || failures.length ? "incomplete" : "released"});
+}
+
+/** Feature-local projection. Only public owner reads establish qualification. */
+export function createDarwinLiveVerification(input, {openFile = open, filesystem} = {}) {
+  const failures = [], state = {};
+  const checks = verification(input, state, filesystem);
+  return Object.freeze({verification: Object.freeze({...checks,
+    async verifyArtifactManifest(...args) {
+      state.operation = undefined; state.workspace = undefined; state.manifest = undefined; state.http = undefined; state.rehydrated = undefined; state.rehydratedIdentity = undefined;
+      const result = await checks.verifyArtifactManifest(...args);
+      state.http = await readHttpClosure(input, state.operation);
+      return result;
+    }}),
     reconciliation: Object.freeze({retain: result => retainSnapshot(input, result, openFile)}),
-    cleanup: Object.freeze({
-      recordFailure(error) {failures.push(String(error));},
-      async readback() {
-        const observed = await input.readCleanup?.();
-        const gaps = [gap("http-evidence", "PostgresHttpEgressEvidence exposes record/digest but no public retained read"),
-          gap("native-closure", "NodeContainedTurnWorkspaceOwner exposes dispose but no public closure readback")];
-        if (!observed) {gaps.push(gap("cleanup-owner-state", "retained lifecycle readback unavailable"));}
-        return Object.freeze({...observed, status: "incomplete", gaps, failures: [...failures],
-          ...(input.outputOwner?.readback ? {output: await input.outputOwner.readback()} : {})});
-      },
-    }),
+    cleanup: Object.freeze({recordFailure(error) {failures.push(String(error));},
+      readback: () => cleanupReadback(input, state, failures)}),
   });
 }

@@ -4,7 +4,7 @@
   "title": "Agent Runtime Feature Module Standard profile",
   "type": "object",
   "additionalProperties": false,
-  "required": ["$schema", "schemaVersion", "status", "authority", "scope", "moduleRoles", "features", "assemblyFiles", "featureEdges", "extensions", "deviations", "exceptions", "enforcement", "activation"],
+  "required": ["$schema", "schemaVersion", "status", "authority", "scope", "moduleRoles", "features", "assemblyFiles", "featureEdges", "moduleEdges", "extensions", "deviations", "exceptions", "enforcement", "activation"],
   "properties": {
     "$schema": { "const": "./profile.schema.json" },
     "schemaVersion": { "const": 1 },
@@ -25,8 +25,10 @@
     "scope": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["productionRoots", "outOfScope"],
+      "required": ["workspaceContainers", "productionModules", "productionRoots", "outOfScope"],
       "properties": {
+        "workspaceContainers": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/repositoryPath" } },
+        "productionModules": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/productionModule" } },
         "productionRoots": { "type": "array", "minItems": 1, "items": { "type": "string" } },
         "outOfScope": { "type": "array", "minItems": 1, "items": { "type": "string" } }
       }
@@ -61,6 +63,20 @@
         "required": ["from", "to", "kinds"],
         "properties": {
           "from": { "type": "string" }, "to": { "type": "string" },
+          "kinds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["runtime", "type"] } }
+        }
+      }
+    },
+    "moduleEdges": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to", "kinds"],
+        "properties": {
+          "from": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "to": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
           "kinds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["runtime", "type"] } }
         }
       }
@@ -159,7 +175,10 @@
               }
             },
             "decisionRecords": {
-              "const": [{ "id": "ADR-0013", "path": "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md", "owner": "architecture" }]
+              "const": [
+                { "id": "ADR-0013", "path": "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md", "owner": "architecture" },
+                { "id": "ADR-0017", "path": "docs/decisions/0017-feature-module-production-scope-roles.md", "owner": "architecture" }
+              ]
             }
           }
         }
@@ -249,6 +268,31 @@
     }
   ],
   "$defs": {
+    "productionModule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role", "moduleRoot", "sourceRoot", "packageName", "ownerDocument", "curatedExports", "adoption"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "role": { "enum": ["bounded-context", "host-app", "platform"] },
+        "moduleRoot": { "$ref": "#/$defs/repositoryRoot" },
+        "sourceRoot": { "$ref": "#/$defs/repositoryPath" },
+        "packageName": { "type": "string", "minLength": 1, "maxLength": 214, "pattern": "^[!-~]+$" },
+        "ownerDocument": { "type": "string", "pattern": "^ADR-[0-9]{4}$" },
+        "curatedExports": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": [".", "./composition"] } },
+        "adoption": { "enum": ["active", "pending"] },
+        "activationAuthority": { "type": "string", "pattern": "^ADR-[0-9]{4}$" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "adoption": { "const": "active" } }, "required": ["adoption"] },
+          "then": {
+            "required": ["activationAuthority"],
+            "properties": { "activationAuthority": { "type": "string", "pattern": "^ADR-[0-9]{4}$" } }
+          }
+        }
+      ]
+    },
     "repositoryPath": {
       "type": "string",
       "minLength": 1,

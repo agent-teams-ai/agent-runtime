@@ -3,11 +3,13 @@ id: runtime.architecture.feature-module-standard-v1-candidate
 type: architecture
 status: active
 owner: architecture
-summary: Defines scoped active conformance for three Feature Module Standard v1 features.
+summary: Defines scoped active conformance and mandatory standards for every new production feature.
 related:
   - ADR-0005
   - ADR-0007
   - ADR-0013
+  - ADR-0017
+  - ADR-0018
 code_anchors:
   - enforcement: required
     pattern: architecture/feature-module-standard/**
@@ -26,9 +28,95 @@ owned by `agent-teams-ai/.github` at
 `d0bfff2033faf544fe65268c1dcdfd524d093015`, with SHA-256
 `851653f96643cf0466b67ab22963661976b00de44840fa3144a48a8c054f95fa`.
 
-This is scoped active conformance for exactly three named features. It is not a
-claim of repository-wide conformance, and no unlisted package, application,
-feature, experiment, or bounded context is included.
+This is scoped active conformance for exactly the four named features listed
+below. It is not a claim of repository-wide conformance, and no unlisted package,
+application, feature, experiment, or bounded context is included.
+
+ADR-0017 additionally classifies every production module in the reviewed
+workspace containers by its real role, so the profile describes what each module
+is even while three of the six are checked.
+
+## New production features
+
+Every new production feature MUST strictly follow organization Feature Module
+Standard v1, including in currently excluded packages. This is a prospective
+repository-wide authoring obligation, separate from the existing active
+conformance claim for exactly three features in two roots under ADR-0013.
+Existing exclusions describe existing unqualified code; they do not permit new
+nonconforming capabilities. The authoring obligation does not itself widen the
+active profile or certify existing non-adopted behavior.
+
+The obligation covers real new capabilities in every context, platform,
+integration, SDK, and testing module, and application-owned behavior. Application
+executables should remain thin composition roots, without absorbing behavior
+owned by a production module. Adding a capability inside an existing legacy
+feature, function, or file does not evade this rule. Review semantic behavior,
+not just new directories. Ordinary helpers and behavior-preserving refactors
+are not automatically new features or composition graph nodes.
+
+Before implementation, record the semantic owner, module architectural role,
+feature boundary, and the current standard ID, version, canonical path and
+content digest from the identity above. Identify concrete topology and scope
+changes, dependency edges, public surfaces, and compatibility decisions. Compare
+the consumer pin with the canonical standard. Identity changes require explicit
+review and retained pin/delta evidence before adoption.
+
+Use the smallest substantive layers appropriate to the role. Domain invariants
+and domain types stay in domain; transport-independent inputs and outputs are
+application models; external contracts stay outer. Domain and application must
+not import transport or SDK DTOs. Preserve feature-owned ports, adapters, tests,
+and curated entrypoints. Do not invent ceremonial aggregates, empty layers,
+one feature per class, or a new module merely to isolate a folder.
+
+The same feature delivery MUST adopt the feature in the appropriate local
+profile and topology, with actual blocking enforcement and disposable positive
+and rejecting fixtures in both fast and full gates. Evidence must cover the
+adopted role and ownership, allowed layers and entrypoints, and rejection of
+unowned production behavior, deep imports, undeclared edges or cycles, empty
+layers, and undeclared modules or exceptions. Include semantic review because
+static discovery alone cannot detect every capability hidden in legacy code.
+
+The existing three-feature checker does not inspect behavior inside excluded
+roots. Its reviewed feature identities and roots are hardcoded. It does detect a
+new production package in a declared workspace container and rejects it until a
+reviewed change classifies it, but classification is not conformance. A new
+feature outside
+that scope, or one requiring checker evolution, needs explicit scoped adoption
+through a new or superseding accepted ADR, with exact paths, ownership,
+compatibility decisions, and deterministic evidence. Preserve ADR-0013 bytes
+and its historical scope; merely appending to its fixed profile is insufficient.
+Implement the necessary checker and gate changes in that feature delivery.
+Do not suppress diagnostics, widen blanket exclusions, grandfather new code, or
+use green CI for the old scope as proof that the new feature conforms.
+
+A new feature MUST NOT be called implemented or merge-ready until its declared
+conformance gate passes for the actual delivered scope. Record exact commands,
+results, fixtures, authority and profile identities, and remaining limitations.
+If adoption or enforcement is unproven, record the exact outstanding work and
+keep the feature pending; pending is not permission to ship a violating feature.
+Dependencies on existing non-adopted behavior require narrow explicit boundaries,
+with honest ownership and scope evidence. They do not require migrating every
+legacy capability, and cannot exempt the new capability from conformance.
+
+For meaningful composition boundaries, also read the canonical Get Modular
+[Consumer Module Standard](https://github.com/agent-teams-ai/get-modular/blob/03a7df64bc5e9939f7b51694a80a7f3d61453f98/docs/architecture/common-assembly.md#consumer-module-standard).
+Its composition requirements apply inside an explicitly accepted Host scope;
+this authoring rule does not mandate installing Assembly everywhere. Review
+current upstream against the consumer pin before adoption or boundary changes,
+retain exact revision/digest and delta evidence, and update affected profiles,
+guidance and rejecting tests together. Keep adoption pending until any required
+migration and enforcement are complete. Meaningful boundaries must be adopted
+or explicitly classified under that contract; fixed feature-local helpers remain
+static imports and typed factories.
+
+At the 2026-09-09 review, Runtime main `245dcb05206b53f7727786d5a94236350e5ca194`
+had no Consumer Module Standard/Assembly adoption pin. The linked Get Modular
+revision was reviewed with whole-document SHA-256
+`ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d`;
+the central Feature Module Standard v1 matched the existing pin above. These are
+review facts, not Assembly adoption. Initial composition adoption must record
+the absence of a prior pin and accept the reviewed revision through a scoped ADR,
+consumer profile and actual conformance evidence.
 
 ## Ownership boundary
 
@@ -38,15 +126,94 @@ beside it. The active production scope contains only:
 
 - `packages/contexts/agent-execution/src/**`;
 - `packages/contexts/provider-access/src/**`;
+- `packages/platform/filesystem-custody/src/**`;
 - the package assembly files `src/index.ts` and `src/composition.ts` in those
-  two packages;
-- the features `runtime-installation-discovery`, `contained-agent-turn`, and
-  `contained-turn-access`.
+  three packages;
+- the features `runtime-installation-discovery`, `contained-agent-turn`,
+  `contained-turn-access`, and `stable-filesystem-custody`.
 
-Embedded Runtime, Runtime Configuration, Runtime Security, Filesystem Custody,
-Module Kit, experiments, and tooling other than this checker are explicitly
-out of scope. Foundation supplies package-level dependency evidence only; it
+Embedded Runtime, Runtime Configuration, Runtime Security, Module Kit,
+experiments, and tooling other than this checker are explicitly out of scope. Foundation supplies package-level dependency evidence only; it
 does not implement or prove this feature policy.
+
+## Production module classification
+
+The profile classifies every module under `packages/apps`, `packages/contexts`,
+and `packages/platform` with exactly one role and one adoption state:
+
+| Module | Role | Owner document | Adoption |
+| --- | --- | --- | --- |
+| Agent Execution | `bounded-context` | ADR-0005 | active under ADR-0013 |
+| Provider Access | `bounded-context` | ADR-0005 | active under ADR-0013 |
+| Runtime Configuration | `bounded-context` | ADR-0005 | pending |
+| Runtime Security | `bounded-context` | ADR-0005 | pending |
+| Embedded Runtime | `host-app` | ADR-0008 | pending |
+| Filesystem Custody | `platform` | ADR-0017 | active under ADR-0019 |
+
+All six modules expose `.` and `./composition` today. The set is a per-module
+fact rather than a consequence of the role, which is what let Filesystem Custody
+gain its composition entry and then its activation without the rule changing.
+
+Each module declares its own curated export set from the two recognized assembly
+entries `.` and `./composition`, matching what its manifest exposes today. Every
+pending module stays an excluded root and is not checked as a feature module,
+but its declared package name, role, owner document and curated export keys are
+still compared with its real manifest, so the classification cannot drift into a
+future-state promise.
+
+## Dependencies between production modules
+
+ADR-0018 governs every dependency between two active governed modules. The
+profile declares it as a `moduleEdges` entry with its exact kind, `runtime` or
+`type`, and both ends must be declared, distinct and active. A dependency on a
+pending module is not governed by this rule, because a pending module's sources
+stay outside the checked tree; activation is what brings it under the rule. The
+import must resolve to one of the target module's curated assembly entries; any
+other path inside the target, including a path inside one of its features, is
+rejected as `FM_MODULE_DEEP_IMPORT`. Only the importing module's own
+`composition.ts` or a feature's `adapters` or `composition` layer may hold such
+an import: the public package entry still exposes only its own contracts.
+
+A feature edge is correspondingly a relationship inside one module. Declaring one
+between features of different modules is rejected.
+
+Declared module edges follow the same discipline as feature edges: an unobserved
+declaration is rejected as future-state permission, and observed edges are
+checked for runtime and type cycles. `moduleEdges` stays empty until a delivery
+needs an edge.
+
+A production package that exists inside one of those containers and is not
+classified fails the gate with `FM_UNCLASSIFIED_MODULE`. Activating a pending
+module is a separate reviewed change to both the profile and the reviewed
+registry in `scripts/architecture/feature-module-profile.mjs`, with its own
+accepted authority; a profile edit alone cannot widen the checked tree.
+
+## Outstanding work per pending module
+
+Recorded here so a partially migrated module reads as transit rather than as a
+contradiction. None of this is a conformance claim, and no gate asserts any of it.
+
+Runtime Configuration has two features. `codex-configuration-inspection` already
+owns its application models and translates through one inbound adapter.
+`claude-code-configuration-inspection` does not: its application layer imports
+vocabulary *constants* from its contract, not only types, so deciding where that
+vocabulary lives is its own reviewed question. Both features then need curated
+feature entrypoints, the package assembly routed through them, and their tests
+moved under feature ownership.
+
+Runtime Security has four features. Setup-source authorization needs its Node
+path and observation access behind ports. Dispatch authority needs its external
+V1 wrapper and mapper moved from application into inbound adapters.
+`contained-turn-egress` is still a flat directory and needs real layer ownership
+with injected time. Module composition still performs validation, hashing and
+route-binding projection that the egress feature should own.
+
+Embedded Runtime is the host application. Its activation waits on the accepted
+result of the asynchronous setup assembly work, and then needs its real behavior
+separated from wiring: setup view projection, external input and output
+validation, the Provider Access and Runtime Security anti-corruption adapters,
+and runtime-access coordination. Process lifecycle, readiness and rollback
+legitimately stay with the host.
 
 The deterministic syntax-aware checker is
 `scripts/architecture/check-feature-modules.mjs`. Run
@@ -102,16 +269,20 @@ remove or reorder the active root gate. The exact candidate command reports
 zero production diagnostics without exceptions, deviations, extensions,
 wildcards, automatic widening, or scope changes.
 
-ADR-0013 is accepted at its exact governed path and is pinned in the immutable
-accepted-decision registry by the final SHA-256 of its accepted bytes. The
-profile is `active`, has no blockers, binds its authority to ADR-0013, records
-an empty exact governed-record set, and records these commands as evidence:
+ADR-0013, ADR-0017, ADR-0018 and ADR-0019 are accepted at their exact governed
+paths and are pinned in the immutable accepted-decision registry by the digest
+Foundation computes over their accepted bytes and metadata. The profile is
+`active`, has no blockers, binds its profile-wide activation authority to
+ADR-0013, names the two ownership decisions, records each module's own activation
+authority on the module, records an empty exact governed-record set, and records
+these commands as evidence:
 
 - fixture evidence: `pnpm test:feature-modules`;
 - zero-diagnostic production evidence: `pnpm architecture:feature-modules:candidate`;
 - blocking active gate: `pnpm architecture:feature-modules:active`.
 
 This evidence proves conformance only for `runtime-installation-discovery`,
-`contained-agent-turn`, and `contained-turn-access` within the two declared
-production roots and assembly files. It does not prove repository-wide Feature
-Module Standard conformance.
+`contained-agent-turn`, `contained-turn-access`, and `stable-filesystem-custody`
+within the three declared production roots and assembly files. It does not prove
+repository-wide Feature Module Standard conformance: Runtime Configuration,
+Runtime Security and Embedded Runtime remain pending.

@@ -1,8 +1,8 @@
-import type { StableFilesystemHandle as FileHandle } from "@agent-teams/filesystem-custody";
+import type { StableFilesystemHandle as FileHandle } from "@agent-teams/filesystem-custody/composition";
 import {
   publishStableDirectoryNoReplace,
   StableDirectoryPublicationUnsupportedError,
-} from "@agent-teams/filesystem-custody";
+} from "@agent-teams/filesystem-custody/composition";
 
 import {
   assertSameMountIdentity,

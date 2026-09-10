@@ -108,10 +108,12 @@ test("passive setup slice has no process, network, ambient env or write adapter"
   const filesystemCustodyRoot = join(
     repositoryRoot, "packages", "platform", "filesystem-custody", "src",
   );
+  const custodyFeature = join(filesystemCustodyRoot, "features", "stable-filesystem-custody");
   const files: string[] = [
     join(filesystemCustodyRoot, "index.ts"),
-    join(filesystemCustodyRoot, "stable-directory-capability.ts"),
-    join(filesystemCustodyRoot, "stable-path-custody.ts"),
+    join(filesystemCustodyRoot, "composition.ts"),
+    join(custodyFeature, "adapters", "outbound", "filesystem", "stable-directory-capability.ts"),
+    join(custodyFeature, "adapters", "outbound", "filesystem", "stable-path-custody.ts"),
   ];
   const walk = async (directory: string): Promise<void> => {
     for (const entry of await readdir(directory, { withFileTypes: true })) {

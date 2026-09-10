@@ -1,4 +1,4 @@
-import {initializeDarwinHostAcquisitionGuard} from "@agent-teams/filesystem-custody";
+import {initializeDarwinHostAcquisitionGuard} from "@agent-teams/filesystem-custody/composition";
 
 initializeDarwinHostAcquisitionGuard();
 

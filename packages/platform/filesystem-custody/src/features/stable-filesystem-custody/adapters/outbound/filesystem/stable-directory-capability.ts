@@ -1,3 +1,13 @@
+import type {
+  StableCustodyPlatform,
+  StableDirectoryMutationCapabilityDisposition,
+} from "../../../contracts/stable-filesystem-custody.js";
+
+// A drift between the contract union and the runtime's own platform union would
+// otherwise surface as a silently widened or narrowed published declaration.
+type Equals<Left, Right> = (<T>() => T extends Left ? 1 : 2) extends (<T>() => T extends Right ? 1 : 2) ? true : false;
+type Expect<T extends true> = T;
+export type CustodyPlatformUnionMatchesRuntime = Expect<Equals<NodeJS.Platform, StableCustodyPlatform>>;
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 
@@ -5,33 +15,11 @@ import { hasDarwinHostDescriptors, nativeHostMount, type StableFilesystemHandle 
 
 const MAX_FDINFO_BYTES = 16 * 1_024;
 
-export type StableDirectoryMutationCapability = LinuxStableDirectoryMutationCapability | {
-  readonly kind: "supported"; readonly platform: "darwin"; readonly version: 1;
-};
-
-interface LinuxStableDirectoryMutationCapability {
-  readonly descriptorRoot: "/proc/self/fd";
-  readonly kind: "supported";
-  readonly platform: "linux";
-  readonly version: 1;
-}
-
-export interface UnsupportedStableDirectoryMutationCapability {
-  readonly kind: "unsupported";
-  readonly platform: NodeJS.Platform;
-  readonly reason: string;
-  readonly version: 1;
-}
-
-export type StableDirectoryMutationCapabilityDisposition =
-  | StableDirectoryMutationCapability
-  | UnsupportedStableDirectoryMutationCapability;
-
 export const resolveStableDirectoryMutationCapability = (input: Readonly<{
   hasNativeHostDescriptors?: boolean;
   hasDirectoryOpen: boolean;
   hasNoFollowOpen: boolean;
-  platform: NodeJS.Platform;
+  platform: StableCustodyPlatform;
 }>): StableDirectoryMutationCapabilityDisposition => {
     if (
       input.platform === "linux" && input.hasDirectoryOpen && input.hasNoFollowOpen

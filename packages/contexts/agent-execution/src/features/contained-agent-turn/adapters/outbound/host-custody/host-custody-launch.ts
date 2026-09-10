@@ -14,7 +14,7 @@ import {
   resolve as resolvePath,
 } from "node:path";
 
-import { openStablePath } from "@agent-teams/filesystem-custody";
+import { openStablePath } from "@agent-teams/filesystem-custody/composition";
 
 import {
   HostCustodyFingerprintConflictError,

@@ -20,11 +20,12 @@
   },
   "fms": {
     "profile": "architecture/feature-module-standard/candidate-profile.json",
-    "sha256": "0cad5566f768567e6186dc8ae5768bfba5f2bc3edf18c85c5e668fad3dde7aad",
+    "sha256": "6ac48de5c8c10abbc8695adbf0553892f36804419afd4fe0c6508b05e3cc883a",
     "features": [
       "runtime-installation-discovery",
       "contained-agent-turn",
-      "contained-turn-access"
+      "contained-turn-access",
+      "stable-filesystem-custody"
     ]
   },
   "productionRoots": [
@@ -221,7 +222,7 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-files.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
         },
         {
@@ -392,7 +393,7 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-node-storage.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
         },
         {
@@ -407,7 +408,7 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/node-docker-egress-journal-storage.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
         },
         {
@@ -622,7 +623,7 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-route-durable-storage.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
         },
         {
@@ -632,7 +633,7 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-host-http-consumption-journal.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
         },
         {
@@ -642,7 +643,7 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-launch.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
         },
         {
@@ -1292,11 +1293,6 @@
       "relationships": [
         {
           "from": "packages/contexts/agent-execution/src/composition.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace-owner.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/composition.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
           "mode": "runtime"
         },
@@ -1307,7 +1303,7 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-native-files/codex-native-broker-file-installer.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "type-only"
         },
         {
@@ -1322,27 +1318,27 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-custody.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-custody.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "type-only"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-rehydration.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-rehydration.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "type-only"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-sealing.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "type-only"
         },
         {
@@ -1352,27 +1348,27 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-directory-publication.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-directory-publication.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "type-only"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-durable-file.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-handles.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "type-only"
         },
         {
@@ -1387,7 +1383,7 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-reads.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
         },
         {
@@ -1402,17 +1398,17 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-rehydration-filesystem.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "type-only"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-relative-directory.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "type-only"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-capability.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "type-only"
         },
         {
@@ -1422,12 +1418,12 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-closure.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "type-only"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-io.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "type-only"
         },
         {
@@ -1437,12 +1433,12 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-materialization.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "type-only"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-tree.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
         },
         {
@@ -1467,17 +1463,17 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/host-private-root-filesystem.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "type-only"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/host-private-root-owner.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/host-private-root-owner.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "type-only"
         },
         {
@@ -1507,12 +1503,12 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "type-only"
         },
         {
@@ -1841,21 +1837,6 @@
           "mode": "runtime"
         },
         {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/darwin-codex-effect-custody-owner.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-effect-custody.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/darwin-codex-effect-custody-owner.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/darwin-codex-effect-custody-owner.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/committed-dispatch-proof-v1.ts",
-          "mode": "type-only"
-        },
-        {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/claude-current-kernel-owner.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-current-kernel-entrypoint.ts",
           "mode": "runtime"
@@ -1989,6 +1970,21 @@
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/contained-turn-route-enforcement-capability.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
           "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/darwin-codex-effect-custody-owner.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-effect-custody.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/darwin-codex-effect-custody-owner.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/darwin-codex-effect-custody-owner.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/committed-dispatch-proof-v1.ts",
+          "mode": "type-only"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/darwin-codex-host-post-claim-preparation.ts",
@@ -2452,7 +2448,7 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/adapters/outbound/node-executable-file-observer.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
         },
         {
@@ -2588,29 +2584,14 @@
       "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
       "relationships": [
         {
-          "from": "packages/platform/filesystem-custody/src/index.ts",
-          "to": "packages/platform/filesystem-custody/src/host-descriptor.ts",
+          "from": "packages/platform/filesystem-custody/src/composition.ts",
+          "to": "packages/platform/filesystem-custody/src/features/stable-filesystem-custody/internal.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/platform/filesystem-custody/src/index.ts",
-          "to": "packages/platform/filesystem-custody/src/stable-directory-capability.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/platform/filesystem-custody/src/index.ts",
-          "to": "packages/platform/filesystem-custody/src/stable-directory-process-lock.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/platform/filesystem-custody/src/index.ts",
-          "to": "packages/platform/filesystem-custody/src/stable-directory-publication.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/platform/filesystem-custody/src/index.ts",
-          "to": "packages/platform/filesystem-custody/src/stable-path-custody.ts",
-          "mode": "runtime"
+          "to": "packages/platform/filesystem-custody/src/features/stable-filesystem-custody/index.ts",
+          "mode": "type-only"
         }
       ]
     },
@@ -2671,6 +2652,11 @@
         },
         {
           "from": "packages/contexts/runtime-configuration/src/composition.ts",
+          "to": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/adapters/outbound/node-configuration-digest.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-configuration/src/composition.ts",
           "to": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/adapters/outbound/strict-claude-code-json-parser.ts",
           "mode": "runtime"
         },
@@ -2681,12 +2667,22 @@
         },
         {
           "from": "packages/contexts/runtime-configuration/src/composition.ts",
+          "to": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/application/ports/outbound/configuration-digest.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/runtime-configuration/src/composition.ts",
           "to": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/composition/feature-module-factory.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/contexts/runtime-configuration/src/composition.ts",
           "to": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/adapters/outbound/codex-configuration-semantic-classifier-v1.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-configuration/src/composition.ts",
+          "to": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/adapters/outbound/node-configuration-digest.ts",
           "mode": "runtime"
         },
         {
@@ -2711,6 +2707,11 @@
         },
         {
           "from": "packages/contexts/runtime-configuration/src/composition.ts",
+          "to": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/application/ports/outbound/configuration-digest.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/runtime-configuration/src/composition.ts",
           "to": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/application/ports/outbound/configuration-source-reader.ts",
           "mode": "type-only"
         },
@@ -2721,12 +2722,12 @@
         },
         {
           "from": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/adapters/outbound/claude-code-configuration-source-reader-adapter.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
         },
         {
           "from": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/adapters/outbound/node-configuration-source-reader.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
         },
         {
@@ -2962,7 +2963,7 @@
         },
         {
           "from": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/adapters/outbound/node-path-canonicalizer.ts",
-          "to": "@agent-teams/filesystem-custody",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
         },
         {
@@ -3065,7 +3066,8 @@
       "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority",
       "packages/contexts/runtime-security/src/features/contained-turn-egress",
       "packages/contexts/runtime-security/src/features/provider-process-egress-authorization",
-      "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization"
+      "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization",
+      "packages/platform/filesystem-custody/src/features/stable-filesystem-custody"
     ]
   }
 }

@@ -6,6 +6,7 @@ import {
   createClaudeCodeConfigurationInspectionFeature,
   createClaudeCodeConfigurationSemanticClassifierV2,
   createClaudeCodeConfigurationSourceReaderAdapter,
+  createNodeClaudeCodeConfigurationDigest,
   createNodeConfigurationSourceReader,
   createStrictClaudeCodeJsonParser,
 } from "@agent-teams/runtime-configuration/composition";
@@ -56,6 +57,7 @@ export const createSyntheticClaudeOwners = (systemInstallations = false) => {
     },
   });
   const configuration = createClaudeCodeConfigurationInspectionFeature({
+    digest: createNodeClaudeCodeConfigurationDigest(),
     parser: createStrictClaudeCodeJsonParser(),
     semanticClassifier: createClaudeCodeConfigurationSemanticClassifierV2(),
     sourceIdentityKey: new Uint8Array(32).fill(7),

@@ -22,7 +22,10 @@ import {
   sameFilesystemIdentity,
 } from "./feature-module-paths.mjs";
 import { ACCEPTED_DECISIONS, CANDIDATE_MIGRATION_CODES, acceptedDecisionsFromRegistry, applyGovernedRecords, validateProfile } from "./feature-module-profile.mjs";
+import { curatedModuleImportIssues, detectCycles, recordObservedEdge, unusedEdgeIssues } from "./feature-module-edges.mjs";
 import { packagePolicyIssues } from "./feature-module-tests.mjs";
+import { activeGateIssues } from "./feature-module-root-gates.mjs";
+import { pendingModuleManifestIssues, workspaceClassificationIssues } from "./feature-module-workspace.mjs";
 
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const REPOSITORY_IDENTITY = await canonicalRoot(REPOSITORY_ROOT);
@@ -74,31 +77,6 @@ const featureForPath = (features, path) => features.find((feature) => path === f
 const layerForPath = (feature, path) => path.slice(feature.root.length + 1).split("/")[0];
 const hasUndeclaredSharedName = (path) => path.split("/").some((segment) => SHARED_NAMES.has(segment));
 
-const detectCycles = (edges, edgeLocations, kind) => {
-  const adjacency = new Map();
-  for (const edge of edges.filter((candidate) => candidate.kinds.includes(kind))) {
-    const targets = adjacency.get(edge.from) ?? [];
-    targets.push(edge.to);
-    adjacency.set(edge.from, targets.toSorted());
-  }
-  const cyclic = new Set();
-  const visit = (node, stack, active) => {
-    if (active.has(node)) {
-      const start = stack.indexOf(node);
-      const cycle = stack.slice(start);
-      for (let index = 0; index < cycle.length; index += 1) {cyclic.add(`${cycle[index]}->${cycle[(index + 1) % cycle.length]}`);}
-      return;
-    }
-    active.add(node); stack.push(node);
-    for (const target of adjacency.get(node) ?? []) {visit(target, stack, active);}
-    stack.pop(); active.delete(node);
-  };
-  for (const node of [...adjacency.keys()].toSorted()) {visit(node, [], new Set());}
-  return [...cyclic].flatMap((key) => (edgeLocations.get(`${kind}:${key}`) ?? []).map((location) => issue(
-    kind === "type" ? "FM_TYPE_CYCLE" : "FM_RUNTIME_CYCLE", location.path, location.line, `${kind} feature edge ${key} participates in a cycle`,
-  )));
-};
-
 const readProfile = async (root, profilePath) => {
   const inspected = await inspectRepositoryPath(root, profilePath);
   if (!inspected.ok) {
@@ -117,8 +95,8 @@ const readProfile = async (root, profilePath) => {
   catch { return { issues: [issue("FM_PROFILE_INVALID", profilePath, 1, "profile cannot be read or parsed deterministically")] }; }
 };
 
-const collectProductionFiles = async (root, productionRoots) => {
-  const files = [], issues = [], identities = new Map(), budget = { entries: 0, files: 0, sourceBytes: 0 };
+const collectProductionFiles = async (root, productionRoots, budget) => {
+  const files = [], issues = [], identities = new Map();
   let overflow = false;
   for (const productionRoot of productionRoots) {
     const inventory = await inventoryRepositoryFiles({
@@ -136,6 +114,8 @@ const collectProductionFiles = async (root, productionRoots) => {
 const profileFilesystemPathIssues = (profile) => {
   const paths = [
     ...profile.scope.productionRoots,
+    ...profile.scope.workspaceContainers,
+    ...profile.scope.productionModules.flatMap(({ moduleRoot, sourceRoot }) => moduleRoot === "." ? [sourceRoot] : [moduleRoot, sourceRoot]),
     ...profile.assemblyFiles,
     ...profile.features.flatMap((feature) => [feature.root, ...Object.values(feature.entrypoints ?? {})]),
   ];
@@ -307,22 +287,6 @@ const internalEntrypointIssues = ({ path, imported, sourceFeature, targetFeature
   return [issue("FM_INTERNAL_ENTRYPOINT_EXPORT", path, imported.line, `${sourceFeature.id} internal entrypoint may expose only its own feature` )];
 };
 
-const recordObservedEdge = ({ key, imported, path, observedEdges, edgeLocations }) => {
-  const kinds = observedEdges.get(key) ?? new Set();
-  kinds.add(imported.kind);
-  observedEdges.set(key, kinds);
-  const locationKey = `${imported.kind}:${key}`;
-  const locations = edgeLocations.get(locationKey) ?? [];
-  locations.push({ path, line: imported.line });
-  edgeLocations.set(locationKey, locations);
-};
-
-const unusedEdgeIssues = (declaredEdges, observedEdges, profilePath) => [...declaredEdges].flatMap(([key, kinds]) =>
-  [...kinds]
-    .filter((kind) => !observedEdges.get(key)?.has(kind))
-    .map((kind) => issue("FM_UNUSED_EDGE", profilePath, 1, `${kind} edge ${key} is declared but not observed`)),
-);
-
 const crossFeatureImportIssues = (context) => {
   const { path, imported, targetPath, sourceFeature, targetFeature, declaredEdges } = context;
   const issues = [];
@@ -383,6 +347,8 @@ const inspectImport = (context) => {
   }
   if (resolved.kind === "external") {return nonLocalImportIssues(context);}
   const targetPath = resolved.path;
+  const crossModule = curatedModuleImportIssues({ ...context, targetPath, issue, layerForPath });
+  if (crossModule) {return crossModule;}
   const targetFeature = featureForPath(features, targetPath);
   if (!targetFeature) {return outsideFeatureImportIssues({ ...context, targetPath, productionRoots });}
   const importContext = { ...context, targetPath, targetFeature };
@@ -405,28 +371,6 @@ const acceptedDecisionsForRoot = async (root) => {
   } catch {return new Map();}
 };
 
-const activeGateIssues = async (profile, root) => {
-  if (profile.status !== "active") {return [];}
-  const manifestPath = "package.json";
-  try {
-    const inspected = await inspectRepositoryPath(root, manifestPath);
-    if (!inspected.ok || inspected.metadata.size > CHECKER_LIMITS.sourceFileBytes) {throw new TypeError("invalid manifest");}
-    const manifest = parseDeterministicJson(await readFile(inspected.absolutePath, "utf8"));
-    const requiredPair = ["pnpm test:feature-modules", "pnpm architecture:feature-modules:active"];
-    const invalid = ["check", "check:fast"].some((name) => {
-      const steps = typeof manifest?.scripts?.[name] === "string" ? manifest.scripts[name].split(" && ") : [];
-      const fixtureIndex = steps.indexOf(requiredPair[0]);
-      return fixtureIndex < 0
-        || steps.lastIndexOf(requiredPair[0]) !== fixtureIndex
-        || steps[fixtureIndex + 1] !== requiredPair[1]
-        || steps.lastIndexOf(requiredPair[1]) !== fixtureIndex + 1;
-    });
-    return invalid ? [issue("FM_PROFILE_INVALID", manifestPath, 1, "active status requires the active checker immediately after the fixture suite in check and check:fast")] : [];
-  } catch {
-    return [issue("FM_PROFILE_INVALID", manifestPath, 1, "active status requires deterministic root check and check:fast scripts")];
-  }
-};
-
 export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath = DEFAULT_PROFILE, requiredStatus, acceptedDecisions } = {}) => {
   const rootIdentity = await canonicalRoot(root);
   if (!rootIdentity.ok) {return [filesystemIdentityIssue(issue, "<root>")];}
@@ -446,13 +390,18 @@ export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath 
   if (identityIssues.length) {findings.add(identityIssues); return findings.result().toSorted(compareIssues);}
 
   const productionRoots = profile.scope.productionRoots;
+  const declaredModules = new Map(profile.scope.productionModules.map((declared) => [declared.sourceRoot, declared]));
   const features = profile.features.map((feature) => ({ ...feature, root: portableRepositoryPath(feature.root) }));
   const assemblyFiles = new Set(profile.assemblyFiles);
   const declaredEdges = new Map(profile.featureEdges.map((edge) => [`${edge.from}->${edge.to}`, new Set(edge.kinds)]));
-  const observedEdges = new Map();
-  findings.add(await activeGateIssues(profile, rootIdentity));
+  const declaredModuleEdges = new Map(profile.moduleEdges.map((edge) => [`${edge.from}->${edge.to}`, new Set(edge.kinds)]));
+  const observedEdges = new Map(), observedModuleEdges = new Map(), moduleEdgeLocations = new Map();
+  findings.add(await activeGateIssues({ profile, root: rootIdentity, issue }));
+  const traversalBudget = { entries: 0, files: 0, sourceBytes: 0 };
+  findings.add(await workspaceClassificationIssues({ profile, root: rootIdentity, issue, budget: traversalBudget }));
+  findings.add(await pendingModuleManifestIssues({ profile, root: rootIdentity, issue }));
   const edgeLocations = new Map();
-  const inventory = await collectProductionFiles(rootIdentity, productionRoots);
+  const inventory = await collectProductionFiles(rootIdentity, productionRoots, traversalBudget);
   const allFiles = inventory.files;
   findings.add(inventory.issues);
   if (inventory.overflow) {findings.overflow("source scan");}
@@ -466,6 +415,7 @@ export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath 
     productionRoots,
     issue,
     pathIndex,
+    declaredModules,
   });
   findings.add(localPackageImports.issues);
   findings.add(await assemblyStructureIssues(profile.assemblyFiles, rootIdentity));
@@ -476,6 +426,8 @@ export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath 
   findings.add(await packagePolicyIssues({
     root: rootIdentity,
     productionRoots,
+    declaredModules,
+    declaredModuleEdges,
     features,
     issue,
     productionFiles: allFiles,
@@ -499,13 +451,17 @@ export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath 
       source: parsed.source,
     }));
     findings.add(assemblyGrammarIssues({ isAssembly, path, sourceFeature, program: parsed.program, source: parsed.source }));
-    for (const imported of parsed.imports) {findings.add(inspectImport({ features, isAssembly, sourceFeature, path, imported, declaredEdges, observedEdges, edgeLocations, localPackageImports, productionRoots, identityPaths }));}
+    for (const imported of parsed.imports) {findings.add(inspectImport({ features, isAssembly, sourceFeature, path, imported, declaredEdges, observedEdges, edgeLocations, localPackageImports, productionRoots, identityPaths, declaredModules, declaredModuleEdges, observedModuleEdges, moduleEdgeLocations }));}
     if (parsed.overflow) {findings.overflow("import"); break;}
   }
   const observed = [...observedEdges].map(([key, kinds]) => { const [from, to] = key.split("->"); return { from, to, kinds: [...kinds] }; });
-  findings.add(unusedEdgeIssues(declaredEdges, observedEdges, diagnosticProfilePath));
-  findings.add(detectCycles(observed, edgeLocations, "runtime"));
-  findings.add(detectCycles(observed, edgeLocations, "type"));
+  findings.add(unusedEdgeIssues(issue, declaredEdges, observedEdges, diagnosticProfilePath));
+  findings.add(detectCycles(issue, observed, edgeLocations, "runtime"));
+  findings.add(detectCycles(issue, observed, edgeLocations, "type"));
+  const observedModules = [...observedModuleEdges].map(([key, kinds]) => { const [from, to] = key.split("->"); return { from, to, kinds: [...kinds] }; });
+  findings.add(unusedEdgeIssues(issue, declaredModuleEdges, observedModuleEdges, diagnosticProfilePath));
+  findings.add(detectCycles(issue, observedModules, moduleEdgeLocations, "runtime", "module"));
+  findings.add(detectCycles(issue, observedModules, moduleEdgeLocations, "type", "module"));
   const governed = applyGovernedRecords(profile, withoutIdentityConsequences(findings.result()), diagnosticProfilePath).toSorted(compareIssues);
   return governed.filter((entry, index) => !index || compareIssues(entry, governed[index - 1]));
 };

@@ -15,7 +15,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 
-import { openStablePath } from "@agent-teams/filesystem-custody";
+import { openStablePath } from "@agent-teams/filesystem-custody/composition";
 import {
   createNodePathCanonicalizer,
   createSetupInspectionAuthorizationFeature,

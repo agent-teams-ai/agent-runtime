@@ -7,9 +7,9 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { withStableDirectoryProcessLock } from "../dist/stable-directory-process-lock.js";
-import { stableDirectoryMutationCapability } from "../dist/stable-directory-capability.js";
-import { publishStableDirectoryNoReplace } from "../dist/stable-directory-publication.js";
+import { withStableDirectoryProcessLock } from "../../../dist/features/stable-filesystem-custody/adapters/outbound/filesystem/stable-directory-process-lock.js";
+import { stableDirectoryMutationCapability } from "../../../dist/features/stable-filesystem-custody/adapters/outbound/filesystem/stable-directory-capability.js";
+import { publishStableDirectoryNoReplace } from "../../../dist/features/stable-filesystem-custody/adapters/outbound/filesystem/stable-directory-publication.js";
 
 const supported = process.platform === "linux" || process.platform === "darwin";
 const nativeTest = supported ? test : test.skip;

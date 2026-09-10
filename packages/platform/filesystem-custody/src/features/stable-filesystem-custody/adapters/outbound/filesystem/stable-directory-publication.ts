@@ -1,5 +1,6 @@
+import type { StableDirectoryPublicationOutcome } from "../../../contracts/stable-filesystem-custody.js";
 import type { FileHandle } from "node:fs/promises";
-import { join } from "node:path";
+import { stableFilesystemNativeArtifactPath } from "../native/stable-filesystem-native-artifact.js";
 
 export class StableDirectoryPublicationUnsupportedError extends Error {
   public constructor(message: string) {
@@ -14,8 +15,6 @@ export class StableDirectoryPublicationAmbiguousResidueError extends Error {
     this.name = "StableDirectoryPublicationAmbiguousResidueError";
   }
 }
-
-export type StableDirectoryPublicationOutcome = "created" | "existing";
 
 interface NativePublicationBinding {
   publishNoReplace(
@@ -41,7 +40,7 @@ const loadNativeBinding = (): NativePublicationBinding => {
   if (nativeBinding !== undefined) {return nativeBinding;}
   const loaded = { exports: {} } as NodeModule;
   try {
-    process.dlopen(loaded, join(import.meta.dirname, "rename-no-replace.node"));
+    process.dlopen(loaded, stableFilesystemNativeArtifactPath());
   } catch {
     throw new StableDirectoryPublicationUnsupportedError(
       "the qualified stable directory publication binding is unavailable",

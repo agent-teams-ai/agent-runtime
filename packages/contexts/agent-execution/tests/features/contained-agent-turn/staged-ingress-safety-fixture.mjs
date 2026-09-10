@@ -14,7 +14,7 @@ const blocked = new Map([
   ["node:dns/promises", ["lookup", "resolve", "Resolver"]],
   ["node:dgram", ["createSocket"]],
   ["node:worker_threads", ["Worker"]],
-  ["@agent-teams/filesystem-custody", ["openStablePath", "capturePathLineage", "pathLineagesEqual"]],
+  ["@agent-teams/filesystem-custody/composition", ["openStablePath", "capturePathLineage", "pathLineagesEqual"]],
 ]);
 
 registerHooks({

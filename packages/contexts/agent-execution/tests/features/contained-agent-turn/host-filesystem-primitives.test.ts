@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { hasDarwinHostDescriptors } from "@agent-teams/filesystem-custody";
+import { hasDarwinHostDescriptors } from "@agent-teams/filesystem-custody/composition";
 import { scanContainedTurnWorkspace } from "../../../dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-tree.js";
 import { bindContainedTurnRoot, openBoundDirectory } from "../../../dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.js";
 import { writeImmutableFileAt, readStableFileAt, quarantineAmbiguousStagingDirectory } from "../../../dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-durable-file.js";

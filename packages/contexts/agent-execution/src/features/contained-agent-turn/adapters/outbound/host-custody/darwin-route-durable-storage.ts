@@ -1,7 +1,7 @@
 import { constants, openSync, closeSync, fstatSync, lstatSync, realpathSync, fsyncSync, writeSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { createHash } from "node:crypto";
-import { withStableDirectoryProcessLock } from "@agent-teams/filesystem-custody";
+import { withStableDirectoryProcessLock } from "@agent-teams/filesystem-custody/composition";
 
 export interface DarwinTrustedDirectory { readonly path: string; readonly dev: string; readonly ino: string }
 const reject = (): never => {throw new Error("Darwin durable route storage unavailable; reconcile original locator");};

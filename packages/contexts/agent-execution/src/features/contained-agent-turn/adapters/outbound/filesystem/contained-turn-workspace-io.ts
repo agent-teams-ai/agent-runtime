@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { StableFilesystemHandle as FileHandle } from "@agent-teams/filesystem-custody";
+import type { StableFilesystemHandle as FileHandle } from "@agent-teams/filesystem-custody/composition";
 import { basename, dirname, isAbsolute, resolve } from "node:path";
 
 import type { ContainedTurnScope } from "../../../contracts/contained-agent-turn.js";

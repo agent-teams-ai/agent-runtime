@@ -167,6 +167,42 @@ export const changes = Object.freeze([
     id: "runtime-setup-current-product-anchor",
     revision: "e615369d50ed73cac6e00909fcc8f6705b0d6973",
   }),
+  Object.freeze({
+    id: "custody-test-seam-relocation",
+    revision: "c75940cccc7f0d03ffd776dbe2efee9446a90fa8",
+  }),
+  Object.freeze({
+    id: "production-module-role-classification",
+    revision: "01dc2418c963586d43e92221a01ebcdb11e756f4",
+  }),
+  Object.freeze({
+    id: "custody-composition-surface",
+    revision: "3adac9884ae86d6acbe7fd92c5a5fdadd0119dbd",
+  }),
+  Object.freeze({
+    id: "custody-feature-activation",
+    revision: "09cbb717578a39e5788a4f43ca950bcf91e2ef67",
+  }),
+  Object.freeze({
+    id: "configuration-digest-port",
+    revision: "b7c5817d93c0d0dd6553739ebb67154dd42251b0",
+  }),
+  Object.freeze({
+    id: "reviewed-scope-guard",
+    revision: "2184584a8f3fcebfe7721024bcb2e81ce76127bf",
+  }),
+  Object.freeze({
+    id: "codex-application-models",
+    revision: "6dfffbff6abbe28ffbb8fb528d13647b3e09e013",
+  }),
+  Object.freeze({
+    id: "claude-code-vocabulary-parity",
+    revision: "24755bd012239973ef043459c2dd2960406baa33",
+  }),
+  Object.freeze({
+    id: "codex-boundary-test-hardening",
+    revision: "65fb9b836862f82ab8bc905cb6e244168505c868",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -177,12 +213,12 @@ export const sourceRevisionArtifactDigests = Object.freeze({
     sha256: "2f185db9f8cd0bd29ed28b08d862dbf23846ce19e14c657d8e6afad9c3e769fc",
   }),
   sources: Object.freeze({
-    fileCount: 597,
-    sha256: "cd5d24caf5a8385b6c4249c2588c71a2c74e6b474573f9de644394fdd3ab50fe",
+    fileCount: 661,
+    sha256: "ce31be82d931ca2de943fc16e2b6a6be9f822902ee9dd8352332cd866cf6dad0",
   }),
   tests: Object.freeze({
-    fileCount: 553,
-    sha256: "ca4366ba19394483798602ac8af171e15509ceb72dcd7543128c10395838a757",
+    fileCount: 610,
+    sha256: "a81f56010117ed0e89d9bfb5b68ab3239ff00930bbaa9b46f2a35b3221668282",
   }),
 });
 

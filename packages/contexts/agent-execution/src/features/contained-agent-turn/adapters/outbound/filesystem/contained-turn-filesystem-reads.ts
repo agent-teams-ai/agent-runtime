@@ -1,5 +1,5 @@
 import { opendir } from "node:fs/promises";
-import { isNativeHostDescriptor, nativeHostNames, type StableFilesystemHandle as FileHandle } from "@agent-teams/filesystem-custody";
+import { isNativeHostDescriptor, nativeHostNames, type StableFilesystemHandle as FileHandle } from "@agent-teams/filesystem-custody/composition";
 
 import {
   descriptorChildPath,

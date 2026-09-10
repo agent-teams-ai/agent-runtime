@@ -1,7 +1,7 @@
 import { constants, type BigIntStats, type Dirent } from "node:fs";
 import { lstat, open, opendir, realpath, type FileHandle } from "node:fs/promises";
 import { isAbsolute } from "node:path";
-import { openStablePath, withStableDirectoryProcessLock } from "@agent-teams/filesystem-custody";
+import { openStablePath, withStableDirectoryProcessLock } from "@agent-teams/filesystem-custody/composition";
 import { v4Digest } from "./host-http-egress-v4-codec.js";
 import { HOST_HTTP_EGRESS_V4_LIMITS as LIMITS, HostHttpEgressV4Error, type HostHttpEgressV4Storage } from "./host-http-egress-v4-types.js";
 

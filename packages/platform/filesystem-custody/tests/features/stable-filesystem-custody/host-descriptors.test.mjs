@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, rm, rename, symlink, writeFile, stat, readdir, copyFile, realpath, chmod, lstat, readlink, readFile } from "node:fs/promises";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { constants as osConstants, tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath,pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import nodeTest from "node:test";
-import { hasDarwinHostDescriptors, openNativeHostRoot, decodeHostNameBytes } from "../dist/host-descriptor.js";
+import { hasDarwinHostDescriptors, openNativeHostRoot, decodeHostNameBytes } from "../../../dist/features/stable-filesystem-custody/adapters/outbound/filesystem/host-descriptor.js";
 
 const loaded = { exports: {} };
-process.dlopen(loaded, fileURLToPath(new URL("../dist/rename-no-replace.node", import.meta.url)));
+process.dlopen(loaded, fileURLToPath(new URL("../../../dist/rename-no-replace.node", import.meta.url)));
 const native = loaded.exports;
 // The shared suite may execute on Darwin only inside the explicitly guarded
 // disposable worker. Never confine the main test runner.
@@ -48,12 +48,23 @@ test("Host native capability requires actual Apple binding methods", () => {
 test("Host capability rejects a missing adjacent native binding", async t => {
   const path = await mkdtemp(join(tmpdir(), "ar-host-no-binding-"));
   t.after(() => rm(path, { recursive: true, force: true }));
-  const modulePath = join(path, "host-descriptor.mjs");
-  await copyFile(new URL("../dist/host-descriptor.js", import.meta.url), modulePath);
-  await copyFile(new URL("../dist/stable-directory-publication.js", import.meta.url), join(path, "stable-directory-publication.js"));
-  const isolated = await import(pathToFileURL(modulePath).href);
-  assert.equal(isolated.hasDarwinHostDescriptors(), false);
-  assert.throws(() => isolated.openNativeHostRoot(), /unavailable/);
+  // Mirror the emitted depth so the feature's own native resolver lands on a
+  // sibling directory that has no qualified artifact, which is the real failure
+  // this test reproduces.
+  const outbound = join(path, "dist/features/stable-filesystem-custody/adapters/outbound");
+  await mkdir(join(outbound, "filesystem"), { recursive: true });
+  await mkdir(join(outbound, "native"), { recursive: true });
+  const source = new URL("../../../dist/features/stable-filesystem-custody/adapters/outbound/", import.meta.url);
+  const modulePath = join(outbound, "filesystem/host-descriptor.mjs");
+  await copyFile(new URL("filesystem/host-descriptor.js", source), modulePath);
+  await copyFile(new URL("filesystem/stable-directory-publication.js", source), join(outbound, "filesystem/stable-directory-publication.js"));
+  await copyFile(new URL("native/stable-filesystem-native-artifact.js", source), join(outbound, "native/stable-filesystem-native-artifact.js"));
+  const worker = spawnSync(process.execPath, [
+    fileURLToPath(new URL("./host-descriptor-isolation-worker.mjs", import.meta.url)),
+    modulePath,
+  ], { encoding: "utf8", timeout: 15_000 });
+  assert.ifError(worker.error);
+  assert.equal(worker.status, 0, worker.stderr);
 });
 
 test("native inspection refuses a FIFO without opening it", async t => {

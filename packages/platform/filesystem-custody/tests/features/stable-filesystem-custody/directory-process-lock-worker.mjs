@@ -1,5 +1,5 @@
 import { open } from 'node:fs/promises';
-import { withStableDirectoryProcessLock } from '../dist/stable-directory-process-lock.js';
+import { withStableDirectoryProcessLock } from '../../../dist/features/stable-filesystem-custody/adapters/outbound/filesystem/stable-directory-process-lock.js';
 
 const directory = await open(process.argv[2], 'r');
 try {

@@ -32,7 +32,7 @@ import {
   readStableDirectoryMountIdentity,
   resolveStableDirectoryMutationCapability,
   StableDirectoryPublicationAmbiguousResidueError,
-} from "../dist/index.js";
+} from "../../../dist/composition.js";
 
 const execFile = promisify(execFileCallback);
 const publicationCrashWorker = fileURLToPath(new URL(
@@ -365,7 +365,7 @@ test("Native no-replace recovery never moves arbitrary deterministic-name residu
 test("native publication rejects malformed names and descriptors before namespace mutation", async t => {
   if (process.platform !== "linux" && process.platform !== "darwin") {t.skip(); return;}
   const loaded = { exports: {} } as NodeModule;
-  process.dlopen(loaded, fileURLToPath(new URL("../dist/rename-no-replace.node", import.meta.url)));
+  process.dlopen(loaded, fileURLToPath(new URL("../../../dist/rename-no-replace.node", import.meta.url)));
   const binding = loaded.exports as {
     publishNoReplace(...args: readonly unknown[]): number;
   };
