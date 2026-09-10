@@ -1,14 +1,14 @@
-import {types} from "node:util";
 import type {CommittedDispatchProofV1} from "../domain/committed-dispatch-proof-v1.js";
 import type {CodexEffectCustodyAuthority, CodexEffectCustodyExecution, CodexEffectCustodyRequest}
   from "../adapters/outbound/codex-app-server/codex-app-server-effect-custody.js";
-import {inspectDarwinNativeExecutionLease, inspectDarwinNativeLaunchObservation, assertDarwinNativeExecutionClaim, hostHttpAbortOperations,
+import {inspectDarwinNativeExecutionLease, inspectDarwinNativeLaunchObservation, assertDarwinNativeExecutionClaim,
+  hostHttpAbortOperations, isNodeProxy,
   type DarwinNativeExecutionLease} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 
 const executionFields = ["attemptId", "custodyRef", "effectId", "operationId", "workspaceRef"] as const;
 const issued = new WeakSet<object>();
 const captureExecution = (execution: CodexEffectCustodyExecution): CodexEffectCustodyExecution => {
-  if (!execution || typeof execution !== "object" || types.isProxy(execution) ||
+  if (!execution || typeof execution !== "object" || isNodeProxy(execution) ||
       Object.getPrototypeOf(execution) !== Object.prototype) {
     throw new TypeError("Darwin execution must be an exact inert data record");
   }
@@ -60,7 +60,7 @@ export const createDarwinCodexEffectCustodyOwner = () => {
       // PG receiver's committed claim. Caller-shaped evidence cannot issue it.
       // Reject proxy traps before invoking the native proof comparator. Its
       // successful comparison establishes that every proof field is inert data.
-      if (!proof || typeof proof !== "object" || types.isProxy(proof)) {
+      if (!proof || typeof proof !== "object" || isNodeProxy(proof)) {
         throw new TypeError("Darwin committed proof must be inert data");
       }
       assertDarwinNativeExecutionClaim(lease, proof);
