@@ -410,3 +410,18 @@ test("native abort subscriptions stay in physical adapters, never core or outer 
       ["architecture.source-dependencies.forbidden-builtin-dependency"], path);
   }
 });
+
+
+test("Host custody cannot import the filesystem workspace owner backwards", async () => {
+  const owner = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace-owner.ts";
+  for (const prefix of ["import", "import type {} from"]) {
+    const diagnostics = await analyzeFixture({
+      [paths.host]: `${prefix} '../filesystem/node-contained-turn-workspace-owner.js';\n`,
+      [owner]: "export {};\n",
+    });
+    assert.deepEqual(rules(diagnostics).toSorted(), [
+      "architecture.source-dependencies.cross-boundary-local-import-not-entrypoint",
+      "architecture.source-dependencies.forbidden-boundary-dependency",
+    ]);
+  }
+});

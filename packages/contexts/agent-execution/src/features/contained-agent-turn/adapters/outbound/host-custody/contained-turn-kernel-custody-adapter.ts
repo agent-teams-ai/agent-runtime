@@ -1,3 +1,5 @@
+import { types } from "node:util";
+import { isNativeHostCustodyWorkspaceAuthority, inspectNativeHostCustodyWorkspaceAuthority } from "./native-host-custody-workspace-authority.js";
 import { KernelOpenAttempts, type KernelOpenAttempt } from "./contained-turn-kernel-custody-open-attempts.js";
 import { containedTurnIdentity } from "../../../domain/contained-turn-identities.js";
 import type { ContainedTurnProof } from "../../../domain/contained-turn-proofs.js";
@@ -132,14 +134,22 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     workspaceAuthority: HostCustodyReservationInput["workspaceAuthority"],
     attempt: KernelOpenAttempt,
   ): ReturnType<ContainedTurnKernelCustodyPort["open"]> {
-    if (workspaceAuthority.canonicalPath.length === 0 || workspaceAuthority.descriptorPath.length === 0 ||
-        workspaceAuthority.identity.mountId.length === 0 || input.intentMode !== "analysis" && input.intentMode !== "workspace-write") {
+    if (isNativeHostCustodyWorkspaceAuthority(workspaceAuthority)) {
+      inspectNativeHostCustodyWorkspaceAuthority(workspaceAuthority, input);
+    } else if (types.isProxy(workspaceAuthority) || !("descriptorPath" in workspaceAuthority) || workspaceAuthority.canonicalPath.length === 0 ||
+        workspaceAuthority.descriptorPath.length === 0 || workspaceAuthority.identity.mountId.length === 0) {
+      throw new TypeError("Host Custody scoped workspace authority is unavailable");
+    }
+    if (input.intentMode !== "analysis" && input.intentMode !== "workspace-write") {
       throw new TypeError("Host Custody scoped workspace authority is unavailable");
     }
     const providerBinding = projectProviderBinding(input);
     const plan = await this.#attemptOwner.prepare({ kernel: input, providerBinding, workspaceAuthority });
     const authority = Object.freeze({ intentMode: input.intentMode, workspaceRef: workspaceAuthority.canonicalPath });
     if (attempt.closed) {throw new TypeError("Host Custody open was cut off before acquisition");}
+    if (isNativeHostCustodyWorkspaceAuthority(workspaceAuthority)) {
+      inspectNativeHostCustodyWorkspaceAuthority(workspaceAuthority, input);
+    }
     // From this point even a rejected or malformed raw response may own resources.
     attempt.acquisitionPossible = true;
     return this.#reserve(input, authority, providerBinding, plan, workspaceAuthority);
