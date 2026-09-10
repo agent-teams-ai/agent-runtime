@@ -159,6 +159,7 @@ export interface HostCustodyEvidence {
 
 export interface HostCustodyEvidenceRegistry {
   evidence(custodyRef: string): HostCustodyEvidence | undefined;
+  evidenceForAttempt?(input: Readonly<{operationId: string; attemptId: string}>): HostCustodyEvidence | undefined;
 }
 
 export interface HostCustodyProcessIdentityProof {

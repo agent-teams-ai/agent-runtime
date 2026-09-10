@@ -4,9 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import { syncBuiltinESMExports } from "node:module";
 import { test, after } from "node:test";
-import { DarwinRouteDurableStorage, darwinDigest, inspectDarwinRouteResidue } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-route-durable-storage.js";
+import { DarwinRouteDurableStorage, darwinDigest, inspectDarwinRouteRequestInventory, inspectDarwinRouteResidue } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-route-durable-storage.js";
 import { createDarwinHostHttpConsumptionJournal } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/darwin-host-http-consumption-journal.js";
 import { DarwinRouteLifecycleJournal } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-route-lifecycle-journal.js";
+import {ids, openInput} from "./support/current-provider-owner-fixture.ts";
+import {committedDispatchProofFixture} from "./support/committed-dispatch-proof-fixture.ts";
 
 // Actual emitted adapters + disposable filesystem; only platform/ancestor trust
 // and native lock binding are simulated. This is not Darwin storage evidence.
@@ -39,6 +41,51 @@ const envelope = {tenantId: "tenant", projectId: "project", operationId: "operat
   custodyId: "custody", hostBootId: "boot", generation: "generation", authorityVectorDigest: "vector", listenerIdentity: "listener"};
 const key = {namespace: "provider-process-egress/v2" as const, tenantId: "tenant", projectId: "project", operationId: "operation", boundaryUseId: "use"};
 const fingerprint = `sha256:${"a".repeat(64)}`;
+
+const routeProof = () => {
+  const operation = ids("codex", "darwin-route-inventory");
+  const open = openInput(operation, "codex", {provider: "codex", adapterRevision: "adapter:test",
+    binaryRevision: "binary:test", capabilityManifestRevision: "manifest:test"});
+  return committedDispatchProofFixture(open, {hostBootId: "host-boot:test", hostInstanceId: "host-instance:test",
+    hostCustodyProof: {kind: "host_custody", proofId: "proof:host-custody", custodyId: open.custodyId,
+      hostBootId: "host-boot:test", hostInstanceId: "host-instance:test"}} as never);
+};
+
+test("retired Darwin lifecycle exposes only its exact bounded request identities", async t => {
+  const f = fixture(); t.after(f.cleanup);
+  const proof = routeProof();
+  const identity = {tenantId: proof.tenantId, projectId: proof.projectId, operationId: proof.operationId,
+    attemptId: proof.attemptId, custodyId: proof.custodyId};
+  const lifetime = {signal: new AbortController().signal, hostLifecycleGenerationSha256: "a".repeat(64),
+    committedDispatchProof: proof};
+  const journal = new DarwinRouteLifecycleJournal(f.store, lifetime as never); await journal.prepare();
+  journal.record("request_reserved", {requestId: "request-1"});
+  journal.record("request_reserved", {requestId: "request-2"});
+  assert.deepEqual(inspectDarwinRouteRequestInventory(f.store.path, identity), {kind: "unknown"});
+  assert.equal(await journal.close(true), true);
+  const inventory = inspectDarwinRouteRequestInventory(f.store.path, identity);
+  assert.deepEqual(inventory, {kind: "closed", requestIds: ["request-1", "request-2"]});
+  assert.ok(inventory.kind === "closed" && Object.isFrozen(inventory.requestIds));
+  for (const field of Object.keys(identity) as (keyof typeof identity)[]) {
+    assert.deepEqual(inspectDarwinRouteRequestInventory(f.store.path, {...identity, [field]: "foreign"}), {kind: "unknown"});
+  }
+  assert.deepEqual(inspectDarwinRouteRequestInventory(f.store.path, {...identity, extra: "field"} as never), {kind: "unknown"});
+});
+
+test("Darwin request inventory rejects duplicate, malformed and noncanonical journal identities", async t => {
+  for (const requests of [["duplicate", "duplicate"], ["bad/request"], Array.from({length: 257}, (_, i) => `request-${i}`)]) {
+    const f = fixture(); t.after(f.cleanup);
+    const proof = routeProof();
+    const identity = {tenantId: proof.tenantId, projectId: proof.projectId, operationId: proof.operationId,
+      attemptId: proof.attemptId, custodyId: proof.custodyId};
+    const lifetime = {signal: new AbortController().signal, hostLifecycleGenerationSha256: "a".repeat(64),
+      committedDispatchProof: proof};
+    const journal = new DarwinRouteLifecycleJournal(f.store, lifetime as never); await journal.prepare();
+    for (const requestId of requests) {journal.record("request_reserved", {requestId});}
+    assert.equal(await journal.close(true), true);
+    assert.deepEqual(inspectDarwinRouteRequestInventory(f.store.path, identity), {kind: "unknown"});
+  }
+});
 
 test("Darwin synchronous consumption persists before return, duplicates burn once and conflicts quarantine", async t => {
   const f = fixture(); t.after(f.cleanup); await f.store.open(); t.after(() => f.store.close());

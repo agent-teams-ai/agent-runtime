@@ -82,7 +82,9 @@ test("same actual reservation prepares/finalizes before guardian and installs af
   assert.ok(f.records.indexOf("prepared") < f.records.indexOf("guardian_allocation_intent"));
   assert.ok(f.records.indexOf("provider_exec_intent") < f.records.indexOf("final_image_installed"));
   assert.equal((launched.sent.find(message => message.type === "launch")!.darwinRoute as {digest: string}).digest, f.projection.digest);
-  assert.equal(f.owner.firstWrite.reserve("request").consume(), true);
+  const firstWrite = f.owner.firstWrite.reserve("request");
+  assert.equal(f.records.at(-1), "request_reserved");
+  assert.equal(firstWrite.consume(), true);
   assert.throws(() => f.owner.firstWrite.reserve("request")); assert.equal(f.owner.state, "cut");
 });
 

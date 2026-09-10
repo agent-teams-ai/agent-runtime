@@ -155,8 +155,11 @@ export class DarwinSeatbeltRouteOwner {
   public readonly firstWrite: HttpEgressRouteFirstWrite = Object.freeze({reserve: (requestId: string) => {
     try {
       this.assertInstalled();
-      if (typeof requestId !== "string" || requestId.length < 1 || requestId.length > 128 ||
+      if (typeof requestId !== "string" || !/^[A-Za-z0-9:._-]{1,128}$/u.test(requestId) ||
           this.#requests.has(requestId) || this.#requests.size >= 256) {rejected();}
+      // The fsynced lifecycle owner records identity before first-write
+      // authority becomes observable. Lost acknowledgement still burns it.
+      this.journal.record("request_reserved", {requestId});
       this.#requests.add(requestId); let burned = false;
       return Object.freeze({consume: () => {
         if (burned) {this.cutoff(); return false;} burned = true;

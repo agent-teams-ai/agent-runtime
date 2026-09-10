@@ -44,7 +44,9 @@ export {PostgresHttpEgressEvidence, initializePostgresHttpEgressEvidence, type P
 export {createNodeHostHttpConsumptionJournal} from "./egress/node-host-http-consumption-journal.js";
 
 export {NodeProviderProcessCustodyCore} from "./node-provider-process-custody-core.js";
-export {DarwinRouteDurableStorage, darwinDigest, type DarwinTrustedDirectory} from "./darwin-route-durable-storage.js";
+export {DarwinRouteDurableStorage, darwinDigest, inspectDarwinRouteRequestInventory,
+  type DarwinTrustedDirectory, type DarwinRouteRequestInventoryIdentity,
+  type DarwinRouteRequestInventory} from "./darwin-route-durable-storage.js";
 export {DarwinRouteLifecycleJournal} from "./darwin-route-lifecycle-journal.js";
 export {DarwinSeatbeltRouteOwner} from "./darwin-seatbelt-route-owner.js";
 export {pinDarwinExecutable, createDarwinSeatbeltProjection} from "./darwin-seatbelt-launch-projection.js";

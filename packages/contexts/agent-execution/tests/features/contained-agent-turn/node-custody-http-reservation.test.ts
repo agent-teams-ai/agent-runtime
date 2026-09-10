@@ -4,6 +4,21 @@ import {readCustodyStartAdmission} from "../../../dist/features/contained-agent-
 import {getEventListeners} from "node:events";
 import {Core, Kernel, deferred, fixture, startInput, tick} from "./node-custody-http-reservation-fixture.ts";
 
+test("attempt evidence lookup is exact, inert and does not disclose the private custody reference", async () => {
+  const f = fixture();
+  await f.reserve();
+  const identity = {operationId: f.identity.operationId, attemptId: f.identity.attemptId};
+  const evidence = f.core.evidenceForAttempt(identity);
+  assert.ok(evidence); assert.ok(Object.isFrozen(evidence));
+  assert.equal("custodyRef" in evidence, false);
+  assert.equal(f.core.evidenceForAttempt({...identity, operationId: "operation:foreign"}), undefined);
+  assert.equal(f.core.evidenceForAttempt({...identity, attemptId: "attempt:foreign"}), undefined);
+  assert.throws(() => f.core.evidenceForAttempt({...identity, extra: "field"} as never), /identity is invalid/u);
+  assert.throws(() => f.core.evidenceForAttempt(new Proxy(identity, {}) as never), /inert data record/u);
+  assert.throws(() => f.core.evidenceForAttempt(Object.defineProperty({}, "operationId", {get() {throw new Error("trap");}}) as never),
+    /accessors are unavailable/u);
+});
+
 test("reservation identity belongs to the same LiveCustody before and after delegated start", async () => {
   const f = fixture();
   const {custodyRef} = await f.reserve();

@@ -165,6 +165,27 @@ export class NodeProviderProcessCustodyCore implements
     if (live === undefined || live.fingerprint === undefined) {return undefined;}
     return snapshotEvidence(live);
   }
+  /** Inert owner lookup for recovery callers that retain the public attempt
+   * identity but never receive the Host-private custody reference. */
+  public evidenceForAttempt(input: Readonly<{operationId: string; attemptId: string}>): HostCustodyEvidence | undefined {
+    input = custodyDataRecord(input);
+    const keys = Reflect.ownKeys(input);
+    if (keys.length !== 2 || !keys.includes("operationId") || !keys.includes("attemptId") ||
+        typeof input.operationId !== "string" || !/^[A-Za-z0-9:._-]{1,192}$/u.test(input.operationId) ||
+        typeof input.attemptId !== "string" || !/^[A-Za-z0-9:._-]{1,192}$/u.test(input.attemptId)) {
+      throw new TypeError("Host Custody attempt evidence identity is invalid");
+    }
+    const live = this.#byAttempt.get(input.attemptId);
+    const tombstone = this.#tombstonesByAttempt.get(input.attemptId);
+    // A valid owner has exactly one binding for an attempt. Ambiguous internal
+    // state cannot be projected as evidence for either operation.
+    if (live !== undefined && tombstone !== undefined) {return undefined;}
+    if (tombstone !== undefined) {
+      return tombstone.operationId === input.operationId ? tombstone.evidence : undefined;
+    }
+    return live?.operationId === input.operationId && live.fingerprint !== undefined
+      ? snapshotEvidence(live) : undefined;
+  }
 
   public async release(input: {
     readonly attemptId: string;
