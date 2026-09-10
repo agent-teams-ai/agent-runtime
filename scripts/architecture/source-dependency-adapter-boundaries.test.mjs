@@ -193,6 +193,7 @@ test("transitional boundaries and adapter permissions remain exact", () => {
   const claude = boundariesById.get("adapter.agent-execution.claude-agent-sdk");
   const delegation = boundariesById.get("adapter.agent-execution.provider-delegation-ports");
   const production = boundariesById.get("production.agent-execution");
+  const composition = boundariesById.get("composition.agent-execution.contained-turn");
 
   assert.deepEqual(legacy.roots, [dirname(paths.legacy)]);
   assert.deepEqual(legacy.entrypoints, [paths.legacy]);
@@ -218,6 +219,23 @@ test("transitional boundaries and adapter permissions remain exact", () => {
   assert.ok(!claude.allowedBoundaries.includes("adapter.agent-execution.host-custody"));
   assert.ok(!claude.allowedBoundaries.includes("adapter.agent-execution.legacy-contained-turn-ports"));
   assert.ok(!claude.allowedBoundaries.includes("production.agent-execution"));
+  assert.deepEqual(composition.roots, [
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/authority-owner-boundary.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-credential-output-inventory.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
+  ]);
+  assert.deepEqual(composition.entrypoints, []);
+  assert.deepEqual(composition.allowedBoundaries, [
+    "adapter.agent-execution.host-custody",
+    "core.agent-execution.contained-turn",
+  ]);
+  assert.deepEqual(composition.allowedPackages, []);
+  assert.deepEqual(composition.allowedBuiltins, ["node:util"]);
+  assert.deepEqual(composition.allowedRuntimeReferences, []);
   assert.deepEqual(production.allowedBoundaries, [
     "adapter.agent-execution.claude-agent-sdk",
     "adapter.agent-execution.codex-app-server",
@@ -227,6 +245,7 @@ test("transitional boundaries and adapter permissions remain exact", () => {
     "adapter.agent-execution.provider-delegation-ports",
     "core.agent-execution.contained-turn",
   ]);
+  assert.ok(!production.allowedBuiltins.includes("node:util"));
   assert.ok(!production.entrypoints.includes(paths.legacy));
 });
 
@@ -235,7 +254,7 @@ test("Docker custody uses only the engine port and explicit residue construction
   const custody = boundariesById.get("adapter.agent-execution.docker-custody");
   const json = boundariesById.get("adapter.agent-execution.docker-json");
 
-  assert.deepEqual(engine.entrypoints, [paths.dockerConstruction, paths.dockerPort]);
+  assert.deepEqual(engine.entrypoints.toSorted(), [paths.dockerConstruction, paths.dockerPort].toSorted());
   assert.deepEqual(engine.allowedBoundaries, ["adapter.agent-execution.docker-json"]);
   assert.deepEqual(engine.allowedPackages, []);
   assert.deepEqual(engine.allowedRuntimeReferences, []);

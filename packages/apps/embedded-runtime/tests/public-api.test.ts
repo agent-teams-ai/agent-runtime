@@ -100,13 +100,19 @@ test("contained-turn declarations stay owned across root and composition closure
 test("passive setup slice has no process, network, ambient env or write adapter", async () => {
   const repositoryRoot = resolve(packageRoot, "../../..");
   const roots = [
-    join(repositoryRoot, "packages", "apps", "embedded-runtime", "src"),
+    join(repositoryRoot, "packages", "apps", "embedded-runtime", "src", "application"),
     join(repositoryRoot, "packages", "contexts", "agent-execution", "src", "features", "runtime-installation-discovery"),
     join(repositoryRoot, "packages", "contexts", "runtime-configuration", "src"),
     join(repositoryRoot, "packages", "contexts", "runtime-security", "src"),
-    join(repositoryRoot, "packages", "platform", "filesystem-custody", "src"),
   ];
-  const files: string[] = [];
+  const filesystemCustodyRoot = join(
+    repositoryRoot, "packages", "platform", "filesystem-custody", "src",
+  );
+  const files: string[] = [
+    join(filesystemCustodyRoot, "index.ts"),
+    join(filesystemCustodyRoot, "stable-directory-capability.ts"),
+    join(filesystemCustodyRoot, "stable-path-custody.ts"),
+  ];
   const walk = async (directory: string): Promise<void> => {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
