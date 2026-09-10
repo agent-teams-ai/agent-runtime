@@ -115,6 +115,30 @@ authority selection, route admission, private-root and resource custody,
 cleanup and reconciliation remain with their existing Host owners. This
 reconciliation changes no runtime behavior and grants no new qualification.
 
+### PR71 bounded profile reconciliation
+
+At exact source `81b2833af327c6c4559f92a822c83529431565c0`, the
+Foundation-backed `readSourceCensus` reports 14 added relationships and no
+removed relationships relative to the retained profile. Package, production
+and feature roots are unchanged. The complete upstream Consumer Module Standard
+bytes remain SHA-256
+`ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d`,
+so the reviewed `a05f2cb` pin remains current.
+
+| Boundary | Added | Reviewed classification |
+| --- | ---: | --- |
+| Codex app-server adapter | 1 | `DarwinCodexNativeFiles` is a fixed adapter resource helper using the existing durable Host journal; not an independently composed capability. |
+| Host custody adapter | 1 | Darwin durable route storage uses the existing filesystem-custody lock inside Host-owned lifecycle and remains outside passive Assembly scope. |
+| Embedded Runtime composition | 6 | Darwin authority and deployment are meaningful independently composed direct Host roots. They are explicitly outside the adopted passive setup scope; their Agent Execution, Provider Access and Runtime Security edges are retained without adding graph nodes. |
+| Agent Execution production | 6 | Darwin post-claim preparation and route enforcement remain direct contained-turn owners outside passive scope. Route enforcement is a fixed feature-local helper, not a separate graph node. |
+
+Rejecting coverage removes every one of these reviewed relationships and changes
+its dependency mode against the independently loaded live census. Positive
+coverage preserves the mixed type-only/runtime Darwin authority classification
+and the explicit outside-passive-scope ownership decision. Passive Assembly
+remains the same seven-node composition. This reconciliation makes no native or
+provider readiness claim and changes no runtime behavior.
+
 ## Evidence and executable references
 
 Existing passive contract evidence starts with

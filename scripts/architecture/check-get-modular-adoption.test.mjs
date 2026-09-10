@@ -259,14 +259,17 @@ test('PR71 reviewed owners and helpers retain exact live relationships without e
   verifySourceCensus(pending, census);
   // Explicit semantic review subjects, not a regenerated list from the live graph.
   const subjects = {
+    'adapter.agent-execution.codex-app-server': ['darwin-codex-native-files'],
     'adapter.agent-execution.docker-custody': ['node-docker-route-provenance'],
-    'adapter.agent-execution.host-custody': ['contained-turn-kernel-custody-open-attempts'],
+    'adapter.agent-execution.host-custody': ['contained-turn-kernel-custody-open-attempts', 'darwin-route-durable-storage'],
     'composition.embedded-runtime': [
+      'darwin-contained-turn-authority', 'darwin-contained-turn-deployment',
       'contained-turn-current-authority', 'linux-codex-contained-turn-owner',
       'linux-codex-deployment-authority', 'linux-codex-deployment',
       'linux-codex-node-recipe-consumption', 'linux-codex-node-recipe',
     ],
     'production.agent-execution': [
+      'darwin-codex-host-post-claim-preparation', 'darwin-codex-route-enforcement',
       'codex-native-broker-file-installer', 'contained-turn-route-enforcement-capability',
       'deferred-codex-native-broker-files', 'docker-codex-current-kernel-owner',
       'docker-codex-effect-custody-owner', 'docker-consumption-observations',
@@ -297,6 +300,17 @@ test('PR71 reviewed owners and helpers retain exact live relationships without e
   const helper = pending.boundaries.find(b => b.id === 'composition.embedded-runtime').relationships
     .filter(edge => edge.from.endsWith('/linux-codex-node-recipe-consumption.ts'));
   assert.deepEqual(helper.map(edge => [edge.to, edge.mode]), [['@agent-teams/agent-execution/composition', 'type-only']]);
+  const darwinAuthority = pending.boundaries.find(b => b.id === 'composition.embedded-runtime').relationships
+    .filter(edge => edge.from.endsWith('/darwin-contained-turn-authority.ts'));
+  assert.deepEqual(darwinAuthority.map(edge => [edge.to, edge.mode]), [
+    ['@agent-teams/agent-execution/composition', 'type-only'],
+    ['@agent-teams/provider-access/composition', 'runtime'],
+    ['@agent-teams/runtime-security/composition', 'runtime'],
+  ]);
+  assert.match(pending.boundaries.find(b => b.id === 'composition.embedded-runtime').rationale,
+    /independently composed Darwin authority and deployment roots remain explicitly outside.*passive setup scope/);
+  assert.match(pending.boundaries.find(b => b.id === 'production.agent-execution').rationale,
+    /fixed feature-local route helper.*not separate graph nodes/);
   assert.deepEqual(pending.boundaries.filter(b => b.status === 'adopted').map(b => b.id), ['composition.embedded-runtime']);
   assert.deepEqual(pending.compositions.map(c => c.factorySymbol), ['createDefaultAgentRuntimeHost']);
   assert.deepEqual(pending.exceptions, []);
