@@ -33,8 +33,6 @@ import {
   DarwinSeatbeltRouteOwner,
   pinDarwinExecutable, createDarwinSeatbeltProjection,
   createDarwinHostHttpConsumptionJournal,
-  cutoffDarwinNativeExecution, settleDarwinNativeExecutionLaunchRoute,
-  settleDarwinNativeExecutionPrivateMaterial, disposeDarwinNativeExecution,
   createNodeHostHttpListener,
   createNodeHostHttpConnection,
   retainFinalizationHttpResources,
@@ -84,7 +82,6 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
     if (entered) {return Object.freeze({kind: "quarantined" as const});} entered = true;
     let route: DarwinSeatbeltRouteOwner | undefined;
     let nativeLease: DarwinNativeExecutionLease | undefined;
-    let nativeTransferred = false;
     try {
       // The legacy route owner below performs Host-UID pathname observations.
       // Until the native Host preparation owner seam is supplied, refuse before
@@ -110,7 +107,7 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
           sessionInput.providerAccessSnapshot.tenantId !== proof.tenantId ||
           sessionInput.providerAccessSnapshot.projectId !== proof.projectId) {throw new TypeError("Darwin broker selection conflicts");}
       const lifetime = preparation.acquire(claimed);
-      if (native !== undefined) {nativeLease = preparation.consumeDarwinNativeExecution(lifetime, native); nativeTransferred = true;}
+      if (native !== undefined) {nativeLease = preparation.consumeDarwinNativeExecution(lifetime, native);}
       const locator = darwinDigest(JSON.stringify(["darwin-operation-locator/v1", proof.tenantId, proof.projectId, proof.operationId]));
       const storage = new DarwinRouteDurableStorage(options.durableRoot, locator);
       const journal = new DarwinRouteLifecycleJournal(storage, lifetime);
@@ -210,14 +207,8 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
       });
     } catch {
       route?.cutoff();
-      if (nativeLease !== undefined && nativeTransferred) {
-        try {
-          await cutoffDarwinNativeExecution(nativeLease);
-          await settleDarwinNativeExecutionLaunchRoute(nativeLease);
-          await settleDarwinNativeExecutionPrivateMaterial(nativeLease);
-          await disposeDarwinNativeExecution(nativeLease);
-        } catch {}
-      }
+      // Once transferred, the Host HTTP reservation is the sole terminal owner.
+      // Containment/release preserves and retries each native cleanup phase.
       return Object.freeze({kind: "quarantined" as const});
     }
   }});

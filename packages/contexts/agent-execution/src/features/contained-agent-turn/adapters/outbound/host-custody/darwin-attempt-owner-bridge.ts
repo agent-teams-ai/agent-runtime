@@ -270,6 +270,10 @@ export class DarwinAttemptOwnerEvents {
     if (this.#lost || !this.#preexec || !this.#image || !this.#exit || !this.#streams) {return undefined;}
     return Object.freeze({ image: this.#image, exit: this.#exit, streams: this.#streams });
   }
+  image(): DarwinAttemptOwnerEvent | undefined {
+    if (this.#lost || !this.#preexec || !this.#image) {return undefined;}
+    return this.#image;
+  }
   noStart(): DarwinAttemptOwnerEvent | undefined {
     if (this.#lost || this.#preexec || this.#image || this.#exit || this.#streams?.phase !== native.phase.noStart) {return undefined;}
     return this.#streams;
@@ -595,7 +599,7 @@ export function bindDarwinAttemptOwnerBridge(endpoint: Duplex, selected: DarwinA
     commitCreation: nativeCreationCommit(request, () => {creationAcknowledged = true;}),
     binding: () => events.binding(), capturedManifest: () => events.capturedManifest(), capturedOwner: () => events.capturedOwner(), capturedPeerPacket: () => events.capturedPeerPacket(),
     start: () => request("START_ONCE"), cutoff, status: () => request("READ_STATUS"),
-    execution: () => events.execution(), noStart: () => events.noStart(), retainedClosed: () => events.retainedClosed(),
+    execution: () => events.execution(), image: () => events.image(), noStart: () => events.noStart(), retainedClosed: () => events.retainedClosed(),
     freezeWorkspace: () => request("WORKSPACE_FREEZE"), cleanupWorkspace: () => request("WORKSPACE_CLEANUP"),
     closeWorkspace: () => request("WORKSPACE_CLOSE"),
     async readClosedWorkspace() {

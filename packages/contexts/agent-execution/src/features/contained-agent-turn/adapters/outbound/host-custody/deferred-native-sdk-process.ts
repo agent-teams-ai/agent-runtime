@@ -24,7 +24,7 @@ export class DeferredNativeProviderProcess implements CustodiedProviderProcess {
     this.#settled = true; this.#ready.resolve(process);
     const pump = async (stream: "stdout" | "stderr", source: AsyncIterable<Uint8Array>, target: PassThrough) => {
       try {for await (const bytes of source) {this.#accounting[stream].bytes += bytes.byteLength; this.#accounting[stream].hash.update(bytes);
-        if (!target.write(bytes)) {await new Promise<void>(r => target.once("drain", r));}} target.end();}
+        target.write(bytes);} target.end();}
       catch (error) {target.destroy(error as Error); throw error;}
     };
     void Promise.all([pump("stdout", process.stdout, this.stdout), pump("stderr", process.stderr, this.stderr)]).then(

@@ -81,7 +81,8 @@ const closeLiveCustody = async (
   }
   const httpClosed = await boundedPromise(live.httpReservation.cleanup(), state.cleanupAfterMs);
   if (httpClosed !== true) {return unprovenResult("http-resources-release-unproven", input, live);}
-  if (live.nativeExecutionLease !== undefined && live.nativeExit !== undefined && live.evidenceSealed) {
+  if (live.nativeExecutionLease !== undefined && live.evidenceSealed &&
+      (live.nativeExit !== undefined || isCompleteProvedNoStart(live))) {
     live.privateRootClosure = Object.freeze({...live.privateRootClosure, status: "deleted" as const});
     const tombstone: CustodyTombstone = Object.freeze({
       ...(live.privateReservationPlan === undefined ? {} : {privateReservationPlan: live.privateReservationPlan}),

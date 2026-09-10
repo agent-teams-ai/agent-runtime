@@ -73,7 +73,7 @@ import { startHostCustodyLaunch } from "./host-custody-start-projection.js";
 import { snapshotHostCustodyLaunchPlan } from "./host-custody-launch-plan-snapshot.js";
 import {assertDarwinNativeExecutionClaim, assertRetainedDarwinNativeHttpExecutionAuthority,
   bindRetainedDarwinNativeHttpLaunch,
-  inspectDarwinNativeLaunchObservation, startDarwinNativeExecution, readDarwinNativeExecution, readDarwinNativeNoStart,
+  inspectDarwinNativeLaunchObservation, startDarwinNativeExecution, readDarwinNativeExecution, readDarwinNativeImage, readDarwinNativeNoStart,
   readDarwinNativeExecutionStatus,
   cutoffDarwinNativeExecution} from "./darwin-attempt-owner-selection.js";
 import {DeferredNativeProviderProcess, DeferredNativeSdkProcess} from "./deferred-native-sdk-process.js";
@@ -452,9 +452,18 @@ export class NodeProviderProcessCustodyCore implements
           const started = startDarwinNativeExecution(live.nativeExecutionLease);
           live.exit = started.then(process => process.waitForExit());
           live.spawnAcknowledgement = started.then(process => {
-            try {provider.bind(process); sdk.bind(process); live.httpReservation.installNativeExecution(live.nativeExecutionLease!);}
+            try {
+              provider.bind(process); sdk.bind(process);
+              const image = readDarwinNativeImage(live.nativeExecutionLease!); const child = image?.child;
+              if (image === undefined || child === undefined) {throw new Error("native provider image unavailable");}
+              live.httpReservation.installNativeExecution(live.nativeExecutionLease!);
+              live.childProcessInstanceSha256 = sha256(JSON.stringify(child));
+              live.identity = Object.freeze({...identityBase(live, this.#hostLifecycleGenerationSha256),
+                pid: child.pid, pgid: child.pgid, proofRef: `native-darwin:${image.attestation}`, status: "proved" as const});
+              live.spawnStatus = "acknowledged";
+            }
             catch (error) {provider.fail(error); sdk.fail(error); throw error;}
-            return "ambiguous" as const;
+            return "acknowledged" as const;
           }, error => {provider.fail(error); sdk.fail(error); live.spawnStatus = "ambiguous"; throw error;});
           sdkProcess = sdk;
         } else {sdkProcess = this.#spawn(live, admission.arguments, admission.environment);}
