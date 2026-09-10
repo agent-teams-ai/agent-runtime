@@ -1,5 +1,9 @@
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import type {
+  ContainedTurnWorkspaceTree, ContainedTurnWorkspaceTreeLimits,
+  ContainedTurnWorkspaceFile, ContainedTurnWorkspaceFileEntry,
+} from "../filesystem/contained-turn-workspace-tree.js";
 
 /** The native header is the only wire-number/limit/slot definition. This
  * source-only adapter deliberately requires that exact adjacent header; root
@@ -25,7 +29,8 @@ const commandNames = [
   "START_ONCE", "CUTOFF", "READ_STATUS", "SETTLE_LAUNCH_ROUTE",
   "SETTLE_ARTIFACT_RESULT", "WORKSPACE_FREEZE", "WORKSPACE_CLEANUP",
   "WORKSPACE_CLOSE", "SETTLE_WORKSPACE", "SETTLE_PRIVATE",
-  "READ_ARTIFACT_SLOT", "DISPOSE_ONCE", "READ_CLOSED_WORKSPACE",
+  "DISPOSE_ONCE", "READ_CLOSED_WORKSPACE",
+  "MATERIALIZE_BEGIN", "MATERIALIZE_ENTRY", "MATERIALIZE_CHUNK", "MATERIALIZE_FINISH", "COMMIT_CREATION", "READ_TREE", "BIND_PREPARED", "CONFIRM_CLAIM", "READ_OBSERVATION", "MATERIAL_BEGIN", "MATERIAL_CHUNK", "MATERIAL_FINISH",
 ] as const;
 export type DarwinAttemptOwnerCommand = typeof commandNames[number];
 export interface DarwinAttemptOwnerRequest {
@@ -40,6 +45,19 @@ const digestBytes = numeric("DIGEST_BYTES");
 const digest = new RegExp(`^[a-f0-9]{${digestBytes * 2}}$`, "u");
 const exactKeys = ["argument", "binding", "command", "launch", "sequence"];
 
+const validRequestArgument = (command: DarwinAttemptOwnerCommand, argument: number): boolean => {
+  switch (command) {
+    case "MATERIALIZE_BEGIN": return argument === 16;
+    case "MATERIALIZE_ENTRY": return argument >= 25 && argument <= 279;
+    case "MATERIALIZE_CHUNK": return argument > 8 && argument <= numeric("TREE_REQUEST_MAX_BYTES");
+    case "COMMIT_CREATION": return argument === numeric("CREATION_BYTES");
+    case "MATERIAL_BEGIN": return argument === 44;
+    case "MATERIAL_CHUNK": return argument > 8 && argument <= numeric("TREE_REQUEST_MAX_BYTES");
+    case "BIND_PREPARED": return argument === numeric("PREPARED_BYTES");
+    case "CONFIRM_CLAIM": return argument > numeric("PREPARED_BYTES") && argument <= numeric("TREE_REQUEST_MAX_BYTES");
+    default: return argument === 0;
+  }
+};
 export function encodeDarwinAttemptOwnerRequest(request: DarwinAttemptOwnerRequest): Buffer {
   // Reject extra keys, accessors, symbols and prototypes before reading values.
   if (Object.getPrototypeOf(request) !== Object.prototype ||
@@ -53,7 +71,7 @@ export function encodeDarwinAttemptOwnerRequest(request: DarwinAttemptOwnerReque
       typeof request.binding !== "string" || !digest.test(request.binding) ||
       typeof request.launch !== "string" || !digest.test(request.launch) ||
       !Number.isInteger(request.argument) || request.argument < 0 ||
-      (request.command === "READ_ARTIFACT_SLOT" ? request.argument >= numeric("ARTIFACT_SLOTS") : request.argument !== 0)) {
+      !validRequestArgument(request.command, request.argument)) {
     throw new Error("invalid owner command value");
   }
   const bytes = Buffer.alloc(darwinAttemptOwnerFrameBytes);
@@ -112,7 +130,7 @@ export class DarwinAttemptOwnerFrameReader {
   }
 }
 
-const eventNames = ["STATUS", "PREEXEC", "IMAGE", "EXIT", "STREAMS", "ARTIFACT", "STDOUT", "STDERR", "REFUSED", "HELLO", "RELEASED"] as const;
+const eventNames = ["STATUS", "PREEXEC", "IMAGE", "EXIT", "STREAMS", "STDOUT", "STDERR", "REFUSED", "HELLO", "RELEASED", "TREE_ENTRY", "TREE_CHUNK", "TREE_END", "CLOSED_READ", "OBSERVATION", "MATERIAL_RESULT"] as const;
 export interface DarwinAttemptOwnerImage {
   readonly protocol: "ae-darwin-owned-image/v1";
   readonly pid: number;
@@ -173,11 +191,17 @@ const eventPayloadLength = (frame: Buffer): number => {
       frame.readUInt32BE(4) !== numeric("VERSION")) {throw new Error("invalid native event header");}
   const kind = eventNames.find((name) => numeric(`EVENT_${name}`) === frame.readUInt32BE(8));
   const length = frame.readUInt32BE(numeric("EVENT_LENGTH_OFFSET"));
-  if (kind === undefined || length > numeric("ARTIFACT_MAX_BYTES") ||
-      ((kind === "STDOUT" || kind === "STDERR") && (length === 0 || length > numeric("STREAM_CHUNK_BYTES"))) ||
-      (kind === "HELLO" && length !== numeric("HELLO_BYTES")) ||
-      (kind === "RELEASED" && length !== numeric("CLOSED_RECORD_BYTES")) ||
-      (!["ARTIFACT", "STDOUT", "STDERR", "HELLO", "RELEASED"].includes(kind) && length !== 0)) {
+  const bounds: Partial<Record<typeof eventNames[number], readonly [number, number]>> = {
+    STDOUT: [1, numeric("STREAM_CHUNK_BYTES")], STDERR: [1, numeric("STREAM_CHUNK_BYTES")],
+    OBSERVATION: [numeric("OBSERVATION_BYTES"), numeric("OBSERVATION_BYTES")],
+    MATERIAL_RESULT: [numeric("MATERIAL_RESULT_BYTES"), numeric("MATERIAL_RESULT_BYTES")],
+    TREE_END: [24, 24], TREE_ENTRY: [25, 279], TREE_CHUNK: [9, numeric("TREE_REQUEST_MAX_BYTES")],
+    HELLO: [numeric("HELLO_BYTES"), numeric("HELLO_BYTES")],
+    RELEASED: [numeric("CLOSED_RECORD_BYTES"), numeric("CLOSED_RECORD_BYTES")],
+    CLOSED_READ: [numeric("CLOSED_RECORD_BYTES"), numeric("CLOSED_RECORD_BYTES")],
+  };
+  const [min, max] = (kind && bounds[kind]) || [0, 0];
+  if (!kind || length > numeric("EVENT_MAX_BYTES") || length < min || length > max) {
     throw new Error("unknown, oversized or inexact native event");
   }
   return length;
@@ -245,6 +269,12 @@ const validateEventImage = (frame: Buffer, kind: string, child: DarwinAttemptOwn
     throw new Error("invalid distinct child birth");
   }
 };
+const validateEventExit = (exit: number, signal: number): void => {
+  if ((exit !== 0xffff_ffff && exit > 255) || signal > 127 ||
+      (exit !== 0xffff_ffff && signal !== 0)) {
+    throw new Error("inconsistent native event exit fields");
+  }
+};
 export function decodeDarwinAttemptOwnerEvent(frame: Buffer, payload: Uint8Array): DarwinAttemptOwnerEvent {
   if (eventPayloadLength(frame) !== payload.byteLength) {throw new Error("partial or surplus native payload");}
   const kind = eventNames.find((name) => numeric(`EVENT_${name}`) === frame.readUInt32BE(8));
@@ -259,11 +289,10 @@ export function decodeDarwinAttemptOwnerEvent(frame: Buffer, payload: Uint8Array
   const exit = get("EXIT_CODE");
   if (!owner || get("SERIAL") === 0 || get("PHASE") > numeric("PHASE_QUARANTINED") || get("WORKSPACE") > numeric("WORKSPACE_CLOSED") || flags > (numeric("FLAG_PROVIDER") * 2 - 1) ||
       get("RESULT") > numeric("RESULT_UNKNOWN") || (commandNumber !== 0 && command === undefined) ||
-      (exit !== 0xffff_ffff && exit > 255) || get("EXIT_SIGNAL") > 127 ||
-      (exit !== 0xffff_ffff && get("EXIT_SIGNAL") !== 0) ||
-      get("SLOT") >= numeric("ARTIFACT_SLOTS") || get("MODE") > 0o777) {
+      get("SLOT") !== 0 || get("MODE") > 0o777) {
     throw new Error("inconsistent native event fields");
   }
+  validateEventExit(exit, get("EXIT_SIGNAL"));
   validateEventImage(frame, kind, child, owner);
   if (kind === "HELLO") {validateCapturedHello(frame, payload);}
   if (kind === "RELEASED") {validateClosedTicket(frame, payload);}
@@ -284,7 +313,7 @@ export class DarwinAttemptOwnerEventReader {
   #used = 0;
   #closed = false;
   push(chunk: Uint8Array): readonly DarwinAttemptOwnerEvent[] {
-    if (this.#closed || chunk.byteLength === 0 || chunk.byteLength > numeric("ARTIFACT_MAX_BYTES") + darwinAttemptOwnerEventBytes) {
+    if (this.#closed || chunk.byteLength === 0 || chunk.byteLength > numeric("EVENT_MAX_BYTES") + darwinAttemptOwnerEventBytes) {
       this.#closed = true;
       throw new Error("native event channel closed or oversized");
     }
@@ -325,3 +354,221 @@ export const darwinAttemptOwnerStates = Object.freeze({
   image: Object.freeze({ helper: numeric("IMAGE_HELPER"), provider: numeric("IMAGE_PROVIDER") }),
   closedRecordBytes: numeric("CLOSED_RECORD_BYTES"),
 });
+
+/** Complete-tree data validation. This never issues workspace or attempt
+ * authority. Copy before the first transport await: Buffers in a frozen source
+ * object are still mutable. The digest encoding is the canonical scanner's
+ * UTF-16 sorted JSON inventory, including directories and exact mode bits. */
+export function captureDarwinWorkspaceTree(
+  tree: ContainedTurnWorkspaceTree,
+  limits: ContainedTurnWorkspaceTreeLimits,
+): ContainedTurnWorkspaceTree {
+  validateTreeLimits(limits);
+  if (tree.entries.length > limits.maxEntries || tree.files.length > tree.entries.length) {
+    throw new Error("native tree entry budget exceeded");
+  }
+  const files = tree.files.map(file => Object.freeze({ relativePath: file.relativePath,
+    mode: file.mode, size: file.size, digest: file.digest, bytes: Buffer.from(file.bytes) }));
+  const byPath = new Map(files.map(file => [file.relativePath, file]));
+  if (byPath.size !== files.length) {throw new Error("duplicate native tree content");}
+  const entries = tree.entries.map(entry => entry.kind === "file"
+    ? Object.freeze({ kind: entry.kind, relativePath: entry.relativePath, mode: entry.mode, size: entry.size, digest: entry.digest })
+    : Object.freeze({ kind: entry.kind, relativePath: entry.relativePath, mode: entry.mode }));
+  const directories = new Set<string>([""]);
+  const names = new Map<string, Set<string>>();
+  let previous: string | undefined;
+  let total = 0;
+  for (const entry of entries) {
+    if (previous !== undefined && previous >= entry.relativePath) {throw new Error("native tree inventory is not canonical");}
+    previous = entry.relativePath;
+    validateTreePath(entry.relativePath, directories, names, entry.kind === "directory", limits.maxDepth);
+    if (!Number.isInteger(entry.mode) || entry.mode < 0 || entry.mode > 0o777) {throw new Error("invalid native tree mode");}
+    if (entry.kind === "directory") {directories.add(entry.relativePath); continue;}
+    if (entry.kind !== "file") {throw new Error("unsupported native tree entry");}
+    const file = byPath.get(entry.relativePath);
+    validateTreeFile(file, entry, limits.maxFileBytes);
+    total += entry.size;
+    if (total > limits.maxTotalBytes) {throw new Error("native tree total budget exceeded");}
+    byPath.delete(entry.relativePath);
+  }
+  if (byPath.size !== 0 || files.some((file, index) => index > 0 && files[index - 1]!.relativePath >= file.relativePath)) {
+    throw new Error("native tree content is not the complete canonical inventory");
+  }
+  const inventory = entries.map(entry => entry.kind === "directory"
+    ? [entry.kind, entry.relativePath, entry.mode]
+    : [entry.kind, entry.relativePath, entry.mode, entry.size, entry.digest]);
+  const treeDigest = createHash("sha256").update(Buffer.from(JSON.stringify(inventory), "utf8")).digest("hex");
+  if (treeDigest !== tree.treeDigest) {throw new Error("native tree semantic digest mismatch");}
+  return Object.freeze({ entries: Object.freeze(entries), files: Object.freeze(files),
+    rootIdentity: Object.freeze({ ...tree.rootIdentity }), treeDigest });
+}
+const validateTreeFile = (file: ContainedTurnWorkspaceFile | undefined, entry: ContainedTurnWorkspaceFileEntry, maxBytes: number): void => {
+  if (!file || file.mode !== entry.mode || file.size !== entry.size || file.digest !== entry.digest ||
+      file.bytes.length !== entry.size || entry.size > maxBytes ||
+      createHash("sha256").update(file.bytes).digest("hex") !== entry.digest) {
+    throw new Error("native tree file inventory/content mismatch");
+  }
+};
+const validateTreeLimits = (limits: ContainedTurnWorkspaceTreeLimits): void => {
+  const ceilings = { maxDepth: 32, maxEntries: 4096, maxFileBytes: 8 * 1024 * 1024, maxTotalBytes: 32 * 1024 * 1024 };
+  for (const key of Object.keys(ceilings) as (keyof typeof ceilings)[]) {
+    if (!Number.isSafeInteger(limits[key]) || limits[key] < 0 || limits[key] > ceilings[key]) {
+      throw new Error("native tree limit exceeds canonical ceiling");
+    }
+  }
+  if (limits.maxFileBytes > limits.maxTotalBytes) {throw new Error("native file budget exceeds tree budget");}
+};
+const validateTreePath = (path: string, directories: Set<string>, names: Map<string, Set<string>>, directory: boolean, maxDepth: number): void => {
+  const components = path.split("/");
+  const name = components.pop()!;
+  const parent = components.join("/");
+  if (!directories.has(parent) || components.length + Number(directory) > maxDepth ||
+      components.some(component => component === "") || name === "" || name !== name.normalize("NFC") ||
+      /[ .]$/u.test(name) || /^(?:aux|com[1-9]|con|lpt[1-9]|nul|prn)(?:\..*)?$/iu.test(name) ||
+      /[<>:"/\\|?*]/u.test(name) || [...name].some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127) || Buffer.byteLength(name, "utf8") > 255) {
+    throw new Error("native tree path is not canonical portable data");
+  }
+  const siblings = names.get(parent) ?? new Set<string>();
+  const key = name.normalize("NFKC").toUpperCase().toLowerCase().normalize("NFKC");
+  if (siblings.has(key)) {throw new Error("native tree contains a portable name collision");}
+  siblings.add(key); names.set(parent, siblings);
+};
+
+/** Receives bounded observed data from an already authenticated owner channel.
+ * Completion alone is not authority: the bridge must also await the matching
+ * successful command acknowledgement before returning this snapshot. */
+export class DarwinWorkspaceTreeReceiver {
+  readonly #limits: ContainedTurnWorkspaceTreeLimits;
+  readonly #entries: { path: string; directory: boolean; mode: number; size: number; bytes: Buffer; used: number }[] = [];
+  readonly #dev: string;
+  readonly #ino: string;
+  #total = 0;
+  #ended: DarwinAttemptOwnerEvent | undefined;
+  #failed = false;
+  constructor(limits: ContainedTurnWorkspaceTreeLimits, dev: string, ino: string) {
+    validateTreeLimits(limits); this.#limits = Object.freeze({ ...limits }); this.#dev = dev; this.#ino = ino;
+  }
+  accept(event: DarwinAttemptOwnerEvent): void {
+    if (this.#failed || this.#ended) {throw new Error("native tree stream already terminal");}
+    try {
+      if (event.workspaceDev !== this.#dev || event.workspaceIno !== this.#ino) {throw new Error("foreign native tree root");}
+      if (event.kind === "TREE_ENTRY") {this.#entry(event);}
+      else if (event.kind === "TREE_CHUNK") {this.#chunk(event.payload);}
+      else if (event.kind === "TREE_END") {this.#completeFile(); this.#ended = event;}
+      else {throw new Error("unexpected native tree event");}
+    } catch (error) {this.#failed = true; throw error;}
+  }
+  #completeFile(): void {
+    const last = this.#entries.at(-1);
+    if (last && last.used !== last.size) {throw new Error("incomplete native file transfer");}
+  }
+  #entry(event: DarwinAttemptOwnerEvent): void {
+    this.#completeFile();
+    const bytes = event.payload;
+    const ordinal = bytes.readUInt32BE(0), parent = bytes.readUInt32BE(4);
+    const directory = bytes.readUInt32BE(8), mode = bytes.readUInt32BE(12), size = bytes.readUInt32BE(16);
+    const nameBytes = bytes.subarray(24), name = new TextDecoder("utf-8", { fatal: true }).decode(nameBytes);
+    if (ordinal !== this.#entries.length || ordinal >= this.#limits.maxEntries || directory > 1 ||
+        nameBytes.length !== bytes.readUInt32BE(20) || name.includes("/") || name.includes("\0") ||
+        mode > 0o777 || (directory === 1 && size !== 0) || size > this.#limits.maxFileBytes ||
+        size > this.#limits.maxTotalBytes - this.#total || event.dev !== this.#dev || event.ino === "0") {
+      throw new Error("invalid native tree inventory event");
+    }
+    const retainedParent = parent === 0xffff_ffff ? undefined : this.#entries[parent];
+    if (parent !== 0xffff_ffff && !retainedParent?.directory) {throw new Error("native tree parent is not a retained directory");}
+    const path = retainedParent ? `${retainedParent.path}/${name}` : name;
+    this.#entries.push({ path, directory: directory === 1, mode, size, bytes: Buffer.alloc(size), used: 0 });
+    this.#total += size;
+  }
+  #chunk(payload: Buffer): void {
+    const entry = this.#entries[payload.readUInt32BE(0)];
+    const bytes = payload.subarray(8);
+    if (!entry || entry !== this.#entries.at(-1) || entry.directory || payload.readUInt32BE(4) !== entry.used ||
+        bytes.length === 0 || bytes.length > 16384 || bytes.length > entry.size - entry.used) {
+      throw new Error("out-of-order native tree chunk");
+    }
+    bytes.copy(entry.bytes, entry.used); entry.used += bytes.length;
+  }
+  finish(): ContainedTurnWorkspaceTree {
+    const end = this.#ended;
+    if (this.#failed || !end) {throw new Error("native tree completion missing");}
+    const observed = this.#entries.toSorted((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+    const files = observed.filter(entry => !entry.directory).map(entry => Object.freeze({ relativePath: entry.path,
+      mode: entry.mode, size: entry.size, bytes: entry.bytes, digest: createHash("sha256").update(entry.bytes).digest("hex") }));
+    const byPath = new Map(files.map(file => [file.relativePath, file]));
+    const entries = observed.map(entry => entry.directory
+      ? Object.freeze({ kind: "directory" as const, relativePath: entry.path, mode: entry.mode })
+      : Object.freeze({ kind: "file" as const, relativePath: entry.path, mode: entry.mode,
+        size: entry.size, digest: byPath.get(entry.path)!.digest }));
+    const inventory = entries.map(entry => entry.kind === "directory" ? [entry.kind, entry.relativePath, entry.mode]
+      : [entry.kind, entry.relativePath, entry.mode, entry.size, entry.digest]);
+    const treeDigest = createHash("sha256").update(JSON.stringify(inventory)).digest("hex");
+    return captureDarwinWorkspaceTree({ entries, files, treeDigest, rootIdentity: {
+      dev: BigInt(this.#dev), ino: BigInt(this.#ino), mode: BigInt(end.payload.readUInt32BE(0)),
+      ctimeNs: end.payload.readBigUInt64BE(8), mtimeNs: end.payload.readBigUInt64BE(16),
+    } }, this.#limits);
+  }
+}
+
+export type DarwinNativeDirectoryData = Readonly<{path: string; dev: bigint; ino: bigint; uid: number; mode: number}>;
+export type DarwinNativeLaunchData = Readonly<{
+  operationId: string; generation: string; leasedUid: number;
+  privateRoot: DarwinNativeDirectoryData; codexHome: DarwinNativeDirectoryData;
+  tmpDir: DarwinNativeDirectoryData; workspace: DarwinNativeDirectoryData;
+}>;
+const decodeNativeText = (bytes: Buffer, offset: number): string => {
+  const length = bytes.readUInt32BE(offset);
+  if (!length || length > 1024) {throw new Error("invalid native fixed text length");}
+  const encoded = bytes.subarray(offset + 4, offset + 4 + length);
+  if (encoded.includes(0) || bytes.subarray(offset + 4 + length, offset + 1028).some(value => value !== 0)) {
+    throw new Error("invalid native fixed text padding");
+  }
+  return new TextDecoder("utf-8", { fatal: true }).decode(encoded);
+};
+const decodeNativeDirectory = (bytes: Buffer, offset: number, uid: number): DarwinNativeDirectoryData => {
+  const path = decodeNativeText(bytes, offset);
+  const dev = bytes.readBigUInt64BE(offset + 1028), ino = bytes.readBigUInt64BE(offset + 1036);
+  const actualUid = bytes.readUInt32BE(offset + 1044), mode = bytes.readUInt32BE(offset + 1048);
+  if (!path.startsWith("/") || path.slice(1).split("/").some(part => !part || part === "." || part === "..") ||
+      !dev || !ino || actualUid !== uid || mode !== 0o700) {throw new Error("invalid native directory fact");}
+  return Object.freeze({path, dev, ino, uid, mode});
+};
+/** Decodes authenticated channel data only. Opaque authority is issued by the retained selection owner. */
+export function decodeDarwinNativeLaunchData(event: DarwinAttemptOwnerEvent): DarwinNativeLaunchData {
+  if ((event.kind !== "OBSERVATION" && event.kind !== "MATERIAL_RESULT") ||
+      event.payload.length !== (event.kind === "OBSERVATION" ? 5244 : 8520)) {throw new Error("missing native launch observation");}
+  const bytes = event.payload;
+  const operationId = decodeNativeText(bytes, 0), leasedUid = bytes.readUInt32BE(1028);
+  const generation = bytes.readUInt32BE(1032);
+  if (!leasedUid || !generation || generation !== event.revision) {throw new Error("invalid native observation generation");}
+  const privateRoot = decodeNativeDirectory(bytes, 1036, leasedUid);
+  const codexHome = decodeNativeDirectory(bytes, 2088, leasedUid);
+  const tmpDir = decodeNativeDirectory(bytes, 3140, leasedUid);
+  const workspace = decodeNativeDirectory(bytes, 4192, leasedUid);
+  if (codexHome.path !== privateRoot.path + "/codex-home" || tmpDir.path !== privateRoot.path + "/tmp" ||
+      workspace.dev.toString() !== event.workspaceDev || workspace.ino.toString() !== event.workspaceIno ||
+      new Set([privateRoot.ino, codexHome.ino, tmpDir.ino, workspace.ino]).size !== 4 ||
+      [privateRoot, codexHome, tmpDir].some(fact => fact.dev !== workspace.dev)) {throw new Error("foreign native observation tree");}
+  return Object.freeze({operationId, generation: String(generation), leasedUid, privateRoot, codexHome, tmpDir, workspace});
+}
+
+export type DarwinNativeFileData = Readonly<DarwinNativeDirectoryData & {nlink: number; bytes: number; sha256: string}>;
+export function decodeDarwinNativeMaterialData(event: DarwinAttemptOwnerEvent): Readonly<{
+  observation: DarwinNativeLaunchData; config: DarwinNativeFileData; catalog: DarwinNativeFileData; installation: DarwinNativeFileData;
+}> {
+  if (event.kind !== "MATERIAL_RESULT") {throw new Error("missing native material result");}
+  const observation = decodeDarwinNativeLaunchData(event);
+  const file = (index: number, name: string, mode: number): DarwinNativeFileData => {
+    const offset = 5244 + index * 1092, data = event.payload;
+    const path = decodeNativeText(data, offset), dev = data.readBigUInt64BE(offset + 1028), ino = data.readBigUInt64BE(offset + 1036);
+    const uid = data.readUInt32BE(offset + 1044), actualMode = data.readUInt32BE(offset + 1048);
+    const nlink = data.readUInt32BE(offset + 1052), bytes = data.readUInt32BE(offset + 1056);
+    if (path !== observation.codexHome.path + "/" + name || dev !== observation.codexHome.dev ||
+        !ino || uid !== observation.leasedUid || actualMode !== mode || nlink !== 1) {throw new Error("foreign native material file");}
+    return Object.freeze({path, dev, ino, uid, mode, nlink, bytes, sha256: data.subarray(offset + 1060, offset + 1092).toString("hex")});
+  };
+  const config = file(0, "config.toml", 0o600), catalog = file(1, "models.json", 0o600), installation = file(2, "installation_id", 0o644);
+  if (!config.bytes || config.bytes > numeric("CONFIG_MAX_BYTES") || catalog.bytes !== numeric("CATALOG_BYTES") || installation.bytes !== 36 ||
+      new Set([config.ino, catalog.ino, installation.ino, observation.codexHome.ino]).size !== 4) {throw new Error("invalid native material inventory");}
+  return Object.freeze({observation, config, catalog, installation});
+}

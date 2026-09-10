@@ -4,7 +4,6 @@
 int main(int argc,char **argv) {
 #ifdef __APPLE__
   if (argc==2 && !strcmp(argv[1],"--preexec")) return ae_native_preexec();
-  if (argc==2 && !strcmp(argv[1],"--read-closed")) return ae_root_read_closed();
   /* No elevation, pathname/UID/command options or provider activation from
    * ordinary input. Root supplies the exact fixed descriptor packet already
    * approved for this binary and attempt. Capture and isolation precede staging

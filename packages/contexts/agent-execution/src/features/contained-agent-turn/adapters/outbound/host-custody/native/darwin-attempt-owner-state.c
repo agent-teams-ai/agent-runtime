@@ -8,9 +8,19 @@ int ae_decode(const uint8_t *b, size_t n, ae_request *r) {
   if (!b || !r || n != AE_FRAME_BYTES || u32(b+AE_MAGIC_OFFSET)!=AE_MAGIC ||
       u32(b+AE_VERSION_OFFSET)!=AE_VERSION) return 0;
   uint32_t kind=u32(b+AE_KIND_OFFSET), arg=u32(b+AE_ARGUMENT_OFFSET);
-  if (kind<AE_START_ONCE || kind>AE_READ_CLOSED_WORKSPACE ||
+  if (kind<AE_START_ONCE || kind>AE_MATERIAL_FINISH || kind==AE_RETIRED_SLOT_COMMAND ||
       u32(b+AE_SEQUENCE_OFFSET)==0) return 0;
-  if (kind==AE_READ_ARTIFACT_SLOT ? arg>=AE_ARTIFACT_SLOTS : arg!=0) return 0;
+  switch (kind) {
+    case AE_MATERIALIZE_BEGIN: if (arg!=16) return 0; break;
+    case AE_MATERIALIZE_ENTRY: if (arg<25 || arg>279) return 0; break;
+    case AE_MATERIALIZE_CHUNK: if (arg<=8 || arg>AE_TREE_REQUEST_MAX_BYTES) return 0; break;
+    case AE_COMMIT_CREATION: if (arg!=AE_CREATION_BYTES) return 0; break;
+    case AE_BIND_PREPARED: if (arg!=AE_PREPARED_BYTES) return 0; break;
+    case AE_CONFIRM_CLAIM: if (arg<=AE_PREPARED_BYTES || arg>AE_TREE_REQUEST_MAX_BYTES) return 0; break;
+    case AE_MATERIAL_BEGIN: if (arg!=44) return 0; break;
+    case AE_MATERIAL_CHUNK: if (arg<=8 || arg>AE_TREE_REQUEST_MAX_BYTES) return 0; break;
+    default: if (arg!=0) return 0; break;
+  }
   for (size_t i=AE_ARGUMENT_OFFSET+4; i<AE_FRAME_BYTES; i++) if (b[i]) return 0;
   memset(r,0,sizeof(*r));
   r->kind=kind; r->sequence=u32(b+AE_SEQUENCE_OFFSET); r->argument=arg;
@@ -34,7 +44,12 @@ ae_result ae_commit(ae_state *s, const ae_state *next, ae_persist save, void *ct
   *s=committed; return AE_ACCEPTED;
 }
 int ae_writer_stopped(const ae_state *s) {
-  return s->phase==AE_NO_START || (s->phase==AE_EXIT_PROVED && s->reaped && s->streams_sealed);
+  /* A direct-child wait and pipe EOF do not exclude descendants or external
+   * writable mappings/descriptors. The current root capture has no executable
+   * singleton/exclusive-UID/IPC qualification observation, so a launched child
+   * cannot authorize freeze, disposal or release. A policy digest cannot turn
+   * this into proof. Keep the no-birth path independent of that missing gate. */
+  return s->phase==AE_NO_START && !s->birth_attempted && !s->reaped;
 }
 int ae_may_signal(const ae_state *s) {
   return s->phase==AE_CHILD_OWNED && !s->reaped;
@@ -76,6 +91,15 @@ ae_result ae_command(ae_state *s, const ae_request *r, ae_persist save, void *ct
     case AE_START_ONCE:
       if (s->phase!=AE_STAGED || s->cutoff) return AE_REFUSED;
       next.phase=AE_START_CONSUMED; next.pending_effect=r->kind; break;
+    case AE_MATERIALIZE_BEGIN: case AE_MATERIALIZE_ENTRY:
+    case AE_MATERIALIZE_CHUNK: case AE_MATERIALIZE_FINISH: case AE_COMMIT_CREATION:
+    case AE_BIND_PREPARED: case AE_CONFIRM_CLAIM:
+    case AE_READ_OBSERVATION: case AE_MATERIAL_BEGIN: case AE_MATERIAL_CHUNK: case AE_MATERIAL_FINISH:
+      if (s->phase!=AE_STAGED || s->cutoff || s->workspace!=AE_ACTIVE) return AE_REFUSED;
+      next.pending_effect=r->kind; next.pending_argument=r->argument; break;
+    case AE_READ_TREE:
+      if (!(s->phase==AE_STAGED || ae_writer_stopped(s)) || s->workspace>AE_FROZEN) return AE_REFUSED;
+      next.pending_effect=r->kind; break;
     case AE_CUTOFF:
       next.cutoff=1;
       if (s->phase==AE_RESERVED || s->phase==AE_STAGED) next.phase=AE_NO_START;
@@ -102,9 +126,6 @@ ae_result ae_command(ae_state *s, const ae_request *r, ae_persist save, void *ct
     case AE_WORKSPACE_CLOSE:
       if (!ae_writer_stopped(s) || s->workspace!=AE_CLEANUP) return AE_REFUSED;
       next.pending_effect=r->kind; break;
-    case AE_READ_ARTIFACT_SLOT:
-      if (!ae_writer_stopped(s) || s->workspace!=AE_FROZEN || r->argument>=AE_ARTIFACT_SLOTS) return AE_REFUSED;
-      next.pending_effect=r->kind; next.pending_argument=r->argument; break;
     case AE_READ_CLOSED_WORKSPACE:
       if (s->workspace!=AE_CLOSED || s->phase!=AE_RELEASED) return AE_REFUSED;
       return AE_EFFECT_REQUIRED; /* Readback never writes or advances state. */
@@ -119,8 +140,8 @@ ae_result ae_command(ae_state *s, const ae_request *r, ae_persist save, void *ct
   /* These are requests for native work, NEVER acknowledgments of that work. */
   if (r->kind==AE_START_ONCE || r->kind==AE_WORKSPACE_FREEZE ||
       r->kind==AE_WORKSPACE_CLEANUP || r->kind==AE_WORKSPACE_CLOSE ||
-      r->kind==AE_DISPOSE_ONCE || r->kind==AE_READ_ARTIFACT_SLOT ||
-      r->kind==AE_READ_CLOSED_WORKSPACE) return AE_EFFECT_REQUIRED;
+      r->kind==AE_DISPOSE_ONCE ||
+      r->kind==AE_READ_CLOSED_WORKSPACE || r->kind>=AE_MATERIALIZE_BEGIN) return AE_EFFECT_REQUIRED;
   return AE_ACCEPTED;
 }
 

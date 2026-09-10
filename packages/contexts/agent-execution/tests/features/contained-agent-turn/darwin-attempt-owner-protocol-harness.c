@@ -1,5 +1,6 @@
 #include "darwin-attempt-owner-state.h"
 #include "vectors.h"
+#include "darwin-attempt-owner-material.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -19,7 +20,7 @@ static void frames(void) {
   ae_request r;
   for (unsigned i=0;i<sizeof(vectors)/sizeof(vectors[0]);i++) {
     assert(ae_decode(vectors[i],AE_FRAME_BYTES,&r));
-    assert(r.kind==i+1 && r.sequence==1);
+    assert(r.kind==(i<10 ? i+1 : i+2) && r.sequence==1);
     for (size_t n=0;n<AE_FRAME_BYTES;n++) assert(!ae_decode(vectors[i],n,&r));
   }
   unsigned char b[AE_FRAME_BYTES+1]; memcpy(b,vectors[0],AE_FRAME_BYTES);
@@ -52,7 +53,7 @@ static void lifecycle(void) {
   next=s; next.phase=AE_CHILD_OWNED; next.pending_effect=0;
   assert(ae_commit(&s,&next,persist,&store)==AE_ACCEPTED);
   assert(ae_may_signal(&s));
-  assert(command(&s,AE_READ_ARTIFACT_SLOT,&store)==AE_REFUSED);
+  assert(command(&s,AE_READ_TREE,&store)==AE_REFUSED);
   assert(command(&s,AE_DISPOSE_ONCE,&store)==AE_REFUSED);
   assert(command(&s,AE_SETTLE_PRIVATE,&store)==AE_REFUSED);
   next=s; next.phase=AE_EXIT_PROVED; next.reaped=1; next.exit_code=17;
@@ -60,14 +61,22 @@ static void lifecycle(void) {
   assert(!ae_may_signal(&s) && !ae_writer_stopped(&s));
   next=s; next.streams_sealed=1;
   assert(ae_commit(&s,&next,persist,&store)==AE_ACCEPTED);
-  assert(ae_writer_stopped(&s) && s.exit_code==17 && s.exit_signal==0);
+  assert(!ae_writer_stopped(&s) && s.exit_code==17 && s.exit_signal==0);
+  assert(command(&s,AE_WORKSPACE_FREEZE,&store)==AE_REFUSED);
+  assert(command(&s,AE_SETTLE_LAUNCH_ROUTE,&store)==AE_REFUSED);
+  assert(command(&s,AE_SETTLE_PRIVATE,&store)==AE_REFUSED);
+  /* Exercise the remaining mechanical settlements on a DIFFERENT, positively
+   * no-birth fixture. Never fabricate a qualification flag for the child. */
+  ae_init(&s,binding,launch); s.phase=AE_STAGED;
+  assert(command(&s,AE_CUTOFF,&store)==AE_ACCEPTED);
+  assert(ae_streams_observed(&s,persist,&store)==AE_ACCEPTED);
   /* Physical stage has no artifact/workspace settlement prerequisite. */
   assert(s.settlements==0);
   assert(command(&s,AE_WORKSPACE_FREEZE,&store)==AE_EFFECT_REQUIRED);
   assert(s.workspace==AE_ACTIVE); /* Command is not a fictional rename ack. */
   next=s; next.workspace=AE_FROZEN; next.pending_effect=0;
   assert(ae_commit(&s,&next,persist,&store)==AE_ACCEPTED);
-  assert(command(&s,AE_READ_ARTIFACT_SLOT,&store)==AE_EFFECT_REQUIRED);
+  assert(command(&s,AE_READ_TREE,&store)==AE_EFFECT_REQUIRED);
   next=s; next.pending_effect=0;
   assert(ae_commit(&s,&next,persist,&store)==AE_ACCEPTED);
   assert(command(&s,AE_WORKSPACE_CLEANUP,&store)==AE_REFUSED);
@@ -85,7 +94,7 @@ static void lifecycle(void) {
   assert(command(&s,AE_SETTLE_LAUNCH_ROUTE,&store)==AE_ACCEPTED);
   assert(command(&s,AE_SETTLE_PRIVATE,&store)==AE_ACCEPTED);
   assert(command(&s,AE_DISPOSE_ONCE,&store)==AE_EFFECT_REQUIRED);
-  assert(s.phase==AE_EXIT_PROVED && s.workspace==AE_CLOSED);
+  assert(s.phase==AE_NO_START && s.workspace==AE_CLOSED);
   assert(command(&s,AE_READ_CLOSED_WORKSPACE,&store)==AE_REFUSED);
   next=s; next.phase=AE_RELEASED; next.pending_effect=0;
   assert(ae_commit(&s,&next,persist,&store)==AE_ACCEPTED);
@@ -133,15 +142,15 @@ static void faults(void) {
 static void pending_effects(void) {
   uint8_t binding[32]={1},launch[32]={2};
   ae_state s; storage store={0}; ae_init(&s,binding,launch);
-  s.phase=AE_EXIT_PROVED; s.reaped=1; s.streams_sealed=1; s.workspace=AE_FROZEN;
-  ae_request r=request(&s,AE_READ_ARTIFACT_SLOT); r.argument=1;
+  s.phase=AE_STAGED;
+  ae_request r=request(&s,AE_MATERIALIZE_ENTRY); r.argument=25;
   assert(ae_command(&s,&r,persist,&store)==AE_EFFECT_REQUIRED);
-  assert(s.pending_argument==1 && store.saved.pending_argument==1);
+  assert(s.pending_argument==25 && store.saved.pending_argument==25);
   assert(command(&s,AE_READ_STATUS,&store)==AE_ACCEPTED);
-  assert(s.last_request.argument==0 && s.pending_argument==1);
+  assert(s.last_request.argument==0 && s.pending_argument==25);
   assert(command(&s,AE_CUTOFF,&store)==AE_ACCEPTED);
-  assert(s.pending_effect==AE_READ_ARTIFACT_SLOT && s.pending_argument==1);
-  assert(command(&s,AE_READ_ARTIFACT_SLOT,&store)==AE_REFUSED);
+  assert(s.pending_effect==AE_MATERIALIZE_ENTRY && s.pending_argument==25);
+  assert(command(&s,AE_READ_TREE,&store)==AE_REFUSED);
   ae_init(&s,binding,launch); s.phase=AE_STAGED;
   assert(command(&s,AE_START_ONCE,&store)==AE_EFFECT_REQUIRED);
   store.fail=1;
@@ -149,7 +158,7 @@ static void pending_effects(void) {
   assert(s.phase==AE_QUARANTINED && s.cutoff && store.saved.birth_attempted);
   unsigned writes=store.writes;
   assert(ae_begin_birth(&s,persist,&store)==AE_UNKNOWN && writes==store.writes);
-  puts("C: pending slot survives status/cutoff; birth claim durable, single-use and failure-quarantined");
+  puts("C: pending materialization payload length survives status/cutoff; birth claim durable, single-use and failure-quarantined");
 }
 static void channel_and_no_start(void) {
   uint8_t binding[32]={1},launch[32]={2};
@@ -242,9 +251,32 @@ static void native_events(void) {
   assert(ae_wait_observed(&s,-1,15,persist,&store)==AE_ACCEPTED);
   assert(!ae_may_signal(&s) && !ae_writer_stopped(&s) && s.exit_code==-1 && s.exit_signal==15);
   assert(ae_wait_observed(&s,0,0,persist,&store)==AE_REFUSED);
-  assert(ae_streams_observed(&s,persist,&store)==AE_ACCEPTED && ae_writer_stopped(&s));
+  assert(ae_streams_observed(&s,persist,&store)==AE_ACCEPTED && !ae_writer_stopped(&s));
   assert(s.settlements==0 && s.workspace==AE_ACTIVE);
   assert(ae_streams_observed(&s,persist,&store)==AE_REFUSED);
   puts("C: genuine native birth/preexec/wait/stream transitions, invalid wait outcomes and duplicate events rejected");
 }
-int main(void) { admission(); native_events(); frames(); lifecycle(); faults(); pending_effects(); channel_and_no_start(); return 0; }
+static void material_uuid(void) {
+  uint8_t uuid[]="01234567-89ab-4cde-8012-3456789abcde";
+  assert(ae_material_uuid_valid(uuid,36));
+  for (size_t i=0;i<36;i++) assert(!ae_material_uuid_valid(uuid,i));
+  assert(!ae_material_uuid_valid(uuid,37));
+  assert(!ae_material_uuid_valid(NULL,36));
+  uuid[14]='5'; assert(!ae_material_uuid_valid(uuid,36)); uuid[14]='4';
+  uuid[19]='7'; assert(!ae_material_uuid_valid(uuid,36)); uuid[19]='8';
+  uuid[0]='A'; assert(!ae_material_uuid_valid(uuid,36)); uuid[0]='0';
+  uuid[8]='0'; assert(!ae_material_uuid_valid(uuid,36)); uuid[8]='-';
+  uuid[35]=0; assert(!ae_material_uuid_valid(uuid,36));
+  puts("C: fixed material UUID bounds/version/variant/canonical spelling reject malformed input");
+}
+int ae_rejecting_probe_main(int argc,char **argv);
+static void rejecting_probe_entry(void) {
+  char *invalid[]={"probe","--unknown",NULL};
+  assert(ae_rejecting_probe_main(2,invalid)==78);
+#ifndef __APPLE__
+  char *exact[]={"probe","--restricted-singleton-probe",NULL};
+  assert(ae_rejecting_probe_main(2,exact)==78);
+#endif
+  puts("C: probe entry refuses unsupported invocation/platform without qualification or native probe execution");
+}
+int main(void) { rejecting_probe_entry(); material_uuid(); admission(); native_events(); frames(); lifecycle(); faults(); pending_effects(); channel_and_no_start(); return 0; }

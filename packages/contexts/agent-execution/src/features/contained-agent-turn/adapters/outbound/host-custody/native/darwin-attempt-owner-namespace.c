@@ -82,14 +82,6 @@ static int fresh_directory(int parent,const char *name,uid_t uid,gid_t gid,mode_
   if (!ok) { (void)close_owned(&fd); return -1; }
   return fd;
 }
-static int empty_slot(ae_custody *c,const char *name) {
-  int fd=openat(c->workspace,name,O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW|O_CLOEXEC,0600);
-  if (fd<0) return 0;
-  int ok=clear_acl(fd) && fchown(fd,c->leased_uid,c->leased_gid)==0 &&
-    fchmod(fd,0600)==0 && durable(fd);
-  if (!close_owned(&fd)) ok=0;
-  return ok;
-}
 int ae_native_stage_namespace(ae_custody *c) {
   if (!c || c->unknown || c->state.phase!=AE_EMPTY || c->state.cutoff ||
       c->leased_uid==0 || c->leased_gid==0 || c->leased_uid==c->host_uid ||
@@ -131,6 +123,15 @@ int ae_native_stage_namespace(ae_custody *c) {
   if (private_fd<0) return uncertain(c);
   struct stat private_stat;
   int ok=fstat(private_fd,&private_stat)==0;
+  int home_fd=fresh_directory(private_fd,"codex-home",c->leased_uid,c->leased_gid,0700);
+  int tmp_fd=fresh_directory(private_fd,"tmp",c->leased_uid,c->leased_gid,0700);
+  struct stat home_stat,tmp_stat;
+  if (!ok || home_fd<0 || tmp_fd<0 || fstat(home_fd,&home_stat)!=0 || fstat(tmp_fd,&tmp_stat)!=0 ||
+      home_stat.st_dev!=private_stat.st_dev || tmp_stat.st_dev!=private_stat.st_dev || home_stat.st_ino==tmp_stat.st_ino) ok=0;
+  if (ok) {c->codex_home_inode=(uint64_t)home_stat.st_ino; c->tmp_inode=(uint64_t)tmp_stat.st_ino;}
+  if (!close_owned(&home_fd)) ok=0;
+  if (!close_owned(&tmp_fd)) ok=0;
+  c->material_root=-1;
   if (!close_owned(&private_fd)) ok=0;
   if (!ok) return uncertain(c);
   c->private_device=(uint64_t)private_stat.st_dev; c->private_inode=(uint64_t)private_stat.st_ino;
@@ -138,8 +139,7 @@ int ae_native_stage_namespace(ae_custody *c) {
   if (c->workspace<0) return uncertain(c);
   struct stat workspace_stat;
   if (fstat(c->workspace,&workspace_stat)!=0 || workspace_stat.st_dev!=private_stat.st_dev ||
-      workspace_stat.st_ino==private_stat.st_ino || !empty_slot(c,AE_SLOT_0) ||
-      !empty_slot(c,AE_SLOT_1) || !durable(c->workspace) || !durable(c->envelope)) return uncertain(c);
+      workspace_stat.st_ino==private_stat.st_ino || !durable(c->workspace) || !durable(c->envelope)) return uncertain(c);
   c->device=(uint64_t)workspace_stat.st_dev; c->inode=(uint64_t)workspace_stat.st_ino;
   next=c->state; next.workspace_dev=c->device; next.workspace_ino=c->inode; next.phase=AE_STAGED;
   return ae_commit(&c->state,&next,ae_native_persist,c)==AE_ACCEPTED;

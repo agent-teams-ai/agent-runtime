@@ -21,7 +21,6 @@ typedef struct {
   uint64_t host_birth_seconds, host_birth_micros;
 } ae_bootstrap;
 int ae_root_capture(ae_bootstrap *);
-int ae_root_read_closed(void);
 /* On success only the native owner returns; the root launcher exec-replaces
  * into the pinned Host after dropping all root authority and root descriptors.
  * A failed exec exits without becoming a second owner or restarting. */

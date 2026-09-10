@@ -29,15 +29,38 @@
 #define AE_WORKSPACE_CLOSE 8
 #define AE_SETTLE_WORKSPACE 9
 #define AE_SETTLE_PRIVATE 10
-#define AE_READ_ARTIFACT_SLOT 11
+#define AE_RETIRED_SLOT_COMMAND 11
 #define AE_DISPOSE_ONCE 12
 #define AE_READ_CLOSED_WORKSPACE 13
-#define AE_ARTIFACT_SLOTS 2
-#define AE_ARTIFACT_MAX_BYTES 1048576
-/* The entire admitted writable workspace is these two regular files. Empty
- * or richer trees require a separately reviewed manifest, never truncation. */
-#define AE_SLOT_0 "analysis.txt"
-#define AE_SLOT_1 "result.json"
+#define AE_MATERIALIZE_BEGIN 14
+#define AE_MATERIALIZE_ENTRY 15
+#define AE_MATERIALIZE_CHUNK 16
+#define AE_MATERIALIZE_FINISH 17
+#define AE_COMMIT_CREATION 18
+#define AE_READ_TREE 19
+#define AE_BIND_PREPARED 20
+#define AE_CONFIRM_CLAIM 21
+#define AE_READ_OBSERVATION 22
+#define AE_MATERIAL_BEGIN 23
+#define AE_MATERIAL_CHUNK 24
+#define AE_MATERIAL_FINISH 25
+#define AE_CREATION_BYTES 3116
+#define AE_DIRECTORY_FACT_BYTES 1052
+#define AE_OBSERVATION_BYTES 5244
+#define AE_FILE_FACT_BYTES 1092
+#define AE_MATERIAL_RESULT_BYTES 8520
+#define AE_CONFIG_MAX_BYTES 65536
+#define AE_CATALOG_BYTES 515145
+#define AE_CATALOG_SHA256 "d7136a413cfac1b5b1686d9e0dcc5c80ca05bebed5e9fc3911376561d0ef6ee8"
+#define AE_PREPARED_BYTES 9252
+#define AE_TREE_REQUEST_MAX_BYTES 16392
+#define AE_EVENT_TREE_ENTRY 12
+#define AE_EVENT_TREE_CHUNK 13
+#define AE_EVENT_TREE_END 14
+#define AE_EVENT_CLOSED_READ 15
+#define AE_EVENT_OBSERVATION 16
+#define AE_EVENT_MATERIAL_RESULT 17
+#define AE_EVENT_MAX_BYTES 1048576
 /* Root bootstrap is a separate, fixed FD-only interface; it is never accepted
  * on the Host command channel. Each fixed-width string has one terminating NUL
  * and zero tail. All unused image/argv entries and all reserved bytes are zero.
@@ -75,7 +98,7 @@
 #define AE_IMAGE_PROFILE 4
 #define AE_IMAGE_FIRST_LOADER 5
 #define AE_MANIFEST_BINDINGS 8
-/* Bindings, in order: operation, attempt, Host boot, Host generation, route,
+/* Bindings, in order: operation, scope (tenant NUL project), Host boot, Host generation, route,
  * frozen retained consumer set, policy qualification, allowed image chain.
  * The last two identify root-reviewed qualification evidence, not booleans. */
 typedef struct {
@@ -129,7 +152,7 @@ int ae_manifest_in_range(const ae_manifest *, const ae_grant *);
 #define AE_EVENT_IMAGE 3
 #define AE_EVENT_EXIT 4
 #define AE_EVENT_STREAMS 5
-#define AE_EVENT_ARTIFACT 6
+#define AE_RETIRED_ARTIFACT_EVENT 6
 #define AE_EVENT_STDOUT 7
 #define AE_EVENT_STDERR 8
 #define AE_EVENT_REFUSED 9
@@ -159,8 +182,6 @@ int ae_manifest_in_range(const ae_manifest *, const ae_grant *);
 #define AE_RECORD_BIRTH_ATTEMPTED_OFFSET 156
 #define AE_RECORD_HASH_OFFSET 160
 
-#define AE_READBACK_GRANT_MAGIC 1095062065
-#define AE_READBACK_GRANT_BYTES 256
 #define AE_EVENT_PHASE_OFFSET 80
 #define AE_EVENT_WORKSPACE_OFFSET 84
 #define AE_EVENT_FLAGS_OFFSET 88

@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import {
+  decodeDarwinNativeLaunchData, type DarwinAttemptOwnerEvent,
   decodeDarwinAttemptOwnerRequest, encodeDarwinAttemptOwnerRequest,
   DarwinAttemptOwnerFrameReader, darwinAttemptOwnerFrameBytes,
 } from "../../../src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-protocol.ts";
@@ -14,11 +15,13 @@ const native = fileURLToPath(new URL("../../../src/features/contained-agent-turn
 const start = { command: "START_ONCE", sequence: 1, binding: "01".repeat(32), launch: "02".repeat(32), argument: 0 } as const;
 const commands = ["START_ONCE", "CUTOFF", "READ_STATUS", "SETTLE_LAUNCH_ROUTE",
   "SETTLE_ARTIFACT_RESULT", "WORKSPACE_FREEZE", "WORKSPACE_CLEANUP", "WORKSPACE_CLOSE",
-  "SETTLE_WORKSPACE", "SETTLE_PRIVATE", "READ_ARTIFACT_SLOT", "DISPOSE_ONCE", "READ_CLOSED_WORKSPACE"] as const;
+  "SETTLE_WORKSPACE", "SETTLE_PRIVATE", "DISPOSE_ONCE", "READ_CLOSED_WORKSPACE",
+  "MATERIALIZE_BEGIN", "MATERIALIZE_ENTRY", "MATERIALIZE_CHUNK", "MATERIALIZE_FINISH", "COMMIT_CREATION", "READ_TREE", "BIND_PREPARED", "CONFIRM_CLAIM", "READ_OBSERVATION", "MATERIAL_BEGIN", "MATERIAL_CHUNK", "MATERIAL_FINISH"] as const;
+const argumentFor = (command: typeof commands[number]): number => ({ MATERIALIZE_BEGIN: 16, MATERIALIZE_ENTRY: 25, MATERIALIZE_CHUNK: 9, COMMIT_CREATION: 3116, BIND_PREPARED: 9252, CONFIRM_CLAIM: 9253, MATERIAL_BEGIN: 44, MATERIAL_CHUNK: 9 } as Partial<Record<typeof commands[number], number>>)[command] ?? 0;
 
 test("all finite commands roundtrip exact owned source", () => {
   for (const command of commands) {
-    const input = { ...start, command };
+    const input = { ...start, command, argument: argumentFor(command) };
     assert.deepEqual(decodeDarwinAttemptOwnerRequest(encodeDarwinAttemptOwnerRequest(input)), input);
   }
 });
@@ -38,8 +41,11 @@ test("shape validation rejects paths, PIDs, duplicate-equivalent extra fields an
     assert.throws(() => encodeDarwinAttemptOwnerRequest({ ...start, binding }));
   }
   assert.throws(() => encodeDarwinAttemptOwnerRequest({ ...start, argument: 1 }));
-  assert.throws(() => encodeDarwinAttemptOwnerRequest({ ...start, command: "READ_ARTIFACT_SLOT", argument: 2 }));
-  assert.equal(decodeDarwinAttemptOwnerRequest(encodeDarwinAttemptOwnerRequest({ ...start, command: "READ_ARTIFACT_SLOT", argument: 1 })).argument, 1);
+  const retired = encodeDarwinAttemptOwnerRequest(start);
+  retired.writeUInt32BE(11, 8);
+  assert.throws(() => decodeDarwinAttemptOwnerRequest(retired));
+  assert.throws(() => encodeDarwinAttemptOwnerRequest({ ...start, command: "MATERIALIZE_ENTRY", argument: 24 }));
+  assert.throws(() => encodeDarwinAttemptOwnerRequest({ ...start, command: "MATERIALIZE_CHUNK", argument: 16393 }));
 });
 
 test("all truncations, reserved data, concatenated frames and channel loss reject", () => {
@@ -67,11 +73,11 @@ test("all truncations, reserved data, concatenated frames and channel loss rejec
 test("portable C pure state/protocol harness uses the exact TS wire vectors", () => {
   const temporary = mkdtempSync(join(tmpdir(), "darwin-owner-protocol-"));
   try {
-    const vectors = commands.map((command) => [...encodeDarwinAttemptOwnerRequest({ ...start, command })]);
+    const vectors = commands.map((command) => [...encodeDarwinAttemptOwnerRequest({ ...start, command, argument: argumentFor(command) })]);
     writeFileSync(join(temporary, "vectors.h"), `static const unsigned char vectors[][AE_FRAME_BYTES]={${vectors.map((v) => `{${v.join(",")}}`).join(",")}};\n`);
     const executable = join(temporary, "protocol-harness");
     const args = ["-std=c11", "-Wall", "-Wextra", "-Werror", "-pedantic", "-I", native, "-I", temporary,
-      join(native, "darwin-attempt-owner-state.c"), join(native, "darwin-attempt-owner-admission.c"),
+      join(native, "darwin-attempt-owner-state.c"), join(native, "darwin-attempt-owner-admission.c"), join(native, "darwin-attempt-owner-material.c"), join(native, "darwin-attempt-owner-probes.c"),
       fileURLToPath(new URL("./darwin-attempt-owner-protocol-harness.c", import.meta.url)), "-o", executable];
     const compile = spawnSync("cc", args, { encoding: "utf8" });
     console.log(JSON.stringify({ command: ["cc", ...args], stdout: compile.stdout, stderr: compile.stderr, exit: compile.status }));
@@ -82,4 +88,31 @@ test("portable C pure state/protocol harness uses the exact TS wire vectors", ()
     assert.ifError(run.error);
     assert.equal(run.status, 0, run.stderr);
   } finally { rmSync(temporary, { recursive: true, force: true }); }
+});
+
+test("launch observation data rejects foreign identity, generation, aliases and noncanonical paths", () => {
+  const payload = Buffer.alloc(5244);
+  const text = (offset: number, value: string): void => {
+    payload.fill(0, offset, offset + 1028);
+    payload.writeUInt32BE(Buffer.byteLength(value), offset); payload.write(value, offset + 4);
+  };
+  text(0, "operation"); payload.writeUInt32BE(70001, 1028); payload.writeUInt32BE(7, 1032);
+  const paths = ["/root/private", "/root/private/codex-home", "/root/private/tmp", "/root/workspace"];
+  for (const [index, path] of paths.entries()) {
+    const offset = 1036 + index * 1052;
+    text(offset, path); payload.writeBigUInt64BE(1n, offset + 1028);
+    payload.writeBigUInt64BE(BigInt(index + 2), offset + 1036);
+    payload.writeUInt32BE(70001, offset + 1044); payload.writeUInt32BE(0o700, offset + 1048);
+  }
+  // Pure decoder fixture; this does not issue an observation capability.
+  const event = {kind: "OBSERVATION", revision: 7, workspaceDev: "1", workspaceIno: "5", payload} as DarwinAttemptOwnerEvent;
+  const observed = decodeDarwinNativeLaunchData(event);
+  assert.equal(observed.codexHome.path, paths[1]); assert.equal(observed.workspace.ino, 5n);
+  assert.ok(Object.isFrozen(observed)); assert.ok(Object.isFrozen(observed.workspace));
+  assert.throws(() => decodeDarwinNativeLaunchData({...event, revision: 8}));
+  assert.throws(() => decodeDarwinNativeLaunchData({...event, workspaceIno: "6"}));
+  text(2088, "/root/private/../codex-home");
+  assert.throws(() => decodeDarwinNativeLaunchData(event));
+  text(2088, paths[1]!); payload.writeBigUInt64BE(2n, 2088 + 1036);
+  assert.throws(() => decodeDarwinNativeLaunchData(event));
 });

@@ -408,43 +408,4 @@ int ae_root_isolate_host(ae_bootstrap *b) {
   execve(argv[0],argv,env);
   _exit(78);
 }
-/* Separate read-only packet: FD3 is the original successfully transmitted
- * close ticket; FD4 is root's immutable grant for that exact known handoff,
- * namespace and retained parent/journal identities. It is not a scan/recovery
- * endpoint and cannot allocate, launch, signal, mutate or dispose anything. */
-int ae_root_read_closed(void) {
-  if (getuid()!=0 || geteuid()!=0) return 78;
-  uint8_t ticket[AE_CLOSED_RECORD_BYTES],grant[AE_READBACK_GRANT_BYTES],digest[32];
-  if (!capture_record(AE_BOOT_GRANT_FD,grant,sizeof(grant),NULL) ||
-      !capture_record(AE_BOOT_MANIFEST_FD,ticket,sizeof(ticket),grant+64) || word(grant)!=AE_READBACK_GRANT_MAGIC ||
-      word(grant+4)!=AE_VERSION || word(grant+8)!=AE_READBACK_GRANT_BYTES || word(grant+12) ||
-      memcmp(grant+16,"attempt-",8) || !zero(grant+56,8) || !zero(grant+208,48)) return 78;
-  for (unsigned i=24;i<56;i++) if (!((grant[i]>='0' && grant[i]<='9') ||
-      (grant[i]>='a' && grant[i]<='f'))) return 78;
-  CC_SHA256(ticket,sizeof(ticket),digest);
-  if (memcmp(digest,grant+64,32) || memcmp(ticket+AE_RECORD_BINDING_OFFSET,grant+96,32) || memcmp(ticket+AE_RECORD_LAUNCH_OFFSET,grant+128,32) ||
-      memcmp(ticket+AE_RECORD_WORKSPACE_DEVICE_OFFSET,grant+192,16) || !protected_fd(AE_BOOT_PARENT_FD,1,0) ||
-      !protected_fd(AE_BOOT_JOURNAL_FD,1,0)) return 78;
-  const int fds[]={AE_BOOT_PARENT_FD,AE_BOOT_JOURNAL_FD};
-  for (unsigned i=0;i<2;i++) {
-    struct stat st; const uint8_t *identity=grant+160+i*16;
-    uint64_t dev=((uint64_t)word(identity)<<32)|word(identity+4);
-    uint64_t ino=((uint64_t)word(identity+8)<<32)|word(identity+12);
-    if (fstat(fds[i],&st)!=0 || (uint64_t)st.st_dev!=dev || (uint64_t)st.st_ino!=ino) return 78;
-  }
-  char namespace_name[41]; memcpy(namespace_name,grant+16,40); namespace_name[40]=0;
-  ae_custody c; memset(&c,0,sizeof(c)); c.journal=AE_BOOT_JOURNAL_FD;
-  c.envelope=openat(AE_BOOT_PARENT_FD,namespace_name,O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
-  struct stat envelope;
-  if (c.envelope<0 || !protected_stat(c.envelope,&envelope,1) || (envelope.st_mode&0777)!=0710) return 78;
-  c.workspace=openat(c.envelope,"workspace.closed",O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
-  int ok=c.workspace>=0 && ae_native_restore_closed(&c,ticket);
-  if (!close_capture(&c.workspace) || !close_capture(&c.envelope) || !close_capture(&c.journal)) ok=0;
-  int parent=AE_BOOT_PARENT_FD;
-  if (!close_capture(&parent)) ok=0;
-  if (!ok) return 75;
-  /* Fixed immutable bytes only. Existing retained workspace owner decides its
-   * ordinary receipt readback; this never emits a new public proof. */
-  return write(STDOUT_FILENO,ticket,sizeof(ticket))==(ssize_t)sizeof(ticket) ? 0 : 75;
-}
 #endif

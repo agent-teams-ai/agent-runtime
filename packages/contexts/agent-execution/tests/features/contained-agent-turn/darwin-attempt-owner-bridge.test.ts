@@ -3,8 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { Duplex } from "node:stream";
-import { createDarwinAttemptWorkspaceBackend } from "../../../src/features/contained-agent-turn/adapters/outbound/filesystem/darwin-attempt-workspace-backend.ts";
-import { createWorkspaceClosureRecord } from "../../../src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-state.ts";
+import { selectDarwinAttemptWorkspaceBackend, type DarwinNativeWorkspaceSelection, type DarwinNativeRetainedWorkspaceOwners } from "../../../src/features/contained-agent-turn/adapters/outbound/filesystem/darwin-attempt-workspace-backend.ts";
 import {
   decodeDarwinAttemptOwnerRequest, decodeDarwinAttemptOwnerEvent, DarwinAttemptOwnerEventReader,
   type DarwinAttemptOwnerEvent,
@@ -81,7 +80,7 @@ test("finite event framing handles every split, coalescing, oversize and lost pa
   assert.throws(() => decoded(surplus));
 });
 
-test("physical observations need the same child birth, native wait and stream EOF but no artifact barrier", () => {
+test("direct-child and stream observations preserve birth and wait without claiming writer exclusion", () => {
   const events = new DarwinAttemptOwnerEvents();
   for (const bytes of [hello(), preexec(), image(), exit()]) {events.accept(decoded(bytes));}
   assert.equal(events.execution(), undefined);
@@ -145,65 +144,14 @@ test("retained callbacks are invoked by the bridge; foreign settlement is never 
 });
 
 
-test("native workspace backend preserves original record identity and passes fixed bytes to the existing owners", async () => {
-  let serial = 2;
-  let workspace = 0;
-  const commands: string[] = [];
-  const endpoint = new Duplex({
-    read() {},
-    write(chunk: Buffer, _encoding, callback) {
-      const request = decodeDarwinAttemptOwnerRequest(chunk); commands.push(request.command);
-      if (request.command === "WORKSPACE_FREEZE") {workspace = 1;}
-      if (request.command === "WORKSPACE_CLEANUP") {workspace = 2;}
-      if (request.command === "WORKSPACE_CLOSE") {workspace = 3;}
-      const artifact = request.command === "READ_ARTIFACT_SLOT";
-      const reply = nativeEvent(artifact ? "ARTIFACT" : "STATUS", ++serial, {
-        sequence: request.sequence, command: request.command, phase: 6, flags: 12, workspace,
-        payload: artifact ? Buffer.from(`slot-${request.argument}`) : Buffer.alloc(0),
-      });
-      if (artifact) {
-        reply.writeUInt32BE(request.argument, number("EVENT_SLOT_OFFSET"));
-        reply.writeUInt32BE(0o600, number("EVENT_MODE_OFFSET"));
-        reply.writeBigUInt64BE(1n, number("EVENT_DEVICE_OFFSET"));
-        reply.writeBigUInt64BE(BigInt(300 + request.argument), number("EVENT_INODE_OFFSET"));
-      }
-      this.push(reply); callback();
-    },
-  });
-  const complete = async () => ({ binding: binding.toString("hex"), launch: launch.toString("hex"),
-    namespace: namespace.toString(), workspaceDev: "1", workspaceIno: "200" });
-  const bridge = bindDarwinAttemptOwnerBridge(endpoint, { launchRoute: complete, artifactResult: complete,
-    workspace: complete, privateMaterial: complete, output: async () => {} });
-  endpoint.push(hello()); await bridge.ready;
-  endpoint.push(nativeEvent("STREAMS", 2, { phase: 6, flags: 12 }));
-  const creation = { schemaVersion: 1, operationId: "operation", workspaceName: `operation-${"a".repeat(64)}`,
-    materializationDigest: "c".repeat(64), rootIdentity: { dev: "1", ino: "200" }, scope: { projectId: "p", tenantId: "t" } } as const;
-  const sealed = { schemaVersion: 2, operationId: creation.operationId, workspaceName: creation.workspaceName,
-    rootIdentity: creation.rootIdentity, scope: creation.scope, manifestDigest: "d".repeat(64), treeDigest: "e".repeat(64) } as const;
-  const closed = createWorkspaceClosureRecord(sealed.workspaceName, sealed);
-  let readbacks = 0;
-  const readClosed = async () => {
-    readbacks++;
-    return { ...await complete(), dev: "1", ino: "200", record: Buffer.alloc(0) };
-  };
-  const backend = createDarwinAttemptWorkspaceBackend(bridge, { creation: async () => creation,
-    seal: async () => sealed, closure: async () => closed, readClosed });
-  const slots = await backend.freeze();
-  assert.deepEqual(slots.map((slot) => [slot.slot, slot.mode, slot.payload.toString()]), [[0, 0o600, "slot-0"], [1, 0o600, "slot-1"]]);
-  assert.ok(slots.every((slot) => slot.workspaceIno === creation.rootIdentity.ino));
-  await backend.cleanup(); await backend.close(); await backend.acknowledgeClosure();
-  assert.deepEqual(commands, ["WORKSPACE_FREEZE", "READ_ARTIFACT_SLOT", "READ_ARTIFACT_SLOT", "SETTLE_ARTIFACT_RESULT",
-    "WORKSPACE_CLEANUP", "WORKSPACE_CLOSE", "SETTLE_WORKSPACE"]);
-  await assert.rejects(backend.readClosed(), /no successfully closed/u);
-  assert.equal(readbacks, 0); // Neither disk state nor helper exit creates a replay capability.
-  const foreign = createDarwinAttemptWorkspaceBackend(bridge, { creation: async () => ({ ...creation, rootIdentity: { dev: "1", ino: "201" } }),
-    seal: async () => sealed, closure: async () => closed, readClosed });
-  const before = commands.length;
-  await assert.rejects(foreign.freeze(), /original creation inode/u);
-  assert.equal(commands.length, before);
-  bridge.lost();
+test("native workspace selection rejects clones before reading caller callbacks", () => {
+  let reads = 0;
+  const records = { get creation() { reads++; throw new Error("must not read"); } } as unknown as DarwinNativeRetainedWorkspaceOwners;
+  for (const selection of [{}, Object.create(null), Object.freeze({ native: true })]) {
+    assert.throws(() => selectDarwinAttemptWorkspaceBackend(selection as DarwinNativeWorkspaceSelection, records), /foreign/u);
+  }
+  assert.equal(reads, 0);
 });
-
 
 test("closed replay requires the exact successful release ticket and rejects torn or mismatched records", () => {
   const ticket = Buffer.alloc(number("CLOSED_RECORD_BYTES"));
@@ -249,4 +197,92 @@ test("Host cutoff latches before a waiting START and never queues a later launch
   await assert.rejects(bridge.start(), /cut off/u);
   assert.deepEqual(commands, ["CUTOFF"]);
   bridge.lost();
+});
+
+test("bridge materializes and verifies a complete destination tree through bounded native frames", async () => {
+  const commands: string[] = [];
+  const inventory: Buffer[] = [];
+  const contents = new Map<number, Buffer[]>();
+  let serial = 1;
+  let phase = 2, flags = 0, workspace = 0;
+  let ticket = Buffer.alloc(0);
+  const endpoint = new Duplex({
+    read() {},
+    write(chunk: Buffer, _encoding, callback) {
+      try {
+        const request = decodeDarwinAttemptOwnerRequest(chunk.subarray(0, number("FRAME_BYTES")));
+        const payload = chunk.subarray(number("FRAME_BYTES"));
+        commands.push(request.command);
+        assert.equal(payload.length, request.argument);
+        if (request.command === "MATERIALIZE_ENTRY") {inventory.push(Buffer.from(payload));}
+        if (request.command === "MATERIALIZE_CHUNK") {
+          const ordinal = payload.readUInt32BE(0), chunks = contents.get(ordinal) ?? [];
+          assert.equal(payload.readUInt32BE(4), chunks.reduce((sum, bytes) => sum + bytes.length, 0));
+          chunks.push(Buffer.from(payload.subarray(8))); contents.set(ordinal, chunks);
+        }
+        if (request.command === "READ_TREE" || request.command === "READ_CLOSED_WORKSPACE") {
+          for (const entry of inventory) {
+            const ordinal = entry.readUInt32BE(0);
+            const event = nativeEvent("TREE_ENTRY", ++serial, { sequence: request.sequence, phase, flags, workspace, payload: entry });
+            event.writeBigUInt64BE(1n, number("EVENT_DEVICE_OFFSET"));
+            event.writeBigUInt64BE(BigInt(300 + ordinal), number("EVENT_INODE_OFFSET"));
+            this.push(event);
+            let offset = 0;
+            for (const bytes of contents.get(ordinal) ?? []) {
+              const data = Buffer.alloc(8 + bytes.length); data.writeUInt32BE(ordinal, 0); data.writeUInt32BE(offset, 4); bytes.copy(data, 8);
+              this.push(nativeEvent("TREE_CHUNK", ++serial, { sequence: request.sequence, phase, flags, workspace, payload: data })); offset += bytes.length;
+            }
+          }
+          const end = Buffer.alloc(24); end.writeUInt32BE(0o40700, 0); end.writeBigUInt64BE(10n, 8); end.writeBigUInt64BE(11n, 16);
+          this.push(nativeEvent("TREE_END", ++serial, { sequence: request.sequence, phase, flags, workspace, payload: end }));
+        }
+        this.push(nativeEvent(request.command === "READ_CLOSED_WORKSPACE" ? "CLOSED_READ" : "STATUS", ++serial, { sequence: request.sequence, command: request.command, phase, flags, workspace, payload: request.command === "READ_CLOSED_WORKSPACE" ? ticket : Buffer.alloc(0) })); callback();
+      } catch (error) {callback(error as Error);}
+    },
+  });
+  const complete = async () => ({ binding: binding.toString("hex"), launch: launch.toString("hex"),
+    namespace: namespace.toString(), workspaceDev: "1", workspaceIno: "200" });
+  const bridge = bindDarwinAttemptOwnerBridge(endpoint, { launchRoute: complete, artifactResult: complete,
+    workspace: complete, privateMaterial: complete, output: async () => {} });
+  endpoint.push(hello()); await bridge.ready;
+  const bytes = Buffer.alloc(20000, 42), digest = createHash("sha256").update(bytes).digest("hex");
+  const entries = [{ kind: "directory" as const, relativePath: "empty", mode: 0o700 },
+    { kind: "file" as const, relativePath: "file", mode: 0o640, size: bytes.length, digest }];
+  const treeDigest = createHash("sha256").update(JSON.stringify([["directory", "empty", 0o700], ["file", "file", 0o640, bytes.length, digest]])).digest("hex");
+  const source = { entries, files: [{ ...entries[1]!, relativePath: "file", mode: 0o640, size: bytes.length, digest, bytes }], treeDigest,
+    rootIdentity: { dev: 2n, ino: 12n, mode: 0o40700n, ctimeNs: 0n, mtimeNs: 0n } };
+  const destination = await bridge.materializeComplete(source, { maxDepth: 32, maxEntries: 4096, maxFileBytes: 8388608, maxTotalBytes: 33554432 });
+  assert.equal(destination.treeDigest, treeDigest); assert.equal(destination.entries.length, 2);
+  assert.equal(destination.rootIdentity.ino, 200n); assert.equal(destination.rootIdentity.ctimeNs, 10n);
+  assert.deepEqual(destination.files[0]!.bytes, bytes);
+  assert.deepEqual(commands, ["MATERIALIZE_BEGIN", "MATERIALIZE_ENTRY", "MATERIALIZE_ENTRY", "MATERIALIZE_CHUNK", "MATERIALIZE_CHUNK", "MATERIALIZE_FINISH", "READ_TREE"]);
+  const before = commands.length;
+  await assert.rejects(bridge.materializeComplete(source, { maxDepth: 32, maxEntries: 4096, maxFileBytes: 8388608, maxTotalBytes: 33554432 }), /already consumed/u);
+  assert.equal(commands.length, before);
+  phase = 6; flags = 8; await bridge.cutoff();
+  const sequence = commands.length;
+  flags = 12; endpoint.push(nativeEvent("STREAMS", ++serial, { sequence, phase, flags }));
+  for (workspace = 1; workspace <= 3; workspace++) {
+    endpoint.push(nativeEvent("STATUS", ++serial, { sequence, phase, flags, workspace }));
+  }
+  workspace = 3; phase = 7;
+  endpoint.push(nativeEvent("STATUS", ++serial, { sequence, phase, flags, workspace }));
+  phase = 8; ticket = Buffer.alloc(number("CLOSED_RECORD_BYTES")); ticket.write("ae-owner-intent-v1");
+  binding.copy(ticket, number("RECORD_BINDING_OFFSET")); launch.copy(ticket, number("RECORD_LAUNCH_OFFSET"));
+  const put = (name: string, field: number): void => {ticket.writeUInt32BE(field, number(`RECORD_${name}_OFFSET`));};
+  put("PHASE", 8); put("WORKSPACE", 3); put("SEQUENCE", sequence); put("SETTLEMENTS", 15);
+  put("CUTOFF", 1); put("STREAMS", 1); put("EXIT_CODE", 0xffff_ffff); put("REVISION", serial + 2);
+  ticket.writeBigUInt64BE(1n, number("RECORD_WORKSPACE_DEVICE_OFFSET")); ticket.writeBigUInt64BE(200n, number("RECORD_WORKSPACE_INODE_OFFSET"));
+  createHash("sha256").update(ticket.subarray(0, number("RECORD_HASH_OFFSET"))).digest().copy(ticket, number("RECORD_HASH_OFFSET"));
+  endpoint.push(nativeEvent("RELEASED", ++serial, { sequence, phase, flags, workspace, payload: ticket }));
+  // Yield only to the synthetic stream reader, not to an external process.
+  await new Promise<void>(resolve => {setImmediate(resolve); });
+  const observedClosed = await bridge.readClosedWorkspace();
+  assert.equal(commands.at(-1), "READ_CLOSED_WORKSPACE");
+  assert.equal(observedClosed.tree.treeDigest, treeDigest);
+  assert.ok(observedClosed.event.payload.equals(ticket));
+  assert.deepEqual(observedClosed.tree.files[0]!.bytes, bytes);
+  const once = commands.length;
+  await assert.rejects(bridge.readClosedWorkspace(), /already consumed/u);
+  assert.equal(commands.length, once); bridge.lost();
 });

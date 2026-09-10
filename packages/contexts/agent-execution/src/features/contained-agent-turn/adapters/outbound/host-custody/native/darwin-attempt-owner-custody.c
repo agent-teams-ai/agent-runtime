@@ -14,7 +14,6 @@
 #include <time.h>
 
 static const char *const workspace_names[]={"workspace", "workspace.frozen", "workspace.cleanup", "workspace.closed"};
-static const char *const slots[]={AE_SLOT_0, AE_SLOT_1};
 static int unknown(ae_custody *c) {
   c->unknown=1; c->state.phase=AE_QUARANTINED; c->state.cutoff=1; return 0;
 }
@@ -99,77 +98,19 @@ int ae_native_workspace_move(ae_custody *c, ae_workspace target) {
     return unknown(c);
   return commit_effect(c,&next);
 }
-static int no_acl(int fd) {
-  acl_t acl=acl_get_fd_np(fd,ACL_TYPE_EXTENDED);
-  if (!acl) return 0;
-  acl_entry_t entry;
-  int result=acl_get_entry(acl,ACL_FIRST_ENTRY,&entry);
-  int released=acl_free(acl);
-  return result==0 && released==0;
+static int discard_entry(void *context,const ae_tree_observed_entry *entry) {
+  (void)context; (void)entry; return 1;
 }
-/* Enumerate the WHOLE restricted writable tree. Reject extra entries, nested
- * directories, symlinks, mounts, hardlinks, ACLs, flags and missing fixed slots.
- * Bounds are on the enumeration, not just the selected output. */
+static int discard_chunk(void *context,uint32_t ordinal,uint32_t offset,const uint8_t *bytes,size_t size) {
+  (void)context; (void)ordinal; (void)offset; (void)bytes; (void)size; return 1;
+}
+/* Validate every retained entry, including empty directories and contents.
+ * This is readback validation, never evidence that all writers ceased. */
 static int complete_tree(ae_custody *c) {
-  int scan=openat(c->workspace,".",O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
-  if (scan<0) return 0;
-  DIR *dir=fdopendir(scan);
-  if (!dir) { if (!close_once(&scan)) unknown(c); return 0; }
-  unsigned seen=0, count=0; int ok=1;
-  for (;;) {
-    errno=0; struct dirent *e=readdir(dir);
-    if (!e) { if (errno) ok=0; break; }
-    if (!strcmp(e->d_name,".") || !strcmp(e->d_name,"..")) continue;
-    if (++count>AE_ARTIFACT_SLOTS) { ok=0; break; }
-    int slot=!strcmp(e->d_name,slots[0]) ? 0 : !strcmp(e->d_name,slots[1]) ? 1 : -1;
-    if (slot<0 || (seen&(1u<<slot))) { ok=0; break; }
-    struct stat st;
-    if (fstatat(c->workspace,e->d_name,&st,AT_SYMLINK_NOFOLLOW)!=0 ||
-        !S_ISREG(st.st_mode) || st.st_nlink!=1 || (uint64_t)st.st_dev!=c->device ||
-        st.st_size<0 || st.st_size>AE_ARTIFACT_MAX_BYTES || st.st_flags!=0 ||
-        (st.st_mode&07000)!=0) { ok=0; break; }
-    seen|=1u<<slot;
-  }
-  if (closedir(dir)!=0) { unknown(c); ok=0; }
-  return ok && seen==3;
+  ae_tree_limits limits=c->tree_limits;
+  if (!c->materialization_complete) return 0;
+  return ae_tree_observe(c->workspace,&limits,discard_entry,discard_chunk,NULL);
 }
-int ae_native_artifact(ae_custody *c, uint32_t slot, ae_artifact *out) {
-  if (!out) return 0;
-  memset(out,0,sizeof(*out));
-  if (slot>=AE_ARTIFACT_SLOTS || c->state.pending_effect!=AE_READ_ARTIFACT_SLOT ||
-      slot!=c->state.pending_argument || !ae_writer_stopped(&c->state) ||
-      c->state.workspace!=AE_FROZEN || !workspace_identity(c) || !complete_tree(c)) return 0;
-  int fd=openat(c->workspace,slots[slot],O_RDONLY|O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC);
-  if (fd<0) return unknown(c);
-  struct stat before,after,named;
-  int ok=fstat(fd,&before)==0 && S_ISREG(before.st_mode) && before.st_nlink==1 &&
-    (uint64_t)before.st_dev==c->device && before.st_size>=0 &&
-    before.st_size<=AE_ARTIFACT_MAX_BYTES && before.st_flags==0 && no_acl(fd) &&
-    flistxattr(fd,NULL,0,0)==0;
-  uint8_t *bytes=NULL;
-  if (ok) {
-    bytes=malloc((size_t)before.st_size+1);
-    ok=bytes!=NULL;
-  }
-  size_t used=0;
-  while (ok && used<(size_t)before.st_size) {
-    ssize_t n=read(fd,bytes+used,(size_t)before.st_size-used);
-    if (n<=0) { ok=0; break; }
-    used+=(size_t)n;
-  }
-  uint8_t extra;
-  if (ok) ok=read(fd,&extra,1)==0 && fstat(fd,&after)==0 && same(&before,&after) &&
-    fstatat(c->workspace,slots[slot],&named,AT_SYMLINK_NOFOLLOW)==0 && same(&before,&named);
-  if (!close_once(&fd)) ok=0;
-  if (ok) ok=workspace_identity(c) && complete_tree(c);
-  if (!ok) { free(bytes); return unknown(c); }
-  ae_state next=c->state;
-  if (!commit_effect(c,&next)) { free(bytes); return 0; }
-  out->bytes=bytes; out->length=used; out->device=(uint64_t)before.st_dev;
-  out->inode=(uint64_t)before.st_ino; out->mode=(uint32_t)(before.st_mode&0777);
-  return 1; /* Bytes only; no FD and no artifact receipt. Caller frees bytes. */
-}
-
 typedef struct {
   unsigned entries, directories; size_t bytes; struct timespec start;
   uint64_t seen_inodes[256];
@@ -177,7 +118,7 @@ typedef struct {
 static int within_budget(budget *b) {
   struct timespec now;
   return clock_gettime(CLOCK_MONOTONIC,&now)==0 && now.tv_sec-b->start.tv_sec<2 &&
-    b->entries<=256 && b->bytes<=8*AE_ARTIFACT_MAX_BYTES;
+    b->entries<=256 && b->bytes<=8*AE_EVENT_MAX_BYTES;
 }
 static int remove_entries(ae_custody *c,int fd, unsigned depth,budget *b) {
   if (depth>8 || !within_budget(b) || b->directories>=256) return 0;
@@ -200,7 +141,7 @@ static int remove_entries(ae_custody *c,int fd, unsigned depth,budget *b) {
     if (!within_budget(b) || fstatat(fd,e->d_name,&st,AT_SYMLINK_NOFOLLOW)!=0 ||
         (uint64_t)st.st_dev!=c->device || st.st_flags ||
         (!S_ISREG(st.st_mode) && !S_ISDIR(st.st_mode)) ||
-        (S_ISREG(st.st_mode) && (st.st_nlink!=1 || st.st_size<0 || st.st_size>8*AE_ARTIFACT_MAX_BYTES))) { ok=0; break; }
+        (S_ISREG(st.st_mode) && (st.st_nlink!=1 || st.st_size<0 || st.st_size>8*AE_EVENT_MAX_BYTES))) { ok=0; break; }
     if (S_ISREG(st.st_mode)) b->bytes+=(size_t)st.st_size;
     if (!within_budget(b)) { ok=0; break; }
     if (S_ISDIR(st.st_mode)) {
@@ -242,6 +183,30 @@ int ae_native_dispose_private(ae_custody *c) {
   ae_state next=c->state; next.phase=AE_DISPOSED;
   return commit_effect(c,&next); /* Not RELEASED: handles/retention handoff remain. */
 }
+static int retained_journal_bytes(ae_custody *c,const char *name,const uint8_t *expected,size_t size) {
+  if (!size || size>AE_TREE_REQUEST_MAX_BYTES) return 0;
+  int fd=openat(c->journal,name,O_RDONLY|O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC);
+  if (fd<0) return 0;
+  struct stat before,after,named;
+  uint8_t bytes[AE_TREE_REQUEST_MAX_BYTES+1];
+  int ok=fstat(fd,&before)==0 && S_ISREG(before.st_mode) && before.st_uid==0 &&
+    before.st_nlink==1 && (before.st_mode&07777)==0600 && before.st_size==(off_t)size &&
+    read(fd,bytes,size+1)==(ssize_t)size && !memcmp(bytes,expected,size) &&
+    fstat(fd,&after)==0 && same(&before,&after) &&
+    fstatat(c->journal,name,&named,AT_SYMLINK_NOFOLLOW)==0 && same(&before,&named);
+  if (!close_once(&fd)) return unknown(c);
+  return ok;
+}
+int ae_native_validate_journal(ae_custody *c) {
+  if (!c || c->unknown || c->journal<0) return 0;
+  char name[40]; uint8_t expected[AE_CLOSED_RECORD_BYTES];
+  if (snprintf(name,sizeof(name),"intent-%010u",c->state.revision)<0) return 0;
+  record_bytes(&c->state,expected);
+  return retained_journal_bytes(c,name,expected,sizeof(expected)) &&
+    (!c->creation_committed || retained_journal_bytes(c,"workspace-creation",c->creation,sizeof(c->creation))) &&
+    (!c->prepared_bound || retained_journal_bytes(c,"prepared-attempt",c->prepared,sizeof(c->prepared))) &&
+    (!c->claim_committed || retained_journal_bytes(c,"committed-claim",c->committed,c->committed_length));
+}
 int ae_native_read_closed(ae_custody *c) {
   if (c->state.phase!=AE_RELEASED || c->state.workspace!=AE_CLOSED || !workspace_identity(c)) return 0;
   for (unsigned i=0;i<AE_CLOSED;i++) {
@@ -255,44 +220,14 @@ int ae_native_read_closed(ae_custody *c) {
   record_bytes(&c->state,expected);
   int fd=openat(c->journal,name,O_RDONLY|O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC);
   if (fd<0) return 0;
-  struct stat st;
+  struct stat st,after,named;
   int ok=fstat(fd,&st)==0 && S_ISREG(st.st_mode) && st.st_uid==0 && st.st_nlink==1 &&
     st.st_size==(off_t)sizeof(expected) && (st.st_mode&0777)==0600 &&
     read(fd,actual,sizeof(actual))==(ssize_t)sizeof(expected) &&
-    !memcmp(actual,expected,sizeof(expected));
+    !memcmp(actual,expected,sizeof(expected)) && fstat(fd,&after)==0 && same(&st,&after) &&
+    fstatat(c->journal,name,&named,AT_SYMLINK_NOFOLLOW)==0 && same(&st,&named);
   if (!close_once(&fd)) return unknown(c);
-  return ok && complete_tree(c) && workspace_identity(c);
-}
-static uint32_t read32(const uint8_t *p) {
-  return ((uint32_t)p[0]<<24)|((uint32_t)p[1]<<16)|((uint32_t)p[2]<<8)|p[3];
-}
-static uint64_t read64(const uint8_t *p) { return ((uint64_t)read32(p)<<32)|read32(p+4); }
-int ae_native_restore_closed(ae_custody *c,const uint8_t ticket[AE_CLOSED_RECORD_BYTES]) {
-  if (!c || !ticket || c->unknown || c->envelope<0 || c->workspace<0 || c->journal<0) return 0;
-  uint8_t checksum[32],encoded[AE_CLOSED_RECORD_BYTES]; CC_SHA256(ticket,AE_RECORD_HASH_OFFSET,checksum);
-  if (memcmp(ticket,AE_RECORD_MAGIC,AE_RECORD_MAGIC_BYTES) || memcmp(ticket+AE_RECORD_HASH_OFFSET,checksum,32) ||
-      read32(ticket+AE_RECORD_PHASE_OFFSET)!=AE_RELEASED || read32(ticket+AE_RECORD_WORKSPACE_OFFSET)!=AE_CLOSED || read32(ticket+AE_RECORD_SETTLEMENTS_OFFSET)!=15 ||
-      read32(ticket+AE_RECORD_STREAMS_OFFSET)!=1 || read32(ticket+AE_RECORD_REAPED_OFFSET)>1 || read32(ticket+AE_RECORD_PREEXEC_OFFSET)>1 ||
-      read32(ticket+AE_RECORD_CUTOFF_OFFSET)>1 || !read32(ticket+AE_RECORD_REVISION_OFFSET) || read32(ticket+AE_RECORD_PENDING_OFFSET) || read32(ticket+AE_RECORD_ARGUMENT_OFFSET) ||
-      read32(ticket+AE_RECORD_BIRTH_ATTEMPTED_OFFSET)>1) return 0;
-  ae_state s; ae_init(&s,ticket+AE_RECORD_BINDING_OFFSET,ticket+AE_RECORD_LAUNCH_OFFSET);
-  s.phase=AE_RELEASED; s.workspace=AE_CLOSED; s.sequence=read32(ticket+AE_RECORD_SEQUENCE_OFFSET); s.settlements=15;
-  s.workspace_dev=read64(ticket+AE_RECORD_WORKSPACE_DEVICE_OFFSET); s.workspace_ino=read64(ticket+AE_RECORD_WORKSPACE_INODE_OFFSET);
-  s.cutoff=(int)read32(ticket+AE_RECORD_CUTOFF_OFFSET); s.streams_sealed=1; s.reaped=(int)read32(ticket+AE_RECORD_REAPED_OFFSET);
-  s.preexec_applied=(int)read32(ticket+AE_RECORD_PREEXEC_OFFSET);
-  uint32_t code=read32(ticket+AE_RECORD_EXIT_CODE_OFFSET),signal=read32(ticket+AE_RECORD_EXIT_SIGNAL_OFFSET);
-  if ((code!=UINT32_MAX && code>255) || signal>127 || (code!=UINT32_MAX && signal) ||
-      (!s.reaped && (code!=UINT32_MAX || signal || read32(ticket+AE_RECORD_BIRTH_ATTEMPTED_OFFSET))) ||
-      (s.reaped && (code==UINT32_MAX && !signal))) return 0;
-  s.exit_code=code==UINT32_MAX ? -1 : (int)code; s.exit_signal=(int)signal;
-  s.revision=read32(ticket+AE_RECORD_REVISION_OFFSET); s.birth_attempted=(int)read32(ticket+AE_RECORD_BIRTH_ATTEMPTED_OFFSET);
-  if (s.reaped && !s.birth_attempted) return 0;
-  record_bytes(&s,encoded);
-  if (memcmp(ticket,encoded,sizeof(encoded)) || !s.workspace_ino) return 0;
-  c->state=s; c->device=s.workspace_dev; c->inode=s.workspace_ino;
-  /* No discovery of active journals and no "latest valid record" fallback.
-   * Caller has the exact original successful-close ticket under root grant. */
-  return ae_native_read_closed(c);
+  return ok && ae_native_validate_journal(c) && complete_tree(c) && workspace_identity(c);
 }
 int ae_native_release(ae_custody *c,uint8_t ticket[AE_CLOSED_RECORD_BYTES]) {
   if (!c || !ticket || c->unknown || c->state.phase!=AE_DISPOSED ||
