@@ -45,7 +45,9 @@ stub(new URL('docker-provider-process-entrypoint.js', docker), {
 });
 // This scenario qualifies Linux provenance only; no Darwin capability is minted.
 stub(new URL('composition/darwin-codex-route-enforcement.js', feature), {
-  readDarwinCodexRouteEnforcementTarget: () => undefined,
+  readDarwinCodexRouteEnforcementTarget() {
+    // No Darwin capability exists in this Linux-only scenario.
+  },
 });
 const capability = await import(new URL('composition/contained-turn-route-enforcement-capability.js', feature));
 stub('@agent-teams/agent-execution/composition', {...capability,
