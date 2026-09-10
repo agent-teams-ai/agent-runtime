@@ -2,9 +2,8 @@ import type {CommittedDispatchProofV1} from "../domain/committed-dispatch-proof-
 import type {CodexEffectCustodyAuthority, CodexEffectCustodyExecution, CodexEffectCustodyRequest}
   from "../adapters/outbound/codex-app-server/codex-app-server-effect-custody.js";
 import {inspectDarwinNativeExecutionLease, inspectDarwinNativeLaunchObservation, assertDarwinNativeExecutionClaim,
-  hostHttpAbortOperations,
+  hostHttpAbortOperations, isNodeProxy,
   type DarwinNativeExecutionLease} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
-import {isNodeProxy} from "../adapters/outbound/host-custody/node-inert-record.js";
 
 const executionFields = ["attemptId", "custodyRef", "effectId", "operationId", "workspaceRef"] as const;
 const issued = new WeakSet<object>();

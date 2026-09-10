@@ -1,5 +1,6 @@
 
 import {addAbortListener} from 'node:events';
+export {isNodeProxy} from '../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/node-inert-record.js';
 export const counters = {abortCallbacks: 0};
 export const hostHttpAbortOperations = {
  subscribe(signal, callback) {return addAbortListener(signal, () => {counters.abortCallbacks++; callback()})},
