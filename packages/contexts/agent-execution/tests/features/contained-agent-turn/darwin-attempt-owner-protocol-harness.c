@@ -35,6 +35,18 @@ static void frames(void) {
   assert(!ae_decode(b,AE_FRAME_BYTES,&r));
   puts("C: exact TS vectors, all partial lengths, oversize/header/kind/reserved/argument rejection");
 }
+static void input_admission(void) {
+  uint8_t binding[32]={1},launch[32]={2}; ae_state s; storage store={0};
+  ae_init(&s,binding,launch); s.phase=AE_STAGED;
+  assert(command(&s,AE_CLOSE_INPUT,&store)==AE_REFUSED);
+  s.phase=AE_CHILD_OWNED;
+  ae_request r=request(&s,AE_WRITE_INPUT); r.argument=4;
+  assert(ae_command(&s,&r,persist,&store)==AE_EFFECT_REQUIRED);
+  assert(s.pending_effect==AE_WRITE_INPUT && s.pending_argument==4);
+  assert(command(&s,AE_CLOSE_INPUT,&store)==AE_REFUSED);
+  assert(command(&s,AE_CUTOFF,&store)==AE_ACCEPTED);
+  assert(command(&s,AE_WRITE_INPUT,&store)==AE_REFUSED);
+}
 static void lifecycle(void) {
   uint8_t binding[32]={1},launch[32]={2};
   ae_state s; storage store={0}; ae_init(&s,binding,launch);
@@ -86,9 +98,15 @@ static void lifecycle(void) {
   assert(command(&s,AE_WORKSPACE_CLEANUP,&store)==AE_EFFECT_REQUIRED);
   next=s; next.workspace=AE_CLEANUP; next.pending_effect=0;
   assert(ae_commit(&s,&next,persist,&store)==AE_ACCEPTED);
+  assert(command(&s,AE_QUERY_CLOSED_WORKSPACE,&store)==AE_REFUSED);
   assert(command(&s,AE_WORKSPACE_CLOSE,&store)==AE_EFFECT_REQUIRED);
   next=s; next.workspace=AE_CLOSED; next.pending_effect=0;
   assert(ae_commit(&s,&next,persist,&store)==AE_ACCEPTED);
+  assert(command(&s,AE_QUERY_CLOSED_WORKSPACE,&store)==AE_EFFECT_REQUIRED);
+  assert(s.phase==AE_NO_START && s.pending_effect==AE_QUERY_CLOSED_WORKSPACE);
+  next=s; next.pending_effect=0;
+  assert(ae_commit(&s,&next,persist,&store)==AE_ACCEPTED);
+  assert(command(&s,AE_READ_CLOSED_WORKSPACE,&store)==AE_REFUSED);
   assert(command(&s,AE_SETTLE_WORKSPACE,&store)==AE_ACCEPTED);
   assert(command(&s,AE_DISPOSE_ONCE,&store)==AE_REFUSED);
   assert(command(&s,AE_SETTLE_LAUNCH_ROUTE,&store)==AE_ACCEPTED);
@@ -195,9 +213,9 @@ static void admission(void) {
   uint8_t b[AE_MANIFEST_BYTES]={0},g[AE_GRANT_BYTES]={0}; ae_manifest m; ae_grant grant;
   put_word(b,AE_MANIFEST_MAGIC); put_word(b+4,AE_VERSION); put_word(b+8,AE_MANIFEST_BYTES);
   put_word(b+16,501); put_word(b+20,20); put_word(b+24,70001); put_word(b+28,70002);
-  put_word(b+32,6); put_word(b+36,1); put_word(b+40,1000); put_word(b+44,10000);
+  put_word(b+32,8); put_word(b+36,1); put_word(b+40,1000); put_word(b+44,10000);
   memset(b+AE_MANIFEST_BINDINGS_OFFSET,1,AE_MANIFEST_BINDINGS*AE_DIGEST_BYTES);
-  for (unsigned i=0;i<6;i++) {
+  for (unsigned i=0;i<8;i++) {
     uint8_t *entry=b+AE_MANIFEST_IMAGES_OFFSET+i*AE_MANIFEST_IMAGE_BYTES;
     assert(snprintf((char *)entry,AE_MANIFEST_STRING_BYTES,"/images/image%u",i)>0);
     memset(entry+AE_MANIFEST_STRING_BYTES,(int)i+1,32);
@@ -279,4 +297,4 @@ static void rejecting_probe_entry(void) {
 #endif
   puts("C: probe entry refuses unsupported invocation/platform without qualification or native probe execution");
 }
-int main(void) { rejecting_probe_entry(); material_uuid(); admission(); native_events(); frames(); lifecycle(); faults(); pending_effects(); channel_and_no_start(); return 0; }
+int main(void) { input_admission(); rejecting_probe_entry(); material_uuid(); admission(); native_events(); frames(); lifecycle(); faults(); pending_effects(); channel_and_no_start(); return 0; }

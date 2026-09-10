@@ -3,10 +3,10 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { Duplex } from "node:stream";
-import { selectDarwinAttemptWorkspaceBackend, type DarwinNativeWorkspaceSelection, type DarwinNativeRetainedWorkspaceOwners } from "../../../src/features/contained-agent-turn/adapters/outbound/filesystem/darwin-attempt-workspace-backend.ts";
+import type { DarwinNativeWorkspaceSelection, DarwinNativeRetainedWorkspaceOwners } from "../../../src/features/contained-agent-turn/adapters/outbound/filesystem/darwin-attempt-workspace-backend.ts";
 import {
   decodeDarwinAttemptOwnerRequest, decodeDarwinAttemptOwnerEvent, DarwinAttemptOwnerEventReader,
-  type DarwinAttemptOwnerEvent,
+  type DarwinAttemptOwnerEvent, type DarwinNativeFinalLaunchData,
 } from "../../../src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-protocol.ts";
 import {
   DarwinAttemptOwnerEvents, bindDarwinAttemptOwnerBridge,
@@ -48,7 +48,7 @@ const nativeEvent = (kind: DarwinAttemptOwnerEvent["kind"], serial: number, opti
   frame.writeBigUInt64BE(1n, number("EVENT_WORKSPACE_DEVICE_OFFSET"));
   frame.writeBigUInt64BE(200n, number("EVENT_WORKSPACE_INODE_OFFSET"));
   if ((options.flags ?? 0) & 1) {frame.fill(3, number("EVENT_ATTESTATION_OFFSET"));}
-  const payload = options.payload ?? (kind === "HELLO" ? Buffer.concat([namespace, manifest]) : Buffer.alloc(0));
+  const payload = options.payload ?? (kind === "HELLO" ? Buffer.concat([namespace, manifest, Buffer.alloc(32, 7)]) : Buffer.alloc(0));
   field("LENGTH", payload.length);
   return Buffer.concat([frame, payload]);
 };
@@ -144,7 +144,8 @@ test("retained callbacks are invoked by the bridge; foreign settlement is never 
 });
 
 
-test("native workspace selection rejects clones before reading caller callbacks", () => {
+test("native workspace selection rejects clones before reading caller callbacks", async () => {
+  const {selectDarwinAttemptWorkspaceBackend} = await import("../../../src/features/contained-agent-turn/adapters/outbound/filesystem/darwin-attempt-workspace-backend.ts");
   let reads = 0;
   const records = { get creation() { reads++; throw new Error("must not read"); } } as unknown as DarwinNativeRetainedWorkspaceOwners;
   for (const selection of [{}, Object.create(null), Object.freeze({ native: true })]) {
@@ -174,6 +175,21 @@ test("closed replay requires the exact successful release ticket and rejects tor
   const retained = events.retainedClosed(); assert.ok(retained);
   assert.ok(retained.payload.equals(ticket));
   retained.payload.fill(0); assert.ok(events.retainedClosed()?.payload.equals(ticket));
+  // Every transaction gets a new sequence and unchanged actual release record.
+  // The durable journal sequence is not rewritten for a read-only replay.
+  for (let transaction = 1; transaction <= 3; transaction++) {
+    const sequence = retained.sequence + transaction;
+    events.accept(decoded(nativeEvent("CLOSED_READ", 10 + transaction, {
+      sequence, command: "READ_CLOSED_WORKSPACE", phase: 8, workspace: 3,
+      flags: 23, code: 17, child: true, image: 2, payload: ticket,
+    })));
+    assert.ok(events.retainedClosed()?.payload.equals(ticket));
+  }
+  assert.throws(() => events.accept(decoded(nativeEvent("CLOSED_READ", 14, {
+    sequence: retained.sequence + 3, command: "READ_CLOSED_WORKSPACE", phase: 8,
+    workspace: 3, flags: 23, code: 17, child: true, image: 2, payload: ticket,
+  }))), /fresh bounded closed read/u);
+  assert.equal(events.retainedClosed(), undefined);
   ticket[100] = 1; assert.throws(() => decoded(release()), /torn/u);
   ticket[100] = 0; put("PENDING", number("DISPOSE_ONCE")); hash();
   assert.throws(() => decoded(release()), /unresolved/u);
@@ -220,7 +236,7 @@ test("bridge materializes and verifies a complete destination tree through bound
           assert.equal(payload.readUInt32BE(4), chunks.reduce((sum, bytes) => sum + bytes.length, 0));
           chunks.push(Buffer.from(payload.subarray(8))); contents.set(ordinal, chunks);
         }
-        if (request.command === "READ_TREE" || request.command === "READ_CLOSED_WORKSPACE") {
+        if (request.command === "READ_TREE" || request.command === "READ_CLOSED_WORKSPACE" || request.command === "QUERY_CLOSED_WORKSPACE") {
           for (const entry of inventory) {
             const ordinal = entry.readUInt32BE(0);
             const event = nativeEvent("TREE_ENTRY", ++serial, { sequence: request.sequence, phase, flags, workspace, payload: entry });
@@ -260,12 +276,18 @@ test("bridge materializes and verifies a complete destination tree through bound
   await assert.rejects(bridge.materializeComplete(source, { maxDepth: 32, maxEntries: 4096, maxFileBytes: 8388608, maxTotalBytes: 33554432 }), /already consumed/u);
   assert.equal(commands.length, before);
   phase = 6; flags = 8; await bridge.cutoff();
-  const sequence = commands.length;
+  let sequence = commands.length;
   flags = 12; endpoint.push(nativeEvent("STREAMS", ++serial, { sequence, phase, flags }));
   for (workspace = 1; workspace <= 3; workspace++) {
     endpoint.push(nativeEvent("STATUS", ++serial, { sequence, phase, flags, workspace }));
   }
-  workspace = 3; phase = 7;
+  workspace = 3;
+  const queried = await bridge.queryClosedWorkspace();
+  sequence = commands.length;
+  assert.equal(queried.treeDigest, treeDigest);
+  assert.equal(bridge.retainedClosed(), undefined);
+  await assert.rejects(bridge.readClosedWorkspace(), /grant unavailable/u);
+  phase = 7;
   endpoint.push(nativeEvent("STATUS", ++serial, { sequence, phase, flags, workspace }));
   phase = 8; ticket = Buffer.alloc(number("CLOSED_RECORD_BYTES")); ticket.write("ae-owner-intent-v1");
   binding.copy(ticket, number("RECORD_BINDING_OFFSET")); launch.copy(ticket, number("RECORD_LAUNCH_OFFSET"));
@@ -282,7 +304,211 @@ test("bridge materializes and verifies a complete destination tree through bound
   assert.equal(observedClosed.tree.treeDigest, treeDigest);
   assert.ok(observedClosed.event.payload.equals(ticket));
   assert.deepEqual(observedClosed.tree.files[0]!.bytes, bytes);
-  const once = commands.length;
-  await assert.rejects(bridge.readClosedWorkspace(), /already consumed/u);
-  assert.equal(commands.length, once); bridge.lost();
+  const beforeReplay = commands.length;
+  const replayed = await bridge.readClosedWorkspace();
+  assert.equal(commands.length, beforeReplay + 1);
+  assert.equal(replayed.tree.treeDigest, treeDigest);
+  assert.ok(replayed.event.sequence > observedClosed.event.sequence);
+  assert.ok(replayed.event.payload.equals(ticket));
+  endpoint.push(null);
+  await new Promise<void>(resolve => {setImmediate(resolve);});
+  assert.equal(bridge.retainedClosed(), undefined);
+  await assert.rejects(bridge.readClosedWorkspace(), /grant unavailable/u);
+});
+
+test("START preserves retained directory epoch while cutoff invalidates it", async () => {
+  let serial = 1;
+  const endpoint = new Duplex({read() {}, write(chunk: Buffer, _encoding, callback) {
+    const request = decodeDarwinAttemptOwnerRequest(chunk);
+    this.push(nativeEvent("STATUS", ++serial, {sequence: request.sequence, command: request.command,
+      phase: 3, flags: request.command === "CUTOFF" ? 8 : 0})); callback();
+  }});
+  const completion = async () => ({binding: binding.toString("hex"), launch: launch.toString("hex"),
+    namespace: namespace.toString(), workspaceDev: "1", workspaceIno: "200"});
+  const bridge = bindDarwinAttemptOwnerBridge(endpoint, {launchRoute: completion, artifactResult: completion,
+    workspace: completion, privateMaterial: completion, output: async () => {}});
+  try {
+    endpoint.push(hello()); await bridge.ready;
+    bridge.assertObservationCurrent(0);
+    await bridge.start();
+    bridge.assertObservationCurrent(0);
+    const cutting = bridge.cutoff();
+    assert.throws(() => bridge.assertObservationCurrent(0), /no longer current/u);
+    await cutting;
+    assert.equal(bridge.execution(), undefined);
+  } finally {bridge.lost();}
+});
+
+
+test("final native capture snapshots finite data once and burns refused or uncertain admission", async () => {
+  for (const refuse of [false, true]) {
+    let transmitted: Buffer | undefined;
+    const endpoint = new Duplex({read() {}, write(chunk: Buffer, _encoding, callback) {
+      const request = decodeDarwinAttemptOwnerRequest(chunk.subarray(0, number("FRAME_BYTES")));
+      assert.equal(request.command, "BIND_FINAL_LAUNCH");
+      transmitted = Buffer.from(chunk.subarray(number("FRAME_BYTES")));
+      const response = nativeEvent(refuse ? "REFUSED" : "STATUS", 2, {sequence: request.sequence, command: request.command});
+      if (refuse) {response.writeUInt32BE(0, number("EVENT_RESULT_OFFSET"));}
+      this.push(response); callback();
+    }});
+    const completion = async () => ({binding: binding.toString("hex"), launch: launch.toString("hex"),
+      namespace: namespace.toString(), workspaceDev: "1", workspaceIno: "200"});
+    const bridge = bindDarwinAttemptOwnerBridge(endpoint, {launchRoute: completion, artifactResult: completion,
+      workspace: completion, privateMaterial: completion, output: async () => {}});
+    try {
+      endpoint.push(hello()); await bridge.ready;
+      const hash = "a".repeat(64);
+      const input: DarwinNativeFinalLaunchData = {home: "/private/owner/private", codexHome: "/private/owner/private/codex-home",
+        tmpDir: "/private/owner/private/tmp", localCapability: hash, port: 32123,
+        preparedSha256: hash, profileSha256: hash, configSha256: hash, catalogSha256: hash,
+        installationSha256: hash, fingerprintSha256: hash, materialSha256: hash, executableSha256: hash, argumentsSha256: hash};
+      const capturing = bridge.captureFinalLaunch(input);
+      Object.assign(input, {localCapability: "b".repeat(64), port: 43210});
+      if (refuse) {await assert.rejects(capturing, /refused/u);} else {await capturing;}
+      assert.ok(transmitted); assert.equal(transmitted.length, number("FINAL_LAUNCH_BYTES"));
+      assert.equal(transmitted.readUInt32BE(4), 32123);
+      assert.equal(transmitted.subarray(8 + 3 * 1028 + 4, 8 + 3 * 1028 + 68).toString(), hash);
+      await assert.rejects(bridge.captureFinalLaunch(input), /already consumed/u);
+      if (refuse) {await assert.rejects(bridge.start(), /refused/u);}
+    } finally {bridge.lost();}
+  }
+});
+
+test("native session input snapshots bounded writes, orders EOF and rejects post-cutoff input", async () => {
+  let serial = 1;
+  const observed: Array<{command: string; bytes: Buffer}> = [];
+  const endpoint = new Duplex({read() {}, write(chunk: Buffer, _encoding, callback) {
+    const request = decodeDarwinAttemptOwnerRequest(chunk.subarray(0, number("FRAME_BYTES")));
+    observed.push({command: request.command, bytes: Buffer.from(chunk.subarray(number("FRAME_BYTES")))});
+    setImmediate(() => {
+      this.push(nativeEvent("STATUS", ++serial, {sequence: request.sequence, command: request.command,
+        phase: 3, flags: request.command === "CUTOFF" ? 8 : 0})); callback();
+    });
+  }});
+  const completion = async () => ({binding: binding.toString("hex"), launch: launch.toString("hex"),
+    namespace: namespace.toString(), workspaceDev: "1", workspaceIno: "200"});
+  const bridge = bindDarwinAttemptOwnerBridge(endpoint, {launchRoute: completion, artifactResult: completion,
+    workspace: completion, privateMaterial: completion, output: async () => {}});
+  try {
+    endpoint.push(hello()); await bridge.ready;
+    await assert.rejects(bridge.writeInput(Buffer.from("early")), /closed/u);
+    await bridge.start();
+    const bytes = Buffer.alloc(20000, 42);
+    const write = bridge.writeInput(bytes); bytes.fill(0);
+    const second = bridge.writeInput(Buffer.from("last"));
+    const closing = bridge.closeInput();
+    await assert.rejects(bridge.writeInput(Buffer.from("late")), /closed/u);
+    await Promise.all([write, second, closing]);
+    assert.deepEqual(observed.map(x => x.command), ["START_ONCE", "WRITE_INPUT", "WRITE_INPUT", "WRITE_INPUT", "CLOSE_INPUT"]);
+    assert.deepEqual(observed.slice(1, 4).map(x => x.bytes.length), [16384, 3616, 4]);
+    assert.ok(observed[1]!.bytes.every(byte => byte === 42));
+    assert.ok(observed[2]!.bytes.every(byte => byte === 42));
+    assert.equal(observed[3]!.bytes.toString(), "last");
+    await bridge.cutoff();
+    await assert.rejects(bridge.writeInput(Buffer.from("cutoff")), /closed/u);
+  } finally {bridge.lost();}
+});
+
+function processBridge() {
+  let serial = 1, sequence = 0;
+  const observed: string[] = [];
+  const endpoint = new Duplex({read() {}, write(chunk: Buffer, _encoding, callback) {
+    const request = decodeDarwinAttemptOwnerRequest(chunk.subarray(0, number("FRAME_BYTES")));
+    sequence = request.sequence; observed.push(request.command);
+    if (request.command === "READ_OBSERVATION") {
+      const bytes = Buffer.alloc(5244);
+      const text = (offset: number, value: string): void => {bytes.writeUInt32BE(Buffer.byteLength(value), offset); bytes.write(value, offset + 4);};
+      text(0, "operation"); bytes.writeUInt32BE(70001, 1028); bytes.writeUInt32BE(serial + 2, 1032);
+      ["/root/private", "/root/private/codex-home", "/root/private/tmp", "/root/workspace"].forEach((path, index) => {
+        const offset = 1036 + index * 1052;
+        text(offset, path); bytes.writeBigUInt64BE(1n, offset + 1028);
+        bytes.writeBigUInt64BE(index === 3 ? 200n : BigInt(index + 2), offset + 1036);
+        bytes.writeUInt32BE(70001, offset + 1044); bytes.writeUInt32BE(0o700, offset + 1048);
+      });
+      this.push(nativeEvent("OBSERVATION", ++serial, {sequence, command: request.command, payload: bytes}));
+    } else {
+      this.push(nativeEvent("STATUS", ++serial, {sequence, command: request.command, phase: 4, child: true,
+        flags: request.command === "START_ONCE" ? 0 : 17, image: request.command === "START_ONCE" ? 0 : 2}));
+    }
+    callback();
+  }});
+  const completion = async () => ({binding: binding.toString("hex"), launch: launch.toString("hex"),
+    namespace: namespace.toString(), workspaceDev: "1", workspaceIno: "200"});
+  const bridge = bindDarwinAttemptOwnerBridge(endpoint, {launchRoute: completion, artifactResult: completion,
+    workspace: completion, privateMaterial: completion, output: async () => {}});
+  const emit = (kind: DarwinAttemptOwnerEvent["kind"], options: Parameters<typeof nativeEvent>[2] = {}): void => {
+    endpoint.push(nativeEvent(kind, ++serial, {sequence, phase: 4, child: true, flags: 17, image: 2, ...options}));
+  };
+  endpoint.push(hello());
+  return {bridge, observed, emit};
+}
+
+test("native process waits for actual image, streams actual bytes and distinguishes exit from drain", async () => {
+  const {bridge, observed, emit} = processBridge();
+  try {
+    await bridge.ready; await bridge.readLaunchObservation();
+    const starting = bridge.startProcess(); let started = false;
+    void starting.then(() => {started = true; return;});
+    await new Promise(resolve => {setImmediate(resolve);});
+    assert.equal(started, false);
+    emit("PREEXEC", {flags: 1, image: 0}); emit("IMAGE");
+    const process = await starting;
+    assert.ok(Object.isFrozen(process));
+    assert.equal(process.custodyRef, binding.toString("hex"));
+    assert.equal(process.workspaceAuthorityPath, "/root/workspace");
+    await process.write(Buffer.from("request")); await process.closeInput();
+    assert.deepEqual(observed, ["READ_OBSERVATION", "START_ONCE", "WRITE_INPUT", "CLOSE_INPUT"]);
+    const stdout = process.stdout[Symbol.asyncIterator](), stderr = process.stderr[Symbol.asyncIterator]();
+    emit("STDOUT", {payload: Buffer.from("reply")}); emit("STDERR", {payload: Buffer.from("diagnostic")});
+    assert.equal(Buffer.from((await stdout.next()).value!).toString(), "reply");
+    assert.equal(Buffer.from((await stderr.next()).value!).toString(), "diagnostic");
+    emit("EXIT", {phase: 5, flags: 19, signal: 10});
+    assert.deepEqual(await process.waitForExit(), {code: null, signal: "SIGBUS"});
+    let drained = false;
+    const ending = stdout.next().then(value => {drained = true; return value;});
+    await new Promise(resolve => {setImmediate(resolve);}); assert.equal(drained, false);
+    emit("STREAMS", {phase: 5, flags: 23, signal: 10});
+    assert.equal((await ending).done, true); assert.equal((await stderr.next()).done, true);
+    await assert.rejects(process.stdout[Symbol.asyncIterator]().next(), /already consumed/u);
+  } finally {bridge.lost();}
+});
+
+test("native process channel loss rejects unobserved exit and stream completion", async () => {
+  const {bridge, emit} = processBridge();
+  try {
+    await bridge.ready; await bridge.readLaunchObservation();
+    const starting = bridge.startProcess(); await new Promise(resolve => {setImmediate(resolve);});
+    emit("PREEXEC", {flags: 1, image: 0}); emit("IMAGE");
+    const process = await starting;
+    const next = process.stdout[Symbol.asyncIterator]().next(), waitingExit = process.waitForExit();
+    bridge.lost();
+    await assert.rejects(next, /relinquished/u); await assert.rejects(waitingExit, /relinquished/u);
+  } finally {bridge.lost();}
+});
+
+test("native start never publishes a process for an exit before provider image", async () => {
+  const {bridge, emit} = processBridge();
+  try {
+    await bridge.ready; await bridge.readLaunchObservation();
+    const starting = bridge.startProcess(); await new Promise(resolve => {setImmediate(resolve);});
+    emit("EXIT", {phase: 5, flags: 2, image: 0, code: 78});
+    await assert.rejects(starting, /before provider image/u);
+  } finally {bridge.lost();}
+});
+
+test("native process enforces the shared output budget without converting overflow to EOF", async () => {
+  const {bridge, emit} = processBridge();
+  try {
+    await bridge.ready; await bridge.readLaunchObservation();
+    const starting = bridge.startProcess(); await new Promise(resolve => {setImmediate(resolve);});
+    emit("PREEXEC", {flags: 1, image: 0}); emit("IMAGE");
+    const process = await starting;
+    const rejected = assert.rejects(process.waitForExit(), /output budget exceeded/u);
+    for (let index = 0; index < 513; index++) {
+      emit(index % 2 ? "STDERR" : "STDOUT", {payload: Buffer.alloc(16384, index % 256)});
+      await new Promise(resolve => {setImmediate(resolve);});
+    }
+    await rejected;
+    await assert.rejects(process.stdout[Symbol.asyncIterator]().next(), /output budget exceeded/u);
+  } finally {bridge.lost();}
 });

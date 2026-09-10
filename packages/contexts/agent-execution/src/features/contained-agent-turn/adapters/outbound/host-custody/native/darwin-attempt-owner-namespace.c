@@ -23,10 +23,17 @@ static int close_owned(int *fd) {
 static int acl_empty(int fd) {
   acl_t acl=acl_get_fd_np(fd,ACL_TYPE_EXTENDED);
   if (!acl) return 0;
-  acl_entry_t entry;
-  int empty=acl_get_entry(acl,ACL_FIRST_ENTRY,&entry)==0;
-  if (acl_free(acl)!=0) empty=0;
-  return empty;
+  int empty=0;
+  if (acl_valid(acl)==0) {
+    acl_entry_t entry;
+    errno=0;
+    int status=acl_get_entry(acl,ACL_FIRST_ENTRY,&entry),saved_errno=errno;
+    /* Darwin returns zero for an actual entry. On this valid ACL and fixed
+     * first index, EINVAL is the observed empty-list result, not an ACE. */
+    empty=status==-1 && saved_errno==EINVAL;
+  }
+  int released=acl_free(acl);
+  return empty && released==0;
 }
 static int clear_acl(int fd) {
   acl_t acl=acl_init(0);

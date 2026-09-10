@@ -1,6 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { isAbsolute } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 // Read-only finite source deployment description; never installs or launches.
 if (process.argv.length === 3 && process.argv[2] === "--describe-deployment") {
@@ -14,11 +13,13 @@ if (process.argv.length === 3 && process.argv[2] === "--describe-deployment") {
       6: "protected durable exclusive UID/GID lease registry directory",
       7: "protected durable operation journal directory",
       9: "manifest-bound finite provider input",
-      10: "manifest-bound retained launch route",
+      10: "manifest-bound inert bootstrap socket; never prepared HTTP readiness or provider delegation",
     },
-    hostArgv: ["<reviewed protected exact Host image>", "--darwin-attempt-owner-bridge"],
+    hostArgv: ["<reviewed protected exact Node Host image>", "<root-pinned Host entrypoint image slot 5>", "--darwin-attempt-owner-bridge"],
+    hostChallengeDescriptor: 11,
+    hostPeerAddon: "image slot 6; loaded only as ./native/darwin-attempt-owner-peer.node in pinned Host closure",
     hostDescriptor: 8,
-    capturedImages: ["helper", "sandbox-exec", "provider", "Host", "restricted singleton profile", "complete loader closure"],
+    capturedImages: ["helper", "sandbox-exec", "provider", "Host", "restricted singleton profile", "Host entrypoint", "Host peer addon", "complete loader closure"],
     imageRequirements: [
       "Exact root-owned immutable bytes, digests, vnode identities and protected ancestors; no writable ACL/metadata ancestry",
       "Root prepares reviewed protected executable copies accessible to leased UID; an existing UID501 private installation path is not assumed usable",
@@ -47,6 +48,19 @@ if (process.argv.length === 3 && process.argv[2] === "--describe-deployment") {
     rejectingProbeCoverage: "Writable shared mapping plus fork, Unix descriptor-transfer channel, delegated bootstrap port; passing alone NEVER issues qualification",
     probeExecution: "Separate later root Mac review only. Portable source tests do not execute this launch packet.",
   }, null, 2));
+} else if (process.argv[2] === "--build-host-peer-addon") {
+  const output = process.argv[3], headers = process.argv[4];
+  if (process.platform !== "darwin" || process.argv.length !== 5 || !output || !headers ||
+      !isAbsolute(output) || !isAbsolute(headers)) {
+    throw new Error("Darwin SDK, absolute scratch output and existing Node headers required");
+  }
+  const sources = ["main", "state", "custody", "namespace", "admission", "child", "tree", "material"].map(name =>
+    join(import.meta.dirname, `darwin-attempt-owner-${name}.c`));
+  const result = spawnSync("cc", ["-std=c11", "-D_DARWIN_C_SOURCE", "-DAE_HOST_PEER_ADDON",
+    "-Wall", "-Wextra", "-Werror", "-Wno-deprecated-declarations", "-bundle", "-undefined", "dynamic_lookup",
+    "-I", headers, ...sources, "-o", output], {stdio: "inherit"});
+  if (result.error) {throw result.error;}
+  process.exitCode = result.status ?? 1;
 } else {
   // Explicit manual compile only. No installation, execution or package wiring.
   if (process.platform !== "darwin") {
@@ -57,7 +71,7 @@ if (process.argv.length === 3 && process.argv[2] === "--describe-deployment") {
     throw new Error("one absolute disposable output path required");
   }
   const sources = ["main", "state", "custody", "namespace", "admission", "child", "tree", "material"].map((name) =>
-    fileURLToPath(new URL(`darwin-attempt-owner-${name}.c`, import.meta.url)));
+    join(import.meta.dirname, `darwin-attempt-owner-${name}.c`));
   const result = spawnSync("cc", ["-std=c11", "-D_DARWIN_C_SOURCE", "-Wall", "-Wextra", "-Werror",
     "-Wno-deprecated-declarations", ...sources, "-o", output], { stdio: "inherit" });
   if (result.error) {throw result.error;}

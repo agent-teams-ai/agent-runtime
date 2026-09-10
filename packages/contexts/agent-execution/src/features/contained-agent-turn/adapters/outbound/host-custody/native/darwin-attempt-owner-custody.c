@@ -21,6 +21,23 @@ static int unknown(ae_custody *c) {
 static int close_once(int *fd) {
   int owned=*fd; *fd=-1; return owned<0 || close(owned)==0;
 }
+/* These are owner-held writers, independent of whether a provider was born.
+ * Cutoff consumes every handle before acknowledging no-start settlement. */
+static int native_transactions_settled(const ae_custody *c) {
+  return !c->unknown && !c->materialization && !c->material_transaction && c->material_root<0;
+}
+int ae_native_abort_transactions(ae_custody *c) {
+  if (!c || !c->state.cutoff) return 0;
+  ae_tree_transaction *workspace=c->materialization, *material=c->material_transaction;
+  c->materialization=NULL; c->material_transaction=NULL;
+  int ok=!c->unknown;
+  if (workspace && !ae_tree_dispose(workspace)) ok=0;
+  if (material && !ae_tree_dispose(material)) ok=0;
+  if (!close_once(&c->material_root)) ok=0;
+  /* Consumption flags and incomplete transaction facts are never reset. Close
+   * uncertainty stays terminal even though the handle slots are now empty. */
+  return ok ? native_transactions_settled(c) : unknown(c);
+}
 static int sync_fd(int fd) {
   return fsync(fd)==0 && fcntl(fd,F_FULLFSYNC)==0;
 }
@@ -82,7 +99,7 @@ static int commit_effect(ae_custody *c, ae_state *next) {
   return ae_commit(&c->state,next,ae_native_persist,c)==AE_ACCEPTED;
 }
 int ae_native_workspace_move(ae_custody *c, ae_workspace target) {
-  if (!ae_writer_stopped(&c->state) || !workspace_identity(c) ||
+  if (!native_transactions_settled(c) || !ae_writer_stopped(&c->state) || !workspace_identity(c) ||
       target!=c->state.workspace+1 || target>AE_CLOSED ||
       c->state.pending_effect!=(target==AE_FROZEN ? AE_WORKSPACE_FREEZE :
         target==AE_CLEANUP ? AE_WORKSPACE_CLEANUP : AE_WORKSPACE_CLOSE) ||
@@ -163,7 +180,7 @@ static int remove_entries(ae_custody *c,int fd, unsigned depth,budget *b) {
   return ok && sync_fd(fd);
 }
 int ae_native_dispose_private(ae_custody *c) {
-  if (!ae_writer_stopped(&c->state) || !c->state.streams_sealed ||
+  if (!native_transactions_settled(c) || !ae_writer_stopped(&c->state) || !c->state.streams_sealed ||
       c->state.pending_effect!=AE_DISPOSE_ONCE ||
       c->state.settlements!=15 ||
       c->state.workspace!=AE_CLOSED || !workspace_identity(c)) return 0;
@@ -207,6 +224,15 @@ int ae_native_validate_journal(ae_custody *c) {
     (!c->prepared_bound || retained_journal_bytes(c,"prepared-attempt",c->prepared,sizeof(c->prepared))) &&
     (!c->claim_committed || retained_journal_bytes(c,"committed-claim",c->committed,c->committed_length));
 }
+int ae_native_query_closed(ae_custody *c) {
+  if (!c || !native_transactions_settled(c) || !ae_writer_stopped(&c->state) ||
+      c->state.workspace!=AE_CLOSED || !workspace_identity(c) || !ae_native_validate_journal(c)) return 0;
+  for (unsigned i=0;i<AE_CLOSED;i++) {
+    struct stat st;
+    if (fstatat(c->envelope,workspace_names[i],&st,AT_SYMLINK_NOFOLLOW)==0 || errno!=ENOENT) return 0;
+  }
+  return 1;
+}
 int ae_native_read_closed(ae_custody *c) {
   if (c->state.phase!=AE_RELEASED || c->state.workspace!=AE_CLOSED || !workspace_identity(c)) return 0;
   for (unsigned i=0;i<AE_CLOSED;i++) {
@@ -230,7 +256,7 @@ int ae_native_read_closed(ae_custody *c) {
   return ok && ae_native_validate_journal(c) && complete_tree(c) && workspace_identity(c);
 }
 int ae_native_release(ae_custody *c,uint8_t ticket[AE_CLOSED_RECORD_BYTES]) {
-  if (!c || !ticket || c->unknown || c->state.phase!=AE_DISPOSED ||
+  if (!c || !ticket || !native_transactions_settled(c) || c->state.phase!=AE_DISPOSED ||
       c->state.workspace!=AE_CLOSED || c->state.settlements!=15 ||
       !c->state.streams_sealed || !workspace_identity(c)) return 0;
   /* Workspace settlement came from the retained existing receipt owner before

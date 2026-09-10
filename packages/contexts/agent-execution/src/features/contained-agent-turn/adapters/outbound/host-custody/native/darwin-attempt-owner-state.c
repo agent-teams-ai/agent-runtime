@@ -8,15 +8,17 @@ int ae_decode(const uint8_t *b, size_t n, ae_request *r) {
   if (!b || !r || n != AE_FRAME_BYTES || u32(b+AE_MAGIC_OFFSET)!=AE_MAGIC ||
       u32(b+AE_VERSION_OFFSET)!=AE_VERSION) return 0;
   uint32_t kind=u32(b+AE_KIND_OFFSET), arg=u32(b+AE_ARGUMENT_OFFSET);
-  if (kind<AE_START_ONCE || kind>AE_MATERIAL_FINISH || kind==AE_RETIRED_SLOT_COMMAND ||
+  if (kind<AE_START_ONCE || kind>AE_QUERY_CLOSED_WORKSPACE || kind==AE_RETIRED_SLOT_COMMAND ||
       u32(b+AE_SEQUENCE_OFFSET)==0) return 0;
   switch (kind) {
+    case AE_WRITE_INPUT: if (!arg || arg>AE_STREAM_CHUNK_BYTES) return 0; break;
     case AE_MATERIALIZE_BEGIN: if (arg!=16) return 0; break;
     case AE_MATERIALIZE_ENTRY: if (arg<25 || arg>279) return 0; break;
     case AE_MATERIALIZE_CHUNK: if (arg<=8 || arg>AE_TREE_REQUEST_MAX_BYTES) return 0; break;
     case AE_COMMIT_CREATION: if (arg!=AE_CREATION_BYTES) return 0; break;
     case AE_BIND_PREPARED: if (arg!=AE_PREPARED_BYTES) return 0; break;
     case AE_CONFIRM_CLAIM: if (arg<=AE_PREPARED_BYTES || arg>AE_TREE_REQUEST_MAX_BYTES) return 0; break;
+    case AE_BIND_FINAL_LAUNCH: if (arg!=AE_FINAL_LAUNCH_BYTES) return 0; break;
     case AE_MATERIAL_BEGIN: if (arg!=44) return 0; break;
     case AE_MATERIAL_CHUNK: if (arg<=8 || arg>AE_TREE_REQUEST_MAX_BYTES) return 0; break;
     default: if (arg!=0) return 0; break;
@@ -93,13 +95,16 @@ ae_result ae_command(ae_state *s, const ae_request *r, ae_persist save, void *ct
       next.phase=AE_START_CONSUMED; next.pending_effect=r->kind; break;
     case AE_MATERIALIZE_BEGIN: case AE_MATERIALIZE_ENTRY:
     case AE_MATERIALIZE_CHUNK: case AE_MATERIALIZE_FINISH: case AE_COMMIT_CREATION:
-    case AE_BIND_PREPARED: case AE_CONFIRM_CLAIM:
+    case AE_BIND_PREPARED: case AE_CONFIRM_CLAIM: case AE_BIND_FINAL_LAUNCH:
     case AE_READ_OBSERVATION: case AE_MATERIAL_BEGIN: case AE_MATERIAL_CHUNK: case AE_MATERIAL_FINISH:
       if (s->phase!=AE_STAGED || s->cutoff || s->workspace!=AE_ACTIVE) return AE_REFUSED;
       next.pending_effect=r->kind; next.pending_argument=r->argument; break;
     case AE_READ_TREE:
       if (!(s->phase==AE_STAGED || ae_writer_stopped(s)) || s->workspace>AE_FROZEN) return AE_REFUSED;
       next.pending_effect=r->kind; break;
+    case AE_WRITE_INPUT: case AE_CLOSE_INPUT:
+      if (s->phase!=AE_CHILD_OWNED || s->cutoff || s->reaped) return AE_REFUSED;
+      next.pending_effect=r->kind; next.pending_argument=r->argument; break;
     case AE_CUTOFF:
       next.cutoff=1;
       if (s->phase==AE_RESERVED || s->phase==AE_STAGED) next.phase=AE_NO_START;
@@ -125,6 +130,9 @@ ae_result ae_command(ae_state *s, const ae_request *r, ae_persist save, void *ct
       next.pending_effect=r->kind; break;
     case AE_WORKSPACE_CLOSE:
       if (!ae_writer_stopped(s) || s->workspace!=AE_CLEANUP) return AE_REFUSED;
+      next.pending_effect=r->kind; break;
+    case AE_QUERY_CLOSED_WORKSPACE:
+      if (!ae_writer_stopped(s) || s->workspace!=AE_CLOSED) return AE_REFUSED;
       next.pending_effect=r->kind; break;
     case AE_READ_CLOSED_WORKSPACE:
       if (s->workspace!=AE_CLOSED || s->phase!=AE_RELEASED) return AE_REFUSED;

@@ -45,9 +45,13 @@ int ae_native_stage_namespace(ae_custody *);
 int ae_native_persist(void *, const ae_state *);
 int ae_native_workspace_move(ae_custody *, ae_workspace);
 int ae_native_dispose_private(ae_custody *);
+/* Private cutoff only; settles native transactions without erasing replay debt. */
+int ae_native_abort_transactions(ae_custody *);
 /* Readback requires a separately retained, known-successful closed-state
  * authority. It never reconstructs success from an ambiguous active journal. */
 int ae_native_read_closed(ae_custody *);
+/* Fresh original-inode query before release; never a resource-release grant. */
+int ae_native_query_closed(ae_custody *);
 int ae_native_validate_journal(ae_custody *);
 int ae_native_release(ae_custody *, uint8_t [AE_CLOSED_RECORD_BYTES]);
 #endif

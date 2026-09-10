@@ -88,6 +88,7 @@ int ae_manifest_in_range(const ae_manifest *m,const ae_grant *g) {
 #include <sys/acl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/random.h>
 #include <sys/proc_info.h>
 #include <sys/sysctl.h>
 #include <sys/param.h>
@@ -111,10 +112,17 @@ static int close_capture(int *fd) {
 static int empty_acl(int fd) {
   acl_t acl=acl_get_fd_np(fd,ACL_TYPE_EXTENDED);
   if (!acl) return 0;
-  acl_entry_t entry;
-  int ok=acl_get_entry(acl,ACL_FIRST_ENTRY,&entry)==0;
-  if (acl_free(acl)!=0) ok=0;
-  return ok;
+  int empty=0;
+  if (acl_valid(acl)==0) {
+    acl_entry_t entry;
+    errno=0;
+    int status=acl_get_entry(acl,ACL_FIRST_ENTRY,&entry),saved_errno=errno;
+    /* Darwin returns zero for an actual entry. On this valid ACL and fixed
+     * first index, EINVAL is the observed empty-list result, not an ACE. */
+    empty=status==-1 && saved_errno==EINVAL;
+  }
+  int released=acl_free(acl);
+  return empty && released==0;
 }
 static int protected_stat(int fd,struct stat *st,int directory) {
   return fstat(fd,st)==0 && st->st_uid==0 && !(st->st_mode&0022) &&
@@ -211,23 +219,98 @@ int ae_image_identity(pid_t pid,const ae_bootstrap *b,unsigned image,uint64_t *s
       held.st_dev!=b->identities[image].st_dev || held.st_ino!=b->identities[image].st_ino) return 0;
   *seconds=before.pbi_start_tvsec; *micros=before.pbi_start_tvusec; return 1;
 }
+static int socket_creator(int fd,pid_t *pid,pid_t *epid,audit_token_t *token) {
+  uid_t uid; gid_t gid;
+  socklen_t pid_length=sizeof(*pid),epid_length=sizeof(*epid),token_length=sizeof(*token);
+  memset(token,0,sizeof(*token));
+  return getsockopt(fd,SOL_LOCAL,LOCAL_PEERPID,pid,&pid_length)==0 && pid_length==sizeof(*pid) &&
+    getsockopt(fd,SOL_LOCAL,LOCAL_PEEREPID,epid,&epid_length)==0 && epid_length==sizeof(*epid) &&
+    getsockopt(fd,SOL_LOCAL,LOCAL_PEERTOKEN,token,&token_length)==0 && token_length==sizeof(*token) &&
+    getpeereid(fd,&uid,&gid)==0 && uid==0 && gid==0;
+}
+static int capture_creator(ae_bootstrap *b,const int pair[2]) {
+  pid_t first,second,first_epid,second_epid; audit_token_t first_token,second_token;
+  if (!socket_creator(pair[0],&first,&first_epid,&first_token) ||
+      !socket_creator(pair[1],&second,&second_epid,&second_token) || first!=getpid() || second!=first ||
+      first_epid!=first || second_epid!=first_epid || memcmp(&first_token,&second_token,sizeof(first_token))) return 0;
+  b->creator_token=first_token; b->creator_epid=first_epid;
+  return 1;
+}
 int ae_host_identity(const ae_bootstrap *b) {
   uint64_t seconds,micros;
   struct proc_bsdinfo info;
-  pid_t peer=0; uid_t creator_uid; gid_t creator_gid; socklen_t length=sizeof(peer);
+  pid_t peer=0,epid=0; audit_token_t token;
   /* Peer credentials are a necessary consistency check, not the admission
    * mechanism. Provenance is the exclusive socketpair created by THIS root
    * launcher, plus its captured Host birth/image and immutable isolation grant.
    * Socket credentials describe root creation before Host exec/drop. */
-  if (b->channel<0 || getsockopt(b->channel,SOL_LOCAL,LOCAL_PEERPID,&peer,&length)!=0 ||
-      length!=sizeof(peer) || peer!=b->host_pid || getpeereid(b->channel,&creator_uid,&creator_gid)!=0 ||
-      creator_uid!=0 || creator_gid!=0) return 0;
+  if (b->channel<0 || !socket_creator(b->channel,&peer,&epid,&token) ||
+      peer!=b->host_pid || epid!=b->creator_epid || memcmp(&token,&b->creator_token,sizeof(token))) return 0;
   return ae_image_identity(b->host_pid,b,AE_IMAGE_HOST,&seconds,&micros) &&
     seconds==b->host_birth_seconds && micros==b->host_birth_micros &&
     proc_pidinfo(b->host_pid,PROC_PIDTBSDINFO,0,&info,sizeof(info))==(int)sizeof(info) &&
     info.pbi_uid==b->manifest.host_uid && info.pbi_ruid==b->manifest.host_uid &&
     info.pbi_svuid==b->manifest.host_uid && info.pbi_gid==b->manifest.host_gid &&
     info.pbi_rgid==b->manifest.host_gid && info.pbi_svgid==b->manifest.host_gid;
+}
+static uint64_t peer_quad(const uint8_t *bytes) {
+  return ((uint64_t)word(bytes)<<32)|word(bytes+4);
+}
+/* Called synchronously inside the selected Host by the fixed native addon.
+ * Arguments are evidence to match, never authority: peer credentials come from
+ * FD8 and birth/image/UID from the kernel. FD11 is consumed even on failure. */
+int ae_verify_host_peer(const uint8_t *input,size_t size) {
+  static int consumed=0;
+  if (consumed) return 0;
+  consumed=1;
+  uint8_t packet[AE_HOST_PEER_PACKET_BYTES],challenge[AE_ROOT_CHALLENGE_RECORD_BYTES+1];
+  int challenge_fd=AE_HOST_CHALLENGE_FD;
+  struct stat pipe_stat;
+  int ok=input && size==sizeof(packet) && getuid()!=0 && geteuid()==getuid() &&
+    fstat(challenge_fd,&pipe_stat)==0 && S_ISFIFO(pipe_stat.st_mode) &&
+    fcntl(challenge_fd,F_SETFL,O_NONBLOCK)==0;
+  if (ok) memcpy(packet,input,sizeof(packet));
+  ssize_t got=ok ? read(challenge_fd,challenge,sizeof(challenge)) : -1;
+  uint8_t extra;
+  if (got!=AE_ROOT_CHALLENGE_RECORD_BYTES || read(challenge_fd,&extra,1)!=0) ok=0;
+  if (!close_capture(&challenge_fd)) ok=0;
+  if (!ok || zero(challenge,AE_ROOT_CHALLENGE_BYTES) || memcmp(packet+48,challenge,AE_ROOT_CHALLENGE_BYTES)) return 0;
+  pid_t creator,epid; audit_token_t token;
+  _Static_assert(sizeof(audit_token_t)==32,"fixed Darwin audit token size");
+  if (!socket_creator(AE_BOOT_CHANNEL_FD,&creator,&epid,&token) || creator!=getpid() || epid!=creator ||
+      memcmp(&token,challenge+48,sizeof(token))) return 0;
+  ae_bootstrap b; memset(&b,0,sizeof(b));
+  for (unsigned i=0;i<AE_MANIFEST_IMAGES;i++) b.images[i]=-1;
+  if (!ae_manifest_decode(packet+80,AE_MANIFEST_BYTES,&b.manifest) ||
+      b.manifest.host_uid!=getuid() || b.manifest.host_gid!=getgid()) return 0;
+  const unsigned images[]={AE_IMAGE_HELPER,AE_IMAGE_HOST};
+  for (unsigned i=0;i<2;i++) {
+    unsigned index=images[i]; uint8_t digest[32];
+    b.images[index]=protected_open(b.manifest.images[index].path,&b.identities[index],0);
+    if (b.images[index]<0 || !(b.identities[index].st_flags&(UF_IMMUTABLE|SF_IMMUTABLE)) ||
+        !digest_image(b.images[index],digest) || memcmp(digest,b.manifest.images[index].digest,32)) ok=0;
+  }
+  pid_t child=(pid_t)word(packet);
+  uint64_t seconds=0,micros=0,host_seconds=0,host_micros=0;
+  struct proc_bsdinfo child_info,host_info;
+  if (!ok || child<=0 || word(packet+4)!=(uint32_t)getpid() || word(packet+12)!=AE_IMAGE_HELPER ||
+      !ae_image_identity(child,&b,AE_IMAGE_HELPER,&seconds,&micros) ||
+      seconds!=peer_quad(packet+16) || micros!=peer_quad(packet+24) ||
+      peer_quad(packet+32)!=(uint64_t)b.identities[AE_IMAGE_HELPER].st_dev ||
+      peer_quad(packet+40)!=(uint64_t)b.identities[AE_IMAGE_HELPER].st_ino ||
+      proc_pidinfo(child,PROC_PIDTBSDINFO,0,&child_info,sizeof(child_info))!=(int)sizeof(child_info) ||
+      child_info.pbi_ppid!=(uint32_t)getpid() || child_info.pbi_pgid!=word(packet+8) ||
+      child_info.pbi_start_tvsec!=seconds || child_info.pbi_start_tvusec!=micros ||
+      child_info.pbi_uid || child_info.pbi_ruid || child_info.pbi_svuid ||
+      child_info.pbi_gid || child_info.pbi_rgid || child_info.pbi_svgid ||
+      !ae_image_identity(getpid(),&b,AE_IMAGE_HOST,&host_seconds,&host_micros) ||
+      proc_pidinfo(getpid(),PROC_PIDTBSDINFO,0,&host_info,sizeof(host_info))!=(int)sizeof(host_info) ||
+      host_info.pbi_start_tvsec!=host_seconds || host_info.pbi_start_tvusec!=host_micros ||
+      host_seconds!=peer_quad(challenge+32) || host_micros!=peer_quad(challenge+40) ||
+      host_info.pbi_uid!=b.manifest.host_uid || host_info.pbi_ruid!=b.manifest.host_uid || host_info.pbi_svuid!=b.manifest.host_uid ||
+      host_info.pbi_gid!=b.manifest.host_gid || host_info.pbi_rgid!=b.manifest.host_gid || host_info.pbi_svgid!=b.manifest.host_gid) ok=0;
+  for (unsigned i=0;i<2;i++) if (!close_capture(&b.images[images[i]])) ok=0;
+  return ok;
 }
 /* Reject registered identities/membership and observed use in addition to the
  * root grant. These observations are NOT themselves range authority. The grant
@@ -293,6 +376,18 @@ static int capture_input(ae_bootstrap *b) {
     if (got<=0) return 0;
     used+=(size_t)got;
   }
+}
+int ae_revalidate_root_images(ae_bootstrap *b) {
+  for (unsigned i=0;i<b->manifest.image_count;i++) {
+    struct stat current; uint8_t digest[32];
+    int fd=protected_open(b->manifest.images[i].path,&current,0);
+    int ok=fd>=0 && (current.st_flags&(UF_IMMUTABLE|SF_IMMUTABLE)) &&
+      current.st_dev==b->identities[i].st_dev && current.st_ino==b->identities[i].st_ino &&
+      digest_image(fd,digest) && !memcmp(digest,b->manifest.images[i].digest,32);
+    if (!close_capture(&fd)) ok=0;
+    if (!ok) return 0;
+  }
+  return 1;
 }
 int ae_root_capture(ae_bootstrap *b) {
   if (!b || getuid()!=0 || geteuid()!=0 || getgid()!=0 || getegid()!=0) return 0;
@@ -372,7 +467,7 @@ int ae_root_isolate_host(ae_bootstrap *b) {
   b->host_pid=getpid(); b->host_birth_seconds=host.pbi_start_tvsec; b->host_birth_micros=host.pbi_start_tvusec;
   /* Created here, never accepted from a caller. There are exactly these two
    * references, neither endpoint is published through a file or public API. */
-  if (fcntl(pair[0],F_SETFD,FD_CLOEXEC)!=0 || fcntl(pair[1],F_SETFD,FD_CLOEXEC)!=0) {
+  if (getentropy(b->root_challenge,sizeof(b->root_challenge))!=0 || !capture_creator(b,pair) || fcntl(pair[0],F_SETFD,FD_CLOEXEC)!=0 || fcntl(pair[1],F_SETFD,FD_CLOEXEC)!=0) {
     (void)close_capture(&pair[0]); (void)close_capture(&pair[1]); return 0;
   }
   pid_t owner=fork();
@@ -387,9 +482,23 @@ int ae_root_isolate_host(ae_bootstrap *b) {
   if (!close_capture(&pair[1]) || dup2(pair[0],AE_BOOT_CHANNEL_FD)<0) _exit(78);
   if (pair[0]!=AE_BOOT_CHANNEL_FD && !close_capture(&pair[0])) _exit(78);
   if (fcntl(AE_BOOT_CHANNEL_FD,F_SETFD,0)!=0) _exit(78);
+  /* One root-created secret, shared only with the retained owner child and
+   * selected Host. This pipe carries challenge data, never caller authority. */
+  uint8_t challenge_record[AE_ROOT_CHALLENGE_RECORD_BYTES];
+  memcpy(challenge_record,b->root_challenge,AE_ROOT_CHALLENGE_BYTES);
+  for (unsigned i=0;i<8;i++) {
+    challenge_record[32+i]=(uint8_t)(b->host_birth_seconds>>(56-8*i));
+    challenge_record[40+i]=(uint8_t)(b->host_birth_micros>>(56-8*i));
+  }
+  memcpy(challenge_record+48,&b->creator_token,sizeof(b->creator_token));
+  int challenge[2];
+  if (pipe(challenge)!=0 || write(challenge[1],challenge_record,sizeof(challenge_record))!=(ssize_t)sizeof(challenge_record) ||
+      !close_capture(&challenge[1]) || dup2(challenge[0],AE_HOST_CHALLENGE_FD)<0) _exit(78);
+  if (challenge[0]!=AE_HOST_CHALLENGE_FD && !close_capture(&challenge[0])) _exit(78);
+  if (fcntl(AE_HOST_CHALLENGE_FD,F_SETFD,0)!=0) _exit(78);
   int max=getdtablesize();
   if (max<0 || max>1048576) _exit(78);
-  for (int fd=3;fd<max;fd++) if (fd!=AE_BOOT_CHANNEL_FD) {
+  for (int fd=3;fd<max;fd++) if (fd!=AE_BOOT_CHANNEL_FD && fd!=AE_HOST_CHALLENGE_FD) {
     if (close(fd)!=0 && errno!=EBADF) _exit(78);
   }
   /* Never export the operator's root-open log/stdin files or current directory
@@ -403,7 +512,7 @@ int ae_root_isolate_host(ae_bootstrap *b) {
       setgid((gid_t)b->manifest.host_gid)!=0 || setuid((uid_t)b->manifest.host_uid)!=0 ||
       getuid()!=b->manifest.host_uid || geteuid()!=b->manifest.host_uid ||
       getgid()!=b->manifest.host_gid || getegid()!=b->manifest.host_gid || getgroups(0,NULL)!=0) _exit(78);
-  char *argv[]={b->manifest.images[AE_IMAGE_HOST].path,"--darwin-attempt-owner-bridge",NULL};
+  char *argv[]={b->manifest.images[AE_IMAGE_HOST].path,b->manifest.images[AE_IMAGE_HOST_ENTRYPOINT].path,"--darwin-attempt-owner-bridge",NULL};
   char *env[]={"PATH=/usr/bin:/bin","LANG=C","LC_ALL=C",NULL};
   execve(argv[0],argv,env);
   _exit(78);

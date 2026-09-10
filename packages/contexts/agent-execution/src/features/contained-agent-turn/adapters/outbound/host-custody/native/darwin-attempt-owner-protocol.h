@@ -44,6 +44,13 @@
 #define AE_MATERIAL_BEGIN 23
 #define AE_MATERIAL_CHUNK 24
 #define AE_MATERIAL_FINISH 25
+#define AE_BIND_FINAL_LAUNCH 26
+#define AE_WRITE_INPUT 27
+#define AE_CLOSE_INPUT 28
+#define AE_QUERY_CLOSED_WORKSPACE 29
+#define AE_FINAL_LAUNCH_BYTES 5436
+#define AE_FINAL_TEXT_OFFSET 8
+#define AE_FINAL_DIGEST_OFFSET 5148
 #define AE_CREATION_BYTES 3116
 #define AE_DIRECTORY_FACT_BYTES 1052
 #define AE_OBSERVATION_BYTES 5244
@@ -96,7 +103,9 @@
 #define AE_IMAGE_PROVIDER 2
 #define AE_IMAGE_HOST 3
 #define AE_IMAGE_PROFILE 4
-#define AE_IMAGE_FIRST_LOADER 5
+#define AE_IMAGE_HOST_ENTRYPOINT 5
+#define AE_IMAGE_HOST_PEER_ADDON 6
+#define AE_IMAGE_FIRST_LOADER 7
 #define AE_MANIFEST_BINDINGS 8
 /* Bindings, in order: operation, scope (tenant NUL project), Host boot, Host generation, route,
  * frozen retained consumer set, policy qualification, allowed image chain.
@@ -157,7 +166,11 @@ int ae_manifest_in_range(const ae_manifest *, const ae_grant *);
 #define AE_EVENT_STDERR 8
 #define AE_EVENT_REFUSED 9
 #define AE_EVENT_HELLO 10
-#define AE_HELLO_BYTES 8232
+#define AE_HELLO_BYTES 8264
+#define AE_ROOT_CHALLENGE_BYTES 32
+#define AE_ROOT_CHALLENGE_RECORD_BYTES 80
+#define AE_HOST_CHALLENGE_FD 11
+#define AE_HOST_PEER_PACKET_BYTES 8272
 #define AE_EVENT_RELEASED 11
 #define AE_CLOSED_RECORD_BYTES 192
 #define AE_RECORD_MAGIC "ae-owner-intent-v1"

@@ -33,9 +33,19 @@ static void put64(uint8_t *p,uint64_t n) {put32(p,(uint32_t)(n>>32));put32(p+4,(
 static int close_once(int *fd) {int owned=*fd;*fd=-1;return owned<0 || close(owned)==0;}
 static int metadata(int fd,const struct stat *st) {
   if (st->st_flags || flistxattr(fd,NULL,0,0)!=0) return 0;
-  acl_t acl=acl_get_fd_np(fd,ACL_TYPE_EXTENDED); if (!acl) return 0;
-  acl_entry_t entry; int result=acl_get_entry(acl,ACL_FIRST_ENTRY,&entry),released=acl_free(acl);
-  return result==0 && released==0;
+  acl_t acl=acl_get_fd_np(fd,ACL_TYPE_EXTENDED);
+  if (!acl) return 0;
+  int empty=0;
+  if (acl_valid(acl)==0) {
+    acl_entry_t entry;
+    errno=0;
+    int status=acl_get_entry(acl,ACL_FIRST_ENTRY,&entry),saved_errno=errno;
+    /* Darwin returns zero for an actual entry. On this valid ACL and fixed
+     * first index, EINVAL is the observed empty-list result, not an ACE. */
+    empty=status==-1 && saved_errno==EINVAL;
+  }
+  int released=acl_free(acl);
+  return empty && released==0;
 }
 static int same(const struct stat *a,const struct stat *b) {
   return a->st_dev==b->st_dev && a->st_ino==b->st_ino && a->st_uid==b->st_uid && a->st_gid==b->st_gid &&

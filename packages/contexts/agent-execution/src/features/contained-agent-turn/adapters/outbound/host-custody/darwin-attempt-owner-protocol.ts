@@ -1,9 +1,28 @@
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import type {
-  ContainedTurnWorkspaceTree, ContainedTurnWorkspaceTreeLimits,
-  ContainedTurnWorkspaceFile, ContainedTurnWorkspaceFileEntry,
-} from "../filesystem/contained-turn-workspace-tree.js";
+/** Host-owned finite transport data, structurally compatible with the existing
+ * complete workspace inventory. These are byte/metadata inputs, not filesystem
+ * owner handles or receipt authority; native validation retains original roots. */
+export interface DarwinNativeWorkspaceTreeLimits {
+  readonly maxDepth: number;
+  readonly maxEntries: number;
+  readonly maxFileBytes: number;
+  readonly maxTotalBytes: number;
+}
+export interface DarwinNativeWorkspaceFileEntry {
+  readonly kind: "file";
+  readonly relativePath: string;
+  readonly mode: number;
+  readonly size: number;
+  readonly digest: string;
+}
+export type DarwinNativeWorkspaceFile = Readonly<Omit<DarwinNativeWorkspaceFileEntry, "kind"> & {bytes: Buffer}>;
+export interface DarwinNativeWorkspaceTree {
+  readonly entries: readonly (DarwinNativeWorkspaceFileEntry | Readonly<{kind: "directory"; relativePath: string; mode: number}>)[];
+  readonly files: readonly DarwinNativeWorkspaceFile[];
+  readonly rootIdentity: Readonly<{ctimeNs: bigint; dev: bigint; ino: bigint; mode: bigint; mtimeNs: bigint}>;
+  readonly treeDigest: string;
+}
 
 /** The native header is the only wire-number/limit/slot definition. This
  * source-only adapter deliberately requires that exact adjacent header; root
@@ -30,7 +49,7 @@ const commandNames = [
   "SETTLE_ARTIFACT_RESULT", "WORKSPACE_FREEZE", "WORKSPACE_CLEANUP",
   "WORKSPACE_CLOSE", "SETTLE_WORKSPACE", "SETTLE_PRIVATE",
   "DISPOSE_ONCE", "READ_CLOSED_WORKSPACE",
-  "MATERIALIZE_BEGIN", "MATERIALIZE_ENTRY", "MATERIALIZE_CHUNK", "MATERIALIZE_FINISH", "COMMIT_CREATION", "READ_TREE", "BIND_PREPARED", "CONFIRM_CLAIM", "READ_OBSERVATION", "MATERIAL_BEGIN", "MATERIAL_CHUNK", "MATERIAL_FINISH",
+  "MATERIALIZE_BEGIN", "MATERIALIZE_ENTRY", "MATERIALIZE_CHUNK", "MATERIALIZE_FINISH", "COMMIT_CREATION", "READ_TREE", "BIND_PREPARED", "CONFIRM_CLAIM", "READ_OBSERVATION", "MATERIAL_BEGIN", "MATERIAL_CHUNK", "MATERIAL_FINISH", "BIND_FINAL_LAUNCH", "WRITE_INPUT", "CLOSE_INPUT", "QUERY_CLOSED_WORKSPACE",
 ] as const;
 export type DarwinAttemptOwnerCommand = typeof commandNames[number];
 export interface DarwinAttemptOwnerRequest {
@@ -51,6 +70,8 @@ const validRequestArgument = (command: DarwinAttemptOwnerCommand, argument: numb
     case "MATERIALIZE_ENTRY": return argument >= 25 && argument <= 279;
     case "MATERIALIZE_CHUNK": return argument > 8 && argument <= numeric("TREE_REQUEST_MAX_BYTES");
     case "COMMIT_CREATION": return argument === numeric("CREATION_BYTES");
+    case "WRITE_INPUT": return argument > 0 && argument <= numeric("STREAM_CHUNK_BYTES");
+    case "BIND_FINAL_LAUNCH": return argument === numeric("FINAL_LAUNCH_BYTES");
     case "MATERIAL_BEGIN": return argument === 44;
     case "MATERIAL_CHUNK": return argument > 8 && argument <= numeric("TREE_REQUEST_MAX_BYTES");
     case "BIND_PREPARED": return argument === numeric("PREPARED_BYTES");
@@ -209,7 +230,7 @@ const eventPayloadLength = (frame: Buffer): number => {
 const validateCapturedHello = (frame: Buffer, payload: Uint8Array): void => {
   const bytes = Buffer.from(payload);
   const namespace = bytes.subarray(0, 40);
-  const manifest = bytes.subarray(40);
+  const manifest = bytes.subarray(40, 40 + numeric("MANIFEST_BYTES"));
   const launch = createHash("sha256").update(manifest).digest();
   const scopes = manifest.subarray(numeric("MANIFEST_BINDINGS_OFFSET"), numeric("MANIFEST_IMAGES_OFFSET"));
   const initial = createHash("sha256").update(scopes).digest();
@@ -360,9 +381,9 @@ export const darwinAttemptOwnerStates = Object.freeze({
  * object are still mutable. The digest encoding is the canonical scanner's
  * UTF-16 sorted JSON inventory, including directories and exact mode bits. */
 export function captureDarwinWorkspaceTree(
-  tree: ContainedTurnWorkspaceTree,
-  limits: ContainedTurnWorkspaceTreeLimits,
-): ContainedTurnWorkspaceTree {
+  tree: DarwinNativeWorkspaceTree,
+  limits: DarwinNativeWorkspaceTreeLimits,
+): DarwinNativeWorkspaceTree {
   validateTreeLimits(limits);
   if (tree.entries.length > limits.maxEntries || tree.files.length > tree.entries.length) {
     throw new Error("native tree entry budget exceeded");
@@ -402,14 +423,14 @@ export function captureDarwinWorkspaceTree(
   return Object.freeze({ entries: Object.freeze(entries), files: Object.freeze(files),
     rootIdentity: Object.freeze({ ...tree.rootIdentity }), treeDigest });
 }
-const validateTreeFile = (file: ContainedTurnWorkspaceFile | undefined, entry: ContainedTurnWorkspaceFileEntry, maxBytes: number): void => {
+const validateTreeFile = (file: DarwinNativeWorkspaceFile | undefined, entry: DarwinNativeWorkspaceFileEntry, maxBytes: number): void => {
   if (!file || file.mode !== entry.mode || file.size !== entry.size || file.digest !== entry.digest ||
       file.bytes.length !== entry.size || entry.size > maxBytes ||
       createHash("sha256").update(file.bytes).digest("hex") !== entry.digest) {
     throw new Error("native tree file inventory/content mismatch");
   }
 };
-const validateTreeLimits = (limits: ContainedTurnWorkspaceTreeLimits): void => {
+const validateTreeLimits = (limits: DarwinNativeWorkspaceTreeLimits): void => {
   const ceilings = { maxDepth: 32, maxEntries: 4096, maxFileBytes: 8 * 1024 * 1024, maxTotalBytes: 32 * 1024 * 1024 };
   for (const key of Object.keys(ceilings) as (keyof typeof ceilings)[]) {
     if (!Number.isSafeInteger(limits[key]) || limits[key] < 0 || limits[key] > ceilings[key]) {
@@ -438,14 +459,14 @@ const validateTreePath = (path: string, directories: Set<string>, names: Map<str
  * Completion alone is not authority: the bridge must also await the matching
  * successful command acknowledgement before returning this snapshot. */
 export class DarwinWorkspaceTreeReceiver {
-  readonly #limits: ContainedTurnWorkspaceTreeLimits;
+  readonly #limits: DarwinNativeWorkspaceTreeLimits;
   readonly #entries: { path: string; directory: boolean; mode: number; size: number; bytes: Buffer; used: number }[] = [];
   readonly #dev: string;
   readonly #ino: string;
   #total = 0;
   #ended: DarwinAttemptOwnerEvent | undefined;
   #failed = false;
-  constructor(limits: ContainedTurnWorkspaceTreeLimits, dev: string, ino: string) {
+  constructor(limits: DarwinNativeWorkspaceTreeLimits, dev: string, ino: string) {
     validateTreeLimits(limits); this.#limits = Object.freeze({ ...limits }); this.#dev = dev; this.#ino = ino;
   }
   accept(event: DarwinAttemptOwnerEvent): void {
@@ -489,7 +510,7 @@ export class DarwinWorkspaceTreeReceiver {
     }
     bytes.copy(entry.bytes, entry.used); entry.used += bytes.length;
   }
-  finish(): ContainedTurnWorkspaceTree {
+  finish(): DarwinNativeWorkspaceTree {
     const end = this.#ended;
     if (this.#failed || !end) {throw new Error("native tree completion missing");}
     const observed = this.#entries.toSorted((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
@@ -571,4 +592,65 @@ export function decodeDarwinNativeMaterialData(event: DarwinAttemptOwnerEvent): 
   if (!config.bytes || config.bytes > numeric("CONFIG_MAX_BYTES") || catalog.bytes !== numeric("CATALOG_BYTES") || installation.bytes !== 36 ||
       new Set([config.ino, catalog.ino, installation.ino, observation.codexHome.ino]).size !== 4) {throw new Error("invalid native material inventory");}
   return Object.freeze({observation, config, catalog, installation});
+}
+
+
+/** Inert final data, not an authority issuer. Only the private HTTP owner may
+ * transmit it after authenticating its retained same-object final launch. */
+export interface DarwinNativeFinalLaunchData {
+  readonly home: string; readonly codexHome: string; readonly tmpDir: string;
+  readonly localCapability: string; readonly port: number;
+  readonly preparedSha256: string; readonly profileSha256: string;
+  readonly configSha256: string; readonly catalogSha256: string; readonly installationSha256: string;
+  readonly fingerprintSha256: string; readonly materialSha256: string;
+  readonly executableSha256: string; readonly argumentsSha256: string;
+}
+const finalDigestBytes = (value: string): Buffer => {
+  if (typeof value !== "string" || !digest.test(value)) {throw new Error("invalid final native binding digest");}
+  return Buffer.from(value, "hex");
+};
+const canonicalFinalPath = (value: string): boolean => value.startsWith("/") &&
+  !value.slice(1).split("/").some(part => !part || part === "." || part === "..");
+export function encodeDarwinNativeFinalLaunchData(input: DarwinNativeFinalLaunchData): Buffer {
+  const names = ["home", "codexHome", "tmpDir", "localCapability", "port", "preparedSha256", "profileSha256",
+    "configSha256", "catalogSha256", "installationSha256", "fingerprintSha256", "materialSha256", "executableSha256", "argumentsSha256"];
+  if (Object.getPrototypeOf(input) !== Object.prototype || Reflect.ownKeys(input).length !== names.length ||
+      names.some(name => !Object.hasOwn(input, name)) ||
+      Object.values(Object.getOwnPropertyDescriptors(input)).some(field => !("value" in field) ||
+        (typeof field.value !== "string" && typeof field.value !== "number"))) {
+    throw new Error("final native launch requires exact inert data");
+  }
+  if (!Number.isInteger(input.port) || input.port < 1 || input.port > 65535 || (typeof input.localCapability !== "string" || !digest.test(input.localCapability))) {
+    throw new Error("invalid final native local route");
+  }
+  const packet = Buffer.alloc(numeric("FINAL_LAUNCH_BYTES"));
+  packet.writeUInt32BE(1, 0); packet.writeUInt32BE(input.port, 4);
+  const fields = [input.home, input.codexHome, input.tmpDir, input.localCapability,
+    `http://127.0.0.1:${input.port}/backend-api/codex`];
+  for (const [index, value] of fields.entries()) {
+    if (typeof value !== "string" || !value || !value.isWellFormed() || value.includes("\0") ||
+        Buffer.byteLength(value) > 1024 || (index < 3 && !canonicalFinalPath(value))) {
+      throw new Error("invalid final native environment field");
+    }
+    const offset = numeric("FINAL_TEXT_OFFSET") + index * 1028;
+    packet.writeUInt32BE(Buffer.byteLength(value), offset); packet.write(value, offset + 4, "utf8");
+  }
+  const hashes = [input.preparedSha256, input.profileSha256, input.configSha256, input.catalogSha256,
+    input.installationSha256, input.fingerprintSha256, input.materialSha256, input.executableSha256, input.argumentsSha256];
+  for (const [index, value] of hashes.entries()) {
+    finalDigestBytes(value).copy(packet, numeric("FINAL_DIGEST_OFFSET") + index * 32);
+  }
+  return packet;
+}
+
+export function darwinNativeArgumentsSha256(executable: string, args: readonly string[]): string {
+  if (args.length > 7) {throw new Error("native argument count exceeds root bound");}
+  const hash = createHash("sha256");
+  for (const value of [executable, ...args]) {
+    if (typeof value !== "string" || !value || !value.isWellFormed() || value.includes("\0") || Buffer.byteLength(value) > 255) {
+      throw new Error("native argument exceeds fixed root slot");
+    }
+    const count = Buffer.alloc(4); count.writeUInt32BE(Buffer.byteLength(value)); hash.update(count).update(value);
+  }
+  return hash.digest("hex");
 }

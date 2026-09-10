@@ -32,7 +32,10 @@ typedef struct {
   int born,reaped,wait_lost,term_sent,stream_unknown,provider_seen,channel_lost;
   uint32_t serial,image;
   uint64_t started,term_at,stream_bytes,transfer_deadline;
-  size_t input_used;
+  size_t input_used, write_used, write_length;
+  uint64_t write_deadline;
+  uint32_t input_command;
+  uint8_t write_bytes[AE_STREAM_CHUNK_BYTES];
   uint8_t challenge[AE_PREEXEC_BYTES];
 } owner;
 static uint64_t now_ms(void) {
@@ -115,6 +118,7 @@ static int event(owner *o,uint32_t kind,uint32_t command,ae_result result,const 
   return 1;
 }
 static void quarantine(owner *o) {
+  o->boot->final_ready=0; explicit_bzero(o->boot->final_data,sizeof(o->boot->final_data));
   (void)ae_channel_lost(&o->boot->custody.state,ae_native_persist,&o->boot->custody);
   /* Direct wait/stop ownership is held independently from journal truth. A
    * persistence failure must not erase an unreaped child or redirect its PID. */
@@ -143,30 +147,41 @@ static int drop_and_reset(uid_t uid,gid_t gid) {
 }
 static void spawn_child(owner *o,int input,int output,int error,int manifest,int ack,int gate) {
   ae_bootstrap *b=o->boot;
-  int sources[]={input,output,error,b->route,manifest,ack,gate};
+  int sources[]={input,output,error,manifest,ack,gate};
+  const int targets[]={0,1,2,AE_PREEXEC_MANIFEST_FD,AE_PREEXEC_ACK_FD,AE_PREEXEC_GATE_FD};
   /* First lift all sources above the target FD map; dup2 ordering cannot alias
    * a still-needed source. No root/namespace descriptor survives this map. */
-  int copies[7];
-  for (unsigned i=0;i<7;i++) {
+  int copies[6];
+  for (unsigned i=0;i<6;i++) {
     copies[i]=fcntl(sources[i],F_DUPFD_CLOEXEC,32);
     if (copies[i]<0) _exit(126);
   }
-  char workspace[PATH_MAX],envelope[PATH_MAX],home[PATH_MAX],codex_home[PATH_MAX+16],tmp[PATH_MAX+16],private_arg[PATH_MAX+16],workspace_arg[PATH_MAX+16];
+  char workspace[PATH_MAX],envelope[PATH_MAX],environment[4][1100],private_arg[PATH_MAX+16],workspace_arg[PATH_MAX+16],broker_arg[32];
+  const char *keys[]={"HOME","CODEX_HOME","TMPDIR","AR_PRIVATE_BROKER_CAPABILITY"};
+  if (!b->final_ready) _exit(126);
+  for (unsigned i=0;i<4;i++) {
+    const uint8_t *field=b->final_data+AE_FINAL_TEXT_OFFSET+i*1028;
+    uint32_t length=((uint32_t)field[0]<<24)|((uint32_t)field[1]<<16)|((uint32_t)field[2]<<8)|field[3];
+    int n=snprintf(environment[i],sizeof(environment[i]),"%s=%.*s",keys[i],(int)length,field+4);
+    if (n<0 || n>=(int)sizeof(environment[i])) _exit(126);
+  }
+  uint32_t port=((uint32_t)b->final_data[4]<<24)|((uint32_t)b->final_data[5]<<16)|((uint32_t)b->final_data[6]<<8)|b->final_data[7];
   if (fcntl(b->custody.workspace,F_GETPATH,workspace)!=0 || fcntl(b->custody.envelope,F_GETPATH,envelope)!=0 ||
-      snprintf(home,sizeof(home),"HOME=%s/private",envelope)>=(int)sizeof(home) ||
-      snprintf(codex_home,sizeof(codex_home),"CODEX_HOME=%s/private/codex-home",envelope)>=(int)sizeof(codex_home) ||
-      snprintf(tmp,sizeof(tmp),"TMPDIR=%s/private/tmp",envelope)>=(int)sizeof(tmp) ||
       snprintf(private_arg,sizeof(private_arg),"PRIVATE=%s/private",envelope)>=(int)sizeof(private_arg) ||
       snprintf(workspace_arg,sizeof(workspace_arg),"WORKSPACE=%s",workspace)>=(int)sizeof(workspace_arg) ||
+      snprintf(broker_arg,sizeof(broker_arg),"BROKER_PORT=%u",port)>=(int)sizeof(broker_arg) ||
       fchdir(b->custody.workspace)!=0 || setpgid(0,0)!=0) _exit(126);
-  for (int i=0;i<7;i++) if (dup2(copies[i],i)<0 || fcntl(i,F_SETFD,0)!=0) _exit(126);
+  for (unsigned i=0;i<6;i++) if (dup2(copies[i],targets[i])<0 || fcntl(targets[i],F_SETFD,0)!=0) _exit(126);
+  /* Early root FD10 is inert bootstrap custody, never prepared HTTP readiness.
+   * Do not delegate it as provider FD3 or through the sandbox/preexec chain. */
+  if (close(3)!=0 && errno!=EBADF) _exit(126);
   int max=getdtablesize();
   if (max<0 || max>1048576) _exit(126);
   for (int fd=7;fd<max;fd++) if (close(fd)!=0 && errno!=EBADF) _exit(126);
   if (!drop_and_reset((uid_t)b->manifest.uid,(gid_t)b->manifest.gid)) _exit(126);
   char *argv[]={b->manifest.images[AE_IMAGE_SANDBOX].path,"-f",b->manifest.images[AE_IMAGE_PROFILE].path,
-    "-D",workspace_arg,"-D",private_arg,b->manifest.images[AE_IMAGE_HELPER].path,"--preexec",NULL};
-  char *env[]={home,codex_home,tmp,"PATH=/usr/bin:/bin","LANG=C","LC_ALL=C",NULL};
+    "-D",workspace_arg,"-D",private_arg,"-D",broker_arg,b->manifest.images[AE_IMAGE_HELPER].path,"--preexec",NULL};
+  char *env[]={environment[0],environment[1],environment[2],environment[3],"PATH=/usr/bin:/bin","LANG=C.UTF-8",NULL};
   execve(argv[0],argv,env);
   _exit(126);
 }
@@ -190,6 +205,12 @@ int ae_native_preexec(void) {
   if (!transfer(AE_PREEXEC_GATE_FD,&go,1,0,deadline) || go!=1) return 126;
   int ack=AE_PREEXEC_ACK_FD,gate=AE_PREEXEC_GATE_FD;
   if (!close_one(&ack) || !close_one(&gate)) return 126;
+  int max=getdtablesize();
+  if (max<0 || max>1048576) return 126;
+  for (int fd=3;fd<max;fd++) {
+    errno=0;
+    if (fcntl(fd,F_GETFD)!=-1 || errno!=EBADF) return 126;
+  }
   char *argv[AE_MANIFEST_ARGV_SLOTS+1];
   for (unsigned i=0;i<m.argc;i++) argv[i]=m.argv[i];
   argv[m.argc]=NULL;
@@ -255,18 +276,52 @@ static void reap(owner *o) {
 static void feed_input(owner *o) {
   if (o->input<0) return;
   ae_bootstrap *b=o->boot;
-  if (o->input_used<b->input_length) {
-    size_t remaining=b->input_length-o->input_used;
+  if (b->custody.state.cutoff || o->reaped) {
+    if (!close_one(&o->input)) { o->stream_unknown=1; quarantine(o); }
+    if (o->input_command) { o->stream_unknown=1; quarantine(o); }
+    explicit_bzero(o->write_bytes,sizeof(o->write_bytes));
+    return;
+  }
+  uint64_t now=now_ms();
+  if (o->input_command && (!now || now>=o->write_deadline)) {
+    o->stream_unknown=1; quarantine(o); return;
+  }
+  /* Bootstrap bytes precede session writes but no longer imply stdin EOF.
+   * Each Host write has one retained bounded buffer and a physical pipe-write
+   * acknowledgement; output continues draining between partial writes. */
+  int bootstrap=o->input_used<b->input_length;
+  size_t remaining=bootstrap ? b->input_length-o->input_used : o->write_length-o->write_used;
+  if (remaining) {
     if (remaining>AE_STREAM_CHUNK_BYTES) remaining=AE_STREAM_CHUNK_BYTES;
-    ssize_t n=write(o->input,b->input_bytes+o->input_used,remaining);
+    const uint8_t *bytes=bootstrap ? b->input_bytes+o->input_used : o->write_bytes+o->write_used;
+    ssize_t n=write(o->input,bytes,remaining);
     if (n<0 && (errno==EINTR || errno==EAGAIN)) return;
     if (n<=0) { o->stream_unknown=1; quarantine(o); (void)close_one(&o->input); return; }
-    o->input_used+=(size_t)n;
+    if (bootstrap) o->input_used+=(size_t)n; else o->write_used+=(size_t)n;
   }
-  if (o->input_used==b->input_length) {
-    if (!close_one(&o->input)) { o->stream_unknown=1; quarantine(o); }
-    free(b->input_bytes); b->input_bytes=NULL;
+  if (o->input_used<b->input_length || o->write_used<o->write_length) return;
+  free(b->input_bytes); b->input_bytes=NULL;
+  if (!o->input_command) return;
+  uint32_t command=o->input_command;
+  if (command==AE_CLOSE_INPUT && !close_one(&o->input)) {
+    o->stream_unknown=1; quarantine(o); return;
   }
+  ae_state next=b->custody.state;
+  if (next.pending_effect!=command) { quarantine(o); return; }
+  next.pending_effect=0; next.pending_argument=0;
+  explicit_bzero(o->write_bytes,sizeof(o->write_bytes));
+  o->write_used=0; o->write_length=0; o->input_command=0;
+  if (ae_commit(&b->custody.state,&next,ae_native_persist,&b->custody)!=AE_ACCEPTED ||
+      !event(o,AE_EVENT_STATUS,command,AE_ACCEPTED,NULL,0,NULL,0)) quarantine(o);
+}
+static int capture_input(owner *o,uint32_t command,const uint8_t *bytes,size_t size) {
+  if (o->input<0 || o->input_command || o->reaped ||
+      size>sizeof(o->write_bytes) || (command==AE_WRITE_INPUT && !size) ||
+      (command==AE_CLOSE_INPUT && size)) return 0;
+  uint64_t now=now_ms(); if (!now) return 0;
+  if (size) memcpy(o->write_bytes,bytes,size);
+  o->write_length=size; o->write_used=0; o->input_command=command; o->write_deadline=now+5000;
+  return 1;
 }
 static void drain(owner *o,int *fd,uint32_t kind) {
   if (*fd<0) return;
@@ -372,10 +427,50 @@ static int scope_matches_root(owner *o,const uint8_t *bytes,unsigned fields) {
   CC_SHA256(scope,tenant+1+project,digest);
   return !memcmp(digest,o->boot->manifest.bindings[1],32);
 }
+static int final_launch_data(owner *o,const uint8_t *payload,size_t size) {
+  ae_bootstrap *b=o->boot; ae_custody *c=&b->custody;
+  if (b->final_consumed || !c->claim_committed || !c->material_ready || size!=AE_FINAL_LAUNCH_BYTES) return 0;
+  b->final_consumed=1;
+  if (tree_u32(payload)!=1 || !tree_u32(payload+4) || tree_u32(payload+4)>65535) return 0;
+  for (unsigned i=0;i<5;i++) {
+    const uint8_t *field=payload+AE_FINAL_TEXT_OFFSET+i*1028; uint32_t length=tree_u32(field);
+    if (!length || length>1024 || memchr(field+4,0,length)) return 0;
+    for (uint32_t j=length;j<1024;j++) if (field[4+j]) return 0;
+  }
+  const uint8_t *capability=payload+AE_FINAL_TEXT_OFFSET+3*1028;
+  if (tree_u32(capability)!=64) return 0;
+  for (unsigned i=0;i<64;i++) if (!((capability[4+i]>='0' && capability[4+i]<='9') ||
+      (capability[4+i]>='a' && capability[4+i]<='f'))) return 0;
+  char endpoint[128]; int length=snprintf(endpoint,sizeof(endpoint),"http://127.0.0.1:%u/backend-api/codex",tree_u32(payload+4));
+  const uint8_t *route=payload+AE_FINAL_TEXT_OFFSET+4*1028;
+  if (length<0 || (size_t)length>=sizeof(endpoint) || tree_u32(route)!=(uint32_t)length || memcmp(route+4,endpoint,(size_t)length)) return 0;
+  uint8_t observed[AE_OBSERVATION_BYTES],hash[32];
+  if (!ae_native_validate_launch(c) || !ae_native_observe_launch(c,observed,c->state.revision) || !ae_revalidate_root_images(b)) return 0;
+  for (unsigned i=0;i<3;i++) if (memcmp(payload+AE_FINAL_TEXT_OFFSET+i*1028,observed+1036+i*AE_DIRECTORY_FACT_BYTES,1028)) return 0;
+  const uint8_t *digests=payload+AE_FINAL_DIGEST_OFFSET;
+  CC_SHA256(c->prepared,sizeof(c->prepared),hash);
+  if (memcmp(hash,digests,32) || memcmp(digests+32,b->manifest.images[AE_IMAGE_PROFILE].digest,32) ||
+      memcmp(digests+7*32,b->manifest.images[AE_IMAGE_PROVIDER].digest,32)) return 0;
+  for (unsigned i=0;i<3;i++) if (memcmp(digests+(2+i)*32,c->material_facts+i*AE_FILE_FACT_BYTES+1060,32)) return 0;
+  CC_SHA256_CTX arguments; CC_SHA256_Init(&arguments);
+  for (unsigned i=0;i<b->manifest.argc;i++) {
+    uint8_t count[4]; size_t n=strlen(b->manifest.argv[i]); put32(count,(uint32_t)n);
+    CC_SHA256_Update(&arguments,count,sizeof(count)); CC_SHA256_Update(&arguments,b->manifest.argv[i],(CC_LONG)n);
+  }
+  CC_SHA256_Final(hash,&arguments);
+  if (memcmp(hash,digests+8*32,32)) return 0;
+  /* Only a digest of the capability-bearing packet is journaled. Raw final
+   * capability/environment bytes live in this one owner, never in receipts. */
+  CC_SHA256(payload,(CC_LONG)size,hash);
+  if (!publish_attempt_data(c,"final-launch",hash,sizeof(hash))) return 0;
+  memcpy(b->final_data,payload,size); b->final_ready=1; return 1;
+}
 static int tree_effect(owner *o,uint32_t kind,const uint8_t *payload,size_t size) {
   ae_custody *c=&o->boot->custody;
   int ok=0;
   switch (kind) {
+    case AE_BIND_FINAL_LAUNCH:
+      ok=final_launch_data(o,payload,size); break;
     case AE_BIND_PREPARED:
       if (c->prepared_bound || !c->creation_committed || size!=AE_PREPARED_BYTES) return 0;
       c->prepared_bound=1; /* Burn before validation or durable publication. */
@@ -410,7 +505,8 @@ static int tree_effect(owner *o,uint32_t kind,const uint8_t *payload,size_t size
       if (!scope_matches_root(o,payload+32,3) || !publish_attempt_data(c,"workspace-creation",payload,size)) return 0;
       memcpy(c->creation,payload,size); memcpy(c->materialization_digest,payload,32);
       memcpy(c->operation_id,payload+36,tree_u32(payload+32)); ok=1; break;
-    case AE_READ_TREE: {
+    case AE_READ_TREE: case AE_QUERY_CLOSED_WORKSPACE: {
+      if (kind==AE_QUERY_CLOSED_WORKSPACE && !ae_native_query_closed(c)) return 0;
       o->transfer_deadline=now_ms()+5000;
       struct stat root;
       if (!c->materialization_complete || !ae_tree_observe(c->workspace,&c->tree_limits,tree_entry_event,tree_chunk_event,o) ||
@@ -418,6 +514,7 @@ static int tree_effect(owner *o,uint32_t kind,const uint8_t *payload,size_t size
       uint8_t end[24]={0}; put32(end,(uint32_t)root.st_mode);
       put64(end+8,(uint64_t)root.st_ctimespec.tv_sec*1000000000u+(uint64_t)root.st_ctimespec.tv_nsec);
       put64(end+16,(uint64_t)root.st_mtimespec.tv_sec*1000000000u+(uint64_t)root.st_mtimespec.tv_nsec);
+      if (kind==AE_QUERY_CLOSED_WORKSPACE && !ae_native_query_closed(c)) return 0;
       ok=event(o,AE_EVENT_TREE_END,0,AE_ACCEPTED,NULL,0,end,sizeof(end));
       o->transfer_deadline=0; break;
     }
@@ -449,20 +546,29 @@ static int material_effect(owner *o,uint32_t kind,const uint8_t *payload,size_t 
 }
 static int dispatch(owner *o,const ae_request *request,const uint8_t *payload,size_t size) {
   ae_custody *c=&o->boot->custody;
+  if (request->kind==AE_CUTOFF) {
+    o->boot->final_ready=0; explicit_bzero(o->boot->final_data,sizeof(o->boot->final_data));
+  }
   if (!ae_host_identity(o->boot)) { quarantine(o); return 0; }
   if (request->kind==AE_START_ONCE && (!c->materialization_complete || !c->creation_committed ||
-      !c->prepared_bound || !c->claim_committed || !c->material_ready))
+      !c->prepared_bound || !c->claim_committed || !c->material_ready || !o->boot->final_ready))
     return event(o,AE_EVENT_REFUSED,request->kind,AE_REFUSED,NULL,0,NULL,0);
   ae_result result=ae_command(&c->state,request,ae_native_persist,c);
+  if (result==AE_ACCEPTED && request->kind==AE_CUTOFF && !ae_native_abort_transactions(c)) {
+    quarantine(o); result=AE_UNKNOWN;
+  }
   if (result==AE_EFFECT_REQUIRED) {
     int ok=0;
     switch (request->kind) {
-      case AE_START_ONCE: ok=ae_native_validate_launch(c) && start(o); break;
+      case AE_WRITE_INPUT: case AE_CLOSE_INPUT:
+        if (capture_input(o,request->kind,payload,size)) return 1;
+        break;
+      case AE_START_ONCE: ok=ae_revalidate_root_images(o->boot) && ae_native_validate_launch(c) && start(o); break;
       case AE_READ_OBSERVATION: case AE_MATERIAL_BEGIN: case AE_MATERIAL_CHUNK: case AE_MATERIAL_FINISH:
         ok=material_effect(o,request->kind,payload,size); break;
       case AE_MATERIALIZE_BEGIN: case AE_MATERIALIZE_ENTRY: case AE_MATERIALIZE_CHUNK:
       case AE_MATERIALIZE_FINISH: case AE_COMMIT_CREATION: case AE_READ_TREE:
-      case AE_BIND_PREPARED: case AE_CONFIRM_CLAIM:
+      case AE_BIND_PREPARED: case AE_CONFIRM_CLAIM: case AE_BIND_FINAL_LAUNCH: case AE_QUERY_CLOSED_WORKSPACE:
         ok=tree_effect(o,request->kind,payload,size); break;
       case AE_WORKSPACE_FREEZE: ok=ae_native_workspace_move(c,AE_FROZEN); break;
       case AE_WORKSPACE_CLEANUP: ok=ae_native_workspace_move(c,AE_CLEANUP); break;
@@ -479,8 +585,9 @@ static int dispatch(owner *o,const ae_request *request,const uint8_t *payload,si
 }
 /* One retained read-only grant, captured before releasing live owner handles,
  * activated ONLY by the successful actual release below. No caller ticket,
- * path or active-root reopen is used. Grant resources close before readback is
- * acknowledged; timeout/disconnect/close uncertainty cannot claim success. */
+ * path or active-root reopen is used. Read-only grant resources survive each
+ * read until the retained Host disconnects or loses identity. Each response is
+ * fresh native readback; a transfer timeout never becomes cached success. */
 static int close_reader(ae_custody *reader,int *image) {
   int ok=1;
   if (!close_one(&reader->workspace)) ok=0;
@@ -489,18 +596,19 @@ static int close_reader(ae_custody *reader,int *image) {
   if (!close_one(image)) ok=0;
   return ok;
 }
-static int serve_closed_reader(owner *o,ae_custody *reader,int image,const uint8_t ticket[AE_CLOSED_RECORD_BYTES]) {
+static int read_closed_transaction(owner *o,ae_custody *reader,const uint8_t ticket[AE_CLOSED_RECORD_BYTES]) {
   ae_bootstrap *b=o->boot;
   uint8_t frame[AE_FRAME_BYTES]; ae_request request;
-  b->images[AE_IMAGE_HOST]=image;
-  o->transfer_deadline=now_ms()+6000;
+  uint64_t now=now_ms();
+  if (!now) return 0;
+  o->transfer_deadline=now+6000;
   int ok=transfer(b->channel,frame,sizeof(frame),0,o->transfer_deadline) &&
     ae_decode(frame,sizeof(frame),&request) && request.kind==AE_READ_CLOSED_WORKSPACE &&
-    request.sequence==reader->state.sequence+1 && !memcmp(request.binding,reader->state.binding,32) &&
+    b->custody.state.sequence!=UINT32_MAX && request.sequence==b->custody.state.sequence+1 && !memcmp(request.binding,reader->state.binding,32) &&
     !memcmp(request.launch,reader->state.launch,32) && ae_host_identity(b) && ae_native_read_closed(reader);
   if (ok) {
     /* Original record sequence remains captured in reader; response sequence
-     * belongs to this single fresh read transaction, not a journal mutation. */
+     * belongs to this fresh read transaction, not a journal mutation. */
     b->custody.state.sequence=request.sequence;
     ok=ae_tree_observe(reader->workspace,&reader->tree_limits,tree_entry_event,tree_chunk_event,o);
     struct stat root;
@@ -509,14 +617,34 @@ static int serve_closed_reader(owner *o,ae_custody *reader,int image,const uint8
       uint8_t end[24]={0}; put32(end,(uint32_t)root.st_mode);
       put64(end+8,(uint64_t)root.st_ctimespec.tv_sec*1000000000u+(uint64_t)root.st_ctimespec.tv_nsec);
       put64(end+16,(uint64_t)root.st_mtimespec.tv_sec*1000000000u+(uint64_t)root.st_mtimespec.tv_nsec);
+      if (kind==AE_QUERY_CLOSED_WORKSPACE && !ae_native_query_closed(c)) return 0;
       ok=event(o,AE_EVENT_TREE_END,0,AE_ACCEPTED,NULL,0,end,sizeof(end));
     }
     if (ok) ok=ae_native_read_closed(reader);
   }
-  if (!close_reader(reader,&b->images[AE_IMAGE_HOST])) ok=0;
-  if (ok) ok=event(o,AE_EVENT_CLOSED_READ,AE_READ_CLOSED_WORKSPACE,AE_ACCEPTED,NULL,0,ticket,AE_CLOSED_RECORD_BYTES);
-  if (!close_one(&b->channel)) ok=0;
-  return ok ? 0 : 75;
+  return ok && event(o,AE_EVENT_CLOSED_READ,AE_READ_CLOSED_WORKSPACE,AE_ACCEPTED,NULL,0,ticket,AE_CLOSED_RECORD_BYTES);
+}
+static int serve_closed_reader(owner *o,ae_custody *reader,int image,const uint8_t ticket[AE_CLOSED_RECORD_BYTES]) {
+  ae_bootstrap *b=o->boot;
+  b->images[AE_IMAGE_HOST]=image;
+  /* Idle time does not consume the actual retained owner's read authority.
+   * Poll the same endpoint and revalidate the selected Host birth/image. The
+   * six-second bound starts only when a finite read transaction has data. */
+  for (;;) {
+    if (!ae_host_identity(b)) break;
+    struct pollfd p={b->channel,POLLIN,0};
+    int n=poll(&p,1,1000);
+    if (n<0 && errno==EINTR) continue;
+    if (n<0 || (n && (p.revents&(POLLERR|POLLNVAL)))) break;
+    if (!n) continue;
+    if (!(p.revents&POLLIN)) break;
+    if (!read_closed_transaction(o,reader,ticket)) break;
+  }
+  /* Disconnect/identity loss ends read authority. No success response or
+   * physical completion is inferred from this shutdown, including close debt. */
+  (void)close_reader(reader,&b->images[AE_IMAGE_HOST]);
+  (void)close_one(&b->channel);
+  return 75;
 }
 int ae_native_owner_loop(ae_bootstrap *b) {
   owner o; memset(&o,0,sizeof(o)); o.boot=b;
@@ -533,6 +661,7 @@ int ae_native_owner_loop(ae_bootstrap *b) {
   if (sigemptyset(&ignore.sa_mask)!=0 || sigaction(SIGPIPE,&ignore,NULL)!=0) return 78;
   uint8_t hello[AE_HELLO_BYTES];
   memcpy(hello,b->custody.namespace_name,40); memcpy(hello+40,b->manifest_bytes,AE_MANIFEST_BYTES);
+  memcpy(hello+40+AE_MANIFEST_BYTES,b->root_challenge,AE_ROOT_CHALLENGE_BYTES);
   if (!event(&o,AE_EVENT_HELLO,0,AE_ACCEPTED,NULL,0,hello,sizeof(hello))) quarantine(&o);
   uint64_t owner_deadline=now_ms()+b->manifest.run_ms+b->manifest.term_ms+10000;
   uint8_t frame[AE_FRAME_BYTES]; size_t used=0; uint64_t partial_since=0;
@@ -555,6 +684,7 @@ int ae_native_owner_loop(ae_bootstrap *b) {
     if (s->phase==AE_QUARANTINED && (!o.born || o.reaped || o.wait_lost ||
         (o.term_sent && now-o.term_at>b->manifest.term_ms))) return 75;
     if (s->phase==AE_DISPOSED) {
+      b->final_ready=0; explicit_bzero(b->final_data,sizeof(b->final_data));
       uint8_t ticket[AE_CLOSED_RECORD_BYTES]; int ok=1;
       ae_custody reader=b->custody;
       reader.workspace=fcntl(b->custody.workspace,F_DUPFD_CLOEXEC,0);
@@ -590,13 +720,14 @@ int ae_native_owner_loop(ae_bootstrap *b) {
       if (!ae_decode(frame,sizeof(frame),&request)) { o.channel_lost=1; used=0; continue; }
       if (request.kind==AE_MATERIALIZE_BEGIN || request.kind==AE_MATERIALIZE_ENTRY ||
           request.kind==AE_MATERIALIZE_CHUNK || request.kind==AE_COMMIT_CREATION ||
-          request.kind==AE_BIND_PREPARED || request.kind==AE_CONFIRM_CLAIM ||
-          request.kind==AE_MATERIAL_BEGIN || request.kind==AE_MATERIAL_CHUNK) size=request.argument;
+          request.kind==AE_BIND_PREPARED || request.kind==AE_CONFIRM_CLAIM || request.kind==AE_BIND_FINAL_LAUNCH ||
+          request.kind==AE_MATERIAL_BEGIN || request.kind==AE_MATERIAL_CHUNK || request.kind==AE_WRITE_INPUT) size=request.argument;
       if (size && !transfer(b->channel,payload,size,0,now_ms()+1000)) { o.channel_lost=1; used=0; continue; }
       uint8_t queued;
       ssize_t extra=recv(b->channel,&queued,1,MSG_PEEK|MSG_DONTWAIT);
       if (extra>=0 || (errno!=EAGAIN && errno!=EWOULDBLOCK)) { o.channel_lost=1; used=0; continue; }
       if (!dispatch(&o,&request,payload,size)) o.channel_lost=1;
+      explicit_bzero(payload,sizeof(payload));
       used=0; partial_since=0;
     }
   }
