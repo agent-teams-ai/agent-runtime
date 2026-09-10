@@ -411,8 +411,9 @@ const executeInspection = async (
 ): Promise<CodexInspectionOutcome> => {
   // identityScope defines the source identity namespace every sourceRef is bound
   // to, so an empty one is a degenerate namespace rather than a malformed
-  // transport shape. The invariant stays with the use case that depends on it;
-  // the inbound adapter repeats it only to fail before any port is touched.
+  // transport shape. The invariant stays with the use case that depends on it
+  // and is enforced here, before any port below is touched; the inbound
+  // adapter's own copy only rejects a malformed transport request earlier.
   if (input.identityScope.length === 0) {
     throw new TypeError("identityScope must not be empty");
   }

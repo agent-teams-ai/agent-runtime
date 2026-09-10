@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "evidenceKind": "runtime-setup-l0-direct-composition",
-  "sourceRevision": "216273dc20b8e13156b9162124bea964ec8f6591",
+  "sourceRevision": "65fb9b836862f82ab8bc905cb6e244168505c868",
   "authority": "ADR-0008",
   "productOutcome": "detached-safe-runtime-setup-preview",
   "taxonomyAuthority": "experiment-local-non-qualification-rubric",
@@ -40,7 +40,7 @@
   "capture": {
     "command": "pnpm --filter @agent-teams/embedded-runtime check",
     "exitCode": 0,
-    "outputSha256": "d60d3385a4e2d761988c91d40453630043d71473f5f36830557e192a4c210dca",
+    "outputSha256": "1d832294d2e918624391f48117221c77134bcb1a547bae9355497c3f67c2ee1b",
     "architecture": "arm64",
     "nodeVersion": "v24.18.0",
     "platform": "darwin",
@@ -59,11 +59,11 @@
     },
     "sources": {
       "fileCount": 661,
-      "sha256": "e9af86e3be98ebf03bdd6363b755a89561f27d48067bcc8a357b09c4b1ba2dbc"
+      "sha256": "ce31be82d931ca2de943fc16e2b6a6be9f822902ee9dd8352332cd866cf6dad0"
     },
     "tests": {
       "fileCount": 610,
-      "sha256": "a88ddf0c6e5e62f609a26e6d0c0bb5f89248c43a18ede7c7172260ad34311c3b"
+      "sha256": "a81f56010117ed0e89d9bfb5b68ab3239ff00930bbaa9b46f2a35b3221668282"
     }
   },
   "historicalChanges": [
@@ -1490,10 +1490,10 @@
     },
     {
       "id": "claude-code-vocabulary-parity",
-      "revision": "216273dc20b8e13156b9162124bea964ec8f6591",
-      "files": 7,
-      "additions": 210,
-      "deletions": 39,
+      "revision": "24755bd012239973ef043459c2dd2960406baa33",
+      "files": 9,
+      "additions": 253,
+      "deletions": 49,
       "binaryFiles": 0,
       "composition": {
         "files": 1,
@@ -1509,6 +1509,35 @@
         "files": 1,
         "additions": 53,
         "deletions": 0
+      },
+      "behaviorFixtures": {
+        "before": 369,
+        "after": 369,
+        "retained": 369,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "codex-boundary-test-hardening",
+      "revision": "65fb9b836862f82ab8bc905cb6e244168505c868",
+      "files": 3,
+      "additions": 81,
+      "deletions": 23,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 2,
+        "additions": 7,
+        "deletions": 6
+      },
+      "tests": {
+        "files": 1,
+        "additions": 74,
+        "deletions": 17
       },
       "behaviorFixtures": {
         "before": 369,
