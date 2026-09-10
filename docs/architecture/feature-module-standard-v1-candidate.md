@@ -28,13 +28,13 @@ owned by `agent-teams-ai/.github` at
 `d0bfff2033faf544fe65268c1dcdfd524d093015`, with SHA-256
 `851653f96643cf0466b67ab22963661976b00de44840fa3144a48a8c054f95fa`.
 
-This is scoped active conformance for exactly three named features. It is not a
-claim of repository-wide conformance, and no unlisted package, application,
-feature, experiment, or bounded context is included.
+This is scoped active conformance for exactly the four named features listed
+below. It is not a claim of repository-wide conformance, and no unlisted package,
+application, feature, experiment, or bounded context is included.
 
 ADR-0017 additionally classifies every production module in the reviewed
-workspace containers by its real role, so the profile now describes what each
-module is even while only two of them are checked.
+workspace containers by its real role, so the profile describes what each module
+is even while three of the six are checked.
 
 ## New production features
 
@@ -126,14 +126,14 @@ beside it. The active production scope contains only:
 
 - `packages/contexts/agent-execution/src/**`;
 - `packages/contexts/provider-access/src/**`;
+- `packages/platform/filesystem-custody/src/**`;
 - the package assembly files `src/index.ts` and `src/composition.ts` in those
-  two packages;
-- the features `runtime-installation-discovery`, `contained-agent-turn`, and
-  `contained-turn-access`.
+  three packages;
+- the features `runtime-installation-discovery`, `contained-agent-turn`,
+  `contained-turn-access`, and `stable-filesystem-custody`.
 
-Embedded Runtime, Runtime Configuration, Runtime Security, Filesystem Custody,
-Module Kit, experiments, and tooling other than this checker are explicitly
-out of scope. Foundation supplies package-level dependency evidence only; it
+Embedded Runtime, Runtime Configuration, Runtime Security, Module Kit,
+experiments, and tooling other than this checker are explicitly out of scope. Foundation supplies package-level dependency evidence only; it
 does not implement or prove this feature policy.
 
 ## Production module classification
@@ -148,10 +148,11 @@ and `packages/platform` with exactly one role and one adoption state:
 | Runtime Configuration | `bounded-context` | ADR-0005 | pending |
 | Runtime Security | `bounded-context` | ADR-0005 | pending |
 | Embedded Runtime | `host-app` | ADR-0008 | pending |
-| Filesystem Custody | `platform` | ADR-0017 | pending |
+| Filesystem Custody | `platform` | ADR-0017 | active under ADR-0019 |
 
-Filesystem Custody currently exposes only `.`; the other five expose `.` and
-`./composition`.
+All six modules expose `.` and `./composition` today. The set is a per-module
+fact rather than a consequence of the role, which is what let Filesystem Custody
+gain its composition entry and then its activation without the rule changing.
 
 Each module declares its own curated export set from the two recognized assembly
 entries `.` and `./composition`, matching what its manifest exposes today. Every
@@ -186,6 +187,33 @@ classified fails the gate with `FM_UNCLASSIFIED_MODULE`. Activating a pending
 module is a separate reviewed change to both the profile and the reviewed
 registry in `scripts/architecture/feature-module-profile.mjs`, with its own
 accepted authority; a profile edit alone cannot widen the checked tree.
+
+## Outstanding work per pending module
+
+Recorded here so a partially migrated module reads as transit rather than as a
+contradiction. None of this is a conformance claim, and no gate asserts any of it.
+
+Runtime Configuration has two features. `codex-configuration-inspection` already
+owns its application models and translates through one inbound adapter.
+`claude-code-configuration-inspection` does not: its application layer imports
+vocabulary *constants* from its contract, not only types, so deciding where that
+vocabulary lives is its own reviewed question. Both features then need curated
+feature entrypoints, the package assembly routed through them, and their tests
+moved under feature ownership.
+
+Runtime Security has four features. Setup-source authorization needs its Node
+path and observation access behind ports. Dispatch authority needs its external
+V1 wrapper and mapper moved from application into inbound adapters.
+`contained-turn-egress` is still a flat directory and needs real layer ownership
+with injected time. Module composition still performs validation, hashing and
+route-binding projection that the egress feature should own.
+
+Embedded Runtime is the host application. Its activation waits on the accepted
+result of the asynchronous setup assembly work, and then needs its real behavior
+separated from wiring: setup view projection, external input and output
+validation, the Provider Access and Runtime Security anti-corruption adapters,
+and runtime-access coordination. Process lifecycle, readiness and rollback
+legitimately stay with the host.
 
 The deterministic syntax-aware checker is
 `scripts/architecture/check-feature-modules.mjs`. Run
@@ -241,17 +269,20 @@ remove or reorder the active root gate. The exact candidate command reports
 zero production diagnostics without exceptions, deviations, extensions,
 wildcards, automatic widening, or scope changes.
 
-ADR-0013 and ADR-0017 are accepted at their exact governed paths and are pinned
-in the immutable accepted-decision registry by the final SHA-256 of their
-accepted bytes. The profile is `active`, has no blockers, binds its activation
-authority to ADR-0013, names both ownership decisions, records an empty exact
-governed-record set, and records these commands as evidence:
+ADR-0013, ADR-0017, ADR-0018 and ADR-0019 are accepted at their exact governed
+paths and are pinned in the immutable accepted-decision registry by the digest
+Foundation computes over their accepted bytes and metadata. The profile is
+`active`, has no blockers, binds its profile-wide activation authority to
+ADR-0013, names the two ownership decisions, records each module's own activation
+authority on the module, records an empty exact governed-record set, and records
+these commands as evidence:
 
 - fixture evidence: `pnpm test:feature-modules`;
 - zero-diagnostic production evidence: `pnpm architecture:feature-modules:candidate`;
 - blocking active gate: `pnpm architecture:feature-modules:active`.
 
 This evidence proves conformance only for `runtime-installation-discovery`,
-`contained-agent-turn`, and `contained-turn-access` within the two declared
-production roots and assembly files. It does not prove repository-wide Feature
-Module Standard conformance.
+`contained-agent-turn`, `contained-turn-access`, and `stable-filesystem-custody`
+within the three declared production roots and assembly files. It does not prove
+repository-wide Feature Module Standard conformance: Runtime Configuration,
+Runtime Security and Embedded Runtime remain pending.

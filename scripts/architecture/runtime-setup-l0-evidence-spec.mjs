@@ -187,6 +187,10 @@ export const changes = Object.freeze([
     id: "configuration-digest-port",
     revision: "b7c5817d93c0d0dd6553739ebb67154dd42251b0",
   }),
+  Object.freeze({
+    id: "reviewed-scope-guard",
+    revision: "2184584a8f3fcebfe7721024bcb2e81ce76127bf",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -202,7 +206,7 @@ export const sourceRevisionArtifactDigests = Object.freeze({
   }),
   tests: Object.freeze({
     fileCount: 608,
-    sha256: "7505e3bd04e566c5b00174fc79afd93bb5fd2f755a09b514446cbdd4060c6e77",
+    sha256: "5c7133c9c7ed4c157e0aae3c0f7fbf0c4d238408e52c2f988fa9a9aa87f2517c",
   }),
 });
 
