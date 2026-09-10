@@ -54,6 +54,11 @@ export const stats = (path: string, options?: { bigint?: boolean }) => {
 const canonical = (path: string) => { entry(path); return path; };
 const close = (descriptor: number) => { assert.equal(descriptors.delete(descriptor), true); };
 modules.set("node:fs", {
+  // Import closure includes durable storage; these fixtures never perform writes.
+  fchmodSync: () => {throw new Error("synthetic filesystem chmod forbidden");},
+  unlinkSync: () => {throw new Error("synthetic filesystem unlink forbidden");},
+  fsyncSync: () => {throw new Error("synthetic filesystem sync forbidden");},
+  writeSync: () => {throw new Error("synthetic filesystem write forbidden");},
   renameSync: () => {throw new Error("real rename forbidden");},
   rmSync: () => {throw new Error("real removal forbidden");},
   readlinkSync: () => {throw new Error("real readlink forbidden");},
@@ -154,6 +159,24 @@ modules.set("./host-custody-private-root.js", {
   },
   quarantinePrivateRoot: () => true, quarantinePrivateRootForReconciliation: () => true,
 });
+// Install observers before the issuer's transitive imports cache their consumers.
+const actualState = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-state.js");
+const liveRecords = new Map<string, ReturnType<typeof actualState.createLiveCustody>>();
+modules.set("./node-provider-process-custody-state.js", {...actualState,
+  createLiveCustody(...input: Parameters<typeof actualState.createLiveCustody>) {
+    const live = actualState.createLiveCustody(...input); liveRecords.set(live.custodyRef, live); return live;
+  },
+});
+export const liveFor = (ref: string) => liveRecords.get(ref)!;
+const actualOptions = await import("../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-provider-options.js");
+let providerOptions: ReturnType<typeof actualOptions.detachCodexProviderOptions> | undefined;
+modules.set("./codex-app-server-provider-options.js", {...actualOptions,
+  detachCodexProviderOptions(input: Parameters<typeof actualOptions.detachCodexProviderOptions>[0]) {
+    providerOptions = actualOptions.detachCodexProviderOptions(input); return providerOptions;
+  },
+});
+export const constructorOptions = () => providerOptions;
+
 export const host = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.js");
 export const snapshots = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-launch-plan-snapshot.js");
 export const issuer = await import("../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.js");
@@ -214,22 +237,6 @@ export const fixture = async (native = true, intentMode: "analysis" | "workspace
   };
 };
 
-const actualState = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-state.js");
-const liveRecords = new Map<string, ReturnType<typeof actualState.createLiveCustody>>();
-modules.set("./node-provider-process-custody-state.js", {...actualState,
-  createLiveCustody(...input: Parameters<typeof actualState.createLiveCustody>) {
-    const live = actualState.createLiveCustody(...input); liveRecords.set(live.custodyRef, live); return live;
-  },
-});
-export const liveFor = (ref: string) => liveRecords.get(ref)!;
-const actualOptions = await import("../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-provider-options.js");
-let providerOptions: ReturnType<typeof actualOptions.detachCodexProviderOptions> | undefined;
-modules.set("./codex-app-server-provider-options.js", {...actualOptions,
-  detachCodexProviderOptions(input: Parameters<typeof actualOptions.detachCodexProviderOptions>[0]) {
-    providerOptions = actualOptions.detachCodexProviderOptions(input); return providerOptions;
-  },
-});
-export const constructorOptions = () => providerOptions;
 export const {NodeProviderProcessCustodyCore: Core} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-core.js");
 export const {ContainedTurnKernelCustodyAdapter: Kernel} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.js");
 export const {createCodexCurrentKernelOwner} = await import("../../../dist/features/contained-agent-turn/composition/codex-current-kernel-owner.js");

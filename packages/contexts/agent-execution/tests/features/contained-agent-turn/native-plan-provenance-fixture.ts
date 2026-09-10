@@ -24,7 +24,7 @@ const hooks = registerHooks({
     if (!url.startsWith("native-plan-fixture:")) {return next(url, context);}
     const name = url.slice("native-plan-fixture:".length);
     const source = `const data = globalThis[Symbol.for(${JSON.stringify(slot.description)})].get(${JSON.stringify(name)});\n`
-      + Object.keys(modules.get(name)!).map(key => `export const ${key} = data.${key};`).join("\n");
+      + Object.keys(modules.get(name)!).map(key => key === "default" ? "export default data.default;" : `export const ${key} = data.${key};`).join("\n");
     return { format: "module", source, shortCircuit: true };
   },
 });
@@ -54,6 +54,16 @@ const stats = (path: string, options?: { bigint?: boolean }) => {
 const canonical = (path: string) => { entry(path); return path; };
 const close = (descriptor: number) => { assert.equal(descriptors.delete(descriptor), true); };
 modules.set("node:fs", {
+  // Import closure includes durable storage; these fixtures never perform writes.
+  writeFileSync: () => {throw new Error("synthetic filesystem write forbidden");},
+  renameSync: () => {throw new Error("real rename forbidden");},
+  rmdirSync: () => {throw new Error("real removal forbidden");},
+  rmSync: () => {throw new Error("real removal forbidden");},
+  readlinkSync: () => {throw new Error("real readlink forbidden");},
+  fchmodSync: () => {throw new Error("synthetic filesystem chmod forbidden");},
+  unlinkSync: () => {throw new Error("synthetic filesystem unlink forbidden");},
+  fsyncSync: () => {throw new Error("synthetic filesystem sync forbidden");},
+  writeSync: () => {throw new Error("synthetic filesystem write forbidden");},
   constants, lstatSync: stats, statSync: stats, realpathSync: canonical,
   readdirSync: (path: string) => {
     entry(path);
@@ -74,11 +84,18 @@ modules.set("node:fs", {
   },
   readFileSync: () => {throw new Error("unexpected product sync read");},
 });
+modules.get("node:fs")!.default = modules.get("node:fs")!;
 modules.set("node:fs/promises", {
+  readFile: async () => {throw new Error("real process/config reads forbidden");},
+  readdir: async () => {throw new Error("filesystem access forbidden");},
+  readlink: async () => {throw new Error("filesystem access forbidden");},
+  stat: async (path: string, options: {bigint?: boolean}) => stats(path, options),
+  open: async () => {throw new Error("filesystem access forbidden");},
   lstat: async (path: string, options: { bigint?: boolean }) => stats(path, options),
   realpath: async (path: string) => canonical(path),
 });
 modules.set("@agent-teams/filesystem-custody", {
+  withStableDirectoryProcessLock: async () => {throw new Error("filesystem lock forbidden");},
   capturePathLineage: async (path: string) => {entry(path); return path;},
   pathLineagesEqual: (left: string, right: string) => left === right,
   openStablePath: async (path: string, expected: string, use: (opened: object) => Promise<unknown>) => {
