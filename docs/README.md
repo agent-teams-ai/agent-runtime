@@ -163,9 +163,9 @@ Read documents in this order:
 40. `architecture/foundation-adoption.md` - executable Engineering Foundation
    capabilities, deferred applicability gates, maintainability budgets, and the
    reviewed bounded-context scaffolding workflow.
-41. `architecture/feature-module-standard-v1-candidate.md` - the narrowly
-   scoped Feature Module Standard v1 candidate profile, deterministic checker,
-   current blockers, and activation boundary; it is not a conformance claim.
+41. [Feature Module Standard v1](architecture/feature-module-standard-v1-candidate.md#new-production-features)
+   - repository-wide new-feature requirements and the separate active
+   conformance scope of three features in two roots.
 42. `spikes/runtime-setup-l0-dogfooding-evidence.md` - executable evidence for
    the product-owned Runtime Setup Pure DI baseline and fail-closed gates for
    any later module layer.

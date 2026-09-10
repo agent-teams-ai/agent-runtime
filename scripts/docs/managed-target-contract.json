@@ -13,7 +13,7 @@
   "target": { "consumerIntegration": 3, "cohort": 2, "managedState": 2, "qualificationReceipt": 3, "scenario": 2 },
   "directDevelopmentPackages": {
     "@agent-teams/docs-protocol": "0.6.0",
-    "@agent-teams/docs-protocol-agent-teams": "0.2.4",
+    "@agent-teams/docs-protocol-agent-teams": "0.2.5",
     "@agent-teams/engineering-foundation": "1.2.0"
   },
   "transitiveCohortPackages": {
@@ -51,6 +51,6 @@
     "Matched retained managed controller/kernel process-death and recovery pair",
     "Consumer status wiring over authenticated captures; never a bare receipt or input success flag"
   ],
-  "historicalEvidence": "Keep profile 2, state 1, stable10, scenario 2 and journals unchanged; target bootstrap is not historical restoration",
+  "historicalEvidence": "Retain main stable18 integration/state and unchanged scenario 2; target bootstrap does not admit this package upgrade",
   "authority": "Synthetic local binding only in independently allocated disposable target; public authority/publication and CLI restoration remain separate owner obligations"
 }

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import test from "node:test";
-import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import test from "node:test";
 import { parseDocument } from "yaml";
 
 const foundationManifestPath = fileURLToPath(import.meta.resolve("@agent-teams/engineering-foundation/package.json"));
@@ -102,7 +102,7 @@ const rules = diagnostics => diagnostics.map(diagnostic => diagnostic.ruleId);
 test("the named negative suite runs exactly once through every Foundation gate", () => {
   assert.equal(
     manifest.scripts["foundation:boundaries:negative"],
-    "node --test scripts/architecture/source-dependency-adapter-boundaries.test.mjs scripts/docs/runtime-builtin-permissions.test.mjs",
+    "node --test scripts/architecture/source-dependency-adapter-boundaries.test.mjs",
   );
   assert.equal(
     manifest.scripts["foundation:check"].split("pnpm foundation:boundaries:negative").length - 1,
@@ -166,10 +166,6 @@ test("transitional boundaries and adapter permissions remain exact", () => {
     "adapter.agent-execution.legacy-contained-turn-ports",
     "adapter.agent-execution.provider-delegation-ports",
     "core.agent-execution.contained-turn",
-    "adapter.agent-execution.codex-data",
-    "adapter.agent-execution.codex-primitives",
-    "composition.agent-execution.boundary-data",
-    "composition.agent-execution.dispatch-grant",
   ]);
   assert.ok(!production.entrypoints.includes(paths.legacy));
 });

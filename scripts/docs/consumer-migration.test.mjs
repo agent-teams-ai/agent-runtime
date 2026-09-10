@@ -34,7 +34,7 @@ test("projected direct tooling pins and exact transitive age exceptions preserve
   assert.deepEqual(manifest.engines, { node: ">=24.18.0 <25", pnpm: "11.18.0" });
   assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.2.0");
   assert.equal(manifest.devDependencies["@agent-teams/docs-protocol"], "0.6.0");
-  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol-agent-teams"], "0.2.4");
+  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol-agent-teams"], "0.2.5");
   for (const section of ["dependencies", "optionalDependencies", "peerDependencies"]) {
     assert.equal(Object.hasOwn(manifest[section] ?? {}, "@agent-teams/docs-protocol-agent-teams"), false);
   }
@@ -44,7 +44,7 @@ test("projected direct tooling pins and exact transitive age exceptions preserve
     assert.equal(Object.hasOwn(manifest.devDependencies, `@agent-teams/${name}`), false);
   }
   assert.deepEqual(workspace.minimumReleaseAgeExclude.filter(value => value.startsWith("@agent-teams/")).toSorted(), [
-    "@agent-teams/docs-protocol-agent-teams@0.2.4",
+    "@agent-teams/docs-protocol-agent-teams@0.2.5",
     "@agent-teams/docs-protocol@0.6.0", "@agent-teams/document-authoring@0.3.0",
     "@agent-teams/engineering-foundation@1.2.0", "@agent-teams/repository-mutation@0.2.0",
   ]);
@@ -77,10 +77,10 @@ test("Source Dependencies keeps its eight v1 roots and uses the supported instal
   assert.match(source, /"architecture\.source-dependencies", "--consumer", root, "--json"/u);
 });
 
-test("historical integration, managed state and scenario contract remain byte-exact non-admission evidence", async () => {
+test("retained stable18 integration, managed state and scenarios do not admit this upgrade", async () => {
   const expected = {
-    "architecture/foundation/docs-consumer-integration.json": "0899fc2f0cf5838a34c401bfa004386c72100d483641e2627496170ea9b6cd23",
-    "architecture/foundation/docs-protocol-managed-state.json": "901d5a4ea3c1de8cba2bec491ec919124c3b30bb29ea195692e1eb3d6279f658",
+    "architecture/foundation/docs-consumer-integration.json": "487476cb23bb08c2c397d3a385622a0e13dcb93373954225f68ca786a86509d2",
+    "architecture/foundation/docs-protocol-managed-state.json": "5a0170c19290901c2994f9946bbb0cc0fe55a09cce43325a3784f0cb18f235fc",
     "architecture/foundation/docs-protocol-qualification.json": "1f7e50ec5b0e6ecc991668b83790b2367062240043c4b885c58377855968969b",
     "architecture/foundation/document-authoring.yaml": "d6f5ba4b178e742e122f6711c9d989d52a77768eb68527b0ecdf3c9a9699c6d2",
     // Current migration evidence: reviewed scaffold source-policy overlay.
