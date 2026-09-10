@@ -21,7 +21,12 @@ import type { ContainedTurnWorkspaceRoots } from "./contained-turn-workspace-cus
 const WORKSPACE_NAME = /^operation-[a-f\d]{64}$/u;
 const RECORD_BYTES = 64 * 1_024;
 
+export type SelectedNativeWorkspaceBackend = ReturnType<
+  typeof import("./darwin-attempt-workspace-backend.js").selectDarwinAttemptWorkspaceBackend
+>;
+
 export interface ContainedTurnWorkspaceContext {
+  readonly nativeWorkspace?: SelectedNativeWorkspaceBackend | undefined;
   readonly custodyRoots: readonly BoundContainedTurnRoot[];
   readonly options: Readonly<{
     readonly canonicalProjectRoot: string;

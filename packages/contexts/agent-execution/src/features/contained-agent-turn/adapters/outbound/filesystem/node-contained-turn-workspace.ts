@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { FileHandle } from "node:fs/promises";
+import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody";
 import { join } from "node:path";
 import { withStableDirectoryProcessLock } from "@agent-teams/filesystem-custody";
 
@@ -51,13 +51,14 @@ import {
   workspaceName,
   workspaceRecordBytes as RECORD_BYTES,
   type ContainedTurnWorkspaceContext as WorkspaceContext,
+  type SelectedNativeWorkspaceBackend,
 } from "./contained-turn-workspace-io.js";
 import { moveDirectoryNoReplace, requireDirectoryPublication } from "./contained-turn-directory-publication.js";
 import {
   retainWorkspaceCapability,
   type WorkspaceCapabilityRetention,
 } from "./contained-turn-workspace-capability.js";
-import { createContainedTurnWorkspace } from "./contained-turn-workspace-creation.js";
+import { createContainedTurnWorkspace, createNativeContainedTurnWorkspace } from "./contained-turn-workspace-creation.js";
 import {
   encodeKernelClosureRecord,
   kernelClosureEvidenceId,
@@ -69,6 +70,7 @@ import {
 } from "./contained-turn-kernel-closure-record.js";
 
 export interface NodeContainedTurnWorkspaceOptions {
+  readonly selectedNativeWorkspace?: import("./darwin-attempt-workspace-backend.js").DarwinNativeWorkspaceSelection;
   readonly canonicalProjectRoot: string;
   readonly disposableRoot: string;
   readonly limits?: ContainedTurnWorkspaceTreeLimits;
@@ -121,6 +123,9 @@ const verifyWorkspace = async (
   context: WorkspaceContext,
   retention: Pick<WorkspaceCapabilityRetention, "retain">,
 ): Promise<Awaited<ReturnType<ContainedTurnWorkspacePort["verify"]>>> => {
+  if (context.nativeWorkspace !== undefined) {
+    throw new Error("contained turn native workspace requires owner-private native launch consumption");
+  }
   await revalidateBoundRoots(context.custodyRoots);
   const name = assertWorkspaceRef(input.workspaceRef, context.roots.active.canonicalPath);
   if (workspaceName(input.operationId, input.scope) !== name) {
@@ -167,6 +172,10 @@ const quarantineWorkspace = async (
   if (workspaceName(input.operationId, input.scope) !== name) {
     throw new Error("contained turn workspace quarantine scope or operation mismatch");
   }
+  if (context.nativeWorkspace !== undefined) {
+    await context.nativeWorkspace.quarantine();
+    return;
+  }
   const suffix = createHash("sha256").update(input.evidenceRef).digest("hex");
   const quarantineName = `${name}-${suffix}`;
   const handles = await openBoundDirectories([
@@ -186,7 +195,7 @@ const quarantineWorkspace = async (
     if (await readOptionalFileAt(receipts, `${name}.json`) !== undefined) {
       throw new Error("contained turn closed workspace cannot be quarantined");
     }
-    const present: FileHandle[] = [];
+    const present: StableFilesystemHandle[] = [];
     for (const source of [active, frozen, cleanup]) {
       if (await directoryExistsAt(source, name)) {present.push(source);}
     }
@@ -239,6 +248,7 @@ export interface NodeContainedTurnWorkspaceOwnerBackend {
 const createNodeContainedTurnWorkspaceBackend = (
   options: NodeContainedTurnWorkspaceOptions,
   retention: Pick<WorkspaceCapabilityRetention, "retain">,
+  initializeNative?: (context: WorkspaceContext) => Promise<SelectedNativeWorkspaceBackend>,
 ): Promise<NodeContainedTurnWorkspaceOwnerBackend> => guardContainedTurnFilesystemOperation(
   "workspace_initialize",
   async () => {
@@ -260,7 +270,7 @@ const createNodeContainedTurnWorkspaceBackend = (
       ) },
     );
   } finally {await closeHandles([staging, stagingQuarantine]);}
-  const context = Object.freeze({
+  const hostContext: WorkspaceContext = Object.freeze({
     custodyRoots: Object.freeze([
       bound.canonicalProjectRoot,
       bound.disposableRoot,
@@ -269,6 +279,8 @@ const createNodeContainedTurnWorkspaceBackend = (
     options,
     roots,
   });
+  const nativeWorkspace = await initializeNative?.(hostContext);
+  const context: WorkspaceContext = Object.freeze({ ...hostContext, nativeWorkspace });
   const inflightCreations = new Map<string, Promise<{ readonly workspaceRef: string }>>();
   const createIdempotently = async (
     input: Parameters<ContainedTurnWorkspacePort["create"]>[0],
@@ -279,12 +291,16 @@ const createNodeContainedTurnWorkspaceBackend = (
       const created = await existing;
       return Object.freeze({ ...created, workspaceId: kernelWorkspaceId(key) });
     }
-    const pending = createContainedTurnWorkspace(input, context);
+    const pending = context.nativeWorkspace === undefined
+      ? createContainedTurnWorkspace(input, context)
+      : createNativeContainedTurnWorkspace(input, context, context.nativeWorkspace);
     inflightCreations.set(key, pending);
     try {
       return Object.freeze({ ...(await pending), workspaceId: kernelWorkspaceId(key) });
     } finally {
-      if (inflightCreations.get(key) === pending) {inflightCreations.delete(key);}
+      if (context.nativeWorkspace === undefined && inflightCreations.get(key) === pending) {
+        inflightCreations.delete(key);
+      }
     }
   };
 
@@ -383,6 +399,24 @@ const createNodeContainedTurnWorkspaceBackend = (
     return queryKernelClosure(input);
   };
 
+  let nativeClosureAttempt: Readonly<{
+    requestFingerprint: string;
+    outcome: ReturnType<ContainedTurnKernelWorkspacePort["ensureClosed"]>;
+  }> | undefined;
+  const ensureClosedOnce = (input: Parameters<ContainedTurnKernelWorkspacePort["ensureClosed"]>[0]) => {
+    if (context.nativeWorkspace === undefined) {return ensureKernelClosed(input);}
+    const requestFingerprint = JSON.stringify(input);
+    if (nativeClosureAttempt !== undefined) {
+      if (nativeClosureAttempt.requestFingerprint !== requestFingerprint) {
+        throw new Error("contained turn native workspace closure request conflicts with prior attempt");
+      }
+      return nativeClosureAttempt.outcome;
+    }
+    const outcome = ensureKernelClosed(input);
+    nativeClosureAttempt = Object.freeze({ outcome, requestFingerprint });
+    return outcome;
+  };
+
   const legacyClose = (input: Parameters<ContainedTurnWorkspacePort["close"]>[0]) =>
     guardContainedTurnFilesystemOperation(
       "workspace_close", () => closeContainedTurnWorkspace(input, context), options.testFaults !== undefined,
@@ -425,7 +459,7 @@ const createNodeContainedTurnWorkspaceBackend = (
       "workspace_create", () => createIdempotently(input), options.testFaults !== undefined,
     ),
     ensureClosed: input => guardContainedTurnFilesystemOperation(
-      "workspace_ensure_closed", () => ensureKernelClosed(input), options.testFaults !== undefined,
+      "workspace_ensure_closed", () => ensureClosedOnce(input), options.testFaults !== undefined,
     ),
     quarantine,
     queryClosure: input => guardContainedTurnFilesystemOperation(
@@ -467,12 +501,17 @@ const legacyWorkspaceCapabilityRetention = Object.freeze({
 
 export const createNodeContainedTurnWorkspace = async (
   options: NodeContainedTurnWorkspaceOptions,
-): Promise<NodeContainedTurnWorkspace> =>
-  (await createNodeContainedTurnWorkspaceBackend(options, legacyWorkspaceCapabilityRetention)).workspace;
+): Promise<NodeContainedTurnWorkspace> => {
+  if (options.selectedNativeWorkspace !== undefined) {
+    throw new Error("contained turn native selection requires an issued workspace owner");
+  }
+  return (await createNodeContainedTurnWorkspaceBackend(options, legacyWorkspaceCapabilityRetention)).workspace;
+};
 
 /** Private construction seam for the owner composition; not a package capability. */
 export const createNodeContainedTurnWorkspaceOwnerBackend = (
   options: NodeContainedTurnWorkspaceOptions,
   retention: Pick<WorkspaceCapabilityRetention, "retain">,
+  initializeNative?: (context: WorkspaceContext) => Promise<SelectedNativeWorkspaceBackend>,
 ): Promise<NodeContainedTurnWorkspaceOwnerBackend> =>
-  createNodeContainedTurnWorkspaceBackend(options, retention);
+  createNodeContainedTurnWorkspaceBackend(options, retention, initializeNative);

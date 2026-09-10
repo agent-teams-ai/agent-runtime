@@ -4,7 +4,7 @@ import { after, test, type TestContext } from "node:test";
 
 import { containedTurnIdentity } from
   "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
-import { createNodeContainedTurnWorkspaceOwner } from
+import { createNodeContainedTurnWorkspaceOwner, isNodeContainedTurnNativeWorkspaceOwner } from
   "../../../dist/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace-owner.js";
 import {
   cleanupTrackedFilesystemLayouts,
@@ -245,4 +245,49 @@ linuxTest("durable identity substitution fails closed before the launch callback
     await owner.dispose();
     await layout.cleanup();
   }
+});
+
+linuxTest("artifact attachment rejects structural owner clones and another workspace root", async () => {
+  const { createNodeContainedTurnArtifacts } = await import(
+    "../../../dist/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-artifacts.js"
+  );
+  const layout = await createSyntheticFilesystemLayout();
+  const other = await createSyntheticFilesystemLayout();
+  const owner = await createNodeContainedTurnWorkspaceOwner(layout.workspaceOptions);
+  try {
+    await assert.rejects(createNodeContainedTurnArtifacts({
+      ...layout.artifactOptions,
+      testFaults: { checkpoint() {} },
+      workspaceOwner: Object.freeze({ ...owner }),
+    }), /workspace owner is not issued/u);
+    await assert.rejects(createNodeContainedTurnArtifacts({
+      ...other.artifactOptions,
+      testFaults: { checkpoint() {} },
+      workspaceOwner: owner,
+    }), /workspace root belongs to another owner/u);
+    const artifacts = await createNodeContainedTurnArtifacts({
+      ...layout.artifactOptions,
+      workspaceOwner: owner,
+    });
+    assert.equal(typeof artifacts.ensureSealed, "function");
+  } finally {await owner.dispose();}
+});
+
+
+test("native owner discriminator rejects unknown objects without reading properties", () => {
+  const hostile = new Proxy({}, { get() { throw new Error("must not inspect properties"); } });
+  for (const value of [{}, { native: true }, Object.create(null), hostile]) {
+    assert.equal(isNodeContainedTurnNativeWorkspaceOwner(value), false);
+    assert.equal(isNodeContainedTurnNativeWorkspaceOwner(value), false);
+  }
+});
+
+linuxTest("native owner discriminator rejects issued Linux owners and structural clones", async () => {
+  const layout = await createSyntheticFilesystemLayout();
+  const owner = await createNodeContainedTurnWorkspaceOwner({ ...layout.workspaceOptions, limits: LIMITS });
+  try {
+    assert.equal(isNodeContainedTurnNativeWorkspaceOwner(owner), false);
+    assert.equal(isNodeContainedTurnNativeWorkspaceOwner({ ...owner }), false);
+    assert.equal(isNodeContainedTurnNativeWorkspaceOwner(owner), false);
+  } finally { await owner.dispose(); }
 });
