@@ -1,4 +1,6 @@
-import { descriptorWorkspaceAuthority } from "./private-host-custody-reservation.js";
+import { inspectNodeCustodyReservation, assertNativeBoundReservation } from "./node-provider-process-custody-native-reservation.js";
+import { createNodeCustodyHttpPreparation } from "./node-provider-process-custody-http-preparation.js";
+import { containNodeCustody } from "./node-provider-process-custody-containment.js";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
@@ -18,10 +20,9 @@ import {
   type HostCustodySpawnAcknowledgement,
   type ProviderProcessCustodyPort,
 } from "./custodied-provider-process.js";
-import { containCustody, containedResult, identityBase, notStartedIdentity, snapshotEvidence, strictClosure,
+import { identityBase, snapshotEvidence,
   unprovenResult, type ContainmentResult } from "./host-custody-evidence.js";
 import {
-  inputIdentity,
   positiveInteger,
   resolveLaunchCandidate,
   sha256,
@@ -39,10 +40,10 @@ import {
   assertHostCustodyReservationMode,
   openHostCustodyReservation,
 } from "./node-provider-process-custody-open.js";
-import { assertPrivateReservationReplay, privateReservationIdentity, snapshotPrivateReservationReplayInput, replayCustody } from "./node-provider-process-custody-replay.js";
+import { assertPrivateReservationReplay, snapshotPrivateReservationReplayInput, replayCustody } from "./node-provider-process-custody-replay.js";
 import { releaseHostCustody } from "./host-custody-release.js";
-import { quarantinePrivateRootForReconciliation } from "./host-custody-private-root.js";
 import {
+  descriptorWorkspaceAuthority,
   assertRetainedWorkspaceAuthority,
   assertReservedWorkspaceAuthority,
   bindPrivateHostCustodyReservation,
@@ -51,7 +52,6 @@ import {
 import {
   createLiveCustody,
   HOST_CUSTODY_LIMITS,
-  isCompleteProvedNoStart,
   type CustodyTombstone,
   type LiveCustody,
   type NodeProviderProcessCustodyOptions,
@@ -64,33 +64,17 @@ import { acknowledgeProviderSpawn } from "./node-provider-process-custody-spawn-
 import { readCustodyStartAdmission } from "./node-provider-process-custody-start-admission.js";
 import {
   custodyDataRecord,
-  readNodeCustodyHttpHandoff,
   type NodeCustodyHttpPreparation,
-  type NodeCustodyHttpLifetime,
 } from "./node-provider-process-custody-http-reservation.js";
 import type { FinalHostLaunch } from "./host-launch-finalization.js";
 import { startHostCustodyLaunch } from "./host-custody-start-projection.js";
 import { snapshotHostCustodyLaunchPlan } from "./host-custody-launch-plan-snapshot.js";
-import {assertDarwinNativeExecutionClaim, assertRetainedDarwinNativeHttpExecutionAuthority,
-  bindRetainedDarwinNativeHttpLaunch,
-  inspectDarwinNativeLaunchObservation, startDarwinNativeExecution, readDarwinNativeExecution, readDarwinNativeImage, readDarwinNativeNoStart,
-  readDarwinNativeExecutionStatus,
-  inspectDarwinNativeExecutionLease as inspectDarwinNativeLeaseFacts,
+import {inspectDarwinNativeLaunchObservation, startDarwinNativeExecution, readDarwinNativeImage,
   cutoffDarwinNativeExecution} from "./darwin-attempt-owner-selection.js";
 import {DeferredNativeProviderProcess, DeferredNativeSdkProcess} from "./deferred-native-sdk-process.js";
-import {boundedPromise} from "./host-custody-stdio.js";
-import {consumeNativeHostCustodyExecutionLease, inspectNativeHostCustodyExecutionLease,
-  inspectNativeHostCustodyReservationAuthority, isNativeHostCustodyWorkspaceAuthority,
-  retireNativeHostCustodyWorkspaceAuthority} from "./native-host-custody-workspace-authority.js";
+import {isNativeHostCustodyWorkspaceAuthority, retireNativeHostCustodyWorkspaceAuthority} from "./native-host-custody-workspace-authority.js";
 export type { NodeProviderProcessCustodyOptions } from "./node-provider-process-custody-state.js";
-export const assertDarwinNativeHostGenerationBinding = (
-  leaseHostGenerationBinding: string,
-  hostLifecycleGenerationSha256: string,
-): void => {
-  if (leaseHostGenerationBinding !== hostLifecycleGenerationSha256) {
-    throw new TypeError("Native execution lease belongs to another Host generation");
-  }
-};
+export { assertDarwinNativeHostGenerationBinding } from "./node-provider-process-custody-native-reservation.js";
 export class NodeProviderProcessCustodyCore implements
   ProviderProcessCustodyPort,
   CustodiedProviderProcessRegistry,
@@ -124,73 +108,7 @@ export class NodeProviderProcessCustodyCore implements
   readonly #tombstonesByAttempt = new Map<string, CustodyTombstone>();
   readonly #tombstonesByRef = new Map<string, CustodyTombstone>();
 
-  readonly #preparations = new WeakMap<NodeCustodyHttpLifetime, LiveCustody>();
-  readonly #httpPreparation: NodeCustodyHttpPreparation = (() => {
-    const byRef = this.#byRef;
-    const preparations = this.#preparations;
-    const capability: NodeCustodyHttpPreparation = Object.freeze({
-      acquire(input: Parameters<NodeCustodyHttpPreparation["acquire"]>[0]) {
-        if (this !== capability) {throw new TypeError("Host Custody HTTP preparation receiver conflicts");}
-        const handoff = readNodeCustodyHttpHandoff(input);
-        const live = byRef.get(handoff.underlyingCustodyRef);
-        if (live === undefined) {throw new TypeError("Host Custody HTTP reservation is unavailable");}
-        const lifetime = live.httpReservation.acquire(live, handoff);
-        preparations.set(lifetime, live);
-        return lifetime;
-      },
-      consumeDarwinNativeExecution(lifetime: Parameters<NodeCustodyHttpPreparation["consumeDarwinNativeExecution"]>[0],
-        authority: Parameters<NodeCustodyHttpPreparation["consumeDarwinNativeExecution"]>[1]) {
-        const live = preparations.get(lifetime);
-        if (this !== capability || live === undefined || byRef.get(live.custodyRef) !== live ||
-            live.nativeExecutionLease === undefined || live.nativeWorkspaceAuthority === undefined) {
-          throw new TypeError("Host Custody native execution reservation conflicts");
-        }
-        live.httpReservation.assertPreparation(lifetime);
-        assertDarwinNativeExecutionClaim(live.nativeExecutionLease, lifetime.committedDispatchProof);
-        assertRetainedDarwinNativeHttpExecutionAuthority(authority, live.nativeExecutionLease);
-        const lease = consumeNativeHostCustodyExecutionLease(live.nativeWorkspaceAuthority, live.nativeExecutionLease);
-        live.httpReservation.retainNativeExecution(lease);
-        return lease;
-      },
-      async bindDarwinNativeFinalLaunch(
-        lifetime: Parameters<NodeCustodyHttpPreparation["bindDarwinNativeFinalLaunch"]>[0],
-        authority: Parameters<NodeCustodyHttpPreparation["bindDarwinNativeFinalLaunch"]>[1],
-        lease: Parameters<NodeCustodyHttpPreparation["bindDarwinNativeFinalLaunch"]>[2],
-        material: Parameters<NodeCustodyHttpPreparation["bindDarwinNativeFinalLaunch"]>[3],
-        port: Parameters<NodeCustodyHttpPreparation["bindDarwinNativeFinalLaunch"]>[4],
-        launch: Parameters<NodeCustodyHttpPreparation["bindDarwinNativeFinalLaunch"]>[5],
-      ) {
-        const live = preparations.get(lifetime);
-        if (this !== capability || live === undefined || byRef.get(live.custodyRef) !== live ||
-            live.nativeExecutionLease !== lease || live.launchBinding.view.readFinal() !== launch) {
-          throw new TypeError("Host Custody native final launch binding conflicts");
-        }
-        await bindRetainedDarwinNativeHttpLaunch(authority, lease, launch, live.launchBinding, material, port);
-      },
-      prepareResources(lifetime: NodeCustodyHttpLifetime, input: Parameters<NodeCustodyHttpPreparation["prepareResources"]>[1]) {
-        const live = preparations.get(lifetime);
-        if (this !== capability || live === undefined || byRef.get(live.custodyRef) !== live) {
-          throw new TypeError("Host Custody HTTP preparation identity conflicts");
-        }
-        return live.httpReservation.prepareResources(lifetime, input);
-      },
-      retainDarwinRoute(lifetime: NodeCustodyHttpLifetime, route: Parameters<NodeCustodyHttpPreparation["retainDarwinRoute"]>[1]) {
-        const live = preparations.get(lifetime);
-        if (this !== capability || live === undefined || byRef.get(live.custodyRef) !== live) {
-          throw new TypeError("Host Custody Darwin route preparation conflicts");
-        }
-        live.httpReservation.retainDarwinRoute(live, lifetime, route);
-      },
-      finalize(lifetime: NodeCustodyHttpLifetime) {
-        const live = preparations.get(lifetime);
-        if (this !== capability || live === undefined || byRef.get(live.custodyRef) !== live) {
-          throw new TypeError("Host Custody HTTP preparation identity conflicts");
-        }
-        return live.launchBinding.bind(live, lifetime);
-      },
-    });
-    return capability;
-  })();
+  readonly #httpPreparation = createNodeCustodyHttpPreparation(this.#byRef);
 
   /** Provider gets a view of the reservation slot, never its mutation owner. */
   public static launchView(owner: unknown, custodyRef: string) {
@@ -317,23 +235,7 @@ export class NodeProviderProcessCustodyCore implements
     reservationLaunchPlans?: HostCustodyLaunchPlanResolver,
     retainedWorkspaceAuthority?: import("./private-host-custody-reservation.js").RetainedHostCustodyWorkspaceAuthority,
   ): Promise<ContainedTurnCustodyHandle> {
-    const baseIdentitySha256 = inputIdentity(input);
-    const workspaceAuthority = "workspaceAuthority" in input ? input.workspaceAuthority : undefined;
-    const nativeAuthority = workspaceAuthority !== undefined && isNativeHostCustodyWorkspaceAuthority(workspaceAuthority)
-      ? workspaceAuthority : undefined;
-    const native = nativeAuthority === undefined ? undefined : inspectNativeHostCustodyReservationAuthority(nativeAuthority, input);
-    const nativeLease = nativeAuthority === undefined ? undefined : inspectNativeHostCustodyExecutionLease(nativeAuthority);
-    if (nativeLease !== undefined) {
-      assertDarwinNativeHostGenerationBinding(
-        inspectDarwinNativeLeaseFacts(nativeLease).hostGenerationBinding,
-        this.#hostLifecycleGenerationSha256,
-      );
-    }
-    const identitySha256 = native !== undefined
-      ? sha256(`${baseIdentitySha256}:${nativeAuthority!.canonicalPath}:${nativeAuthority!.identity.dev}:${nativeAuthority!.identity.ino}`)
-      : "workspaceAuthority" in input
-      ? privateReservationIdentity(input)
-      : baseIdentitySha256;
+    const {nativeAuthority, native, nativeLease, identitySha256} = inspectNodeCustodyReservation(input, this.#hostLifecycleGenerationSha256);
     const tombstone = this.#tombstonesByAttempt.get(input.attemptId);
     const existing = this.#byAttempt.get(input.attemptId);
     if (tombstone !== undefined && requiredSpawnMode !== undefined) {
@@ -410,22 +312,7 @@ export class NodeProviderProcessCustodyCore implements
       ...(requiredSpawnMode === undefined ? {} : { requiredSpawnMode }),
       resolveOpening,
       spawn: (reserved, arguments_, environment) => {this.#spawn(reserved, arguments_, environment);},
-      ...(native !== undefined ? {assertBoundReservation: (reserved: LiveCustody) => {
-        const facts = reserved.nativeWorkspaceFacts;
-        if (facts === undefined || reserved.workspace?.dev !== facts.workspace.dev || reserved.workspace.ino !== facts.workspace.ino ||
-            reserved.workspaceRef !== facts.workspace.path || reserved.privatePaths?.root.dev !== facts.privateRoot.dev ||
-            reserved.privatePaths.root.ino !== facts.privateRoot.ino || reserved.plan?.environment.TMPDIR !== facts.tmpDir.path ||
-            reserved.plan.environment.CODEX_HOME !== facts.codexHome.path || reserved.plan.environment.HOME !== facts.privateRoot.path ||
-            reserved.plan.environment.PATH !== "/usr/bin:/bin" ||
-            reserved.privatePaths.byEnvironmentKey.HOME?.dev !== facts.privateRoot.dev ||
-            reserved.privatePaths.byEnvironmentKey.HOME?.ino !== facts.privateRoot.ino ||
-            reserved.privatePaths.byEnvironmentKey.CODEX_HOME?.dev !== facts.codexHome.dev ||
-            reserved.privatePaths.byEnvironmentKey.CODEX_HOME?.ino !== facts.codexHome.ino ||
-            reserved.privatePaths.byEnvironmentKey.TMPDIR?.dev !== facts.tmpDir.dev ||
-            reserved.privatePaths.byEnvironmentKey.TMPDIR?.ino !== facts.tmpDir.ino) {
-          throw new TypeError("Native launch plan differs from prepared roots");
-        }
-      }} : reservationLaunchPlans === undefined ? {} : { assertBoundReservation: assertReservedWorkspaceAuthority }),
+      ...(native !== undefined ? {assertBoundReservation: assertNativeBoundReservation} : reservationLaunchPlans === undefined ? {} : { assertBoundReservation: assertReservedWorkspaceAuthority }),
     });
   }
 
@@ -638,71 +525,15 @@ export class NodeProviderProcessCustodyCore implements
     return containment;
   }
 
-  async #contain(
-    live: LiveCustody,
-    input: { readonly attemptId: string; readonly custodyRef?: string; readonly operationId: string },
-  ): Promise<ContainmentResult> {
-    live.sealed = true;
-    live.httpReservation.cutoff();
-    live.containmentDeadline ??= this.#monotonicNow() + this.#containmentAfterMs;
-    try {
-      if (live.nativeExecutionLease !== undefined) {
-        const process = live.process;
-        try {
-          await live.httpReservation.cutoffNativeExecution(live.nativeExecutionLease);
-          if (!(process instanceof DeferredNativeProviderProcess) || live.exit === undefined) {
-            const remaining = Math.max(1, live.containmentDeadline - this.#monotonicNow());
-            await boundedPromise(readDarwinNativeExecutionStatus(live.nativeExecutionLease), remaining);
-            if (readDarwinNativeNoStart(live.nativeExecutionLease) === undefined) {
-              return unprovenResult("stable-guardian-unavailable", input, live);
-            }
-            live.spawnStatus = "never-started"; live.guardianNoStartAcknowledged = true;
-            live.identity = notStartedIdentity(this.#hostLifecycleGenerationSha256);
-            live.closureEvidence = strictClosure("not-started", "cooperative-darwin-posix-process-group");
-            live.evidenceSealed = true;
-            const result = containedResult(live, "never-started"); live.contained = result; return result;
-          }
-          const remaining = Math.max(1, live.containmentDeadline - this.#monotonicNow());
-          const completed = await boundedPromise(Promise.all([live.exit, process.drained]), remaining);
-          const execution = readDarwinNativeExecution(live.nativeExecutionLease);
-          if (completed === undefined || execution === undefined || execution.image.child === undefined) {
-            return unprovenResult("posix-process-group-close-unproven", input, live);
-          }
-          const [exit] = completed; const child = execution.image.child;
-          live.nativeExit = exit; live.nativeStdout = process.evidence("stdout"); live.nativeStderr = process.evidence("stderr");
-          live.spawnStatus = "acknowledged"; live.childProcessInstanceSha256 = sha256(JSON.stringify(child));
-          live.identity = Object.freeze({...identityBase(live, this.#hostLifecycleGenerationSha256), pid: child.pid, pgid: child.pgid,
-            proofRef: `native-darwin:${execution.image.attestation}`, status: "proved" as const});
-          live.closureEvidence = Object.freeze({limitations: Object.freeze([] as const),
-            profile: "native-darwin-attempt-owner" as const, status: "closed" as const});
-          live.evidenceSealed = true;
-          const result = containedResult(live, "native-darwin-attempt-owner"); live.contained = result; return result;
-        } catch {return unprovenResult("posix-process-group-close-unproven", input, live);}
-      }
-      if (live.spawnStatus === "ambiguous" && live.guardian === undefined) {
-        // Reentrant abort may precede the synchronous launch's resource return.
-        // If it throws instead, keep custody for reconciliation: the no-guardian
-        // no-start cleanup path has no evidence for this admitted launch.
-        await Promise.resolve();
-        if (live.guardian === undefined) {return unprovenResult("stable-guardian-unavailable", input, live);}
-      }
-      if (live.residueAllocation === "uncertain") {
-        return unprovenResult("operation-cgroup-release-unproven", input, live);
-      }
-      return await containCustody(live, input, {
-        containmentAfterMs: this.#containmentAfterMs,
-        drainAfterMs: this.#drainAfterMs,
-        forceKillAfterMs: this.#forceKillAfterMs,
-        hostLifecycleGenerationSha256: this.#hostLifecycleGenerationSha256,
-        monotonicNow: this.#monotonicNow,
-        terminateAfterMs: this.#terminateAfterMs,
-      });
-    } finally {
-      if (live.fingerprint?.containmentProfile === "cooperative-darwin-posix-process-group" &&
-          !isCompleteProvedNoStart(live)) {
-        quarantinePrivateRootForReconciliation(live);
-      }
-    }
+  #contain(live: LiveCustody, input: { readonly attemptId: string; readonly custodyRef?: string; readonly operationId: string }): Promise<ContainmentResult> {
+    return containNodeCustody(live, input, {
+      containmentAfterMs: this.#containmentAfterMs,
+      drainAfterMs: this.#drainAfterMs,
+      forceKillAfterMs: this.#forceKillAfterMs,
+      hostLifecycleGenerationSha256: this.#hostLifecycleGenerationSha256,
+      monotonicNow: this.#monotonicNow,
+      terminateAfterMs: this.#terminateAfterMs,
+    });
   }
 
   async #triggerOverflowContainment(live: LiveCustody): Promise<void> {
