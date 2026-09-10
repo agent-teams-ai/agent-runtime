@@ -8,10 +8,10 @@ import type {
   InspectCodexConfigurationUseCase,
 } from "../../application/models/codex-inspection-models.js";
 
-/** Perimeter check, not the owner of the rule. The use case owns the
- * identityScope invariant because it depends on it; repeating it here means an
- * invalid request is refused before any port is touched, so no source is read
- * and no digest is computed for input that cannot produce an answer. */
+/** Perimeter check, not the owner of the rule. The use case already refuses an
+ * empty identityScope before touching any port; repeating the check here is
+ * about rejecting a malformed transport request at the edge, without
+ * constructing a use-case call for input that can never produce an answer. */
 const request = (input: InspectCodexConfigurationInput): CodexInspectionRequest => {
   if (input.identityScope.length === 0) {
     throw new TypeError("identityScope must not be empty");
