@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
@@ -13,6 +13,15 @@ import {
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-protocol.js";
 
 const native = fileURLToPath(new URL("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/native/", import.meta.url));
+// The runtime's own headers come first: a Node installed from the official
+// tarball, as CI does, ships them beside the executable and has no
+// /usr/include/node. Compiling against a different runtime's headers would
+// qualify the wrong ABI, so an absent header set refuses rather than guesses.
+const nodeApiIncludeDirectory = [
+  resolve(dirname(process.execPath), "../include/node"),
+  "/usr/local/include/node",
+  "/usr/include/node",
+].find(candidate => existsSync(join(candidate, "node_api.h")));
 const start = { command: "START_ONCE", sequence: 1, binding: "01".repeat(32), launch: "02".repeat(32), argument: 0 } as const;
 const commands = ["START_ONCE", "CUTOFF", "READ_STATUS", "SETTLE_LAUNCH_ROUTE",
   "SETTLE_ARTIFACT_RESULT", "WORKSPACE_FREEZE", "WORKSPACE_CLEANUP", "WORKSPACE_CLOSE",
@@ -118,12 +127,14 @@ test("launch observation data rejects foreign identity, generation, aliases and 
   assert.throws(() => decodeDarwinNativeLaunchData(event));
 });
 
-test("fixed native peer addon rejects caller-shaped packets on unsupported hosts", {skip: process.platform !== "linux"}, () => {
+test("fixed native peer addon rejects caller-shaped packets on unsupported hosts", {
+  skip: process.platform !== "linux" || nodeApiIncludeDirectory === undefined && "Node-API headers are unavailable for this runtime",
+}, () => {
   const temporary = mkdtempSync(join(tmpdir(), "darwin-peer-reject-"));
   try {
     const output = join(temporary, "peer.node");
     const argv = ["-std=c11", "-Wall", "-Wextra", "-Werror", "-fPIC", "-shared", "-DAE_HOST_PEER_ADDON",
-      "-I", "/usr/include/node", join(native, "darwin-attempt-owner-main.c"), "-o", output];
+      "-I", nodeApiIncludeDirectory!, join(native, "darwin-attempt-owner-main.c"), "-o", output];
     const started = performance.now();
     const compiled = spawnSync("cc", argv, {encoding: "utf8"});
     console.log(JSON.stringify({argv: ["cc", ...argv], exit: compiled.status, elapsedMs: performance.now() - started,
