@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { ContainedTurnWorkspaceTree, ContainedTurnWorkspaceTreeLimits } from "./contained-turn-workspace-tree.js";
 import { darwinAttemptOwnerStates, consumeDarwinNativeWorkspaceSelection } from "../host-custody/darwin-attempt-workspace-entrypoint.js";
 import type { DarwinNativeWorkspaceSelection } from "../host-custody/darwin-attempt-workspace-entrypoint.js";
+import type { ContainedTurnResultPublicationRecord } from "./contained-turn-result-publication.js";
 import { createWorkspaceClosureRecord } from "./contained-turn-workspace-state.js";
 import type {
   ContainedTurnWorkspaceCreationRecord, ContainedTurnWorkspaceSealRecord,
@@ -16,8 +17,7 @@ export interface DarwinNativeRetainedWorkspaceOwners {
   readonly creation: () => Promise<ContainedTurnWorkspaceCreationRecord>;
   readonly seal: () => Promise<ContainedTurnWorkspaceSealRecord>;
   readonly closure: () => Promise<ContainedTurnWorkspaceClosureRecord>;
-  readonly artifactResult: () => Promise<Readonly<Pick<ContainedTurnWorkspaceSealRecord,
-    "operationId" | "scope" | "treeDigest" | "manifestDigest">>>;
+  readonly artifactResult: () => Promise<ContainedTurnResultPublicationRecord>;
 }
 function createDarwinAttemptWorkspaceBackend(bridge: Bridge, selected: DarwinNativeRetainedWorkspaceOwners) {
   const records = Object.freeze({ creation: selected.creation, seal: selected.seal,
@@ -103,6 +103,22 @@ function createDarwinAttemptWorkspaceBackend(bridge: Bridge, selected: DarwinNat
       const observed = await bridge.queryClosedWorkspace();
       if (observed.treeDigest !== closed.treeDigest) {throw new Error("queried native closed tree differs from retained seal");}
       return closed;
+    },
+    async readReceipts(): Promise<Readonly<{
+      creation: ContainedTurnWorkspaceCreationRecord;
+      seal: ContainedTurnWorkspaceSealRecord;
+      publication: ContainedTurnResultPublicationRecord;
+    }>> {
+      // Read only the retained owner records, validating their original native
+      // inode and operation reservation. No receipt identifier is synthesized.
+      const creation = await identity(), sealed = await seal();
+      const publication = await records.artifactResult();
+      if (publication.operationId !== sealed.operationId || publication.workspaceName !== sealed.workspaceName ||
+          publication.scope.projectId !== sealed.scope.projectId || publication.scope.tenantId !== sealed.scope.tenantId ||
+          publication.treeDigest !== sealed.treeDigest || publication.manifestDigest !== sealed.manifestDigest) {
+        throw new Error("native artifact/result publication mismatch");
+      }
+      return Object.freeze({creation, seal: sealed, publication});
     },
     async readClosed(): Promise<ContainedTurnWorkspaceClosureRecord> {
       const known = bridge.retainedClosed();

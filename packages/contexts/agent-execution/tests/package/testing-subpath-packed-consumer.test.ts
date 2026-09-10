@@ -168,6 +168,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "readContainedTurnRouteEnforcementTarget",
       "readContainedTurnSelectedRouteAdmission",
       "readNodeContainedTurnNativeWorkspaceClosure",
+      "readNodeContainedTurnNativeWorkspaceReceipts",
       "recoverContainedTurnCommittedGrantSettlements",
       "recoverContainedTurnDispatchPreparations",
       "rollbackContainedTurnPostgresSchemaV4",
