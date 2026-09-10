@@ -37,7 +37,12 @@ export interface DarwinContainedTurnDeploymentInput extends Omit<DarwinCodexRout
  * single production PA/RS/AE authority root: neither a feature port nor an auth
  * acquisition owner. The internal Session-returning port never leaves this root.
  * Construction captures deployment only; acquisition starts with bridge.take. */
-export const createDarwinContainedTurnDeployment = (raw: DarwinContainedTurnDeploymentInput) => {
+export const createDarwinContainedTurnDeployment = (raw: DarwinContainedTurnDeploymentInput): Readonly<{
+  routeEnforcement: ReturnType<typeof createDarwinCodexRouteEnforcement>;
+  bindAuthority: ReturnType<typeof createDarwinContainedTurnAuthority>["bind"];
+  bindStore: ReturnType<typeof createDarwinContainedTurnAuthority>["bindStore"];
+  dispose: ReturnType<typeof createDarwinContainedTurnAuthority>["dispose"];
+}> => {
   if (raw === null || typeof raw !== "object" || types.isProxy(raw)) {
     throw new TypeError("Invalid Darwin deployment input");
   }
