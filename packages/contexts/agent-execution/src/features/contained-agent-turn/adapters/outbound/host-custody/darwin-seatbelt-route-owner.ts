@@ -7,7 +7,6 @@ import type { HttpEgressRouteFirstWrite } from "./egress/http-egress-ports.js";
 import type { HostHttpLocalCutInput } from "./egress/host-http-local-cut-owner.js";
 import { DarwinRouteLifecycleJournal } from "./darwin-route-lifecycle-journal.js";
 import { captureDarwinOwnedImage, observeDarwinGuardian, type DarwinOwnedImage } from "./darwin-seatbelt-process-identity.js";
-import { codexNativeBrokerLaunchInput } from "../codex-app-server/codex-app-server-launch-plan.js";
 import { isIssuedDarwinSeatbeltProjection, recheckDarwinExecutable, type DarwinExecutablePin, type DarwinSeatbeltProjection } from "./darwin-seatbelt-launch-projection.js";
 
 import { issueDarwinRouteIdentity } from "./darwin-route-identity.js";
@@ -27,7 +26,10 @@ export class DarwinSeatbeltRouteOwner {
   public constructor(public readonly lifetime: NodeCustodyHttpLifetime,
     public readonly journal: DarwinRouteLifecycleJournal,
     readonly localCut: Omit<HostHttpLocalCutInput, "claimed" | "identity">,
-    readonly closureDeadline: number, readonly owned: Readonly<{node: DarwinExecutablePin; files(): Promise<boolean>}>) {issueDarwinRouteIdentity(this);}
+    readonly closureDeadline: number, readonly owned: Readonly<{node: DarwinExecutablePin;
+      /** Borrowed provider observation; route authorization remains local. */
+      nativeLaunch(plan: FinalHostLaunch["plan"]): Readonly<{recipe: Readonly<{endpoint: string}>}>;
+      files(): Promise<boolean>}>) {issueDarwinRouteIdentity(this);}
   public get pending(): Promise<void> | undefined {return this.#preparation;}
   public get projection(): DarwinSeatbeltProjection {if (this.#projection === undefined) {return rejected();} return this.#projection;}
   public get state(): string {return this.#state;}
@@ -94,7 +96,7 @@ export class DarwinSeatbeltRouteOwner {
     if (this.#final !== undefined || this.#session === undefined) {rejected();}
     this.assertWritableTmp(this.projection.writePaths[0]!);
     if (final.plan.environment.TMPDIR !== this.projection.writePaths[0]) {rejected();}
-    const native = codexNativeBrokerLaunchInput(final.plan);
+    const native = this.owned.nativeLaunch(final.plan);
     if (native.recipe.endpoint !== `http://127.0.0.1:${this.projection.endpoint.port}/backend-api/codex`) {rejected();}
     this.journal.record("finalized", {fingerprint: final.fingerprint.fingerprintSha256, material: final.materialSha256});
     this.assertActive(); this.#final = final;

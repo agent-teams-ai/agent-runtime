@@ -4,7 +4,7 @@ import {mkdtempSync, mkdirSync, realpathSync, readFileSync, lstatSync, writeFile
   unlinkSync, rmSync, chmodSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {DarwinCodexNativeFiles} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-codex-native-files.js";
+import {DarwinCodexNativeFiles} from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/darwin-codex-native-files.js";
 import {createCodexAppServerPermissionBoundary} from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
 import {darwinCodexInstallationMaterial, createDarwinCodexNativeBrokerRecipe, createCodexNativeBrokerRecipe, renderCodexNativeBrokerConfig,
   codexNativeBrokerUserOverrides} from "../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.js";

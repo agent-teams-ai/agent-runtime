@@ -323,3 +323,6 @@ export {prepareCodexNativeBrokerFiles} from "./codex-native-broker-files.js";
 
 export {codexNativeBrokerBoundary,
   CODEX_NATIVE_CATALOG_BYTES, CODEX_NATIVE_CATALOG_SHA256} from "./codex-native-broker-recipe.js";
+
+export {DarwinCodexNativeFiles} from "./darwin-codex-native-files.js";
+export {createDarwinCodexNativeBrokerRecipe} from "./codex-native-broker-recipe.js";

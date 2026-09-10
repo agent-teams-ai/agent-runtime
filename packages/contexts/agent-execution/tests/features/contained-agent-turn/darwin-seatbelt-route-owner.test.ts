@@ -9,6 +9,7 @@ const {DarwinRouteLifecycleJournal} = await import("../../../dist/features/conta
 const {pinDarwinExecutable, createDarwinSeatbeltProjection} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-seatbelt-launch-projection.js");
 const {darwinDigest} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-route-durable-storage.js");
 const {acknowledgeProviderSpawn} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-spawn-acknowledgement.js");
+const issuer = await import("../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.js");
 const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
 Object.defineProperty(process, "platform", {...platform, value: "darwin"});
 after(() => {Object.defineProperty(process, "platform", platform); controlDarwinChildObservations();});
@@ -27,7 +28,7 @@ const setup = async () => {
   const localCut = {expectedClock: {authorityId: "clock-authority", epoch: "epoch-1"}, operationDeadline: 100,
     clock: {read: () => {reentrant?.(); return {authorityId: "clock-authority", epoch, controlTime: now};},
       within: async <T>(_deadline: number, operation: () => Promise<T>) => operation()}};
-  const owner = new DarwinSeatbeltRouteOwner(reservation.lifetime, journal, localCut, 200, {node, files: async () => true});
+  const owner = new DarwinSeatbeltRouteOwner(reservation.lifetime, journal, localCut, 200, {node, nativeLaunch: issuer.codexNativeBrokerLaunchInput, files: async () => true});
   reservation.live.httpReservation.retainDarwinRoute(reservation.live, reservation.lifetime, owner);
   const projection = createDarwinSeatbeltProjection({provider, observer, launcher, protectedRoot: "/durable",
     endpoint: {address: "127.0.0.1", family: "IPv4", port: 32123}, operationBinding: {proof: reservation.lifetime.committedDispatchProof.proofDigest},

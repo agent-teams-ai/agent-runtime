@@ -129,7 +129,7 @@ test("outer preparation binds actual reserved TMPDIR before allocation and at fi
 test("issued Darwin recipe with another state directory cannot stage against the actual reservation", async t => {
   const f = fixture("analysis", true); const reserved = await f.reserve(); t.after(reserved.close);
   const {createDarwinCodexNativeBrokerRecipe} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.js");
-  const {DarwinCodexNativeFiles} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-codex-native-files.js");
+  const {DarwinCodexNativeFiles} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/darwin-codex-native-files.js");
   const {prepareCodexNativeBrokerFiles} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-files.js");
   const recipe = createDarwinCodexNativeBrokerRecipe({boundary: f.boundary, profile: "codex-chatgpt",
     endpoint: "http://127.0.0.1:32123/backend-api/codex", tmpDir: `${f.options.tmpDir}-foreign`});

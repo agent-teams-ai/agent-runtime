@@ -220,14 +220,14 @@ export const fixture = (mode: "analysis" | "workspace-write" = "analysis", darwi
   const input = {attemptId: identity.attemptId, operationId: identity.operationId, intentMode: mode, workspaceRef,
     providerBinding: {...snapshot, credentialBindingDigest: access("codex").credentialBindingDigest,
       providerRouteRef: access("codex").providerRouteRef}};
-  let nativeFiles: import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-codex-native-files.js").DarwinCodexNativeFiles | undefined;
+  let nativeFiles: import("../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/darwin-codex-native-files.js").DarwinCodexNativeFiles | undefined;
   return {options, boundary, recipe, plan, input, identity, kernelInput,
     workspaceAuthority: () => ({canonicalPath: workspaceRef, descriptorPath: workspaceRef,
       identity: {dev: 1n, ino: BigInt(entry(workspaceRef).ino), mountId: "darwin-statfs:synthetic"}}),
     async install() {
       if (darwinLoopback) {
         enablePreparationOS();
-        const {DarwinCodexNativeFiles} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-codex-native-files.js");
+        const {DarwinCodexNativeFiles} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/codex-app-server/darwin-codex-native-files.js");
         nativeFiles = new DarwinCodexNativeFiles(boundary, retainedBytes("models.json"), {record() {}} as never, () => {});
         nativeFiles.install(recipe);
         return filesIssuer.prepareCodexNativeBrokerFiles(recipe);

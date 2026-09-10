@@ -2,10 +2,9 @@ import { randomUUID } from "node:crypto";
 import { constants, fchmodSync, openSync, closeSync, lstatSync, fstatSync, fsyncSync, writeSync, unlinkSync, readdirSync, realpathSync } from "node:fs";
 import type { BigIntStats } from "node:fs";
 import { renderCodexNativeBrokerConfig, CODEX_NATIVE_CATALOG_SHA256, CODEX_NATIVE_CATALOG_BYTES,
-  codexNativeBrokerBoundary, codexNativeBrokerDarwinStateDirectory, retainDarwinCodexInstallation, darwinCodexInstallationMaterial, type CodexNativeBrokerRecipe } from "../codex-app-server/codex-native-broker-recipe.js";
-import type { CodexAppServerPermissionBoundary } from "../codex-app-server/codex-app-server-permission-boundary.js";
-import { darwinDigest } from "./darwin-route-durable-storage.js";
-import type { DarwinRouteLifecycleJournal } from "./darwin-route-lifecycle-journal.js";
+  codexNativeBrokerBoundary, codexNativeBrokerDarwinStateDirectory, retainDarwinCodexInstallation, darwinCodexInstallationMaterial, type CodexNativeBrokerRecipe } from "./codex-native-broker-recipe.js";
+import type { CodexAppServerPermissionBoundary } from "./codex-app-server-permission-boundary.js";
+import { darwinDigest, type DarwinRouteLifecycleJournal } from "../host-custody/contained-turn-kernel-custody-entrypoint.js";
 
 /** Fixed three-file installer under the accepted trusted-Host/name-bound model.
  * Erases only these retained entries; CODEX_HOME/root closure stays unproven. */

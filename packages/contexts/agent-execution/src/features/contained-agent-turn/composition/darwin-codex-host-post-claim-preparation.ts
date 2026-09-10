@@ -1,20 +1,23 @@
-import { addAbortListener } from "node:events";
-import type { ContainedTurnHostPostClaimPreparation } from "../adapters/outbound/host-custody/contained-turn-kernel-custody-contracts.js";
-import { NodeProviderProcessCustodyCore } from "../adapters/outbound/host-custody/node-provider-process-custody-core.js";
-import { DarwinRouteDurableStorage, darwinDigest, type DarwinTrustedDirectory } from "../adapters/outbound/host-custody/darwin-route-durable-storage.js";
-import { DarwinRouteLifecycleJournal } from "../adapters/outbound/host-custody/darwin-route-lifecycle-journal.js";
-import { DarwinSeatbeltRouteOwner } from "../adapters/outbound/host-custody/darwin-seatbelt-route-owner.js";
-import { pinDarwinExecutable, createDarwinSeatbeltProjection } from "../adapters/outbound/host-custody/darwin-seatbelt-launch-projection.js";
-import { DarwinCodexNativeFiles } from "../adapters/outbound/host-custody/darwin-codex-native-files.js";
-import { createDarwinHostHttpConsumptionJournal } from "../adapters/outbound/host-custody/egress/darwin-host-http-consumption-journal.js";
-import { createNodeHostHttpListener } from "../adapters/outbound/host-custody/egress/node-host-http-listener.js";
-import { createNodeHostHttpConnection } from "../adapters/outbound/host-custody/egress/node-host-http-connection.js";
-import { retainFinalizationHttpResources } from "../adapters/outbound/host-custody/host-launch-finalization-validation.js";
-import type { HostHttpEgressSessionDependencies } from "../adapters/outbound/host-custody/egress/host-http-egress-session.js";
-import type { HostHttpLocalCutInput } from "../adapters/outbound/host-custody/egress/host-http-local-cut-owner.js";
-import type { HttpEgressLimits } from "../adapters/outbound/host-custody/egress/http-egress-contracts.js";
-import { createDarwinCodexNativeBrokerRecipe } from "../adapters/outbound/codex-app-server/codex-native-broker-recipe.js";
-import { prepareCodexNativeBrokerFiles } from "../adapters/outbound/codex-app-server/codex-native-broker-files.js";
+import {
+  hostHttpAbortOperations,
+  type ContainedTurnHostPostClaimPreparation,
+  NodeProviderProcessCustodyCore,
+  DarwinRouteDurableStorage, darwinDigest, type DarwinTrustedDirectory,
+  DarwinRouteLifecycleJournal,
+  DarwinSeatbeltRouteOwner,
+  pinDarwinExecutable, createDarwinSeatbeltProjection,
+  createDarwinHostHttpConsumptionJournal,
+  createNodeHostHttpListener,
+  createNodeHostHttpConnection,
+  retainFinalizationHttpResources,
+  type HostHttpEgressSessionDependencies,
+  type HostHttpLocalCutInput,
+  type HttpEgressLimits,
+} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
+import {
+  DarwinCodexNativeFiles, codexNativeBrokerLaunchInput,
+  createDarwinCodexNativeBrokerRecipe, prepareCodexNativeBrokerFiles,
+} from "../adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
 import type { CodexAppServerPermissionBoundary } from "../adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
 
 export interface DarwinCodexHostPreparationInput {
@@ -71,12 +74,12 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
       const journal = new DarwinRouteLifecycleJournal(storage, lifetime);
       let files: DarwinCodexNativeFiles | undefined;
       route = new DarwinSeatbeltRouteOwner(lifetime, journal, options.localCut, options.limits.closureDeadline,
-        {node, files: () => files?.cleanup() ?? Promise.resolve(true)});
+        {node, nativeLaunch: codexNativeBrokerLaunchInput, files: () => files?.cleanup() ?? Promise.resolve(true)});
       const owner = route;
       files = new DarwinCodexNativeFiles(options.boundary, options.catalogSource, journal, () => owner.assertActive());
       preparation.retainDarwinRoute(lifetime, owner);
       owner.assertWritableTmp(options.tmpDir);
-      if (options.localCut.hostShutdownSignal !== undefined) {addAbortListener(options.localCut.hostShutdownSignal, () => owner.cutoff());}
+      if (options.localCut.hostShutdownSignal !== undefined) {hostHttpAbortOperations.subscribe(options.localCut.hostShutdownSignal, () => owner.cutoff());}
       return await owner.run(async () => {
         await journal.prepare(); owner.assertActive();
         let lastTime = -1;
@@ -111,7 +114,7 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
           accept: async (socket, signal) => {
             let connection: ReturnType<ReturnType<typeof createNodeHostHttpConnection>["bindAcceptedSocket"]> | undefined;
             const controller = new AbortController(); const abort = () => controller.abort();
-            const subscription = addAbortListener(signal, abort);
+            const subscription = hostHttpAbortOperations.subscribe(signal, abort);
             try {
               // Even TLS/resolver work is refused before installed admission.
               owner.assertInstalled();
