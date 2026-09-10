@@ -4,7 +4,8 @@ import {
   inspectDarwinNativeExecutionLease,
   type DarwinNativeWorkspaceSelection, type DarwinNativeExecutionLease, type DarwinNativeCodexMaterial,
 } from "../host-custody/contained-turn-kernel-custody-entrypoint.js";
-import { codexDarwinNativeLaunchObservation, acceptCodexDarwinNativeMaterialObservation, validateCodexDirectoryIdentity } from "./codex-app-server-permission-boundary.js";
+import { validateCodexDirectoryIdentity } from "./codex-app-server-permission-boundary.js";
+import { codexDarwinNativeLaunchObservation, acceptCodexDarwinNativeMaterialObservation, retainCodexDarwinNativeMaterialReader } from "./codex-native-observations.js";
 import { createHash, randomUUID } from "node:crypto";
 import { lstatSync, readdirSync, type BigIntStats } from "node:fs";
 import { capturePathLineage, openStablePath, pathLineagesEqual } from "@agent-teams/filesystem-custody";
@@ -152,18 +153,27 @@ export const installCodexDarwinNativeBrokerFiles = async (
     [actual.catalog, "models.json", catalog, 0o600],
     [actual.installation, "installation_id", Buffer.from(installationId), 0o644],
   ] as const;
-  for (const [fact, name, bytes, mode] of expected) {
-    if (fact.path !== `${boundary.codexHome}/${name}` || fact.uid !== original.leasedUid ||
-        fact.mode !== (0o100000 | mode) || fact.nlink !== 1 || fact.bytes !== bytes.length ||
-        fact.sha256 !== digest(bytes) || fact.dev !== original.codexHome.dev || fact.ino <= 0n) {throw rejected();}
-  }
-  if (new Set(expected.map(([fact]) => `${fact.dev}:${fact.ino}`)).size !== 3) {throw rejected();}
+  validateInstalledMaterial(expected, boundary.codexHome, original);
   acceptCodexDarwinNativeMaterialObservation(boundary, material);
   const files: CodexNativeBrokerFiles = Object.freeze({kind: "codex-native-broker-prepared-files/v1"});
   nativeFiles.set(files, Object.freeze({recipe, material}));
   nativeRecipes.set(recipe, files);
+  retainCodexDarwinNativeMaterialReader(recipe, () => codexDarwinNativeMaterialIdentity(recipe)!);
   validateCodexNativeBrokerFiles(files, recipe);
   return files;
+};
+
+const validateInstalledMaterial = (
+  expected: readonly (readonly [ReturnType<typeof inspectDarwinNativeCodexMaterial>["config"], string, Uint8Array, number])[],
+  codexHome: string,
+  original: ReturnType<typeof inspectDarwinNativeLaunchObservation>,
+): void => {
+  for (const [fact, name, bytes, mode] of expected) {
+    if (fact.path !== `${codexHome}/${name}` || fact.uid !== original.leasedUid ||
+        fact.mode !== (0o100000 | mode) || fact.nlink !== 1 || fact.bytes !== bytes.length ||
+        fact.sha256 !== digest(bytes) || fact.dev !== original.codexHome.dev || fact.ino <= 0n) {throw rejected();}
+  }
+  if (new Set(expected.map(([fact]) => `${fact.dev}:${fact.ino}`)).size !== 3) {throw rejected();}
 };
 
 const inspectDarwinNativeExecutionLeaseSafe = (value: DarwinNativeWorkspaceSelection | DarwinNativeExecutionLease): object => {

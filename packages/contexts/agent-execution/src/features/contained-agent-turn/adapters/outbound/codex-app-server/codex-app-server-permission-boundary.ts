@@ -1,7 +1,8 @@
+import { retainCodexDarwinNativeLaunchObservation } from "./codex-native-observations.js";
+export { acceptCodexDarwinNativeMaterialObservation, codexDarwinNativeLaunchObservation } from "./codex-native-observations.js";
 import {
   inspectDarwinNativeLaunchObservation, assertDarwinNativeLaunchObservationCurrent,
-  inspectDarwinNativeCodexMaterial, assertDarwinNativeCodexMaterialCurrent,
-  type DarwinNativeCodexMaterial, type DarwinNativeLaunchObservation,
+  type DarwinNativeLaunchObservation,
 } from "../host-custody/contained-turn-kernel-custody-entrypoint.js";
 import {codexProtocolPaths} from "./codex-docker-path-projection.js";
 import { createHash } from "node:crypto";
@@ -168,34 +169,8 @@ export const createCodexAppServerPermissionBoundary = (input: {
   return issuePermissionBoundary(privateHome, workspace, input.intentMode);
 };
 
-const nativeObservations = new WeakMap<CodexAppServerPermissionBoundary, DarwinNativeLaunchObservation>();
-const nativeOriginals = new WeakMap<CodexAppServerPermissionBoundary, ReturnType<typeof inspectDarwinNativeLaunchObservation>>();
-/** Only authenticated installed material can advance a boundary generation. */
-export const acceptCodexDarwinNativeMaterialObservation = (
-  boundary: CodexAppServerPermissionBoundary, material: DarwinNativeCodexMaterial,
-): void => {
-  const original = nativeOriginals.get(boundary);
-  if (original === undefined) {throw new TypeError("Native Codex boundary provenance rejected");}
-  const installed = inspectDarwinNativeCodexMaterial(material);
-  assertDarwinNativeCodexMaterialCurrent(material);
-  const next = inspectDarwinNativeLaunchObservation(installed.observation);
-  if (next.operationId !== original.operationId || next.leasedUid !== original.leasedUid ||
-      (["privateRoot", "codexHome", "tmpDir", "workspace"] as const).some(key => {
-        const a = original[key]; const b = next[key];
-        return a.path !== b.path || a.dev !== b.dev || a.ino !== b.ino || a.uid !== b.uid || a.mode !== b.mode;
-      })) {throw new TypeError("Native Codex material changed original roots");}
-  assertDarwinNativeLaunchObservationCurrent(installed.observation);
-  nativeObservations.set(boundary, installed.observation);
-};
-/** Same-object lookup precedes observation inspection; this is lifetime validation,
- * not fresh OS readback. Native START must revalidate descriptors atomically. */
-export const codexDarwinNativeLaunchObservation = (
-  boundary: CodexAppServerPermissionBoundary,
-): DarwinNativeLaunchObservation | undefined => {
-  const observation = nativeObservations.get(boundary);
-  if (observation !== undefined) {assertDarwinNativeLaunchObservationCurrent(observation);}
-  return observation;
-};
+const project = (fact: ReturnType<typeof inspectDarwinNativeLaunchObservation>["codexHome"]) => Object.freeze({path: fact.path,
+  identity: Object.freeze({device: Number(fact.dev), inode: Number(fact.ino), path: fact.path})});
 
 const validateNativeDirectories = (facts: ReturnType<typeof inspectDarwinNativeLaunchObservation>): void => {
   const directories = [facts.privateRoot, facts.codexHome, facts.tmpDir, facts.workspace];
@@ -233,11 +208,8 @@ export const createDarwinNativeCodexPermissionBoundary = (
       }
     }
   }
-  const project = (fact: typeof codexHome) => Object.freeze({path: fact.path,
-    identity: Object.freeze({device: Number(fact.dev), inode: Number(fact.ino), path: fact.path})});
   const boundary = issuePermissionBoundary(project(codexHome), project(workspace), intentMode);
-  nativeObservations.set(boundary, observation);
-  nativeOriginals.set(boundary, facts);
+  retainCodexDarwinNativeLaunchObservation(boundary, observation);
   return boundary;
 };
 
