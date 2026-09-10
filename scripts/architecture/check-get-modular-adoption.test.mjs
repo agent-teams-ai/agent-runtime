@@ -308,7 +308,7 @@ test('PR71 reviewed owners and helpers retain exact live relationships without e
   const darwinAuthority = pending.boundaries.find(b => b.id === 'composition.embedded-runtime').relationships
     .filter(edge => edge.from.endsWith('/darwin-contained-turn-authority.ts'));
   assert.deepEqual(darwinAuthority.map(edge => [edge.to, edge.mode]), [
-    ['@agent-teams/agent-execution/composition', 'type-only'],
+    ['@agent-teams/agent-execution/composition', 'runtime'],
     ['@agent-teams/provider-access/composition', 'runtime'],
     ['@agent-teams/runtime-security/composition', 'runtime'],
   ]);
