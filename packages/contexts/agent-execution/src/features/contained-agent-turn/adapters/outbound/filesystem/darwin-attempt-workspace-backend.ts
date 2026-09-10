@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { workspaceName } from "./contained-turn-workspace-io.js";
 import type { ContainedTurnWorkspaceTree, ContainedTurnWorkspaceTreeLimits } from "./contained-turn-workspace-tree.js";
 import { darwinAttemptOwnerStates, consumeDarwinNativeWorkspaceSelection } from "../host-custody/darwin-attempt-workspace-entrypoint.js";
 import type { DarwinNativeWorkspaceSelection } from "../host-custody/darwin-attempt-workspace-entrypoint.js";
@@ -30,7 +31,8 @@ function createDarwinAttemptWorkspaceBackend(bridge: Bridge, selected: DarwinNat
     const manifest = bridge.capturedManifest();
     const operation = createHash("sha256").update(creation.operationId).digest();
     const scope = createHash("sha256").update(creation.scope.tenantId).update(Buffer.alloc(1)).update(creation.scope.projectId).digest();
-    if (!operation.equals(manifest.subarray(48, 80)) || !scope.equals(manifest.subarray(80, 112))) {
+    if (!operation.equals(manifest.subarray(48, 80)) || !scope.equals(manifest.subarray(80, 112)) ||
+        creation.workspaceName !== workspaceName(creation.operationId, creation.scope)) {
       throw new Error("workspace creation does not match root operation/scope reservation");
     }
     if (creation.schemaVersion !== 1 || creation.rootIdentity.dev !== native.workspaceDev ||
@@ -38,8 +40,7 @@ function createDarwinAttemptWorkspaceBackend(bridge: Bridge, selected: DarwinNat
         !materialized || creation.materializationDigest !== materialized.treeDigest) {throw new Error("native workspace is not the original creation inode");}
     return creation;
   };
-  const seal = async (): Promise<ContainedTurnWorkspaceSealRecord> => {
-    const creation = await identity();
+  const sealForCreation = async (creation: ContainedTurnWorkspaceCreationRecord): Promise<ContainedTurnWorkspaceSealRecord> => {
     const sealed = await records.seal();
     if (sealed.schemaVersion !== 2 || sealed.operationId !== creation.operationId ||
         sealed.workspaceName !== creation.workspaceName || sealed.scope.projectId !== creation.scope.projectId ||
@@ -47,6 +48,7 @@ function createDarwinAttemptWorkspaceBackend(bridge: Bridge, selected: DarwinNat
         sealed.rootIdentity.ino !== creation.rootIdentity.ino) {throw new Error("workspace seal belongs to another retained root");}
     return sealed;
   };
+  const seal = async (): Promise<ContainedTurnWorkspaceSealRecord> => sealForCreation(await identity());
   const closure = async (): Promise<ContainedTurnWorkspaceClosureRecord> => {
     const sealed = await seal();
     const closed = await records.closure();
@@ -111,7 +113,7 @@ function createDarwinAttemptWorkspaceBackend(bridge: Bridge, selected: DarwinNat
     }>> {
       // Read only the retained owner records, validating their original native
       // inode and operation reservation. No receipt identifier is synthesized.
-      const creation = await identity(), sealed = await seal();
+      const creation = await identity(), sealed = await sealForCreation(creation);
       const publication = await records.artifactResult();
       if (publication.operationId !== sealed.operationId || publication.workspaceName !== sealed.workspaceName ||
           publication.scope.projectId !== sealed.scope.projectId || publication.scope.tenantId !== sealed.scope.tenantId ||

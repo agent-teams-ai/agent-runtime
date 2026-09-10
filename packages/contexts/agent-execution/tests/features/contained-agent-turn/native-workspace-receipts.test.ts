@@ -22,15 +22,19 @@ test("native receipt readback returns retained records before release and reject
     }});
     const {selectDarwinAttemptWorkspaceBackend} = await import(root + "filesystem/darwin-attempt-workspace-backend.js");
     const scope = {tenantId: "tenant", projectId: "project"};
-    const creation = {schemaVersion: 1, operationId: "operation", workspaceName: "workspace",
+    const workspaceName = "operation-" + digest(JSON.stringify(["tenant", "project", "operation"])).toString("hex");
+    const creation = {schemaVersion: 1, operationId: "operation", workspaceName,
       scope, rootIdentity: {dev: "1", ino: "2"}, materializationDigest: "tree"};
-    const seal = {schemaVersion: 2, operationId: "operation", workspaceName: "workspace",
+    const seal = {schemaVersion: 2, operationId: "operation", workspaceName,
       scope, rootIdentity: {dev: "1", ino: "2"}, treeDigest: "sealed-tree", manifestDigest: "manifest"};
     const publication = {...seal, schemaVersion: 1, resultRef: "stored-result",
       manifestReceiptRef: "stored-manifest-receipt", resultReceiptRef: "stored-result-receipt"};
     const records = {creation, seal, publication};
+    let creationReads = 0, changeCreation = false;
     const backend = selectDarwinAttemptWorkspaceBackend({}, {
-      creation: async () => records.creation, seal: async () => records.seal,
+      creation: async () => {creationReads++; return changeCreation && creationReads > 1
+        ? {...records.creation, workspaceName: "changed-between-reads"} : records.creation;},
+      seal: async () => records.seal,
       artifactResult: async () => records.publication, closure: async () => {throw Error("not closed");},
     });
     await backend.materializeComplete({treeDigest: "tree"}, {});
@@ -52,6 +56,16 @@ test("native receipt readback returns retained records before release and reject
       }
       records[record] = saved;
     }
+    creationReads = 0; changeCreation = true;
+    const stable = await backend.readReceipts();
+    assert.equal(creationReads, 1);
+    assert.equal(stable.creation, creation);
+    assert.equal(stable.seal.workspaceName, stable.creation.workspaceName);
+    changeCreation = false;
+    for (const record of ["creation", "seal", "publication"]) {
+      records[record] = {...records[record], workspaceName: "operation-" + "f".repeat(64)};
+    }
+    await assert.rejects(backend.readReceipts(), /reservation/);
     assert.equal(closedReads, 0);
   `], {encoding: "utf8"});
   assert.equal(result.status, 0, result.stderr || result.stdout);
