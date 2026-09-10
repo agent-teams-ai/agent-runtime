@@ -70,6 +70,12 @@ import {
 import type { FinalHostLaunch } from "./host-launch-finalization.js";
 import { startHostCustodyLaunch } from "./host-custody-start-projection.js";
 import { snapshotHostCustodyLaunchPlan } from "./host-custody-launch-plan-snapshot.js";
+import {assertDarwinNativeExecutionClaim, assertRetainedDarwinNativeHttpExecutionAuthority,
+  bindRetainedDarwinNativeHttpLaunch,
+  inspectDarwinNativeLaunchObservation} from "./darwin-attempt-owner-selection.js";
+import {consumeNativeHostCustodyExecutionLease, inspectNativeHostCustodyExecutionLease,
+  inspectNativeHostCustodyReservationAuthority, isNativeHostCustodyWorkspaceAuthority,
+  retireNativeHostCustodyWorkspaceAuthority} from "./native-host-custody-workspace-authority.js";
 export type { NodeProviderProcessCustodyOptions } from "./node-provider-process-custody-state.js";
 export class NodeProviderProcessCustodyCore implements
   ProviderProcessCustodyPort,
@@ -117,6 +123,33 @@ export class NodeProviderProcessCustodyCore implements
         const lifetime = live.httpReservation.acquire(live, handoff);
         preparations.set(lifetime, live);
         return lifetime;
+      },
+      consumeDarwinNativeExecution(lifetime: Parameters<NodeCustodyHttpPreparation["consumeDarwinNativeExecution"]>[0],
+        authority: Parameters<NodeCustodyHttpPreparation["consumeDarwinNativeExecution"]>[1]) {
+        const live = preparations.get(lifetime);
+        if (this !== capability || live === undefined || byRef.get(live.custodyRef) !== live ||
+            live.nativeExecutionLease === undefined || live.nativeWorkspaceAuthority === undefined) {
+          throw new TypeError("Host Custody native execution reservation conflicts");
+        }
+        live.httpReservation.assertPreparation(lifetime);
+        assertDarwinNativeExecutionClaim(live.nativeExecutionLease, lifetime.committedDispatchProof);
+        assertRetainedDarwinNativeHttpExecutionAuthority(authority, live.nativeExecutionLease);
+        return consumeNativeHostCustodyExecutionLease(live.nativeWorkspaceAuthority, live.nativeExecutionLease);
+      },
+      async bindDarwinNativeFinalLaunch(
+        lifetime: Parameters<NodeCustodyHttpPreparation["bindDarwinNativeFinalLaunch"]>[0],
+        authority: Parameters<NodeCustodyHttpPreparation["bindDarwinNativeFinalLaunch"]>[1],
+        lease: Parameters<NodeCustodyHttpPreparation["bindDarwinNativeFinalLaunch"]>[2],
+        material: Parameters<NodeCustodyHttpPreparation["bindDarwinNativeFinalLaunch"]>[3],
+        port: Parameters<NodeCustodyHttpPreparation["bindDarwinNativeFinalLaunch"]>[4],
+        launch: Parameters<NodeCustodyHttpPreparation["bindDarwinNativeFinalLaunch"]>[5],
+      ) {
+        const live = preparations.get(lifetime);
+        if (this !== capability || live === undefined || byRef.get(live.custodyRef) !== live ||
+            live.nativeExecutionLease !== lease || live.launchBinding.view.readFinal() !== launch) {
+          throw new TypeError("Host Custody native final launch binding conflicts");
+        }
+        await bindRetainedDarwinNativeHttpLaunch(authority, lease, launch, live.launchBinding, material, port);
       },
       prepareResources(lifetime: NodeCustodyHttpLifetime, input: Parameters<NodeCustodyHttpPreparation["prepareResources"]>[1]) {
         const live = preparations.get(lifetime);
@@ -221,7 +254,10 @@ export class NodeProviderProcessCustodyCore implements
       tombstonesByAttempt: this.#tombstonesByAttempt,
       tombstonesByRef: this.#tombstonesByRef,
     }, input);
-    if (outcome.kind === "released" && live !== undefined) {closeRetainedWorkspaceAuthority(live);}
+    if (outcome.kind === "released" && live !== undefined) {
+      closeRetainedWorkspaceAuthority(live);
+      if (live.nativeWorkspaceAuthority !== undefined) {await retireNativeHostCustodyWorkspaceAuthority(live.nativeWorkspaceAuthority);}
+    }
     return outcome;
   }
 
@@ -230,6 +266,14 @@ export class NodeProviderProcessCustodyCore implements
   }
 
   public async reserve(input: HostCustodyReservationInput): Promise<ContainedTurnCustodyHandle> {
+    if (isNativeHostCustodyWorkspaceAuthority(input.workspaceAuthority)) {
+      const plan = snapshotHostCustodyLaunchPlan(input.launchPlan);
+      let consumed = false;
+      return this.#open(input, "sdk-delegated", Object.freeze({resolve: async () => {
+        if (consumed) {throw new TypeError("Native launch plan already consumed");}
+        consumed = true; return plan;
+      }}));
+    }
     const replayInput = snapshotPrivateReservationReplayInput(input);
     const prior = this.#byAttempt.get(replayInput.attemptId) ?? this.#tombstonesByAttempt.get(replayInput.attemptId);
     if (prior !== undefined) {
@@ -258,7 +302,13 @@ export class NodeProviderProcessCustodyCore implements
     retainedWorkspaceAuthority?: import("./private-host-custody-reservation.js").RetainedHostCustodyWorkspaceAuthority,
   ): Promise<ContainedTurnCustodyHandle> {
     const baseIdentitySha256 = inputIdentity(input);
-    const identitySha256 = "workspaceAuthority" in input
+    const workspaceAuthority = "workspaceAuthority" in input ? input.workspaceAuthority : undefined;
+    const nativeAuthority = workspaceAuthority !== undefined && isNativeHostCustodyWorkspaceAuthority(workspaceAuthority)
+      ? workspaceAuthority : undefined;
+    const native = nativeAuthority === undefined ? undefined : inspectNativeHostCustodyReservationAuthority(nativeAuthority, input);
+    const identitySha256 = native !== undefined
+      ? sha256(`${baseIdentitySha256}:${nativeAuthority!.canonicalPath}:${nativeAuthority!.identity.dev}:${nativeAuthority!.identity.ino}`)
+      : "workspaceAuthority" in input
       ? privateReservationIdentity(input)
       : baseIdentitySha256;
     const tombstone = this.#tombstonesByAttempt.get(input.attemptId);
@@ -295,7 +345,10 @@ export class NodeProviderProcessCustodyCore implements
         containmentProfile: this.#runtimeProfile.containmentProfile,
         ...("launchPlan" in input ? {privateReservationPlan: snapshotHostCustodyLaunchPlan(input.launchPlan)} : {}),
         opening,
-        ...("workspaceAuthority" in input ? { workspaceAuthority: descriptorWorkspaceAuthority(input.workspaceAuthority) } : {}),
+        ...(native === undefined && "workspaceAuthority" in input ? { workspaceAuthority: descriptorWorkspaceAuthority(input.workspaceAuthority) } : {}),
+        ...(native === undefined ? {} : {nativeWorkspaceAuthority: nativeAuthority!,
+          nativeWorkspaceFacts: inspectDarwinNativeLaunchObservation(native.observation),
+          nativeExecutionLease: inspectNativeHostCustodyExecutionLease(nativeAuthority!)}),
         ...(retainedWorkspaceAuthority === undefined ? {} : { retainedWorkspaceAuthority }),
       },
     );
@@ -334,7 +387,13 @@ export class NodeProviderProcessCustodyCore implements
       ...(requiredSpawnMode === undefined ? {} : { requiredSpawnMode }),
       resolveOpening,
       spawn: (reserved, arguments_, environment) => {this.#spawn(reserved, arguments_, environment);},
-      ...(reservationLaunchPlans === undefined ? {} : { assertBoundReservation: assertReservedWorkspaceAuthority }),
+      ...(native !== undefined ? {assertBoundReservation: (reserved: LiveCustody) => {
+        const facts = reserved.nativeWorkspaceFacts;
+        if (facts === undefined || reserved.workspace?.dev !== facts.workspace.dev || reserved.workspace.ino !== facts.workspace.ino ||
+            reserved.workspaceRef !== facts.workspace.path || reserved.privatePaths?.root.dev !== facts.privateRoot.dev ||
+            reserved.privatePaths.root.ino !== facts.privateRoot.ino || reserved.plan?.environment.TMPDIR !== facts.tmpDir.path ||
+            reserved.plan.environment.CODEX_HOME !== facts.codexHome.path) {throw new TypeError("Native launch plan differs from prepared roots");}
+      }} : reservationLaunchPlans === undefined ? {} : { assertBoundReservation: assertReservedWorkspaceAuthority }),
     });
   }
 

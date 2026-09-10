@@ -5,11 +5,13 @@ import { createDarwinNativeCodexPermissionBoundary, codexDarwinNativeLaunchObser
  * the kernel's later workspace selection callback or inventing an attempt. */
 export const prepareDarwinCodexNativeLaunchInput = async (
   selection: DarwinNativeWorkspaceSelection, intentMode: CodexContainedTurnMode,
+  httpLaunchAuthority?: RetainedNativeHttpLaunchAuthority,
 ) => {
   const observation = await readDarwinNativeLaunchObservation(selection);
   const boundary = createDarwinNativeCodexPermissionBoundary(observation, intentMode);
   const facts = inspectDarwinNativeLaunchObservation(observation);
-  return Object.freeze({boundary, nativeSelection: selection, privateRootPath: facts.privateRoot.path, tmpDir: facts.tmpDir.path});
+  return Object.freeze({boundary, httpLaunchAuthority,
+    privateRootPath: facts.privateRoot.path, tmpDir: facts.tmpDir.path});
 };
 
 /** Assembly calls this after the real committed-claim/session owner, before its
@@ -22,6 +24,7 @@ export const prepareDarwinCodexNativeFixedMaterial = async (
 import {
   readDarwinNativeLaunchObservation, inspectDarwinNativeLaunchObservation,
   type DarwinNativeWorkspaceSelection,
+  type RetainedNativeHttpLaunchAuthority, type DarwinNativeExecutionLease,
   hostHttpAbortOperations,
   type ContainedTurnHostPostClaimPreparation,
   NodeProviderProcessCustodyCore,
@@ -30,6 +33,8 @@ import {
   DarwinSeatbeltRouteOwner,
   pinDarwinExecutable, createDarwinSeatbeltProjection,
   createDarwinHostHttpConsumptionJournal,
+  cutoffDarwinNativeExecution, settleDarwinNativeExecutionLaunchRoute,
+  settleDarwinNativeExecutionPrivateMaterial, disposeDarwinNativeExecution,
   createNodeHostHttpListener,
   createNodeHostHttpConnection,
   retainFinalizationHttpResources,
@@ -38,7 +43,7 @@ import {
   type HttpEgressLimits,
 } from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import {
-  installCodexDarwinNativeBrokerFiles, type CodexNativeBrokerRecipe,
+  installCodexDarwinNativeBrokerFiles, readCodexDarwinNativeMaterial, type CodexNativeBrokerRecipe,
   DarwinCodexNativeFiles, codexNativeBrokerLaunchInput,
   createDarwinCodexNativeBrokerRecipe, prepareCodexNativeBrokerFiles,
 } from "../adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
@@ -49,7 +54,7 @@ export interface DarwinCodexHostPreparationInput {
    * Must be the original locator namespace on restart, never a fresh retry tree. */
   readonly durableRoot: DarwinTrustedDirectory;
   readonly boundary: CodexAppServerPermissionBoundary;
-  readonly nativeSelection?: DarwinNativeWorkspaceSelection;
+  readonly httpLaunchAuthority?: RetainedNativeHttpLaunchAuthority;
   readonly executable: Readonly<{path: string; sha256: string}>;
   readonly observer: Readonly<{path: string; sha256: string}>;
   readonly launcherSha256: string;
@@ -76,11 +81,15 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
   return Object.freeze({prepareClaimed: async (claimed: Parameters<ContainedTurnHostPostClaimPreparation["prepareClaimed"]>[0]) => {
     if (entered) {return Object.freeze({kind: "quarantined" as const});} entered = true;
     let route: DarwinSeatbeltRouteOwner | undefined;
+    let nativeLease: DarwinNativeExecutionLease | undefined;
+    let nativeTransferred = false;
     try {
       // The legacy route owner below performs Host-UID pathname observations.
       // Until the native Host preparation owner seam is supplied, refuse before
       // touching protected roots; a native selection cannot select this route.
-      if (options.nativeSelection !== undefined || codexDarwinNativeLaunchObservation(options.boundary) !== undefined) {
+      const nativeObservation = codexDarwinNativeLaunchObservation(options.boundary);
+      const native = options.httpLaunchAuthority;
+      if ((nativeObservation === undefined) !== (native === undefined)) {
         return Object.freeze({kind: "unsupported" as const, reason: "owner" as const});
       }
       const preparation = NodeProviderProcessCustodyCore.httpPreparation(options.hostCustody);
@@ -99,6 +108,7 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
           sessionInput.providerAccessSnapshot.tenantId !== proof.tenantId ||
           sessionInput.providerAccessSnapshot.projectId !== proof.projectId) {throw new TypeError("Darwin broker selection conflicts");}
       const lifetime = preparation.acquire(claimed);
+      if (native !== undefined) {nativeLease = preparation.consumeDarwinNativeExecution(lifetime, native); nativeTransferred = true;}
       const locator = darwinDigest(JSON.stringify(["darwin-operation-locator/v1", proof.tenantId, proof.projectId, proof.operationId]));
       const storage = new DarwinRouteDurableStorage(options.durableRoot, locator);
       const journal = new DarwinRouteLifecycleJournal(storage, lifetime);
@@ -164,7 +174,10 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
         owner.assertActive(); if (resources.kind !== "prepared" || resources.address.address !== "127.0.0.1") {throw new Error("Darwin HTTP preparation unproven");}
         const recipe = createDarwinCodexNativeBrokerRecipe({boundary: options.boundary,
           endpoint: `http://127.0.0.1:${resources.address.port}/backend-api/codex`, profile: "codex-chatgpt", tmpDir: options.tmpDir});
-        owner.assertWritableTmp(options.tmpDir); files!.install(recipe); owner.assertActive();
+        owner.assertWritableTmp(options.tmpDir);
+        if (nativeLease !== undefined) {await installCodexDarwinNativeBrokerFiles(nativeLease, recipe, options.catalogSource);}
+        else {files!.install(recipe);}
+        owner.assertActive();
         const projection = createDarwinSeatbeltProjection({launcher, observer, provider,
           endpoint: {...resources.address, address: "127.0.0.1"}, operationBinding: {proof: proof.proofDigest,
             generation: lifetime.hostLifecycleGenerationSha256, installation: files!.installationMaterial()}, protectedRoot: options.durableRoot.path,
@@ -177,11 +190,24 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
         session = finalizer.bindSession({...sessionInput, journal: resources.journal, routeFirstWrite: owner.firstWrite,
           identity: {operationId: proof.operationId, attemptId: proof.attemptId, custodyId: proof.custodyId,
             hostBootId: proof.hostBootId, liveProcessSessionIdentity: lifetime.executionSessionIdentity}});
-        owner.assertActive(); finalizer.commit(staged); owner.assertActive();
+        owner.assertActive(); const launch = finalizer.commit(staged); owner.assertActive();
+        if (nativeLease !== undefined) {
+          await preparation.bindDarwinNativeFinalLaunch(lifetime, native!, nativeLease,
+            readCodexDarwinNativeMaterial(recipe), resources.address.port, launch);
+          owner.assertActive();
+        }
         return Object.freeze({kind: "prepared" as const});
       });
     } catch {
       route?.cutoff();
+      if (nativeLease !== undefined && nativeTransferred) {
+        try {
+          await cutoffDarwinNativeExecution(nativeLease);
+          await settleDarwinNativeExecutionLaunchRoute(nativeLease);
+          await settleDarwinNativeExecutionPrivateMaterial(nativeLease);
+          await disposeDarwinNativeExecution(nativeLease);
+        } catch {}
+      }
       return Object.freeze({kind: "quarantined" as const});
     }
   }});

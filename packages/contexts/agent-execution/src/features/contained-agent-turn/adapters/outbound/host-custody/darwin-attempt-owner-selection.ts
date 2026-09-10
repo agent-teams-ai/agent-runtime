@@ -315,6 +315,13 @@ export function inspectDarwinNativeExecutionLease(lease: DarwinNativeExecutionLe
   assertDarwinNativeExecutionLeaseCurrent(lease);
   return retained.facts;
 }
+export function assertDarwinNativeSelectionExecutionLease(
+  selection: DarwinNativeWorkspaceSelection, lease: DarwinNativeExecutionLease,
+): void {
+  const issued = selections.get(selection); const retained = leases.get(lease);
+  if (issued === undefined || retained?.issued !== issued) {throw new Error("foreign native execution lease owner");}
+  assertDarwinNativeExecutionLeaseCurrent(lease);
+}
 /** P is retained solely by the actual private PG receiver. Validators detach
  * P to P2/P3; compare every inert field with P, never JS reference identity.
  * This assertion grants no independent lifetime and does not consume a claim. */
@@ -445,7 +452,7 @@ function finalLaunchData(
     argumentsSha256: darwinNativeArgumentsSha256(plan.executablePath, plan.arguments)});
 }
 function retainHttpLaunchAuthority(issued: SelectionRecord): RetainedNativeHttpLaunchAuthority {
-  return Object.freeze({
+  const authority = Object.freeze({
     async bindDarwinNativeFinalLaunch(lease: DarwinNativeExecutionLease, launch: FinalHostLaunch,
       binding: HostLaunchBinding, material: DarwinNativeCodexMaterial, port: number): Promise<void> {
       const retained = leases.get(lease);
@@ -473,6 +480,23 @@ function retainHttpLaunchAuthority(issued: SelectionRecord): RetainedNativeHttpL
       } catch (error) {issued.bridge.lost(); throw error;}
     },
   });
+  httpAuthorities.set(authority, issued);
+  return authority;
+}
+const httpAuthorities = new WeakMap<RetainedNativeHttpLaunchAuthority, SelectionRecord>();
+export function assertRetainedDarwinNativeHttpExecutionAuthority(
+  authority: RetainedNativeHttpLaunchAuthority, lease: DarwinNativeExecutionLease,
+): void {
+  const issued = httpAuthorities.get(authority); const retained = leases.get(lease);
+  if (issued === undefined || retained?.issued !== issued) {throw new Error("foreign native HTTP execution authority");}
+  assertDarwinNativeExecutionLeaseCurrent(lease);
+}
+export async function bindRetainedDarwinNativeHttpLaunch(
+  authority: RetainedNativeHttpLaunchAuthority, lease: DarwinNativeExecutionLease,
+  launch: FinalHostLaunch, binding: HostLaunchBinding, material: DarwinNativeCodexMaterial, port: number,
+): Promise<void> {
+  assertRetainedDarwinNativeHttpExecutionAuthority(authority, lease);
+  await authority.bindDarwinNativeFinalLaunch(lease, launch, binding, material, port);
 }
 export type DarwinNativeExecutionStart = Awaited<ReturnType<Bridge["startProcess"]>>;
 /** Parameterless beyond the same issued lease. Nothing caller-shaped can

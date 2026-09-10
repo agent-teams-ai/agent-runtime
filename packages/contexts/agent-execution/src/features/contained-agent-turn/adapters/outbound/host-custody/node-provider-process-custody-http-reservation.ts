@@ -6,6 +6,9 @@ import { NodeCustodyHttpResources, type NodeCustodyHttpResourceInput } from "./n
 import type { HostHttpEgressSessionDependencies } from "./egress/host-http-egress-session.js";
 
 import type { DarwinSeatbeltRouteOwner } from "./darwin-seatbelt-route-owner.js";
+import type {DarwinNativeExecutionLease, RetainedNativeHttpLaunchAuthority} from "./darwin-attempt-owner-selection.js";
+import type {DarwinNativeCodexMaterial} from "./darwin-attempt-owner-selection.js";
+import type {FinalHostLaunch} from "./host-launch-finalization.js";
 
 import { isIssuedDarwinRouteOwner } from "./darwin-route-identity.js";
 
@@ -26,6 +29,10 @@ export interface NodeCustodyHttpLifetime extends HostCustodyHttpResourceLifetime
  */
 export interface NodeCustodyHttpPreparation {
   acquire(input: Handoff): NodeCustodyHttpLifetime;
+  consumeDarwinNativeExecution(lifetime: NodeCustodyHttpLifetime,
+    authority: RetainedNativeHttpLaunchAuthority): DarwinNativeExecutionLease;
+  bindDarwinNativeFinalLaunch(lifetime: NodeCustodyHttpLifetime, authority: RetainedNativeHttpLaunchAuthority,
+    lease: DarwinNativeExecutionLease, material: DarwinNativeCodexMaterial, port: number, launch: FinalHostLaunch): Promise<void>;
   prepareResources(lifetime: NodeCustodyHttpLifetime, input: NodeCustodyHttpResourceInput):
     ReturnType<NodeCustodyHttpResources["prepare"]>;
   retainDarwinRoute(lifetime: NodeCustodyHttpLifetime, owner: DarwinSeatbeltRouteOwner): void;

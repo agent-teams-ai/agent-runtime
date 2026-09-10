@@ -54,6 +54,9 @@ export interface LiveCustody {
   readonly workspaceRef: string;
   readonly workspaceAuthority?: HostCustodyWorkspaceAuthority;
   readonly retainedWorkspaceAuthority?: RetainedHostCustodyWorkspaceAuthority;
+  readonly nativeWorkspaceAuthority?: import("./native-host-custody-workspace-authority.js").NativeHostCustodyWorkspaceAuthority;
+  readonly nativeWorkspaceFacts?: import("./darwin-attempt-owner-protocol.js").DarwinNativeLaunchData;
+  readonly nativeExecutionLease?: import("./darwin-attempt-owner-selection.js").DarwinNativeExecutionLease;
   closureEvidence: HostCustodyClosureEvidence;
   containment?: Promise<ContainmentResult>;
   contained?: Extract<ContainmentResult, { readonly kind: "contained" }>;
@@ -110,6 +113,9 @@ export const createLiveCustody = (
     containmentProfile: HostCustodyLaunchPlan["containmentProfile"];
     opening: Promise<void>;
     retainedWorkspaceAuthority?: RetainedHostCustodyWorkspaceAuthority;
+    nativeWorkspaceAuthority?: import("./native-host-custody-workspace-authority.js").NativeHostCustodyWorkspaceAuthority;
+    nativeWorkspaceFacts?: import("./darwin-attempt-owner-protocol.js").DarwinNativeLaunchData;
+    nativeExecutionLease?: import("./darwin-attempt-owner-selection.js").DarwinNativeExecutionLease;
     workspaceAuthority?: HostCustodyWorkspaceAuthority;
   }>,
 ): LiveCustody => {
@@ -139,6 +145,9 @@ export const createLiveCustody = (
     ...(options.retainedWorkspaceAuthority === undefined ? {} : {
       retainedWorkspaceAuthority: options.retainedWorkspaceAuthority,
     }),
+    ...(options.nativeWorkspaceAuthority === undefined ? {} : {nativeWorkspaceAuthority: options.nativeWorkspaceAuthority}),
+    ...(options.nativeWorkspaceFacts === undefined ? {} : {nativeWorkspaceFacts: options.nativeWorkspaceFacts}),
+    ...(options.nativeExecutionLease === undefined ? {} : {nativeExecutionLease: options.nativeExecutionLease}),
   };
   return Object.defineProperties(live, {
     launchBinding: {value: launchBinding, writable: false, configurable: false},

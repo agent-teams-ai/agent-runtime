@@ -61,6 +61,9 @@ export {
   assertDarwinNativeLaunchObservationCurrent,
   installDarwinNativeCodexMaterial, inspectDarwinNativeCodexMaterial,
   assertDarwinNativeCodexMaterialCurrent,
+  inspectDarwinNativeExecutionLease,
+  cutoffDarwinNativeExecution, settleDarwinNativeExecutionLaunchRoute,
+  settleDarwinNativeExecutionPrivateMaterial, disposeDarwinNativeExecution,
   type DarwinNativeWorkspaceSelection, type DarwinNativeLaunchObservation,
   type DarwinNativeCodexMaterial,
 } from "./darwin-attempt-owner-selection.js";
@@ -72,7 +75,7 @@ export {
 } from "./darwin-attempt-owner-selection.js";
 export type {
   DarwinNativeExecutionLease, NativePreparedAttemptBinding,
-  RetainedNativeAttemptAuthority, NativeDirectoryFact, NativeFileFact,
+  RetainedNativeAttemptAuthority, RetainedNativeHttpLaunchAuthority, NativeDirectoryFact, NativeFileFact,
 } from "./darwin-attempt-owner-selection.js";
 export type {
   DarwinAttemptRetainedOwners, DarwinAttemptRetainedCompletion,
