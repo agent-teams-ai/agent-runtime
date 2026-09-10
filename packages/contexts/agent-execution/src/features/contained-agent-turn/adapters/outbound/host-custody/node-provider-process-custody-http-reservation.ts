@@ -6,8 +6,8 @@ import { NodeCustodyHttpResources, type NodeCustodyHttpResourceInput } from "./n
 import type { HostHttpEgressSessionDependencies } from "./egress/host-http-egress-session.js";
 
 import type { DarwinSeatbeltRouteOwner } from "./darwin-seatbelt-route-owner.js";
-import type {DarwinNativeExecutionLease, RetainedNativeHttpLaunchAuthority} from "./darwin-attempt-owner-selection.js";
-import type {DarwinNativeCodexMaterial} from "./darwin-attempt-owner-selection.js";
+import type {DarwinNativeCodexMaterial, DarwinNativeExecutionLease,
+  RetainedNativeHttpLaunchAuthority} from "./darwin-attempt-owner-selection.js";
 import type {FinalHostLaunch} from "./host-launch-finalization.js";
 import {cutoffDarwinNativeExecution, disposeDarwinNativeExecution,
   settleDarwinNativeExecutionLaunchRoute, settleDarwinNativeExecutionPrivateMaterial} from "./darwin-attempt-owner-selection.js";

@@ -25,7 +25,7 @@ import type {
   VerifiedLaunchDescriptors,
   WorkspaceObservation,
 } from "./host-custody-launch.js";
-import type { NodeCustodiedSdkProcess, SpawnStatus } from "./host-custody-process-tree.js";
+import type { SpawnStatus } from "./host-custody-process-tree.js";
 import type { StableProcessGroupGuardian } from "./host-custody-stable-guardian.js";
 import type { OperationResidueAuthority, OperationResidueAuthorityFactory } from "./host-custody-cgroup-v2.js";
 import type { HostStderrIngress, HostStdoutIngress } from "./host-custody-stdio.js";
