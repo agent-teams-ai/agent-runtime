@@ -46,7 +46,7 @@ export async function createDarwinLiveRuntime(activation) {
     const artifacts = await createNodeContainedTurnArtifacts({...owned.artifacts, workspaceOwner});
     cleanup.push(artifacts.dispose);
     if (typeof owned.createPostClaimPreparation !== "function") {throw refused();}
-    const preparation = owned.createPostClaimPreparation(native.httpLaunchAuthority);
+    const preparation = await owned.createPostClaimPreparation(native.selection, native.httpLaunchAuthority);
     deployment = createDarwinContainedTurnDeployment({...owned.deployment, preparation,
       providerAccess: owned.providerAccess, rendering: owned.rendering, pool: owned.pool});
     cleanup.push(deployment.dispose);
@@ -67,7 +67,7 @@ export async function createDarwinLiveRuntime(activation) {
         disposed = true; await sealAdmission();
         if (result?.uncertainty !== undefined && !reconciled) {reconciled = true; await owned.reconciliation.retain(result);}
         try {await host.dispose();} finally {
-          for (const action of cleanup.reverse()) {try {await action?.();} catch (error) {owned.cleanup.recordFailure(error);}}
+          for (const action of cleanup.toReversed()) {try {await action?.();} catch (error) {owned.cleanup.recordFailure(error);}}
         }
         return owned.cleanup.readback();
       },
@@ -75,7 +75,7 @@ export async function createDarwinLiveRuntime(activation) {
   } catch (error) {
     sealed = true;
     try {await owned.sealAdmission?.();} catch (cleanupError) {owned.cleanup.recordFailure(cleanupError);}
-    for (const action of cleanup.reverse()) {try {await action?.();} catch (cleanupError) {owned.cleanup.recordFailure(cleanupError);}}
+    for (const action of cleanup.toReversed()) {try {await action?.();} catch (cleanupError) {owned.cleanup.recordFailure(cleanupError);}}
     throw error;
   }
 }
