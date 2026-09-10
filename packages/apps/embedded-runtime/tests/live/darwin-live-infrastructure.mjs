@@ -204,3 +204,29 @@ export function createDarwinLaunchRecords(activation, nativeLaunch, withCredenti
       tmpDir: nativeLaunch.tmpDir});
   }});
 }
+
+/** Fixed one-operation namespace. Dynamic proof/cancellation identities remain
+ * deterministic per domain and seed; they never stand in for retained proofs. */
+export function createDarwinOperationStore(activation, pool, agentExecution) {
+  const config = plainJson(activation.infrastructure), turn = plainJson(activation.turn);
+  const fixed = {operation: turn.operationId, attempt: turn.attemptId, effect: turn.effectId,
+    execution_generation: turn.executionGenerationId};
+  if (Object.values(fixed).some(value => typeof value !== "string" || !value.length)) {throw refused("operation identities missing");}
+  const store = new agentExecution.PostgresContainedTurnOperationStore({pool,
+    intentAuthority: config.host.intentAuthority,
+    identities: Object.freeze({nextId(kind, seed = kind) {
+      if (Object.hasOwn(fixed, kind)) {return fixed[kind];}
+      if (!["cancellation_command", "cleanup", "custody", "operation_authority", "proof", "writer_fence"].includes(kind)) {
+        throw refused("unknown identity domain");
+      }
+      return `${kind.replaceAll("_", "-")}:sha256:${hash(JSON.stringify([turn.operationId, kind, seed]))}`;
+    }}),
+  });
+  return Object.freeze(Object.fromEntries([
+    "accept", "appendOutput", "claimPreparedDispatch", "commit", "identifyAcceptance",
+    "listDispatchPreparations", "preventIntent", "prepareCancellation", "prepareDispatch",
+    "proofsForAcceptedEffect", "proofsForPrevention", "proofsForProcessNoStart",
+    "proveDispatchPreparationClosure", "read", "recordDispatchPreparationCleanup",
+    "requestCancellation", "retireDispatchPreparation", "terminalProof",
+  ].map(name => [name, store[name].bind(store)])));
+}

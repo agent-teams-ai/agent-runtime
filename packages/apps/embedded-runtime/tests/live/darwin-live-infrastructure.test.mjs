@@ -131,3 +131,20 @@ test("database identity mismatch prevents all migrations and awaits close", asyn
   {Pool, agentExecution: {async applyContainedTurnPostgresSchema() {migrated = true;}}}), /database identity differs/);
   assert.equal(migrated, false); assert.equal(closed, true);
 });
+
+test("operation store binds real methods and fixed one-attempt identities", async () => {
+  const {createDarwinOperationStore} = await import("./darwin-live-infrastructure.mjs");
+  let captured;
+  const methods = ["accept", "appendOutput", "claimPreparedDispatch", "commit", "identifyAcceptance",
+    "listDispatchPreparations", "preventIntent", "prepareCancellation", "prepareDispatch",
+    "proofsForAcceptedEffect", "proofsForPrevention", "proofsForProcessNoStart", "proveDispatchPreparationClosure",
+    "read", "recordDispatchPreparationCleanup", "requestCancellation", "retireDispatchPreparation", "terminalProof"];
+  class Store {constructor(options) {captured = options; for (const name of methods) {this[name] = function() {assert.equal(this instanceof Store, true); return name;};}}}
+  const store = createDarwinOperationStore({turn: {operationId: "op", attemptId: "attempt", effectId: "effect", executionGenerationId: "generation"},
+    infrastructure: {host: {intentAuthority: {audience: "test"}}}}, {}, {PostgresContainedTurnOperationStore: Store});
+  assert.equal(store.read(), "read");
+  assert.equal(captured.identities.nextId("operation"), "op");
+  assert.equal(captured.identities.nextId("proof", "a"), captured.identities.nextId("proof", "a"));
+  assert.notEqual(captured.identities.nextId("proof", "a"), captured.identities.nextId("proof", "b"));
+  assert.throws(() => captured.identities.nextId("unknown"), /identity domain/);
+});
