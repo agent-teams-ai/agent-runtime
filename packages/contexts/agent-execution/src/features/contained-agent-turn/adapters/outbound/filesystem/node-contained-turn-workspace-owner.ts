@@ -188,6 +188,8 @@ export const createNodeContainedTurnWorkspaceOwner = async (
 ): Promise<NodeContainedTurnWorkspaceOwner> => {
   const options = Object.freeze({ ...configuration,
     ...(configuration.limits === undefined ? {} : { limits: Object.freeze({ ...configuration.limits }) }) });
+  const darwinWorkspace = options.selectedNativeWorkspace === undefined ? undefined :
+    await import("./darwin-attempt-workspace-backend.js");
   const retention = createWorkspaceCapabilityRetention();
   const nativeState = createNativeOwnerState(options);
   let backend: Awaited<ReturnType<typeof createNodeContainedTurnWorkspaceOwnerBackend>>;
@@ -307,6 +309,11 @@ export const createNodeContainedTurnWorkspaceOwner = async (
   const dispose = (): Promise<void> => {
     if (disposal !== undefined) {return disposal;}
     disposed = true;
+    // Revoke admission and outstanding borrows synchronously; already acquired
+    // lease cleanup remains owned by the native backend.
+    if (darwinWorkspace !== undefined && options.selectedNativeWorkspace !== undefined) {
+      darwinWorkspace.revokeDarwinNativeWorkspaceSelection(options.selectedNativeWorkspace);
+    }
     const launches = [...activeLaunches];
     disposal = (async () => {
       let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -333,11 +340,14 @@ export const createNodeContainedTurnWorkspaceOwner = async (
       roots, results, assertOpen, operationId => ownedOperations.has(operationId),
     ),
     consumeNative: (input, consume) => {
-      if (nativeState.native === undefined || options.selectedNativeWorkspace === undefined) {
+      if (nativeState.native === undefined || options.selectedNativeWorkspace === undefined ||
+        darwinWorkspace === undefined) {
         return Promise.reject(new Error("contained turn workspace owner has no selected native authority"));
       }
       const selection = options.selectedNativeWorkspace;
-      return consumeLaunch(input, () => consume(selection));
+      const ids = Object.freeze({ ...input });
+      return consumeLaunch(ids, () =>
+        darwinWorkspace.withDarwinNativeWorkspaceSelection(selection, ids, consume));
     },
   }));
   return owner;

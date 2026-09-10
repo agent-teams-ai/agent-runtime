@@ -77,7 +77,8 @@ const assertReceiptCustody = async (input: {
   await assertDirectoryIdentityAt(input.closed, input.name, input.rootIdentity);
 };
 
-/** Read-only replay of the durable closure owner facts used by kernel recovery. */
+/** Repeatable durable recovery with a fresh native closed-inode query.
+ * Post-release readClosed belongs to the later native release/readback lifecycle. */
 export const queryContainedTurnWorkspaceClosure = async (
   input: Parameters<ContainedTurnWorkspacePort["close"]>[0],
   context: ContainedTurnWorkspaceContext,
@@ -120,8 +121,8 @@ export const queryContainedTurnWorkspaceClosure = async (
       await assertReceiptCustody({
         active, cleanup, closed, frozen, name, rootIdentity: creation.rootIdentity,
       });
-    } else if (!sameWorkspaceClosureRecord(await context.nativeWorkspace.readClosed(), existing)) {
-      throw new Error("contained turn native closed readback conflicts with genuine closure");
+    } else if (!sameWorkspaceClosureRecord(await context.nativeWorkspace.queryClosed(), existing)) {
+      throw new Error("contained turn native closed observation conflicts with genuine closure");
     }
     return Object.freeze({ receiptRef: existing.receiptRef });
   } finally {await closeWorkspaceHandles(handles);}
@@ -225,12 +226,12 @@ export const closeContainedTurnWorkspace = async (
       if (context.nativeWorkspace === undefined) {
         await assertReceiptCustody({ active, cleanup, closed, frozen, name, rootIdentity: creation.rootIdentity });
       } else {
-        const observed = await context.nativeWorkspace.readClosed();
+        const observed = await context.nativeWorkspace.queryClosed();
         const recorded = parseWorkspaceClosureRecord(await readStableFileAt(
           receipts, recordName, workspaceRecordBytes,
         ));
         if (!sameWorkspaceClosureRecord(observed, recorded)) {
-          throw new Error("contained turn native closed readback conflicts with genuine closure");
+          throw new Error("contained turn native closed observation conflicts with genuine closure");
         }
       }
     }
