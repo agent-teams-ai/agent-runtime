@@ -162,3 +162,32 @@ export async function acquireDarwinPersistenceOwners(activation, dependencies) {
     throw error;
   }
 }
+
+/** Keep sensitive inventory in the launch owner's memory only. No activation,
+ * retained JSON, diagnostic, or verification projection receives these bytes. */
+export function createDarwinLaunchRecords(activation, nativeLaunch, withCredentialOutputInventory) {
+  const turn = plainJson(activation.turn);
+  if (typeof withCredentialOutputInventory !== "function" || !nativeLaunch?.boundary ||
+      !isAbsolute(nativeLaunch.privateRootPath ?? "") || !isAbsolute(nativeLaunch.tmpDir ?? "")) {
+    throw refused("launch owner input incomplete");
+  }
+  return Object.freeze({async resolve(input) {
+    if (input.operationId !== turn.operationId || input.attemptId !== turn.attemptId || input.effectId !== turn.effectId ||
+        input.providerBinding?.provider !== "codex") {return undefined;}
+    let captured;
+    withCredentialOutputInventory(input.operationId, inventory => {
+      if (inventory.credentialBindingDigest !== input.credentialBindingDigest ||
+          inventory.credentialGeneration !== input.credentialGeneration ||
+          !Array.isArray(inventory.sensitiveOutputTokens) || !inventory.sensitiveOutputTokens.length ||
+          inventory.sensitiveOutputTokens.some(value => typeof value !== "string" || !value.length)) {return false;}
+      captured = Object.freeze({credentialBindingDigest: inventory.credentialBindingDigest,
+        credentialGeneration: inventory.credentialGeneration,
+        sensitiveOutputTokens: Object.freeze([...inventory.sensitiveOutputTokens])});
+      return true;
+    });
+    if (!captured) {return undefined;}
+    return Object.freeze({boundary: nativeLaunch.boundary, credentialOutputInventory: captured,
+      executablePath: activation.codex.path, privateRootPath: nativeLaunch.privateRootPath,
+      tmpDir: nativeLaunch.tmpDir});
+  }});
+}

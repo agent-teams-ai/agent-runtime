@@ -88,3 +88,23 @@ test("persistence uses public migrations and closes owners and pool after constr
     database: {connection: {database: "ar69_test_lifecycle", host: "127.0.0.1"}}}}, dependencies), /migration refused/);
   assert.deepEqual(events, ["ae-migrate", "http-migrate", "rs-migrate", "decisions-close", "rs-close", "pool-end"]);
 });
+
+test("launch records retain PA credential inventory without expecting a fabricated return boolean", async () => {
+  const {createDarwinLaunchRecords} = await import("./darwin-live-infrastructure.mjs");
+  const activation = {turn: {operationId: "op", attemptId: "attempt", effectId: "effect"}, codex: {path: "/test/codex"}};
+  const native = {boundary: {}, privateRootPath: "/test/private", tmpDir: "/test/tmp"};
+  let count = 0;
+  const owner = createDarwinLaunchRecords(activation, native, (operation, consume) => {
+    count += 1; assert.equal(operation, "op");
+    assert.equal(consume({credentialBindingDigest: "digest", credentialGeneration: 1, sensitiveOutputTokens: ["synthetic-secret"]}), true);
+    // Accepted PA returns void after verifying the callback result.
+  });
+  const input = {operationId: "op", attemptId: "attempt", effectId: "effect", providerBinding: {provider: "codex"},
+    credentialBindingDigest: "digest", credentialGeneration: 1};
+  assert.equal(await owner.resolve({...input, operationId: "foreign"}), undefined);
+  assert.equal(count, 0);
+  const record = await owner.resolve(input);
+  assert.equal(record.boundary, native.boundary);
+  assert.deepEqual(record.credentialOutputInventory.sensitiveOutputTokens, ["synthetic-secret"]);
+  assert.equal(count, 1);
+});
