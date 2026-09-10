@@ -165,7 +165,9 @@ test("native input pump preserves partial writes, explicit EOF and timeout uncer
   const temporary = mkdtempSync(join(tmpdir(), "darwin-input-"));
   try {
     const child = readFileSync(join(native, "darwin-attempt-owner-child.c"), "utf8");
+    const zero = child.slice(child.indexOf("static void secure_zero("), child.indexOf("static uint64_t now_ms("));
     const functions = child.slice(child.indexOf("static void feed_input("), child.indexOf("static void drain("));
+    assert.ok(zero.includes("volatile uint8_t *bytes=buffer"));
     assert.ok(functions.includes("static int capture_input("));
     const source = join(temporary, "input.c"), executable = join(temporary, "input");
     writeFileSync(source, `
@@ -177,7 +179,7 @@ test("native input pump preserves partial writes, explicit EOF and timeout uncer
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
-#define explicit_bzero(p,n) memset(p,0,n)
+${zero}
 typedef struct { ae_state state; } custody;
 typedef struct { custody custody; size_t input_length; uint8_t *input_bytes; } ae_bootstrap;
 typedef struct {

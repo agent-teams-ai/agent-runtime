@@ -38,6 +38,10 @@ typedef struct {
   uint8_t write_bytes[AE_STREAM_CHUNK_BYTES];
   uint8_t challenge[AE_PREEXEC_BYTES];
 } owner;
+static void secure_zero(void *buffer,size_t length) {
+  volatile uint8_t *bytes=buffer;
+  while (length) { *bytes++=0; length--; }
+}
 static uint64_t now_ms(void) {
   struct timespec t;
   if (clock_gettime(CLOCK_MONOTONIC,&t)!=0) return 0;
@@ -118,7 +122,7 @@ static int event(owner *o,uint32_t kind,uint32_t command,ae_result result,const 
   return 1;
 }
 static void quarantine(owner *o) {
-  o->boot->final_ready=0; explicit_bzero(o->boot->final_data,sizeof(o->boot->final_data));
+  o->boot->final_ready=0; secure_zero(o->boot->final_data,sizeof(o->boot->final_data));
   (void)ae_channel_lost(&o->boot->custody.state,ae_native_persist,&o->boot->custody);
   /* Direct wait/stop ownership is held independently from journal truth. A
    * persistence failure must not erase an unreaped child or redirect its PID. */
@@ -279,7 +283,7 @@ static void feed_input(owner *o) {
   if (b->custody.state.cutoff || o->reaped) {
     if (!close_one(&o->input)) { o->stream_unknown=1; quarantine(o); }
     if (o->input_command) { o->stream_unknown=1; quarantine(o); }
-    explicit_bzero(o->write_bytes,sizeof(o->write_bytes));
+    secure_zero(o->write_bytes,sizeof(o->write_bytes));
     return;
   }
   uint64_t now=now_ms();
@@ -309,7 +313,7 @@ static void feed_input(owner *o) {
   ae_state next=b->custody.state;
   if (next.pending_effect!=command) { quarantine(o); return; }
   next.pending_effect=0; next.pending_argument=0;
-  explicit_bzero(o->write_bytes,sizeof(o->write_bytes));
+  secure_zero(o->write_bytes,sizeof(o->write_bytes));
   o->write_used=0; o->write_length=0; o->input_command=0;
   if (ae_commit(&b->custody.state,&next,ae_native_persist,&b->custody)!=AE_ACCEPTED ||
       !event(o,AE_EVENT_STATUS,command,AE_ACCEPTED,NULL,0,NULL,0)) quarantine(o);
@@ -547,7 +551,7 @@ static int material_effect(owner *o,uint32_t kind,const uint8_t *payload,size_t 
 static int dispatch(owner *o,const ae_request *request,const uint8_t *payload,size_t size) {
   ae_custody *c=&o->boot->custody;
   if (request->kind==AE_CUTOFF) {
-    o->boot->final_ready=0; explicit_bzero(o->boot->final_data,sizeof(o->boot->final_data));
+    o->boot->final_ready=0; secure_zero(o->boot->final_data,sizeof(o->boot->final_data));
   }
   if (!ae_host_identity(o->boot)) { quarantine(o); return 0; }
   if (request->kind==AE_START_ONCE && (!c->materialization_complete || !c->creation_committed ||
@@ -617,7 +621,7 @@ static int read_closed_transaction(owner *o,ae_custody *reader,const uint8_t tic
       uint8_t end[24]={0}; put32(end,(uint32_t)root.st_mode);
       put64(end+8,(uint64_t)root.st_ctimespec.tv_sec*1000000000u+(uint64_t)root.st_ctimespec.tv_nsec);
       put64(end+16,(uint64_t)root.st_mtimespec.tv_sec*1000000000u+(uint64_t)root.st_mtimespec.tv_nsec);
-      if (kind==AE_QUERY_CLOSED_WORKSPACE && !ae_native_query_closed(c)) return 0;
+      if (!ae_native_read_closed(reader)) return 0;
       ok=event(o,AE_EVENT_TREE_END,0,AE_ACCEPTED,NULL,0,end,sizeof(end));
     }
     if (ok) ok=ae_native_read_closed(reader);
@@ -684,7 +688,7 @@ int ae_native_owner_loop(ae_bootstrap *b) {
     if (s->phase==AE_QUARANTINED && (!o.born || o.reaped || o.wait_lost ||
         (o.term_sent && now-o.term_at>b->manifest.term_ms))) return 75;
     if (s->phase==AE_DISPOSED) {
-      b->final_ready=0; explicit_bzero(b->final_data,sizeof(b->final_data));
+      b->final_ready=0; secure_zero(b->final_data,sizeof(b->final_data));
       uint8_t ticket[AE_CLOSED_RECORD_BYTES]; int ok=1;
       ae_custody reader=b->custody;
       reader.workspace=fcntl(b->custody.workspace,F_DUPFD_CLOEXEC,0);
@@ -727,7 +731,7 @@ int ae_native_owner_loop(ae_bootstrap *b) {
       ssize_t extra=recv(b->channel,&queued,1,MSG_PEEK|MSG_DONTWAIT);
       if (extra>=0 || (errno!=EAGAIN && errno!=EWOULDBLOCK)) { o.channel_lost=1; used=0; continue; }
       if (!dispatch(&o,&request,payload,size)) o.channel_lost=1;
-      explicit_bzero(payload,sizeof(payload));
+      secure_zero(payload,sizeof(payload));
       used=0; partial_since=0;
     }
   }

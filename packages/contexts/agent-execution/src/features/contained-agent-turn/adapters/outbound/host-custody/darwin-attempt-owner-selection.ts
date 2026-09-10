@@ -39,11 +39,11 @@ const borrows = new WeakMap<DarwinNativeWorkspaceSelection, NativeBorrow>();
 function assertOwnerCurrent(issued: SelectionRecord, borrow?: NativeBorrow): void {
   if (issued.revoked || (borrow && !borrow.active)) {throw new Error("native admission revoked or borrow expired");}
 }
-function selectionAuthority(selection: DarwinNativeWorkspaceSelection) {
+function selectionAuthority(selection: DarwinNativeWorkspaceSelection): {issued: SelectionRecord; borrow?: NativeBorrow} {
   const borrow = borrows.get(selection), issued = selections.get(selection) ?? borrow?.issued;
   if (!issued) {throw new Error("foreign native workspace selection");}
   assertOwnerCurrent(issued, borrow);
-  return {issued, borrow};
+  return borrow ? {issued, borrow} : {issued};
 }
 export async function withDarwinNativeWorkspaceSelection<Result>(
   selection: DarwinNativeWorkspaceSelection,
@@ -201,11 +201,11 @@ type NativeLaunchFacts = import("./darwin-attempt-owner-protocol.js").DarwinNati
 const observations = new WeakMap<DarwinNativeLaunchObservation, Readonly<{ bridge: Bridge; issued: SelectionRecord; borrow?: NativeBorrow; facts: NativeLaunchFacts; generation: number }>>();
 
 type NativeAuthority = DarwinNativeWorkspaceSelection | DarwinNativeExecutionLease;
-function retainedAuthority(authority: NativeAuthority) {
+function retainedAuthority(authority: NativeAuthority): {issued: SelectionRecord; borrow?: NativeBorrow} {
   const lease = leases.get(authority as DarwinNativeExecutionLease);
   if (!lease) {return selectionAuthority(authority as DarwinNativeWorkspaceSelection);}
   assertDarwinNativeExecutionLeaseCurrent(authority as DarwinNativeExecutionLease);
-  return {issued: lease.issued, borrow: undefined};
+  return {issued: lease.issued};
 }
 export async function readDarwinNativeLaunchObservation(selection: DarwinNativeWorkspaceSelection): Promise<DarwinNativeLaunchObservation>;
 export async function readDarwinNativeLaunchObservation(lease: DarwinNativeExecutionLease): Promise<DarwinNativeLaunchObservation>;
@@ -215,7 +215,9 @@ export async function readDarwinNativeLaunchObservation(authority: NativeAuthori
   assertOwnerCurrent(issued, borrow);
   issued.bridge.assertObservationCurrent(captured.generation);
   const observation = Object.freeze(Object.create(null)) as DarwinNativeLaunchObservation;
-  observations.set(observation, Object.freeze({bridge: issued.bridge, issued, borrow, ...captured}));
+  observations.set(observation, Object.freeze(borrow
+    ? {bridge: issued.bridge, issued, borrow, ...captured}
+    : {bridge: issued.bridge, issued, ...captured}));
   if (!borrow) {issued.observation = observation;}
   return observation;
 }
@@ -252,7 +254,8 @@ export async function installDarwinNativeCodexMaterial(authority: NativeAuthorit
   assertOwnerCurrent(issued, borrow);
   issued.bridge.assertObservationCurrent(captured.generation);
   const observation = Object.freeze(Object.create(null)) as DarwinNativeLaunchObservation;
-  observations.set(observation, Object.freeze({bridge: issued.bridge, issued, borrow, facts: captured.facts.observation, generation: captured.generation}));
+  const retainedObservation = {bridge: issued.bridge, issued, facts: captured.facts.observation, generation: captured.generation};
+  observations.set(observation, Object.freeze(borrow ? {...retainedObservation, borrow} : retainedObservation));
   const material = Object.freeze(Object.create(null)) as DarwinNativeCodexMaterial;
   materials.set(material, Object.freeze({observation, config: captured.facts.config, catalog: captured.facts.catalog,
     installation: captured.facts.installation, installationId: captured.installationId}));
@@ -294,7 +297,8 @@ export function reserveDarwinNativeExecution(selection: DarwinNativeWorkspaceSel
   const binding = issued.bridge.binding();
   const original = observations.get(issued.observation)!;
   const observation = Object.freeze(Object.create(null)) as DarwinNativeLaunchObservation;
-  observations.set(observation, Object.freeze({...original, borrow: undefined}));
+  observations.set(observation, Object.freeze({bridge: original.bridge, issued: original.issued,
+    facts: original.facts, generation: original.generation}));
   const facts = Object.freeze({prepared: issued.prepared, custodyRef: binding.binding,
     hostGenerationBinding: issued.bridge.capturedManifest().subarray(144, 176).toString("hex"), observation});
   leases.set(lease, Object.freeze({issued, facts}));
