@@ -57,7 +57,8 @@ export const createSyntheticClaudeOwners = (systemInstallations = false) => {
     },
   });
   const configuration = createClaudeCodeConfigurationInspectionFeature({
-    digest: createNodeClaudeCodeConfigurationDigest(), parser: createStrictClaudeCodeJsonParser(),
+    digest: createNodeClaudeCodeConfigurationDigest(),
+    parser: createStrictClaudeCodeJsonParser(),
     semanticClassifier: createClaudeCodeConfigurationSemanticClassifierV2(),
     sourceIdentityKey: new Uint8Array(32).fill(7),
     sourceReader: createClaudeCodeConfigurationSourceReaderAdapter(createNodeConfigurationSourceReader()),

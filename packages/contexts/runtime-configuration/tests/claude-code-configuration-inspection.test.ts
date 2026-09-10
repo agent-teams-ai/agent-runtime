@@ -1,4 +1,3 @@
-import { createNodeConfigurationDigest } from "../dist/features/claude-code-configuration-inspection/adapters/outbound/node-configuration-digest.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -12,7 +11,9 @@ import {
 import {
   claudeCodeConfigurationSemanticClassifierContract,
   createClaudeCodeConfigurationInspectionFeature,
-  createClaudeCodeConfigurationSemanticClassifierV2, createStrictClaudeCodeJsonParser,
+  createClaudeCodeConfigurationSemanticClassifierV2,
+  createNodeClaudeCodeConfigurationDigest,
+  createStrictClaudeCodeJsonParser,
 } from "../dist/composition.js";
 
 const encoder = new TextEncoder();
@@ -55,7 +56,7 @@ const inspector = (reader: ClaudeCodeConfigurationSourceReader, overrides: Recor
   createClaudeCodeConfigurationInspectionFeature({
     parser: createStrictClaudeCodeJsonParser(),
     semanticClassifier: createClaudeCodeConfigurationSemanticClassifierV2(),
-    digest: createNodeConfigurationDigest(),
+    digest: createNodeClaudeCodeConfigurationDigest(),
     sourceIdentityKey: identityKey, sourceReader: reader, ...overrides,
   } as Parameters<typeof createClaudeCodeConfigurationInspectionFeature>[0]);
 
@@ -382,4 +383,56 @@ test("returns detached deeply frozen results and honors cancellation without pro
   assert.equal(Object.isFrozen(result.observedPortableIntent[0]), true);
   const cancellation = new AbortController(); cancellation.abort(new Error("cancelled"));
   await assert.rejects(configured.execute(input([source("one")]), { signal: cancellation.signal }));
+});
+
+test("every Claude Code identifier comes from the digest port with its exact preimage", async () => {
+  const hmacCalls: { key: string; preimage: string }[] = [];
+  const sha256Calls: string[] = [];
+  const recording = Object.freeze({
+    hmacSha256Hex: (key: Uint8Array, preimage: string) => {
+      hmacCalls.push({ key: Buffer.from(key).toString("hex"), preimage });
+      return String(hmacCalls.length).repeat(64);
+    },
+    sha256Hex: (preimage: string) => {
+      sha256Calls.push(preimage);
+      return "f".repeat(64);
+    },
+  });
+  const configured = inspector(readerFor({ one: '{"model":"sonnet"}' }), { digest: recording });
+  const result = await configured.execute(input([source("one")]));
+
+  // Identifier stability is part of the observable contract, so the preimages are
+  // restated here independently instead of only their shape being matched: a
+  // reordered key, an extra field or a different serializer would silently change
+  // every reference this feature ever issued.
+  const expectedCollector = {
+    bundleId: "synthetic-bundle-v2", id: "synthetic-collector",
+    observationEpoch: "epoch-1", platform: "darwin", version: "2",
+  };
+  const expectedTopology = {
+    claim: "observed-files-only",
+    collector: expectedCollector,
+    contract: "claude-code-observed-source-plan/v1",
+    roots: [{ absolutePath: "/synthetic", canonicalPath: "/synthetic", rootId: "synthetic-root" }],
+    sources: [{
+      access: "authorized", absolutePath: "/synthetic/one.json", canonicalPath: "/synthetic/one.json",
+      custodyRootRef: "synthetic-root", locationClaims: [], observationEpoch: "epoch-1",
+      role: "user", selectionBasis: "caller-explicit", sourceId: "one", trust: "user",
+    }],
+  };
+  const key = Buffer.from(identityKey).toString("hex");
+  assert.deepEqual(hmacCalls.map(call => call.key), [key, key, key, key]);
+  assert.deepEqual(hmacCalls.map(call => call.preimage), [
+    // The invalid-plan reference is derived before the plan is judged, so a valid
+    // plan still spends one call on it.
+    JSON.stringify(["scope-a", "invalid"]),
+    JSON.stringify(expectedCollector),
+    JSON.stringify(expectedTopology),
+    JSON.stringify(["scope-a", `claude-code-topology/v2:hmac-sha256:${"3".repeat(64)}`, "one"]),
+  ]);
+  assert.equal(result.sourceModel.collectorRef, `claude-code-collector/v2:hmac-sha256:${"2".repeat(64)}`);
+  assert.equal(result.sourceModel.topologyRef, `claude-code-topology/v2:hmac-sha256:${"3".repeat(64)}`);
+  assert.equal(sha256Calls.length, 1);
+  assert.match(sha256Calls[0] ?? "", /"digestSchema":"claude-code-configuration-semantic-digest\/v2"/u);
+  assert.equal(result.sources[0]?.semanticDigest, `claude-code-configuration-semantic-digest/v2:sha256:${"f".repeat(64)}`);
 });

@@ -1,4 +1,3 @@
-import { createNodeConfigurationDigest } from "../dist/features/codex-configuration-inspection/adapters/outbound/node-configuration-digest.js";
 import assert from "node:assert/strict";
 import { execFile as execFileCallback } from "node:child_process";
 import { mkdir, mkdtemp, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
@@ -11,6 +10,7 @@ import {
   codexConfigurationSemanticClassifierContract,
   createCodexConfigurationInspectionFeature,
   createCodexConfigurationSemanticClassifierV1,
+  createNodeCodexConfigurationDigest,
   createNodeConfigurationSourceReader,
   createSmolTomlParser,
 } from "../dist/composition.js";
@@ -21,7 +21,7 @@ const createFeature = (maximumBytes = 128 * 1024) =>
   createCodexConfigurationInspectionFeature({
     parser: createSmolTomlParser(),
     semanticClassifier: createCodexConfigurationSemanticClassifierV1(),
-    digest: createNodeConfigurationDigest(),
+    digest: createNodeCodexConfigurationDigest(),
     sourceIdentityKey: Buffer.alloc(32, 7),
     sourceReader: createNodeConfigurationSourceReader(maximumBytes),
   });
@@ -55,7 +55,7 @@ test("uses the injected versioned semantic-classifier capability", async () => {
       },
       supportsDialect: selectedDialect => selectedDialect === "codex-0.134",
     },
-    digest: createNodeConfigurationDigest(),
+    digest: createNodeCodexConfigurationDigest(),
     sourceIdentityKey: Buffer.alloc(32, 7),
     sourceReader: {
       async read() {
@@ -465,7 +465,7 @@ test("rejects parser documents with inherited object properties", async () => {
       },
     },
     semanticClassifier: createCodexConfigurationSemanticClassifierV1(),
-    digest: createNodeConfigurationDigest(),
+    digest: createNodeCodexConfigurationDigest(),
     sourceIdentityKey: Buffer.alloc(32, 7),
     sourceReader: {
       async read() {

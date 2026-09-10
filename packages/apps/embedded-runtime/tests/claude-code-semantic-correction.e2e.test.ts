@@ -117,7 +117,8 @@ const createFourOwnerDependencies = () => {
     },
   });
   const configuration = createClaudeCodeConfigurationInspectionFeature({
-    digest: createNodeClaudeCodeConfigurationDigest(), parser: createStrictClaudeCodeJsonParser(),
+    digest: createNodeClaudeCodeConfigurationDigest(),
+    parser: createStrictClaudeCodeJsonParser(),
     semanticClassifier: createClaudeCodeConfigurationSemanticClassifierV2(),
     sourceIdentityKey: new Uint8Array(32).fill(11),
     sourceReader: createClaudeCodeConfigurationSourceReaderAdapter(

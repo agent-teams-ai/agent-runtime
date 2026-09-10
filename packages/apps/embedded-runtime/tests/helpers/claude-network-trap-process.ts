@@ -118,13 +118,15 @@ try {
 
   const sourceReader = configurationComposition.createNodeConfigurationSourceReader();
   const codexConfiguration = configurationComposition.createCodexConfigurationInspectionFeature({
-    digest: configurationComposition.createNodeCodexConfigurationDigest(), parser: configurationComposition.createSmolTomlParser(),
+    digest: configurationComposition.createNodeCodexConfigurationDigest(),
+    parser: configurationComposition.createSmolTomlParser(),
     semanticClassifier: configurationComposition.createCodexConfigurationSemanticClassifierV1(),
     sourceIdentityKey: new Uint8Array(32).fill(3),
     sourceReader,
   });
   const claudeConfiguration = configurationComposition.createClaudeCodeConfigurationInspectionFeature({
-    digest: configurationComposition.createNodeClaudeCodeConfigurationDigest(), parser: configurationComposition.createStrictClaudeCodeJsonParser(),
+    digest: configurationComposition.createNodeClaudeCodeConfigurationDigest(),
+    parser: configurationComposition.createStrictClaudeCodeJsonParser(),
     semanticClassifier: configurationComposition.createClaudeCodeConfigurationSemanticClassifierV2(),
     sourceIdentityKey: new Uint8Array(32).fill(5),
     sourceReader: configurationComposition.createClaudeCodeConfigurationSourceReaderAdapter(sourceReader),

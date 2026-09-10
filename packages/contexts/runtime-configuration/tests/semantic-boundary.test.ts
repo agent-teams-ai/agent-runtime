@@ -1,4 +1,3 @@
-import { createNodeConfigurationDigest } from "../dist/features/codex-configuration-inspection/adapters/outbound/node-configuration-digest.js";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -7,6 +6,7 @@ import {
   codexConfigurationSemanticClassifierContract,
   createCodexConfigurationInspectionFeature,
   createCodexConfigurationSemanticClassifierV1,
+  createNodeCodexConfigurationDigest,
   createSmolTomlParser,
 } from "../dist/composition.js";
 
@@ -44,7 +44,7 @@ const inspectWithRevision = async (
       },
       supportsDialect: () => true,
     },
-    digest: createNodeConfigurationDigest(),
+    digest: createNodeCodexConfigurationDigest(),
     sourceIdentityKey: Buffer.alloc(32, 7),
     sourceReader: syntheticReader,
   });
@@ -79,7 +79,7 @@ test("rejects parser accessors without invoking them", async () => {
       },
       supportsDialect: () => true,
     },
-    digest: createNodeConfigurationDigest(),
+    digest: createNodeCodexConfigurationDigest(),
     sourceIdentityKey: Buffer.alloc(32, 7),
     sourceReader: syntheticReader,
   });
@@ -113,7 +113,7 @@ test("rejects secret-shaped classifier output without exposing it", async () => 
       },
       supportsDialect: () => true,
     },
-    digest: createNodeConfigurationDigest(),
+    digest: createNodeCodexConfigurationDigest(),
     sourceIdentityKey: Buffer.alloc(32, 7),
     sourceReader: syntheticReader,
   });
@@ -157,7 +157,7 @@ test("rejects non-record parser roots while keeping nested opaque scalars inert"
         },
         supportsDialect: () => true,
       },
-      digest: createNodeConfigurationDigest(),
+      digest: createNodeCodexConfigurationDigest(),
       sourceIdentityKey: Buffer.alloc(32, 7),
       sourceReader: syntheticReader,
     });
@@ -181,7 +181,7 @@ test("rejects non-record parser roots while keeping nested opaque scalars inert"
       }),
     },
     semanticClassifier: createCodexConfigurationSemanticClassifierV1(),
-    digest: createNodeConfigurationDigest(),
+    digest: createNodeCodexConfigurationDigest(),
     sourceIdentityKey: Buffer.alloc(32, 7),
     sourceReader: syntheticReader,
   });
@@ -200,7 +200,7 @@ test("keeps valid TOML opaque scalars and repeated diagnostics observable", asyn
   const feature = createCodexConfigurationInspectionFeature({
     parser: createSmolTomlParser(),
     semanticClassifier: createCodexConfigurationSemanticClassifierV1(),
-    digest: createNodeConfigurationDigest(),
+    digest: createNodeCodexConfigurationDigest(),
     sourceIdentityKey: Buffer.alloc(32, 7),
     sourceReader: {
       async read() {
@@ -242,7 +242,7 @@ test("keeps the parser and classifier diagnostic budgets aligned", async () => {
   const feature = createCodexConfigurationInspectionFeature({
     parser: { parse: () => ({ document, kind: "parsed" as const }) },
     semanticClassifier: createCodexConfigurationSemanticClassifierV1(),
-    digest: createNodeConfigurationDigest(),
+    digest: createNodeCodexConfigurationDigest(),
     sourceIdentityKey: Buffer.alloc(32, 7),
     sourceReader: syntheticReader,
   });

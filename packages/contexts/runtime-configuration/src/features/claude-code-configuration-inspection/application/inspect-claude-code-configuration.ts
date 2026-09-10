@@ -1,4 +1,3 @@
-
 import {
   CLAUDE_CODE_CONFIGURATION_BUDGETS, CLAUDE_CODE_OBSERVED_SOURCE_PLAN_CONTRACT,
   CLAUDE_CODE_SETTINGS_DIALECT, type ClaudeCodeConfigurationDiagnostic,
@@ -478,7 +477,8 @@ export const createInspectClaudeCodeConfiguration = (dependencies: Dependencies)
       options?.signal?.throwIfAborted();
       if (!identifier.test(input.identityScope)) {throw new TypeError("identityScope must be a stable identifier");}
       const planDiagnostic = validatePlan(input.sourcePlan);
-      const invalidTopologyRef = hmac(dependencies.digest, key, "claude-code-topology/v2", [input.identityScope, planDiagnostic ?? "invalid"]);
+      const invalidTopologyRef = hmac(dependencies.digest, key, "claude-code-topology/v2",
+        [input.identityScope, planDiagnostic ?? "invalid"]);
       if (planDiagnostic !== undefined) {
         const invalidCollectorRef = hmac(dependencies.digest, key, "claude-code-collector/v2", [input.identityScope, "unobserved"]);
         return buildResult({
