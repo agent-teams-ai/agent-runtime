@@ -61,7 +61,7 @@ export {
   assertDarwinNativeLaunchObservationCurrent,
   installDarwinNativeCodexMaterial, inspectDarwinNativeCodexMaterial,
   assertDarwinNativeCodexMaterialCurrent,
-  inspectDarwinNativeExecutionLease,
+  inspectDarwinNativeExecutionLease, assertDarwinNativeExecutionClaim,
   cutoffDarwinNativeExecution, settleDarwinNativeExecutionLaunchRoute,
   settleDarwinNativeExecutionPrivateMaterial, disposeDarwinNativeExecution,
   type DarwinNativeWorkspaceSelection, type DarwinNativeLaunchObservation,

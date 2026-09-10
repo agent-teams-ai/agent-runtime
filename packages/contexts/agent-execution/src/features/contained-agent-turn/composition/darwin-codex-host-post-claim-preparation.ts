@@ -1,3 +1,4 @@
+import {isDarwinCodexEffectCustodyOwner, type DarwinCodexEffectCustodyOwner} from "./darwin-codex-effect-custody-owner.js";
 import { createDarwinNativeCodexPermissionBoundary, codexDarwinNativeLaunchObservation,
   type CodexAppServerPermissionBoundary, type CodexContainedTurnMode } from "../adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
 
@@ -48,6 +49,7 @@ import {
 
 export interface DarwinCodexHostPreparationInput {
   readonly hostCustody: unknown;
+  readonly effectCustody?: DarwinCodexEffectCustodyOwner;
   /** Stable coordinator-selected namespace, outside every provider-writable root.
    * Must be the original locator namespace on restart, never a fresh retry tree. */
   readonly durableRoot: DarwinTrustedDirectory;
@@ -81,12 +83,12 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
     let route: DarwinSeatbeltRouteOwner | undefined;
     let nativeLease: DarwinNativeExecutionLease | undefined;
     try {
-      // The legacy route owner below performs Host-UID pathname observations.
-      // Until the native Host preparation owner seam is supplied, refuse before
-      // touching protected roots; a native selection cannot select this route.
+      // Native execution requires the matching retained HTTP and effect owners
+      // before any protected roots or route resources can be touched.
       const nativeObservation = codexDarwinNativeLaunchObservation(options.boundary);
       const native = options.httpLaunchAuthority;
-      if ((nativeObservation === undefined) !== (native === undefined)) {
+      if ((nativeObservation === undefined) !== (native === undefined) ||
+          (native !== undefined && !isDarwinCodexEffectCustodyOwner(options.effectCustody))) {
         return Object.freeze({kind: "unsupported" as const, reason: "owner" as const});
       }
       const preparation = NodeProviderProcessCustodyCore.httpPreparation(options.hostCustody);
@@ -105,7 +107,16 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
           sessionInput.providerAccessSnapshot.tenantId !== proof.tenantId ||
           sessionInput.providerAccessSnapshot.projectId !== proof.projectId) {throw new TypeError("Darwin broker selection conflicts");}
       const lifetime = preparation.acquire(claimed);
-      if (native !== undefined) {nativeLease = preparation.consumeDarwinNativeExecution(lifetime, native);}
+      if (native !== undefined) {
+        nativeLease = preparation.consumeDarwinNativeExecution(lifetime, native);
+        options.effectCustody!.bind(nativeLease, proof, {operationId: proof.operationId, attemptId: proof.attemptId,
+          custodyRef: proof.custodyId, effectId: proof.effectId, workspaceRef: options.boundary.workspaceRef});
+        hostHttpAbortOperations.subscribe(claimed.signal, () => options.effectCustody!.cutoff());
+        if (options.localCut.hostShutdownSignal !== undefined) {
+          hostHttpAbortOperations.subscribe(options.localCut.hostShutdownSignal, () => options.effectCustody!.cutoff());
+        }
+        if (claimed.signal.aborted) {options.effectCustody!.cutoff(); throw new Error("Darwin effect custody claim aborted");}
+      }
       const locator = darwinDigest(JSON.stringify(["darwin-operation-locator/v1", proof.tenantId, proof.projectId, proof.operationId]));
       const storage = new DarwinRouteDurableStorage(options.durableRoot, locator);
       const journal = new DarwinRouteLifecycleJournal(storage, lifetime);
@@ -204,6 +215,7 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
         return Object.freeze({kind: "prepared" as const});
       });
     } catch {
+      if (isDarwinCodexEffectCustodyOwner(options.effectCustody)) {options.effectCustody.cutoff();}
       route?.cutoff();
       // Once transferred, the Host HTTP reservation is the sole terminal owner.
       // Containment/release preserves and retries each native cleanup phase.
