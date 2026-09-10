@@ -21,9 +21,10 @@ test("native deferred output drains bounded upstream without an SDK reader", asy
 
 test("native deferred drain rejects a failed authenticated output source", async () => {
   const provider = new DeferredNativeProviderProcess("host-ref", "/workspace");
-  async function* failed() {yield Buffer.from("partial"); throw new Error("native stream lost");}
   provider.bind({custodyRef: "private-native-binding", workspaceAuthorityPath: "/workspace",
     stdout: failed(), stderr: chunks(), write: async () => {}, closeInput: async () => {},
     waitForExit: async () => ({code: null, signal: "SIGKILL" as const})});
   await assert.rejects(provider.drained, /native stream lost/u);
 });
+
+async function* failed() {yield Buffer.from("partial"); throw new Error("native stream lost");}

@@ -1,6 +1,9 @@
 import { types } from "node:util";
 import { isNativeHostCustodyWorkspaceAuthority } from "./native-host-custody-workspace-authority.js";
-import type { HostCustodyWorkspaceAuthority } from "./custodied-provider-process.js";
+import type { HostCustodyWorkspaceAuthority,
+  HostCustodyLaunchPlan,
+  HostCustodyLaunchPlanResolver,
+  HostCustodyReservationInput } from "./custodied-provider-process.js";
 
 /** Raw Node custody has no native owner. Reject before descriptor/allocation work. */
 export const descriptorWorkspaceAuthority = (
@@ -15,11 +18,6 @@ export const descriptorWorkspaceAuthority = (
 };
 import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
 
-import type {
-  HostCustodyLaunchPlan,
-  HostCustodyLaunchPlanResolver,
-  HostCustodyReservationInput,
-} from "./custodied-provider-process.js";
 import type { LiveCustody } from "./node-provider-process-custody-state.js";
 import type { ProcessCustodyRuntimeProfile } from "./host-custody-runtime-profile.js";
 import { assertInertHostLaunchData, snapshotHostCustodyLaunchPlan } from "./host-custody-launch-plan-snapshot.js";

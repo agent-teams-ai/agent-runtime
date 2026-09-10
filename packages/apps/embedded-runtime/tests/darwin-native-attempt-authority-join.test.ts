@@ -120,7 +120,7 @@ test("accepts absent optional store operations and preserves prototype receivers
 });
 
 test("rejects unsafe optional store operations", () => {
-  for (const unsafe of [42, new Proxy(async () => undefined, {})]) {
+  for (const unsafe of [42, new Proxy(async () => {}, {})]) {
     const h = fixture(); h.store.listDispatchPreparations = unsafe as never;
     assert.throws(() => bindDarwinNativeAttemptAuthority(h.store, h.authority), /authority unavailable/u);
   }

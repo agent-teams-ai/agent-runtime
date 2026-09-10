@@ -199,10 +199,6 @@ test("finalizable native plan reserves HOME at the retained private root", async
   const temporary = join(privateRoot, "tmp");
   try {
     for (const path of [workspace, privateRoot, codexHome, temporary]) {mkdirSync(path, {mode: 0o700});}
-    const identity = (path: string) => {
-      const value = lstatSync(path, {bigint: true});
-      return {path, dev: value.dev, ino: value.ino, uid: Number(value.uid), mode: Number(value.mode)};
-    };
     const facts = synthetic.syntheticFacts();
     Object.assign(facts, {leasedUid: Number(lstatSync(workspace, {bigint: true}).uid), workspace: identity(workspace),
       privateRoot: identity(privateRoot), codexHome: identity(codexHome), tmpDir: identity(temporary)});
@@ -551,3 +547,8 @@ test("private wiring propagates original owner rejection before scoped preparati
   await new Promise<void>(resolve => {setImmediate(resolve);});
   try {assert.equal(rejected, true);} finally {preparation.resolve(); await result;}
 });
+
+  const identity = (path: string) => {
+    const value = lstatSync(path, {bigint: true});
+    return {path, dev: value.dev, ino: value.ino, uid: Number(value.uid), mode: Number(value.mode)};
+  };

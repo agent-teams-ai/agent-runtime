@@ -52,6 +52,7 @@ export class DeferredNativeSdkProcess implements CustodiedSdkProcess {
         const exit = await process.waitForExit(); this.#exitCode = exit.code; this.#signalCode = exit.signal;
         this.#events.emit("exit", exit.code, exit.signal);
       } catch (error) {this.#stdout.destroy(error as Error); this.#events.emit("error", error);}
+      return;
     });
   }
   public bind(process: CustodiedProviderProcess): void {if (this.#settled) {throw new TypeError("native SDK process already settled");} this.#settled = true; this.#ready.resolve(process);}

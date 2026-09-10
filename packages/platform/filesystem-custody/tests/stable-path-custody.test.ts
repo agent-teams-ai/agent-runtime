@@ -413,7 +413,7 @@ test("native publication restores a symlink replacement without publishing its t
       destinationDirectory: parent, destinationName: "published",
       expectedSourceIdentity: identity,
     }), /source identity changed/u);
-    assert.deepEqual((await readdir(root)).sort(), ["candidate", "original"]);
+    assert.deepEqual((await readdir(root)).toSorted(), ["candidate", "original"]);
     assert.equal((await stat(join(root, "original"), { bigint: true })).ino, identity.ino);
   } finally {await parent.close();}
 });

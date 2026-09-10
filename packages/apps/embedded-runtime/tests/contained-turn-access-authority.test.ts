@@ -210,7 +210,7 @@ test("observe cancellation reaches the authority-bound owner and remains Host-tr
 
   let disposalSettled = false;
   const disposal = host.dispose().finally(() => { disposalSettled = true; });
-  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => { setImmediate(resolve); });
   assert.equal(disposalSettled, false);
   assert.equal(ownerSettled, false);
   releaseOwner();
