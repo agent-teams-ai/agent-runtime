@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
+import { darwinRouteFixture } from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/darwin-route-capability-fixture.ts";
+
 import { createContainedTurnRouteEnforcement } from "@agent-teams/agent-execution/composition";
 import {
   CLAUDE_ROUTE_ENFORCEMENT_UNSUPPORTED_DETAIL,
@@ -81,7 +83,8 @@ const shippedScopedTarget = async (): Promise<Target> => {
   return Object.freeze({...entry.targets[0]});
 };
 const codexHostTarget = async (): Promise<Target> => Object.freeze({
-  ...await shippedScopedTarget(), platform: `${process.platform}-${process.arch}`,
+  ...(process.platform === "darwin" ? darwinRouteFixture().input.qualificationTarget : await shippedScopedTarget()),
+  platform: `${process.platform}-${process.arch}`,
 });
 /**
  * A Claude target the repository has not promoted and does not describe: its
@@ -158,8 +161,17 @@ test("Claude stays refused even when both route-enforcement facts hold for it", 
   const codexTarget = await codexHostTarget();
   await withFixtureRegistry("implementation", codexTarget, url => {
     const probe = harness();
+    const fixture = process.platform === "darwin" ? darwinRouteFixture() : undefined;
+    const route = fixture?.mint() ?? mint(codexTarget);
+    const routeDependencies = fixture === undefined ? dependencies("codex", route) : (() => {
+      const {hostCustody, ...owner} = fixture.input.owner;
+      return Object.freeze({
+        ...dependencies("codex", route), hostCustody,
+        selectedProvider: Object.freeze({kind: "codex" as const, owner}),
+      });
+    })();
     assert.equal(composeQualifiedHostCustodiedContainedTurn(
-      dependencies("codex", mint(codexTarget)) as never, probe.factories, probe.featureFactory, url,
+      routeDependencies as never, probe.factories, probe.featureFactory, url,
     ).feature, capability);
     assert.deepEqual(probe.calls, {claude: 0, codex: 1, dispose: 0, feature: 1});
   });
