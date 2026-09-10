@@ -73,6 +73,7 @@ import {inspectDarwinNativeLaunchObservation, startDarwinNativeExecution, readDa
   cutoffDarwinNativeExecution} from "./darwin-attempt-owner-selection.js";
 import {DeferredNativeProviderProcess, DeferredNativeSdkProcess} from "./deferred-native-sdk-process.js";
 import {isNativeHostCustodyWorkspaceAuthority, retireNativeHostCustodyWorkspaceAuthority} from "./native-host-custody-workspace-authority.js";
+import {validateContainedTurnIdentity} from "../../../domain/contained-turn-identities.js";
 export type { NodeProviderProcessCustodyOptions } from "./node-provider-process-custody-state.js";
 export { assertDarwinNativeHostGenerationBinding } from "./node-provider-process-custody-native-reservation.js";
 export class NodeProviderProcessCustodyCore implements
@@ -171,10 +172,11 @@ export class NodeProviderProcessCustodyCore implements
     input = custodyDataRecord(input);
     const keys = Reflect.ownKeys(input);
     if (keys.length !== 2 || !keys.includes("operationId") || !keys.includes("attemptId") ||
-        typeof input.operationId !== "string" || !/^[A-Za-z0-9:._-]{1,192}$/u.test(input.operationId) ||
-        typeof input.attemptId !== "string" || !/^[A-Za-z0-9:._-]{1,192}$/u.test(input.attemptId)) {
+        typeof input.operationId !== "string" || typeof input.attemptId !== "string") {
       throw new TypeError("Host Custody attempt evidence identity is invalid");
     }
+    validateContainedTurnIdentity("operation", input.operationId);
+    validateContainedTurnIdentity("attempt", input.attemptId);
     const live = this.#byAttempt.get(input.attemptId);
     const tombstone = this.#tombstonesByAttempt.get(input.attemptId);
     // A valid owner has exactly one binding for an attempt. Ambiguous internal

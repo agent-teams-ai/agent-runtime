@@ -10,6 +10,7 @@ import { captureDarwinOwnedImage, observeDarwinGuardian, type DarwinOwnedImage }
 import { isIssuedDarwinSeatbeltProjection, recheckDarwinExecutable, type DarwinExecutablePin, type DarwinSeatbeltProjection } from "./darwin-seatbelt-launch-projection.js";
 
 import { issueDarwinRouteIdentity } from "./darwin-route-identity.js";
+import {CONTAINED_TURN_LIMITS, validateContainedTurnText} from "../../../domain/contained-turn-limits.js";
 
 const rejected = (): never => {throw new TypeError("Darwin same-reservation route sealed or conflicts");};
 /** Alternative Host implementation, private candidate composition; this is not
@@ -155,8 +156,8 @@ export class DarwinSeatbeltRouteOwner {
   public readonly firstWrite: HttpEgressRouteFirstWrite = Object.freeze({reserve: (requestId: string) => {
     try {
       this.assertInstalled();
-      if (typeof requestId !== "string" || !/^[A-Za-z0-9:._-]{1,128}$/u.test(requestId) ||
-          this.#requests.has(requestId) || this.#requests.size >= 256) {rejected();}
+      if (typeof requestId !== "string" || this.#requests.has(requestId) || this.#requests.size >= 256) {rejected();}
+      validateContainedTurnText("Darwin request identity", requestId, CONTAINED_TURN_LIMITS.text.identifier);
       // The fsynced lifecycle owner records identity before first-write
       // authority becomes observable. Lost acknowledgement still burns it.
       this.journal.record("request_reserved", {requestId});

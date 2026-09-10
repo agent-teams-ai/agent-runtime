@@ -3,6 +3,8 @@ import { dirname, join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { withStableDirectoryProcessLock } from "@agent-teams/filesystem-custody/composition";
 import {validateCommittedDispatchProofV1} from "../../../domain/committed-dispatch-proof-v1.js";
+import {CONTAINED_TURN_LIMITS, validateContainedTurnText} from "../../../domain/contained-turn-limits.js";
+import {validateContainedTurnIdentity} from "../../../domain/contained-turn-identities.js";
 
 export interface DarwinTrustedDirectory { readonly path: string; readonly dev: string; readonly ino: string }
 const reject = (): never => {throw new Error("Darwin durable route storage unavailable; reconcile original locator");};
@@ -193,9 +195,14 @@ const exactRecord = (value: unknown, names: readonly string[]): value is Record<
 
 const assertRequestInventoryIdentity = (expected: DarwinRouteRequestInventoryIdentity): void => {
   if (!exactRecord(expected, ["tenantId", "projectId", "operationId", "attemptId", "custodyId"]) ||
-      Object.values(expected).some(value => typeof value !== "string" || !/^[A-Za-z0-9:._-]{1,192}$/u.test(value))) {
+      Object.values(expected).some(value => typeof value !== "string")) {
     throw new TypeError("Darwin route inventory identity invalid");
   }
+  validateContainedTurnText("tenantId", expected.tenantId, CONTAINED_TURN_LIMITS.text.identifier);
+  validateContainedTurnText("projectId", expected.projectId, CONTAINED_TURN_LIMITS.text.identifier);
+  validateContainedTurnIdentity("operation", expected.operationId);
+  validateContainedTurnIdentity("attempt", expected.attemptId);
+  validateContainedTurnIdentity("custody", expected.custodyId);
 };
 
 const readInventoryClaim = (path: string, record: Record<string, unknown>) => {
@@ -214,8 +221,10 @@ const collectRequestIds = (records: readonly Record<string, unknown>[]): readonl
     if (record.kind !== "request_reserved") {continue;}
     if (!exactRecord(record.data, ["requestId"])) {throw new TypeError("Darwin request identity invalid");}
     const requestId = record.data.requestId;
-    if (typeof requestId !== "string" || !/^[A-Za-z0-9:._-]{1,128}$/u.test(requestId) ||
-        unique.has(requestId) || unique.size >= 256) {throw new TypeError("Darwin request identity invalid");}
+    if (typeof requestId !== "string" || unique.has(requestId) || unique.size >= 256) {
+      throw new TypeError("Darwin request identity invalid");
+    }
+    validateContainedTurnText("Darwin request identity", requestId, CONTAINED_TURN_LIMITS.text.identifier);
     unique.add(requestId); requestIds.push(requestId);
   }
   return Object.freeze(requestIds);
@@ -235,7 +244,8 @@ export const inspectDarwinRouteRequestInventory = (
     for (const name of ["tenantId", "projectId", "operationId", "attemptId", "custodyId"] as const) {
       if (claim[name] !== expected[name]) {return UNKNOWN_REQUEST_INVENTORY;}
     }
-    if (records.at(-1)?.kind !== "retired" || records.some(record => record.kind === "quarantined")) {
+    const retired = records.findIndex(record => record.kind === "retired");
+    if (retired !== records.length - 1 || records.some(record => record.kind === "quarantined")) {
       return UNKNOWN_REQUEST_INVENTORY;
     }
     return Object.freeze({kind: "closed", requestIds: collectRequestIds(records)});

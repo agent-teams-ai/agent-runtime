@@ -42,29 +42,31 @@ const envelope = {tenantId: "tenant", projectId: "project", operationId: "operat
 const key = {namespace: "provider-process-egress/v2" as const, tenantId: "tenant", projectId: "project", operationId: "operation", boundaryUseId: "use"};
 const fingerprint = `sha256:${"a".repeat(64)}`;
 
-const routeProof = () => {
+const routeProof = (overrides: Record<string, unknown> = {}) => {
   const operation = ids("codex", "darwin-route-inventory");
   const open = openInput(operation, "codex", {provider: "codex", adapterRevision: "adapter:test",
     binaryRevision: "binary:test", capabilityManifestRevision: "manifest:test"});
   return committedDispatchProofFixture(open, {hostBootId: "host-boot:test", hostInstanceId: "host-instance:test",
     hostCustodyProof: {kind: "host_custody", proofId: "proof:host-custody", custodyId: open.custodyId,
-      hostBootId: "host-boot:test", hostInstanceId: "host-instance:test"}} as never);
+      hostBootId: "host-boot:test", hostInstanceId: "host-instance:test"}, ...overrides} as never);
 };
 
 test("retired Darwin lifecycle exposes only its exact bounded request identities", async t => {
   const f = fixture(); t.after(f.cleanup);
-  const proof = routeProof();
+  const proof = routeProof({operationId: `operation:${"path/".repeat(90)}`,
+    attemptId: `attempt:${"path/".repeat(90)}`, custodyId: `custody:${"path/".repeat(90)}`});
   const identity = {tenantId: proof.tenantId, projectId: proof.projectId, operationId: proof.operationId,
     attemptId: proof.attemptId, custodyId: proof.custodyId};
   const lifetime = {signal: new AbortController().signal, hostLifecycleGenerationSha256: "a".repeat(64),
     committedDispatchProof: proof};
   const journal = new DarwinRouteLifecycleJournal(f.store, lifetime as never); await journal.prepare();
-  journal.record("request_reserved", {requestId: "request-1"});
+  const longRequestId = `request/${"path/".repeat(98)}`;
+  journal.record("request_reserved", {requestId: longRequestId});
   journal.record("request_reserved", {requestId: "request-2"});
   assert.deepEqual(inspectDarwinRouteRequestInventory(f.store.path, identity), {kind: "unknown"});
   assert.equal(await journal.close(true), true);
   const inventory = inspectDarwinRouteRequestInventory(f.store.path, identity);
-  assert.deepEqual(inventory, {kind: "closed", requestIds: ["request-1", "request-2"]});
+  assert.deepEqual(inventory, {kind: "closed", requestIds: [longRequestId, "request-2"]});
   assert.ok(inventory.kind === "closed" && Object.isFrozen(inventory.requestIds));
   for (const field of Object.keys(identity) as (keyof typeof identity)[]) {
     assert.deepEqual(inspectDarwinRouteRequestInventory(f.store.path, {...identity, [field]: "foreign"}), {kind: "unknown"});
@@ -72,8 +74,21 @@ test("retired Darwin lifecycle exposes only its exact bounded request identities
   assert.deepEqual(inspectDarwinRouteRequestInventory(f.store.path, {...identity, extra: "field"} as never), {kind: "unknown"});
 });
 
+test("records after the first retired terminal make Darwin request inventory unknown", async t => {
+  const f = fixture(); t.after(f.cleanup); const proof = routeProof();
+  const identity = {tenantId: proof.tenantId, projectId: proof.projectId, operationId: proof.operationId,
+    attemptId: proof.attemptId, custodyId: proof.custodyId};
+  await f.store.open();
+  f.store.create("lifecycle", {claim: proof, generation: "a".repeat(64), locator: f.store.path});
+  f.store.append("lifecycle", "retired", {});
+  f.store.append("lifecycle", "request_reserved", {requestId: "request/after-terminal"});
+  f.store.append("lifecycle", "retired", {});
+  assert.equal(await f.store.close(), true);
+  assert.deepEqual(inspectDarwinRouteRequestInventory(f.store.path, identity), {kind: "unknown"});
+});
+
 test("Darwin request inventory rejects duplicate, malformed and noncanonical journal identities", async t => {
-  for (const requests of [["duplicate", "duplicate"], ["bad/request"], Array.from({length: 257}, (_, i) => `request-${i}`)]) {
+  for (const requests of [["duplicate", "duplicate"], ["bad\u0001request"], Array.from({length: 257}, (_, i) => `request-${i}`)]) {
     const f = fixture(); t.after(f.cleanup);
     const proof = routeProof();
     const identity = {tenantId: proof.tenantId, projectId: proof.projectId, operationId: proof.operationId,

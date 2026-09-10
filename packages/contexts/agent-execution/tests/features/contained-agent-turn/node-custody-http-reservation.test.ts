@@ -13,6 +13,8 @@ test("attempt evidence lookup is exact, inert and does not disclose the private 
   assert.equal("custodyRef" in evidence, false);
   assert.equal(f.core.evidenceForAttempt({...identity, operationId: "operation:foreign"}), undefined);
   assert.equal(f.core.evidenceForAttempt({...identity, attemptId: "attempt:foreign"}), undefined);
+  assert.equal(f.core.evidenceForAttempt({operationId: `operation:${"segment/".repeat(60)}`,
+    attemptId: `attempt:${"segment/".repeat(60)}`}), undefined);
   assert.throws(() => f.core.evidenceForAttempt({...identity, extra: "field"} as never), /identity is invalid/u);
   assert.throws(() => f.core.evidenceForAttempt(new Proxy(identity, {}) as never), /inert data record/u);
   assert.throws(() => f.core.evidenceForAttempt(Object.defineProperty({}, "operationId", {get() {throw new Error("trap");}}) as never),
