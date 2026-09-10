@@ -9,7 +9,13 @@ import * as synthetic from "./synthetic-native-custody-producer.fixture.ts";
 // Explicit independent source-loaded SYNTHETIC producer, never a build shim.
 const producer = new URL("./synthetic-native-custody-producer.fixture.ts", import.meta.url).href;
 registerHooks({resolve(specifier, context, next) {
-  if (specifier.endsWith("/darwin-attempt-workspace-backend.js") || specifier.endsWith("/node-contained-turn-workspace-owner.js")) {
+  if ((specifier.endsWith("/contained-turn-kernel-custody-entrypoint.js") && [
+    "codex-app-server-launch-plan.ts", "codex-app-server-permission-boundary.ts", "codex-native-broker-files.ts",
+    "codex-native-broker-recipe.ts", "native-host-custody-workspace-authority.ts", "node-kernel-workspace-authority.ts",
+  ].some(name => context.parentURL?.endsWith("/" + name))) || specifier.endsWith("/node-contained-turn-workspace-owner.js")) {
+    if (specifier.endsWith("/contained-turn-kernel-custody-entrypoint.js") && context.parentURL?.endsWith("/node-kernel-workspace-authority.ts")) {
+      return {url: new URL("./synthetic-native-kernel-entrypoint.fixture.ts", import.meta.url).href, shortCircuit: true};
+    }
     return {url: producer, shortCircuit: true};
   }
   if (specifier.startsWith(".") && specifier.endsWith(".js") && context.parentURL?.startsWith("file:")) {
@@ -21,6 +27,7 @@ registerHooks({resolve(specifier, context, next) {
 const root = "../../../src/features/contained-agent-turn/adapters/outbound/";
 const permission = await import(root + "codex-app-server/codex-app-server-permission-boundary.ts");
 const authority = await import(root + "host-custody/native-host-custody-workspace-authority.ts");
+const {nodeKernelWorkspaceAuthority} = await import("../../../src/features/contained-agent-turn/composition/node-kernel-workspace-authority.ts");
 const {KernelOpenAttempts} = await import(root + "host-custody/contained-turn-kernel-custody-open-attempts.ts");
 const raw = await import(root + "host-custody/private-host-custody-reservation.ts");
 const files = await import(root + "codex-app-server/codex-native-broker-files.ts");
@@ -38,7 +45,7 @@ const setup = async (facts = synthetic.syntheticFacts(), mutate?: (facts: any) =
 };
 test("synthetic provenance rejects observation clones and proxies without reading traps", async () => {
   const {observation} = await setup(); let reads = 0;
-  for (const fake of [{}, {...observation}, new Proxy(observation, {get() {reads++; throw Error();}})]) {
+  for (const fake of [{}, {...observation}, new Proxy(observation, {get() {reads++; throw new Error("synthetic forbidden property read");}})]) {
     assert.throws(() => permission.createDarwinNativeCodexPermissionBoundary(fake, "analysis"));
   }
   assert.equal(reads, 0);
@@ -62,7 +69,7 @@ test("ordinary Linux boundary still validates actual disposable directories", ()
 });
 test("native authority has no descriptor; raw Linux rejects before allocation; attempt and copy fences", async () => {
   const {selection} = await setup();
-  await authority.withNativeHostCustodyWorkspaceAuthority(synthetic.issueSyntheticOwner(selection), ids, async value => {
+  await nodeKernelWorkspaceAuthority(synthetic.issueSyntheticOwner(selection)).withLaunchAuthority(ids, async value => {
     assert.equal(Object.hasOwn(value, "descriptorPath"), false);
     assert.equal(value.canonicalPath, "/synthetic/workspace");
     assert.throws(() => raw.descriptorWorkspaceAuthority(value));
@@ -77,7 +84,7 @@ test("native authority has no descriptor; raw Linux rejects before allocation; a
   assert.equal(raw.descriptorWorkspaceAuthority(descriptor), descriptor);
 });
 test("kernel genuine native selection is once, duplicate fenced, sealed admission blocks acquisition", async () => {
-  const {selection} = await setup(); const owner = synthetic.issueSyntheticOwner(selection);
+  const {selection} = await setup(); const owner = nodeKernelWorkspaceAuthority(synthetic.issueSyntheticOwner(selection));
   const input = {...ids, custodyId: "synthetic-custody", adapterSnapshot: {}, providerAccessSnapshot: {}};
   const attempts = new KernelOpenAttempts(); let opens = 0; let retired = 0;
   const attemptOwner = {retire() {retired++;}};
@@ -198,7 +205,7 @@ test("Linux reservation retains and rechecks the actual disposable descriptor an
     } finally {retained.retainedWorkspaceAuthority.close();}
     assert.deepEqual(events, ["opened", "closed"]);
     const {selection} = await setup();
-    await authority.withNativeHostCustodyWorkspaceAuthority(synthetic.issueSyntheticOwner(selection), ids, async native => {
+    await nodeKernelWorkspaceAuthority(synthetic.issueSyntheticOwner(selection)).withLaunchAuthority(ids, async native => {
       await assert.rejects(raw.bindPrivateHostCustodyReservation({...input, workspaceAuthority: native}, owner, {containmentProfile: "strict-linux-cgroup-v2"}));
       assert.deepEqual(events, ["opened", "closed"]);
     });
@@ -224,7 +231,7 @@ test("native authority retires on callback failure or owner failure after callba
     const {selection} = await setup();
     const owner = synthetic.issueSyntheticOwner(selection, ownerFails);
     let captured: object | undefined;
-    await assert.rejects(authority.withNativeHostCustodyWorkspaceAuthority(owner, ids, async value => {
+    await assert.rejects(nodeKernelWorkspaceAuthority(owner).withLaunchAuthority(ids, async value => {
       captured = value;
       assert.equal(authority.isNativeHostCustodyWorkspaceAuthority(value), true);
       if (!ownerFails) {throw new Error("synthetic preparation failure");}
@@ -233,4 +240,128 @@ test("native authority retires on callback failure or owner failure after callba
     assert.equal(authority.isNativeHostCustodyWorkspaceAuthority(captured), false);
     assert.throws(() => authority.inspectNativeHostCustodyWorkspaceAuthority(captured, ids), /provenance/u);
   }
+});
+
+
+test("private owner wiring rejects foreign owners and operation/attempt/workspace mismatches", async () => {
+  const {selection} = await setup();
+  const owner = synthetic.issueSyntheticOwner(selection);
+  let calls = 0;
+  for (const key of ["operationId", "attemptId", "workspaceId"]) {
+    await assert.rejects(nodeKernelWorkspaceAuthority(owner).withLaunchAuthority({...ids, [key]: "foreign"}, async () => {calls++;}));
+  }
+  for (const fake of [{...owner}, new Proxy(owner, {})]) {
+    assert.equal(synthetic.isNodeContainedTurnNativeWorkspaceOwner(fake), false);
+    await assert.rejects(async () => nodeKernelWorkspaceAuthority(fake).withLaunchAuthority(ids, async () => {calls++;}));
+  }
+  assert.equal(calls, 0);
+});
+
+test("Host issuance requires an authenticated current selection and matching operation", async () => {
+  const {selection} = await setup(); let calls = 0; let reads = 0;
+  for (const fake of [{}, {...selection}, new Proxy(selection, {get() {reads++; throw new Error("synthetic forbidden property read");}})]) {
+    await assert.rejects(authority.withNativeHostCustodyWorkspaceAuthority(fake, ids, async () => {calls++;}));
+  }
+  await assert.rejects(authority.withNativeHostCustodyWorkspaceAuthority(selection, {...ids, operationId: "foreign"}, async () => {calls++;}));
+  synthetic.expireSyntheticSelection(selection);
+  await assert.rejects(authority.withNativeHostCustodyWorkspaceAuthority(selection, ids, async () => {calls++;}));
+  assert.equal(calls, 0); assert.equal(reads, 0);
+});
+
+test("Host grant inspection binds workspace as well as operation and attempt", async () => {
+  const {selection} = await setup();
+  await nodeKernelWorkspaceAuthority(synthetic.issueSyntheticOwner(selection)).withLaunchAuthority(ids, async value => {
+    for (const key of ["operationId", "attemptId", "workspaceId"]) {
+      assert.throws(() => authority.inspectNativeHostCustodyWorkspaceAuthority(value, {...ids, [key]: "foreign"}));
+    }
+    assert.deepEqual(value.identity, {dev: 1n, ino: 5n});
+    synthetic.expireSyntheticSelection(selection);
+    assert.throws(() => authority.inspectNativeHostCustodyWorkspaceAuthority(value, ids));
+  });
+});
+
+test("private native wiring fences callbacks after owner settlement and repeated callbacks", async () => {
+  for (const repeat of [false, true]) {
+    const {selection} = await setup(); const owner = synthetic.issueSyntheticOwner(selection);
+    let late: (() => Promise<unknown>) | undefined; let calls = 0;
+    synthetic.setSyntheticOwnerBehavior(owner, async consume => {
+      late = consume;
+      if (repeat) {await consume();}
+    });
+    await nodeKernelWorkspaceAuthority(owner).withLaunchAuthority(ids, async () => {calls++;});
+    await assert.rejects(async () => late!(), /already consumed/u);
+    assert.equal(calls, repeat ? 1 : 0);
+  }
+});
+
+test("native owner rejection during pending preparation revokes grant and retires kernel attempt", async () => {
+  const {selection} = await setup(); const owner = synthetic.issueSyntheticOwner(selection);
+  let captured: object | undefined; let finish!: () => void; let started!: () => void;
+  const entered = new Promise<void>(resolve => {started = resolve;});
+  const pending = new Promise<void>(resolve => {finish = resolve;});
+  synthetic.setSyntheticOwnerBehavior(owner, async consume => {
+    void consume().catch(() => {});
+    await entered;
+    throw new Error("synthetic owner asynchronous failure");
+  });
+  const attempts = new KernelOpenAttempts(); let retires = 0;
+  const input = {...ids, custodyId: "synthetic-pending", adapterSnapshot: {}, providerAccessSnapshot: {}};
+  const result = attempts.open(input, nodeKernelWorkspaceAuthority(owner), {retire() {retires++;}}, async (_: any, value: any) => {
+    captured = value; started(); await pending;
+    assert.throws(() => authority.inspectNativeHostCustodyWorkspaceAuthority(value, ids));
+    throw new Error("synthetic preparation cut off");
+  });
+  await entered;
+  await new Promise<void>(resolve => {setImmediate(resolve);});
+  assert.equal(authority.isNativeHostCustodyWorkspaceAuthority(captured), false);
+  assert.equal(retires, 0);
+  finish(); await assert.rejects(result, /owner asynchronous failure/u);
+  assert.equal(retires, 1);
+  await assert.rejects(attempts.open(input, nodeKernelWorkspaceAuthority(owner), {retire() {retires++;}}, async () => {}), /already consumed/u);
+  assert.equal(retires, 1);
+});
+
+test("private wiring preserves the existing descriptor owner by identity", () => {
+  const owner = {withLaunchAuthority: async (_: unknown, consume: any) => consume({descriptorPath: "/proc/self/fd/99"})};
+  assert.equal(nodeKernelWorkspaceAuthority(owner), owner);
+});
+
+
+test("native owner failure cuts off issuance while authenticated observation read is pending", async () => {
+  const {selection} = await setup(); const owner = synthetic.issueSyntheticOwner(selection);
+  const release = synthetic.pauseSyntheticObservation(selection); let calls = 0;
+  synthetic.setSyntheticOwnerBehavior(owner, async consume => {
+    void consume().catch(() => {});
+    throw new Error("synthetic early owner failure");
+  });
+  const result = nodeKernelWorkspaceAuthority(owner).withLaunchAuthority(ids, async () => {calls++;});
+  await new Promise<void>(resolve => {setImmediate(resolve);});
+  assert.equal(calls, 0);
+  release(); await assert.rejects(result, /early owner failure/u);
+  assert.equal(calls, 0);
+});
+
+test("actual kernel checks Host registry before preparation for forged, cloned, proxy and mismatched grants", async () => {
+  const {ContainedTurnKernelCustodyAdapter} = await import(root + "host-custody/contained-turn-kernel-custody-adapter.ts");
+  const {selection} = await setup(); let prepares = 0; let reserves = 0; let reads = 0;
+  await nodeKernelWorkspaceAuthority(synthetic.issueSyntheticOwner(selection)).withLaunchAuthority(ids, async grant => {
+    const input = {...ids, custodyId: "synthetic-registry", intentMode: "analysis", adapterSnapshot: {}, providerAccessSnapshot: {}};
+    const run = (value: any, override = {}) => {
+      const kernel = new ContainedTurnKernelCustodyAdapter({reserve: async () => {reserves++;}}, {
+        postClaimPreparation: "current-owner", hostBootId: "host-boot:synthetic", hostInstanceId: "host-instance:synthetic",
+        workspaceOwner: {withLaunchAuthority: async (_: unknown, consume: any) => consume(value)},
+        attemptOwner: {retire() {}, prepare: async () => {prepares++; throw new Error("synthetic preparation reached");}},
+      });
+      return kernel.open({...input, ...override});
+    };
+    for (const fake of [{}, {...grant}, new Proxy(grant, {get() {reads++; throw new Error("synthetic forbidden property read");}})]) {
+      await assert.rejects(run(fake), /scoped workspace authority/u);
+    }
+    for (const key of ["operationId", "attemptId", "workspaceId"]) {
+      await assert.rejects(run(grant, {[key]: "foreign"}), /provenance or attempt mismatch/u);
+    }
+    assert.equal(prepares, 0); assert.equal(reserves, 0); assert.equal(reads, 0);
+    await assert.rejects(run(grant), /synthetic preparation reached/u);
+    assert.equal(prepares, 1); assert.equal(reserves, 0);
+  });
 });

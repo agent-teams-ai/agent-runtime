@@ -5,6 +5,10 @@ const observations = new WeakMap<object, any>();
 const materials = new WeakMap<object, any>();
 const owners = new WeakMap<object, object>();
 const rejectingOwners = new WeakSet<object>();
+const ownerBehaviors = new WeakMap<object, (consume: () => Promise<unknown>) => Promise<unknown>>();
+export const setSyntheticOwnerBehavior = (owner: object, behavior: (consume: () => Promise<unknown>) => Promise<unknown>) => {
+  ownerBehaviors.set(owner, behavior);
+};
 export const syntheticFacts = () => ({operationId: "synthetic-operation", generation: "synthetic-generation", leasedUid: 501,
   privateRoot: {path: "/synthetic/private", dev: 1n, ino: 2n, uid: 501, mode: 0o40700},
   codexHome: {path: "/synthetic/private/home", dev: 1n, ino: 3n, uid: 501, mode: 0o40700},
@@ -20,14 +24,24 @@ export function issueSyntheticOwner(selection: object, rejectAfterCallback = fal
   owners.set(owner, selection); if (rejectAfterCallback) {rejectingOwners.add(owner);} return owner;
 }
 export const isNodeContainedTurnNativeWorkspaceOwner = (value: object) => owners.has(value);
-export async function withNodeContainedTurnNativeWorkspaceSelection(owner: object, _ids: unknown, consume: any) {
+export async function withNodeContainedTurnNativeWorkspaceSelection(owner: object, ids: any, consume: any) {
   const selection = owners.get(owner); if (!selection) {throw new TypeError("synthetic owner rejected");}
-  const result = await consume(selection);
+  if (ids.operationId !== "synthetic-operation" || ids.attemptId !== "synthetic-attempt" || ids.workspaceId !== "synthetic-workspace") {
+    throw new TypeError("synthetic owner identity mismatch");
+  }
+  const behavior = ownerBehaviors.get(owner);
+  const result = await (behavior ? behavior(() => consume(selection)) : consume(selection));
   if (rejectingOwners.has(owner)) {throw new Error("synthetic owner failure after callback");}
   return result;
 }
+export function pauseSyntheticObservation(selection: object) {
+  let release!: () => void;
+  selections.get(selection).readWait = new Promise<void>(resolve => {release = resolve;});
+  return release;
+}
 export async function readDarwinNativeLaunchObservation(selection: object) {
   const state = selections.get(selection); if (!state || !state.current) {throw new TypeError("synthetic selection rejected");}
+  await state.readWait;
   return state.observation;
 }
 export function inspectDarwinNativeLaunchObservation(observation: object) {

@@ -2,7 +2,7 @@ import {
   inspectDarwinNativeLaunchObservation, assertDarwinNativeLaunchObservationCurrent,
   inspectDarwinNativeCodexMaterial, assertDarwinNativeCodexMaterialCurrent,
   type DarwinNativeCodexMaterial, type DarwinNativeLaunchObservation,
-} from "../filesystem/darwin-attempt-workspace-backend.js";
+} from "../host-custody/contained-turn-kernel-custody-entrypoint.js";
 import {codexProtocolPaths} from "./codex-docker-path-projection.js";
 import { createHash } from "node:crypto";
 import { lstatSync, realpathSync, statSync } from "node:fs";

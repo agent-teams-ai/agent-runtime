@@ -1,6 +1,6 @@
 import { codexDarwinNativeMaterialIdentity } from "./codex-native-broker-files.js";
 import { codexDarwinNativeLaunchObservation } from "./codex-app-server-permission-boundary.js";
-import { inspectDarwinNativeLaunchObservation } from "../filesystem/darwin-attempt-workspace-backend.js";
+import { inspectDarwinNativeLaunchObservation } from "../host-custody/contained-turn-kernel-custody-entrypoint.js";
 import { createHash } from "node:crypto";
 import { fstatSync, lstatSync, readSync, realpathSync, type BigIntStats } from "node:fs";
 import {createCodexDockerPathProjection, codexProtocolHostBoundary,

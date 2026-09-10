@@ -1,11 +1,5 @@
-import {
-  readDarwinNativeLaunchObservation, inspectDarwinNativeLaunchObservation,
-  type DarwinNativeWorkspaceSelection,
-} from "../adapters/outbound/filesystem/darwin-attempt-workspace-backend.js";
 import { createDarwinNativeCodexPermissionBoundary, codexDarwinNativeLaunchObservation,
-  type CodexContainedTurnMode } from "../adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
-import { installCodexDarwinNativeBrokerFiles } from "../adapters/outbound/codex-app-server/codex-native-broker-files.js";
-import type { CodexNativeBrokerRecipe } from "../adapters/outbound/codex-app-server/codex-native-broker-recipe.js";
+  type CodexAppServerPermissionBoundary, type CodexContainedTurnMode } from "../adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
 
 /** Before PG prepare: authenticate the native original roots without consuming
  * the kernel's later workspace selection callback or inventing an attempt. */
@@ -26,6 +20,8 @@ export const prepareDarwinCodexNativeFixedMaterial = async (
 ) => Object.freeze({recipe, files: await installCodexDarwinNativeBrokerFiles(selection, recipe, catalogSource)});
 
 import {
+  readDarwinNativeLaunchObservation, inspectDarwinNativeLaunchObservation,
+  type DarwinNativeWorkspaceSelection,
   hostHttpAbortOperations,
   type ContainedTurnHostPostClaimPreparation,
   NodeProviderProcessCustodyCore,
@@ -42,10 +38,10 @@ import {
   type HttpEgressLimits,
 } from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import {
+  installCodexDarwinNativeBrokerFiles, type CodexNativeBrokerRecipe,
   DarwinCodexNativeFiles, codexNativeBrokerLaunchInput,
   createDarwinCodexNativeBrokerRecipe, prepareCodexNativeBrokerFiles,
 } from "../adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
-import type { CodexAppServerPermissionBoundary } from "../adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
 
 export interface DarwinCodexHostPreparationInput {
   readonly hostCustody: unknown;

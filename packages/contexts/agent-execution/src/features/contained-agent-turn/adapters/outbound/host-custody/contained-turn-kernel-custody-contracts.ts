@@ -21,11 +21,7 @@ export interface ContainedTurnKernelWorkspaceOwner {
     operationId: KernelOpenInput["operationId"];
     workspaceId: KernelOpenInput["workspaceId"];
     attemptId: KernelOpenInput["attemptId"];
-  }>, consume: (target: Readonly<{
-    canonicalPath: string;
-    descriptorPath: string;
-    identity: Readonly<{ dev: bigint; ino: bigint; mountId: string }>;
-  }>) => Promise<Result>): Promise<Result>;
+  }>, consume: (target: HostCustodyReservationInput["workspaceAuthority"]) => Promise<Result>): Promise<Result>;
 }
 
 export interface ContainedTurnKernelCustodyAttemptOwner {

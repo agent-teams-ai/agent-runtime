@@ -1,5 +1,3 @@
-import { isNodeContainedTurnNativeWorkspaceOwner } from "../filesystem/node-contained-turn-workspace-owner.js";
-import { withNativeHostCustodyWorkspaceAuthority } from "./native-host-custody-workspace-authority.js";
 import type { ContainedTurnKernelCustodyPort } from "../../../application/ports/outbound/contained-turn-ports.js";
 import type {
   ContainedTurnKernelCustodyAttemptOwner,
@@ -66,9 +64,7 @@ export class KernelOpenAttempts {
         scoped = openScoped(input, authority, attempt);
         return scoped;
       };
-      return await (isNodeContainedTurnNativeWorkspaceOwner(workspaceOwner)
-        ? withNativeHostCustodyWorkspaceAuthority(workspaceOwner, ids, consume)
-        : workspaceOwner.withLaunchAuthority(ids, consume));
+      return await workspaceOwner.withLaunchAuthority(ids, consume);
     } catch (error) {
       attempt.closed = true;
       // A workspace owner can reject while its callback is still preparing.

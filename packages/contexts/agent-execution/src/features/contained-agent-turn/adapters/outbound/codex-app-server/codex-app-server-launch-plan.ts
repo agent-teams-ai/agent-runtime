@@ -1,5 +1,5 @@
 import { assertIssuedCodexPermissionBoundary } from "./codex-native-broker-boundary.js";
-import { inspectDarwinNativeLaunchObservation, assertDarwinNativeLaunchObservationCurrent, type DarwinNativeLaunchObservation } from "../filesystem/darwin-attempt-workspace-backend.js";
+import { inspectDarwinNativeLaunchObservation, assertDarwinNativeLaunchObservationCurrent, type DarwinNativeLaunchObservation } from "../host-custody/contained-turn-kernel-custody-entrypoint.js";
 import { createHash } from "node:crypto";
 import { types } from "node:util";
 import { lstatSync, realpathSync, statSync } from "node:fs";
@@ -372,3 +372,6 @@ export {codexNativeBrokerBoundary,
 
 export {DarwinCodexNativeFiles} from "./darwin-codex-native-files.js";
 export {createDarwinCodexNativeBrokerRecipe} from "./codex-native-broker-recipe.js";
+
+export {installCodexDarwinNativeBrokerFiles} from "./codex-native-broker-files.js";
+export type {CodexNativeBrokerRecipe} from "./codex-native-broker-recipe.js";

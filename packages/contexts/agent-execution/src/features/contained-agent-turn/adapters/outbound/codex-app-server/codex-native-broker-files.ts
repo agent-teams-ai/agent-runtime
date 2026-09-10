@@ -2,8 +2,8 @@ import {
   readDarwinNativeLaunchObservation, inspectDarwinNativeLaunchObservation,
   installDarwinNativeCodexMaterial, inspectDarwinNativeCodexMaterial, assertDarwinNativeCodexMaterialCurrent,
   type DarwinNativeWorkspaceSelection, type DarwinNativeCodexMaterial,
-} from "../filesystem/darwin-attempt-workspace-backend.js";
-import { codexDarwinNativeLaunchObservation, acceptCodexDarwinNativeMaterialObservation } from "./codex-app-server-permission-boundary.js";
+} from "../host-custody/contained-turn-kernel-custody-entrypoint.js";
+import { codexDarwinNativeLaunchObservation, acceptCodexDarwinNativeMaterialObservation, validateCodexDirectoryIdentity } from "./codex-app-server-permission-boundary.js";
 import { createHash, randomUUID } from "node:crypto";
 import { lstatSync, readdirSync, type BigIntStats } from "node:fs";
 import { capturePathLineage, openStablePath, pathLineagesEqual } from "@agent-teams/filesystem-custody";
@@ -12,7 +12,6 @@ import {
   codexNativeBrokerBoundary, renderCodexNativeBrokerConfig,
   type CodexNativeBrokerRecipe,
 } from "./codex-native-broker-recipe.js";
-import { validateCodexDirectoryIdentity } from "./codex-app-server-permission-boundary.js";
 
 export interface CodexNativeBrokerFiles {
   readonly kind: "codex-native-broker-prepared-files/v1";
