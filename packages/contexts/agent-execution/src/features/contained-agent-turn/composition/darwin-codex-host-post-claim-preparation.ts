@@ -68,15 +68,27 @@ export interface DarwinCodexHostPreparationInput {
   readonly session: HostHttpEgressSessionDependencies;
 }
 
-/** One-operation candidate factory for createCodexCurrentKernelOwner's existing
- * postClaimPreparation option. No public export, product qualification bypass,
- * Linux storage selection, arbitrary native callback or detached route owner. */
-export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHostPreparationInput): ContainedTurnHostPostClaimPreparation => {
-  const options = Object.freeze({...input, executable: Object.freeze({...input.executable}),
+const snapshotPreparationInput = (input: DarwinCodexHostPreparationInput) => {
+  return Object.freeze({...input, executable: Object.freeze({...input.executable}),
     observer: Object.freeze({...input.observer}), durableRoot: Object.freeze({...input.durableRoot}),
     catalogSource: Buffer.from(input.catalogSource), limits: Object.freeze({...input.limits}),
     localCut: Object.freeze({...input.localCut, expectedClock: Object.freeze({...input.localCut.expectedClock}),
       clock: Object.freeze({read: input.localCut.clock.read.bind(input.localCut.clock), within: input.localCut.clock.within.bind(input.localCut.clock)})})});
+};
+
+const hasRequiredNativeOwners = (options: DarwinCodexHostPreparationInput): boolean => {
+  // Native execution requires matching retained HTTP and effect owners before allocation.
+  const observation = codexDarwinNativeLaunchObservation(options.boundary);
+  const native = options.httpLaunchAuthority;
+  return (observation === undefined) === (native === undefined) &&
+    (native === undefined || isDarwinCodexEffectCustodyOwner(options.effectCustody));
+};
+
+/** One-operation candidate factory for createCodexCurrentKernelOwner's existing
+ * postClaimPreparation option. No public export, product qualification bypass,
+ * Linux storage selection, arbitrary native callback or detached route owner. */
+export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHostPreparationInput): ContainedTurnHostPostClaimPreparation => {
+  const options = snapshotPreparationInput(input);
   let entered = false;
   return Object.freeze({prepareClaimed: async (claimed: Parameters<ContainedTurnHostPostClaimPreparation["prepareClaimed"]>[0]) => {
     if (entered) {return Object.freeze({kind: "quarantined" as const});} entered = true;
@@ -90,12 +102,8 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
     };
     let nativeLease: DarwinNativeExecutionLease | undefined;
     try {
-      // Native execution requires the matching retained HTTP and effect owners
-      // before any protected roots or route resources can be touched.
-      const nativeObservation = codexDarwinNativeLaunchObservation(options.boundary);
       const native = options.httpLaunchAuthority;
-      if ((nativeObservation === undefined) !== (native === undefined) ||
-          (native !== undefined && !isDarwinCodexEffectCustodyOwner(options.effectCustody))) {
+      if (!hasRequiredNativeOwners(options)) {
         return Object.freeze({kind: "unsupported" as const, reason: "owner" as const});
       }
       const preparation = NodeProviderProcessCustodyCore.httpPreparation(options.hostCustody);

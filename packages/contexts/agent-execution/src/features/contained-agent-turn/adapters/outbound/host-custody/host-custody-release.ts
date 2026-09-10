@@ -94,13 +94,6 @@ const closeLiveCustody = async (
     return Object.freeze({kind: "released" as const});
   }
   const cooperativeDarwin = live.fingerprint?.containmentProfile === "cooperative-darwin-posix-process-group";
-  const provedNoStart = isCompleteProvedNoStart(live);
-  if (cooperativeDarwin && !provedNoStart) {
-    if (!quarantinePrivateRootForReconciliation(live)) {
-      return unprovenResult("private-root-quarantine-unproven", input, live);
-    }
-    return unprovenResult("darwin-cooperative-reconciliation-required", input, live);
-  }
   if (cooperativeDarwin) {
     if (!quarantinePrivateRootForReconciliation(live)) {
       return unprovenResult("private-root-quarantine-unproven", input, live);

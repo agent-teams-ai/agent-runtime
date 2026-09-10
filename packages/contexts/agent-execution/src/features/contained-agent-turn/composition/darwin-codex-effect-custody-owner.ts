@@ -21,6 +21,11 @@ const captureExecution = (execution: CodexEffectCustodyExecution): CodexEffectCu
     effectId: fields.effectId!.value!, operationId: fields.operationId!.value!, workspaceRef: fields.workspaceRef!.value!});
 };
 
+const directoriesJoined = (facts: ReturnType<typeof inspectDarwinNativeLaunchObservation>): boolean =>
+  facts.privateRoot.path !== facts.workspace.path && facts.privateRoot.dev === facts.workspace.dev &&
+  facts.privateRoot.ino !== facts.workspace.ino && facts.privateRoot.uid === facts.leasedUid &&
+  facts.workspace.uid === facts.leasedUid && facts.privateRoot.mode === 0o700 && facts.workspace.mode === 0o700;
+
 /** Native retained directory evidence covers the contained turn, never the
  * inode opened by an individual provider syscall. Endpoint paths are diagnostic.
  * Construction grants nothing until the actual retained PG claim is joined. */
@@ -72,9 +77,7 @@ export const createDarwinCodexEffectCustodyOwner = () => {
           facts.operationId !== authenticated.operationId || native.prepared.workspaceId !== authenticated.workspaceId ||
           native.prepared.executionGenerationId !== authenticated.executionGenerationId ||
           !/^[a-f0-9]{64}$/u.test(native.hostGenerationBinding) || !native.custodyRef ||
-          facts.privateRoot.path === facts.workspace.path || facts.privateRoot.dev !== facts.workspace.dev ||
-          facts.privateRoot.ino === facts.workspace.ino || facts.privateRoot.uid !== facts.leasedUid ||
-          facts.workspace.uid !== facts.leasedUid || facts.privateRoot.mode !== 0o700 || facts.workspace.mode !== 0o700) {
+          !directoriesJoined(facts)) {
         throw new TypeError("Darwin effect custody execution/directory join unproven");
       }
       retained = Object.freeze({lease, execution: captured});

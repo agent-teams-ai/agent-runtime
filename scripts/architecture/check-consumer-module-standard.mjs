@@ -120,7 +120,7 @@ const staticString = node => {
     const right = staticString(node.right);
     return left === undefined || right === undefined ? undefined : left + right;
   }
-  return undefined;
+  return;
 };
 const staticModuleRequest = node => {
   if (node.type === "Literal" && typeof node.value === "string") {return node.value;}
@@ -132,9 +132,9 @@ const staticModuleRequest = node => {
     const right = staticModuleRequest(node.right);
     return left === undefined || right === undefined ? undefined : left + right;
   }
-  return undefined;
+  return;
 };
-const walkAst = (node, visit, parent = undefined, key = undefined) => {
+const walkAst = (node, visit, parent, key) => {
   if (node === null || typeof node !== "object") {return;}
   if (typeof node.type === "string") {visit(node, parent, key);}
   for (const [childKey, child] of Object.entries(node)) {
@@ -160,6 +160,51 @@ const patternIdentifiers = pattern => {
   return identifiers;
 };
 
+const inspectFactoryImport = (node, state) => {
+  for (const specifier of node.specifiers) {
+    if (specifier.type === "ImportNamespaceSpecifier") {
+      state.namespaceBindings.add(specifier.local.name);
+      state.excludedIdentifiers.add(specifier.local);
+      state.factoryAliases.push(specifier);
+    } else if (specifier.type === "ImportSpecifier" && staticString(specifier.imported) === factoryName) {
+      state.factoryBindings.add(specifier.local.name);
+      state.excludedIdentifiers.add(specifier.imported);
+      state.excludedIdentifiers.add(specifier.local);
+      state.factoryIdentifiers += 1 + (specifier.local.name === factoryName ? 1 : 0);
+      if (specifier.local.name !== factoryName) {state.factoryAliases.push(specifier);}
+    }
+  }
+};
+
+const inspectFactoryDeclarations = (path, program, state) => {
+  const {factoryBindings, factoryAliases, excludedIdentifiers} = state;
+  for (const node of program.body) {
+    if (node.type === "ExportAllDeclaration" && factoryModule(path, node.source.value)) {
+      factoryAliases.push(node);
+    } else if (node.type === "ImportDeclaration" && factoryModule(path, node.source.value)) {
+      inspectFactoryImport(node, state);
+    } else if (node.type === "ExportNamedDeclaration" && node.source !== null &&
+        factoryModule(path, node.source.value)) {
+      for (const specifier of node.specifiers) {
+        if (staticString(specifier.local) !== factoryName) {continue;}
+        excludedIdentifiers.add(specifier.local);
+        excludedIdentifiers.add(specifier.exported);
+        state.factoryIdentifiers += 1 + (staticString(specifier.exported) === factoryName ? 1 : 0);
+        if (staticString(specifier.exported) !== factoryName) {factoryAliases.push(specifier);}
+      }
+    } else if (path === factoryPath && node.type === "ExportNamedDeclaration" &&
+        node.declaration?.type === "VariableDeclaration") {
+      for (const declaration of node.declaration.declarations) {
+        if (declaration.id.type === "Identifier" && declaration.id.name === factoryName) {
+          factoryBindings.add(factoryName);
+          excludedIdentifiers.add(declaration.id);
+          state.factoryIdentifiers += 1;
+        }
+      }
+    }
+  }
+};
+
 const inspectTypeScript = (path, source) => {
   const parsed = parseSync(path, source);
   assert.deepEqual(parsed.errors, [], `Oxc could not parse ${path}`);
@@ -174,43 +219,9 @@ const inspectTypeScript = (path, source) => {
   const factoryAliases = [];
   const excludedIdentifiers = new Set();
   let factoryIdentifiers = 0;
-  for (const node of parsed.program.body) {
-    if (node.type === "ExportAllDeclaration" && factoryModule(path, node.source.value)) {
-      factoryAliases.push(node);
-    } else if (node.type === "ImportDeclaration" && factoryModule(path, node.source.value)) {
-      for (const specifier of node.specifiers) {
-        if (specifier.type === "ImportNamespaceSpecifier") {
-          namespaceBindings.add(specifier.local.name);
-          excludedIdentifiers.add(specifier.local);
-          factoryAliases.push(specifier);
-        } else if (specifier.type === "ImportSpecifier" && staticString(specifier.imported) === factoryName) {
-          factoryBindings.add(specifier.local.name);
-          excludedIdentifiers.add(specifier.imported);
-          excludedIdentifiers.add(specifier.local);
-          factoryIdentifiers += 1 + (specifier.local.name === factoryName ? 1 : 0);
-          if (specifier.local.name !== factoryName) {factoryAliases.push(specifier);}
-        }
-      }
-    } else if (node.type === "ExportNamedDeclaration" && node.source !== null &&
-        factoryModule(path, node.source.value)) {
-      for (const specifier of node.specifiers) {
-        if (staticString(specifier.local) !== factoryName) {continue;}
-        excludedIdentifiers.add(specifier.local);
-        excludedIdentifiers.add(specifier.exported);
-        factoryIdentifiers += 1 + (staticString(specifier.exported) === factoryName ? 1 : 0);
-        if (staticString(specifier.exported) !== factoryName) {factoryAliases.push(specifier);}
-      }
-    } else if (path === factoryPath && node.type === "ExportNamedDeclaration" &&
-        node.declaration?.type === "VariableDeclaration") {
-      for (const declaration of node.declaration.declarations) {
-        if (declaration.id.type === "Identifier" && declaration.id.name === factoryName) {
-          factoryBindings.add(factoryName);
-          excludedIdentifiers.add(declaration.id);
-          factoryIdentifiers += 1;
-        }
-      }
-    }
-  }
+  const declarationState = {factoryBindings, namespaceBindings, factoryAliases, excludedIdentifiers, factoryIdentifiers};
+  inspectFactoryDeclarations(path, parsed.program, declarationState);
+  factoryIdentifiers = declarationState.factoryIdentifiers;
   walkAst(parsed.program, node => {
     if (node.type !== "TSImportEqualsDeclaration" || node.id.type !== "Identifier") {return;}
     const expression = node.moduleReference.type === "TSExternalModuleReference"
@@ -355,14 +366,7 @@ export async function loadConsumerModuleStandardInputs(root = repositoryRoot) {
   return { decisionBytes, decisionRegistry, packageManifest, pathExistence, profile, sources };
 }
 
-export function validateConsumerModuleStandard(inputs) {
-  assert.deepEqual(inputs.profile, EXPECTED_PROFILE,
-    "consumer profile must equal the reviewed pending-adoption record");
-
-  for (const path of requiredPaths) {
-    assert.equal(inputs.pathExistence.get(path), true, `required adoption path is missing: ${path}`);
-  }
-
+const validatePendingDecision = inputs => {
   const decision = inputs.decisionRegistry.decisions?.find(record => record.id === "ADR-0015");
   assert.equal(decision, undefined, "proposed ADR-0015 cannot enter the immutable accepted-decision registry");
   const decisionSource = inputs.decisionBytes.toString("utf8");
@@ -373,6 +377,18 @@ export function validateConsumerModuleStandard(inputs) {
   const body = decisionSource.slice(frontmatterMatch?.[0].length ?? 0);
   assert.deepEqual([...body.matchAll(/^Status:\s*(.+)$/gmu)].map(match => match[1]), ["proposed"],
     "ADR-0015 body must declare proposed exactly once");
+
+};
+
+export function validateConsumerModuleStandard(inputs) {
+  assert.deepEqual(inputs.profile, EXPECTED_PROFILE,
+    "consumer profile must equal the reviewed pending-adoption record");
+
+  for (const path of requiredPaths) {
+    assert.equal(inputs.pathExistence.get(path), true, `required adoption path is missing: ${path}`);
+  }
+
+  validatePendingDecision(inputs);
 
   for (const [name, command] of Object.entries(expectedScripts)) {
     assert.equal(inputs.packageManifest.scripts?.[name], command, `${name} must execute the reviewed command`);
