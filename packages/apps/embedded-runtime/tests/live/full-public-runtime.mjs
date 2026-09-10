@@ -128,7 +128,9 @@ export function verifyReleasedCleanup(cleanup) {
 }
 
 export async function runDarwinPublicRuntimeHostChild() {
-  const {activation: input, createDarwinLiveRuntime} = await import("./darwin-live-production-root.mjs");
+  const {loadDarwinLiveActivation, createDarwinLiveRuntime} = await import("./darwin-live-production-root.mjs");
+  const activation = await loadDarwinLiveActivation();
+  const input = Object.freeze({...activation, ...activation.turn});
   if (input.version !== 1 || input.candidate !== true || input.qualified !== false) {
     throw new Error("invalid candidate child input");
   }

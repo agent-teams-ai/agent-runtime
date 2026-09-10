@@ -21,7 +21,7 @@ const fixture = async () => {
   await writeFile(peer, "peer"); await writeFile(codex, "codex", {mode: 0o700});
   const evidenceDirectory = join(root, "evidence");
   const activation = await createDarwinLiveActivationManifest({
-    sourceRevision: "a".repeat(40), closure: [
+    sourceRevision: "a".repeat(40), turn: {operationId: "operation:fixture", commandId: "command:fixture", effectId: "effect:fixture", attemptId: "attempt:fixture", executionGenerationId: "execution-generation:fixture", expectedMarker: "marker", frozenWorkspacePath: join(root, "frozen-workspace"), resultPath: join(root, "frozen-workspace", "result.txt"), sourceMessagePath: join(root, "input", "nested", "message.txt"), taskPath: join(root, "TASK.md"), scope: {tenantId: "tenant", projectId: "project"}, expectedResultSha256: "1".repeat(64), expectedTaskSha256: "2".repeat(64), maximumObservations: 4, observeTimeoutMs: 1000}, infrastructure: {identities: {operationId: "operation:fixture", attemptId: "attempt:fixture", effectId: "effect:fixture", executionGenerationId: "execution-generation:fixture", custodyId: "custody:fixture"}, database: {}, providerAccess: {}, runtimeSecurity: {}, filesystem: {}, host: {}, deployment: {}, verification: {}, native: {}}, closure: [
       {role: "runner", path: join(live, "run-darwin-codex-live-canary.mjs")}, {role: "host-entrypoint", path: entrypoint},
       {role: "full-public-runtime", path: runtime},
       {role: "root-packet-builder", path: join(live, "darwin-native-root-packet.mjs")},
@@ -45,6 +45,19 @@ test("preflight refuses while the exact production root is absent", async () => 
     await assert.rejects(main(["--preflight", value.activationPath]), /closure role production-root is missing/);
     await assert.rejects(readFile(join(value.evidenceDirectory, "attempt-consumed.json")), {code: "ENOENT"});
   } finally {await rm(value.root, {recursive: true, force: true});}
+});
+
+
+test("CLI preflight passes the verified canonical activation to root packet validation", async () => {
+  let prepared;
+  await main(["--preflight", "/fixed/activation.json"], {
+    loadActivation: async () => ({manifest: {sourceRevision: "a".repeat(40)}, manifestPath: "/canonical/activation.json"}),
+    prepareRootLaunch: async path => {prepared = path;},
+    preflightInfrastructure: async () => ({hostEndpointReachable: true, databaseEmpty: true,
+      sourceResultAbsent: true, providerAuthoritiesFresh: true, routeInstalled: true,
+      routeReadbackCurrent: true, mutated: false}),
+  });
+  assert.equal(prepared, "/canonical/activation.json");
 });
 
 test("attempt marker is exclusive and cannot be replayed", async () => {

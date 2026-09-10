@@ -2,6 +2,17 @@ import {createHash} from "node:crypto";
 import {lstat, readFile} from "node:fs/promises";
 import {isAbsolute} from "node:path";
 
+const plainJson = value => {
+  if (value === null || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) {
+    throw new TypeError("activation infrastructure must be a plain JSON record");
+  }
+  const encoded = JSON.stringify(value);
+  if (encoded === undefined || /"(?:token|password|cookie|authJson|credentials)"\s*:/iu.test(encoded)) {
+    throw new TypeError("activation infrastructure contains forbidden material");
+  }
+  return JSON.parse(encoded);
+};
+
 const digestFile = async ({path, role}) => {
   if (typeof role !== "string" || role.length === 0) {throw new TypeError("activation closure roles are required");}
   if (!isAbsolute(path)) {throw new TypeError("activation closure paths must be absolute");}
@@ -11,8 +22,23 @@ const digestFile = async ({path, role}) => {
 };
 
 export async function createDarwinLiveActivationManifest(input) {
-  if (!/^[a-f0-9]{40}$/.test(input.sourceRevision) || !Array.isArray(input.closure) || input.closure.length === 0) {
-    throw new TypeError("invalid activation source or closure");
+  const turn = input.turn;
+  const textFields = ["operationId", "commandId", "effectId", "attemptId", "executionGenerationId", "expectedMarker",
+    "frozenWorkspacePath", "resultPath", "sourceMessagePath", "taskPath"];
+  if (!/^[a-f0-9]{40}$/.test(input.sourceRevision) || !Array.isArray(input.closure) || input.closure.length === 0 ||
+      !turn || textFields.some(key => typeof turn[key] !== "string" || turn[key].length === 0) ||
+      typeof turn.scope?.tenantId !== "string" || typeof turn.scope?.projectId !== "string" ||
+      !/^[a-f0-9]{64}$/.test(turn.expectedResultSha256) || !/^[a-f0-9]{64}$/.test(turn.expectedTaskSha256) ||
+      !Number.isInteger(turn.maximumObservations) || turn.maximumObservations < 1 || turn.maximumObservations > 128 ||
+      !Number.isInteger(turn.observeTimeoutMs) || turn.observeTimeoutMs < 1 || turn.observeTimeoutMs > 30000) {
+    throw new TypeError("invalid activation source, closure or turn identity");
+  }
+  const infrastructure = plainJson(input.infrastructure);
+  for (const key of ["identities", "database", "providerAccess", "runtimeSecurity", "filesystem", "host", "deployment", "verification", "native"]) {
+    if (infrastructure[key] === null || typeof infrastructure[key] !== "object") {throw new TypeError(`activation infrastructure ${key} is required`);}
+  }
+  for (const key of ["operationId", "attemptId", "effectId", "executionGenerationId"]) {
+    if (infrastructure.identities[key] !== turn[key]) {throw new TypeError(`activation identity ${key} differs from infrastructure`);}
   }
   const files = [];
   for (const entry of input.closure) {files.push(await digestFile(entry));}
@@ -28,6 +54,11 @@ export async function createDarwinLiveActivationManifest(input) {
     database: Object.freeze({...input.database}),
     source: Object.freeze({...input.source}),
     evidenceDirectory: input.evidenceDirectory,
+    runtimeRootModulePath: input.runtimeRootModulePath,
+    paRuntimeModulePath: input.paRuntimeModulePath,
+    infrastructureModulePath: input.infrastructureModulePath,
+    turn: Object.freeze(structuredClone(input.turn)),
+    infrastructure: Object.freeze(infrastructure),
     files: Object.freeze(files.map(Object.freeze)),
   });
 }

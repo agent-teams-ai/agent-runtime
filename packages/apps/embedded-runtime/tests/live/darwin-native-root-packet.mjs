@@ -21,6 +21,11 @@ const digest = value => {
   return hex(value);
 };
 
+export function validateDarwinNativeRootPacketTemplate(input) {
+  encodeDarwinNativeRootPacket({...input, fds: Array.from({length: 5}, (_, index) =>
+    ({dev: 0x100 + index, ino: 0x200 + index, right: index < 3 ? 1 : index === 3 ? 2 : 3}))});
+}
+
 // oxlint-disable-next-line complexity -- mirrors the native fail-closed decoder's complete fixed record validation
 export function encodeDarwinNativeRootPacket(input) {
   if (!Number.isInteger(input.hostUid) || !Number.isInteger(input.hostGid) || !Number.isInteger(input.uid) || !Number.isInteger(input.gid) ||
