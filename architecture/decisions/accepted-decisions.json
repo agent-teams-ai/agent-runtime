@@ -66,6 +66,11 @@
       "id": "ADR-0017",
       "path": "docs/decisions/0017-feature-module-production-scope-roles.md",
       "immutableDigest": "sha256:a7b5030f94eeb3ec1abaab0919237f8359c7d0b24c997abf133d9007b8d0a86f"
+    },
+    {
+      "id": "ADR-0018",
+      "path": "docs/decisions/0018-declared-production-module-edges.md",
+      "immutableDigest": "sha256:30047bd8af157f3190ed149d55a972bbccf8d5dd4ad8b72857099c53c8151843"
     }
   ]
 }

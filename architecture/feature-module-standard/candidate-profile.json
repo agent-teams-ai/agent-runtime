@@ -172,6 +172,7 @@
     "packages/contexts/provider-access/src/composition.ts"
   ],
   "featureEdges": [],
+  "moduleEdges": [],
   "extensions": [],
   "deviations": [],
   "exceptions": [],

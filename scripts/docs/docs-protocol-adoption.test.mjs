@@ -97,7 +97,8 @@ async function addRequiredAnchorFixtures(root) {
     "packages/apps/embedded-runtime/src/index.ts",
     "packages/contexts/agent-execution/tests/live/claude-contained-turn-live-canary.mjs",
     "scripts/architecture/check-consumer-module-standard.mjs",
-    "scripts/architecture/check-feature-modules.mjs"
+    "scripts/architecture/check-feature-modules.mjs",
+    "scripts/architecture/feature-module-edges.mjs"
   ]) {
     const destination = join(root, path);
     await mkdir(dirname(destination), { recursive: true });

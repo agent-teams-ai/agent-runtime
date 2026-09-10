@@ -20,7 +20,26 @@ const productionModule = (overrides = {}) => ({
   ...overrides,
 });
 
-export const feature = (id, roles = ["domain"]) => ({
+export const secondModule = () => ({
+  id: "fixture-other",
+  role: "platform",
+  moduleRoot: "other",
+  sourceRoot: "other/src",
+  packageName: "@fixture/other",
+  ownerDocument: "ADR-0005",
+  curatedExports: [".", "./composition"],
+  adoption: "active",
+  activationAuthority: "ADR-0005",
+});
+
+export const secondModuleFeature = (roles = ["contracts", "adapters"]) => ({
+  id: "gamma",
+  root: "other/src/features/gamma",
+  roles,
+  entrypoints: { public: "other/src/features/gamma/index.ts", internal: "other/src/features/gamma/internal.ts" },
+});
+
+const feature = (id, roles = ["domain"]) => ({
   id,
   root: `src/features/${id}`,
   roles,
@@ -106,14 +125,20 @@ export const fixtureProfile = (fixture) => {
     authority: { ...authority, id: fixture.authorityId ?? authority.id, ...fixture.authorityExtra },
     scope: {
       workspaceContainers: fixture.workspaceContainers ?? [],
-      productionModules: fixture.productionModules ?? [productionModule()],
-      productionRoots: ["src"],
+      productionModules: fixture.productionModules
+        ?? (fixture.secondModule ? [productionModule(), secondModule()] : [productionModule()]),
+      productionRoots: fixture.secondModule ? ["src", "other/src"] : ["src"],
       outOfScope: ["everything else"],
     },
     moduleRoles: ["contracts", "domain", "application", "adapters", "composition"],
-    features: [feature("alpha", fixture.alphaRoles)],
-    assemblyFiles: ["src/index.ts", "src/composition.ts"],
+    features: fixture.secondModule
+      ? [feature("alpha", fixture.alphaRoles), secondModuleFeature(fixture.gammaRoles)]
+      : [feature("alpha", fixture.alphaRoles)],
+    assemblyFiles: fixture.secondModule
+      ? ["src/index.ts", "src/composition.ts", "other/src/index.ts", "other/src/composition.ts"]
+      : ["src/index.ts", "src/composition.ts"],
     featureEdges: fixture.edges ?? [],
+    moduleEdges: fixture.moduleEdges ?? [],
     extensions: fixture.extensions ?? [], deviations: fixture.deviations ?? [], exceptions: fixture.exceptions ?? [],
     enforcement: { candidate: "pnpm architecture:feature-modules:candidate", active: "pnpm architecture:feature-modules:active", fixtures: "pnpm test:feature-modules" },
     activation: fixtureActivation(status),

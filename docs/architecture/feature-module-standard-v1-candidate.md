@@ -9,6 +9,7 @@ related:
   - ADR-0007
   - ADR-0013
   - ADR-0017
+  - ADR-0018
 code_anchors:
   - enforcement: required
     pattern: architecture/feature-module-standard/**
@@ -158,6 +159,27 @@ pending module stays an excluded root and is not checked as a feature module,
 but its declared package name, role, owner document and curated export keys are
 still compared with its real manifest, so the classification cannot drift into a
 future-state promise.
+
+## Dependencies between production modules
+
+ADR-0018 governs every dependency between two active governed modules. The
+profile declares it as a `moduleEdges` entry with its exact kind, `runtime` or
+`type`, and both ends must be declared, distinct and active. A dependency on a
+pending module is not governed by this rule, because a pending module's sources
+stay outside the checked tree; activation is what brings it under the rule. The
+import must resolve to one of the target module's curated assembly entries; any
+other path inside the target, including a path inside one of its features, is
+rejected as `FM_MODULE_DEEP_IMPORT`. Only the importing module's own
+`composition.ts` or a feature's `adapters` or `composition` layer may hold such
+an import: the public package entry still exposes only its own contracts.
+
+A feature edge is correspondingly a relationship inside one module. Declaring one
+between features of different modules is rejected.
+
+Declared module edges follow the same discipline as feature edges: an unobserved
+declaration is rejected as future-state permission, and observed edges are
+checked for runtime and type cycles. `moduleEdges` stays empty until a delivery
+needs an edge.
 
 A production package that exists inside one of those containers and is not
 classified fails the gate with `FM_UNCLASSIFIED_MODULE`. Activating a pending
