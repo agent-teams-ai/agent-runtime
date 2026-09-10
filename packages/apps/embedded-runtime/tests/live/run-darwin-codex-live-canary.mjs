@@ -92,10 +92,12 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     const inspect = dependencies.preflightInfrastructure ??
       (await import(pathToFileURL(manifest.runtimeRootModulePath).href)).preflightDarwinInfrastructure;
     if (typeof inspect !== "function") {fail("infrastructure preflight is unavailable");}
+    // No operation has been claimed yet. Route installation/currentness belongs to
+    // the owned post-claim, pre-spawn enforcement, never activation assertions.
     const readback = await inspect(manifest);
     if (readback?.hostEndpointReachable !== true || readback.databaseEmpty !== true ||
         readback.sourceResultAbsent !== true || readback.providerAuthoritiesFresh !== true ||
-        readback.routeInstalled !== true || readback.routeReadbackCurrent !== true || readback.mutated !== false) {
+        readback.mutated !== false) {
       fail("inert infrastructure readback refused");
     }
     process.stdout.write(`${JSON.stringify({status: "inert", sourceRevision: manifest.sourceRevision})}\n`);

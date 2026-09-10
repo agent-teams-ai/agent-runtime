@@ -54,10 +54,48 @@ test("CLI preflight passes the verified canonical activation to root packet vali
     loadActivation: async () => ({manifest: {sourceRevision: "a".repeat(40)}, manifestPath: "/canonical/activation.json"}),
     prepareRootLaunch: async path => {prepared = path;},
     preflightInfrastructure: async () => ({hostEndpointReachable: true, databaseEmpty: true,
-      sourceResultAbsent: true, providerAuthoritiesFresh: true, routeInstalled: true,
-      routeReadbackCurrent: true, mutated: false}),
+      sourceResultAbsent: true, providerAuthoritiesFresh: true, mutated: false}),
   });
   assert.equal(prepared, "/canonical/activation.json");
+});
+
+const inertReadback = () => ({hostEndpointReachable: true, databaseEmpty: true,
+  sourceResultAbsent: true, providerAuthoritiesFresh: true, mutated: false});
+const preflightDependencies = readback => ({
+  loadActivation: async () => ({manifest: {sourceRevision: "a".repeat(40),
+    routeInstalled: true, routeReadbackCurrent: true}, manifestPath: "/canonical/activation.json"}),
+  prepareRootLaunch: async () => {},
+  preflightInfrastructure: async () => readback,
+});
+
+test("inert preflight permits an uninstalled per-operation route before claim", async () => {
+  await main(["--preflight", "/fixed/activation.json"], preflightDependencies({
+    ...inertReadback(), routeInstalled: false, routeReadbackCurrent: false,
+  }));
+});
+
+for (const field of Object.keys(inertReadback())) {
+  test(`inert preflight rejects missing or invalid ${field} despite activation assertions`, async () => {
+    for (const invalid of [undefined, null, "true", field === "mutated"]) {
+      await assert.rejects(main(["--preflight", "/fixed/activation.json"],
+        preflightDependencies({...inertReadback(), [field]: invalid})), /inert infrastructure readback refused/);
+    }
+  });
+}
+
+test("inert preflight rejects missing readback", async () => {
+  await assert.rejects(main(["--preflight", "/fixed/activation.json"],
+    preflightDependencies(undefined)), /inert infrastructure readback refused/);
+});
+
+test("failed packet validation prevents infrastructure inspection", async () => {
+  let inspected = false;
+  await assert.rejects(main(["--preflight", "/fixed/activation.json"], {
+    ...preflightDependencies(inertReadback()),
+    prepareRootLaunch: async () => {throw new Error("packet rejected");},
+    preflightInfrastructure: async () => {inspected = true; return inertReadback();},
+  }), /packet rejected/);
+  assert.equal(inspected, false);
 });
 
 test("attempt marker is exclusive and cannot be replayed", async () => {
