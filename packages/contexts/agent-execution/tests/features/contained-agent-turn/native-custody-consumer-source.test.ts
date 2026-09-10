@@ -37,7 +37,7 @@ registerHooks({resolve(specifier, context, next) {
     "codex-app-server-launch-plan.ts", "codex-app-server-permission-boundary.ts", "codex-native-broker-files.ts",
     "codex-native-broker-recipe.ts", "node-kernel-workspace-authority.ts",
   ].some(name => context.parentURL?.endsWith("/" + name))) || specifier.endsWith("/node-contained-turn-workspace-owner.js")) {
-    if (specifier.endsWith("/contained-turn-kernel-custody-entrypoint.js") && context.parentURL?.endsWith("/node-kernel-workspace-authority.ts")) {
+    if (specifier.endsWith("/contained-turn-kernel-custody-entrypoint.js")) {
       return {url: new URL("./synthetic-native-kernel-entrypoint.fixture.ts", import.meta.url).href, shortCircuit: true};
     }
     return {url: producer, shortCircuit: true};
@@ -157,6 +157,9 @@ test("fixed native material is same-recipe, same-files, generation checked witho
   const options = {boundary, executablePath: "/synthetic/codex", intentMode: "analysis", platformTarget: {platform: "darwin", architecture: "arm64"},
     privateRootPath: "/synthetic/private", tmpDir: "/synthetic/private/tmp"};
   const initial = launch.createCodexAppServerLaunchPlan(options);
+  const {isDarwinNativeRootLaunchPlan} = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-launch.ts");
+  assert.equal(isDarwinNativeRootLaunchPlan(initial), true);
+  assert.equal(isDarwinNativeRootLaunchPlan({...initial}), false);
   launch.validateCodexAppServerLaunchPlanRoots(initial);
   assert.throws(() => launch.createCodexAppServerLaunchPlan({...options, boundary: {...boundary}}));
   const installed = await files.installCodexDarwinNativeBrokerFiles(selection, recipe, catalog);
