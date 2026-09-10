@@ -11,9 +11,7 @@ import {
   type ContainedTurnArtifactOutputRecord,
 } from "./contained-turn-artifact-manifest.js";
 import type { VerifiedStoredArtifact } from "./contained-turn-artifact-store.js";
-import {
-  closeContainedTurnArtifactHandles,
-} from "./contained-turn-artifact-custody.js";
+import { closeWorkspaceHandles } from "./contained-turn-workspace-io.js";
 import {
   inspectFileHandle,
   isMissingFilesystemEntry,
@@ -574,5 +572,5 @@ export const sealContainedTurnArtifact = async (
       context, directories, manifestDigest, name, recordName, request,
       rootIdentity: manifest.tree.rootIdentity, treeDigest: manifest.treeDigest,
     });
-  } finally {await closeContainedTurnArtifactHandles(directories.handles);}
+  } finally {await closeWorkspaceHandles(directories.handles);}
 };
