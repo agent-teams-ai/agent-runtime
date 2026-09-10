@@ -55,3 +55,7 @@ export const canonicalHttpEvidenceReceipt = (input: unknown): Readonly<{receipt:
   if (Buffer.byteLength(canonical, "utf8") > 32_768) {throw new TypeError("HTTP evidence receipt too large");}
   return {receipt, canonical};
 };
+
+export type PostgresHttpEgressReceiptIdentity = Readonly<{operationId: string; attemptId: string; requestId: string}>;
+export const snapshotHttpEvidenceIdentity = (input: unknown): PostgresHttpEgressReceiptIdentity =>
+  snapshot(input, {operationId: opaque, attemptId: opaque, requestId: opaque}) as PostgresHttpEgressReceiptIdentity;
