@@ -78,5 +78,5 @@ export type {
   RetainedNativeAttemptAuthority, RetainedNativeHttpLaunchAuthority, NativeDirectoryFact, NativeFileFact,
 } from "./darwin-attempt-owner-selection.js";
 export type {
-  DarwinAttemptRetainedOwners, DarwinAttemptRetainedCompletion,
+  DarwinAttemptRetainedOwners, DarwinAttemptRetainedCompletion, DarwinAttemptRetainedOwnerFactory,
 } from "./darwin-attempt-owner-bridge.js";

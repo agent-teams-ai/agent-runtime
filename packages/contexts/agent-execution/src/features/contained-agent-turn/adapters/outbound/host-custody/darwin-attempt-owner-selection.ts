@@ -5,7 +5,7 @@ import { fstatSync } from "node:fs";
 import type { CommittedDispatchProofV1 } from "../../../domain/committed-dispatch-proof-v1.js";
 import type { ContainedTurnWriterFence } from "../../../domain/contained-turn-identities.js";
 import { bindDarwinAttemptOwnerBridge } from "./darwin-attempt-owner-bridge.js";
-import type { DarwinAttemptRetainedOwners } from "./darwin-attempt-owner-bridge.js";
+import type { DarwinAttemptRetainedOwnerFactory } from "./darwin-attempt-owner-bridge.js";
 
 import type { FinalHostLaunch, HostLaunchBinding } from "./host-launch-finalization.js";
 import { darwinNativeArgumentsSha256, type DarwinNativeFinalLaunchData } from "./darwin-attempt-owner-protocol.js";
@@ -134,7 +134,7 @@ const retainAttemptAuthority = (issued: SelectionRecord): RetainedNativeAttemptA
  * The returned receiver belongs ONLY to the actual Lane4 outer store wrapper.
  * It is deliberately absent from the opaque workspace selection. */
 export async function captureRootDarwinAttemptWorkspace(
-  retainedConsumers: DarwinAttemptRetainedOwners,
+  retainedOwnerFactory: DarwinAttemptRetainedOwnerFactory,
 ): Promise<Readonly<{ selection: DarwinNativeWorkspaceSelection; attemptAuthority: RetainedNativeAttemptAuthority;
   httpLaunchAuthority: RetainedNativeHttpLaunchAuthority }>> {
   if (rootConstructorConsumed) {throw new Error("native root constructor already consumed");}
@@ -144,7 +144,7 @@ export async function captureRootDarwinAttemptWorkspace(
     throw new Error("root-selected native Host inherited endpoint unavailable");
   }
   const endpoint = new Socket({ fd: 8, readable: true, writable: true });
-  const bridge = bindDarwinAttemptOwnerBridge(endpoint, retainedConsumers);
+  const bridge = bindDarwinAttemptOwnerBridge(endpoint);
   try {
     await bridge.ready;
     // Fixed trusted dependency in the pinned Host closure, never a caller path
@@ -164,6 +164,9 @@ export async function captureRootDarwinAttemptWorkspace(
     if (bridge.capturedOwner().ppid !== process.pid || manifest.readUInt32BE(16) !== process.getuid() || manifest.readUInt32BE(20) !== process.getgid?.()) {
       throw new Error("native root manifest selected another Host identity");
     }
+    // The factory receives its unforgeable completion capability only after
+    // both channel HELLO and the fixed native peer/manifest checks succeed.
+    bridge.bindRetainedOwners(retainedOwnerFactory);
     const selection = Object.freeze(Object.create(null)) as DarwinNativeWorkspaceSelection;
     const issued: SelectionRecord = { bridge, selected: false, reserved: false, claimStarted: false };
     selections.set(selection, issued);

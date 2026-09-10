@@ -5,6 +5,7 @@ import { registerHooks } from "node:module";
 import { Duplex } from "node:stream";
 import { test } from "node:test";
 import type { NativePreparedAttemptBinding } from "../../../src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-selection.ts";
+import type { DarwinAttemptRetainedOwnerFactory } from "../../../src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-bridge.ts";
 
 const native = new URL("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/native/", import.meta.url);
 const header = readFileSync(new URL("darwin-attempt-owner-protocol.h", native), "utf8");
@@ -67,6 +68,20 @@ function assertDetachedClaim(helper: NativeHelper, lease: Parameters<NativeHelpe
 // source is loaded unchanged. No native process, socket or OS qualification is
 // simulated as genuine authority. Tests establish private receiver ordering,
 // same-object selection, payload retention and uncertainty behavior only.
+function syntheticRetainedOwnerFactory(onFactory: () => void, onSettlement: () => void): DarwinAttemptRetainedOwnerFactory {
+  return completion => {
+    onFactory();
+    const complete = async () => {onSettlement(); return completion;};
+    return {launchRoute: complete, artifactResult: complete, workspace: complete,
+      privateMaterial: complete, output: async () => completion};
+  };
+}
+
+async function assertPeerRefusal(capture: (factory: DarwinAttemptRetainedOwnerFactory) => Promise<unknown>, factory: DarwinAttemptRetainedOwnerFactory) {
+  await assert.rejects(capture(factory), /peer verification refused/u);
+  await assert.rejects(capture(factory), /already consumed/u);
+}
+
 async function exercise(mode: "normal" | "refused" | "foreign" | "material" | "material_corrupt" | "identity_changed" | "lease" | "peer_refused" | "late_lease" | "borrow_throw") {
   const manifest = Buffer.alloc(value("MANIFEST_BYTES"));
   manifest.write("/synthetic/host-entrypoint.mjs", 304 + 5 * 288);
@@ -163,6 +178,7 @@ async function exercise(mode: "normal" | "refused" | "foreign" | "material" | "m
   });
   const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
   const oldArgv = process.argv, uid = process.getuid, gid = process.getgid, originalDlopen = process.dlopen;
+  let peerVerified = false, factoryCalls = 0, ownerSettlements = 0;
   try {
     Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
     process.argv = ["synthetic-host", "/synthetic/host-entrypoint.mjs", "--darwin-attempt-owner-bridge"];
@@ -172,20 +188,19 @@ async function exercise(mode: "normal" | "refused" | "foreign" | "material" | "m
       (module as {exports: unknown}).exports = {verifyRootPeer(packet: Buffer) {
         assert.equal(packet.length, 8272); assert.equal(packet.readUInt32BE(4), process.pid);
         if (mode === "peer_refused") {throw new Error("native root peer verification refused");}
-        return true; // Test-only native dependency substitution, not OS evidence.
+        peerVerified = true; return true; // Test-only native dependency substitution, not OS evidence.
       }};
     };
     const helper = await import("../../../src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-selection.js");
-    const complete = async () => ({ binding: binding.toString("hex"), launch: launch.toString("hex"), namespace: namespace.toString(), workspaceDev: "1", workspaceIno: "200" });
-    const consumers = { launchRoute: complete, artifactResult: complete, workspace: complete, privateMaterial: complete, output: async () => {} };
+    const retainedOwnerFactory = syntheticRetainedOwnerFactory(
+      () => {factoryCalls++; assert.equal(peerVerified, true);}, () => {ownerSettlements++;});
     if (mode === "peer_refused") {
-      await assert.rejects(helper.captureRootDarwinAttemptWorkspace(consumers), /peer verification refused/u);
-      await assert.rejects(helper.captureRootDarwinAttemptWorkspace(consumers), /already consumed/u);
-      assert.equal(requests.length, 0); return;
+      await assertPeerRefusal(helper.captureRootDarwinAttemptWorkspace, retainedOwnerFactory);
+      assert.equal(factoryCalls, 0); assert.equal(requests.length, 0); return;
     }
-    const { selection, attemptAuthority } = await helper.captureRootDarwinAttemptWorkspace(consumers);
-    assert.deepEqual(Reflect.ownKeys(selection), []);
-    await assert.rejects(helper.captureRootDarwinAttemptWorkspace(consumers), /already consumed/u);
+    const { selection, attemptAuthority } = await helper.captureRootDarwinAttemptWorkspace(retainedOwnerFactory);
+    assert.equal(factoryCalls, 1); assert.deepEqual(Reflect.ownKeys(selection), []);
+    await assert.rejects(helper.captureRootDarwinAttemptWorkspace(retainedOwnerFactory), /already consumed/u);
     if (mode === "refused") {
       await assert.rejects(attemptAuthority.bindPreparedAttempt(prepared), /refused/u);
       await assert.rejects(attemptAuthority.bindPreparedAttempt(prepared), /already consumed/u);
@@ -259,7 +274,7 @@ async function exercise(mode: "normal" | "refused" | "foreign" | "material" | "m
       await assert.rejects(helper.disposeDarwinNativeExecution({...lease}), /foreign/u);
       await helper.settleDarwinNativeExecutionLaunchRoute(lease);
       await helper.settleDarwinNativeExecutionPrivateMaterial(lease);
-      assert.equal(requests.at(-2)!.kind, value("SETTLE_LAUNCH_ROUTE"));
+      assert.equal(ownerSettlements, 2); assert.equal(requests.at(-2)!.kind, value("SETTLE_LAUNCH_ROUTE"));
       assert.equal(requests.at(-1)!.kind, value("SETTLE_PRIVATE"));
       endpoint!.destroy();
       await new Promise(resolve => {setImmediate(resolve);});

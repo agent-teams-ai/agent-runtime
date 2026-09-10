@@ -140,6 +140,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "createContainedTurnRouteEnforcement",
       "createContainedTurnRuntimeSecurityPort",
       "createContainedTurnSecurityAcceptancePort",
+      "createDarwinCodexHostPostClaimPreparation",
       "createDarwinCodexRouteEnforcement",
       "createDeferredCodexNativeBrokerFiles",
       "createDockerCodexHostKernelOwner",
@@ -160,6 +161,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "initializePostgresHttpEgressEvidence",
       // Embedded Runtime consumes this value; NativeHttpRequestProfileId is type-only.
       "nativeHttpRequestProfile",
+      "prepareDarwinCodexNativeLaunchInput",
       "readContainedTurnRouteEnforcementTarget",
       "readContainedTurnSelectedRouteAdmission",
       "recoverContainedTurnCommittedGrantSettlements",

@@ -107,8 +107,11 @@ export {createDeferredCodexNativeBrokerFiles, type DeferredCodexNativeBrokerFile
 export {createDarwinCodexRouteEnforcement, bindDarwinCodexRouteEnforcement,
   type DarwinCodexRouteEnforcementCapability, type DarwinCodexRouteEnforcementInput,
   type DarwinCodexHostPreparationInput} from "./features/contained-agent-turn/internal.js";
+export {prepareDarwinCodexNativeLaunchInput, createDarwinCodexHostPostClaimPreparation}
+  from "./features/contained-agent-turn/internal.js";
 export {containedTurnPreparationToken,
   captureRootDarwinAttemptWorkspace,
   type NativePreparedAttemptBinding, type RetainedNativeAttemptAuthority,
-  type DarwinAttemptRetainedOwners, type DarwinAttemptRetainedCompletion}
+  type DarwinAttemptRetainedOwners, type DarwinAttemptRetainedCompletion,
+  type DarwinAttemptRetainedOwnerFactory}
   from "./features/contained-agent-turn/internal.js";
