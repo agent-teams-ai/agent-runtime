@@ -8,7 +8,29 @@ import * as synthetic from "./synthetic-native-custody-producer.fixture.ts";
 
 // Explicit independent source-loaded SYNTHETIC producer, never a build shim.
 const producer = new URL("./synthetic-native-custody-producer.fixture.ts", import.meta.url).href;
+const dockerCustodyEffects = Symbol.for("agent-runtime.test.docker-custody-effects");
+const dockerCustodyParent = "/composition/docker-kernel-host-custody.ts";
+const dockerEffectModule = (body: string) => `data:text/javascript,${encodeURIComponent(body)}`;
 registerHooks({resolve(specifier, context, next) {
+  if (context.parentURL?.endsWith(dockerCustodyParent)) {
+    if (specifier === "node:crypto") {
+      return {url: dockerEffectModule(`const effects = globalThis[Symbol.for("agent-runtime.test.docker-custody-effects")];
+        export function randomUUID() { effects.uuid++; throw new Error("unexpected Docker UUID allocation"); }
+        export function createHash() { effects.hash++; throw new Error("unexpected Docker evidence hash"); }`), shortCircuit: true};
+    }
+    if (specifier.endsWith("/filesystem/retained-launch-workspace.js")) {
+      return {url: dockerEffectModule(`export async function retainLaunchWorkspace() {
+        globalThis[Symbol.for("agent-runtime.test.docker-custody-effects")].retain++;
+        throw new Error("unexpected Docker descriptor retention");
+      }`), shortCircuit: true};
+    }
+    if (specifier.endsWith("/docker-kernel-evidence.js")) {
+      return {url: dockerEffectModule(`export class DockerKernelEvidence { constructor() {
+        globalThis[Symbol.for("agent-runtime.test.docker-custody-effects")].evidence++;
+        throw new Error("unexpected Docker evidence allocation");
+      } }`), shortCircuit: true};
+    }
+  }
   if ((specifier.endsWith("/darwin-attempt-owner-selection.js") && context.parentURL?.endsWith("/native-host-custody-workspace-authority.ts")) || (specifier.endsWith("/contained-turn-kernel-custody-entrypoint.js") && [
     "codex-app-server-launch-plan.ts", "codex-app-server-permission-boundary.ts", "codex-native-broker-files.ts",
     "codex-native-broker-recipe.ts", "node-kernel-workspace-authority.ts",
@@ -83,6 +105,34 @@ test("native authority has no descriptor; raw Linux rejects before allocation; a
   });
   const descriptor = {canonicalPath: "/synthetic/linux", descriptorPath: "/proc/self/fd/99", identity: {dev: 1n, ino: 2n, mountId: "1"}};
   assert.equal(raw.descriptorWorkspaceAuthority(descriptor), descriptor);
+});
+test("Docker reserve rejects genuine native authority before retaining or allocating effects", async () => {
+  const effects = {retain: 0, uuid: 0, evidence: 0, hash: 0};
+  Object.defineProperty(globalThis, dockerCustodyEffects, {value: effects, configurable: true});
+  try {
+    const {DockerKernelHostCustody} = await import("../../../src/features/contained-agent-turn/composition/docker-kernel-host-custody.ts");
+    const custody = await import(root + "host-custody/custodied-provider-process.ts");
+    const {selection} = await setup();
+    await nodeKernelWorkspaceAuthority(synthetic.issueSyntheticOwner(selection)).withLaunchAuthority(ids, async workspaceAuthority => {
+      const host = new DockerKernelHostCustody(1000);
+      const input = {...ids, intentMode: "analysis" as const, workspaceRef: workspaceAuthority.canonicalPath, workspaceAuthority,
+        providerBinding: {provider: "codex", binaryRevision: "synthetic", adapterRevision: "synthetic",
+          capabilityManifestRevision: "synthetic", credentialBindingDigest: "synthetic", providerRouteRef: "synthetic"},
+        launchPlan: {arguments: [], binaryRevision: "synthetic", containmentProfile: "strict-linux-cgroup-v2" as const,
+          environment: {}, executablePath: "/synthetic/provider", executableSha256: "a".repeat(64),
+          privateRootPath: "/synthetic/private", intentMode: "analysis" as const, provider: "codex",
+          spawnMode: "sdk-delegated" as const}};
+      await assert.rejects(host.reserve(input), error => {
+        assert.ok(error instanceof custody.HostCustodyUnsupportedError);
+        assert.equal(error.code, "platform-profile-unavailable");
+        return true;
+      });
+      assert.deepEqual(effects, {retain: 0, uuid: 0, evidence: 0, hash: 0});
+      assert.throws(() => host.reservation("docker-host-reservation:unallocated"), /reservation unavailable/u);
+    });
+  } finally {
+    delete (globalThis as Record<symbol, unknown>)[dockerCustodyEffects];
+  }
 });
 test("kernel genuine native selection is once, duplicate fenced, sealed admission blocks acquisition", async () => {
   const {selection} = await setup(); const owner = nodeKernelWorkspaceAuthority(synthetic.issueSyntheticOwner(selection));
