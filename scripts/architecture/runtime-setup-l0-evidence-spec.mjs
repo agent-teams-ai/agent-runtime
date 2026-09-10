@@ -195,6 +195,10 @@ export const changes = Object.freeze([
     id: "codex-application-models",
     revision: "6dfffbff6abbe28ffbb8fb528d13647b3e09e013",
   }),
+  Object.freeze({
+    id: "claude-code-vocabulary-parity",
+    revision: "216273dc20b8e13156b9162124bea964ec8f6591",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -205,12 +209,12 @@ export const sourceRevisionArtifactDigests = Object.freeze({
     sha256: "2f185db9f8cd0bd29ed28b08d862dbf23846ce19e14c657d8e6afad9c3e769fc",
   }),
   sources: Object.freeze({
-    fileCount: 659,
-    sha256: "6f3fca3471610def651e2ff062ec5659044d4dffb1871de7594359726d4234fa",
+    fileCount: 661,
+    sha256: "e9af86e3be98ebf03bdd6363b755a89561f27d48067bcc8a357b09c4b1ba2dbc",
   }),
   tests: Object.freeze({
-    fileCount: 609,
-    sha256: "4a579f7d55ee7829d7560306387b0d08b33b9d7ad0b8d3f04e5756805bd99b50",
+    fileCount: 610,
+    sha256: "a88ddf0c6e5e62f609a26e6d0c0bb5f89248c43a18ede7c7172260ad34311c3b",
   }),
 });
 

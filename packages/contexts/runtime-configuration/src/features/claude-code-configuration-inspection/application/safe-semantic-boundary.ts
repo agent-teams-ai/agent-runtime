@@ -1,11 +1,13 @@
 import {
-  CLAUDE_CODE_CONFIGURATION_BUDGETS,
-  CLAUDE_CODE_EFFORT_VALUES,
-  CLAUDE_CODE_MODEL_ALIASES,
-  CLAUDE_CODE_MODEL_DEFAULT,
-  type ClaudeCodeConfigurationDiagnosticCode,
-  type ClaudeCodeEffort,
-  type ClaudeCodeModelAlias, type ClaudeCodeModelSelection,
+  CLAUDE_CODE_BUDGETS,
+  CLAUDE_CODE_DEFAULT_MODEL,
+  CLAUDE_CODE_EFFORT_VOCABULARY,
+  CLAUDE_CODE_MODEL_VOCABULARY,
+} from "./models/claude-code-vocabulary.js";
+import type {
+  ClaudeCodeConfigurationDiagnosticCode,
+  ClaudeCodeEffort,
+  ClaudeCodeModelAlias, ClaudeCodeModelSelection,
 } from "../contracts/claude-code-configuration-inspection.js";
 import type {
   ClassifyClaudeCodeConfigurationResult,
@@ -21,8 +23,8 @@ interface NormalizationState {
 }
 
 const portableKeys = new Set(["model", "effortLevel"] as const);
-const modelAliases = new Set<string>(CLAUDE_CODE_MODEL_ALIASES);
-const effortValues = new Set<string>(CLAUDE_CODE_EFFORT_VALUES);
+const modelAliases = new Set<string>(CLAUDE_CODE_MODEL_VOCABULARY);
+const effortValues = new Set<string>(CLAUDE_CODE_EFFORT_VOCABULARY);
 const diagnosticCodes = new Set<ClaudeCodeConfigurationDiagnosticCode>([
   "configuration_dialect_unsupported", "config_duplicate_key", "config_invalid_utf8",
   "config_parse_failed", "config_too_large", "config_unreadable",
@@ -85,7 +87,7 @@ const normalizeScalar = (value: unknown): unknown => {
   if (value === null || typeof value === "boolean") {return value;}
   if (typeof value === "number" && Number.isFinite(value)) {return value;}
   if (typeof value === "string" &&
-      value.length <= CLAUDE_CODE_CONFIGURATION_BUDGETS.stringLength) {return value;}
+      value.length <= CLAUDE_CODE_BUDGETS.stringLength) {return value;}
   throw new TypeError("scalar");
 };
 
@@ -97,7 +99,7 @@ const normalizeArray = (
   const items = denseArray(value);
   if (items === undefined) {throw new TypeError("array");}
   state.arrayItems += items.length;
-  if (state.arrayItems > CLAUDE_CODE_CONFIGURATION_BUDGETS.arrayItems) {
+  if (state.arrayItems > CLAUDE_CODE_BUDGETS.arrayItems) {
     throw new TypeError("array budget");
   }
   return Object.freeze(items.map(item => normalize(item, depth + 1, state)));
@@ -113,12 +115,12 @@ const normalizeRecord = (
   if (descriptors === undefined) {throw new TypeError("properties");}
   const keys = Object.keys(descriptors);
   state.objectKeys += keys.length;
-  if (state.objectKeys > CLAUDE_CODE_CONFIGURATION_BUDGETS.objectKeys) {
+  if (state.objectKeys > CLAUDE_CODE_BUDGETS.objectKeys) {
     throw new TypeError("key budget");
   }
   const output: Record<string, unknown> = Object.create(null);
   for (const key of keys) {
-    if (key.length === 0 || key.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.keyLength) {
+    if (key.length === 0 || key.length > CLAUDE_CODE_BUDGETS.keyLength) {
       throw new TypeError("key");
     }
     output[key] = normalize(descriptors[key]?.value, depth + 1, state);
@@ -144,8 +146,8 @@ const normalizeContainer = (
 
 function normalize(value: unknown, depth: number, state: NormalizationState): unknown {
   state.nodes += 1;
-  if (depth > CLAUDE_CODE_CONFIGURATION_BUDGETS.depth ||
-      state.nodes > CLAUDE_CODE_CONFIGURATION_BUDGETS.nodes) {
+  if (depth > CLAUDE_CODE_BUDGETS.depth ||
+      state.nodes > CLAUDE_CODE_BUDGETS.nodes) {
     throw new TypeError("budget");
   }
   if (typeof value === "object" && value !== null) {
@@ -219,12 +221,12 @@ const modelSelection = (value: unknown): ClaudeCodeModelSelection => {
   }
   if (record.kind === "alias" && Object.keys(record).length === 2 &&
       typeof record.value === "string" && modelAliases.has(record.value) &&
-      record.value !== CLAUDE_CODE_MODEL_DEFAULT) {
+      record.value !== CLAUDE_CODE_DEFAULT_MODEL) {
     return Object.freeze({ kind: "alias", value: record.value as ClaudeCodeModelAlias });
   }
   if (record.kind === "exact-name" && Object.keys(record).length === 2 &&
       typeof record.value === "string" &&
-      record.value.length <= CLAUDE_CODE_CONFIGURATION_BUDGETS.classifierValueLength &&
+      record.value.length <= CLAUDE_CODE_BUDGETS.classifierValueLength &&
       /^claude-[a-z0-9]+(?:-[a-z0-9]+)*(?:\[1m\])?$/u.test(record.value) &&
       !isSecretShapedClaudeCodeValue(record.value) &&
       !isControlBearingClaudeCodeValue(record.value) &&
@@ -272,7 +274,7 @@ const deferredObservations = (value: unknown): ClassifyClaudeCodeConfigurationRe
 const diagnostics = (value: unknown): ClassifyClaudeCodeConfigurationResult["diagnostics"] => {
   if (!Array.isArray(value)) {throw new TypeError("diagnostics");}
   const items = denseArray(value);
-  if (items === undefined || items.length > CLAUDE_CODE_CONFIGURATION_BUDGETS.diagnostics) {throw new TypeError("diagnostics");}
+  if (items === undefined || items.length > CLAUDE_CODE_BUDGETS.diagnostics) {throw new TypeError("diagnostics");}
   const output = items.map(item => {
     const record = exactRecord(item, new Set(["code"]));
     if (record === undefined || typeof record.code !== "string" ||
