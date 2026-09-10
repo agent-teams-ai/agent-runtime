@@ -45,7 +45,10 @@ export interface ContainedTurnCapabilityBundle {
     ): Promise<unknown>;
   };
   readonly observe: {
-    execute(input: ContainedTurnCompositionOperationRef): Promise<unknown>;
+    execute(
+      input: ContainedTurnCompositionOperationRef,
+      options?: { readonly signal?: AbortSignal },
+    ): Promise<unknown>;
   };
   readonly submit: {
     execute(
@@ -412,7 +415,7 @@ export const createContainedTurnRuntimeAccess = (
     }
     return outcome;
   },
-  observe: async (operationId: string) => {
+  observe: async (operationId: string, options?: { readonly signal?: AbortSignal }) => {
     dependencies.assertActive();
     if (!isBoundedIdentity(operationId)) {
       return contractViolation("invalid_operation_id");
@@ -420,14 +423,25 @@ export const createContainedTurnRuntimeAccess = (
     if (dependencies.capability === undefined || dependencies.scope === undefined) {
       return unavailableOutcome;
     }
+    const signal = options?.signal === undefined ? dependencies.hostSignal
+      : AbortSignal.any([dependencies.hostSignal, options.signal]);
+    signal.throwIfAborted();
     const ownerCompletion = dependencies.executeCall(() => dependencies.capability!.observe.execute({
         operationId,
         scope: dependencies.scope!,
         authority: dependencies.scope!,
-      })).catch(() => {throw containedTurnOwnerInvocationFailed;});
+      }, { signal })).then(
+        outcome => Object.freeze({ kind: "completed" as const, outcome }),
+        () => Object.freeze({ kind: "owner_failure" as const }),
+      );
+    const completion = await raceWithAbort(ownerCompletion, signal);
+    if (completion.kind === "owner_failure") {
+      dependencies.onObserved(operationId, "contract_violation");
+      throw containedTurnOwnerInvocationFailed;
+    }
     let outcome: ObserveRuntimeContainedTurnOutcome;
     try {
-      outcome = copyObservation(unwrapContainedTurnAuthorityOutcome(await ownerCompletion, dependencies.scope!), operationId);
+      outcome = copyObservation(unwrapContainedTurnAuthorityOutcome(completion.outcome, dependencies.scope!), operationId);
     } catch (error) {
       dependencies.onObserved(operationId, "contract_violation");
       throw error;

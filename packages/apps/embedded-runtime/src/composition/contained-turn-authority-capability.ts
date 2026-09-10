@@ -18,7 +18,7 @@ export interface AuthorityBoundContainedTurnCapability {
     execute(input: AuthorityBoundOperationRef, options?: { readonly signal?: AbortSignal }): Promise<unknown>;
   };
   readonly observe: {
-    execute(input: AuthorityBoundOperationRef): Promise<unknown>;
+    execute(input: AuthorityBoundOperationRef, options?: { readonly signal?: AbortSignal }): Promise<unknown>;
   };
   readonly submit: {
     execute(
@@ -73,9 +73,9 @@ export const bindContainedTurnCapabilityAuthority = (
       const outcome = await cancel(Object.freeze({ operationId: input.operationId, scope: scopeOf(authority) }), options);
       return Object.freeze({ authority, outcome });
     } }),
-    observe: Object.freeze({ async execute(input: AuthorityBoundOperationRef) {
+    observe: Object.freeze({ async execute(input: AuthorityBoundOperationRef, options?: { readonly signal?: AbortSignal }) {
       const authority = boundAuthority(input);
-      const outcome = await observe(Object.freeze({ operationId: input.operationId, scope: scopeOf(authority) }));
+      const outcome = await observe(Object.freeze({ operationId: input.operationId, scope: scopeOf(authority) }), options);
       return Object.freeze({ authority, outcome });
     } }),
     submit: Object.freeze({ async execute(
