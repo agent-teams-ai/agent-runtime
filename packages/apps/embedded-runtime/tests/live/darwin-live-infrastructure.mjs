@@ -127,10 +127,8 @@ async function readRetainedPolicy(identity, signal) {
       return retained;
 }
 
-/** Persistence and policy owners used by the eventual full infrastructure root.
- * This is deliberately not exported as acquireDarwinInfrastructureOwners: native
- * settlement and effect-custody composition must be joined before that contract
- * can honestly be returned. */
+/** Persistence and policy acquisition shared by the concrete infrastructure
+ * root. Native custody and consumer settlement are joined separately below. */
 export async function acquireDarwinPersistenceOwners(activation, dependencies) {
   const config = plainJson(activation.infrastructure);
   const connection = databaseConnection(config.database?.connection);
