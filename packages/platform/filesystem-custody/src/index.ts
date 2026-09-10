@@ -24,7 +24,7 @@ export {
 } from "./stable-directory-publication.js";
 export { withStableDirectoryProcessLock } from "./stable-directory-process-lock.js";
 export {
-  hasDarwinHostDescriptors, isNativeHostDescriptor, openNativeHostRoot, openNativeHostEntry,
+  initializeDarwinHostAcquisitionGuard, hasDarwinHostDescriptors, isNativeHostDescriptor, openNativeHostRoot, openNativeHostEntry,
   duplicateNativeHostDescriptor, nativeHostPath, nativeHostMount, nativeHostMkdir,
   nativeHostUnlink, nativeHostNames, quarantineNativeHostEntry,
   type StableFilesystemHandle, type StableFilesystemStats,

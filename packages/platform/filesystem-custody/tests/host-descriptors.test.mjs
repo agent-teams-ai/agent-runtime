@@ -5,12 +5,17 @@ import { constants as osConstants, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { pathToFileURL } from "node:url";
-import test from "node:test";
+import nodeTest from "node:test";
 import { hasDarwinHostDescriptors, openNativeHostRoot, decodeHostNameBytes } from "../dist/host-descriptor.js";
 
 const loaded = { exports: {} };
 process.dlopen(loaded, fileURLToPath(new URL("../dist/rename-no-replace.node", import.meta.url)));
 const native = loaded.exports;
+// The shared suite may execute on Darwin only inside the explicitly guarded
+// disposable worker. Never confine the main test runner.
+const test = process.platform === "darwin" && !native.isDarwinHostAcquisitionGuardInstalled()
+  ? (name, ...args) => nodeTest(name, { skip: "requires disposable guarded child" }, args.at(-1))
+  : nodeTest;
 
 // Linux runs the actual shared POSIX implementation. This is not a simulated
 // Darwin run: Apple fstatfs, F_GETPATH and renameatx_np require separate Mac proof.

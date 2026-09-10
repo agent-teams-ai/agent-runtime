@@ -7,7 +7,7 @@
 #include <linux/fs.h>
 #endif
 #include <node_api.h>
-#include <uv.h>
+#include "host-errno.h"
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -15,6 +15,8 @@
 #include <stdio.h>
 #include <string.h>
 #ifdef __APPLE__
+#include <sandbox.h>
+#include <stdatomic.h>
 #include <sys/mount.h>
 #include <sys/param.h>
 #endif
@@ -262,16 +264,9 @@ typedef struct { int fd; } host_descriptor;
 static const napi_type_tag host_descriptor_tag = { 0x4a43cdb6e3264b01ULL, 0xb8c88c4473290ac2ULL };
 
 static napi_value host_error(napi_env env, const char *message) {
-  /* Capture before any Node-API/libuv call or allocation. errno is positive;
-   * expose that native value, with libuv's symbolic spelling. */
+  /* Preserve the positive OS errno before allocation or Node-API calls. */
   const int saved = errno;
-  const char *code = "UNKNOWN";
-  switch (uv_translate_sys_error(saved)) {
-#define HOST_ERRNO_CASE(name, message) case UV_##name: code = #name; break;
-    UV_ERRNO_MAP(HOST_ERRNO_CASE)
-#undef HOST_ERRNO_CASE
-    default: break;
-  }
+  const char *code = host_errno_name(saved);
   napi_value text, error, number, symbol;
   if (napi_create_string_utf8(env, message, NAPI_AUTO_LENGTH, &text) != napi_ok ||
       napi_create_string_utf8(env, code, NAPI_AUTO_LENGTH, &symbol) != napi_ok ||
@@ -280,6 +275,53 @@ static napi_value host_error(napi_env env, const char *message) {
       napi_set_named_property(env, error, "errno", number) != napi_ok) return NULL;
   napi_throw(env, error);
   return NULL;
+}
+/* Process-local, irreversible authority; neither exports nor JS handles own it. */
+#ifdef __APPLE__
+static atomic_bool host_guard_installed = ATOMIC_VAR_INIT(false);
+static atomic_flag host_guard_installing = ATOMIC_FLAG_INIT;
+static const char host_guard_profile[] =
+  "(version 1)(allow default)(deny file-read-data file-write-data (require-not (require-any (vnode-type REGULAR-FILE) (vnode-type DIRECTORY))))";
+static napi_value host_guard_status(napi_env env, napi_callback_info info) {
+  (void)info;
+  napi_value result;
+  if (napi_get_boolean(env, atomic_load(&host_guard_installed), &result) != napi_ok) return NULL;
+  return result;
+}
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+static napi_value host_guard_initialize(napi_env env, napi_callback_info info) {
+  (void)info;
+  if (!atomic_load(&host_guard_installed)) {
+    if (atomic_flag_test_and_set(&host_guard_installing)) {
+      napi_throw_error(env, NULL, "Host acquisition guard initialization is in progress"); return NULL;
+    }
+    char *error = NULL;
+    int status = atomic_load(&host_guard_installed) ? 0 : sandbox_init(host_guard_profile, 0, &error);
+    if (status == 0) atomic_store(&host_guard_installed, true);
+    atomic_flag_clear(&host_guard_installing);
+    if (status != 0) {
+      napi_throw_error(env, NULL, "Host acquisition guard installation failed; terminate child");
+      if (error) sandbox_free_error(error);
+      return NULL;
+    }
+    if (error) sandbox_free_error(error);
+  }
+  napi_value result;
+  if (napi_get_undefined(env, &result) != napi_ok) return NULL;
+  return result;
+}
+#pragma clang diagnostic pop
+#endif
+static bool host_require_guard(napi_env env) {
+#ifdef __APPLE__
+  if (!atomic_load(&host_guard_installed)) {
+    napi_throw_error(env, NULL, "Host acquisition guard is not installed"); return false;
+  }
+#else
+  (void)env;
+#endif
+  return true;
 }
 static void host_finalize(napi_env env, void *data, void *hint) {
   (void)env; (void)hint;
@@ -325,10 +367,12 @@ static bool host_uint(napi_env env, napi_value value, uint32_t maximum, uint32_t
   return number == *out;
 }
 static napi_value host_root(napi_env env, napi_callback_info info) {
+  if (!host_require_guard(env)) return NULL;
   (void)info;
   return host_own(env, open("/", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
 }
 static napi_value host_open(napi_env env, napi_callback_info info) {
+  if (!host_require_guard(env)) return NULL;
   napi_value args[3];
   if (!host_args(env, info, 3, args)) return NULL;
   host_descriptor *parent = host_get(env, args[0]);
@@ -393,6 +437,7 @@ static bool host_same_mount(int left, int right) {
 #endif
 }
 static napi_value host_quarantine(napi_env env, napi_callback_info info) {
+  if (!host_require_guard(env)) return NULL;
   napi_value args[4], output;
   if (!host_args(env, info, 4, args)) return NULL;
   host_descriptor *source = host_get(env, args[0]);
@@ -456,6 +501,7 @@ static napi_value host_fd(napi_env env, napi_callback_info info) {
   return result;
 }
 static napi_value host_duplicate(napi_env env, napi_callback_info info) {
+  if (!host_require_guard(env)) return NULL;
   napi_value args[1];
   if (!host_args(env, info, 1, args)) return NULL;
   host_descriptor *handle = host_get(env, args[0]);
@@ -488,6 +534,7 @@ static napi_value host_stat(napi_env env, napi_callback_info info) {
   return result;
 }
 static napi_value host_names(napi_env env, napi_callback_info info) {
+  if (!host_require_guard(env)) return NULL;
   napi_value args[2], result;
   if (!host_args(env, info, 2, args)) return NULL;
   host_descriptor *handle = host_get(env, args[0]);
@@ -635,6 +682,8 @@ static bool host_exports(napi_env env, napi_value exports) {
     HOST_EXPORT("hostChmod", host_chmod), HOST_EXPORT("hostMkdir", host_mkdir),
     HOST_EXPORT("hostUnlink", host_unlink), HOST_EXPORT("hostQuarantine", host_quarantine),
 #ifdef __APPLE__
+    HOST_EXPORT("initializeDarwinHostAcquisitionGuard", host_guard_initialize),
+    HOST_EXPORT("isDarwinHostAcquisitionGuardInstalled", host_guard_status),
     HOST_EXPORT("hostPath", host_path), HOST_EXPORT("hostMount", host_mount),
 #endif
 #undef HOST_EXPORT

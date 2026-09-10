@@ -18,6 +18,8 @@ export interface StableFilesystemHandle {
   chmod(mode: number): Promise<void>;
 }
 interface HostBinding {
+  initializeDarwinHostAcquisitionGuard(): void;
+  isDarwinHostAcquisitionGuardInstalled(): boolean;
   hostQuarantine(source: object, name: string, destination: object, target: string): number;
   hostRoot(): object;
   hostOpen(parent: object, name: string, kind: number): object;
@@ -41,7 +43,7 @@ const load = (): HostBinding => {
   const module = { exports: {} } as NodeModule;
   process.dlopen(module, join(import.meta.dirname, "rename-no-replace.node"));
   const candidate = module.exports as Partial<HostBinding>;
-  const keys: readonly (keyof HostBinding)[] = ["hostRoot", "hostOpen", "hostClose", "hostFd",
+  const keys: readonly (keyof HostBinding)[] = ["initializeDarwinHostAcquisitionGuard", "isDarwinHostAcquisitionGuardInstalled", "hostRoot", "hostOpen", "hostClose", "hostFd",
     "hostDuplicate", "hostStat", "hostNames", "hostRead", "hostWrite", "hostSync",
     "hostChmod", "hostMkdir", "hostUnlink", "hostPath", "hostMount", "hostQuarantine"];
   if (keys.some(key => typeof candidate[key] !== "function")) {
@@ -52,7 +54,16 @@ const load = (): HostBinding => {
 };
 export const hasDarwinHostDescriptors = (): boolean => {
   if (process.platform !== "darwin") {return false;}
-  try {load(); return true;} catch {return false;}
+  try {return load().isDarwinHostAcquisitionGuardInstalled() === true;} catch {return false;}
+};
+/** Only the fresh owned full Host child bootstrap may call this, before acquisition.
+ * Failure requires child termination; this never runs during module loading. */
+export const initializeDarwinHostAcquisitionGuard = (): void => {
+  if (process.platform !== "darwin") {throw new Error("Darwin Host acquisition guard is unavailable");}
+  load().initializeDarwinHostAcquisitionGuard();
+  if (!load().isDarwinHostAcquisitionGuardInstalled()) {
+    throw new Error("Darwin Host acquisition guard installation was not confirmed");
+  }
 };
 const issued = new WeakMap<StableFilesystemHandle, object>();
 const token = (handle: StableFilesystemHandle): object => {
