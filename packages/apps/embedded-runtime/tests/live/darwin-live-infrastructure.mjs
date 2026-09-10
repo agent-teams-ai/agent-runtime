@@ -7,6 +7,19 @@ import {plainJson} from "./darwin-live-activation-manifest.mjs";
 const refused = reason => new Error(`DARWIN_LIVE_INFRASTRUCTURE_REFUSED: ${reason}`);
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const quote = value => `"${value.replaceAll('"', '""')}"`;
+const databaseConnection = value => {
+  if (!value || Object.keys(value).some(key => !["database", "host", "port", "user"].includes(key)) ||
+      !/^ar69_test_[a-z0-9_]+$/u.test(value.database ?? "") || !["127.0.0.1", "::1"].includes(value.host) ||
+      !Number.isInteger(value.port) || value.port < 1 || value.port > 65535 ||
+      typeof value.user !== "string" || value.user.length === 0) {throw refused("dedicated test database configuration required");}
+  return {database: value.database, host: value.host, port: value.port, user: value.user};
+};
+const verifyDatabaseIdentity = async (client, connection) => {
+  const identity = await client.query("SELECT current_database() AS database, current_user AS username, inet_server_addr()::text AS address, inet_server_port() AS port");
+  if (identity.rows.length !== 1 || identity.rows[0].database !== connection.database ||
+      identity.rows[0].username !== connection.user || identity.rows[0].address !== connection.host ||
+      identity.rows[0].port !== connection.port) {throw refused("database identity differs");}
+};
 const socketProbe = path => new Promise((resolve, reject) => {
   const socket = createConnection(path);
   socket.setTimeout(2000);
@@ -26,8 +39,9 @@ export async function preflightDarwinInfrastructure(activation, dependencies) {
       !Number.isInteger(database.connection.port) || !database.connection.user ||
       !isAbsolute(host?.endpointPath ?? "") || !isAbsolute(activation.turn?.resultPath ?? "") ||
       !isAbsolute(filesystem?.sourceRoot ?? "")) {throw refused("dedicated test configuration required");}
+  const connection = databaseConnection(database.connection);
   const Pool = dependencies?.Pool ?? (await import("pg")).Pool;
-  const pool = new Pool({...database.connection, max: 1, connectionTimeoutMillis: 2000,
+  const pool = new Pool({...connection, max: 1, connectionTimeoutMillis: 2000,
     statement_timeout: 2000, query_timeout: 3000});
   let client;
   try {
@@ -39,9 +53,7 @@ export async function preflightDarwinInfrastructure(activation, dependencies) {
         (inspector.rows[0].rolsuper !== true && inspector.rows[0].rolbypassrls !== true)) {
       throw refused("database inspector cannot prove row visibility");
     }
-    const identity = await client.query("SELECT current_database() AS database, current_user AS username");
-    if (identity.rows[0]?.database !== database.connection.database ||
-        identity.rows[0]?.username !== database.connection.user) {throw refused("database identity differs");}
+    await verifyDatabaseIdentity(client, connection);
     const prepared = await client.query("SELECT gid FROM pg_prepared_xacts WHERE database = current_database()");
     if (prepared.rows.length !== 0) {throw refused("prepared transactions exist");}
     // The complete dedicated database must be fresh. Metadata tables can carry
@@ -93,8 +105,7 @@ export async function preflightDarwinInfrastructure(activation, dependencies) {
  * can honestly be returned. */
 export async function acquireDarwinPersistenceOwners(activation, dependencies) {
   const config = plainJson(activation.infrastructure);
-  if (!/^ar69_test_[a-z0-9_]+$/u.test(config.database?.connection?.database ?? "") ||
-      !["127.0.0.1", "::1"].includes(config.database.connection.host)) {throw refused("dedicated test database required");}
+  const connection = databaseConnection(config.database?.connection);
   const deps = dependencies ?? await (async () => {
     const [agentExecution, runtimeSecurity, postgres] = await Promise.all([
       import("@agent-teams/agent-execution/composition"),
@@ -102,7 +113,7 @@ export async function acquireDarwinPersistenceOwners(activation, dependencies) {
     ]);
     return {agentExecution, runtimeSecurity, Pool: postgres.Pool};
   })();
-  const pool = new deps.Pool({...config.database.connection, max: 4, connectionTimeoutMillis: 2000});
+  const pool = new deps.Pool({...connection, max: 4, connectionTimeoutMillis: 2000});
   const actions = [() => pool.end()];
   const lifetime = new AbortController();
   let generation = 1, closing;
@@ -117,6 +128,8 @@ export async function acquireDarwinPersistenceOwners(activation, dependencies) {
     return closing;
   };
   try {
+    const inspector = await pool.connect();
+    try {await verifyDatabaseIdentity(inspector, connection);} finally {inspector.release();}
     // Acquisition requires a completely unused owner namespace. Preflight is
     // informative; this fresh read closes the gap before explicit migrations.
     const existing = await pool.query("SELECT 1 FROM pg_namespace WHERE nspname IN ('agent_execution','provider_access','runtime_security_dispatch_v1','runtime_security_dispatch_acceptance_v1','host_http_egress')");

@@ -37,7 +37,7 @@ test("preflight actively reads database, filesystem, policy and socket and await
       async connect() {return {release() {}, async query(sql) {
         statements.push(sql);
         if (sql.includes("FROM pg_roles")) {return {rows: [{rolsuper: false, rolbypassrls: bypassRls}]};}
-        if (sql.startsWith("SELECT current_database")) {return {rows: [{database: "ar69_test_probe", username: "test"}]};}
+        if (sql.startsWith("SELECT current_database")) {return {rows: [{database: "ar69_test_probe", username: "test", address: "127.0.0.1", port: 5432}]};}
         if (sql.includes("FROM pg_tables")) {return {rows: tables};}
         if (sql.startsWith("SELECT 1")) {return {rows: occupied ? [{}] : []};}
         return {rows: []};
@@ -75,7 +75,7 @@ test("preflight actively reads database, filesystem, policy and socket and await
 test("persistence uses public migrations and closes owners and pool after construction failure", async () => {
   const {acquireDarwinPersistenceOwners} = await import("./darwin-live-infrastructure.mjs");
   const events = [];
-  class Pool {async query() {return {rows: []};} async end() {await Promise.resolve(); events.push("pool-end");}}
+  class Pool {async connect() {return {release() {}, async query() {return {rows: [{database: "ar69_test_lifecycle", username: "test", address: "127.0.0.1", port: 5432}]};}};} async query() {return {rows: []};} async end() {await Promise.resolve(); events.push("pool-end");}}
   const repository = {async migrate() {events.push("rs-migrate");}, async close() {await Promise.resolve(); events.push("rs-close");}};
   const decisions = {async migrate() {throw new Error("migration refused");}, async close() {await Promise.resolve(); events.push("decisions-close");}};
   const dependencies = {Pool, agentExecution: {
@@ -85,7 +85,7 @@ test("persistence uses public migrations and closes owners and pool after constr
     createPostgresDispatchConsumptionRepository: () => repository,
     createPostgresDispatchAcceptanceStore: () => decisions}};
   await assert.rejects(acquireDarwinPersistenceOwners({infrastructure: {
-    database: {connection: {database: "ar69_test_lifecycle", host: "127.0.0.1"}}}}, dependencies), /migration refused/);
+    database: {connection: {database: "ar69_test_lifecycle", host: "127.0.0.1", port: 5432, user: "test"}}}}, dependencies), /migration refused/);
   assert.deepEqual(events, ["ae-migrate", "http-migrate", "rs-migrate", "decisions-close", "rs-close", "pool-end"]);
 });
 
@@ -107,4 +107,27 @@ test("launch records retain PA credential inventory without expecting a fabricat
   assert.equal(record.boundary, native.boundary);
   assert.deepEqual(record.credentialOutputInventory.sensitiveOutputTokens, ["synthetic-secret"]);
   assert.equal(count, 1);
+});
+
+ test("database connection overrides refuse before constructing a pool", async () => {
+  const {acquireDarwinPersistenceOwners} = await import("./darwin-live-infrastructure.mjs");
+  let constructed = false;
+  await assert.rejects(acquireDarwinPersistenceOwners({infrastructure: {database: {connection: {
+    database: "ar69_test_probe", host: "127.0.0.1", port: 5432, user: "test",
+    connectionString: "postgresql://production.example/production"}}}},
+  {Pool: class {constructor() {constructed = true;}}}), /database configuration/);
+  assert.equal(constructed, false);
+});
+
+test("database identity mismatch prevents all migrations and awaits close", async () => {
+  const {acquireDarwinPersistenceOwners} = await import("./darwin-live-infrastructure.mjs");
+  let migrated = false, closed = false;
+  class Pool {
+    async connect() {return {release() {}, async query() {return {rows: [{database: "production", username: "test", address: "127.0.0.1", port: 5432}]};}};}
+    async end() {await Promise.resolve(); closed = true;}
+  }
+  await assert.rejects(acquireDarwinPersistenceOwners({infrastructure: {database: {connection: {
+    database: "ar69_test_probe", host: "127.0.0.1", port: 5432, user: "test"}}}},
+  {Pool, agentExecution: {async applyContainedTurnPostgresSchema() {migrated = true;}}}), /database identity differs/);
+  assert.equal(migrated, false); assert.equal(closed, true);
 });
