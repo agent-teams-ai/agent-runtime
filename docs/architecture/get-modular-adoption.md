@@ -315,6 +315,15 @@ bounded observer and empty-scope passive/disposal behavior, not measured speed,
 reduced wiring or net navigation/diagnostic/maintenance benefit. Benefit remains
 **inconclusive**; `second-consumer-not-admitted`, with no shared extraction claim.
 
+The technical recommendation is to retain the user-approved first passive
+consumer, conditional on final acceptance. Its demonstrated value is typed
+mapping, rejection of invalid wiring before materialization, and one Host
+handoff with preserved cancellation and failure ownership. This justifies the
+bounded slice as a correctness and integration mechanism, not a claim of faster
+development or fewer lines. The cost remains 404 physical adapter lines, two
+package dependencies and consumer metadata. Do not expand the graph into
+contained-turn or introduce shared lifecycle machinery on this evidence.
+
 Release disposition remains pending. Retention requires a reasoned owner
 benefit/cost decision, reviewed external consumer/callsite and package-release
 provenance, and the exact final evidence and gates. The retained v2 report at
