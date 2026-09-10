@@ -3,9 +3,11 @@ import { spawnSync } from "node:child_process";
 import { access, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
+const protocolHeaderPath = "dist/features/contained-agent-turn/adapters/outbound/host-custody/native/darwin-attempt-owner-protocol.h";
+const protocolModulePath = "dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-protocol.js";
 
 const run = (command: string, args: readonly string[], cwd: string) => {
   const result = spawnSync(command, args, {
@@ -43,6 +45,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
     assert.ok(packedPaths.includes("dist/index.d.ts"));
     assert.ok(packedPaths.includes("dist/composition.js"));
     assert.ok(packedPaths.includes("dist/composition.d.ts"));
+    assert.ok(packedPaths.includes(protocolHeaderPath));
     assert.equal(packedPaths.some(path => /^dist\/(?:production|testing)(?:\.|\/)/u.test(path)), false);
     assert.equal(packedPaths.some(path => path.includes("contained-agent-turn-fixture")), false);
     const archive = join(temporaryRoot, packResult[0]?.filename ?? "missing.tgz");
@@ -77,6 +80,14 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       await access(join(installedPackage, `dist/${entrypoint}.js`));
       await access(join(installedPackage, `dist/${entrypoint}.d.ts`));
     }
+    assert.deepEqual(
+      await readFile(join(installedPackage, protocolHeaderPath)),
+      await readFile(join(packageRoot, "src/features/contained-agent-turn/adapters/outbound/host-custody/native/darwin-attempt-owner-protocol.h")),
+    );
+    const protocol = await import(pathToFileURL(join(installedPackage, protocolModulePath)).href) as {
+      readonly darwinAttemptOwnerFrameBytes: number;
+    };
+    assert.ok(protocol.darwinAttemptOwnerFrameBytes > 0);
 
     const consumerPath = join(temporaryRoot, "consumer", "consume.mjs");
     await writeFile(consumerPath, [

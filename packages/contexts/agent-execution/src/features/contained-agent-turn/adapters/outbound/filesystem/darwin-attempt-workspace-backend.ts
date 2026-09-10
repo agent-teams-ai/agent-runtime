@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ContainedTurnWorkspaceTree, ContainedTurnWorkspaceTreeLimits } from "./contained-turn-workspace-tree.js";
-import { darwinAttemptOwnerStates } from "../host-custody/darwin-attempt-owner-protocol.js";
-import { consumeDarwinNativeWorkspaceSelection } from "../host-custody/darwin-attempt-owner-selection.js";
-import type { DarwinNativeWorkspaceSelection } from "../host-custody/darwin-attempt-owner-selection.js";
+import { darwinAttemptOwnerStates, consumeDarwinNativeWorkspaceSelection } from "../host-custody/darwin-attempt-workspace-entrypoint.js";
+import type { DarwinNativeWorkspaceSelection } from "../host-custody/darwin-attempt-workspace-entrypoint.js";
 import { createWorkspaceClosureRecord } from "./contained-turn-workspace-state.js";
 import type {
   ContainedTurnWorkspaceCreationRecord, ContainedTurnWorkspaceSealRecord,

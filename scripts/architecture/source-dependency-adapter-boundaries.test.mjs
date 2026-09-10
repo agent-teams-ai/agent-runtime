@@ -252,7 +252,9 @@ test("existing Host and SDK capabilities retain their exact ownership", async ()
   assert.deepEqual(host.entrypoints, [
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-workspace-entrypoint.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-cooperative-process-custody.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/native-host-custody-workspace-entrypoint.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts",
   ]);
 
@@ -281,6 +283,17 @@ test("existing Host and SDK capabilities retain their exact ownership", async ()
   assert.deepEqual(await analyzeFixture({
     [paths.claude]: "import 'node:perf_hooks';\nimport type {} from '@anthropic-ai/claude-agent-sdk';\n",
   }), []);
+});
+
+test("Darwin retained-owner consumers use the narrow workspace entrypoint", async () => {
+  const hostRoot = boundariesById.get("adapter.agent-execution.host-custody").roots[0];
+  assert.deepEqual(await analyzeFixture({
+    [paths.composition]: `import type {DarwinAttemptRetainedOwners} from './features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-workspace-entrypoint.js';\n`,
+  }), []);
+  assert.deepEqual(rules(await analyzeFixture({
+    [paths.composition]: `import type {DarwinAttemptRetainedOwners} from './features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-bridge.js';\n`,
+    [`${hostRoot}/darwin-attempt-owner-bridge.ts`]: "export interface DarwinAttemptRetainedOwners {}\n",
+  })), ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"]);
 });
 
 test("Codex evidence utilities do not grant spawn or network ownership", async () => {

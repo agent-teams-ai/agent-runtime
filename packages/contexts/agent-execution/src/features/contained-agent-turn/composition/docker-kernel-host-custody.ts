@@ -4,7 +4,7 @@ import {custodyDataRecord, createImmutableHostCustodyLaunchPlan, type ContainedT
   from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import {randomUUID, createHash} from "node:crypto";
 import {HostCustodyUnsupportedError, type HostCustodyReservationInput} from "../adapters/outbound/host-custody/custodied-provider-process.js";
-import {isNativeHostCustodyWorkspaceAuthority} from "../adapters/outbound/host-custody/native-host-custody-workspace-authority.js";
+import {isNativeHostCustodyWorkspaceAuthority} from "../adapters/outbound/host-custody/native-host-custody-workspace-entrypoint.js";
 import {DockerKernelEvidence} from "./docker-kernel-evidence.js";
 
 type Containment = Awaited<ReturnType<ContainedTurnHostCustodyPort["requestContainment"]>>;
