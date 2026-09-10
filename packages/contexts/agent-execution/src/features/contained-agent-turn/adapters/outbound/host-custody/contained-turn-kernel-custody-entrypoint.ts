@@ -46,3 +46,12 @@ export type {HttpEgressLimits} from "./egress/http-egress-contracts.js";
 
 export {withNativeHostCustodyWorkspaceAuthority, retireNativeHostCustodyWorkspaceAuthority,
   type NativeHostCustodyWorkspaceAuthority} from "./native-host-custody-workspace-authority.js";
+
+export {
+  readDarwinNativeLaunchObservation, inspectDarwinNativeLaunchObservation,
+  assertDarwinNativeLaunchObservationCurrent,
+  installDarwinNativeCodexMaterial, inspectDarwinNativeCodexMaterial,
+  assertDarwinNativeCodexMaterialCurrent,
+  type DarwinNativeWorkspaceSelection, type DarwinNativeLaunchObservation,
+  type DarwinNativeCodexMaterial,
+} from "./darwin-attempt-owner-selection.js";

@@ -9,9 +9,9 @@ import * as synthetic from "./synthetic-native-custody-producer.fixture.ts";
 // Explicit independent source-loaded SYNTHETIC producer, never a build shim.
 const producer = new URL("./synthetic-native-custody-producer.fixture.ts", import.meta.url).href;
 registerHooks({resolve(specifier, context, next) {
-  if ((specifier.endsWith("/contained-turn-kernel-custody-entrypoint.js") && [
+  if ((specifier.endsWith("/darwin-attempt-owner-selection.js") && context.parentURL?.endsWith("/native-host-custody-workspace-authority.ts")) || (specifier.endsWith("/contained-turn-kernel-custody-entrypoint.js") && [
     "codex-app-server-launch-plan.ts", "codex-app-server-permission-boundary.ts", "codex-native-broker-files.ts",
-    "codex-native-broker-recipe.ts", "native-host-custody-workspace-authority.ts", "node-kernel-workspace-authority.ts",
+    "codex-native-broker-recipe.ts", "node-kernel-workspace-authority.ts",
   ].some(name => context.parentURL?.endsWith("/" + name))) || specifier.endsWith("/node-contained-turn-workspace-owner.js")) {
     if (specifier.endsWith("/contained-turn-kernel-custody-entrypoint.js") && context.parentURL?.endsWith("/node-kernel-workspace-authority.ts")) {
       return {url: new URL("./synthetic-native-kernel-entrypoint.fixture.ts", import.meta.url).href, shortCircuit: true};

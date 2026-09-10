@@ -2,7 +2,7 @@ import {
   readDarwinNativeLaunchObservation, inspectDarwinNativeLaunchObservation,
   assertDarwinNativeLaunchObservationCurrent,
   type DarwinNativeWorkspaceSelection, type DarwinNativeLaunchObservation,
-} from "./contained-turn-kernel-custody-entrypoint.js";
+} from "./darwin-attempt-owner-selection.js";
 import type { ContainedTurnKernelWorkspaceOwner } from "./contained-turn-kernel-custody-contracts.js";
 
 declare const nativeAuthorityBrand: unique symbol;
