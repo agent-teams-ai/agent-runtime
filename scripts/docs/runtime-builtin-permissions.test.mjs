@@ -68,7 +68,7 @@ async function analyze(files, config = policy) {
     assert.equal(result.error, undefined);
     assert.equal(result.signal, null);
     const envelope = JSON.parse(result.stdout);
-    assert.equal(envelope.foundationVersion, "1.1.0");
+    assert.equal(envelope.foundationVersion, "1.2.0");
     assert.equal(envelope.capabilities.length, 1);
     const [report] = envelope.capabilities;
     assert.equal(report.capabilityConfigSchemaVersion, 1);

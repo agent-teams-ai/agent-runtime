@@ -42,7 +42,7 @@ test("canonical qualification v2 covers every Runtime authorable type exactly on
     gateCommand: "pnpm docs:protocol:check"
   });
   assert.equal(manifest.devDependencies["@agent-teams/docs-protocol"], "0.6.0");
-  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.1.0");
+  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.2.0");
   assert.match(protocolProfileSource, /^schemaVersion: 3$/mu);
   assert.match(protocolProfileSource, /^  path: architecture\/foundation\/document-authoring\.yaml$/mu);
   assert.match(protocolProfileSource, /^  schemaVersion: 3$/mu);
