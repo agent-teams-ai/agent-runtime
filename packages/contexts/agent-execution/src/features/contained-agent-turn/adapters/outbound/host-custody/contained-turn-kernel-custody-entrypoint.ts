@@ -80,3 +80,5 @@ export type {
 export type {
   DarwinAttemptRetainedOwners, DarwinAttemptRetainedCompletion, DarwinAttemptRetainedOwnerFactory,
 } from "./darwin-attempt-owner-bridge.js";
+
+export {markDarwinNativeRootLaunchPlan} from "./host-custody-launch.js";

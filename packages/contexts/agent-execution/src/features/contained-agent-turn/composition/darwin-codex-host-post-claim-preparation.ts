@@ -43,10 +43,8 @@ import {
 import {
   installCodexDarwinNativeBrokerFiles, readCodexDarwinNativeMaterial, type CodexNativeBrokerRecipe,
   DarwinCodexNativeFiles, codexNativeBrokerLaunchInput,
-  createDarwinCodexNativeBrokerRecipe, prepareCodexNativeBrokerFiles,
+  createDarwinCodexNativeBrokerRecipe, prepareCodexNativeBrokerFiles, codexDarwinNativeMaterialIdentity,
 } from "../adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
-import {codexDarwinNativeMaterialIdentity} from
-  "../adapters/outbound/codex-app-server/codex-native-broker-files.js";
 
 export interface DarwinCodexHostPreparationInput {
   readonly hostCustody: unknown;

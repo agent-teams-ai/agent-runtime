@@ -474,3 +474,23 @@ test("Host custody cannot import the filesystem workspace owner backwards", asyn
     ]);
   }
 });
+
+
+test("Darwin native launch consumers use declared custody and Codex entrypoints", async () => {
+  const base = "packages/contexts/agent-execution/src/features/contained-agent-turn";
+  const cases = [
+    {consumer: `${base}/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts`,
+      prefix: "../host-custody/", owner: `${base}/adapters/outbound/host-custody/`,
+      entry: "contained-turn-kernel-custody-entrypoint", internal: "host-custody-launch"},
+    {consumer: `${base}/composition/darwin-codex-host-post-claim-preparation.ts`,
+      prefix: "../adapters/outbound/codex-app-server/", owner: `${base}/adapters/outbound/codex-app-server/`,
+      entry: "codex-app-server-launch-plan", internal: "codex-native-broker-files"},
+  ];
+  for (const {consumer, prefix, owner, entry, internal} of cases) {
+    assert.deepEqual(await analyzeFixture({[consumer]: `import '${prefix}${entry}.js';\n`}), []);
+    assert.deepEqual(rules(await analyzeFixture({
+      [consumer]: `import '${prefix}${internal}.js';\n`,
+      [`${owner}${internal}.ts`]: "export {};\n",
+    })), ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"]);
+  }
+});
