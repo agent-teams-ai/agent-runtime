@@ -9,7 +9,7 @@ const descriptorPathFor = (descriptor: number): string =>
 
 import { DarwinCooperativeProcessCustody } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-cooperative-process-custody.js";
 import { createStaticHostCustodyLaunchPlanResolver } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/static-host-custody-launch-plan-resolver.js";
-import { createDarwinCooperativeProcessCustodyTestSupport } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-cooperative-process-custody-test-support.js";
+import { createDarwinCooperativeProcessCustodyTestSupport } from "./darwin-cooperative-process-custody-test-support.ts";
 import {
   binding,
   claudeBinding,
