@@ -12,6 +12,7 @@ on:
       - refactor/fms-runtime-security-setup-authorization
       - refactor/fms-contained-turn-egress
       - refactor/fms-host-boundaries
+      - refactor/fms-final-integration
       - fix/contained-turn-final-qualification
 
 permissions:
