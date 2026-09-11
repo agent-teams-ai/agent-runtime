@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "evidenceKind": "runtime-setup-l0-direct-composition",
-  "sourceRevision": "d7c875a60ac8e59eb1d097bdb0f0926991a1ed99",
+  "sourceRevision": "01d6cc76cab4817bedbe44635d8b2b31473349c6",
   "authority": "ADR-0008",
   "productOutcome": "detached-safe-runtime-setup-preview",
   "taxonomyAuthority": "experiment-local-non-qualification-rubric",
@@ -62,8 +62,8 @@
       "sha256": "98950b1e761789cde2329fd75605a74824e7cc30ad3472768400431934fdc7df"
     },
     "tests": {
-      "fileCount": 164,
-      "sha256": "4590a859fd7605adce57e317bf100022b387f26ab6cd6e58944b86e3b85042c5"
+      "fileCount": 166,
+      "sha256": "fdf421458b4b32c44e845be533adb93b09a0d145c521dfd2b259039f1186fb97"
     }
   },
   "historicalChanges": [
@@ -1915,6 +1915,64 @@
         "files": 1,
         "additions": 205,
         "deletions": 0
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "source-dependencies-schema-v3",
+      "revision": "b42a1130ea1b2a02a5cd240a33d3cb4e7c4cf32f",
+      "files": 15,
+      "additions": 2027,
+      "deletions": 542,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 9,
+        "additions": 107,
+        "deletions": 24
+      },
+      "behaviorFixtures": {
+        "before": 123,
+        "after": 123,
+        "retained": 123,
+        "reusePercent": 100
+      }
+    },
+    {
+      "id": "source-dependencies-v3-repo-root-test-loads",
+      "revision": "01d6cc76cab4817bedbe44635d8b2b31473349c6",
+      "files": 1,
+      "additions": 5,
+      "deletions": 3,
+      "binaryFiles": 0,
+      "composition": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "production": {
+        "files": 0,
+        "additions": 0,
+        "deletions": 0
+      },
+      "tests": {
+        "files": 1,
+        "additions": 5,
+        "deletions": 3
       },
       "behaviorFixtures": {
         "before": 123,
