@@ -367,10 +367,12 @@ boundaries:
       - packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts
       - packages/apps/embedded-runtime/src/composition/claude-code-setup-inspection-planner.ts
       - packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts
+      - packages/apps/embedded-runtime/src/composition/opaque-reference-digest.ts
     entrypoints:
       - packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts
       - packages/apps/embedded-runtime/src/composition/claude-code-setup-inspection-planner.ts
       - packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts
+      - packages/apps/embedded-runtime/src/composition/opaque-reference-digest.ts
     allow:
       boundaries:
         - composition.embedded-runtime.contained-turn-support
@@ -393,6 +395,7 @@ boundaries:
       - packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts
       - packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts
       - packages/apps/embedded-runtime/src/application/ports/outbound/codex-setup-inspection-planner.ts
+      - packages/apps/embedded-runtime/src/application/ports/outbound/opaque-reference-digest.ts
       - packages/apps/embedded-runtime/src/index.ts
     allow:
       boundaries:
@@ -404,7 +407,6 @@ boundaries:
         - "@agent-teams/runtime-configuration"
         - "@agent-teams/runtime-security"
       builtins:
-        - node:crypto
         - node:timers/promises
       runtimeReferences: []
   - id: experiments.typescript-evidence

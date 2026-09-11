@@ -1430,12 +1430,14 @@
       "roots": [
         "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
         "packages/apps/embedded-runtime/src/composition/claude-code-setup-inspection-planner.ts",
-        "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts"
+        "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts",
+        "packages/apps/embedded-runtime/src/composition/opaque-reference-digest.ts"
       ],
       "entrypoints": [
         "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
         "packages/apps/embedded-runtime/src/composition/claude-code-setup-inspection-planner.ts",
-        "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts"
+        "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts",
+        "packages/apps/embedded-runtime/src/composition/opaque-reference-digest.ts"
       ],
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
@@ -1478,6 +1480,11 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/opaque-reference-digest.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
           "to": "packages/apps/embedded-runtime/src/composition/runtime-access-lifecycle.ts",
           "mode": "runtime"
         },
@@ -1514,6 +1521,11 @@
         {
           "from": "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts",
           "to": "packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/opaque-reference-digest.ts",
+          "to": "packages/apps/embedded-runtime/src/application/ports/outbound/opaque-reference-digest.ts",
           "mode": "type-only"
         }
       ]
@@ -3301,6 +3313,7 @@
         "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
         "packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts",
         "packages/apps/embedded-runtime/src/application/ports/outbound/codex-setup-inspection-planner.ts",
+        "packages/apps/embedded-runtime/src/application/ports/outbound/opaque-reference-digest.ts",
         "packages/apps/embedded-runtime/src/index.ts"
       ],
       "status": "not-adopted",
@@ -3325,6 +3338,11 @@
         {
           "from": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
           "to": "packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
+          "to": "packages/apps/embedded-runtime/src/application/ports/outbound/opaque-reference-digest.ts",
           "mode": "type-only"
         },
         {
@@ -3355,6 +3373,11 @@
         {
           "from": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
           "to": "packages/apps/embedded-runtime/src/application/ports/outbound/codex-setup-inspection-planner.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
+          "to": "packages/apps/embedded-runtime/src/application/ports/outbound/opaque-reference-digest.ts",
           "mode": "type-only"
         },
         {

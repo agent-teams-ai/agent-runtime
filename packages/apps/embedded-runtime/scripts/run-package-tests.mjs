@@ -54,6 +54,7 @@ export const testProcesses = [
     "tests/trusted-runtime-access-scope.unit.test.ts",
     "tests/public-api.test.ts",
     "tests/claude-code-contract.test.ts",
+    "tests/opaque-reference-digest.test.ts",
     "tests/live/linux-codex-pa-rendering.test.ts",
     "tests/live/linux-codex-node-selection.test.ts",
     "tests/live/linux-codex-live-admin-directories.test.ts",

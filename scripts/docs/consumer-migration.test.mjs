@@ -78,13 +78,10 @@ test("qualified stable20 integration and generated state preserve exact evidence
     "architecture/foundation/docs-protocol-managed-state.json": "23d0c21ef21f9f2385fe013f219d38e7a01ca0aaeb9c65ca3728ebba2b5eaedc",
     "architecture/foundation/docs-protocol-qualification.json": "1f7e50ec5b0e6ecc991668b83790b2367062240043c4b885c58377855968969b",
     "architecture/foundation/document-authoring.yaml": "d6f5ba4b178e742e122f6711c9d989d52a77768eb68527b0ecdf3c9a9699c6d2",
-    // Current migration evidence: reviewed scaffold source-policy overlay, reconciled with the
-    // async-assembly-adapter branch's own retained boundary structure (this branch keeps its
-    // existing codex-app-server, composition and embedded-runtime boundaries as-is, widens
-    // codex-app-server's entrypoints to the two files its own further FMS work already reads
-    // cross-boundary, and only adopts main's scaffolding tooling test-boundary split, which
-    // does not touch its code).
-    "architecture/foundation/source-dependencies.yaml": "8ae1670dc11a82cdb4bd9c5adc29a09aad2ff9acba66f53aa6430ee39d8d55ea"
+    // Current migration evidence: carved the Host setup-view HMAC digest adapter into the
+    // agent-runtime-host composition role and dropped node:crypto from the broader
+    // production.embedded-runtime application boundary, which no longer needs it directly.
+    "architecture/foundation/source-dependencies.yaml": "3a05a1ce13bb6f251240036d2f13255dd67c6b84d23eff0bb73b1e8592f6cbb1"
 };
   for (const [path, digest] of Object.entries(expected)) {
     assert.equal(createHash("sha256").update(await read(path)).digest("hex"), digest, path);

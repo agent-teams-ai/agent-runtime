@@ -213,7 +213,10 @@ test("Embedded Runtime Node utility permission belongs only to composition", () 
     "composition.embedded-runtime.contained-turn-support",
     "core.embedded-runtime.access-contracts",
   ]);
-  assert.deepEqual(production.allowedBuiltins, ["node:crypto", "node:timers/promises"]);
+  // The two setup-view builders derive opaque reference digests through an
+  // injected port now; node:crypto moved to the composition-owned adapter
+  // (agent-runtime-host role), so application no longer needs it directly.
+  assert.deepEqual(production.allowedBuiltins, ["node:timers/promises"]);
 });
 
 test("transitional boundaries and adapter permissions remain exact", () => {
