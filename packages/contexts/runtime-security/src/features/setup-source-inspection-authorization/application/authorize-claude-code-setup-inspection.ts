@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import type {
   AuthorizeClaudeCodeSetupInspection,
   AuthorizedClaudeCodeExecutableCandidate,
@@ -23,46 +21,58 @@ import {
 } from "./claude-code-path-authorization.js";
 import { prepareClaudeCodeSourceRequests } from "./claude-code-source-scope.js";
 import { deepFreezeAuthorization } from "./deep-freeze-authorization.js";
+import type { PathAlgebra } from "./ports/outbound/path-algebra.js";
 import type { PathCanonicalizer } from "./ports/outbound/path-canonicalizer.js";
+import type { SourceIdentityDigest } from "./ports/outbound/source-identity-digest.js";
 
 const MAX_DIAGNOSTICS = 1_024;
 const MAX_EPOCH_LENGTH = 256;
 const SOURCE_SLOTS = 3;
 
-const sourceDisplayPaths = Object.freeze({
-  "project-local": "$WORKSPACE/.claude/settings.local.json",
-  "shared-project": "$WORKSPACE/.claude/settings.json",
-  user: "$HOME/.claude/settings.json",
-} as const);
+const sourceDisplayPaths: Readonly<Record<"project-local" | "shared-project" | "user", string>> =
+  Object.freeze({
+    "project-local": "$WORKSPACE/.claude/settings.local.json",
+    "shared-project": "$WORKSPACE/.claude/settings.json",
+    user: "$HOME/.claude/settings.json",
+  });
 
 const candidateIdentity = (
+  digest: SourceIdentityDigest,
   request: { readonly absolutePath: string; readonly priorityRank: number; readonly source: string },
   canonicalPath: string,
-): string => `claude-code-candidate-identity:sha256:${createHash("sha256")
-  .update([
+): string => `claude-code-candidate-identity:sha256:${digest.sha256Hex(
+  [
     request.source,
     String(request.priorityRank),
     request.absolutePath,
     canonicalPath,
-  ].join("\0"))
-  .digest("hex")}`;
+  ].join("\0"),
+)}`;
+
+interface AuthorizationDependencies {
+  readonly canonicalizer: PathCanonicalizer;
+  readonly digest: SourceIdentityDigest;
+  readonly pathAlgebra: PathAlgebra;
+}
 
 const authorizeCandidates = async (
+  dependencies: AuthorizationDependencies,
   scope: TrustedClaudeCodeSetupInspectionScope,
   roots: readonly ClaudeCodeCanonicalRoot[],
-  canonicalizer: PathCanonicalizer,
   signal?: AbortSignal,
 ): Promise<{
   readonly candidates: readonly AuthorizedClaudeCodeExecutableCandidate[];
   readonly diagnostics: readonly ClaudeCodeSetupAuthorizationDiagnostic[];
 }> => {
-  const prepared = prepareClaudeCodeCandidateRequests(scope);
+  const { canonicalizer, digest, pathAlgebra } = dependencies;
+  const prepared = prepareClaudeCodeCandidateRequests(pathAlgebra, scope);
   const candidates: AuthorizedClaudeCodeExecutableCandidate[] = [];
   const diagnostics = [...prepared.diagnostics];
   for (const request of prepared.requests) {
     signal?.throwIfAborted();
     try {
       const verified = await verifyClaudeCodeExecutablePath(
+        pathAlgebra,
         request.absolutePath,
         roots,
         canonicalizer,
@@ -80,6 +90,7 @@ const authorizeCandidates = async (
         diagnostics.push({
           code: "candidate_invalid",
           safeRef: displayClaudeCodePath(
+            pathAlgebra,
             request.absolutePath,
             verified.observation.absolutePath,
             verified.root,
@@ -93,6 +104,7 @@ const authorizeCandidates = async (
           ? {}
           : { authorizedFileIdentity: verified.observation.fileIdentity }),
         candidateIdentity: candidateIdentity(
+          digest,
           request,
           verified.observation.absolutePath,
         ),
@@ -102,6 +114,7 @@ const authorizeCandidates = async (
           canonicalPath: verified.observation.absolutePath,
         },
         displayPath: displayClaudeCodePath(
+          pathAlgebra,
           request.absolutePath,
           verified.observation.absolutePath,
           verified.root,
@@ -128,6 +141,7 @@ const authorizeCandidates = async (
 };
 
 const authorizeSources = async (
+  pathAlgebra: PathAlgebra,
   scope: TrustedClaudeCodeSetupInspectionScope,
   roots: readonly ClaudeCodeCanonicalRoot[],
   canonicalizer: PathCanonicalizer,
@@ -138,7 +152,7 @@ const authorizeSources = async (
 }> => {
   const diagnostics: ClaudeCodeSetupAuthorizationDiagnostic[] = [];
   const sources: AuthorizedClaudeCodePortableSource[] = [];
-  const requests = prepareClaudeCodeSourceRequests(scope);
+  const requests = prepareClaudeCodeSourceRequests(pathAlgebra, scope);
   if (requests === undefined) {
     return {
       diagnostics: [{ code: "source_epoch_stale", safeRef: "scope" }],
@@ -164,9 +178,9 @@ const authorizeSources = async (
     }
     try {
       const verified = await verifyClaudeCodePathWithinRoot(
+        { canonicalizer, pathAlgebra },
         request.absolutePath,
         roots,
-        canonicalizer,
         request.rootKind,
         signal,
       );
@@ -195,6 +209,7 @@ const authorizeSources = async (
           canonicalPath: verified.root.canonicalPath,
         },
         displayPath: displayClaudeCodePath(
+          pathAlgebra,
           request.absolutePath,
           verified.observation.absolutePath,
           verified.root,
@@ -257,32 +272,38 @@ const sortDiagnostics = (
     )
     .slice(0, MAX_DIAGNOSTICS);
 
+const trustScope = (
+  scope: Parameters<AuthorizeClaudeCodeSetupInspection["execute"]>[0],
+): TrustedClaudeCodeSetupInspectionScope => Object.freeze({
+  candidatePaths: Object.freeze(scope.candidatePaths
+    .slice(0, MAX_TOTAL_CANDIDATES + 1)
+    .map(candidate => Object.freeze({
+      absolutePath: candidate.absolutePath,
+      priorityRank: candidate.priorityRank,
+      source: candidate.source,
+    }))),
+  dialect: scope.dialect,
+  homeRoot: scope.homeRoot,
+  observationEpoch: scope.observationEpoch,
+  sourcePaths: Object.freeze(scope.sourcePaths
+    .slice(0, SOURCE_SLOTS + 1)
+    .map(source => Object.freeze({
+      absolutePath: source.absolutePath,
+      kind: source.kind,
+    }))),
+  workspaceRoot: scope.workspaceRoot,
+  workspaceTrusted: scope.workspaceTrusted,
+});
+
 export const createAuthorizeClaudeCodeSetupInspection = (
   canonicalizer: PathCanonicalizer,
+  pathAlgebra: PathAlgebra,
+  digest: SourceIdentityDigest,
 ): AuthorizeClaudeCodeSetupInspection => ({
   async execute(scope, options) {
     const signal = options?.signal;
     signal?.throwIfAborted();
-    const trustedScope: TrustedClaudeCodeSetupInspectionScope = Object.freeze({
-      candidatePaths: Object.freeze(scope.candidatePaths
-        .slice(0, MAX_TOTAL_CANDIDATES + 1)
-        .map(candidate => Object.freeze({
-          absolutePath: candidate.absolutePath,
-          priorityRank: candidate.priorityRank,
-          source: candidate.source,
-        }))),
-      dialect: scope.dialect,
-      homeRoot: scope.homeRoot,
-      observationEpoch: scope.observationEpoch,
-      sourcePaths: Object.freeze(scope.sourcePaths
-        .slice(0, SOURCE_SLOTS + 1)
-        .map(source => Object.freeze({
-          absolutePath: source.absolutePath,
-          kind: source.kind,
-        }))),
-      workspaceRoot: scope.workspaceRoot,
-      workspaceTrusted: scope.workspaceTrusted,
-    });
+    const trustedScope = trustScope(scope);
     if (
       trustedScope.dialect !== "claude-code-settings@2026-08-28" ||
       trustedScope.observationEpoch.length === 0 ||
@@ -294,6 +315,7 @@ export const createAuthorizeClaudeCodeSetupInspection = (
       });
     }
     const roots = await canonicalizeClaudeCodeRoots(
+      pathAlgebra,
       trustedScope,
       canonicalizer,
       signal,
@@ -306,13 +328,14 @@ export const createAuthorizeClaudeCodeSetupInspection = (
       });
     }
     const candidates = await authorizeCandidates(
+      { canonicalizer, digest, pathAlgebra },
       trustedScope,
       roots,
-      canonicalizer,
       signal,
     );
     signal?.throwIfAborted();
     const sources = await authorizeSources(
+      pathAlgebra,
       trustedScope,
       roots,
       canonicalizer,

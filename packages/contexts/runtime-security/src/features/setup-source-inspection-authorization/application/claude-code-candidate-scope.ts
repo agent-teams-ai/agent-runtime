@@ -1,10 +1,9 @@
-import { isAbsolute, join, resolve } from "node:path";
-
 import type {
   AuthorizedClaudeCodeExecutableCandidate,
   ClaudeCodeSetupAuthorizationDiagnostic,
   TrustedClaudeCodeSetupInspectionScope,
 } from "../contracts/claude-code-setup-inspection-authorization.js";
+import type { PathAlgebra } from "./ports/outbound/path-algebra.js";
 
 export interface ClaudeCodeCandidateRequest {
   readonly absolutePath: string;
@@ -20,13 +19,28 @@ const MAX_PATH_LENGTH = 16_384;
 const compareText = (left: string, right: string): number =>
   left === right ? 0 : left < right ? -1 : 1;
 
-const pathIsBoundedAbsolute = (path: string): boolean =>
+const pathIsBoundedAbsolute = (pathAlgebra: PathAlgebra, path: string): boolean =>
   path.length > 0 &&
   path.length <= MAX_PATH_LENGTH &&
   !path.includes("\0") &&
-  isAbsolute(path);
+  pathAlgebra.isAbsolute(path);
+
+const knownLocationsFor = (
+  pathAlgebra: PathAlgebra,
+  scope: TrustedClaudeCodeSetupInspectionScope,
+) => [
+  {
+    absolutePath: pathAlgebra.resolve(
+      pathAlgebra.join(scope.homeRoot, ".local", "bin", "claude"),
+    ),
+    priorityRank: 3,
+  },
+  { absolutePath: "/opt/homebrew/bin/claude", priorityRank: 4 },
+  { absolutePath: "/usr/local/bin/claude", priorityRank: 5 },
+] as const;
 
 export const prepareClaudeCodeCandidateRequests = (
+  pathAlgebra: PathAlgebra,
   scope: TrustedClaudeCodeSetupInspectionScope,
 ): {
   readonly diagnostics: readonly ClaudeCodeSetupAuthorizationDiagnostic[];
@@ -45,14 +59,7 @@ export const prepareClaudeCodeCandidateRequests = (
       requests: [],
     };
   }
-  const expectedKnownLocations = [
-    {
-      absolutePath: resolve(join(scope.homeRoot, ".local", "bin", "claude")),
-      priorityRank: 3,
-    },
-    { absolutePath: "/opt/homebrew/bin/claude", priorityRank: 4 },
-    { absolutePath: "/usr/local/bin/claude", priorityRank: 5 },
-  ] as const;
+  const expectedKnownLocations = knownLocationsFor(pathAlgebra, scope);
   const knownLocations = scope.candidatePaths.filter(candidate =>
     candidate.source === "known-location"
   );
@@ -80,7 +87,7 @@ export const prepareClaudeCodeCandidateRequests = (
         candidate.priorityRank === expected.priorityRank
       );
     if (
-      !pathIsBoundedAbsolute(candidate.absolutePath) ||
+      !pathIsBoundedAbsolute(pathAlgebra, candidate.absolutePath) ||
       !rankMatchesSource ||
       !knownLocationIsBound
     ) {
@@ -88,7 +95,7 @@ export const prepareClaudeCodeCandidateRequests = (
       continue;
     }
     requests.push({
-      absolutePath: resolve(candidate.absolutePath),
+      absolutePath: pathAlgebra.resolve(candidate.absolutePath),
       priorityRank: candidate.priorityRank,
       source: candidate.source,
     });
