@@ -2,6 +2,8 @@ import {createHash, randomUUID} from "node:crypto";
 import {writeFile} from "node:fs/promises";
 import {join, isAbsolute} from "node:path";
 
+import {withOperatorProviderAccess} from "./darwin-operator-provider-access.mjs";
+
 const digest = value => createHash("sha256").update(value).digest("hex");
 const terminal = new Set(["succeeded", "failed", "cancelled", "reconcile_required"]);
 
@@ -133,7 +135,12 @@ export function verifyReleasedCleanup(cleanup) {
 
 export async function runDarwinPublicRuntimeHostChild() {
   const {loadDarwinLiveActivation, createDarwinLiveRuntime} = await import("./darwin-live-production-root.mjs");
-  const activation = await loadDarwinLiveActivation();
+  const sealed = await loadDarwinLiveActivation();
+  // Real codexHome/sandbox/operatorApproval never enter the sealed manifest
+  // (finding 6); this process (dropped to the operator's own uid, env wiped
+  // to PATH/LANG/LC_ALL by ae_root_isolate_host) reads them itself from a
+  // sibling of its own evidenceDirectory. See darwin-live-infrastructure.mjs.
+  const activation = await withOperatorProviderAccess(sealed);
   const input = Object.freeze({...activation, ...activation.turn});
   if (input.version !== 1 || input.candidate !== true || input.qualified !== false) {
     throw new Error("invalid candidate child input");
