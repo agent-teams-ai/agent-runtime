@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { types } from "node:util";
 import { copyContainedTurnAccessAuthority } from "./contained-turn-access-authority.js";
 import type { AuthorityBoundContainedTurnCapability } from "./contained-turn-authority-capability.js";
+import { createNodeOpaqueReferenceDigest } from "./opaque-reference-digest.js";
 import {
   createBuildClaudeCodeSetupView,
   type BuildClaudeCodeSetupViewDependencies,
@@ -259,13 +260,16 @@ export const createAgentRuntimeHost = (
   dependencies: AgentRuntimeHostDependencies,
 ): AgentRuntimeHost => {
   const capabilityDependencies = snapshotAgentRuntimeHostDependencies(dependencies);
+  const referenceDigest = createNodeOpaqueReferenceDigest();
   const buildCodexSetupView = createBuildCodexSetupView(
     capabilityDependencies.codexSetup,
     randomBytes(32),
+    referenceDigest,
   );
   const buildClaudeCodeSetupView = createBuildClaudeCodeSetupView(
     capabilityDependencies.claudeCodeSetup,
     randomBytes(32),
+    referenceDigest,
   );
   const lifecycle = createAgentRuntimeHostDisposalLifecycle(capabilityDependencies.containedTurn);
   const containedTurnSubmissionCoordinator = capabilityDependencies.containedTurn === undefined

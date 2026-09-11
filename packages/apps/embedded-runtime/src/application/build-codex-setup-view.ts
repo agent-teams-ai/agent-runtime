@@ -1,5 +1,3 @@
-import { createHmac } from "node:crypto";
-
 import type {
   DiscoverCodexInstallations,
   InstallationCandidate,
@@ -21,6 +19,7 @@ import type {
   InspectCodexRuntimeSetupOutcome,
 } from "../contracts/runtime-access.js";
 import type { CodexSetupInspectionPlanner } from "./ports/outbound/codex-setup-inspection-planner.js";
+import type { OpaqueReferenceDigest } from "./ports/outbound/opaque-reference-digest.js";
 import type { TrustedCodexSetupScope } from "./trusted-runtime-access-scope.js";
 
 export interface BuildCodexSetupViewDependencies {
@@ -49,30 +48,30 @@ const deepFreeze = <T>(value: T): T => {
 };
 
 const observationRef = (
+  digest: OpaqueReferenceDigest,
   opaqueReferenceKey: Uint8Array,
   scope: TrustedCodexSetupScope,
 ): string =>
-  `codex-setup-observation:${createHmac("sha256", opaqueReferenceKey)
-    .update(JSON.stringify([
-      "codex-setup-observation",
-      scope.scopeId,
-      scope.observationEpoch,
-    ]))
-    .digest("hex")}`;
+  `codex-setup-observation:${digest.hex(
+    opaqueReferenceKey,
+    JSON.stringify(["codex-setup-observation", scope.scopeId, scope.observationEpoch]),
+  )}`;
 
 const installationObservationRef = (
+  digest: OpaqueReferenceDigest,
   opaqueReferenceKey: Uint8Array,
   scope: TrustedCodexSetupScope,
   internalInstallationRef: string,
 ): string =>
-  `codex-installation:${createHmac("sha256", opaqueReferenceKey)
-    .update(JSON.stringify([
+  `codex-installation:${digest.hex(
+    opaqueReferenceKey,
+    JSON.stringify([
       "codex-installation-observation",
       scope.scopeId,
       scope.observationEpoch,
       internalInstallationRef,
-    ]))
-    .digest("hex")}`;
+    ]),
+  )}`;
 
 const mapInstallationCandidate = (
   candidate: AuthorizedInstallationCandidate,
@@ -116,6 +115,7 @@ const mapAuthorizationDiagnostics = (
 export const createBuildCodexSetupView = (
   dependencies: BuildCodexSetupViewDependencies,
   opaqueReferenceKey: Uint8Array,
+  referenceDigest: OpaqueReferenceDigest,
 ) => {
   if (opaqueReferenceKey.byteLength < 32) {
     throw new TypeError("opaqueReferenceKey must contain at least 32 bytes");
@@ -244,6 +244,7 @@ export const createBuildCodexSetupView = (
       installations: installations.installations.map(installation => ({
         aliases: installation.aliases.map(alias => ({ ...alias })),
         installationRef: installationObservationRef(
+          referenceDigest,
           referenceKey,
           scope,
           installation.installationRef,
@@ -251,7 +252,7 @@ export const createBuildCodexSetupView = (
         status: installation.status,
       })),
       nextActions: [...nextActions].toSorted(),
-      observationRef: observationRef(referenceKey, scope),
+      observationRef: observationRef(referenceDigest, referenceKey, scope),
       settings: configuration.settings.map(setting => ({ ...setting })),
       sources: configuration.sources.map(source => ({ ...source })),
       status:
