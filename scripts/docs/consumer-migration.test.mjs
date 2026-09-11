@@ -51,15 +51,10 @@ test("projected direct tooling pins and exact transitive age exceptions preserve
   assert.match(await read("scripts/architecture/feature-module-config.mjs"), /const FOUNDATION_VERSION = "1\.2\.0";/u);
 });
 
-test("Skill commands are executable installed CLI calls with reviewed digest binding and full gate", async () => {
-  const skill = await read(".agents/skills/docs-authoring/SKILL.md");
-  for (const command of ["find", "new", "context", "check"]) {
-    assert.ok(skill.includes(`pnpm exec docs-protocol ${command} --consumer . --profile architecture/foundation/docs-protocol.yaml`));
-  }
-  assert.match(skill, /--apply --expect "DIGEST"/u);
-  assert.match(skill, /manual-required.*markdownLink.*indexPath/u);
-  assert.match(skill, /full consumer gate `pnpm docs:protocol:check`/u);
-  assert.match(skill, /supersession explicitly/u);
+test("managed Skill remains byte-exact with the selected installed Cohort", async () => {
+  const integration = await json("architecture/foundation/docs-consumer-integration.json");
+  const skillDigest = `sha256:${createHash("sha256").update(await read(integration.skillPath)).digest("hex")}`;
+  assert.equal(skillDigest, integration.cohort.assets.skillDigest);
   const manifest = await json("package.json");
   assert.equal(manifest.scripts["docs:protocol:check"], "pnpm docs:check && pnpm docs:governance && pnpm docs:qualification");
 });
@@ -77,10 +72,10 @@ test("Source Dependencies keeps its eight v1 roots and uses the supported instal
   assert.match(source, /"architecture\.source-dependencies", "--consumer", root, "--json"/u);
 });
 
-test("retained stable18 integration, managed state and scenarios do not admit this upgrade", async () => {
+test("qualified stable19 integration and generated state preserve exact evidence", async () => {
   const expected = {
-    "architecture/foundation/docs-consumer-integration.json": "487476cb23bb08c2c397d3a385622a0e13dcb93373954225f68ca786a86509d2",
-    "architecture/foundation/docs-protocol-managed-state.json": "5a0170c19290901c2994f9946bbb0cc0fe55a09cce43325a3784f0cb18f235fc",
+    "architecture/foundation/docs-consumer-integration.json": "63b0ee993ca2c557c2cb0fbcaa4df0b8e90ea6b0ee6664ecdc78f01917184ce1",
+    "architecture/foundation/docs-protocol-managed-state.json": "189be73e3a98e9d9f27257d31cc78f315fc54a9bfe09405260ef96d571e59837",
     "architecture/foundation/docs-protocol-qualification.json": "1f7e50ec5b0e6ecc991668b83790b2367062240043c4b885c58377855968969b",
     "architecture/foundation/document-authoring.yaml": "d6f5ba4b178e742e122f6711c9d989d52a77768eb68527b0ecdf3c9a9699c6d2",
     // Current migration evidence: reviewed scaffold source-policy overlay.

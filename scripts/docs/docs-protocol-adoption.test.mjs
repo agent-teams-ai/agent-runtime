@@ -36,7 +36,7 @@ test("canonical qualification v2 covers every Runtime authorable type exactly on
     readFile(join(repositoryRoot, "package.json"), "utf8").then(JSON.parse),
   ]);
   assert.equal(integration.schemaVersion, 3);
-  assert.equal(integration.cohort.cohortId, "docs-2026-09-10-stable18");
+  assert.equal(integration.cohort.cohortId, "docs-2026-09-10-stable19");
   assert.deepEqual(integration.qualification, {
     contractPath: "architecture/foundation/docs-protocol-qualification.json",
     gateCommand: "pnpm docs:protocol:check"
@@ -210,7 +210,7 @@ test("uses owner catalog authority and keeps blocked_by as read compatibility", 
   }
 });
 
-// Stable18 integration above is retained baseline input, not qualification of this upgrade.
+// Stable19 authority is independently qualified; portable scenarios supplement managed checks.
 // Managed v3 acceptance needs authentic Cohort v2, registry/workflow and package
 // integrities. Portable scenarios must never silently substitute for that gate.
 const scenarioContract = JSON.parse(await readFile(join(repositoryRoot,
