@@ -216,17 +216,26 @@ does not accept one — so revalidation timing remains under trusted-code
 control. Module composition's `containedTurnEgressProviderBindingDigest`
 delegates route-binding digest computation to the egress feature's own domain
 `validation` module instead of computing it inline, but the underlying
-`node:crypto` hashing and the shared `exactObject`/`snapshotUint8Array`
-validation primitives it and other Runtime Security features call through
-still live in `composition.ts` itself. That stays a deliberate
-composition-root position rather than an oversight: those primitives are
-cross-feature shared infrastructure, and domain/application layers still
-cannot import Node builtins directly. Dispatch authority's external V1
-wrapper and mapper (`contained-turn-dispatch-authority-v1-mappers.ts`) still
-live in `application/`, not in an inbound adapter; that move remains open.
-Its control clock takes the opposite design from egress: dispatch authority's
-`ContainedTurnDispatchAuthorityFeatureDependencies` requires callers to supply
-`clock` explicitly, rather than keeping it a composition-root-only detail.
+`node:crypto` hashing and the `exactObject`/`snapshotUint8Array` validation
+primitives still live in `composition.ts` itself and are called only from the
+two egress call sites there. That part of the base document's complaint
+remains open for this feature specifically: the sibling features already
+moved past it, each behind its own outbound Node adapter
+(`node-sha256-dispatch-digest.ts`, `node-egress-cryptography.ts`,
+`node-source-identity-digest.ts`), so egress is the one still routing
+`node:crypto` through the module composition root instead of a feature-owned
+adapter. Domain and application layers in this package do not import Node
+builtins directly today, but nothing in `architecture/foundation/source-dependencies.yaml`
+enforces that split within the single flat `production.runtime-security`
+boundary, unlike Embedded Runtime's narrower allowed-builtins list. Dispatch
+authority's external V1 wrapper and mapper
+(`contained-turn-dispatch-authority-v1-mappers.ts`) still live in
+`application/`, not in an inbound adapter; that move remains open too. Its
+composition-root clock design differs from egress's by choice, not as an
+outstanding gap: dispatch authority's own
+`ContainedTurnDispatchAuthorityFeatureDependencies` requires callers to
+supply `clock` explicitly, while egress keeps the clock a composition-root
+detail its public dependencies shape does not accept.
 
 Embedded Runtime is the host application. Its activation waited on the
 accepted asynchronous setup assembly work, which has since landed. The setup
