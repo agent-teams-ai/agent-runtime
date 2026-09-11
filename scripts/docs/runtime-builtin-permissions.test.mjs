@@ -36,8 +36,8 @@ const approved = [
   `${provider}adapters/provider-access-data.ts`,
 ];
 const forbidden = "architecture.source-dependencies.forbidden-builtin-dependency";
-const within = (path, root) => path === root || path.startsWith(`${root}/`);
-const ownerOf = (boundaries, path) => boundaries.find(boundary => boundary.roots.some(root => within(path, root)));
+const within = (path, boundaryRoot) => path === boundaryRoot || path.startsWith(`${boundaryRoot}/`);
+const ownerOf = (boundaries, path) => boundaries.find(boundary => boundary.roots.some(boundaryRoot => within(path, boundaryRoot)));
 
 async function analyze(files, config = policy) {
   const consumer = await mkdtemp(join(tmpdir(), "runtime-builtin-counterexample-"));
@@ -104,7 +104,7 @@ test("every actual getBuiltinModule role passes; removing util reproduces exactl
   assert.deepEqual(await analyze(files), []);
   const withoutApproval = structuredClone(policy);
   for (const boundary of withoutApproval.boundaries) {
-    if (boundary.roots.some(root => approved.some(path => within(path, root)))) {
+    if (boundary.roots.some(boundaryRoot => approved.some(path => within(path, boundaryRoot)))) {
       boundary.allow.builtins = boundary.allow.builtins.filter(name => name !== "node:util");
     }
   }
