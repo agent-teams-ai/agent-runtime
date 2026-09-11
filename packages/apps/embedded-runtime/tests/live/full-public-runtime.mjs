@@ -114,15 +114,19 @@ export async function verifySuccessfulPublicResult(input, result) {
   }
 }
 
-// oxlint-disable-next-line complexity -- released means every retained owner and readback is proven closed
+// oxlint-disable-next-line complexity -- every exact owner readback is required independently
 export function verifyReleasedCleanup(cleanup) {
-  if (cleanup?.status !== "released" || cleanup.processes?.survivingDescendants !== 0 ||
-      cleanup.processes?.openWriterFds !== 0 || cleanup.routes?.remaining !== 0 ||
-      cleanup.listeners?.remaining !== 0 || cleanup.database?.sessions !== 0 ||
-      cleanup.database?.preparedTransactions !== 0 || cleanup.filesystem?.executionRootPresent !== false ||
-      cleanup.checksums?.verified !== true || cleanup.providerAccess?.disposeCount !== 1 ||
-      cleanup.pool?.closed !== true || cleanup.storage?.closed !== true || cleanup.native?.closureAcknowledged !== true ||
-      cleanup.host?.identityCurrent !== true || cleanup.host?.streamsDrained !== true || cleanup.evidence?.retainedTreeVerified !== true) {
+  if (cleanup?.status !== "released" || cleanup.persistence?.repositoryClosed !== true ||
+      cleanup.persistence?.decisionsClosed !== true || cleanup.pool?.closed !== true ||
+      cleanup.database?.kind !== "observed" || cleanup.database?.otherSessions !== 0 ||
+      cleanup.database?.preparedTransactions !== 0 || cleanup.database?.inspectorClosed !== true ||
+      cleanup.providerAccess?.disposed !== true || cleanup.native?.closureAcknowledged !== true ||
+      cleanup.output?.closed !== true || cleanup.custody?.identity?.status !== "proved" ||
+      cleanup.custody?.sealed !== true || cleanup.custody?.closure?.profile !== "native-darwin-attempt-owner" ||
+      cleanup.custody?.closure?.status !== "closed" || cleanup.custody?.stdout?.status !== "complete" ||
+      cleanup.custody?.stderr?.status !== "complete" || cleanup.http?.gaps?.length !== 0 ||
+      cleanup.verification?.artifactManifestVerified !== true || cleanup.verification?.sourceInventoryVerified !== true ||
+      cleanup.verification?.resultRehydrated !== true || cleanup.gaps?.length !== 0 || cleanup.failures?.length !== 0) {
     throw new Error("cleanup release readback is incomplete");
   }
 }
