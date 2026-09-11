@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,7 +43,13 @@ async function analyze(files, config = policy) {
     }
     for (const boundary of config.boundaries) {
       for (const path of boundary.roots) {
-        if (path.endsWith(".ts")) {
+        let isFile = /\.(?:[cm]?[jt]s)$/u.test(path);
+        try {
+          isFile = (await lstat(join(root, path))).isFile();
+        } catch {
+          // Disposable fixtures keep the path-shape heuristic when the live file is absent.
+        }
+        if (isFile) {
           await write(path);
         } else {
           await mkdir(join(consumer, path), { recursive: true });
@@ -53,8 +59,28 @@ async function analyze(files, config = policy) {
         await write(path);
       }
     }
-    await write("package.json", JSON.stringify({ name: "runtime-builtin-counterexample", private: true, type: "module" }));
-    await write("pnpm-workspace.yaml", "packages: []\n");
+    await write("package.json", JSON.stringify({
+      name: "@vioxen/agent-runtime",
+      private: true,
+      type: "module",
+    }));
+    await write("pnpm-workspace.yaml", [
+      "packages:",
+      '  - "packages/apps/*"',
+      '  - "packages/contexts/*"',
+      '  - "packages/platform/*"',
+      "",
+    ].join("\n"));
+    for (const packageRoot of [
+      "packages/apps/embedded-runtime",
+      "packages/contexts/agent-execution",
+      "packages/contexts/provider-access",
+      "packages/contexts/runtime-configuration",
+      "packages/contexts/runtime-security",
+      "packages/platform/filesystem-custody",
+    ]) {
+      await write(`${packageRoot}/package.json`, await readFile(join(root, packageRoot, "package.json"), "utf8"));
+    }
     await write(configPath, JSON.stringify(config));
     await write("foundation.config.yaml", JSON.stringify({
       schemaVersion: 1, project: { id: "runtime-builtin-counterexample" },
@@ -71,7 +97,7 @@ async function analyze(files, config = policy) {
     assert.equal(envelope.foundationVersion, "1.2.0");
     assert.equal(envelope.capabilities.length, 1);
     const [report] = envelope.capabilities;
-    assert.equal(report.capabilityConfigSchemaVersion, 1);
+    assert.equal(report.capabilityConfigSchemaVersion, 3);
     assert.ok(["passed", "violations"].includes(report.outcome), result.stdout);
     assert.equal(result.status, report.outcome === "passed" ? 0 : 1, result.stderr);
     return report.diagnostics;
@@ -86,7 +112,7 @@ function expectForbidden(diagnostics, paths) {
 }
 
 test("all seven actual getBuiltinModule roles pass; removing util reproduces exactly seven failures", async () => {
-  assert.equal(policy.schemaVersion, 1);
+  assert.equal(policy.schemaVersion, 3);
   const files = Object.fromEntries(await Promise.all(approved.map(async path => {
     const actual = await readFile(join(root, path), "utf8");
     assert.match(actual, /process\.getBuiltinModule\("node:util"\)/u, path);
@@ -112,16 +138,12 @@ test("approved roles still reject another builtin through both ambient lookup an
 test("domain, application, sibling adapters and sibling composition never inherit util", async () => {
   const paths = [
     `${agent}domain/builtin-counterexample.ts`, `${agent}application/builtin-counterexample.ts`,
-    `${provider}domain/builtin-counterexample.ts`, `${provider}application/builtin-counterexample.ts`,
-    `${embedded}domain/builtin-counterexample.ts`, `${embedded}application/builtin-counterexample.ts`,
-    `${agent}adapters/outbound/codex-app-server/builtin-counterexample.ts`,
-    `${agent}composition/builtin-counterexample.ts`, `${embedded}composition/builtin-counterexample.ts`,
-    `${provider}adapters/builtin-counterexample.ts`,
     `${provider}domain/provider-access-binding.ts`,
     `${provider}application/ports/outbound/provider-access-binding-repository.ts`,
+    `${embedded}application/build-claude-code-setup-view.ts`,
     `${embedded}application/trusted-claude-code-setup-scope.ts`,
-    `${agent}composition/dispatch-grant-anti-corruption.ts`,
     `${agent}adapters/outbound/codex-app-server/codex-app-server-jsonl.ts`,
+    `${agent}composition/dispatch-grant-anti-corruption.ts`,
     `${embedded}composition/contained-turn-runtime-access.ts`,
   ];
   for (const content of ['void process.getBuiltinModule("node:util");\n', 'import "node:util";\n']) {

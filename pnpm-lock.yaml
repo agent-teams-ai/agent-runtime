@@ -167,6 +167,9 @@ importers:
       '@types/pg':
         specifier: 'catalog:'
         version: 8.23.1
+      oxc-parser:
+        specifier: 'catalog:'
+        version: 0.147.0
 
   packages/contexts/provider-access: {}
 

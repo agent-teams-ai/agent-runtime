@@ -1,8 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
-import { readCustodiedRepositoryFile } from "../../../../scripts/architecture/ar2-evidence-custody.mjs";
-import { readAr2CoverageTestSource } from "../../../../scripts/architecture/validate-ar2-contract-artifacts.mjs";
+import { findRepoRoot } from "./helpers/repo-root.ts";
+
+const repoRoot = findRepoRoot();
+const { readCustodiedRepositoryFile } = await import(pathToFileURL(join(
+  repoRoot,
+  "scripts/architecture/ar2-evidence-custody.mjs",
+)).href);
+const { readAr2CoverageTestSource } = await import(pathToFileURL(join(
+  repoRoot,
+  "scripts/architecture/validate-ar2-contract-artifacts.mjs",
+)).href);
 
 const fixtureRoot = "packages/contexts/runtime-configuration/tests/fixtures/claude-code-settings";
 const readJson = async (path: string, allowedRoot: string) => JSON.parse(
