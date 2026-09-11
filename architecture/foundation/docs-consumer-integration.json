@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "repository": {
     "provider": "github",
     "id": "1314129620",
@@ -19,47 +19,61 @@
     "docs"
   ],
   "cohort": {
-    "schemaVersion": 1,
-    "cohortId": "docs-2026-08-31-stable10",
+    "schemaVersion": 2,
+    "cohortId": "docs-2026-09-11-stable20",
     "channel": "stable",
-    "recordDigest": "sha256:6eeb5986cf507afd5e0d3751cf3a70e1cb09112b4a7378c6820f37b59c1b3144",
-    "qualificationEventDigest": "sha256:214550ff6bbd5cfb2b134d0a2f3acf569e54d97c8d9c503b706c07c611ba77e5",
-    "eligibleAfter": "2026-08-30T18:02:57Z",
+    "recordDigest": "sha256:a2c8ac85c2f0afdaea498d5c994cb897ecabcbe6e97690dc3c5d416cd827b810",
+    "qualificationEventDigest": "sha256:94ef24e30cc5441fc99a7d8bbbd1952b07438a60642818d429062633a7277d95",
+    "eligibleAfter": "2026-09-11T04:09:06Z",
     "upgradeFrom": [
-      "docs-2026-08-28-stable8"
+      "docs-2026-09-10-stable19"
     ],
-    "rollbackTo": [],
+    "rollbackTo": [
+      "docs-2026-09-10-stable19"
+    ],
     "packages": {
+      "repositoryMutation": {
+        "version": "0.2.0",
+        "integrity": "sha512-a02kzLlWtQjPAG2fFo/HyC+T6D+hW+FJ+aNCYoTLuTdKqeuL50hIvSnQLMUbGajWBb4nAvaINvW2jvmJ+Qku0g=="
+      },
+      "documentAuthoring": {
+        "version": "0.3.0",
+        "integrity": "sha512-LdNT8VHPQxXvuyXsCblFSeCmbEEZcXwiCTY1E+c0ZEWWJG0V2qoi95F8fHAwI4ngZLDmLr/yzHGyDqwkd9GBrA=="
+      },
       "docsProtocol": {
-        "version": "0.4.1",
-        "integrity": "sha512-hcK886DGz94n+K7aVi5BivO/ZNk4QE2jQfh9WCoWrzVJ1aMSIsTkkebRAHAslSCAWIjZSh/DKOronQddYFPe4A=="
+        "version": "0.6.0",
+        "integrity": "sha512-xSlc0DFTGh0jed9581LoToHAXwxxZMhzlItbPeoc67YNBSDxLCP8XNwK0LCMs4w8MLqY6silJDtpzsHFw2XSVg=="
+      },
+      "docsProtocolAgentTeams": {
+        "version": "0.2.7",
+        "integrity": "sha512-YhgXKwsq2JlFisS+vaXBriDvbD+8wEQErMJqZCRaE4DEaZ+z+AWMgVYbpe4lTv2Zkexl4CCkVB74U3LqyUwegg=="
       },
       "engineeringFoundation": {
-        "version": "0.21.0",
-        "integrity": "sha512-KxNgeIamgbABUamT5XAeVvW8j+j6EZ6GlVk4FMUXZG2IPQsk/y3Po4eLl8cx4HMnwWXQZ7idP1sw5OUmT9FYtA=="
+        "version": "1.2.0",
+        "integrity": "sha512-TBUH9TdTv3RepCbSt9RrIAAEnShYiUDxIotcbkbRkT0HjM+yAzBYNmBlC9qRfPqY3GPutDwTy0uZnPxEesi7vg=="
       }
     },
     "workflow": {
       "repository": "agent-teams-ai/.github",
       "path": ".github/workflows/docs-protocol-check.yml",
-      "revision": "eef92e7fd40f538b4e9ba03e01bbd4e2d23f12f2",
-      "blobSha": "efb9327218d89b6959ee38fa09b0e68f1ce5fe22"
+      "revision": "757122cb08ed15aba6c9eef1b1f655b77d1ac54b",
+      "blobSha": "9bcbe54dfec6280045ac596e55c1f14ce5f176e1"
     },
     "assets": {
-      "skillDigest": "sha256:641265ef9ecff59c16482fdae1bc8fc56002b5a4a1ee34b102438d0ca08a86a3",
-      "callerWorkflowDigest": "sha256:8711dbd6109740857c69462d218071818317a62949f08ecf8abdc6d6b736321f",
-      "assetCatalogDigest": "sha256:74cdec4a7982588c53660e9b432fc12daa7adc7a930d147a5b0e46888e210f19",
-      "transitionCatalogDigest": "sha256:ffce6fbb813ccbdbba3ba1dca6b22219672fbcc8bd08a0f0aca37bf8bed38e21"
+      "skillDigest": "sha256:a86d8c9b990124f11b50b1c6703e1aeb5e3b981d51f7e8f5c163c4f5b987d7c5",
+      "callerWorkflowDigest": "sha256:d8d3b1281990179ee25ded67ba160f0e7573d2f70707b8c5b312d70b68d85125",
+      "assetCatalogDigest": "sha256:3ec380a1a6dd8534824ba82ff23affba993e19e9cb6b3c5e424ea9973ad686da",
+      "transitionCatalogDigest": "sha256:77ab3d28d39c6959ae3e5be2e9202b704dd9f57bbc9aed6824de81458c773de9"
     },
     "schemas": {
-      "consumerIntegration": 1,
-      "managedState": 1,
+      "consumerIntegration": 3,
+      "managedState": 2,
       "docsProtocol": 1
     },
     "runtime": {
       "node": ">=24.18.0 <25",
       "pnpm": ">=11.17.0 <12",
-      "runtimeClosureDigest": "sha256:33d07e21e60a169b86895dab7a1693b7ccf9ccbda6dc2797c9ea0a377b074ab4"
+      "runtimeClosureDigest": "sha256:24d85c7f329deedf02dd3254090b56522a3dd23e22cdd51417a9ff3bee1a8589"
     }
   }
 }
