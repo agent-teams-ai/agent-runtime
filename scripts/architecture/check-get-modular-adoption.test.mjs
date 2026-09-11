@@ -264,10 +264,10 @@ test('PR71 reviewed owners and helpers retain exact live relationships without e
   verifySourceCensus(pending, census);
   // Explicit semantic review subjects, not a regenerated list from the live graph.
   const subjects = {
-    'adapter.agent-execution.codex-app-server': ['darwin-codex-native-files'],
+    'adapter.agent-execution.codex-native-broker': ['darwin-codex-native-files'],
     'adapter.agent-execution.docker-custody': ['node-docker-route-provenance'],
     'adapter.agent-execution.host-custody': ['contained-turn-kernel-custody-open-attempts', 'darwin-route-durable-storage'],
-    'composition.embedded-runtime': [
+    'composition.embedded-runtime.contained-turn-routing': [
       'darwin-contained-turn-authority', 'darwin-contained-turn-deployment',
       'contained-turn-current-authority', 'linux-codex-contained-turn-owner',
       'linux-codex-deployment-authority', 'linux-codex-deployment',
@@ -302,15 +302,17 @@ test('PR71 reviewed owners and helpers retain exact live relationships without e
       }
     }
   }
-  const helper = pending.boundaries.find(b => b.id === 'composition.embedded-runtime').relationships
+  const helper = pending.boundaries.find(b => b.id === 'composition.embedded-runtime.contained-turn-routing').relationships
     .filter(edge => edge.from.endsWith('/linux-codex-node-recipe-consumption.ts'));
   assert.deepEqual(helper.map(edge => [edge.to, edge.mode]), [['@agent-teams/agent-execution/composition', 'type-only']]);
-  const darwinAuthority = pending.boundaries.find(b => b.id === 'composition.embedded-runtime').relationships
+  const darwinAuthority = pending.boundaries.find(b => b.id === 'composition.embedded-runtime.contained-turn-routing').relationships
     .filter(edge => edge.from.endsWith('/darwin-contained-turn-authority.ts'));
   assert.deepEqual(darwinAuthority.map(edge => [edge.to, edge.mode]), [
     ['@agent-teams/agent-execution/composition', 'runtime'],
     ['@agent-teams/provider-access/composition', 'runtime'],
     ['@agent-teams/runtime-security/composition', 'runtime'],
+    ['packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts', 'type-only'],
+    ['packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts', 'runtime'],
   ]);
   assert.match(pending.boundaries.find(b => b.id === 'composition.embedded-runtime').rationale,
     /independently composed Darwin authority and deployment roots remain explicitly outside.*passive setup scope/);

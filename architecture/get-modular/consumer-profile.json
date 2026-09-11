@@ -125,13 +125,7 @@
       ],
       "entrypoints": [
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-effect-custody.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-provider-options.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-receipt-identity.ts"
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.ts"
       ],
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules. At 81b2833af, DarwinCodexNativeFiles remains an owner-local Codex adapter resource helper; its durable-journal dependency does not make it an independently composed capability or extend passive scope. Accepted base 0d7a02451 adds an owner-local native observation projection over the existing kernel custody entrypoint; it does not add a passive Assembly capability or transfer custody ownership.",
@@ -139,8 +133,68 @@
       "relationships": [
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-active-turn.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-effect-custody.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-active-turn.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-active-turn.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-active-turn.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/legacy/legacy-contained-turn-ports.ts",
           "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-effect-custody.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-provider-options.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-receipt-identity.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-docker-path-projection.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.ts",
+          "mode": "runtime"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts",
@@ -154,8 +208,23 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-containment-outcome.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-receipt-identity.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-containment-outcome.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/legacy/legacy-contained-turn-ports.ts",
           "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-docker-path-projection.ts",
+          "mode": "runtime"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.ts",
@@ -183,29 +252,131 @@
           "mode": "runtime"
         },
         {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-notification-evidence.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts",
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-notification-evidence.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-output-policy.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts",
-          "mode": "type-only"
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-process-closure.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
+          "mode": "runtime"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-process-closure.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts",
           "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-text-segments.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-thread-item-custody.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-effect-custody.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-thread-item-custody.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-thread-item-custody.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-path-identity.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-thread-item-custody.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-thread-item-lifecycle.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-effect-custody.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-thread-item-lifecycle.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-thread-item-lifecycle.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-thread-item.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-effect-custody.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-thread-item.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-thread-item.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-path-identity.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-thread-item.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
+          "mode": "type-only"
+        }
+      ]
+    },
+    {
+      "id": "adapter.agent-execution.codex-data",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-provider-options.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-receipt-identity.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-provider-options.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-receipt-identity.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": [
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-provider-options.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-effect-custody.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-provider-options.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-provider-options.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-provider-options.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-docker-path-projection.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-provider-options.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.ts",
+          "mode": "runtime"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-provider-options.ts",
@@ -219,8 +390,76 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-receipt-identity.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-receipt-identity.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-receipt-identity.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/legacy/legacy-contained-turn-ports.ts",
           "mode": "type-only"
+        }
+      ]
+    },
+    {
+      "id": "adapter.agent-execution.codex-native-broker",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-config-defaults.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-config-wire.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-docker-path-projection.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-boundary.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-files.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-observations.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/darwin-codex-native-files.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-docker-path-projection.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-files.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": [
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
+          "mode": "runtime"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-files.ts",
@@ -246,6 +485,55 @@
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/darwin-codex-native-files.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
           "mode": "runtime"
+        }
+      ]
+    },
+    {
+      "id": "adapter.agent-execution.codex-primitives",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-effect-custody.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-path-identity.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-effect-custody.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-path-identity.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": [
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-path-identity.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-path-identity.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-docker-path-projection.ts",
+          "mode": "runtime"
+        }
+      ]
+    },
+    {
+      "id": "adapter.agent-execution.codex-primitives-leaves",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": [
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts",
+          "mode": "type-only"
         }
       ]
     },
@@ -743,14 +1031,37 @@
       ]
     },
     {
-      "id": "composition.agent-execution.contained-turn",
+      "id": "adapter.provider-access.boundary-data",
+      "owner": "provider-access",
+      "roots": [
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": [
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
+          "mode": "runtime"
+        }
+      ]
+    },
+    {
+      "id": "composition.agent-execution.boundary-data",
       "owner": "agent-execution",
       "roots": [
         "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/authority-owner-boundary.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-credential-output-inventory.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts"
       ],
@@ -758,13 +1069,11 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/authority-owner-boundary.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-credential-output-inventory.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts"
       ],
       "status": "not-adopted",
-      "rationale": "The contained-turn anti-corruption composition boundary was made explicit by reviewed PR69 checkpoints 2cb9b605 and 981c11314 to confine Node utility access. It remains outside the seven-node passive setup Assembly graph. Existing feature factories retain authority, preparation and custody ownership; this classification grants no exemption from Foundation or FMS rules.",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
       "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
       "relationships": [
         {
@@ -808,26 +1117,6 @@
           "mode": "runtime"
         },
         {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-codecs.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-dispatch-authority.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-record.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
-          "mode": "type-only"
-        },
-        {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-preparation-scope.ts",
           "mode": "runtime"
@@ -859,6 +1148,11 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-authority.ts",
           "mode": "runtime"
         },
@@ -875,6 +1169,56 @@
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-identities.ts",
+          "mode": "runtime"
+        }
+      ]
+    },
+    {
+      "id": "composition.agent-execution.contained-turn",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "The contained-turn anti-corruption composition boundary was made explicit by reviewed PR69 checkpoints 2cb9b605 and 981c11314 to confine Node utility access. It remains outside the seven-node passive setup Assembly graph. Existing feature factories retain authority, preparation and custody ownership; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": [
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
+          "mode": "type-only"
+        }
+      ]
+    },
+    {
+      "id": "composition.agent-execution.dispatch-grant",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": [
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-codecs.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-dispatch-authority.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-record.ts",
           "mode": "runtime"
         }
       ]
@@ -1019,6 +1363,85 @@
           "mode": "type-only"
         },
         {
+          "from": "packages/apps/embedded-runtime/src/composition/default-agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/default-agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/host-custodied-agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/host-custodied-agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/host-custodied-agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-construction-failure.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/host-custodied-agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+          "to": "@agent-teams/runtime-configuration/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+          "to": "@agent-teams/runtime-security/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/claude-code-setup-inspection-planner.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts",
+          "mode": "runtime"
+        }
+      ]
+    },
+    {
+      "id": "composition.embedded-runtime.agent-runtime-host",
+      "owner": "embedded-runtime",
+      "roots": [
+        "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+        "packages/apps/embedded-runtime/src/composition/claude-code-setup-inspection-planner.ts",
+        "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts"
+      ],
+      "entrypoints": [
+        "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+        "packages/apps/embedded-runtime/src/composition/claude-code-setup-inspection-planner.ts",
+        "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": [
+        {
           "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
           "to": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
           "mode": "runtime"
@@ -1026,6 +1449,41 @@
         {
           "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
           "to": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-access-authority.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/runtime-access-lifecycle.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
           "mode": "runtime"
         },
         {
@@ -1057,7 +1515,111 @@
           "from": "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts",
           "to": "packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts",
           "mode": "type-only"
+        }
+      ]
+    },
+    {
+      "id": "composition.embedded-runtime.contained-turn",
+      "owner": "embedded-runtime",
+      "roots": [
+        "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-provider-selection.ts"
+      ],
+      "entrypoints": [
+        "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": [
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
         },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-construction-failure.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-current-authority.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-provider-selection.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-route-qualification.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-provider-selection.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts",
+          "mode": "type-only"
+        }
+      ]
+    },
+    {
+      "id": "composition.embedded-runtime.contained-turn-routing",
+      "owner": "embedded-runtime",
+      "roots": [
+        "packages/apps/embedded-runtime/src/composition/contained-turn-current-authority.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-http-provider-access.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-http-runtime-security.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-linux-route-binding.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-route-qualification.ts",
+        "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-authority.ts",
+        "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-deployment.ts",
+        "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
+        "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
+        "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
+        "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts",
+        "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts"
+      ],
+      "entrypoints": [
+        "packages/apps/embedded-runtime/src/composition/contained-turn-current-authority.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-http-provider-access.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-http-runtime-security.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-linux-route-binding.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-route-qualification.ts",
+        "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-authority.ts",
+        "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-deployment.ts",
+        "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
+        "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
+        "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
+        "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts",
+        "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": [
         {
           "from": "packages/apps/embedded-runtime/src/composition/contained-turn-current-authority.ts",
           "to": "@agent-teams/agent-execution/composition",
@@ -1079,14 +1641,19 @@
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts",
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts",
           "to": "@agent-teams/agent-execution/composition",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-provider-access.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts",
-          "to": "@agent-teams/agent-execution/composition",
-          "mode": "type-only"
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-runtime-security.ts",
+          "mode": "runtime"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
@@ -1124,26 +1691,11 @@
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-provider-selection.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts",
-          "mode": "type-only"
-        },
-        {
           "from": "packages/apps/embedded-runtime/src/composition/contained-turn-route-qualification.ts",
           "to": "@agent-teams/agent-execution/composition",
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
-          "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts",
-          "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
-          "mode": "type-only"
-        },
-        {
           "from": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-authority.ts",
           "to": "@agent-teams/agent-execution/composition",
           "mode": "runtime"
@@ -1159,6 +1711,16 @@
           "mode": "runtime"
         },
         {
+          "from": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-authority.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-authority.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
+          "mode": "runtime"
+        },
+        {
           "from": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-deployment.ts",
           "to": "@agent-teams/agent-execution/composition",
           "mode": "runtime"
@@ -1174,23 +1736,23 @@
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/default-agent-runtime-host.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/default-agent-runtime-host.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+          "from": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-deployment.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/host-custodied-agent-runtime-host.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+          "from": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-deployment.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/host-custodied-agent-runtime-host.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts",
+          "from": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-deployment.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-deployment.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-authority.ts",
           "mode": "runtime"
         },
         {
@@ -1204,6 +1766,21 @@
           "mode": "runtime"
         },
         {
+          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts",
+          "mode": "runtime"
+        },
+        {
           "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
           "to": "@agent-teams/agent-execution/composition",
           "mode": "type-only"
@@ -1217,10 +1794,45 @@
           "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
           "to": "@agent-teams/runtime-security/composition",
           "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-linux-route-binding.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
+          "mode": "type-only"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
           "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
           "mode": "runtime"
         },
         {
@@ -1234,24 +1846,167 @@
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
-          "to": "@agent-teams/agent-execution/composition",
+          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts",
+          "mode": "runtime"
+        }
+      ]
+    },
+    {
+      "id": "composition.embedded-runtime.contained-turn-support",
+      "owner": "embedded-runtime",
+      "roots": [
+        "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal-diagnostics.ts",
+        "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-access-authority.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-cancellation-proof.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-composition-types.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-construction-failure.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-operation-ref.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-owner-contract-error.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts",
+        "packages/apps/embedded-runtime/src/composition/runtime-access-lifecycle.ts",
+        "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts"
+      ],
+      "entrypoints": [
+        "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-access-authority.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-construction-failure.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+        "packages/apps/embedded-runtime/src/composition/runtime-access-lifecycle.ts",
+        "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": [
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal-diagnostics.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal-diagnostics.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
-          "to": "@agent-teams/runtime-configuration/composition",
+          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-access-authority.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
-          "to": "@agent-teams/runtime-security/composition",
+          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-cancellation-proof.ts",
           "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-owner-contract-error.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-access-authority.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-operation-ref.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-operation-ref.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-access-authority.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-composition-types.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-operation-ref.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/runtime-access-lifecycle.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-access-authority.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts",
+          "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+          "mode": "type-only"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
@@ -1262,6 +2017,11 @@
           "from": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
           "to": "packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts",
           "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-access-authority.ts",
+          "mode": "runtime"
         }
       ]
     },
@@ -1298,6 +2058,40 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-satisfaction.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-transitions.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-validation.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": []
+    },
+    {
+      "id": "core.embedded-runtime.access-contracts",
+      "owner": "embedded-runtime",
+      "roots": [
+        "packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts",
+        "packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts",
+        "packages/apps/embedded-runtime/src/contracts/runtime-access.ts"
+      ],
+      "entrypoints": [
+        "packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts",
+        "packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts",
+        "packages/apps/embedded-runtime/src/contracts/runtime-access.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": []
+    },
+    {
+      "id": "core.provider-access.binding",
+      "owner": "provider-access",
+      "roots": [
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts"
       ],
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
@@ -2507,9 +3301,6 @@
         "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
         "packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts",
         "packages/apps/embedded-runtime/src/application/ports/outbound/codex-setup-inspection-planner.ts",
-        "packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts",
-        "packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts",
-        "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
         "packages/apps/embedded-runtime/src/index.ts"
       ],
       "status": "not-adopted",
@@ -2645,6 +3436,131 @@
         {
           "from": "packages/contexts/provider-access/src/composition.ts",
           "to": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/dispatch-consumption-data.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/contained-turn-provider-access-mapper.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/contained-turn-provider-access-mapper.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-bytes.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-lifetime.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-data.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-generation-acquisition.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-material-bytes.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-selection.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-binding-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-binding-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/static-provider-access-binding-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/static-provider-access-binding-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/static-provider-access-binding-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/application/observe-provider-access-binding.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/application/observe-provider-access-binding.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/application/resolve-contained-turn-provider-access.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/application/resolve-contained-turn-provider-access.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/application/revalidate-contained-turn-provider-access.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/application/revalidate-contained-turn-provider-access.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/credential-rendering-owner-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/dispatch-consumption-v1-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/feature-module-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/feature-module-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/materialization-authorization-v1-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
           "mode": "runtime"
         },
         {

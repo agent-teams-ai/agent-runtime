@@ -200,7 +200,10 @@ test("Embedded Runtime Node utility permission belongs only to composition", () 
     "composition.embedded-runtime.agent-runtime-host",
     "core.embedded-runtime.access-contracts",
   ]);
-  assert.deepEqual(composition.allowedBuiltins, []);
+  // The async-assembly-adapter Assembly root (runtime-setup-assembly.ts,
+  // default-agent-runtime-host.ts, agent-runtime-host-creation-error.ts) uses
+  // node:crypto directly and isn't yet carved into its own narrower role.
+  assert.deepEqual(composition.allowedBuiltins, ["node:crypto"]);
   assert.deepEqual(composition.allowedRuntimeReferences, []);
   const production = boundariesById.get("production.embedded-runtime");
   // build-claude-code-setup-view.ts/build-codex-setup-view.ts reach the

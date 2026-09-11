@@ -84,7 +84,7 @@ test("qualified stable19 integration and generated state preserve exact evidence
     // codex-app-server's entrypoints to the two files its own further FMS work already reads
     // cross-boundary, and only adopts main's scaffolding tooling test-boundary split, which
     // does not touch its code).
-    "architecture/foundation/source-dependencies.yaml": "07356559fd62f2ff336b3839e23f70e549f5675fa204c092508e18660c8f80e5"
+    "architecture/foundation/source-dependencies.yaml": "8ae1670dc11a82cdb4bd9c5adc29a09aad2ff9acba66f53aa6430ee39d8d55ea"
 };
   for (const [path, digest] of Object.entries(expected)) {
     assert.equal(createHash("sha256").update(await read(path)).digest("hex"), digest, path);
