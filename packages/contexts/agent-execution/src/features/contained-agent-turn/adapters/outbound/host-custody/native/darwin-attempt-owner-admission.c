@@ -360,7 +360,12 @@ static int capture_input(ae_bootstrap *b) {
     int n=poll(&p,1,50);
     if (n<0 && errno==EINTR) continue;
     if (n<0 || (n && (p.revents&(POLLERR|POLLNVAL)))) return 0;
-    if (!n) continue;
+    /* Darwin's poll(2) does not reliably report POLLIN on a FIFO whose sole
+     * writer has already closed once every buffered byte has been drained --
+     * confirmed empirically: a direct read() returns EOF (0) immediately in
+     * exactly that state while poll() keeps reporting not-ready indefinitely.
+     * The fd is already non-blocking, so this final read is safe to attempt
+     * regardless of poll's verdict; poll paces the loop, it is not the gate. */
     if (used==target) {
       if (bytes==size) {
         b->input_length=word(size);
@@ -372,9 +377,10 @@ static int capture_input(ae_bootstrap *b) {
       }
       uint8_t surplus;
       ssize_t end=read(b->input,&surplus,1);
-      if (end<0 && errno==EINTR) continue;
+      if (end<0 && (errno==EINTR || errno==EAGAIN || errno==EWOULDBLOCK)) continue;
       return end==0 && close_capture(&b->input);
     }
+    if (!n) continue;
     ssize_t got=read(b->input,bytes+used,target-used);
     if (got<0 && errno==EINTR) continue;
     if (got<=0) return 0;
