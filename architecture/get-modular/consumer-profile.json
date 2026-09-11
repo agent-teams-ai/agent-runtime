@@ -3835,6 +3835,11 @@
         },
         {
           "from": "packages/contexts/runtime-security/src/composition.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/adapters/outbound/node-security-primitives.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/composition.ts",
           "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/contained-turn-egress-dependencies.ts",
           "mode": "type-only"
         },
