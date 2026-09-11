@@ -10,6 +10,7 @@ on:
     branches:
       - feat/async-assembly-adapter
       - refactor/fms-runtime-security-setup-authorization
+      - refactor/fms-contained-turn-egress
 
 permissions:
   contents: read
