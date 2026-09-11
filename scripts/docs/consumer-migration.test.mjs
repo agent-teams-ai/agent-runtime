@@ -79,8 +79,12 @@ test("qualified stable19 integration and generated state preserve exact evidence
     "architecture/foundation/docs-protocol-qualification.json": "1f7e50ec5b0e6ecc991668b83790b2367062240043c4b885c58377855968969b",
     "architecture/foundation/document-authoring.yaml": "d6f5ba4b178e742e122f6711c9d989d52a77768eb68527b0ecdf3c9a9699c6d2",
     // Current migration evidence: reviewed scaffold source-policy overlay, reconciled with the
-    // async-assembly-adapter branch's own codex-app-server, composition and embedded-runtime split.
-    "architecture/foundation/source-dependencies.yaml": "0ce81a6df3cdf00846020956dc09bb15f0dd2b525bb5fa7a3af59436c5bc0e34"
+    // async-assembly-adapter branch's own retained boundary structure (this branch keeps its
+    // existing codex-app-server, composition and embedded-runtime boundaries as-is, widens
+    // codex-app-server's entrypoints to the two files its own further FMS work already reads
+    // cross-boundary, and only adopts main's scaffolding tooling test-boundary split, which
+    // does not touch its code).
+    "architecture/foundation/source-dependencies.yaml": "582ea0f716757d45d9ad976896b9da9cf3b41e1ce284ae55e841305165a93fe0"
 };
   for (const [path, digest] of Object.entries(expected)) {
     assert.equal(createHash("sha256").update(await read(path)).digest("hex"), digest, path);

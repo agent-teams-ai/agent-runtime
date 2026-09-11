@@ -190,11 +190,7 @@ test("Embedded Runtime Node utility permission belongs only to composition", () 
   assert.deepEqual(composition.allowedBuiltins, ["node:crypto", "node:fs", "node:timers/promises", "node:util"]);
   assert.deepEqual(composition.allowedRuntimeReferences, []);
   const production = boundariesById.get("production.embedded-runtime");
-  assert.deepEqual(production.allowedBoundaries, [
-    "composition.embedded-runtime.contained-turn",
-    "composition.embedded-runtime.contained-turn-support",
-    "core.embedded-runtime.access-contracts",
-  ]);
+  assert.deepEqual(production.allowedBoundaries, []);
   assert.deepEqual(production.allowedBuiltins, ["node:crypto", "node:timers/promises"]);
 });
 
@@ -232,7 +228,11 @@ test("transitional boundaries and adapter permissions remain exact", () => {
   assert.deepEqual(composition.roots, [
     "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/authority-owner-boundary.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-credential-output-inventory.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
   ]);
   assert.deepEqual(composition.entrypoints, composition.roots);
   assert.deepEqual(composition.allowedBoundaries, [
@@ -251,10 +251,6 @@ test("transitional boundaries and adapter permissions remain exact", () => {
     "adapter.agent-execution.provider-delegation-ports",
     "composition.agent-execution.contained-turn",
     "core.agent-execution.contained-turn",
-    "adapter.agent-execution.codex-data",
-    "adapter.agent-execution.codex-primitives",
-    "composition.agent-execution.boundary-data",
-    "composition.agent-execution.dispatch-grant",
   ]);
   assert.ok(!production.allowedBuiltins.includes("node:util"));
   assert.ok(!production.entrypoints.includes(paths.legacy));
