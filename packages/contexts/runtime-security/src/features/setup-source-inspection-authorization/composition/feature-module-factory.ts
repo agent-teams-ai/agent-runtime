@@ -1,3 +1,5 @@
+import { createNodePathAlgebra } from "../adapters/outbound/node-path-algebra.js";
+import { createNodeSourceIdentityDigest } from "../adapters/outbound/node-source-identity-digest.js";
 import { createAuthorizeClaudeCodeSetupInspection } from "../application/authorize-claude-code-setup-inspection.js";
 import { createAuthorizeSetupInspection } from "../application/authorize-setup-inspection.js";
 import type { PathCanonicalizer } from "../application/ports/outbound/path-canonicalizer.js";
@@ -8,12 +10,20 @@ export interface SetupInspectionAuthorizationDependencies {
 
 export const createSetupInspectionAuthorizationFeature = (
   dependencies: SetupInspectionAuthorizationDependencies,
-) =>
-  Object.freeze({
+) => {
+  // Pure path algebra and the candidate-identity digest are internal
+  // composition details, not part of this feature's public dependency
+  // surface: they are deterministic Node wrappers with nothing to fake.
+  const pathAlgebra = createNodePathAlgebra();
+  return Object.freeze({
     authorizeClaudeCodeSetupInspection: createAuthorizeClaudeCodeSetupInspection(
       dependencies.pathCanonicalizer,
+      pathAlgebra,
+      createNodeSourceIdentityDigest(),
     ),
     authorizeSetupInspection: createAuthorizeSetupInspection(
       dependencies.pathCanonicalizer,
+      pathAlgebra,
     ),
   });
+};
