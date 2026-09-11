@@ -10,28 +10,39 @@ import {isAbsolute} from "node:path";
 // names, which only catches names someone thought to list (finding 6).
 const STRICT_EMPTY_SECTIONS = new Set(["providerAccess"]);
 
+const isPlainScalar = entry =>
+  entry === null || typeof entry === "string" || typeof entry === "boolean" ||
+  (typeof entry === "number" && Number.isFinite(entry));
+
+const assertPlainContainer = (entry, seen) => {
+  if (typeof entry !== "object" || seen.has(entry) ||
+      (!Array.isArray(entry) && Object.getPrototypeOf(entry) !== Object.prototype)) {
+    throw new TypeError("activation infrastructure must contain only plain JSON values");
+  }
+};
+
+const assertAllowedProperty = (topLevel, key, descriptor) => {
+  if (typeof key !== "string" || !descriptor.enumerable || !("value" in descriptor) ||
+      /^(token|password|cookie|authJson|credentials|sensitiveOutputTokens)$/iu.test(key)) {
+    throw new TypeError("activation infrastructure contains forbidden material");
+  }
+  if (topLevel && STRICT_EMPTY_SECTIONS.has(key) && descriptor.value && typeof descriptor.value === "object" &&
+      Reflect.ownKeys(descriptor.value).length > 0) {
+    throw new TypeError(`activation infrastructure section ${key} must be empty in the sealed manifest`);
+  }
+};
+
 export const plainJson = (value, topLevel = false) => {
   const seen = new Set();
   const visit = entry => {
-    if (entry === null || typeof entry === "string" || typeof entry === "boolean") {return entry;}
-    if (typeof entry === "number" && Number.isFinite(entry)) {return entry;}
-    if (typeof entry !== "object" || seen.has(entry) ||
-        (!Array.isArray(entry) && Object.getPrototypeOf(entry) !== Object.prototype)) {
-      throw new TypeError("activation infrastructure must contain only plain JSON values");
-    }
+    if (isPlainScalar(entry)) {return entry;}
+    assertPlainContainer(entry, seen);
     seen.add(entry);
     const result = Array.isArray(entry) ? [] : {};
     for (const key of Reflect.ownKeys(entry)) {
       if (Array.isArray(entry) && key === "length") {continue;}
       const descriptor = Object.getOwnPropertyDescriptor(entry, key);
-      if (typeof key !== "string" || !descriptor.enumerable || !("value" in descriptor) ||
-          /^(token|password|cookie|authJson|credentials|sensitiveOutputTokens)$/iu.test(key)) {
-        throw new TypeError("activation infrastructure contains forbidden material");
-      }
-      if (topLevel && STRICT_EMPTY_SECTIONS.has(key) && descriptor.value && typeof descriptor.value === "object" &&
-          Reflect.ownKeys(descriptor.value).length > 0) {
-        throw new TypeError(`activation infrastructure section ${key} must be empty in the sealed manifest`);
-      }
+      assertAllowedProperty(topLevel, key, descriptor);
       Object.defineProperty(result, key, {value: visit(descriptor.value), enumerable: true});
     }
     seen.delete(entry);
