@@ -75,7 +75,10 @@ const requireRootDarwin = () => {
 export const statDarwinRouteSocket = async socket => {
   const fd = Reflect.get(socket, "_handle")?.fd;
   if (!Number.isInteger(fd) || fd < 0) {fail("route socket unavailable");}
-  return promisify(fstat)(fd);
+  // bigint mode: a socket fd's st_dev is a sentinel (observed -1 on Darwin), which
+  // a plain Number-mode fstat rounds to an unrepresentable value just past 2**64
+  // (double precision loss). bigint mode returns the exact signed value instead.
+  return promisify(fstat)(fd, {bigint: true});
 };
 
 export async function launchDarwinRoot(input) {
