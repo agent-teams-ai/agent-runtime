@@ -101,8 +101,13 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     return;
   }
   if (process.getuid?.() !== 0) {
+    // The pinned closure's own node binary, never the ambient interpreter
+    // that happened to invoke this script (finding 4): the sudo re-exec must
+    // stay bound to the exact sealed closure like every other launch step.
+    const pinnedNode = manifest.files.find(entry => entry.role === "node")?.path;
+    if (!pinnedNode) {fail("closure has no pinned node role to re-exec under sudo");}
     const {spawn} = await import("node:child_process");
-    const elevated = spawn("/usr/bin/sudo", ["--", process.execPath, fileURLToPath(import.meta.url), ...argv],
+    const elevated = spawn("/usr/bin/sudo", ["--", pinnedNode, fileURLToPath(import.meta.url), ...argv],
       {stdio: "inherit", env: {PATH: "/usr/bin:/bin:/usr/sbin:/sbin"}});
     const code = await new Promise((resolve, reject) => {elevated.once("error", reject); elevated.once("exit", value => resolve(value ?? 1));});
     process.exitCode = code; return;

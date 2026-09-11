@@ -160,7 +160,7 @@ test("builder rejects a pinned role file that references ambient process.execPat
     // root-launcher.relativePath must end in .mjs/.js to be scanned; give it one.
     value.spec.files = value.spec.files.map(entry => entry.role === "root-launcher" ?
       {...entry, relativePath: `${entry.relativePath}.mjs`} : entry);
-    await assert.rejects(buildDarwinLiveActivation(value.spec, dependencies), /process\.execPath/);
+    await assert.rejects(buildDarwinLiveActivation(value.spec, dependencies), /ambient interpreter's own exec path/);
   } finally {await rm(value.parent, {recursive: true, force: true});}
 });
 

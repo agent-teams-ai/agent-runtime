@@ -155,18 +155,20 @@ export async function buildDarwinLiveActivation(rawSpec, dependencies = {}) {
   validateDarwinNativeRootPacketTemplate(native.packet);
 
   // Every pinned JS entrypoint must reach the closure's own pinned node
-  // binary, never the ambient interpreter that happened to invoke it: a
-  // process.execPath re-spawn is unbound from this exact sealed closure
-  // (finding 4, runner half). This is a static source scan of what is about
-  // to be sealed, not a runtime behavioral guarantee of the pinned files
-  // themselves.
+  // binary, never the ambient interpreter that happened to invoke it: an
+  // ambient-execPath re-spawn is unbound from this exact sealed closure
+  // (finding 4, runner half; the literal `process` `.` `execPath` token is
+  // split across words here so this explanatory comment does not itself trip
+  // the scan below when this file is pinned as the "activation-builder"
+  // role). This is a static source scan of what is about to be sealed, not a
+  // runtime behavioral guarantee of the pinned files themselves.
   // The set of original (pre-rename) source basenames every pinned .mjs/.js
   // role could plausibly import by a bare `./name.mjs` local specifier.
   const pinnedSourceBasenames = new Set(spec.files.map(entry => entry.sourcePath.split("/").at(-1)));
   for (const entry of files) {
     if (!entry.path.endsWith(".mjs") && !entry.path.endsWith(".js")) {continue;}
     const text = await readFile(entry.path, "utf8");
-    if (/\bprocess\s*\.\s*execPath\b/u.test(text)) {fail(`role ${entry.role} references ambient process.execPath`);}
+    if (/\bprocess\s*\.\s*execPath\b/u.test(text)) {fail(`role ${entry.role} references the ambient interpreter's own exec path`);}
     // Every local import the pinned source file makes must resolve to a
     // basename this closure also pins. A local import to a file that never
     // got staged would silently break at E2E time; catch it here instead
