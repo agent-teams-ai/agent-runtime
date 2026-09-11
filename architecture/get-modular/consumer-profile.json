@@ -3947,6 +3947,11 @@
         },
         {
           "from": "packages/contexts/runtime-security/src/composition.ts",
+          "to": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/authorize-claude-code-setup-inspection.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/composition.ts",
           "to": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/ports/outbound/path-canonicalizer.ts",
           "mode": "type-only"
         },
