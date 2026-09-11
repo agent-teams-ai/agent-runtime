@@ -18,7 +18,7 @@ const stableConfigIssue = (issue, path, message) => issue("FM_UNSUPPORTED_CONFIG
 const configMessage = "TypeScript configuration or an extends parent is missing, unreadable, or unsupported";
 const FOUNDATION_PRESET = "@agent-teams/engineering-foundation/presets/typescript/node.json";
 const FOUNDATION_NAME = "@agent-teams/engineering-foundation";
-const FOUNDATION_VERSION = "1.1.1";
+const FOUNDATION_VERSION = "1.2.0";
 const requireFromHere = createRequire(import.meta.url);
 const compareText = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 const slash = (value) => String(value).replaceAll("\\", "/");

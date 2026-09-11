@@ -105,7 +105,7 @@ const rules = diagnostics => diagnostics.map(diagnostic => diagnostic.ruleId);
 test("the named negative suite runs exactly once through every Foundation gate", () => {
   assert.equal(
     manifest.scripts["foundation:boundaries:negative"],
-    "node --test scripts/architecture/source-dependency-adapter-boundaries.test.mjs",
+    "node --test scripts/architecture/source-dependency-adapter-boundaries.test.mjs scripts/docs/runtime-builtin-permissions.test.mjs",
   );
   assert.equal(
     manifest.scripts["foundation:check"].split("pnpm foundation:boundaries:negative").length - 1,
@@ -251,6 +251,10 @@ test("transitional boundaries and adapter permissions remain exact", () => {
     "adapter.agent-execution.provider-delegation-ports",
     "composition.agent-execution.contained-turn",
     "core.agent-execution.contained-turn",
+    "adapter.agent-execution.codex-data",
+    "adapter.agent-execution.codex-primitives",
+    "composition.agent-execution.boundary-data",
+    "composition.agent-execution.dispatch-grant",
   ]);
   assert.ok(!production.allowedBuiltins.includes("node:util"));
   assert.ok(!production.entrypoints.includes(paths.legacy));
