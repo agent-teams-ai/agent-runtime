@@ -257,6 +257,10 @@ boundaries:
         - adapter.agent-execution.provider-delegation-ports
         - composition.agent-execution.contained-turn
         - core.agent-execution.contained-turn
+        - adapter.agent-execution.codex-data
+        - adapter.agent-execution.codex-primitives
+        - composition.agent-execution.boundary-data
+        - composition.agent-execution.dispatch-grant
       packages:
         - "@agent-teams/filesystem-custody"
         - pg
@@ -277,10 +281,11 @@ boundaries:
       - packages/contexts/provider-access/src/index.ts
       - packages/contexts/provider-access/src/composition.ts
     allow:
-      boundaries: []
+      boundaries:
+        - adapter.provider-access.boundary-data
+        - core.provider-access.binding
       packages: []
-      builtins:
-        - node:util
+      builtins: []
       runtimeReferences: []
   - id: production.runtime-configuration
     dependencyMode: runtime
@@ -367,7 +372,10 @@ boundaries:
       - packages/apps/embedded-runtime/src/contracts/runtime-access.ts
       - packages/apps/embedded-runtime/src/index.ts
     allow:
-      boundaries: []
+      boundaries:
+        - composition.embedded-runtime.contained-turn
+        - composition.embedded-runtime.contained-turn-support
+        - core.embedded-runtime.access-contracts
       packages:
         - "@agent-teams/agent-execution"
         - "@agent-teams/runtime-configuration"
@@ -417,10 +425,12 @@ boundaries:
     dependencyMode: development
     roots:
       - scripts/foundation
-    entrypoints: []
+    entrypoints:
+      - scripts/foundation/fixture-lock.mjs
     allow:
       boundaries: []
-      packages: []
+      packages:
+        - yaml
       builtins:
         - node:child_process
         - node:fs/promises
@@ -428,4 +438,176 @@ boundaries:
         - node:path
         - node:url
         - node:util
+      runtimeReferences: []
+  - id: tooling.foundation-scaffolding-tests
+    dependencyMode: development
+    roots:
+      - scripts/foundation/fixture-lock.test.mjs
+    entrypoints: []
+    allow:
+      boundaries:
+        - tooling.foundation-scaffolding
+      packages:
+        - yaml
+      builtins:
+        - node:assert/strict
+        - node:fs/promises
+        - node:test
+      runtimeReferences: []
+  # V1 selects the most specific root. Exact source roots keep builtin authority
+  # at reviewed adapter/composition roles; support boundaries avoid parent cycles.
+  - id: adapter.agent-execution.codex-data
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-provider-options.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-receipt-identity.ts
+    entrypoints:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-provider-options.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-receipt-identity.ts
+    allow:
+      boundaries:
+        - adapter.agent-execution.codex-primitives
+        - adapter.agent-execution.host-custody
+        - adapter.agent-execution.legacy-contained-turn-ports
+      packages: []
+      builtins:
+        - node:crypto
+        - node:util
+      runtimeReferences: []
+  - id: adapter.agent-execution.codex-primitives
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-effect-custody.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-path-identity.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.ts
+    entrypoints:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-effect-custody.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-path-identity.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.ts
+    allow:
+      boundaries:
+        - adapter.agent-execution.host-custody
+      packages: []
+      builtins:
+        - node:crypto
+        - node:fs
+        - node:path
+      runtimeReferences: []
+  - id: composition.agent-execution.boundary-data
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-credential-output-inventory.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts
+    entrypoints:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-credential-output-inventory.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts
+    allow:
+      boundaries:
+        - composition.agent-execution.dispatch-grant
+        - core.agent-execution.contained-turn
+      packages: []
+      builtins:
+        - node:util
+      runtimeReferences: []
+  - id: composition.agent-execution.dispatch-grant
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts
+    entrypoints:
+      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts
+    allow:
+      boundaries:
+        - core.agent-execution.contained-turn
+      packages: []
+      builtins: []
+      runtimeReferences: []
+  # Feature composition and provider selection have reciprocal runtime/type edges.
+  # V1 cannot split their permissions while retaining both cycle checks.
+  - id: composition.embedded-runtime.contained-turn
+    dependencyMode: runtime
+    roots:
+      - packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts
+      - packages/apps/embedded-runtime/src/composition/contained-turn-provider-selection.ts
+    entrypoints:
+      - packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts
+    allow:
+      boundaries:
+        - composition.embedded-runtime.contained-turn-support
+      packages:
+        - "@agent-teams/agent-execution"
+      builtins:
+        - node:util
+      runtimeReferences: []
+  - id: composition.embedded-runtime.contained-turn-support
+    dependencyMode: runtime
+    roots:
+      - packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal-diagnostics.ts
+      - packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts
+      - packages/apps/embedded-runtime/src/composition/contained-turn-composition-types.ts
+      - packages/apps/embedded-runtime/src/composition/contained-turn-construction-failure.ts
+      - packages/apps/embedded-runtime/src/composition/contained-turn-operation-ref.ts
+      - packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts
+      - packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts
+      - packages/apps/embedded-runtime/src/composition/runtime-access-lifecycle.ts
+      - packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts
+    entrypoints:
+      - packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts
+      - packages/apps/embedded-runtime/src/composition/contained-turn-construction-failure.ts
+      - packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts
+      - packages/apps/embedded-runtime/src/composition/runtime-access-lifecycle.ts
+      - packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts
+    allow:
+      boundaries:
+        - core.embedded-runtime.access-contracts
+      packages: []
+      builtins:
+        - node:crypto
+        - node:timers/promises
+      runtimeReferences: []
+  - id: core.embedded-runtime.access-contracts
+    dependencyMode: runtime
+    roots:
+      - packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts
+      - packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts
+      - packages/apps/embedded-runtime/src/contracts/runtime-access.ts
+    entrypoints:
+      - packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts
+      - packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts
+      - packages/apps/embedded-runtime/src/contracts/runtime-access.ts
+    allow:
+      boundaries: []
+      packages: []
+      builtins: []
+      runtimeReferences: []
+  - id: adapter.provider-access.boundary-data
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts
+    entrypoints:
+      - packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts
+    allow:
+      boundaries:
+        - core.provider-access.binding
+      packages: []
+      builtins:
+        - node:util
+      runtimeReferences: []
+  - id: core.provider-access.binding
+    dependencyMode: runtime
+    roots:
+      - packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts
+      - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts
+    entrypoints:
+      - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts
+      - packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts
+    allow:
+      boundaries: []
+      packages: []
+      builtins: []
       runtimeReferences: []

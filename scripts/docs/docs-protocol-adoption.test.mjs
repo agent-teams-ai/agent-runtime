@@ -5,6 +5,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
   symlink,
   writeFile
@@ -35,19 +36,16 @@ test("canonical qualification v2 covers every Runtime authorable type exactly on
     readFile(join(repositoryRoot, "package.json"), "utf8").then(JSON.parse),
   ]);
   assert.equal(integration.schemaVersion, 3);
-  assert.equal(integration.cohort.schemaVersion, 2);
-  assert.equal(integration.cohort.cohortId, "docs-2026-09-10-stable18");
+  assert.equal(integration.cohort.cohortId, "docs-2026-09-10-stable19");
   assert.deepEqual(integration.qualification, {
     contractPath: "architecture/foundation/docs-protocol-qualification.json",
     gateCommand: "pnpm docs:protocol:check"
   });
   assert.equal(manifest.devDependencies["@agent-teams/docs-protocol"], "0.6.0");
-  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol-agent-teams"], "0.2.3");
-  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.1.1");
+  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.2.0");
   assert.match(protocolProfileSource, /^schemaVersion: 3$/mu);
   assert.match(protocolProfileSource, /^  path: architecture\/foundation\/document-authoring\.yaml$/mu);
   assert.match(protocolProfileSource, /^  schemaVersion: 3$/mu);
-  assert.match(protocolProfileSource, /^  adoption: portable-v1$/mu);
   assert.match(authoringProfileSource, /^schemaVersion: 3$/mu);
   assert.match(authoringProfileSource, /^  ownerSets:$/mu);
   assert.equal(qualification.schemaVersion, 2);
@@ -83,22 +81,22 @@ async function copyFile(source, destination) {
 }
 
 async function addRequiredAnchorFixtures(root) {
+  await copyFile(join(repositoryRoot, "architecture/feature-module-standard/candidate-profile.json"), join(root, "architecture/feature-module-standard/candidate-profile.json"));
+  await copyFile(join(repositoryRoot, "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/contained-turn-v1-contract.json"), join(root, "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/contained-turn-v1-contract.json"));
+  await copyFile(join(repositoryRoot, "packages/contexts/agent-execution/tests/live/claude-contained-turn-live-canary.mjs"), join(root, "packages/contexts/agent-execution/tests/live/claude-contained-turn-live-canary.mjs"));
+  await copyFile(join(repositoryRoot, "scripts/architecture/check-feature-modules.mjs"), join(root, "scripts/architecture/check-feature-modules.mjs"));
   await copyFile(
     join(repositoryRoot, "architecture/decisions/accepted-decisions.json"),
     join(root, "architecture/decisions/accepted-decisions.json")
   );
   for (const path of [
     "architecture/consumer-module-standard/profile.json",
-    "architecture/feature-module-standard/candidate-profile.json",
-    "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/contained-turn-v1-contract.json",
     "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/README.md",
     "experiments/rust-system-boundaries/README.md",
     "experiments/sandbox-backend-hosting/README.md",
     "packages/apps/embedded-runtime/src/index.ts",
     "packages/platform/filesystem-custody/src/features/stable-filesystem-custody/README.md",
-    "packages/contexts/agent-execution/tests/live/claude-contained-turn-live-canary.mjs",
     "scripts/architecture/check-consumer-module-standard.mjs",
-    "scripts/architecture/check-feature-modules.mjs",
     "scripts/architecture/feature-module-edges.mjs"
   ]) {
     const destination = join(root, path);
@@ -134,7 +132,8 @@ async function attachPublishedTooling(root) {
 }
 
 async function disposableRepository(run, { attachTooling = false } = {}) {
-  const root = await mkdtemp(join(tmpdir(), "atd-r-"));
+  // macOS temp roots can traverse /var; qualification requires direct physical paths.
+  const root = await realpath(await mkdtemp(join(tmpdir(), "atd-r-")));
   try {
     await cp(join(repositoryRoot, "docs"), join(root, "docs"), { recursive: true });
     await mkdir(join(root, "architecture", "foundation"), { recursive: true });
@@ -215,41 +214,57 @@ test("uses owner catalog authority and keeps blocked_by as read compatibility", 
   }
 });
 
-test("qualifies Runtime authoring with the strongest published runner", async () => {
-  const v2Runner = Reflect.get(docsQualification, "runDocsProtocolQualificationV2");
-  if (typeof v2Runner === "function") {
-    const receipt = await v2Runner({
-      consumerRoot: repositoryRoot
-    });
-    assert.equal(receipt.projectId, "agent-runtime");
-    assert.deepEqual(receipt.scenarios.map(({ type }) => type).toSorted(), [
-      "adr", "architecture", "evidence", "index", "qualification-plan"
-    ]);
-    return;
-  }
-
-  await disposableRepository(async (root) => {
-    const receipt = await docsQualification.runDocsProtocolQualification({
-      fixtureRoot: root,
-      profilePath: protocolProfile,
-      scenario: {
-        find: { query: { id: "ADR-0001" }, expectedIds: ["ADR-0001"] },
-        newDocument: {
-          intent: {
-            type: "architecture",
-            id: "runtime.architecture.disposable-protocol-qualification",
-            title: "Disposable Protocol Qualification",
-            owner: "architecture/tooling",
-            summary: "Qualifies Runtime documentation without touching the real repository."
-          },
-          related: ["ADR-0001"]
+// Stable19 authority is independently qualified; portable scenarios supplement managed checks.
+// Managed v3 acceptance needs authentic Cohort v2, registry/workflow and package
+// integrities. Portable scenarios must never silently substitute for that gate.
+const scenarioContract = JSON.parse(await readFile(join(repositoryRoot,
+  "architecture/foundation/docs-protocol-qualification.json"), "utf8"));
+for (const scenario of scenarioContract.scenarios) {
+  test(`portable authoring preserves ${scenario.id}`, async () => {
+    await disposableRepository(async (root) => {
+      const { related, slug, ...intent } = scenario.intent;
+      const args = ["--type", scenario.type, "--id", intent.id, "--title", intent.title,
+        "--owner", intent.owner, "--summary", intent.summary,
+        ...(slug === undefined ? [] : ["--slug", slug]),
+        ...(related ?? []).flatMap(id => ["--related", id])];
+      const beforePreview = await docsQualification.fileSnapshot(root);
+      const preview = docs(root, "new", ...args, "--dry-run");
+      assert.equal(preview.status, 0, JSON.stringify(preview.envelope));
+      assert.equal(preview.envelope.result.documentPath, scenario.expected.documentPath);
+      assert.equal(scenario.expected.metadataStorage, "frontmatter");
+      assert.ok(preview.envelope.result.compiled.frontmatter.length > 0);
+      assert.equal(preview.envelope.result.compiled.metadata.owner, intent.owner);
+      assert.equal(preview.envelope.result.compiled.metadata.id, intent.id);
+      assert.deepEqual(preview.envelope.result.reachability, scenario.expected.reachability);
+      const stale = docs(root, "new", ...args, "--apply", "--expect", `sha256:${"0".repeat(64)}`);
+      assert.notEqual(stale.status, 0);
+      assert.ok(stale.envelope.diagnostics.some(({ ruleId }) => ruleId === "docs.new.plan-digest-stale"), JSON.stringify(stale.envelope));
+      await assert.rejects(readFile(join(root, scenario.expected.documentPath)), { code: "ENOENT" });
+      assert.deepEqual(await docsQualification.fileSnapshot(root), beforePreview);
+      const receipt = await docsQualification.runDocsProtocolQualification({
+        fixtureRoot: root,
+        profilePath: protocolProfile,
+        scenario: {
+          find: { query: { id: "ADR-0001" }, expectedIds: ["ADR-0001"] },
+          newDocument: { intent: { type: scenario.type, ...intent, ...(slug === undefined ? {} : { slug }) },
+            ...(related === undefined ? {} : { related }) }
         }
-      }
-    });
-    assert.equal(receipt.projectId, "agent-runtime");
-    assert.equal(receipt.appliedDocumentPath, "docs/architecture/disposable-protocol-qualification.md");
+      });
+      assert.equal(receipt.projectId, "agent-runtime");
+      assert.equal(receipt.appliedDocumentPath, scenario.expected.documentPath);
+      assert.deepEqual(receipt.checks, ["info", "find", "preview", "crash", "doctor", "recover", "receipt", "parent", "apply", "index", "check", "source-unchanged"]);
+      const applied = docs(root, "new", ...args, "--apply", "--expect", preview.envelope.result.planDigest);
+      assert.equal(applied.status, 0, JSON.stringify(applied.envelope));
+      assert.equal(await readFile(join(root, scenario.expected.documentPath), "utf8"),
+        preview.envelope.result.compiled.document.content);
+      await docsQualification.applyReachability(root, scenario.expected.reachability);
+      const context = docs(root, "context", "--id", intent.id);
+      assert.equal(context.status, 0, JSON.stringify(context.envelope));
+      const check = docs(root, "check");
+      assert.equal(check.status, 0, JSON.stringify(check.envelope));
+    }, { attachTooling: true });
   });
-});
+}
 
 test("fails closed for an unknown owner", async () => {
   await disposableRepository(async (root) => {

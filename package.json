@@ -20,17 +20,17 @@
     "docs:info": "agent-teams-docs info --consumer . --profile architecture/foundation/docs-protocol.yaml",
     "docs:new": "agent-teams-docs new --consumer . --profile architecture/foundation/docs-protocol.yaml",
     "docs:protocol:check": "pnpm docs:check && pnpm docs:governance && pnpm docs:qualification",
-    "docs:qualification": "node --test scripts/docs/docs-protocol-adoption.test.mjs",
+    "docs:qualification": "node --test scripts/docs/docs-protocol-adoption.test.mjs scripts/docs/consumer-migration.test.mjs scripts/docs/managed-target-contract.test.mjs scripts/docs/managed-installed-target.test.mjs",
     "docs:recover": "agent-teams-docs recover --consumer . --profile architecture/foundation/docs-protocol.yaml",
     "foundation:assert-dev-only": "agent-teams-foundation assert-dev-only",
     "foundation:assert-registry": "agent-teams-foundation assert-registry",
     "foundation:attach": "agent-teams-foundation attach",
-    "foundation:boundaries:negative": "node --test scripts/architecture/source-dependency-adapter-boundaries.test.mjs",
+    "foundation:boundaries:negative": "node --test scripts/architecture/source-dependency-adapter-boundaries.test.mjs scripts/docs/runtime-builtin-permissions.test.mjs",
     "foundation:check": "agent-teams-foundation check && pnpm foundation:boundaries:negative && pnpm foundation:assert-dev-only && pnpm foundation:assert-registry",
     "foundation:detach": "agent-teams-foundation detach",
     "foundation:status": "agent-teams-foundation status",
     "foundation:scaffold:plan": "agent-teams-foundation scaffold-plan --config architecture/foundation/scaffolding.yaml",
-    "foundation:scaffold:check": "node scripts/foundation/verify-scaffolding.mjs",
+    "foundation:scaffold:check": "node --test --test-concurrency=1 scripts/foundation/fixture-lock.test.mjs && node scripts/foundation/verify-scaffolding.mjs",
     "foundation:scaffold:recover": "agent-teams-foundation scaffold-recover",
     "lint": "oxlint --config .oxlintrc.json --deny-warnings --disable-nested-config .",
     "lint:changed": "oxlint --config .oxlintrc.json --deny-warnings --disable-nested-config --format agent --no-error-on-unmatched-pattern",
@@ -83,7 +83,8 @@
   "devDependencies": {
     "@agent-teams/agent-execution": "workspace:*",
     "@agent-teams/docs-protocol": "0.6.0",
-    "@agent-teams/engineering-foundation": "1.1.1",
+    "@agent-teams/docs-protocol-agent-teams": "0.2.5",
+    "@agent-teams/engineering-foundation": "1.2.0",
     "@agentclientprotocol/sdk": "catalog:",
     "@opencode-ai/plugin": "catalog:",
     "@types/node": "catalog:",
@@ -97,8 +98,7 @@
     "oxc-parser": "catalog:",
     "oxlint": "catalog:",
     "typescript": "catalog:",
-    "yaml": "catalog:",
     "xstate": "catalog:",
-    "@agent-teams/docs-protocol-agent-teams": "0.2.3"
+    "yaml": "catalog:"
   }
 }
