@@ -21,7 +21,7 @@ export const createContainedTurnEgressGatewayCore = (trustedIdentity: TrustedEgr
   dependencies: ContainedTurnEgressDependencies, primitives: EgressSecurityPrimitives,
   clock: MonotonicClock): ContainedTurnEgress => {
   const validation = createEgressValidation(primitives); const captured = captureComposition(primitives, trustedIdentity, dependencies);
-  const owners: ContainedTurnEgressRuntimeDependencies = {...captured.dependencies, clock};
+  const owners = freeze({...captured.dependencies, clock}) as ContainedTurnEgressRuntimeDependencies;
   const lifecycle = new EgressOneShotLifecycle();
   const run = async (unsafe: Parameters<ContainedTurnEgress["exchange"]>[0]): Promise<ContainedTurnEgressResult> => {
     const prepared = await prepareExchange(unsafe, validation, owners, lifecycle);
