@@ -1,17 +1,20 @@
-import type { ContainedTurnEgress, ContainedTurnEgressDependencies, ContainedTurnEgressResult,
-  TrustedEgressHostIdentityV1 } from "./composition.js";
-import { createEgressValidation, type EgressSecurityPrimitives } from "./validation.js";
-import { EgressOneShotLifecycle } from "./lifecycle.js";
-import { captureClose } from "./node-boundary.js";
-import { deny, uncertain } from "./results.js";
-import { prepareExchange } from "./prepare.js";
-import { createFirstWriteBoundary } from "./first-write.js";
-import { completeExchange } from "./complete-exchange.js";
+import type { ContainedTurnEgressResult } from "../domain/egress-request.js";
+import type { TrustedEgressHostIdentityV1 } from "../domain/host-identity.js";
+import { createEgressValidation, type EgressSecurityPrimitives } from "../domain/validation.js";
+import { deny, uncertain } from "../domain/results.js";
+import type { ContainedTurnEgress } from "../application/contained-turn-egress.js";
+import type { ContainedTurnEgressDependencies } from "../application/contained-turn-egress-dependencies.js";
+import { captureComposition, captureTransport } from "../application/capture-boundary-ports.js";
+import { EgressOneShotLifecycle } from "../application/lifecycle.js";
+import { prepareExchange } from "../application/prepare.js";
+import { createFirstWriteBoundary } from "../application/first-write.js";
+import { completeExchange } from "../application/complete-exchange.js";
+import { captureClose } from "../adapters/outbound/node-session-transport-boundary.js";
 const freeze = Object.freeze;
 
 export const createContainedTurnEgressGatewayCore = (trustedIdentity: TrustedEgressHostIdentityV1,
   dependencies: ContainedTurnEgressDependencies, primitives: EgressSecurityPrimitives): ContainedTurnEgress => {
-  const validation = createEgressValidation(primitives); const captured = validation.captureComposition(trustedIdentity, dependencies);
+  const validation = createEgressValidation(primitives); const captured = captureComposition(primitives, trustedIdentity, dependencies);
   const owners = captured.dependencies; const lifecycle = new EgressOneShotLifecycle();
   const run = async (unsafe: Parameters<ContainedTurnEgress["exchange"]>[0]): Promise<ContainedTurnEgressResult> => {
     const prepared = await prepareExchange(unsafe, validation, owners, lifecycle);
@@ -22,7 +25,7 @@ export const createContainedTurnEgressGatewayCore = (trustedIdentity: TrustedEgr
         const session = await owners.transportGateway.openOneShotHttps();
         lifecycle.retainClose(captureClose(session)); return session;
       }, true);
-      const session = validation.captureTransport(acquired);
+      const session = captureTransport(primitives, acquired);
       if (session !== undefined) {lifecycle.attach(session);}}
     catch {lifecycle.markUsed(); return deny("transport_denied");}
     const transport = lifecycle.transport;

@@ -1,10 +1,12 @@
-import type { ContainedTurnEgressDependencies, ContainedTurnEgressRequest, ContainedTurnEgressResult,
-  ProviderRouteAuthoritySnapshotV1, TrustedEgressHostIdentityV1 } from "./composition.js";
+import type { ContainedTurnEgressRequest, ContainedTurnEgressResult } from "../domain/egress-request.js";
+import type { ProviderRouteAuthoritySnapshotV1 } from "../domain/provider-route-authority.js";
+import type { TrustedEgressHostIdentityV1 } from "../domain/host-identity.js";
 import { type createEgressValidation, type BufferedRequest, type EgressSecurityPrimitives,
-  type PolicyAuthority } from "./validation.js";
+  type PolicyAuthority } from "../domain/validation.js";
+import { deny, sameBytes } from "../domain/results.js";
+import type { ContainedTurnEgressDependencies } from "./contained-turn-egress-dependencies.js";
 import type { EgressOneShotLifecycle } from "./lifecycle.js";
 import { createWriteAuthorization } from "./write-authorization.js";
-import { deny, sameBytes } from "./results.js";
 import { revalidateWrite } from "./revalidate-write.js";
 import { signWrite } from "./sign-write.js";
 const freeze = Object.freeze;
@@ -39,7 +41,7 @@ export const createFirstWriteBoundary = (input: FirstWriteInput) => {
       const exposedCanonical = canonicalBody.slice(); const exposedApplication = capturedRequest.applicationBuffer.slice();
       const authorization = freeze({body, canonicalBody: exposedCanonical, envelope});
       const permit = createWriteAuthorization({validation, owner: owners.policyAuthority, route, policy, issuedAt,
-        startedAt, deadlineMs: request.budgets.deadlineMs, active});
+        startedAt, deadlineMs: request.budgets.deadlineMs, active, now: owners.clock.now});
       try {const returned = lifecycle.writeExact?.(freeze({authorization, applicationBytes: exposedApplication,
         consumeAuthorization: () => {const allowed = permit.consumeAuthorization(); writeAttempted ||= allowed; return allowed;}}));
         if (!permit.consumed && permit.rejected) {callbackDenial = deny("authority_drift"); return freeze({status: "denied" as const});}

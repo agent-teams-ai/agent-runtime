@@ -1,4 +1,4 @@
-import type { ContainedTurnEgressResult } from "./composition.js";
+import type { ContainedTurnEgressResult } from "./egress-request.js";
 
 const freeze = Object.freeze;
 export const deny = (reason: Extract<ContainedTurnEgressResult, {status: "denied"}>["reason"]):

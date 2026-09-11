@@ -1,7 +1,6 @@
 import { types } from "node:util";
 
 // Intrinsics stay in this dormant Node boundary; none perform network operations.
-export const monotonicNow = performance.now.bind(performance);
 export const dataProperty = (value: unknown, name: string): unknown => {
   if (value === null || typeof value !== "object" || types.isProxy(value)) {return;}
   const descriptor = Object.getOwnPropertyDescriptor(value, name);

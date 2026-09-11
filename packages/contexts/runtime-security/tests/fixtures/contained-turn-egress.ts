@@ -183,6 +183,7 @@ const harness = (options: HarnessOptions = {}) => {
     },
     transportGateway: {async openOneShotHttps() {events.push("transport:open"); await options.holdOpen;
       if (options.openFails) {throw new Error("open failed");} return {transport, firstWrite};}},
+    clock: {now: () => performance.now()},
   };
   return {dependencies, transport, events, authorizations, canonicalBodies, dispatchInputs, routeInputs, transported,
     firstWrite, emittedApplicationBytes, get callback() {return callback;}, get closeCount() {return closeCount;}};

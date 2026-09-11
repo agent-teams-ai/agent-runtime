@@ -1,6 +1,6 @@
-import type { EgressAuthorizationEnvelopeV1 } from "./composition.js";
+import type { EgressAuthorizationEnvelopeV1 } from "../domain/egress-authorization.js";
+import { isDigest } from "../domain/validation.js";
 import type { FirstWriteInput } from "./first-write.js";
-import { isDigest } from "./validation.js";
 const freeze = Object.freeze;
 export const signWrite = (canonicalBody: Uint8Array, input: FirstWriteInput) => {
   const {owners, policy, primitives, validation} = input;

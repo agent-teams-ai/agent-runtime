@@ -1,8 +1,7 @@
 import type { FirstWriteInput } from "./first-write.js";
 import { frozenExact } from "./write-authorization.js";
-import { monotonicNow } from "./node-boundary.js";
-import { authorizationBody } from "./authorization-evidence.js";
-import { deny } from "./results.js";
+import { authorizationBody } from "../domain/authorization-evidence.js";
+import { deny } from "../domain/results.js";
 const currentIssuedAt = (timed: Readonly<Record<string, unknown>> | undefined, observedAt: number) =>
   timed?.status === "current" && Number.isSafeInteger(timed.observedAt) &&
     (timed.observedAt as number) >= observedAt ? timed.observedAt as number : undefined;
@@ -19,7 +18,7 @@ export const revalidateWrite = async (rawObservation: unknown, input: FirstWrite
       observation.applicationBytes !== capturedRequest.applicationBytes) {
     return deny("authorization_invalid");
   }
-  let receipt; let timed; let routeCurrent = false; const startedAt = monotonicNow();
+  let receipt; let timed; let routeCurrent = false; const startedAt = owners.clock.now();
   try {
     receipt = validation.committedReceipt(await lifecycle.owner(() => owners.dispatchAuthority.observeDispatchConsumption(request.dispatch)), request.dispatch);
     timed = frozenExact(validation, await lifecycle.owner(() => owners.policyAuthority.revalidateExact(policy)), ["status", "observedAt"]);
