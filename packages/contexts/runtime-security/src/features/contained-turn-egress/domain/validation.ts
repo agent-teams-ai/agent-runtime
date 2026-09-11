@@ -247,7 +247,7 @@ const validObservationFacts = (observation: Readonly<Record<string, unknown>>) =
   observation.alpn === "http/1.1" && observation.phase === "immediately_before_first_application_byte";
 
 const createTransportValidation = (tools: ValidationTools) => {
-  const {exact, dense, hash, methods} = tools;
+  const {exact, dense, hash} = tools;
   const snapshotAddress = (value: unknown): NetworkAddressV1 | undefined => {
     const address = exact(value, ["family", "bytesHex"]);
     if (address === undefined || (address.family !== "ipv4" && address.family !== "ipv6") ||
