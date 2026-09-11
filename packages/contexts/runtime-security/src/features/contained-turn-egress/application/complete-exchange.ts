@@ -1,8 +1,8 @@
-import type { ContainedTurnEgressResult } from "./composition.js";
-import type { BufferedRequest, TransportResult } from "./validation.js";
+import type { ContainedTurnEgressResult } from "../domain/egress-request.js";
+import type { BufferedRequest, TransportResult } from "../domain/validation.js";
+import { deny, uncertain } from "../domain/results.js";
 import type { EgressOneShotLifecycle } from "./lifecycle.js";
 import type { createFirstWriteBoundary } from "./first-write.js";
-import { deny, uncertain } from "./results.js";
 const freeze = Object.freeze;
 export const completeExchange = (input: Readonly<{
   result: TransportResult | undefined; closed: boolean; interrupted: boolean; returnedWhilePending: boolean;

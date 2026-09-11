@@ -24,10 +24,13 @@ export type {
 import { createHash } from "node:crypto";
 import { types as nodeTypes } from "node:util";
 
-import { createEgressValidation } from "./features/contained-turn-egress/validation.js";
-import { createContainedTurnEgressGatewayCore } from "./features/contained-turn-egress/gateway.js";
-import type { ContainedTurnEgressDependencies, ProviderRouteAuthoritySnapshotV1, TrustedEgressHostIdentityV1 } from
-  "./features/contained-turn-egress/composition.js";
+import { createEgressValidation } from "./features/contained-turn-egress/domain/validation.js";
+import { createContainedTurnEgressGatewayCore } from "./features/contained-turn-egress/composition/gateway.js";
+import { createNodeMonotonicClock } from "./features/contained-turn-egress/adapters/outbound/node-monotonic-clock.js";
+import type { ContainedTurnEgressDependencies } from
+  "./features/contained-turn-egress/application/contained-turn-egress-dependencies.js";
+import type { ProviderRouteAuthoritySnapshotV1 } from "./features/contained-turn-egress/domain/provider-route-authority.js";
+import type { TrustedEgressHostIdentityV1 } from "./features/contained-turn-egress/domain/host-identity.js";
 
 const exactObject = <Name extends string>(value: unknown, names: readonly Name[]) => {
   if (typeof value !== "object" || value === null || nodeTypes.isProxy(value)) {return;}
@@ -93,7 +96,8 @@ const primitives = Object.freeze({
     return decoded.byteLength === 64 && decoded.toString("base64") === value;},
 });
 export const createContainedTurnEgressGateway = (identity: TrustedEgressHostIdentityV1,
-  dependencies: ContainedTurnEgressDependencies) => createContainedTurnEgressGatewayCore(identity, dependencies, primitives);
+  dependencies: ContainedTurnEgressDependencies) =>
+  createContainedTurnEgressGatewayCore(identity, dependencies, primitives, createNodeMonotonicClock());
 /** Pure private-composition projection for the dormant route candidate's dispatch grant.
  * The existing dispatch owner must commit this digest before egress; legacy/unbound digests fail closed.
  * Provider Access still owns resolution/revalidation of every fact in the projection. */
@@ -102,29 +106,37 @@ export const containedTurnEgressProviderBindingDigest = (route: ProviderRouteAut
   return captured === undefined ? undefined : validation.routeBindingDigest(captured);
 };
 export { createNodeEd25519EgressSigner } from
-  "./features/contained-turn-egress/node-ed25519.js";
+  "./features/contained-turn-egress/adapters/outbound/node-ed25519.js";
 export type {
   BufferedEgressRequestV1,
-  ContainedTurnEgress,
-  ContainedTurnEgressDependencies,
-  ContainedTurnEgressRequest,
-  ContainedTurnEgressResult,
   EgressAuthorizationBodyV1,
   EgressAuthorizationEnvelopeV1,
   EgressTransportObservationV1,
-  EgressAuthorizationSignerV1,
-  EgressPolicyTimeAuthorityV1,
-  EgressPolicyTimeSnapshotV1,
+} from "./features/contained-turn-egress/domain/egress-authorization.js";
+export type { ContainedTurnEgressRequest, ContainedTurnEgressResult } from
+  "./features/contained-turn-egress/domain/egress-request.js";
+export type { EgressPolicyTimeSnapshotV1 } from "./features/contained-turn-egress/domain/egress-policy.js";
+export type { NetworkAddressV1 } from "./features/contained-turn-egress/domain/network-address.js";
+export type { TrustedEgressHostIdentityV1 } from "./features/contained-turn-egress/domain/host-identity.js";
+export type {
+  ProviderRouteAuthoritySnapshotV1,
+  ProviderRouteRevalidationV1,
+} from "./features/contained-turn-egress/domain/provider-route-authority.js";
+export type { ContainedTurnEgress } from "./features/contained-turn-egress/application/contained-turn-egress.js";
+export type { ContainedTurnEgressDependencies } from
+  "./features/contained-turn-egress/application/contained-turn-egress-dependencies.js";
+export type { EgressAuthorizationSignerV1 } from
+  "./features/contained-turn-egress/application/ports/outbound/egress-authorization-signer.js";
+export type { EgressPolicyTimeAuthorityV1 } from
+  "./features/contained-turn-egress/application/ports/outbound/egress-policy-time-authority.js";
+export type { ProviderRouteAuthorityV1 } from
+  "./features/contained-turn-egress/application/ports/outbound/provider-route-authority.js";
+export type {
   EgressTransportGatewayV1,
   EgressTransportV1,
   TrustedEgressFirstWriteV1,
-  NetworkAddressV1,
-  ProviderRouteAuthorityV1,
-  ProviderRouteAuthoritySnapshotV1,
-  ProviderRouteRevalidationV1,
-  TrustedEgressHostIdentityV1,
-} from "./features/contained-turn-egress/composition.js";
-export type { NodeEd25519SignerIdentity } from "./features/contained-turn-egress/node-ed25519.js";
+} from "./features/contained-turn-egress/application/ports/outbound/egress-exchange.js";
+export type { NodeEd25519SignerIdentity } from "./features/contained-turn-egress/adapters/outbound/node-ed25519.js";
 export type { PathCanonicalizer } from "./features/setup-source-inspection-authorization/application/ports/outbound/path-canonicalizer.js";
 export {
   createSetupInspectionAuthorizationFeature,

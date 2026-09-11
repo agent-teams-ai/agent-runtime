@@ -1,7 +1,8 @@
 import { createHash, sign as ed25519Sign, verify as ed25519Verify, type KeyObject } from "node:crypto";
 import { types as nodeTypes } from "node:util";
 
-import type { EgressAuthorizationEnvelopeV1, EgressAuthorizationSignerV1 } from "./composition.js";
+import type { EgressAuthorizationEnvelopeV1 } from "../../domain/egress-authorization.js";
+import type { EgressAuthorizationSignerV1 } from "../../application/ports/outbound/egress-authorization-signer.js";
 const hash = (body: Uint8Array) => `sha256:${createHash("sha256").update(body).digest("hex")}`;
 const exact = (value: unknown, names: readonly string[]) => {
   if (typeof value !== "object" || value === null || nodeTypes.isProxy(value)) {return;}

@@ -1,8 +1,10 @@
 import type { DispatchConsumptionReceipt, ObserveDispatchConsumptionInput } from
-  "../contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.js";
-import type { BufferedEgressRequestV1, ContainedTurnEgressDependencies, ContainedTurnEgressRequest,
-  EgressAuthorizationBodyV1, EgressPolicyTimeSnapshotV1, EgressTransportV1, NetworkAddressV1,
-  ProviderRouteAuthoritySnapshotV1, TrustedEgressHostIdentityV1 } from "./composition.js";
+  "../../contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.js";
+import type { BufferedEgressRequestV1, EgressAuthorizationBodyV1 } from "./egress-authorization.js";
+import type { EgressPolicyTimeSnapshotV1 } from "./egress-policy.js";
+import type { NetworkAddressV1 } from "./network-address.js";
+import type { ProviderRouteAuthoritySnapshotV1 } from "./provider-route-authority.js";
+import type { ContainedTurnEgressRequest } from "./egress-request.js";
 
 export interface EgressSecurityPrimitives {
   readonly sha256: (bytes: Uint8Array) => string;
@@ -38,7 +40,7 @@ const frame = (tag: string, values: readonly (string | number | Uint8Array)[]) =
   return output;
 };
 const flatten = (values: readonly Uint8Array[]) => frame("sequence/v1", values);
-const identifier = (value: unknown): value is string => typeof value === "string" && value.length > 0 &&
+export const isEgressIdentifier = (value: unknown): value is string => typeof value === "string" && value.length > 0 &&
   value.length <= 512 && /^[\x21-\x7e]+$/u.test(value);
 export const isDigest = (value: unknown): value is string => typeof value === "string" && /^sha256:[\da-f]{64}$/u.test(value);
 const count = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
@@ -53,7 +55,7 @@ const dangerousHeaders = new Set(["authorization", "connection", "content-length
 const subnet = (hex: string, network: string, bits: number) => {const shift = BigInt(hex.length * 4 - bits);
   return BigInt(`0x${hex}`) >> shift === BigInt(`0x${network}`) >> shift;};
 const addressKey = (value: NetworkAddressV1) => `${value.family}:${value.bytesHex}`;
-const guarded = <Arguments extends unknown[], Result>(operation: (...args: Arguments) => Result) =>
+export const guarded = <Arguments extends unknown[], Result>(operation: (...args: Arguments) => Result) =>
   (...args: Arguments): Result | undefined => {try {return operation(...args);} catch {return undefined;}};
 const deniedV4: readonly [string, number][] = [["00000000", 8], ["0a000000", 8], ["64400000", 10], ["7f000000", 8],
   ["a9fe0000", 16], ["ac100000", 12], ["c0000000", 24], ["c0000200", 24], ["c01fc400", 24], ["c034c100", 24],
@@ -71,14 +73,14 @@ const deniedV6SpecialPurposeV1: readonly [string, number][] = [["000000000000000
   ["fc000000000000000000000000000000", 7], ["fec00000000000000000000000000000", 10],
   ["fe800000000000000000000000000000", 10], ["ff000000000000000000000000000000", 8]];
 
-type Exact = EgressSecurityPrimitives["exactObject"];
-type Methods = <Name extends string>(value: unknown, names: readonly Name[]) =>
+export type Exact = EgressSecurityPrimitives["exactObject"];
+export type Methods = <Name extends string>(value: unknown, names: readonly Name[]) =>
   Readonly<Record<Name, (...args: never[]) => unknown>> | undefined;
-interface ValidationTools {readonly primitives: EgressSecurityPrimitives; readonly hash: (value: Uint8Array) => string;
+export interface ValidationTools {readonly primitives: EgressSecurityPrimitives; readonly hash: (value: Uint8Array) => string;
   readonly exact: Exact; readonly dense: (value: unknown, maximum: number) => readonly unknown[] | undefined;
   readonly methods: Methods}
 
-const createValidationTools = (primitives: EgressSecurityPrimitives) => {
+export const createValidationTools = (primitives: EgressSecurityPrimitives) => {
   const hash = (value: Uint8Array) => primitives.sha256(value); const exact = primitives.exactObject;
   const dense = (value: unknown, maximum: number): readonly unknown[] | undefined => {
     if (!primitives.array(value)) {return;}
@@ -104,31 +106,13 @@ const createValidationTools = (primitives: EgressSecurityPrimitives) => {
   return {primitives, hash, exact, dense, methods} satisfies ValidationTools;
 };
 
-const captureComposition = (tools: ValidationTools, identity: unknown, dependencies: unknown) => {
-  const {exact, methods} = tools;
-  const host = exact(identity, ["attemptId", "environmentId", "gatewayId", "hostInstanceId", "hostBootId", "transportMode"]);
-  const deps = exact(dependencies, ["routeAuthority", "dispatchAuthority", "policyAuthority", "signer", "transportGateway"]);
-  const routeAuthority = methods(deps?.routeAuthority, ["resolveExact", "revalidateExact"]);
-  const dispatchAuthority = methods(deps?.dispatchAuthority, ["observeDispatchConsumption"]);
-  const policyAuthority = methods(deps?.policyAuthority, ["resolve", "revalidateExact", "consumeFirstWrite"]);
-  const signer = methods(deps?.signer, ["sign", "verify"]);
-  const transportGateway = methods(deps?.transportGateway, ["openOneShotHttps"]);
-  if (host === undefined || ![host.attemptId, host.environmentId, host.gatewayId, host.hostInstanceId, host.hostBootId].every(identifier) ||
-      host.transportMode !== "one_shot_https" || routeAuthority === undefined || dispatchAuthority === undefined ||
-      policyAuthority === undefined || signer === undefined || transportGateway === undefined) {
-    throw new TypeError("invalid contained turn egress composition");
-  }
-  return Object.freeze({identity: Object.freeze({...host}) as TrustedEgressHostIdentityV1,
-    dependencies: Object.freeze({routeAuthority, dispatchAuthority, policyAuthority, signer,
-      transportGateway}) as unknown as ContainedTurnEgressDependencies});
-};
 
 const validRequestFields = (candidate: Readonly<Record<string, unknown>>, scope: Readonly<Record<string, unknown>>,
   budgets: Readonly<Record<string, unknown>>) =>
   [scope.tenantId, scope.projectId, candidate.providerId, candidate.providerAccountRef, candidate.providerRouteRef,
     candidate.credentialBindingRef, candidate.credentialGeneration, candidate.credentialRevision,
     candidate.resolutionAuthorityId, candidate.resolutionGeneration, candidate.operationId, candidate.requestId,
-    candidate.requestNonce].every(identifier) && isDigest(scope.scopeDigest) && isDigest(candidate.credentialBindingDigest) &&
+    candidate.requestNonce].every(isEgressIdentifier) && isDigest(scope.scopeDigest) && isDigest(candidate.credentialBindingDigest) &&
   (candidate.method === "GET" || candidate.method === "POST") && normalizedPath(candidate.path) &&
   [budgets.requestBytes, budgets.responseBytes, budgets.deadlineMs].every(count) && budgets.responseBytes !== 0 && budgets.deadlineMs !== 0;
 
@@ -141,7 +125,7 @@ const createRequestValidation = (tools: ValidationTools) => {
     const dispatch = exact(value, names); const scope = exact(dispatch?.scope, ["tenantId", "projectId", "scopeDigest"]);
     if (dispatch === undefined || scope === undefined || dispatch.purpose !== "contained-turn.provider-dispatch/v1" ||
         ![dispatch.operationId, scope.tenantId, scope.projectId, dispatch.grantRequestId, dispatch.providerId,
-          dispatch.authorityGeneration, dispatch.expectedAuthorityRevision].every(identifier) ||
+          dispatch.authorityGeneration, dispatch.expectedAuthorityRevision].every(isEgressIdentifier) ||
         ![scope.scopeDigest, dispatch.requestDigest, dispatch.providerBindingDigest, dispatch.claimBindingDigest,
           dispatch.acceptedAuthorityDigest, dispatch.expectedAuthorityHeadDigest, dispatch.expectedConstraintsDigest,
           dispatch.expectedContainmentPolicyDigest].every(isDigest)) {return;}
@@ -223,7 +207,7 @@ const createAuthorityValidation = (tools: ValidationTools) => {
         route.contractVersion !== "provider-route-authority/v1" ||
         ![route.tenantId, route.projectId, route.providerId, route.providerAccountRef, route.providerRouteRef,
           route.credentialBindingRef, route.credentialGeneration, route.credentialRevision, route.accessRef, route.accessRevision, route.routeRevision,
-          route.tlsPinSetGeneration, route.tlsPinSetRevision, route.resolutionAuthorityId, route.resolutionGeneration].every(identifier) ||
+          route.tlsPinSetGeneration, route.tlsPinSetRevision, route.resolutionAuthorityId, route.resolutionGeneration].every(isEgressIdentifier) ||
         ![route.scopeDigest, route.credentialBindingDigest, route.authorityDigest, route.tlsPinSetDigest].every(isDigest) ||
         pins.length === 0 || pins.some(digest => !isDigest(digest)) ||
         new Set(pins).size !== pins.length || pins.some((digest, index) => index > 0 && (digest as string) <= (pins[index - 1] as string)) ||
@@ -237,7 +221,7 @@ const createAuthorityValidation = (tools: ValidationTools) => {
       "maxRequestBytes", "maxResponseBytes", "maxDeadlineMs"]);
     return policy !== undefined && Object.isFrozen(value) && policy.contractVersion === "contained-turn-egress-policy/v1" &&
       [policy.policyId, policy.policyRevision, policy.policyGeneration, policy.keyId, policy.keyGeneration,
-        policy.signerRevision, policy.timeAuthorityId, policy.timeGeneration].every(identifier) &&
+        policy.signerRevision, policy.timeAuthorityId, policy.timeGeneration].every(isEgressIdentifier) &&
       [policy.observedAt, policy.expiresAt, policy.maxRequestBytes, policy.maxResponseBytes, policy.maxDeadlineMs].every(count) &&
       (policy.expiresAt as number) > (policy.observedAt as number) && (policy.maxRequestBytes as number) > 0 &&
       (policy.maxResponseBytes as number) > 0 && (policy.maxDeadlineMs as number) > 0 ? Object.freeze({...policy}) as PolicyAuthority : undefined;
@@ -256,13 +240,13 @@ const createAuthorityValidation = (tools: ValidationTools) => {
 };
 
 const validObservationFacts = (observation: Readonly<Record<string, unknown>>) =>
-  observation.peerPort === 443 && identifier(observation.tlsServerName) && isDigest(observation.tlsSpkiDigest) &&
-  identifier(observation.resolutionAuthorityId) && identifier(observation.resolutionGeneration) &&
+  observation.peerPort === 443 && isEgressIdentifier(observation.tlsServerName) && isDigest(observation.tlsSpkiDigest) &&
+  isEgressIdentifier(observation.resolutionAuthorityId) && isEgressIdentifier(observation.resolutionGeneration) &&
   isDigest(observation.answerSetDigest) && isDigest(observation.applicationBytesDigest) && count(observation.applicationBytes) &&
   observation.alpn === "http/1.1" && observation.phase === "immediately_before_first_application_byte";
 
 const createTransportValidation = (tools: ValidationTools) => {
-  const {exact, dense, hash, methods} = tools;
+  const {exact, dense, hash} = tools;
   const snapshotAddress = (value: unknown): NetworkAddressV1 | undefined => {
     const address = exact(value, ["family", "bytesHex"]);
     if (address === undefined || (address.family !== "ipv4" && address.family !== "ipv6") ||
@@ -312,7 +296,7 @@ const createTransportValidation = (tools: ValidationTools) => {
       receipt.claimBindingDigest, receipt.acceptedAuthorityDigest, receipt.authorityHeadDigestAtConsumption,
       receipt.constraintsDigest, receipt.containmentPolicyDigest, receipt.consumptionDigest].every(isDigest) ||
       !count(receipt.claimBeforeControlTime) || !count(receipt.consumedAtControlTime) ||
-      (receipt.claimBeforeControlTime as number) <= (receipt.consumedAtControlTime as number) || !identifier(receipt.ownerEvidenceRef)) {return;}
+      (receipt.claimBeforeControlTime as number) <= (receipt.consumedAtControlTime as number) || !isEgressIdentifier(receipt.ownerEvidenceRef)) {return;}
     return Object.freeze({...receipt, scope: Object.freeze({...scope})}) as DispatchConsumptionReceipt;
   };
   const canonicalReceipt = (value: DispatchConsumptionReceipt) => frame("contained-turn-egress-dispatch-receipt/v1", [
@@ -336,12 +320,6 @@ const createTransportValidation = (tools: ValidationTools) => {
     value.tlsSpkiDigest, value.alpn, value.method, value.headerDigest, value.bodyDigest, value.requestDigest,
     value.applicationBytesDigest, value.applicationBytes, value.budgets.requestBytes, value.budgets.responseBytes,
     value.budgets.deadlineMs, value.policyMaxima.requestBytes, value.policyMaxima.responseBytes, value.policyMaxima.deadlineMs]);
-  const captureTransport = (value: unknown) => {
-    const session = exact(value, ["transport", "firstWrite"]); const transport = methods(session?.transport, ["execute", "close"]);
-    const writer = methods(session?.firstWrite, ["writeExact"]); if (transport === undefined || writer === undefined) {return;}
-    return Object.freeze({transport: transport as unknown as EgressTransportV1,
-      writeExact: writer.writeExact as (input: unknown) => unknown});
-  };
   const snapshotTransportResult = (value: unknown): TransportResult | undefined => {
     const completed = exact(value, ["status", "responseBytes", "responseDigest", "boundaryReceipt"]);
     if (completed !== undefined && Object.isFrozen(value) && completed.status === "completed" && count(completed.responseBytes) && isDigest(completed.responseDigest)) {
@@ -350,17 +328,16 @@ const createTransportValidation = (tools: ValidationTools) => {
     const uncertain = exact(value, ["status"]); return uncertain !== undefined && Object.isFrozen(value) && uncertain.status === "write_indeterminate" ?
       Object.freeze({...uncertain}) as TransportResult : undefined;
   };
-  return {snapshotObservation, committedReceipt, canonicalAuthorization, captureTransport, snapshotTransportResult, answerDigest};
+  return {snapshotObservation, committedReceipt, canonicalAuthorization, snapshotTransportResult, answerDigest};
 };
 
 export const createEgressValidation = (primitives: EgressSecurityPrimitives) => {
   const tools = createValidationTools(primitives); const request = createRequestValidation(tools);
   const authority = createAuthorityValidation(tools); const transport = createTransportValidation(tools);
   return {hash: tools.hash, exact: tools.exact,
-    captureComposition: (identity: unknown, dependencies: unknown) => captureComposition(tools, identity, dependencies),
     snapshotRequest: guarded(request.snapshotRequest), snapshotRoute: guarded(authority.snapshotRoute),
     routeBindingDigest: authority.routeBindingDigest, snapshotPolicy: guarded(authority.snapshotPolicy), snapshotObservation: guarded(transport.snapshotObservation),
     committedReceipt: guarded(transport.committedReceipt), canonicalAuthorization: transport.canonicalAuthorization,
-    captureTransport: guarded(transport.captureTransport), snapshotTransportResult: guarded(transport.snapshotTransportResult),
+    snapshotTransportResult: guarded(transport.snapshotTransportResult),
     answerDigest: transport.answerDigest};
 };

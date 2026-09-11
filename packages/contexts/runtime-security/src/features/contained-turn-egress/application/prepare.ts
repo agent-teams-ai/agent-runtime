@@ -1,8 +1,10 @@
-import type { ContainedTurnEgressRequest, ContainedTurnEgressDependencies, ProviderRouteAuthoritySnapshotV1 } from "./composition.js";
-import type { createEgressValidation } from "./validation.js";
+import type { ContainedTurnEgressRequest } from "../domain/egress-request.js";
+import type { ProviderRouteAuthoritySnapshotV1 } from "../domain/provider-route-authority.js";
+import type { createEgressValidation } from "../domain/validation.js";
+import { deny } from "../domain/results.js";
+import type { ContainedTurnEgressDependencies } from "./contained-turn-egress-dependencies.js";
 import type { EgressOneShotLifecycle } from "./lifecycle.js";
 import { frozenExact } from "./write-authorization.js";
-import { deny } from "./results.js";
 const freeze = Object.freeze;
 const routeMatches = (route: ProviderRouteAuthoritySnapshotV1, request: ContainedTurnEgressRequest) =>
   route.tenantId === request.scope.tenantId && route.projectId === request.scope.projectId &&
