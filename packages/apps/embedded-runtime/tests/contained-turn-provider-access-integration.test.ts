@@ -16,20 +16,22 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const repoRoot = findRepoRoot();
+// Load compiled internals. Node type-stripping does not rewrite `.js` specifiers
+// inside source `.ts`, so a repo-root import of `src/` fails at runtime.
 const { digestContainedTurnCanonicalValue } = await import(pathToFileURL(join(
   repoRoot,
-  "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-codecs.ts",
+  "packages/contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-codecs.js",
 )).href);
 const {
   completeContainedTurnDispatchGrantSubject,
   containedTurnGrantSettlementRequestId,
 } = await import(pathToFileURL(join(
   repoRoot,
-  "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-dispatch-authority.ts",
+  "packages/contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js",
 )).href);
 const { containedTurnIdentity } = await import(pathToFileURL(join(
   repoRoot,
-  "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-identities.ts",
+  "packages/contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-identities.js",
 )).href);
 
 const scope = Object.freeze({ projectId: "project:kernel", tenantId: "tenant:kernel" });
