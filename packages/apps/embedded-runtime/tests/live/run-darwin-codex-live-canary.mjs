@@ -5,6 +5,8 @@ import {access, chown, lstat, mkdir, open, readFile, readdir, realpath, writeFil
 import {dirname, isAbsolute, resolve as resolvePath} from "node:path";
 import {fileURLToPath, pathToFileURL} from "node:url";
 
+import {withOperatorProviderAccess} from "./darwin-operator-provider-access.mjs";
+
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
 const loadedModules = Object.freeze({
   runner: fileURLToPath(import.meta.url),
@@ -79,30 +81,43 @@ export async function consumeAttempt(manifest, outputPath) {
   if (process.getuid?.() === 0) {await chown(outputPath, manifest.native.packet.hostUid, manifest.native.packet.hostGid);}
 }
 
+async function runPreflight(manifest, manifestPath, dependencies) {
+  const prepare = dependencies.prepareRootLaunch ?? (await import("./darwin-root-launcher.mjs")).prepareDarwinRootLaunch;
+  await prepare(manifestPath);
+  const inspect = dependencies.preflightInfrastructure ??
+    (await import(pathToFileURL(manifest.runtimeRootModulePath).href)).preflightDarwinInfrastructure;
+  if (typeof inspect !== "function") {fail("infrastructure preflight is unavailable");}
+  // Real codexHome/sandbox/operatorApproval never enter the sealed manifest
+  // (finding 6); the operator supplies them out-of-band alongside
+  // evidenceDirectory. See darwin-operator-provider-access.mjs.
+  const augmented = await (dependencies.withOperatorProviderAccess ?? withOperatorProviderAccess)(manifest);
+  // No operation has been claimed yet. Route installation/currentness belongs to
+  // the owned post-claim, pre-spawn enforcement, never activation assertions.
+  const readback = await inspect(augmented);
+  if (readback?.hostEndpointReachable !== true || readback.databaseEmpty !== true ||
+      readback.sourceResultAbsent !== true || readback.providerAuthoritiesFresh !== true ||
+      readback.mutated !== false) {
+    fail("inert infrastructure readback refused");
+  }
+  process.stdout.write(`${JSON.stringify({status: "inert", sourceRevision: manifest.sourceRevision})}\n`);
+}
+
 export async function main(argv = process.argv.slice(2), dependencies = {}) {
   const [mode, activationPath, outputPath] = argv;
   if (!["--preflight", "--run-once"].includes(mode) || !activationPath || (mode === "--run-once") !== Boolean(outputPath)) {fail("invalid arguments");}
   const {manifest, manifestPath} = await (dependencies.loadActivation ?? loadAndVerifyActivation)(activationPath);
   if (mode === "--preflight") {
-    const prepare = dependencies.prepareRootLaunch ?? (await import("./darwin-root-launcher.mjs")).prepareDarwinRootLaunch;
-    await prepare(manifestPath);
-    const inspect = dependencies.preflightInfrastructure ??
-      (await import(pathToFileURL(manifest.runtimeRootModulePath).href)).preflightDarwinInfrastructure;
-    if (typeof inspect !== "function") {fail("infrastructure preflight is unavailable");}
-    // No operation has been claimed yet. Route installation/currentness belongs to
-    // the owned post-claim, pre-spawn enforcement, never activation assertions.
-    const readback = await inspect(manifest);
-    if (readback?.hostEndpointReachable !== true || readback.databaseEmpty !== true ||
-        readback.sourceResultAbsent !== true || readback.providerAuthoritiesFresh !== true ||
-        readback.mutated !== false) {
-      fail("inert infrastructure readback refused");
-    }
-    process.stdout.write(`${JSON.stringify({status: "inert", sourceRevision: manifest.sourceRevision})}\n`);
+    await runPreflight(manifest, manifestPath, dependencies);
     return;
   }
   if (process.getuid?.() !== 0) {
+    // The pinned closure's own node binary, never the ambient interpreter
+    // that happened to invoke this script (finding 4): the sudo re-exec must
+    // stay bound to the exact sealed closure like every other launch step.
+    const pinnedNode = manifest.files.find(entry => entry.role === "node")?.path;
+    if (!pinnedNode) {fail("closure has no pinned node role to re-exec under sudo");}
     const {spawn} = await import("node:child_process");
-    const elevated = spawn("/usr/bin/sudo", ["--", process.execPath, fileURLToPath(import.meta.url), ...argv],
+    const elevated = spawn("/usr/bin/sudo", ["--", pinnedNode, fileURLToPath(import.meta.url), ...argv],
       {stdio: "inherit", env: {PATH: "/usr/bin:/bin:/usr/sbin:/sbin"}});
     const code = await new Promise((resolve, reject) => {elevated.once("error", reject); elevated.once("exit", value => resolve(value ?? 1));});
     process.exitCode = code; return;

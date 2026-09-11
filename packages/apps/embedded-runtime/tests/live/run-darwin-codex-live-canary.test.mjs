@@ -53,6 +53,7 @@ test("CLI preflight passes the verified canonical activation to root packet vali
   await main(["--preflight", "/fixed/activation.json"], {
     loadActivation: async () => ({manifest: {sourceRevision: "a".repeat(40)}, manifestPath: "/canonical/activation.json"}),
     prepareRootLaunch: async path => {prepared = path;},
+    withOperatorProviderAccess: async manifest => manifest,
     preflightInfrastructure: async () => ({hostEndpointReachable: true, databaseEmpty: true,
       sourceResultAbsent: true, providerAuthoritiesFresh: true, mutated: false}),
   });
@@ -65,6 +66,7 @@ const preflightDependencies = readback => ({
   loadActivation: async () => ({manifest: {sourceRevision: "a".repeat(40),
     routeInstalled: true, routeReadbackCurrent: true}, manifestPath: "/canonical/activation.json"}),
   prepareRootLaunch: async () => {},
+  withOperatorProviderAccess: async manifest => manifest,
   preflightInfrastructure: async () => readback,
 });
 
