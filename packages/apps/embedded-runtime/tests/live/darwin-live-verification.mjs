@@ -317,6 +317,10 @@ export function createDarwinLiveVerification(input, {openFile = open, filesystem
       state.custody = undefined; state.rehydrated = undefined; state.rehydratedIdentity = undefined;
       state.artifactManifestVerified = false;
       state.resultRehydrated = false;
+      // A repeat verification cycle must re-run captureBeforePoolClose against
+      // the fresh operation snapshot above, not resolve to the prior cycle's
+      // memoized (and now stale/undefined) state.http/state.custody.
+      captured = undefined;
       return checks.verifyArtifactManifest(...args);
     }}),
     reconciliation: Object.freeze({retain: result => retainSnapshot(input, result, openFile)}),
