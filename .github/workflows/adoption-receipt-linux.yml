@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - feat/async-assembly-adapter
+      - refactor/fms-runtime-security-setup-authorization
 
 permissions:
   contents: read

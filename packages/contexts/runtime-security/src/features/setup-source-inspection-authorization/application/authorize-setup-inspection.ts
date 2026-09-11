@@ -1,5 +1,3 @@
-import { isAbsolute, relative, resolve, sep } from "node:path";
-
 import type {
   AuthorizeSetupInspection,
   AuthorizeSetupInspectionInput,
@@ -8,6 +6,7 @@ import type {
   SetupAuthorizationDiagnostic,
   TrustedSetupPathRoot,
 } from "../contracts/setup-inspection-authorization.js";
+import type { PathAlgebra } from "./ports/outbound/path-algebra.js";
 import type { PathCanonicalizer } from "./ports/outbound/path-canonicalizer.js";
 
 interface CanonicalRoot extends TrustedSetupPathRoot {
@@ -38,22 +37,23 @@ const safePathSegment = (value: string): string =>
     )
     .join("");
 
-const contains = (root: string, candidate: string): boolean => {
-  const remainder = relative(root, candidate);
+const contains = (pathAlgebra: PathAlgebra, root: string, candidate: string): boolean => {
+  const remainder = pathAlgebra.relative(root, candidate);
   return remainder === "" ||
     (
       remainder !== ".." &&
-      !remainder.startsWith(`..${sep}`) &&
-      !isAbsolute(remainder)
+      !remainder.startsWith(`..${pathAlgebra.sep}`) &&
+      !pathAlgebra.isAbsolute(remainder)
     );
 };
 
 const selectContainingRoot = (
+  pathAlgebra: PathAlgebra,
   canonicalPath: string,
   roots: readonly CanonicalRoot[],
 ): CanonicalRoot | undefined =>
   roots
-    .filter(root => contains(root.canonicalPath, canonicalPath))
+    .filter(root => contains(pathAlgebra, root.canonicalPath, canonicalPath))
     .toSorted(
       (left, right) =>
         right.canonicalPath.length - left.canonicalPath.length ||
@@ -62,13 +62,14 @@ const selectContainingRoot = (
     )[0];
 
 const selectRoot = (
+  pathAlgebra: PathAlgebra,
   canonicalLocationPath: string,
   canonicalPath: string,
   roots: readonly CanonicalRoot[],
   expectedKind?: CanonicalRoot["kind"],
 ): CanonicalRoot | undefined => {
-  const locationRoot = selectContainingRoot(canonicalLocationPath, roots);
-  const targetRoot = selectContainingRoot(canonicalPath, roots);
+  const locationRoot = selectContainingRoot(pathAlgebra, canonicalLocationPath, roots);
+  const targetRoot = selectContainingRoot(pathAlgebra, canonicalPath, roots);
   return locationRoot === targetRoot &&
     (expectedKind === undefined || locationRoot?.kind === expectedKind)
     ? locationRoot
@@ -76,14 +77,15 @@ const selectRoot = (
 };
 
 const displayPath = (
+  pathAlgebra: PathAlgebra,
   lexicalPath: string,
   canonicalPath: string,
   root: CanonicalRoot,
 ): string => {
-  const lexicalRoot = resolve(root.absolutePath);
-  const suffix = contains(lexicalRoot, lexicalPath)
-    ? relative(lexicalRoot, lexicalPath)
-    : relative(root.canonicalPath, canonicalPath);
+  const lexicalRoot = pathAlgebra.resolve(root.absolutePath);
+  const suffix = contains(pathAlgebra, lexicalRoot, lexicalPath)
+    ? pathAlgebra.relative(lexicalRoot, lexicalPath)
+    : pathAlgebra.relative(root.canonicalPath, canonicalPath);
   const label = rootLabels[root.kind];
   const safeSuffix = suffix
     .split("/")
@@ -110,6 +112,7 @@ const cancellationOptions = (
   signal === undefined ? undefined : { signal };
 
 const custodyOptions = (
+  pathAlgebra: PathAlgebra,
   root: CanonicalRoot,
   signal?: AbortSignal,
 ): {
@@ -120,13 +123,14 @@ const custodyOptions = (
   readonly signal?: AbortSignal;
 } => ({
   custodyBoundary: {
-    absolutePath: resolve(root.absolutePath),
+    absolutePath: pathAlgebra.resolve(root.absolutePath),
     canonicalPath: root.canonicalPath,
   },
   ...(signal === undefined ? {} : { signal }),
 });
 
 const canonicalizeRoots = async (
+  pathAlgebra: PathAlgebra,
   input: AuthorizeSetupInspectionInput,
   canonicalizer: PathCanonicalizer,
   signal?: AbortSignal,
@@ -135,7 +139,7 @@ const canonicalizeRoots = async (
   try {
     for (const root of input.roots) {
       signal?.throwIfAborted();
-      if (!isAbsolute(root.absolutePath)) {
+      if (!pathAlgebra.isAbsolute(root.absolutePath)) {
         return undefined;
       }
       const canonical = await canonicalizer.canonicalize(
@@ -160,9 +164,9 @@ const canonicalizeRoots = async (
 };
 
 const canonicalizeWithinRoot = async (
+  dependencies: Readonly<{ canonicalizer: PathCanonicalizer; pathAlgebra: PathAlgebra }>,
   lexicalPath: string,
   roots: readonly CanonicalRoot[],
-  canonicalizer: PathCanonicalizer,
   expectedKind?: CanonicalRoot["kind"],
   signal?: AbortSignal,
 ): Promise<
@@ -172,11 +176,13 @@ const canonicalizeWithinRoot = async (
     }
   | undefined
 > => {
+  const { canonicalizer, pathAlgebra } = dependencies;
   const observed = await canonicalizer.canonicalize(
     lexicalPath,
     cancellationOptions(signal),
   );
   const observedRoot = selectRoot(
+    pathAlgebra,
     observed.canonicalLocationPath,
     observed.absolutePath,
     roots,
@@ -196,9 +202,10 @@ const canonicalizeWithinRoot = async (
   }
   const canonical = await canonicalizer.canonicalize(
     lexicalPath,
-    custodyOptions(observedRoot, signal),
+    custodyOptions(pathAlgebra, observedRoot, signal),
   );
   const verifiedRoot = selectRoot(
+    pathAlgebra,
     canonical.canonicalLocationPath,
     canonical.absolutePath,
     roots,
@@ -210,6 +217,7 @@ const canonicalizeWithinRoot = async (
 };
 
 const authorizeExecutable = async (
+  pathAlgebra: PathAlgebra,
   request: Readonly<{
     absolutePath: string;
     required: boolean;
@@ -222,7 +230,7 @@ const authorizeExecutable = async (
   signal?: AbortSignal,
 ): Promise<AuthorizedInstallationCandidate | SetupAuthorizationDiagnostic> => {
   signal?.throwIfAborted();
-  const lexicalPath = resolve(request.absolutePath);
+  const lexicalPath = pathAlgebra.resolve(request.absolutePath);
   let canonicalPath: string;
   let authorizedFileIdentity: string | undefined;
   let hardLinked = false;
@@ -230,9 +238,9 @@ const authorizeExecutable = async (
   let root: CanonicalRoot | undefined;
   try {
     const verified = await canonicalizeWithinRoot(
+      { canonicalizer: dependencies.canonicalizer, pathAlgebra },
       lexicalPath,
       dependencies.roots,
-      dependencies.canonicalizer,
       undefined,
       signal,
     );
@@ -255,7 +263,7 @@ const authorizeExecutable = async (
       subject:
         root === undefined
           ? "unscoped-path"
-          : displayPath(lexicalPath, canonicalPath, root),
+          : displayPath(pathAlgebra, lexicalPath, canonicalPath, root),
     };
   }
   return {
@@ -263,16 +271,17 @@ const authorizeExecutable = async (
     ...(authorizedFileIdentity === undefined ? {} : { authorizedFileIdentity }),
     canonicalPath,
     custodyRoot: {
-      absolutePath: resolve(root.absolutePath),
+      absolutePath: pathAlgebra.resolve(root.absolutePath),
       canonicalPath: root.canonicalPath,
     },
-    displayPath: displayPath(lexicalPath, canonicalPath, root),
+    displayPath: displayPath(pathAlgebra, lexicalPath, canonicalPath, root),
     required: request.required,
     source: request.source,
   };
 };
 
 const collectInstallationCandidates = async (
+  pathAlgebra: PathAlgebra,
   input: AuthorizeSetupInspectionInput,
   roots: readonly CanonicalRoot[],
   canonicalizer: PathCanonicalizer,
@@ -286,7 +295,7 @@ const collectInstallationCandidates = async (
   }> = [];
 
   for (const candidate of input.installationCandidates) {
-    if (!isAbsolute(candidate.absolutePath)) {
+    if (!pathAlgebra.isAbsolute(candidate.absolutePath)) {
       diagnostics.push({
         code: candidate.absolutePath.length === 0
           ? "empty_path_entry"
@@ -301,6 +310,7 @@ const collectInstallationCandidates = async (
   const installationCandidates: AuthorizedInstallationCandidate[] = [];
   for (const request of requests) {
     const result = await authorizeExecutable(
+      pathAlgebra,
       request,
       { canonicalizer, roots },
       signal,
@@ -315,6 +325,7 @@ const collectInstallationCandidates = async (
 };
 
 const collectConfigurationSources = async (
+  pathAlgebra: PathAlgebra,
   input: AuthorizeSetupInspectionInput,
   roots: readonly CanonicalRoot[],
   canonicalizer: PathCanonicalizer,
@@ -328,11 +339,11 @@ const collectConfigurationSources = async (
       diagnostics.push({ code: "source_untrusted", subject: "workspace-config" });
       continue;
     }
-    if (!isAbsolute(source.absolutePath)) {
+    if (!pathAlgebra.isAbsolute(source.absolutePath)) {
       diagnostics.push({ code: "path_outside_scope", subject: `${source.kind}-config` });
       continue;
     }
-    const lexicalPath = resolve(source.absolutePath);
+    const lexicalPath = pathAlgebra.resolve(source.absolutePath);
     const expectedRootKind = source.kind === "workspace" ? "workspace" : "home";
     let canonicalPath: string;
     let authorizedFileIdentity: string | undefined;
@@ -341,9 +352,9 @@ const collectConfigurationSources = async (
     let root: CanonicalRoot | undefined;
     try {
       const verified = await canonicalizeWithinRoot(
+        { canonicalizer, pathAlgebra },
         lexicalPath,
         roots,
-        canonicalizer,
         expectedRootKind,
         signal,
       );
@@ -368,7 +379,7 @@ const collectConfigurationSources = async (
         subject:
           root === undefined
             ? `${source.kind}-config`
-            : displayPath(lexicalPath, canonicalPath, root),
+            : displayPath(pathAlgebra, lexicalPath, canonicalPath, root),
       });
       continue;
     }
@@ -377,10 +388,10 @@ const collectConfigurationSources = async (
       ...(authorizedFileIdentity === undefined ? {} : { authorizedFileIdentity }),
       canonicalPath,
       custodyRoot: {
-        absolutePath: resolve(root.absolutePath),
+        absolutePath: pathAlgebra.resolve(root.absolutePath),
         canonicalPath: root.canonicalPath,
       },
-      displayPath: displayPath(lexicalPath, canonicalPath, root),
+      displayPath: displayPath(pathAlgebra, lexicalPath, canonicalPath, root),
       kind: source.kind,
       observationEpoch: input.observationEpoch,
       ...(source.profileName === undefined ? {} : { profileName: source.profileName }),
@@ -394,6 +405,7 @@ const collectConfigurationSources = async (
 
 export const createAuthorizeSetupInspection = (
   canonicalizer: PathCanonicalizer,
+  pathAlgebra: PathAlgebra,
 ): AuthorizeSetupInspection => ({
   async execute(input, options) {
     if (input.observationEpoch.length === 0 || input.roots.length === 0) {
@@ -403,7 +415,7 @@ export const createAuthorizeSetupInspection = (
       };
     }
 
-    const roots = await canonicalizeRoots(input, canonicalizer, options?.signal);
+    const roots = await canonicalizeRoots(pathAlgebra, input, canonicalizer, options?.signal);
     if (roots === undefined) {
       return {
         diagnostics: [{ code: "path_outside_scope", subject: "scope" }],
@@ -411,12 +423,14 @@ export const createAuthorizeSetupInspection = (
       };
     }
     const installations = await collectInstallationCandidates(
+      pathAlgebra,
       input,
       roots,
       canonicalizer,
       options?.signal,
     );
     const configuration = await collectConfigurationSources(
+      pathAlgebra,
       input,
       roots,
       canonicalizer,

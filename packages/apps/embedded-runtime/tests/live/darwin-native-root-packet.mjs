@@ -7,7 +7,11 @@ export const DARWIN_ROOT_PACKET = Object.freeze({
 const hex = value => Buffer.from(value, "hex");
 const sha256 = bytes => createHash("sha256").update(bytes).digest();
 const u32 = (buffer, offset, value) => buffer.writeUInt32BE(value, offset);
-const u64 = (buffer, offset, value) => buffer.writeBigUInt64BE(BigInt(value), offset);
+// A device identity (e.g. a socket's sentinel st_dev, observed -1 on Darwin)
+// can be a negative signed 64-bit value; asUintN reproduces the same
+// two's-complement reinterpretation the receiving C side performs via
+// `(uint64_t)st_dev`, rather than rejecting it as out of the unsigned range.
+const u64 = (buffer, offset, value) => buffer.writeBigUInt64BE(BigInt.asUintN(64, BigInt(value)), offset);
 const text = (buffer, offset, value, absolute) => {
   if (typeof value !== "string" || value.length === 0 || value.length >= 256 ||
       !/^[\x20-\x7e]+$/.test(value) || (absolute && (!value.startsWith("/") || value.endsWith("/") ||

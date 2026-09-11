@@ -4,7 +4,7 @@ import {promisify} from "node:util";
 import {constants, fstat} from "node:fs";
 import {chmod, lstat, mkdtemp, open, readFile, realpath, rm} from "node:fs/promises";
 import {createServer, createConnection} from "node:net";
-import {join} from "node:path";
+import {dirname, join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {encodeDarwinNativeRootPacket, validateDarwinNativeRootPacketTemplate} from "./darwin-native-root-packet.mjs";
 
@@ -75,13 +75,21 @@ const requireRootDarwin = () => {
 export const statDarwinRouteSocket = async socket => {
   const fd = Reflect.get(socket, "_handle")?.fd;
   if (!Number.isInteger(fd) || fd < 0) {fail("route socket unavailable");}
-  return promisify(fstat)(fd);
+  // bigint mode: a socket fd's st_dev is a sentinel (observed -1 on Darwin), which
+  // a plain Number-mode fstat rounds to an unrepresentable value just past 2**64
+  // (double precision loss). bigint mode returns the exact signed value instead.
+  return promisify(fstat)(fd, {bigint: true});
 };
 
 export async function launchDarwinRoot(input) {
   requireRootDarwin();
   const prepared = await prepareDarwinRootLaunch(input?.activationPath);
-  const scratch = await mkdtemp("/var/tmp/agent-runtime-darwin-launch-");
+  // The manifest/grant records this scratch directory holds are captured by
+  // the native side through protected_open, which walks and requires every
+  // path ancestor back to / to be root-owned with no group/other write bit --
+  // /var/tmp (and /var itself, a symlink) can never satisfy that. Root already
+  // owns the namespace parent's own directory for the same reason; reuse it.
+  const scratch = await mkdtemp(join(dirname(prepared.native.namespaceParent), "agent-runtime-darwin-launch-"));
   const held = [];
   try {
     const manifestPath = join(scratch, "manifest.bin"), grantPath = join(scratch, "grant.bin");

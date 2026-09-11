@@ -1,9 +1,8 @@
-import { isAbsolute, join } from "node:path";
-
 import type {
   ClaudeCodePortableSourceKind,
   TrustedClaudeCodeSetupInspectionScope,
 } from "../contracts/claude-code-setup-inspection-authorization.js";
+import type { PathAlgebra } from "./ports/outbound/path-algebra.js";
 
 export interface ClaudeCodeSourceRequest {
   readonly absolutePath: string;
@@ -14,13 +13,14 @@ export interface ClaudeCodeSourceRequest {
 const MAX_PATH_LENGTH = 16_384;
 const SOURCE_SLOTS = 3;
 
-const pathIsBoundedAbsolute = (path: string): boolean =>
+const pathIsBoundedAbsolute = (pathAlgebra: PathAlgebra, path: string): boolean =>
   path.length > 0 &&
   path.length <= MAX_PATH_LENGTH &&
   !path.includes("\0") &&
-  isAbsolute(path);
+  pathAlgebra.isAbsolute(path);
 
 export const prepareClaudeCodeSourceRequests = (
+  pathAlgebra: PathAlgebra,
   scope: TrustedClaudeCodeSetupInspectionScope,
 ): readonly ClaudeCodeSourceRequest[] | undefined => {
   const requests = scope.sourcePaths.map(source => ({
@@ -29,13 +29,13 @@ export const prepareClaudeCodeSourceRequests = (
     rootKind: source.kind === "user" ? "home" as const : "workspace" as const,
   }));
   const expectedPaths: Readonly<Record<ClaudeCodePortableSourceKind, string>> = {
-    "project-local": join(
+    "project-local": pathAlgebra.join(
       scope.workspaceRoot,
       ".claude",
       "settings.local.json",
     ),
-    "shared-project": join(scope.workspaceRoot, ".claude", "settings.json"),
-    user: join(scope.homeRoot, ".claude", "settings.json"),
+    "shared-project": pathAlgebra.join(scope.workspaceRoot, ".claude", "settings.json"),
+    user: pathAlgebra.join(scope.homeRoot, ".claude", "settings.json"),
   };
   const invalid =
     requests.length !== SOURCE_SLOTS ||
@@ -45,7 +45,7 @@ export const prepareClaudeCodeSourceRequests = (
       request.kind !== "shared-project" &&
       request.kind !== "project-local"
     ) ||
-    requests.some(request => !pathIsBoundedAbsolute(request.absolutePath)) ||
+    requests.some(request => !pathIsBoundedAbsolute(pathAlgebra, request.absolutePath)) ||
     requests.some(request => request.absolutePath !== expectedPaths[request.kind]);
   return invalid ? undefined : requests;
 };

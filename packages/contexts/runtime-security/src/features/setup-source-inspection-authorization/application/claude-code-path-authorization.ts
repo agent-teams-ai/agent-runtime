@@ -1,6 +1,5 @@
-import { isAbsolute, relative, resolve, sep } from "node:path";
-
 import type { TrustedClaudeCodeSetupInspectionScope } from "../contracts/claude-code-setup-inspection-authorization.js";
+import type { PathAlgebra } from "./ports/outbound/path-algebra.js";
 import type {
   CanonicalPathObservation,
   PathCanonicalizer,
@@ -37,63 +36,42 @@ const safePathSegment = (value: string): string =>
     )
     .join("");
 
-const contains = (root: string, candidate: string): boolean => {
-  const remainder = relative(root, candidate);
-  return remainder === "" ||
-    (
-      remainder !== ".." &&
-      !remainder.startsWith(`..${sep}`) &&
-      !isAbsolute(remainder)
-    );
+export type VerifiedClaudeCodePath =
+  | {
+      readonly observation: CanonicalPathObservation;
+      readonly root: ClaudeCodeCanonicalRoot;
+      readonly status: "verified";
+    }
+  | { readonly status: "outside" }
+  | { readonly status: "unstable" };
+
+export const compareClaudeCodeText = (left: string, right: string): number =>
+  left === right ? 0 : left < right ? -1 : 1;
+
+export const rethrowClaudeCodeCancellation = (
+  error: unknown,
+  signal?: AbortSignal,
+): void => {
+  signal?.throwIfAborted();
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    error.name === "AbortError"
+  ) {
+    throw error;
+  }
 };
 
-const pathIsBoundedAbsolute = (path: string): boolean =>
-  path.length > 0 &&
-  path.length <= MAX_PATH_LENGTH &&
-  !path.includes("\0") &&
-  isAbsolute(path);
-
-const selectContainingRoot = (
-  path: string,
-  roots: readonly ClaudeCodeCanonicalRoot[],
-): ClaudeCodeCanonicalRoot | undefined =>
-  roots
-    .filter(root => contains(root.canonicalPath, path))
-    .toSorted(
-      (left, right) =>
-        right.canonicalPath.length - left.canonicalPath.length ||
-        compareClaudeCodeText(rootLabels[left.kind], rootLabels[right.kind]) ||
-        compareClaudeCodeText(left.canonicalPath, right.canonicalPath),
-    )[0];
-
-const selectContainingLexicalRoot = (
-  path: string,
-  roots: readonly ClaudeCodeCanonicalRoot[],
-): ClaudeCodeCanonicalRoot | undefined =>
-  roots
-    .filter(root => contains(resolve(root.absolutePath), path))
-    .toSorted(
-      (left, right) =>
-        right.absolutePath.length - left.absolutePath.length ||
-        compareClaudeCodeText(rootLabels[left.kind], rootLabels[right.kind]) ||
-        compareClaudeCodeText(left.absolutePath, right.absolutePath),
-    )[0];
-
-const selectSameRoot = (
+export const invalidExistingClaudeCodePath = (
   observation: CanonicalPathObservation,
-  roots: readonly ClaudeCodeCanonicalRoot[],
-  expectedKind?: ClaudeCodeRootKind,
-): ClaudeCodeCanonicalRoot | undefined => {
-  const locationRoot = selectContainingRoot(
-    observation.canonicalLocationPath,
-    roots,
+): boolean =>
+  observation.exists &&
+  (
+    observation.isFile !== true ||
+    observation.fileIdentity === undefined ||
+    (observation.linkCount ?? 0) !== 1
   );
-  const targetRoot = selectContainingRoot(observation.absolutePath, roots);
-  return locationRoot === targetRoot &&
-    (expectedKind === undefined || locationRoot?.kind === expectedKind)
-    ? locationRoot
-    : undefined;
-};
 
 const observationsEqual = (
   left: CanonicalPathObservation,
@@ -111,7 +89,77 @@ const cancellationOptions = (
 ): { readonly signal: AbortSignal } | undefined =>
   signal === undefined ? undefined : { signal };
 
+const canonicalize = async (
+  canonicalizer: PathCanonicalizer,
+  path: string,
+  options?: Parameters<PathCanonicalizer["canonicalize"]>[1],
+): Promise<CanonicalPathObservation> => {
+  options?.signal?.throwIfAborted();
+  const observation = await canonicalizer.canonicalize(path, options);
+  options?.signal?.throwIfAborted();
+  return observation;
+};
+
+const contains = (pathAlgebra: PathAlgebra, root: string, candidate: string): boolean => {
+  const remainder = pathAlgebra.relative(root, candidate);
+  return remainder === "" ||
+    (
+      remainder !== ".." &&
+      !remainder.startsWith(`..${pathAlgebra.sep}`) &&
+      !pathAlgebra.isAbsolute(remainder)
+    );
+};
+
+const pathIsBoundedAbsolute = (pathAlgebra: PathAlgebra, path: string): boolean =>
+  path.length > 0 &&
+  path.length <= MAX_PATH_LENGTH &&
+  !path.includes("\0") &&
+  pathAlgebra.isAbsolute(path);
+
+const selectContainingRoot = (
+  pathAlgebra: PathAlgebra,
+  path: string,
+  roots: readonly ClaudeCodeCanonicalRoot[],
+): ClaudeCodeCanonicalRoot | undefined =>
+  roots
+    .filter(root => contains(pathAlgebra, root.canonicalPath, path))
+    .toSorted(
+      (left, right) =>
+        right.canonicalPath.length - left.canonicalPath.length ||
+        compareClaudeCodeText(rootLabels[left.kind], rootLabels[right.kind]) ||
+        compareClaudeCodeText(left.canonicalPath, right.canonicalPath),
+    )[0];
+
+const selectContainingLexicalRoot = (
+  pathAlgebra: PathAlgebra,
+  path: string,
+  roots: readonly ClaudeCodeCanonicalRoot[],
+): ClaudeCodeCanonicalRoot | undefined =>
+  roots
+    .filter(root => contains(pathAlgebra, pathAlgebra.resolve(root.absolutePath), path))
+    .toSorted(
+      (left, right) =>
+        right.absolutePath.length - left.absolutePath.length ||
+        compareClaudeCodeText(rootLabels[left.kind], rootLabels[right.kind]) ||
+        compareClaudeCodeText(left.absolutePath, right.absolutePath),
+    )[0];
+
+const selectSameRoot = (
+  pathAlgebra: PathAlgebra,
+  observation: CanonicalPathObservation,
+  roots: readonly ClaudeCodeCanonicalRoot[],
+  expectedKind?: ClaudeCodeRootKind,
+): ClaudeCodeCanonicalRoot | undefined => {
+  const locationRoot = selectContainingRoot(pathAlgebra, observation.canonicalLocationPath, roots);
+  const targetRoot = selectContainingRoot(pathAlgebra, observation.absolutePath, roots);
+  return locationRoot === targetRoot &&
+    (expectedKind === undefined || locationRoot?.kind === expectedKind)
+    ? locationRoot
+    : undefined;
+};
+
 const custodyOptions = (
+  pathAlgebra: PathAlgebra,
   root: ClaudeCodeCanonicalRoot,
   signal?: AbortSignal,
 ): {
@@ -122,7 +170,7 @@ const custodyOptions = (
   readonly signal?: AbortSignal;
 } => ({
   custodyBoundary: {
-    absolutePath: resolve(root.absolutePath),
+    absolutePath: pathAlgebra.resolve(root.absolutePath),
     canonicalPath: root.canonicalPath,
   },
   ...(signal === undefined ? {} : { signal }),
@@ -143,40 +191,18 @@ const executableCustodyOptions = (
   ...(signal === undefined ? {} : { signal }),
 });
 
-const canonicalize = async (
-  canonicalizer: PathCanonicalizer,
-  path: string,
-  options?: Parameters<PathCanonicalizer["canonicalize"]>[1],
-): Promise<CanonicalPathObservation> => {
-  options?.signal?.throwIfAborted();
-  const observation = await canonicalizer.canonicalize(path, options);
-  options?.signal?.throwIfAborted();
-  return observation;
-};
-
-export type VerifiedClaudeCodePath =
-  | {
-      readonly observation: CanonicalPathObservation;
-      readonly root: ClaudeCodeCanonicalRoot;
-      readonly status: "verified";
-    }
-  | { readonly status: "outside" }
-  | { readonly status: "unstable" };
-
-export const compareClaudeCodeText = (left: string, right: string): number =>
-  left === right ? 0 : left < right ? -1 : 1;
-
 export const displayClaudeCodePath = (
+  pathAlgebra: PathAlgebra,
   lexicalPath: string,
   canonicalPath: string,
   root: ClaudeCodeCanonicalRoot,
 ): string => {
-  const lexicalRoot = resolve(root.absolutePath);
-  const suffix = contains(lexicalRoot, lexicalPath)
-    ? relative(lexicalRoot, lexicalPath)
-    : relative(root.canonicalPath, canonicalPath);
+  const lexicalRoot = pathAlgebra.resolve(root.absolutePath);
+  const suffix = contains(pathAlgebra, lexicalRoot, lexicalPath)
+    ? pathAlgebra.relative(lexicalRoot, lexicalPath)
+    : pathAlgebra.relative(root.canonicalPath, canonicalPath);
   const safeSuffix = suffix
-    .split(sep)
+    .split(pathAlgebra.sep)
     .filter(Boolean)
     .map(safePathSegment)
     .join("/");
@@ -185,22 +211,8 @@ export const displayClaudeCodePath = (
     : `${rootLabels[root.kind]}/${safeSuffix}`;
 };
 
-export const rethrowClaudeCodeCancellation = (
-  error: unknown,
-  signal?: AbortSignal,
-): void => {
-  signal?.throwIfAborted();
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "name" in error &&
-    error.name === "AbortError"
-  ) {
-    throw error;
-  }
-};
-
 export const canonicalizeClaudeCodeRoots = async (
+  pathAlgebra: PathAlgebra,
   scope: TrustedClaudeCodeSetupInspectionScope,
   canonicalizer: PathCanonicalizer,
   signal?: AbortSignal,
@@ -215,7 +227,7 @@ export const canonicalizeClaudeCodeRoots = async (
   ];
   if (
     requests.length !== ROOT_SLOTS ||
-    requests.some(root => !pathIsBoundedAbsolute(root.absolutePath))
+    requests.some(root => !pathIsBoundedAbsolute(pathAlgebra, root.absolutePath))
   ) {
     return undefined;
   }
@@ -237,7 +249,7 @@ export const canonicalizeClaudeCodeRoots = async (
         return undefined;
       }
       roots.push({
-        absolutePath: resolve(request.absolutePath),
+        absolutePath: pathAlgebra.resolve(request.absolutePath),
         canonicalPath: observation.absolutePath,
         kind: request.kind,
       });
@@ -259,18 +271,19 @@ export const canonicalizeClaudeCodeRoots = async (
 };
 
 export const verifyClaudeCodePathWithinRoot = async (
+  dependencies: Readonly<{ canonicalizer: PathCanonicalizer; pathAlgebra: PathAlgebra }>,
   lexicalPath: string,
   roots: readonly ClaudeCodeCanonicalRoot[],
-  canonicalizer: PathCanonicalizer,
   expectedKind?: ClaudeCodeRootKind,
   signal?: AbortSignal,
 ): Promise<VerifiedClaudeCodePath> => {
+  const { canonicalizer, pathAlgebra } = dependencies;
   const first = await canonicalize(
     canonicalizer,
     lexicalPath,
     cancellationOptions(signal),
   );
-  const firstRoot = selectSameRoot(first, roots, expectedKind);
+  const firstRoot = selectSameRoot(pathAlgebra, first, roots, expectedKind);
   if (firstRoot === undefined) {
     return { status: "outside" };
   }
@@ -280,9 +293,9 @@ export const verifyClaudeCodePathWithinRoot = async (
   const second = await canonicalize(
     canonicalizer,
     lexicalPath,
-    custodyOptions(firstRoot, signal),
+    custodyOptions(pathAlgebra, firstRoot, signal),
   );
-  const secondRoot = selectSameRoot(second, roots, expectedKind);
+  const secondRoot = selectSameRoot(pathAlgebra, second, roots, expectedKind);
   if (secondRoot !== firstRoot || !observationsEqual(first, second)) {
     return { status: "unstable" };
   }
@@ -290,12 +303,13 @@ export const verifyClaudeCodePathWithinRoot = async (
 };
 
 export const verifyClaudeCodeExecutablePath = async (
+  pathAlgebra: PathAlgebra,
   lexicalPath: string,
   roots: readonly ClaudeCodeCanonicalRoot[],
   canonicalizer: PathCanonicalizer,
   signal?: AbortSignal,
 ): Promise<VerifiedClaudeCodePath> => {
-  const lexicalRoot = selectContainingLexicalRoot(lexicalPath, roots);
+  const lexicalRoot = selectContainingLexicalRoot(pathAlgebra, lexicalPath, roots);
   if (lexicalRoot === undefined) {
     return { status: "outside" };
   }
@@ -317,13 +331,3 @@ export const verifyClaudeCodeExecutablePath = async (
   }
   return { observation: second, root: lexicalRoot, status: "verified" };
 };
-
-export const invalidExistingClaudeCodePath = (
-  observation: CanonicalPathObservation,
-): boolean =>
-  observation.exists &&
-  (
-    observation.isFile !== true ||
-    observation.fileIdentity === undefined ||
-    (observation.linkCount ?? 0) !== 1
-  );

@@ -21,8 +21,12 @@ static int close_owned(int *fd) {
   int old=*fd; *fd=-1; return old<0 || close(old)==0;
 }
 static int acl_empty(int fd) {
+  errno=0;
   acl_t acl=acl_get_fd_np(fd,ACL_TYPE_EXTENDED);
-  if (!acl) return 0;
+  /* The overwhelmingly common case -- a file that has never had an ACL set --
+   * reports back as a NULL acl_t with ENOENT ("the ACL does not exist"), not
+   * a valid zero-entry list; that is trivially empty, not a failure. */
+  if (!acl) return errno==ENOENT;
   int empty=0;
   if (acl_valid(acl)==0) {
     acl_entry_t entry;

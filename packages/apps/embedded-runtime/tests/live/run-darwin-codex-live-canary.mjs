@@ -124,7 +124,13 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
   }
   await consumeAttempt(manifest, outputPath);
   const {spawn} = await import("node:child_process");
-  const child = spawn(manifest.native.rootLauncherPath, [], {
+  // Same reasoning as the sudo re-exec above (finding 4): the root launcher's
+  // own #!/usr/bin/env node shebang cannot resolve against the deliberately
+  // minimal PATH below, so it must be launched via the pinned closure's own
+  // node binary rather than relying on shebang/PATH resolution.
+  const launcherNode = manifest.files.find(entry => entry.role === "node")?.path;
+  if (!launcherNode) {fail("closure has no pinned node role to launch the root launcher under");}
+  const child = spawn(launcherNode, [manifest.native.rootLauncherPath], {
     stdio: ["ignore", "inherit", "inherit"],
     env: {PATH: "/usr/bin:/bin:/usr/sbin:/sbin"},
   });
