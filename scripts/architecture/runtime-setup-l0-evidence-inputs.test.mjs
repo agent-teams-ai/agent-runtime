@@ -171,3 +171,27 @@ test("configured input symlinks and unresolved index stages remain rejected", as
   });
   await assert.rejects(conflicted.artifactDigests(), /unresolved Git index stage/u);
 });
+
+
+test("historical digest readback stays bound to old Git bytes after current source changes", async t => {
+  const f = await fixture(t);
+  assert.deepEqual(await f.inputs.artifactDigestsAtRevision(f.revision), f.digests);
+  await f.write("packages/apps/embedded-runtime/src/input.ts", "new async construction\n");
+  f.git("add", "--", "packages/apps/embedded-runtime/src/input.ts");
+  f.git("commit", "--quiet", "-m", "synthetic adoption");
+  assert.notDeepEqual(await f.inputs.artifactDigests(), f.digests);
+  assert.deepEqual(await f.inputs.artifactDigestsAtRevision(f.revision), f.digests);
+  await assert.rejects(f.inputs.artifactDigestsAtRevision("HEAD"), /exact/u);
+  await assert.rejects(f.inputs.artifactDigestsAtRevision("f".repeat(40)));
+});
+
+test("historical digest reads binary bytes without UTF-8 replacement", async t => {
+  const f = await fixture(t);
+  const path = "packages/contexts/agent-execution/tests/fixtures/binary.bin";
+  await f.write(path, Buffer.from([0, 255, 128, 254]));
+  f.git("add", "--", path); f.git("commit", "--quiet", "-m", "synthetic binary fixture");
+  const inputs = createEvidenceInputs({ repositoryRoot: f.repositoryRoot, git: f.git,
+    readRevisionFile: (revision, name) => execFileSync("git", ["show", `${revision}:${name}`], { cwd: f.repositoryRoot }),
+  });
+  assert.deepEqual(await inputs.artifactDigestsAtRevision(f.git("rev-parse", "HEAD").trim()), await inputs.artifactDigests());
+});

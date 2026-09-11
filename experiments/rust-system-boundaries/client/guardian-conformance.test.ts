@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import test from "node:test";
@@ -233,24 +233,68 @@ const cleanupSyntheticOperation = async (
   stateRoot: string,
   operationId: string,
   opaqueFence: string,
-  evidence: SyntheticProcessEvidence,
+  evidence?: SyntheticProcessEvidence,
 ): Promise<void> => {
   const failures: unknown[] = [];
+  if (evidence === undefined) {
+    try {
+      evidence = await waitForSyntheticProcessEvidence(stateRoot, operationId);
+    } catch (error) {
+      failures.push(error);
+    }
+  }
   try {
     await requestGuardianTermination(preferredClient, stateRoot, operationId, opaqueFence);
   } catch (error) {
     failures.push(error);
   }
-  try {
-    await assertSyntheticProcessesGone(evidence, 1_000);
-    return;
-  } catch (error) {
-    failures.push(error);
+  if (evidence !== undefined) {
+    try {
+      await assertSyntheticProcessesGone(evidence, 1_000);
+      return;
+    } catch (error) {
+      failures.push(error);
+    }
   }
   throw new AggregateError(
     failures,
     `Guardian cleanup failed closed; synthetic evidence retained at ${stateRoot}`,
   );
+};
+
+const finishSyntheticTest = async (
+  client: GuardianClient | undefined,
+  stateRoot: string,
+  operationId: string,
+  opaqueFence: string,
+  outcome: {
+    spawnAttempted: boolean;
+    evidence: SyntheticProcessEvidence | undefined;
+    testError: unknown;
+  },
+): Promise<void> => {
+  const { spawnAttempted, evidence, testError } = outcome;
+  let cleanupError: unknown;
+  if (spawnAttempted) {
+    try {
+      await cleanupSyntheticOperation(client, stateRoot, operationId, opaqueFence, evidence);
+    } catch (error) {
+      cleanupError = error;
+    }
+  }
+  await client?.close().catch(() => {});
+  if (cleanupError === undefined) {
+    await rm(stateRoot, { recursive: true, force: true });
+  }
+  if (testError !== undefined && cleanupError !== undefined) {
+    throw new AggregateError([testError, cleanupError], "test and exact synthetic cleanup failed");
+  }
+  if (testError !== undefined) {
+    throw testError;
+  }
+  if (cleanupError !== undefined) {
+    throw cleanupError;
+  }
 };
 
 test("TypeScript response decoder rejects schema drift", () => {
@@ -308,10 +352,12 @@ test(
     const opaqueFence = `v1-fence-${process.pid}-${Date.now()}`;
     let client: GuardianClient | undefined;
     let evidence: SyntheticProcessEvidence | undefined;
+    let spawnAttempted = false;
     let testError: unknown;
 
     try {
       client = await GuardianClient.start(stateRoot);
+      spawnAttempted = true;
       const spawned = await client.request(
         v1SpawnRequest("v1-spawn", operationId, opaqueFence),
       );
@@ -329,36 +375,9 @@ test(
       testError = error;
     }
 
-    let cleanupError: unknown;
-    if (evidence !== undefined) {
-      try {
-        await cleanupSyntheticOperation(
-          client,
-          stateRoot,
-          operationId,
-          opaqueFence,
-          evidence,
-        );
-      } catch (error) {
-        cleanupError = error;
-      }
-    }
-    await client?.close().catch(() => {});
-    if (cleanupError === undefined) {
-      await rm(stateRoot, { recursive: true, force: true });
-    }
-    if (testError !== undefined && cleanupError !== undefined) {
-      throw new AggregateError(
-        [testError, cleanupError],
-        "N-1 test and exact synthetic cleanup failed",
-      );
-    }
-    if (testError !== undefined) {
-      throw testError;
-    }
-    if (cleanupError !== undefined) {
-      throw cleanupError;
-    }
+    await finishSyntheticTest(
+      client, stateRoot, operationId, opaqueFence, { spawnAttempted, evidence, testError },
+    );
   },
 );
 
@@ -373,7 +392,6 @@ test(
     let restartedGuardian: GuardianClient | undefined;
     let processEvidence: SyntheticProcessEvidence | undefined;
     let spawned = false;
-    let livenessProven = false;
     let testError: unknown;
 
     try {
@@ -461,44 +479,110 @@ test(
         assert.equal(terminatedObservation.state, "terminated");
       }
       await assertSyntheticProcessesGone(processEvidence);
-      livenessProven = true;
     } catch (error) {
       testError = error;
     }
 
-    let cleanupError: unknown;
-    if (spawned) {
-      try {
-        processEvidence ??= await waitForSyntheticProcessEvidence(stateRoot, operationId);
-        if (!livenessProven) {
-          await cleanupSyntheticOperation(
-            restartedGuardian ?? firstGuardian,
-            stateRoot,
-            operationId,
-            opaqueFence,
-            processEvidence,
-          );
-        }
-        await assertSyntheticProcessesGone(processEvidence, 1_000);
-      } catch (error) {
-        cleanupError = error;
-      }
-    }
-
-    await restartedGuardian?.close().catch(() => {});
-    await firstGuardian?.close().catch(() => {});
-    if (cleanupError === undefined) {
-      await rm(stateRoot, { recursive: true, force: true });
-    }
-
-    if (testError !== undefined && cleanupError !== undefined) {
-      throw new AggregateError([testError, cleanupError], "test and exact synthetic cleanup failed");
-    }
-    if (testError !== undefined) {
-      throw testError;
-    }
-    if (cleanupError !== undefined) {
-      throw cleanupError;
+    try {
+      await finishSyntheticTest(
+        restartedGuardian ?? firstGuardian,
+        stateRoot,
+        operationId,
+        opaqueFence,
+        { spawnAttempted: spawned, evidence: processEvidence, testError },
+      );
+    } finally {
+      await firstGuardian?.close().catch(() => {});
     }
   },
 );
+
+for (const missingEvidence of [false, true]) {
+  test(
+    `spawn response timeout cleanup ${missingEvidence ? "attempts termination and retains missing evidence" : "recovers evidence and proves the exact tree gone"}`,
+    { timeout: 30_000 },
+    async () => {
+      const stateRoot = await mkdtemp(join(tmpdir(), "TEST-guardian-timeout-cleanup-"));
+      const operationId = `cleanup-timeout-${process.pid}-${Date.now()}`;
+      const opaqueFence = `cleanup-fence-${process.pid}-${Date.now()}`;
+      let client: GuardianClient | undefined;
+      let proof: SyntheticProcessEvidence | undefined;
+      let spawnAttempted = false;
+      try {
+        client = await GuardianClient.start(stateRoot);
+        spawnAttempted = true;
+        let originalTimeout: unknown;
+        try {
+          // One real spawn, deliberately no response. Never retry this spawn.
+          await client.request(
+            spawnRequest("cleanup-dropped-response", operationId, opaqueFence, true),
+            250,
+          );
+        } catch (error) {
+          originalTimeout = error;
+        }
+        assert.ok(originalTimeout instanceof Error);
+        assert.match(originalTimeout.message, /response for cleanup-dropped-response timed out/);
+
+        // Independent test witness: the cleanup path receives no in-memory evidence.
+        proof = await waitForSyntheticProcessEvidence(stateRoot, operationId);
+        if (missingEvidence) {
+          await rm(join(stateRoot, "operations", operationId, "descendant.pid"));
+        }
+        await assert.rejects(
+          finishSyntheticTest(
+            client, stateRoot, operationId, opaqueFence,
+            { spawnAttempted, evidence: undefined, testError: originalTimeout },
+          ),
+          (error: unknown) => {
+            if (!missingEvidence) {
+              assert.equal(error, originalTimeout, "successful cleanup must preserve the original timeout");
+              return true;
+            }
+            assert.ok(error instanceof AggregateError);
+            assert.equal(error.errors[0], originalTimeout);
+            const cleanupError = error.errors[1] as unknown;
+            assert.ok(cleanupError instanceof AggregateError);
+            assert.match(cleanupError.message, /synthetic evidence retained/);
+            assert.ok(cleanupError.errors.some((failure: unknown) =>
+              failure instanceof Error && /did not publish complete live PID evidence/.test(failure.message),
+            ));
+            return true;
+          },
+        );
+        await assertSyntheticProcessesGone(proof);
+        if (missingEvidence) {
+          assert.ok((await stat(stateRoot)).isDirectory());
+          const custody = asRecord(
+            JSON.parse(await readFile(join(stateRoot, "custody", `${operationId}.json`), "utf8")) as unknown,
+            "retained terminated custody",
+          );
+          assert.equal(custody.state, "terminated", "failed evidence recovery must still send terminate");
+          assert.equal(custody.spawn_attempts, 1);
+        } else {
+          await assert.rejects(stat(stateRoot), { code: "ENOENT" });
+        }
+      } finally {
+        // Dispose the negative fixture only with the independent exact PID proof.
+        // Any failure to establish that proof retains its state for investigation.
+        try {
+          if (proof !== undefined) {
+            try {
+              await assertSyntheticProcessesGone(proof, 100);
+            } catch {
+              await cleanupSyntheticOperation(client, stateRoot, operationId, opaqueFence, proof);
+            }
+            await rm(stateRoot, { recursive: true, force: true });
+          } else if (spawnAttempted) {
+            await cleanupSyntheticOperation(client, stateRoot, operationId, opaqueFence);
+            await rm(stateRoot, { recursive: true, force: true });
+          } else {
+            await rm(stateRoot, { recursive: true, force: true });
+          }
+        } finally {
+          await client?.close().catch(() => {});
+        }
+      }
+    },
+  );
+}

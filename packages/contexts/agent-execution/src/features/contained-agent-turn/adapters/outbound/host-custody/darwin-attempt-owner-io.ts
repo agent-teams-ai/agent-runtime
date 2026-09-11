@@ -67,7 +67,6 @@ export function nativeExecution() {
     lost(error: Error): void {rejectImage(error); rejectExit(error); stdout.lost(error); stderr.lost(error);},
   });
 }
-
 export function nativeInput(
   request: (command: DarwinAttemptOwnerCommand, argument?: number, payload?: Buffer) => Promise<DarwinAttemptOwnerEvent>,
   current: () => boolean, lose: (error: unknown) => void,
@@ -104,4 +103,3 @@ export function nativeInput(
     },
   });
 }
-

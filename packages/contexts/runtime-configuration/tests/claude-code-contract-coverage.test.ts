@@ -4,17 +4,13 @@ import test from "node:test";
 import { readCustodiedRepositoryFile } from "../../../../scripts/architecture/ar2-evidence-custody.mjs";
 import { readAr2CoverageTestSource } from "../../../../scripts/architecture/validate-ar2-contract-artifacts.mjs";
 
+import { ar2InventoryExecutes, readAr2TestExecutionInventory } from "../../../../scripts/architecture/ar2-test-execution-inventory.mjs";
+
 const fixtureRoot = "packages/contexts/runtime-configuration/tests/fixtures/claude-code-settings";
 const readJson = async (path: string, allowedRoot: string) => JSON.parse(
   (await readCustodiedRepositoryFile(path, { allowedRoot })).toString("utf8"),
 );
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-const testScriptExecutes = (script: string, relativeTestFile: string) => script
-  .split(/\s+/u)
-  .some(token => new RegExp(
-    `^${escapeRegExp(token).replaceAll("\\*", "[^/]+")}$`,
-    "u",
-  ).test(relativeTestFile));
 
 test("requires exact executable coverage for every frozen AR-2 fixture", async t => {
   const [freeze, manifest, negatives, coverage] = await Promise.all([
@@ -54,9 +50,9 @@ test("requires exact executable coverage for every frozen AR-2 fixture", async t
         1,
         `${entry.id} must name exactly one declared Node test in ${entry.testFile}`,
       );
-      const packageManifest = await readJson(`${packageRoot}/package.json`, packageRoot);
+      const inventory = await readAr2TestExecutionInventory(packageRoot);
       assert.equal(
-        testScriptExecutes(packageManifest.scripts?.test ?? "", relativeTestFile),
+        ar2InventoryExecutes(inventory, relativeTestFile),
         true,
         `${entry.id} test file must be executed by ${packageRoot}/package.json`,
       );

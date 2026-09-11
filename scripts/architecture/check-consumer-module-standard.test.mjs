@@ -19,7 +19,7 @@ const fresh = async () => {
   };
 };
 
-test("pending Consumer Module Standard profile matches the exact legacy boundary", async () => {
+test("pending contained-turn profile matches the exact legacy boundary", async () => {
   assert.deepEqual(validateConsumerModuleStandard(await fresh()), {
     legacyBoundaries: 1,
     status: "pending",
@@ -55,7 +55,7 @@ test("rejects missing governed paths and proposed decision lifecycle drift", asy
   assert.throws(() => validateConsumerModuleStandard(contradictory), /body must declare proposed/u);
 
   const registered = await fresh();
-  registered.decisionRegistry.decisions.push({id: "ADR-0015"});
+  registered.decisionRegistry.decisions.push({id: "ADR-0016"});
   assert.throws(() => validateConsumerModuleStandard(registered), /cannot enter the immutable/u);
 });
 

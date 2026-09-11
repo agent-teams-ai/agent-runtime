@@ -1,3 +1,4 @@
+import { registerAdoptionEvidenceTests } from "./runtime-setup-l0-evidence-adoption.test.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -7,6 +8,8 @@ import {
   parseTrackedEvidenceEntries,
   validateStoredReportShape,
 } from "./runtime-setup-l0-evidence-validation.mjs";
+
+registerAdoptionEvidenceTests();
 
 const changes = [{ id: "slice", revision: "a".repeat(40) }];
 const report = {
@@ -135,3 +138,6 @@ test("rejects drift even when historical values cannot be recomputed", () => {
     /historicalChanges\[0\]\.composition fields drifted/u,
   );
 });
+
+// Keep paired-platform rejecting fixtures on the existing architecture gate.
+await import("./runtime-setup-l0-evidence-v2.test.mjs");

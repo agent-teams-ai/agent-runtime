@@ -25,6 +25,8 @@ catalog:
   xstate: "5.32.5"
   yaml: "2.9.0"
   zod: "4.4.3"
+  '@get-modular/core': 0.1.0
+  '@get-modular/assembly': 0.1.0
 allowBuilds:
   msgpackr-extract: false
   opencode-ai: true
@@ -43,3 +45,5 @@ minimumReleaseAgeExclude:
   - '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.251'
   - '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.251'
   - '@anthropic-ai/claude-agent-sdk@0.3.251'
+  - '@get-modular/assembly@0.1.0'
+  - '@get-modular/core@0.1.0'

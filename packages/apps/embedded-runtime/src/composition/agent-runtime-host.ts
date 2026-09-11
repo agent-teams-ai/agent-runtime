@@ -1,29 +1,7 @@
+import { randomBytes } from "node:crypto";
 import { types } from "node:util";
 import { copyContainedTurnAccessAuthority } from "./contained-turn-access-authority.js";
 import type { AuthorityBoundContainedTurnCapability } from "./contained-turn-authority-capability.js";
-import { randomBytes } from "node:crypto";
-
-import {
-  createNodeExecutableFileObserver,
-  createRuntimeInstallationDiscoveryFeature,
-} from "@agent-teams/agent-execution/composition";
-import {
-  createClaudeCodeConfigurationInspectionFeature,
-  createClaudeCodeConfigurationSemanticClassifierV2,
-  createClaudeCodeConfigurationSourceReaderAdapter,
-  createCodexConfigurationInspectionFeature,
-  createCodexConfigurationSemanticClassifierV1,
-  createNodeClaudeCodeConfigurationDigest,
-  createNodeCodexConfigurationDigest,
-  createNodeConfigurationSourceReader,
-  createSmolTomlParser,
-  createStrictClaudeCodeJsonParser,
-} from "@agent-teams/runtime-configuration/composition";
-import {
-  createNodePathCanonicalizer,
-  createSetupInspectionAuthorizationFeature,
-} from "@agent-teams/runtime-security/composition";
-
 import {
   createBuildClaudeCodeSetupView,
   type BuildClaudeCodeSetupViewDependencies,
@@ -45,8 +23,6 @@ import {
   type ContainedTurnCompositionScope,
   type TrustedRuntimeAccessScope,
 } from "./trusted-runtime-access-scope.js";
-import { createCodexSetupInspectionPlanner } from "./codex-setup-inspection-planner.js";
-import { createClaudeCodeSetupInspectionPlanner } from "./claude-code-setup-inspection-planner.js";
 import {
   createContainedTurnSubmissionCoordinator,
   createContainedTurnRuntimeAccess,
@@ -382,44 +358,5 @@ export const createAgentRuntimeHost = (
     },
     dispose: lifecycle.dispose,
     [Symbol.asyncDispose]: lifecycle.dispose,
-  });
-};
-
-export const createDefaultAgentRuntimeHost = (): AgentRuntimeHost => {
-  const security = createSetupInspectionAuthorizationFeature({
-    pathCanonicalizer: createNodePathCanonicalizer(),
-  });
-  const execution = createRuntimeInstallationDiscoveryFeature({
-    executableFileObserver: createNodeExecutableFileObserver(),
-  });
-  const nodeConfigurationSourceReader = createNodeConfigurationSourceReader();
-  const configuration = createCodexConfigurationInspectionFeature({
-    digest: createNodeCodexConfigurationDigest(),
-    parser: createSmolTomlParser(),
-    semanticClassifier: createCodexConfigurationSemanticClassifierV1(),
-    sourceIdentityKey: randomBytes(32),
-    sourceReader: nodeConfigurationSourceReader,
-  });
-  const claudeConfiguration = createClaudeCodeConfigurationInspectionFeature({
-    digest: createNodeClaudeCodeConfigurationDigest(),
-    parser: createStrictClaudeCodeJsonParser(),
-    semanticClassifier: createClaudeCodeConfigurationSemanticClassifierV2(),
-    sourceIdentityKey: randomBytes(32),
-    sourceReader: createClaudeCodeConfigurationSourceReaderAdapter(),
-  });
-
-  return createAgentRuntimeHost({
-    claudeCodeSetup: {
-      authorizeClaudeCodeSetupInspection: security.authorizeClaudeCodeSetupInspection,
-      discoverClaudeCodeInstallations: execution.discoverClaudeCodeInstallations,
-      inspectClaudeCodeConfiguration: claudeConfiguration,
-      planClaudeCodeSetupInspection: createClaudeCodeSetupInspectionPlanner(process.platform),
-    },
-    codexSetup: {
-      authorizeSetupInspection: security.authorizeSetupInspection,
-      discoverCodexInstallations: execution.discoverCodexInstallations,
-      inspectCodexConfiguration: configuration.inspectCodexConfiguration,
-      planCodexSetupInspection: createCodexSetupInspectionPlanner(process.platform),
-    },
   });
 };

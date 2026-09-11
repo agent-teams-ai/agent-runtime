@@ -18,6 +18,7 @@ related:
   - ADR-0013
   - ADR-0014
   - ADR-0015
+  - ADR-0016
   - ADR-0017
   - ADR-0018
   - ADR-0019
@@ -34,9 +35,9 @@ immutable evidence; a later change uses an explicit superseding decision.
 
 ## Proposed
 
-- [ADR-0015: Consumer Module Standard pending adoption](0015-consumer-module-standard-pending-adoption.md)
-  proposes the exact central pin and classifies the existing seven-port Pure DI
-  boundary as explicitly not adopted until Assembly migration evidence exists.
+- [ADR-0016: Contained-turn Consumer Module Standard pending adoption](0016-contained-turn-consumer-module-standard-adoption.md)
+  classifies the existing seven-port Pure DI boundary as explicitly not adopted
+  until a separate contained-turn Assembly migration is accepted.
 - [ADR-0006: Orthogonal runtime-operation state and effect continuity](0006-orthogonal-runtime-operation-state-and-effect-continuity.md)
   remains the broader design proposal. ADR-0010 accepts only its narrow V1
   subset without mutating this document.
@@ -74,6 +75,10 @@ immutable evidence; a later change uses an explicit superseding decision.
 - [ADR-0014: Darwin provider candidate platform qualification](0014-darwin-provider-candidate-platform-qualification.md)
   accepts exact Codex and Claude Darwin arm64 revisions as unqualified
   candidates without changing Linux authority or ADR-0010 operation semantics.
+
+- [ADR-0015: Passive setup static Assembly adoption](0015-passive-setup-static-assembly-adoption.md)
+  accepts only the static passive construction contract, narrowly amending
+  ADR-0008 while preserving historical HOLD evidence and all other invariants.
 - [ADR-0017: Feature Module Standard production scope roles](0017-feature-module-production-scope-roles.md)
   classifies every production module by its real role, keeps the four
   unmigrated modules explicitly pending, names the Filesystem Custody platform
