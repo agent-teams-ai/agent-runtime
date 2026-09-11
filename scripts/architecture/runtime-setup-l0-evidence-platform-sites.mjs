@@ -9,7 +9,7 @@ const sites = [
   ["codex-setup.e2e.test.ts", 44, 46, darwin, "darwin-arm64"],
   ["codex-setup.e2e.test.ts", 124, 126, darwin, "darwin-arm64"],
   ["codex-setup.e2e.test.ts", 174, 176, darwin, "darwin-arm64"],
-  ["helpers/assembly-direct-reference.ts", 282, 283, darwin, "darwin-arm64"],
+  ["helpers/assembly-direct-reference.ts", 286, 287, darwin, "darwin-arm64"],
   ["linux-codex-node-recipe-owners.test.ts", 52, 52, linux, "linux-x64"],
   ...[36, 46, 58].map(line => ["live/linux-codex-live-admin-route.test.ts", line, 34, x64, "linux-x64"]),
   ["live/linux-codex-node-selection.test.ts", 187, 188, x64, "linux-x64"],
