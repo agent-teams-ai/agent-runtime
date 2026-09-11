@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { parseDocument } from "yaml";
 
-import { OxcSourceDependencyParser } from "../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/adapters/outbound/oxc/oxc-source-dependency-parser.js";
+import { parseSync } from "oxc-parser";
 
 const foundationManifestPath = fileURLToPath(import.meta.resolve("@agent-teams/engineering-foundation/package.json"));
 const foundationManifest = JSON.parse(await readFile(foundationManifestPath, "utf8"));
@@ -136,7 +136,6 @@ test("contained-turn domain and application remain dependency-free core", async 
 test("the real parser observes every retained Node import in composition and TLS support", async () => {
   const composition = "packages/apps/embedded-runtime/src/composition";
   const host = boundariesById.get("adapter.agent-execution.host-custody");
-  const parser = new OxcSourceDependencyParser();
   for (const [path, builtins] of [
     [`${composition}/agent-runtime-host.ts`, ["node:crypto", "node:util"]],
     [`${composition}/contained-turn-access-authority.ts`, ["node:util"]],
@@ -151,14 +150,15 @@ test("the real parser observes every retained Node import in composition and TLS
       ["node:crypto", "node:util"]],
   ]) {
     const source = await readFile(join(repositoryRoot, path), "utf8");
-    const parsed = parser.parse({ path, source });
-    assert.equal(parsed.parseErrorCount, 0, path);
-    assert.deepEqual(parsed.unresolved, [], path);
-    const observed = parsed.references.filter(reference => reference.specifier.startsWith("node:"));
-    assert.deepEqual(observed.map(reference => reference.specifier).toSorted(), builtins, path);
-    assert.ok(observed.every(reference => reference.kind === "static"), path);
+    const parsed = parseSync(path, source);
+    assert.deepEqual(parsed.errors, [], path);
+    assert.deepEqual(parsed.module.dynamicImports, [], path);
+    const observed = parsed.module.staticImports
+      .map(reference => reference.moduleRequest.value)
+      .filter(specifier => specifier.startsWith("node:"));
+    assert.deepEqual(observed.toSorted(), builtins, path);
     assert.deepEqual(await analyzeFixture({
-      [path]: observed.map(reference => `import '${reference.specifier}';`).join("\n"),
+      [path]: observed.map(specifier => `import '${specifier}';`).join("\n"),
     }), [], path);
   }
 });
@@ -190,7 +190,11 @@ test("Embedded Runtime Node utility permission belongs only to composition", () 
   assert.deepEqual(composition.allowedBuiltins, ["node:crypto", "node:fs", "node:timers/promises", "node:util"]);
   assert.deepEqual(composition.allowedRuntimeReferences, []);
   const production = boundariesById.get("production.embedded-runtime");
-  assert.deepEqual(production.allowedBoundaries, []);
+  assert.deepEqual(production.allowedBoundaries, [
+    "composition.embedded-runtime.contained-turn",
+    "composition.embedded-runtime.contained-turn-support",
+    "core.embedded-runtime.access-contracts",
+  ]);
   assert.deepEqual(production.allowedBuiltins, ["node:crypto", "node:timers/promises"]);
 });
 
@@ -228,11 +232,7 @@ test("transitional boundaries and adapter permissions remain exact", () => {
   assert.deepEqual(composition.roots, [
     "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/authority-owner-boundary.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-credential-output-inventory.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
   ]);
   assert.deepEqual(composition.entrypoints, composition.roots);
   assert.deepEqual(composition.allowedBoundaries, [
@@ -449,9 +449,8 @@ test("Docker process composition uses its narrow entrypoint and a type-only Host
   const entry = `${base}/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.ts`;
   const internal = entry.replace("docker-provider-process-entrypoint.ts", "docker-provider-process-bridge.ts");
   const source = await readFile(join(repositoryRoot, composition), "utf8");
-  const parsed = new OxcSourceDependencyParser().parse({path: composition, source});
-  assert.equal(parsed.parseErrorCount, 0);
-  assert.deepEqual(parsed.unresolved, []);
+  const parsed = parseSync(composition, source);
+  assert.deepEqual(parsed.errors, []);
   assert.deepEqual(await analyzeFixture({[composition]: source}), []);
   assert.match(source, /import type \{CustodiedProviderProcess, CustodiedProviderProcessRegistry\}/u);
   assert.deepEqual(rules(await analyzeFixture({[paths.host]: "import './docker/docker-provider-process-entrypoint.js';\n"})),

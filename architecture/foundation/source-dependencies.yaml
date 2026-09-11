@@ -149,10 +149,7 @@ boundaries:
     entrypoints:
       - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.ts
-      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-effect-custody.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts
-      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts
-      - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.ts
     allow:
       boundaries:
         - adapter.agent-execution.host-custody
@@ -218,19 +215,11 @@ boundaries:
     roots:
       - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/authority-owner-boundary.ts
-      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-credential-output-inventory.ts
-      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts
-      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts
-      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts
     entrypoints:
       - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/authority-owner-boundary.ts
-      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-credential-output-inventory.ts
-      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts
       - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts
-      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts
-      - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts
     allow:
       boundaries:
         - adapter.agent-execution.host-custody
@@ -369,9 +358,6 @@ boundaries:
       - packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts
       - packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts
       - packages/apps/embedded-runtime/src/application/ports/outbound/codex-setup-inspection-planner.ts
-      - packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts
-      - packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts
-      - packages/apps/embedded-runtime/src/contracts/runtime-access.ts
       - packages/apps/embedded-runtime/src/index.ts
     allow:
       boundaries:
@@ -571,6 +557,7 @@ boundaries:
       builtins:
         - node:crypto
         - node:timers/promises
+        - node:util
       runtimeReferences: []
   - id: core.embedded-runtime.access-contracts
     dependencyMode: runtime
