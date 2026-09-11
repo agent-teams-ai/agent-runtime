@@ -8,21 +8,20 @@ import type { EgressTransportV1 } from "./ports/outbound/egress-exchange.js";
 export const captureComposition = (primitives: EgressSecurityPrimitives, identity: unknown, dependencies: unknown) => {
   const {exact, methods} = createValidationTools(primitives);
   const host = exact(identity, ["attemptId", "environmentId", "gatewayId", "hostInstanceId", "hostBootId", "transportMode"]);
-  const deps = exact(dependencies, ["routeAuthority", "dispatchAuthority", "policyAuthority", "signer", "transportGateway", "clock"]);
+  const deps = exact(dependencies, ["routeAuthority", "dispatchAuthority", "policyAuthority", "signer", "transportGateway"]);
   const routeAuthority = methods(deps?.routeAuthority, ["resolveExact", "revalidateExact"]);
   const dispatchAuthority = methods(deps?.dispatchAuthority, ["observeDispatchConsumption"]);
   const policyAuthority = methods(deps?.policyAuthority, ["resolve", "revalidateExact", "consumeFirstWrite"]);
   const signer = methods(deps?.signer, ["sign", "verify"]);
   const transportGateway = methods(deps?.transportGateway, ["openOneShotHttps"]);
-  const clock = methods(deps?.clock, ["now"]);
   if (host === undefined || ![host.attemptId, host.environmentId, host.gatewayId, host.hostInstanceId, host.hostBootId].every(isEgressIdentifier) ||
       host.transportMode !== "one_shot_https" || routeAuthority === undefined || dispatchAuthority === undefined ||
-      policyAuthority === undefined || signer === undefined || transportGateway === undefined || clock === undefined) {
+      policyAuthority === undefined || signer === undefined || transportGateway === undefined) {
     throw new TypeError("invalid contained turn egress composition");
   }
   return Object.freeze({identity: Object.freeze({...host}) as TrustedEgressHostIdentityV1,
     dependencies: Object.freeze({routeAuthority, dispatchAuthority, policyAuthority, signer,
-      transportGateway, clock}) as unknown as ContainedTurnEgressDependencies});
+      transportGateway}) as unknown as ContainedTurnEgressDependencies});
 };
 
 /** Validates the untrusted session a transport gateway open call returns before the gateway

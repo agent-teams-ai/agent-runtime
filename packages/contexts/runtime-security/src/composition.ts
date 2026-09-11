@@ -26,6 +26,7 @@ import { types as nodeTypes } from "node:util";
 
 import { createEgressValidation } from "./features/contained-turn-egress/domain/validation.js";
 import { createContainedTurnEgressGatewayCore } from "./features/contained-turn-egress/composition/gateway.js";
+import { createNodeMonotonicClock } from "./features/contained-turn-egress/adapters/outbound/node-monotonic-clock.js";
 import type { ContainedTurnEgressDependencies } from
   "./features/contained-turn-egress/application/contained-turn-egress-dependencies.js";
 import type { ProviderRouteAuthoritySnapshotV1 } from "./features/contained-turn-egress/domain/provider-route-authority.js";
@@ -95,7 +96,8 @@ const primitives = Object.freeze({
     return decoded.byteLength === 64 && decoded.toString("base64") === value;},
 });
 export const createContainedTurnEgressGateway = (identity: TrustedEgressHostIdentityV1,
-  dependencies: ContainedTurnEgressDependencies) => createContainedTurnEgressGatewayCore(identity, dependencies, primitives);
+  dependencies: ContainedTurnEgressDependencies) =>
+  createContainedTurnEgressGatewayCore(identity, dependencies, primitives, createNodeMonotonicClock());
 /** Pure private-composition projection for the dormant route candidate's dispatch grant.
  * The existing dispatch owner must commit this digest before egress; legacy/unbound digests fail closed.
  * Provider Access still owns resolution/revalidation of every fact in the projection. */
@@ -105,8 +107,6 @@ export const containedTurnEgressProviderBindingDigest = (route: ProviderRouteAut
 };
 export { createNodeEd25519EgressSigner } from
   "./features/contained-turn-egress/adapters/outbound/node-ed25519.js";
-export { createNodeMonotonicClock } from
-  "./features/contained-turn-egress/adapters/outbound/node-monotonic-clock.js";
 export type {
   BufferedEgressRequestV1,
   EgressAuthorizationBodyV1,
@@ -125,7 +125,6 @@ export type {
 export type { ContainedTurnEgress } from "./features/contained-turn-egress/application/contained-turn-egress.js";
 export type { ContainedTurnEgressDependencies } from
   "./features/contained-turn-egress/application/contained-turn-egress-dependencies.js";
-export type { MonotonicClock } from "./features/contained-turn-egress/application/ports/outbound/monotonic-clock.js";
 export type { EgressAuthorizationSignerV1 } from
   "./features/contained-turn-egress/application/ports/outbound/egress-authorization-signer.js";
 export type { EgressPolicyTimeAuthorityV1 } from
@@ -138,7 +137,6 @@ export type {
   TrustedEgressFirstWriteV1,
 } from "./features/contained-turn-egress/application/ports/outbound/egress-exchange.js";
 export type { NodeEd25519SignerIdentity } from "./features/contained-turn-egress/adapters/outbound/node-ed25519.js";
-export { createAuthorizeClaudeCodeSetupInspection } from "./features/setup-source-inspection-authorization/application/authorize-claude-code-setup-inspection.js";
 export type { PathCanonicalizer } from "./features/setup-source-inspection-authorization/application/ports/outbound/path-canonicalizer.js";
 export {
   createSetupInspectionAuthorizationFeature,

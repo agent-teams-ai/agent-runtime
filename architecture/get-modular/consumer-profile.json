@@ -3837,11 +3837,6 @@
         },
         {
           "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/monotonic-clock.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
           "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/provider-route-authority.ts",
           "mode": "type-only"
         },
@@ -3943,11 +3938,6 @@
         {
           "from": "packages/contexts/runtime-security/src/composition.ts",
           "to": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/adapters/outbound/node-path-canonicalizer.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/authorize-claude-code-setup-inspection.ts",
           "mode": "runtime"
         },
         {

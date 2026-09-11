@@ -4,14 +4,14 @@ import type { TrustedEgressHostIdentityV1 } from "../domain/host-identity.js";
 import { type createEgressValidation, type BufferedRequest, type EgressSecurityPrimitives,
   type PolicyAuthority } from "../domain/validation.js";
 import { deny, sameBytes } from "../domain/results.js";
-import type { ContainedTurnEgressDependencies } from "./contained-turn-egress-dependencies.js";
+import type { ContainedTurnEgressRuntimeDependencies } from "./contained-turn-egress-dependencies.js";
 import type { EgressOneShotLifecycle } from "./lifecycle.js";
 import { createWriteAuthorization } from "./write-authorization.js";
 import { revalidateWrite } from "./revalidate-write.js";
 import { signWrite } from "./sign-write.js";
 const freeze = Object.freeze;
 export type FirstWriteInput = Readonly<{
-  owners: ContainedTurnEgressDependencies; request: ContainedTurnEgressRequest;
+  owners: ContainedTurnEgressRuntimeDependencies; request: ContainedTurnEgressRequest;
   route: ProviderRouteAuthoritySnapshotV1; policy: PolicyAuthority; capturedRequest: BufferedRequest;
   identity: TrustedEgressHostIdentityV1; validation: ReturnType<typeof createEgressValidation>;
   lifecycle: EgressOneShotLifecycle; primitives: EgressSecurityPrimitives;
