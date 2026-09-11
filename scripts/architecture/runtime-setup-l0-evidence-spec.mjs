@@ -207,6 +207,10 @@ export const changes = Object.freeze([
     id: "runtime-security-setup-authorization-ports",
     revision: "60e58809eec1a80f27d23df8799b12c48c21975f",
   }),
+  Object.freeze({
+    id: "runtime-security-setup-authorization-export-fix",
+    revision: "a078ce983ef9ab2100bd8c3a6cc6776f1f1b59b3",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -218,7 +222,7 @@ export const sourceRevisionArtifactDigests = Object.freeze({
   }),
   sources: Object.freeze({
     fileCount: 665,
-    sha256: "0aeff2c9da3c4e44cd23b35812a01da6ff53a6cfbc0b21b8c5ed85a2a7d2567b",
+    sha256: "2bef8d76c9dc4775498280631e3020e3fdb02347732ccd394c9359d64aac7c1e",
   }),
   tests: Object.freeze({
     fileCount: 610,
