@@ -118,22 +118,7 @@ export const validateStoredReportShape = (report, changes) => {
     "traces",
     "verdicts",
   ], "evidence report");
-  assertExactKeys(report.capture, [
-    "architecture",
-    "command",
-    "exitCode",
-    "nodeVersion",
-    "outputSha256",
-    "platform",
-    "testSummary",
-  ], "capture");
-  assertExactKeys(
-    report.capture.testSummary,
-    ["cancelled", "fail", "pass", "skipped", "tests"],
-    "capture.testSummary",
-  );
-  assert.equal(report.capture.command, "pnpm --filter @agent-teams/embedded-runtime check");
-  assert.ok(["darwin", "linux", "win32"].includes(report.capture.platform));
+  validateProductCapture(report.capture);
   assert.equal(report.historicalChanges.length, changes.length);
   report.historicalChanges.forEach(validateHistoricalChangeShape);
 };
@@ -157,4 +142,35 @@ export const validateCurrentEvidenceIdentity = (report, {
     currentArtifactDigests,
     "captured product source, tests, fixtures, or build inputs drifted",
   );
+};
+
+export const validateProductCapture = capture => {
+  assertExactKeys(capture, [
+    "architecture",
+    "command",
+    "exitCode",
+    "nodeVersion",
+    "outputSha256",
+    "platform",
+    "testSummary",
+  ], "capture");
+  assertExactKeys(
+    capture.testSummary,
+    ["cancelled", "fail", "pass", "skipped", "tests"],
+    "capture.testSummary",
+  );
+  assert.equal(capture.command, "pnpm --filter @agent-teams/embedded-runtime check");
+  assert.ok(["darwin", "linux", "win32"].includes(capture.platform));
+  assert.equal(capture.exitCode, 0);
+  assert.match(capture.nodeVersion, /^v24\./u);
+  assert.ok(["arm64", "x64"].includes(capture.architecture));
+  assert.match(capture.outputSha256, /^[a-f0-9]{64}$/u);
+  for (const [key, value] of Object.entries(capture.testSummary)) {
+    assertNonNegativeInteger(value, `capture.testSummary.${key}`);
+  }
+  assert.ok(capture.testSummary.tests > 0);
+  assert.equal(capture.testSummary.pass, capture.testSummary.tests);
+  for (const key of ["fail", "cancelled", "skipped"]) {
+    assert.equal(capture.testSummary[key], 0);
+  }
 };

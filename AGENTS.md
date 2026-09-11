@@ -16,6 +16,9 @@ Start here:
 Use [.agents/skills/docs-authoring/SKILL.md](.agents/skills/docs-authoring/SKILL.md) for documentation.
 <!-- agent-teams-docs:route/v1 end -->
 
+- Planned passive Assembly adoption and outstanding gates:
+  [Get Modular adoption](docs/architecture/get-modular-adoption.md)
+
 Guardrails:
 
 - Every new production feature, including in excluded packages or legacy files,
@@ -39,3 +42,9 @@ Verification workflow:
 - Run `pnpm check:fast` before handoff.
 - Run the authoritative `pnpm check` before opening or merging a pull request.
 - A passing changed-file or fast check never replaces the complete gate.
+
+## Consumer Module Standard maintenance
+
+Mandatory for every change to module boundaries, capability contracts, composition, lifecycle ownership, adoption profiles or their gates: read the canonical Get Modular Consumer Module Standard (`docs/architecture/common-assembly.md#consumer-module-standard` in agent-teams-ai/get-modular). Update its current guidance/examples when shared behavior changes, and update affected consumer profiles, documentation and rejecting tests in the same delivery. Do not duplicate the standard or silently replace accepted ADR bytes.
+
+Before implementation, compare the consumer's pinned revision with the current upstream standard; review the delta and migrate the pin with its retained evidence and checks. Never silently follow a moving main revision. If migration is not yet complete, record the exact outstanding work and keep adoption pending. A task is not done with stale guidance, an unreviewed pin, or a no-op/missing enforcement command. New meaningful composition boundaries must be adopted or explicitly classified; feature-local helpers are not separate graph nodes.

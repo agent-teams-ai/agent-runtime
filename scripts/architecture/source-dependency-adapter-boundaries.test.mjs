@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { parseDocument } from "yaml";
 
+import { parseSync } from "oxc-parser";
+
 const foundationManifestPath = fileURLToPath(import.meta.resolve("@agent-teams/engineering-foundation/package.json"));
 const foundationManifest = JSON.parse(await readFile(foundationManifestPath, "utf8"));
 const foundationCli = join(dirname(foundationManifestPath), foundationManifest.bin["agent-teams-foundation"]);
@@ -60,7 +62,7 @@ const analyzeFixture = async files => {
       await mkdir(join(root, governedRoot), { recursive: true });
     }
     await writeFixtureFile(root, "package.json", JSON.stringify({
-      dependencies: { "@anthropic-ai/claude-agent-sdk": "1.0.0" },
+      dependencies: { "@anthropic-ai/claude-agent-sdk": "1.0.0", "@get-modular/core": "0.1.0", "@get-modular/assembly": "0.1.0" },
       name: "foundation-boundary-fixture",
       private: true,
       type: "module",
@@ -131,7 +133,7 @@ test("contained-turn domain and application remain dependency-free core", async 
   })).includes("architecture.source-dependencies.forbidden-package-dependency"));
 });
 
-test("production sources retain expected Node imports and the installed parser accepts them", async () => {
+test("the real parser observes every retained Node import in composition and TLS support", async () => {
   const composition = "packages/apps/embedded-runtime/src/composition";
   const host = boundariesById.get("adapter.agent-execution.host-custody");
   for (const [path, builtins] of [
@@ -148,9 +150,13 @@ test("production sources retain expected Node imports and the installed parser a
       ["node:crypto", "node:util"]],
   ]) {
     const source = await readFile(join(repositoryRoot, path), "utf8");
-    const observed = [...source.matchAll(/(?:from|import)\s+["'](node:[^"']+)["']/gu)]
-      .map(match => match[1]).toSorted();
-    assert.deepEqual(observed, builtins, path);
+    const parsed = parseSync(path, source);
+    assert.deepEqual(parsed.errors, [], path);
+    assert.deepEqual(parsed.module.dynamicImports, [], path);
+    const observed = parsed.module.staticImports
+      .map(reference => reference.moduleRequest.value)
+      .filter(specifier => specifier.startsWith("node:"));
+    assert.deepEqual(observed.toSorted(), builtins, path);
     assert.deepEqual(await analyzeFixture({
       [path]: observed.map(specifier => `import '${specifier}';`).join("\n"),
     }), [], path);
@@ -194,7 +200,10 @@ test("Embedded Runtime Node utility permission belongs only to composition", () 
     "composition.embedded-runtime.agent-runtime-host",
     "core.embedded-runtime.access-contracts",
   ]);
-  assert.deepEqual(composition.allowedBuiltins, []);
+  // The async-assembly-adapter Assembly root (runtime-setup-assembly.ts,
+  // default-agent-runtime-host.ts, agent-runtime-host-creation-error.ts) uses
+  // node:crypto directly and isn't yet carved into its own narrower role.
+  assert.deepEqual(composition.allowedBuiltins, ["node:crypto"]);
   assert.deepEqual(composition.allowedRuntimeReferences, []);
   const production = boundariesById.get("production.embedded-runtime");
   // build-claude-code-setup-view.ts/build-codex-setup-view.ts reach the
@@ -279,7 +288,7 @@ test("Docker custody uses only the engine port and explicit residue construction
   const custody = boundariesById.get("adapter.agent-execution.docker-custody");
   const json = boundariesById.get("adapter.agent-execution.docker-json");
 
-  assert.deepEqual(engine.entrypoints.toSorted(), [paths.dockerConstruction, paths.dockerPort].toSorted());
+  assert.deepEqual(engine.entrypoints, [paths.dockerPort, paths.dockerConstruction]);
   assert.deepEqual(engine.allowedBoundaries, ["adapter.agent-execution.docker-json"]);
   assert.deepEqual(engine.allowedPackages, []);
   assert.deepEqual(engine.allowedRuntimeReferences, []);
@@ -324,20 +333,9 @@ test("existing Host and SDK capabilities retain their exact ownership", async ()
   ]);
 
   assert.deepEqual(host.allowedBuiltins, [
-    "node:buffer",
-    "node:child_process",
-    "node:crypto",
-    "node:dns/promises",
-    "node:events",
-    "node:fs",
-    "node:fs/promises",
-    "node:net",
-    "node:os",
-    "node:path",
-    "node:stream",
-    "node:timers/promises",
-    "node:tls",
-    "node:util",
+    "node:buffer", "node:child_process", "node:crypto", "node:dns/promises",
+    "node:events", "node:fs", "node:fs/promises", "node:net", "node:os",
+    "node:path", "node:stream", "node:timers/promises", "node:tls", "node:util",
   ]);
 
   for (const builtin of ["node:dns/promises", "node:net", "node:os", "node:stream", "node:tls"]) {
@@ -472,6 +470,8 @@ test("Docker process composition uses its narrow entrypoint and a type-only Host
   const entry = `${base}/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.ts`;
   const internal = entry.replace("docker-provider-process-entrypoint.ts", "docker-provider-process-bridge.ts");
   const source = await readFile(join(repositoryRoot, composition), "utf8");
+  const parsed = parseSync(composition, source);
+  assert.deepEqual(parsed.errors, []);
   assert.deepEqual(await analyzeFixture({[composition]: source}), []);
   assert.match(source, /import type \{CustodiedProviderProcess, CustodiedProviderProcessRegistry\}/u);
   assert.deepEqual(rules(await analyzeFixture({[paths.host]: "import './docker/docker-provider-process-entrypoint.js';\n"})),
@@ -493,6 +493,32 @@ test("native abort subscriptions stay in physical adapters, never core or outer 
   }
 });
 
+
+test("Get Modular belongs only to Embedded Runtime composition, including type imports", async () => {
+  const packages = ["@get-modular/core", "@get-modular/assembly"];
+  for (const boundary of policy.boundaries) {
+    assert.deepEqual(boundary.allowedPackages.filter(name => packages.includes(name)).toSorted(),
+      boundary.id === "composition.embedded-runtime" ? packages.toSorted() : [], boundary.id);
+  }
+  for (const pkg of packages) {
+    for (const statement of [`import '${pkg}';`, `import type {} from '${pkg}';`]) {
+      assert.deepEqual(await analyzeFixture({
+        "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts": statement,
+      }), []);
+      for (const root of ["packages/apps/embedded-runtime/src",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn",
+        "packages/contexts/runtime-configuration/src",
+        "packages/contexts/runtime-security/src"]) {
+        for (const layer of ["application", "contracts", "domain"]) {
+          const path = `${root}/${layer}/negative-get-modular.ts`;
+          const diagnostics = await analyzeFixture({ [path]: statement });
+          assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.forbidden-package-dependency"], path);
+          assert.equal(diagnostics[0].location.path, path);
+        }
+      }
+    }
+  }
+});
 
 test("Host custody cannot import the filesystem workspace owner backwards", async () => {
   const owner = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace-owner.ts";

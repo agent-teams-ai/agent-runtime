@@ -351,7 +351,10 @@ boundaries:
         - "@agent-teams/provider-access"
         - "@agent-teams/runtime-configuration"
         - "@agent-teams/runtime-security"
-      builtins: []
+        - "@get-modular/core"
+        - "@get-modular/assembly"
+      builtins:
+        - node:crypto
       runtimeReferences: []
   # agent-runtime-host.ts is the sole real getBuiltinModule("node:util") consumer
   # left under this root; the setup-inspection planners are its exclusive local

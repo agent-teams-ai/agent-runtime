@@ -90,7 +90,9 @@ async function addRequiredAnchorFixtures(root) {
     join(root, "architecture/decisions/accepted-decisions.json")
   );
   for (const path of [
-    "architecture/consumer-module-standard/profile.json",
+    "architecture/consumer-module-standard/contained-turn-profile.json",
+    "architecture/feature-module-standard/candidate-profile.json",
+    "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/contained-turn-v1-contract.json",
     "experiments/runtime-profile-behavior/spec/runtime-operation-oracle/README.md",
     "experiments/rust-system-boundaries/README.md",
     "experiments/sandbox-backend-hosting/README.md",

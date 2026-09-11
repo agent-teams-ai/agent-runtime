@@ -1,8 +1,8 @@
+import { createAgentRuntimeHost } from "../dist/composition/agent-runtime-host.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  createAgentRuntimeHost,
   createDefaultAgentRuntimeHost,
   TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS,
 } from "../dist/composition.js";
@@ -376,7 +376,7 @@ test("absent capability scope preserves cancellation, disposal, and default-host
   await host.dispose();
   await assert.rejects(access.claudeCodeSetup.inspect(), /Host is disposed/u);
 
-  const defaultHost = createDefaultAgentRuntimeHost();
+  const defaultHost = await createDefaultAgentRuntimeHost();
   t.after(() => defaultHost.dispose());
   assert.deepEqual(
     await defaultHost.bindAccess(runtimeScope(false)).claudeCodeSetup.inspect(),
