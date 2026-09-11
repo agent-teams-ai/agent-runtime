@@ -333,20 +333,9 @@ test("existing Host and SDK capabilities retain their exact ownership", async ()
   ]);
 
   assert.deepEqual(host.allowedBuiltins, [
-    "node:buffer",
-    "node:child_process",
-    "node:crypto",
-    "node:dns/promises",
-    "node:events",
-    "node:fs",
-    "node:fs/promises",
-    "node:net",
-    "node:os",
-    "node:path",
-    "node:stream",
-    "node:timers/promises",
-    "node:tls",
-    "node:util",
+    "node:buffer", "node:child_process", "node:crypto", "node:dns/promises",
+    "node:events", "node:fs", "node:fs/promises", "node:net", "node:os",
+    "node:path", "node:stream", "node:timers/promises", "node:tls", "node:util",
   ]);
 
   for (const builtin of ["node:dns/promises", "node:net", "node:os", "node:stream", "node:tls"]) {
