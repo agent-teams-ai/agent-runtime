@@ -26,10 +26,17 @@ const verifyDatabaseSocket = async connection => {
 };
 const verifyDatabaseIdentity = async (client, connection) => {
   const identity = await client.query("SELECT current_database() AS database, current_user AS username, inet_server_addr()::text AS address, inet_server_port() AS port");
+  // Postgres returns NULL from both inet_server_addr() and inet_server_port()
+  // for a Unix-domain-socket connection (documented, unconditional server
+  // behavior) -- the connection's own port still identifies which socket file
+  // (.s.PGSQL.<port>) was dialed, but the server-reported port column cannot
+  // echo it back over that transport, so it needs the same unix exception
+  // already applied to address.
   const expectedAddress = connection.transport === "unix" ? null : connection.host;
+  const expectedPort = connection.transport === "unix" ? null : connection.port;
   if (identity.rows.length !== 1 || identity.rows[0].database !== connection.database ||
       identity.rows[0].username !== connection.user || identity.rows[0].address !== expectedAddress ||
-      identity.rows[0].port !== connection.port) {throw refused("database identity differs");}
+      identity.rows[0].port !== expectedPort) {throw refused("database identity differs");}
 };
 const postgresConnection = ({transport: _transport, ...connection}) => connection;
 const socketProbe = path => new Promise((resolve, reject) => {

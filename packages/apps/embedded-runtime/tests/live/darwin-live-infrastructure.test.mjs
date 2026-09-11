@@ -254,7 +254,9 @@ test("ar_canary Unix-socket persistence proves null server address and inspects 
       constructor(options) {this.number = ++number; assert.equal(options.host, socketRoot);}
       async connect() {return {release() {}, async query(sql) {
         if (sql.includes("FROM pg_stat_activity")) {return {rows: [{other_sessions: 0, prepared_transactions: 0}]};}
-        return {rows: [{database: "ar_canary_64a4c84e", username: "test", address: null, port: 54469}]};
+        // Real Postgres returns NULL from both inet_server_addr() and
+        // inet_server_port() for a Unix-domain-socket connection.
+        return {rows: [{database: "ar_canary_64a4c84e", username: "test", address: null, port: null}]};
       }};}
       async query() {return {rows: []};}
       async end() {events.push(this.number === 1 ? "primary-close" : "inspector-close");}
