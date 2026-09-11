@@ -210,15 +210,23 @@ its application layer no longer imports `node:path` or `node:crypto` directly.
 `contained-turn-egress` is no longer a flat directory: it has real
 domain/application/composition/adapters ownership, and its write-authorization
 lease window now reads a `MonotonicClock` the composition root injects, rather
-than an ambient `performance.now()` binding. The clock stays a composition-root
-detail — the public `ContainedTurnEgressDependencies` shape does not accept
-one — so revalidation timing remains under trusted-code control, matching the
-sibling dispatch-authority feature's own control clock. Module composition's
-`containedTurnEgressProviderBindingDigest` now delegates route-binding digest
-computation to the egress feature's own domain `validation` module instead of
-computing it inline. Dispatch authority's external V1 wrapper and mapper
-(`contained-turn-dispatch-authority-v1-mappers.ts`) still live in
-`application/`, not in an inbound adapter; that move remains open.
+than an ambient `performance.now()` binding. The clock stays a
+composition-root detail — the public `ContainedTurnEgressDependencies` shape
+does not accept one — so revalidation timing remains under trusted-code
+control. Module composition's `containedTurnEgressProviderBindingDigest`
+delegates route-binding digest computation to the egress feature's own domain
+`validation` module instead of computing it inline, but the underlying
+`node:crypto` hashing and the shared `exactObject`/`snapshotUint8Array`
+validation primitives it and other Runtime Security features call through
+still live in `composition.ts` itself. That stays a deliberate
+composition-root position rather than an oversight: those primitives are
+cross-feature shared infrastructure, and domain/application layers still
+cannot import Node builtins directly. Dispatch authority's external V1
+wrapper and mapper (`contained-turn-dispatch-authority-v1-mappers.ts`) still
+live in `application/`, not in an inbound adapter; that move remains open.
+Its control clock takes the opposite design from egress: dispatch authority's
+`ContainedTurnDispatchAuthorityFeatureDependencies` requires callers to supply
+`clock` explicitly, rather than keeping it a composition-root-only detail.
 
 Embedded Runtime is the host application. Its activation waited on the
 accepted asynchronous setup assembly work, which has since landed. The setup
