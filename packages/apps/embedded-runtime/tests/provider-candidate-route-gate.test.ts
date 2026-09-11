@@ -7,18 +7,19 @@ import test, { after } from "node:test";
 import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 
-import {
-  createProviderCandidateEvidenceEnvelope,
-  resolveCanaryExecutionProvenance,
-  revalidateCanaryExecutionProvenance,
-} from "../../../contexts/agent-execution/tests/live/provider-candidate-evidence-envelope.mjs";
+import { findRepoRoot } from "./helpers/repo-root.ts";
 
 const execFileAsync = promisify(execFile);
 const temporaryRoots: string[] = [];
-const authoritySourceUrl = new URL(
-  "../../../contexts/agent-execution/tests/live/provider-candidate-evidence-envelope.mjs",
-  import.meta.url,
-);
+const authoritySourceUrl = pathToFileURL(join(
+  findRepoRoot(),
+  "packages/contexts/agent-execution/tests/live/provider-candidate-evidence-envelope.mjs",
+));
+const {
+  createProviderCandidateEvidenceEnvelope,
+  resolveCanaryExecutionProvenance,
+  revalidateCanaryExecutionProvenance,
+} = await import(authoritySourceUrl.href);
 
 type ExecutionAuthority = {
   createProviderCandidateEvidenceEnvelope: typeof createProviderCandidateEvidenceEnvelope;

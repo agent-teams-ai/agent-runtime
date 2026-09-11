@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
 
 import { createCodexAppServerPermissionBoundary } from "@agent-teams/agent-execution/composition";
 import {
@@ -14,8 +15,17 @@ import {
 } from "../dist/composition.js";
 import { composeCandidateHostCustodiedContainedTurnForImplementationEvidence } from
   "../dist/composition/contained-turn-feature-composition.js";
-import { DeterministicCurrentOwnerHost } from "../../../contexts/agent-execution/tests/current-owner-success-fixture.ts";
-import { createDependencies } from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
+import { findRepoRoot } from "./helpers/repo-root.ts";
+
+const repoRoot = findRepoRoot();
+const { DeterministicCurrentOwnerHost } = await import(pathToFileURL(join(
+  repoRoot,
+  "packages/contexts/agent-execution/tests/current-owner-success-fixture.ts",
+)).href);
+const { createDependencies } = await import(pathToFileURL(join(
+  repoRoot,
+  "packages/contexts/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts",
+)).href);
 
 const unavailable = (): never => {throw new Error("setup dependency must not be reached");};
 const codexInitialization = Object.freeze({

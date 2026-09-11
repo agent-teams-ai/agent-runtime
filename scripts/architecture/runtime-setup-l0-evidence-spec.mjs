@@ -255,6 +255,14 @@ export const changes = Object.freeze([
     id: "runtime-security-ed25519-v2-candidate",
     revision: "d7c875a60ac8e59eb1d097bdb0f0926991a1ed99",
   }),
+  Object.freeze({
+    id: "source-dependencies-schema-v3",
+    revision: "b42a1130ea1b2a02a5cd240a33d3cb4e7c4cf32f",
+  }),
+  Object.freeze({
+    id: "source-dependencies-v3-repo-root-test-loads",
+    revision: "01d6cc76cab4817bedbe44635d8b2b31473349c6",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -269,8 +277,8 @@ export const sourceRevisionArtifactDigests = Object.freeze({
     sha256: "98950b1e761789cde2329fd75605a74824e7cc30ad3472768400431934fdc7df",
   }),
   tests: Object.freeze({
-    fileCount: 164,
-    sha256: "4590a859fd7605adce57e317bf100022b387f26ab6cd6e58944b86e3b85042c5",
+    fileCount: 166,
+    sha256: "fdf421458b4b32c44e845be533adb93b09a0d145c521dfd2b259039f1186fb97",
   }),
 });
 
