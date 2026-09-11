@@ -122,7 +122,13 @@ test("domain, application, sibling adapters and sibling composition never inheri
     `${embedded}application/trusted-claude-code-setup-scope.ts`,
     `${agent}composition/dispatch-grant-anti-corruption.ts`,
     `${agent}adapters/outbound/codex-app-server/codex-app-server-jsonl.ts`,
-    `${embedded}composition/contained-turn-runtime-access.ts`,
+    // contained-turn-runtime-access.ts is not listed here: PR69 gave it a real
+    // runtime edge to/from contained-turn-authority-capability.ts (disposal.ts
+    // re-exports authority-capability's util-consuming exports, and
+    // authority-capability imports runtime-access at runtime too), a genuine
+    // reciprocal pair that cannot be split into a util-free and a util-bearing
+    // role without recreating the cycle. See composition.embedded-runtime
+    // .contained-turn-support in source-dependencies.yaml.
   ];
   for (const content of ['void process.getBuiltinModule("node:util");\n', 'import "node:util";\n']) {
     expectForbidden(await analyze(Object.fromEntries(paths.map(path => [path, content]))), paths);

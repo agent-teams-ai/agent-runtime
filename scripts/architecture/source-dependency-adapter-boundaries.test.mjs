@@ -180,11 +180,30 @@ test("Embedded Runtime Node utility permission belongs only to composition", () 
     "packages/apps/embedded-runtime/src/composition",
     "packages/apps/embedded-runtime/src/composition.ts",
   ]);
-  assert.deepEqual(composition.allowedBoundaries, ["production.embedded-runtime"]);
-  assert.deepEqual(composition.allowedBuiltins, ["node:crypto", "node:fs", "node:timers/promises", "node:util"]);
+  // composition.ts re-exports the linux-codex/http-egress/darwin routing
+  // cluster, the contained-turn and contained-turn-support roles, and
+  // access-contracts; PR69 grew this directory well beyond a single
+  // entrypoint file. agent-runtime-host.ts (the only remaining real
+  // getBuiltinModule("node:util") consumer under this root) moved into its
+  // own role so this catch-all root itself no longer grants node:util.
+  assert.deepEqual(composition.allowedBoundaries, [
+    "production.embedded-runtime",
+    "composition.embedded-runtime.contained-turn",
+    "composition.embedded-runtime.contained-turn-support",
+    "composition.embedded-runtime.contained-turn-routing",
+    "composition.embedded-runtime.agent-runtime-host",
+    "core.embedded-runtime.access-contracts",
+  ]);
+  assert.deepEqual(composition.allowedBuiltins, []);
   assert.deepEqual(composition.allowedRuntimeReferences, []);
   const production = boundariesById.get("production.embedded-runtime");
-  assert.deepEqual(production.allowedBoundaries, []);
+  // build-claude-code-setup-view.ts/build-codex-setup-view.ts reach the
+  // contained-turn, contained-turn-support and access-contracts entrypoints.
+  assert.deepEqual(production.allowedBoundaries, [
+    "composition.embedded-runtime.contained-turn",
+    "composition.embedded-runtime.contained-turn-support",
+    "core.embedded-runtime.access-contracts",
+  ]);
   assert.deepEqual(production.allowedBuiltins, ["node:crypto", "node:timers/promises"]);
 });
 
@@ -219,14 +238,13 @@ test("transitional boundaries and adapter permissions remain exact", () => {
   assert.ok(!claude.allowedBoundaries.includes("adapter.agent-execution.host-custody"));
   assert.ok(!claude.allowedBoundaries.includes("adapter.agent-execution.legacy-contained-turn-ports"));
   assert.ok(!claude.allowedBoundaries.includes("production.agent-execution"));
+  // accepted-authority-anti-corruption.ts and authority-owner-boundary.ts import
+  // provider-access-anti-corruption.ts, which imports both of them back (a real
+  // reciprocal cycle once PR69's provider-access wiring is counted), so they
+  // moved into composition.agent-execution.boundary-data alongside it. Only
+  // host-post-claim-preparation.ts (no such cycle) remains in this role.
   assert.deepEqual(composition.roots, [
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/authority-owner-boundary.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-credential-output-inventory.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
   ]);
   assert.deepEqual(composition.entrypoints, composition.roots);
   assert.deepEqual(composition.allowedBoundaries, [
@@ -247,6 +265,8 @@ test("transitional boundaries and adapter permissions remain exact", () => {
     "core.agent-execution.contained-turn",
     "adapter.agent-execution.codex-data",
     "adapter.agent-execution.codex-primitives",
+    "adapter.agent-execution.codex-primitives-leaves",
+    "adapter.agent-execution.codex-native-broker",
     "composition.agent-execution.boundary-data",
     "composition.agent-execution.dispatch-grant",
   ]);
@@ -297,6 +317,8 @@ test("existing Host and SDK capabilities retain their exact ownership", async ()
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-workspace-entrypoint.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-cooperative-process-custody.ts",
+    // internal.ts consumes the exact Darwin route readback directly.
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-route-durable-storage.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/native-host-custody-workspace-entrypoint.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts",
   ]);
@@ -342,7 +364,14 @@ test("Darwin retained-owner consumers use the narrow workspace entrypoint", asyn
 test("Codex evidence utilities do not grant spawn or network ownership", async () => {
   const codex = boundariesById.get("adapter.agent-execution.codex-app-server");
   const path = `${codex.roots[0]}/negative-fixture.ts`;
-  assert.deepEqual(await analyzeFixture({ [path]: "import 'node:util';\n" }), []);
+  // The former direct getBuiltinModule("node:util") consumers under this root
+  // (effect-custody/permission-boundary/platform-tuple/config-wire/native
+  // -broker-recipe) moved into the narrower codex-primitives/codex-primitives
+  // -leaves/codex-native-broker roles; the remaining bare codex-app-server
+  // files (contained-turn-provider.ts, current-kernel-adapter.ts) never used
+  // node:util, so an arbitrary file under this root no longer inherits it.
+  assert.deepEqual(rules(await analyzeFixture({ [path]: "import 'node:util';\n" })),
+    ["architecture.source-dependencies.forbidden-builtin-dependency"]);
   for (const builtin of ["node:child_process", "node:dns/promises", "node:http", "node:net", "node:tls", "node:timers"]) {
     assert.deepEqual(rules(await analyzeFixture({ [path]: `import '${builtin}';\n` })),
       ["architecture.source-dependencies.forbidden-builtin-dependency"]);
@@ -488,7 +517,7 @@ test("Darwin native launch consumers use declared custody and Codex entrypoints"
       entry: "contained-turn-kernel-custody-entrypoint", internal: "host-custody-launch"},
     {consumer: `${base}/composition/darwin-codex-host-post-claim-preparation.ts`,
       prefix: "../adapters/outbound/codex-app-server/", owner: `${base}/adapters/outbound/codex-app-server/`,
-      entry: "codex-app-server-launch-plan", internal: "codex-native-broker-files"},
+      entry: "codex-app-server-launch-plan", internal: "codex-native-observations"},
   ];
   for (const {consumer, prefix, owner, entry, internal} of cases) {
     assert.deepEqual(await analyzeFixture({[consumer]: `import '${prefix}${entry}.js';\n`}), []);
