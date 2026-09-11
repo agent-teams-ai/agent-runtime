@@ -3827,12 +3827,12 @@
         },
         {
           "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/egress-policy-time-authority.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/egress-exchange.ts",
           "mode": "type-only"
         },
         {
           "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/egress-transport.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/egress-policy-time-authority.ts",
           "mode": "type-only"
         },
         {

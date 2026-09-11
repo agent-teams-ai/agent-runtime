@@ -1,7 +1,7 @@
 import { createValidationTools, isEgressIdentifier, type EgressSecurityPrimitives } from "../domain/validation.js";
 import type { TrustedEgressHostIdentityV1 } from "../domain/host-identity.js";
 import type { ContainedTurnEgressDependencies } from "./contained-turn-egress-dependencies.js";
-import type { EgressTransportV1 } from "./ports/outbound/egress-transport.js";
+import type { EgressTransportV1 } from "./ports/outbound/egress-exchange.js";
 
 /** Validates the untrusted composition inputs a caller supplies (identity + every outbound port)
  * before the gateway trusts any of it. Fails closed on any missing/mistyped/extra member. */

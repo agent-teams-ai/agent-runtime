@@ -1,5 +1,5 @@
 import type { ContainedTurnEgressResult } from "../domain/egress-request.js";
-import type { EgressTransportV1 } from "./ports/outbound/egress-transport.js";
+import type { EgressTransportV1 } from "./ports/outbound/egress-exchange.js";
 
 type State = "open" | "active" | "closing" | "used" | "closed" | "quarantined";
 

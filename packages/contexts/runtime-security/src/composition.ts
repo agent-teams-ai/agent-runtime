@@ -136,7 +136,7 @@ export type {
   EgressTransportGatewayV1,
   EgressTransportV1,
   TrustedEgressFirstWriteV1,
-} from "./features/contained-turn-egress/application/ports/outbound/egress-transport.js";
+} from "./features/contained-turn-egress/application/ports/outbound/egress-exchange.js";
 export type { NodeEd25519SignerIdentity } from "./features/contained-turn-egress/adapters/outbound/node-ed25519.js";
 export { createAuthorizeClaudeCodeSetupInspection } from "./features/setup-source-inspection-authorization/application/authorize-claude-code-setup-inspection.js";
 export type { PathCanonicalizer } from "./features/setup-source-inspection-authorization/application/ports/outbound/path-canonicalizer.js";

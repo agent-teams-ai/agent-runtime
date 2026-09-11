@@ -3,7 +3,7 @@ import type { ContainedTurnDispatchAuthorityV1 } from
 import type { MonotonicClock } from "./ports/outbound/monotonic-clock.js";
 import type { EgressAuthorizationSignerV1 } from "./ports/outbound/egress-authorization-signer.js";
 import type { EgressPolicyTimeAuthorityV1 } from "./ports/outbound/egress-policy-time-authority.js";
-import type { EgressTransportGatewayV1 } from "./ports/outbound/egress-transport.js";
+import type { EgressTransportGatewayV1 } from "./ports/outbound/egress-exchange.js";
 import type { ProviderRouteAuthorityV1 } from "./ports/outbound/provider-route-authority.js";
 
 export interface ContainedTurnEgressDependencies {
