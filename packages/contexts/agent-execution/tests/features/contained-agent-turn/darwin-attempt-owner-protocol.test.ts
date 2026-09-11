@@ -287,7 +287,9 @@ typedef void *acl_entry_t;
 static int mode=0,freed=0,queried=0;
 static acl_t acl_get_fd_np(int fd,int type) {
   assert(fd==9 && type==ACL_TYPE_EXTENDED);
-  if (mode==1) { errno=EBADF; return NULL; } return &mode;
+  if (mode==1) { errno=EBADF; return NULL; }
+  if (mode==6) { errno=ENOENT; return NULL; }
+  return &mode;
 }
 static int acl_valid(acl_t acl) { assert(acl==&mode); return mode==2 ? -1 : 0; }
 static int acl_get_entry(acl_t acl,int index,acl_entry_t *entry) {
@@ -300,12 +302,15 @@ ${metadata ? "struct stat { unsigned st_flags; }; static ssize_t flistxattr(int 
 ${predicate}
 int main(void) {
   ${metadata ? "struct stat st={0};" : ""}
-  for (mode=0;mode<6;mode++) {
+  for (mode=0;mode<7;mode++) {
     freed=0; queried=0;
     int result=${name}(9${metadata ? ",&st" : ""});
-    assert(result==(mode==0));
-    assert(freed==(mode==1 ? 0 : 1));
-    assert(queried==(mode==1 || mode==2 ? 0 : 1));
+    /* mode 6: acl_get_fd_np returns NULL with errno=ENOENT, the ordinary
+     * "this file never had an ACL" case -- must be treated as empty, not
+     * as an API failure indistinguishable from mode 1's EBADF. */
+    assert(result==(mode==0 || mode==6));
+    assert(freed==(mode==1 || mode==6 ? 0 : 1));
+    assert(queried==(mode==1 || mode==2 || mode==6 ? 0 : 1));
   }
   return 0;
 }
