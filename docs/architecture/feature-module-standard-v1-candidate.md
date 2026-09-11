@@ -193,27 +193,45 @@ accepted authority; a profile edit alone cannot widen the checked tree.
 Recorded here so a partially migrated module reads as transit rather than as a
 contradiction. None of this is a conformance claim, and no gate asserts any of it.
 
-Runtime Configuration has two features. `codex-configuration-inspection` already
-owns its application models and translates through one inbound adapter.
-`claude-code-configuration-inspection` does not: its application layer imports
-vocabulary *constants* from its contract, not only types, so deciding where that
-vocabulary lives is its own reviewed question. Both features then need curated
-feature entrypoints, the package assembly routed through them, and their tests
-moved under feature ownership.
+Runtime Configuration has two features. `codex-configuration-inspection`
+already owns its application models and translates through one inbound
+adapter. `claude-code-configuration-inspection` now owns its vocabulary the
+same way: the constants it needs live in its own `models/claude-code-vocabulary.ts`
+application model, and its remaining import from `../contracts` is type-only.
+Both features still route their package assembly through direct deep imports
+into `adapters` and `application/ports`, not through a curated feature
+entrypoint, and their tests still live at the package root rather than under
+feature ownership; both remain open.
 
-Runtime Security has four features. Setup-source authorization needs its Node
-path and observation access behind ports. Dispatch authority needs its external
-V1 wrapper and mapper moved from application into inbound adapters.
-`contained-turn-egress` is still a flat directory and needs real layer ownership
-with injected time. Module composition still performs validation, hashing and
-route-binding projection that the egress feature should own.
+Runtime Security has four features. Setup-source authorization now owns its
+Node path and source-identity digest behind explicit outbound ports
+(`PathAlgebra`, `SourceIdentityDigest`), with a Node adapter supplying both;
+its application layer no longer imports `node:path` or `node:crypto` directly.
+`contained-turn-egress` is no longer a flat directory: it has real
+domain/application/composition/adapters ownership, and its write-authorization
+lease window now reads a `MonotonicClock` the composition root injects, rather
+than an ambient `performance.now()` binding. The clock stays a composition-root
+detail — the public `ContainedTurnEgressDependencies` shape does not accept
+one — so revalidation timing remains under trusted-code control, matching the
+sibling dispatch-authority feature's own control clock. Module composition's
+`containedTurnEgressProviderBindingDigest` now delegates route-binding digest
+computation to the egress feature's own domain `validation` module instead of
+computing it inline. Dispatch authority's external V1 wrapper and mapper
+(`contained-turn-dispatch-authority-v1-mappers.ts`) still live in
+`application/`, not in an inbound adapter; that move remains open.
 
-Embedded Runtime is the host application. Its activation waits on the accepted
-result of the asynchronous setup assembly work, and then needs its real behavior
-separated from wiring: setup view projection, external input and output
+Embedded Runtime is the host application. Its activation waited on the
+accepted asynchronous setup assembly work, which has since landed. The setup
+view's Claude Code and Codex reference-digest computation is now behind an
+outbound `OpaqueReferenceDigest` port with a Host adapter, so
+`application/build-claude-code-setup-view.ts` and
+`application/build-codex-setup-view.ts` no longer import `node:crypto`
+directly, and the package boundary now rejects that import from application
+code. The remaining separation the plan called for — external input/output
 validation, the Provider Access and Runtime Security anti-corruption adapters,
-and runtime-access coordination. Process lifecycle, readiness and rollback
-legitimately stay with the host.
+and runtime-access coordination pulled out of composition wiring — has not
+been attempted yet. Process lifecycle, readiness and rollback legitimately
+stay with the host.
 
 The deterministic syntax-aware checker is
 `scripts/architecture/check-feature-modules.mjs`. Run
