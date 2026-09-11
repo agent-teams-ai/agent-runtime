@@ -2,24 +2,47 @@ import {createHash} from "node:crypto";
 import {lstat, readFile} from "node:fs/promises";
 import {isAbsolute} from "node:path";
 
-export const plainJson = value => {
+// providerAccess never carries a legitimate key at manifest-build time: real
+// PA runtime state (codexHome, sandbox, operatorApproval, ...) is supplied to
+// darwin-live-infrastructure.mjs out-of-band at execution time, never baked
+// into the sealed/hashed activation manifest. A strict "must be empty"
+// allowlist for this one section is stronger than blocklisting known-bad key
+// names, which only catches names someone thought to list (finding 6).
+const STRICT_EMPTY_SECTIONS = new Set(["providerAccess"]);
+
+const isPlainScalar = entry =>
+  entry === null || typeof entry === "string" || typeof entry === "boolean" ||
+  (typeof entry === "number" && Number.isFinite(entry));
+
+const assertPlainContainer = (entry, seen) => {
+  if (typeof entry !== "object" || seen.has(entry) ||
+      (!Array.isArray(entry) && Object.getPrototypeOf(entry) !== Object.prototype)) {
+    throw new TypeError("activation infrastructure must contain only plain JSON values");
+  }
+};
+
+const assertAllowedProperty = (topLevel, key, descriptor) => {
+  if (typeof key !== "string" || !descriptor.enumerable || !("value" in descriptor) ||
+      /^(token|password|cookie|authJson|credentials|sensitiveOutputTokens)$/iu.test(key)) {
+    throw new TypeError("activation infrastructure contains forbidden material");
+  }
+  if (topLevel && STRICT_EMPTY_SECTIONS.has(key) && descriptor.value && typeof descriptor.value === "object" &&
+      Reflect.ownKeys(descriptor.value).length > 0) {
+    throw new TypeError(`activation infrastructure section ${key} must be empty in the sealed manifest`);
+  }
+};
+
+export const plainJson = (value, topLevel = false) => {
   const seen = new Set();
   const visit = entry => {
-    if (entry === null || typeof entry === "string" || typeof entry === "boolean") {return entry;}
-    if (typeof entry === "number" && Number.isFinite(entry)) {return entry;}
-    if (typeof entry !== "object" || seen.has(entry) ||
-        (!Array.isArray(entry) && Object.getPrototypeOf(entry) !== Object.prototype)) {
-      throw new TypeError("activation infrastructure must contain only plain JSON values");
-    }
+    if (isPlainScalar(entry)) {return entry;}
+    assertPlainContainer(entry, seen);
     seen.add(entry);
     const result = Array.isArray(entry) ? [] : {};
     for (const key of Reflect.ownKeys(entry)) {
       if (Array.isArray(entry) && key === "length") {continue;}
       const descriptor = Object.getOwnPropertyDescriptor(entry, key);
-      if (typeof key !== "string" || !descriptor.enumerable || !("value" in descriptor) ||
-          /^(token|password|cookie|authJson|credentials|sensitiveOutputTokens)$/iu.test(key)) {
-        throw new TypeError("activation infrastructure contains forbidden material");
-      }
+      assertAllowedProperty(topLevel, key, descriptor);
       Object.defineProperty(result, key, {value: visit(descriptor.value), enumerable: true});
     }
     seen.delete(entry);
@@ -56,7 +79,7 @@ const validateActivationInput = input => {
 export async function createDarwinLiveActivationManifest(input) {
   validateActivationInput(input);
   const turn = input.turn;
-  const infrastructure = plainJson(input.infrastructure);
+  const infrastructure = plainJson(input.infrastructure, true);
   for (const key of ["identities", "database", "providerAccess", "runtimeSecurity", "filesystem", "host", "deployment", "verification", "native"]) {
     if (infrastructure[key] === null || typeof infrastructure[key] !== "object") {throw new TypeError(`activation infrastructure ${key} is required`);}
   }

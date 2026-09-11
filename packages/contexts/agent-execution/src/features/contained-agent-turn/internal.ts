@@ -24,6 +24,8 @@ export {
   DarwinCooperativeProcessCustody,
   type DarwinCooperativeProcessCustodyOptions,
 } from "./adapters/outbound/host-custody/darwin-cooperative-process-custody.js";
+export {inspectDarwinRouteRequestInventory, type DarwinRouteRequestInventory,
+  type DarwinRouteRequestInventoryIdentity} from "./adapters/outbound/host-custody/darwin-route-durable-storage.js";
 export {
   applyContainedTurnPostgresSchema,
   CONTAINED_TURN_POSTGRES_MIGRATION_DIGEST,

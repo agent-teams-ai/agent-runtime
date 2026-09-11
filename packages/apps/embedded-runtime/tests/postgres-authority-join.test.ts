@@ -22,7 +22,7 @@ import {captureContainedTurnCurrentAuthority, snapshotContainedTurnAuthority} fr
 
 const databaseUrl = process.env.AE_ACL_POSTGRES_DISPOSABLE_URL;
 // A skip only checks loading/type definitions. Orchestrator owns execution on a new disposable database.
-test("joined AE feature with actual PostgreSQL PA current/v2 and RS acceptance/publication owners", {skip: !databaseUrl, timeout: 60_000}, async t => {
+test("joined AE feature with actual PostgreSQL PA current/v2 and RS acceptance/publication owners", {skip: process.platform !== "linux" ? "descriptor-relative custody requires Linux" : !databaseUrl, timeout: 60_000}, async t => {
   const {Pool} = await import("pg");
   const pool = new Pool({connectionString: validateDisposablePostgresUrl(databaseUrl!), max: 8, connectionTimeoutMillis: 2000,
     query_timeout: 5000, idleTimeoutMillis: 1000, application_name: "ar69-authority-acl-disposable"});

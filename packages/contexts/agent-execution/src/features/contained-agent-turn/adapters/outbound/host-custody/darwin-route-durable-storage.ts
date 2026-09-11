@@ -2,6 +2,9 @@ import { constants, openSync, closeSync, fstatSync, lstatSync, realpathSync, fsy
 import { dirname, join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { withStableDirectoryProcessLock } from "@agent-teams/filesystem-custody/composition";
+import {validateCommittedDispatchProofV1} from "../../../domain/committed-dispatch-proof-v1.js";
+import {CONTAINED_TURN_LIMITS, validateContainedTurnText} from "../../../domain/contained-turn-limits.js";
+import {validateContainedTurnIdentity} from "../../../domain/contained-turn-identities.js";
 
 export interface DarwinTrustedDirectory { readonly path: string; readonly dev: string; readonly ino: string }
 const reject = (): never => {throw new Error("Darwin durable route storage unavailable; reconcile original locator");};
@@ -175,4 +178,76 @@ export const inspectDarwinRouteResidue = (path: string): readonly object[] => {
     if (fstatSync(fd).size !== bytes.length) {reject();}
     return Object.freeze(records);
   } finally {closeSync(fd);}
+};
+
+export type DarwinRouteRequestInventoryIdentity = Readonly<{
+  tenantId: string; projectId: string; operationId: string; attemptId: string; custodyId: string;
+}>;
+export type DarwinRouteRequestInventory = Readonly<{kind: "closed"; requestIds: readonly string[]}> |
+  Readonly<{kind: "unknown"}>;
+const UNKNOWN_REQUEST_INVENTORY: DarwinRouteRequestInventory = Object.freeze({kind: "unknown"});
+
+const exactRecord = (value: unknown, names: readonly string[]): value is Record<string, unknown> => {
+  if (typeof value !== "object" || value === null || Object.getPrototypeOf(value) !== Object.prototype) {return false;}
+  const keys = Reflect.ownKeys(value);
+  return keys.length === names.length && keys.every(key => typeof key === "string" && names.includes(key));
+};
+
+const assertRequestInventoryIdentity = (expected: DarwinRouteRequestInventoryIdentity): void => {
+  if (!exactRecord(expected, ["tenantId", "projectId", "operationId", "attemptId", "custodyId"]) ||
+      Object.values(expected).some(value => typeof value !== "string")) {
+    throw new TypeError("Darwin route inventory identity invalid");
+  }
+  validateContainedTurnText("tenantId", expected.tenantId, CONTAINED_TURN_LIMITS.text.identifier);
+  validateContainedTurnText("projectId", expected.projectId, CONTAINED_TURN_LIMITS.text.identifier);
+  validateContainedTurnIdentity("operation", expected.operationId);
+  validateContainedTurnIdentity("attempt", expected.attemptId);
+  validateContainedTurnIdentity("custody", expected.custodyId);
+};
+
+const readInventoryClaim = (path: string, record: Record<string, unknown>) => {
+  if (!exactRecord(record, ["schema", "sequence", "previous", "kind", "data"]) ||
+      record.schema !== "darwin-route-lifecycle/v1" || record.kind !== "header" ||
+      !exactRecord(record.data, ["claim", "generation", "locator"]) || record.data.locator !== path ||
+      typeof record.data.generation !== "string" || !/^[a-f0-9]{64}$/u.test(record.data.generation)) {
+    throw new TypeError("Darwin route inventory header invalid");
+  }
+  return validateCommittedDispatchProofV1(record.data.claim);
+};
+
+const collectRequestIds = (records: readonly Record<string, unknown>[]): readonly string[] => {
+  const requestIds: string[] = []; const unique = new Set<string>();
+  for (const record of records) {
+    if (record.kind !== "request_reserved") {continue;}
+    if (!exactRecord(record.data, ["requestId"])) {throw new TypeError("Darwin request identity invalid");}
+    const requestId = record.data.requestId;
+    if (typeof requestId !== "string" || unique.has(requestId) || unique.size >= 256) {
+      throw new TypeError("Darwin request identity invalid");
+    }
+    validateContainedTurnText("Darwin request identity", requestId, CONTAINED_TURN_LIMITS.text.identifier);
+    unique.add(requestId); requestIds.push(requestId);
+  }
+  return Object.freeze(requestIds);
+};
+
+/** Closed forensic request inventory for subsequent exact evidence reads. It
+ * never interprets a reservation as a successful request or provider effect. */
+export const inspectDarwinRouteRequestInventory = (
+  path: string,
+  expected: DarwinRouteRequestInventoryIdentity,
+): DarwinRouteRequestInventory => {
+  try {
+    assertRequestInventoryIdentity(expected);
+    const records = inspectDarwinRouteResidue(path) as readonly Record<string, unknown>[];
+    if (records.length < 2) {return UNKNOWN_REQUEST_INVENTORY;}
+    const claim = readInventoryClaim(path, records[0]!);
+    for (const name of ["tenantId", "projectId", "operationId", "attemptId", "custodyId"] as const) {
+      if (claim[name] !== expected[name]) {return UNKNOWN_REQUEST_INVENTORY;}
+    }
+    const retired = records.findIndex(record => record.kind === "retired");
+    if (retired !== records.length - 1 || records.some(record => record.kind === "quarantined")) {
+      return UNKNOWN_REQUEST_INVENTORY;
+    }
+    return Object.freeze({kind: "closed", requestIds: collectRequestIds(records)});
+  } catch {return UNKNOWN_REQUEST_INVENTORY;}
 };

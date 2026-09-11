@@ -1,0 +1,150 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "status",
+    "pending",
+    "standard",
+    "authority",
+    "fms",
+    "productionRoots",
+    "boundaries",
+    "compositions",
+    "exceptions",
+    "packages",
+    "enforcement"
+  ],
+  "properties": {
+    "$schema": {"type": "string", "minLength": 1},
+    "schemaVersion": {"const": 1},
+    "status": {"enum": ["pending", "active"]},
+    "pending": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "standard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "path", "anchor", "decision", "commit", "sha256", "evidencePath"],
+      "properties": {
+        "repository": {"const": "agent-teams-ai/get-modular"},
+        "path": {"const": "docs/architecture/common-assembly.md"},
+        "anchor": {"const": "consumer-module-standard"},
+        "decision": {"const": "ADR-0026"},
+        "commit": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40}$"},
+        "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "evidencePath": {"type": ["string", "null"], "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"}
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "owner", "scope"],
+      "properties": {
+        "id": {"const": "ADR-0015"},
+        "path": {"type": ["string", "null"]},
+        "owner": {"type": "string", "minLength": 1},
+        "scope": {"const": "embedded-runtime passive setup"}
+      }
+    },
+    "fms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "sha256", "features"],
+      "properties": {
+        "profile": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "features": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}
+      }
+    },
+    "sourceCensus": {"type": "object", "additionalProperties": false, "required": ["packageRoots", "featureRoots"], "properties": {"packageRoots": {"type": "array", "uniqueItems": true, "items": {"type": "object", "additionalProperties": false, "required": ["name", "root"], "properties": {"name": {"type": "string", "minLength": 1}, "root": {"type": "string", "minLength": 1}}}}, "featureRoots": {"type": "array", "items": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"}, "uniqueItems": true}}},
+    "productionRoots": {"type": "array", "items": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"}, "uniqueItems": true},
+    "boundaries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "owner", "roots", "entrypoints", "status", "rationale", "reviewTrigger", "relationships"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "owner": {"type": "string", "minLength": 1},
+          "roots": {"type": "array", "items": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"}, "uniqueItems": true},
+          "entrypoints": {"type": "array", "items": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"}, "uniqueItems": true},
+          "status": {"enum": ["adopted", "not-adopted"]},
+          "rationale": {"type": "string", "minLength": 1},
+          "reviewTrigger": {"type": "string", "minLength": 1},
+          "relationships": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["from", "to", "mode"],
+              "properties": {"from": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"}, "to": {"type": "string", "minLength": 1}, "mode": {"enum": ["type-only", "runtime"]}}
+            },
+            "uniqueItems": true
+          }
+        }
+      },
+      "uniqueItems": true
+    },
+    "compositions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["boundary", "entrypoint", "declarations", "profile", "factories", "tests"],
+        "properties": {
+          "boundary": {"type": "string", "minLength": 1},
+          "entrypoint": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"},
+          "factorySymbol": {"type": "string", "minLength": 1},
+          "implementation": {"type": "string", "minLength": 1},
+          "declarations": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"},
+          "profile": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"},
+          "factories": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"},
+          "tests": {"type": "array", "items": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"}, "uniqueItems": true}
+        }
+      },
+      "uniqueItems": true
+    },
+    "exceptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["boundary", "rule", "paths", "authority", "owner", "rationale", "reviewTrigger"],
+        "properties": {
+          "boundary": {"type": "string", "minLength": 1},
+          "rule": {"type": "string", "minLength": 1},
+          "paths": {"type": "array", "items": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"}, "uniqueItems": true},
+          "authority": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"},
+          "owner": {"type": "string", "minLength": 1},
+          "rationale": {"type": "string", "minLength": 1},
+          "reviewTrigger": {"type": "string", "minLength": 1}
+        }
+      },
+      "uniqueItems": true
+    },
+    "packages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "version", "archiveSha256", "archivePath"],
+        "properties": {
+          "name": {"enum": ["@get-modular/core", "@get-modular/assembly"]},
+          "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+          "archiveSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "archivePath": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"}
+        }
+      },
+      "uniqueItems": true
+    },
+    "enforcement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commands", "roots"],
+      "properties": {"commands": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}}, "roots": {"const": ["check:fast", "check"]}}
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Scoped Get Modular consumer adoption profile"
+}

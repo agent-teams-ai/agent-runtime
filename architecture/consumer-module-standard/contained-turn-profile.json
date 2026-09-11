@@ -15,8 +15,8 @@
       "gitBlob": "d0bfff2033faf544fe65268c1dcdfd524d093015",
       "sha256": "851653f96643cf0466b67ab22963661976b00de44840fa3144a48a8c054f95fa"
     },
-    "proposedAdr": "ADR-0015",
-    "decisionPath": "docs/decisions/0015-consumer-module-standard-pending-adoption.md"
+    "proposedAdr": "ADR-0016",
+    "decisionPath": "docs/decisions/0016-contained-turn-consumer-module-standard-adoption.md"
   },
   "scope": {
     "owner": "architecture",
@@ -25,7 +25,7 @@
       "packages/contexts/agent-execution/src"
     ],
     "activeWiringScope": [],
-    "profilePath": "architecture/consumer-module-standard/profile.json"
+    "profilePath": "architecture/consumer-module-standard/contained-turn-profile.json"
   },
   "adoptedBoundaries": [],
   "legacyBoundaries": [
@@ -60,15 +60,15 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts": 2
       },
       "authority": "ADR-0012",
-      "rationale": "The existing closed seven-port Pure DI boundary predates Consumer Module Standard adoption and has no Get Modular Assembly declaration or profile.",
+      "rationale": "The existing closed seven-port Pure DI boundary is outside the passive setup Assembly adoption and has no contained-turn Assembly declaration or profile.",
       "reviewTrigger": "Any new replaceable or cross-module relationship, or any change to the entrypoint, factory, dependency declaration, or exact slot set."
     }
   ],
   "exceptions": [],
   "outstandingWork": [
-    "Pin reviewed exact Get Modular Core and Assembly package artifacts under package policy.",
-    "Replace the legacy direct wiring with consumer-owned declarations, profile bindings, and one Assembly composition root.",
-    "Add independent binding parity, preparation failure, cleanup, isolation, typed rejection, and packed-import evidence before changing status to active."
+    "Keep the legacy direct seven-port boundary classified until a contained-turn Assembly migration is separately accepted.",
+    "Replace the legacy direct wiring only under a later contained-turn decision with consumer-owned declarations, profile bindings, and one Assembly composition root.",
+    "Add contained-turn binding parity, preparation failure, cleanup, isolation, typed rejection, and packed-import evidence before changing this scoped profile to active."
   ],
   "enforcement": {
     "topology": "pnpm foundation:check",

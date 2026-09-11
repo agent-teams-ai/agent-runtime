@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { parseDocument } from "yaml";
 
+import { parseSync } from "oxc-parser";
+
 const foundationManifestPath = fileURLToPath(import.meta.resolve("@agent-teams/engineering-foundation/package.json"));
 const foundationManifest = JSON.parse(await readFile(foundationManifestPath, "utf8"));
 const foundationCli = join(dirname(foundationManifestPath), foundationManifest.bin["agent-teams-foundation"]);
@@ -60,7 +62,7 @@ const analyzeFixture = async files => {
       await mkdir(join(root, governedRoot), { recursive: true });
     }
     await writeFixtureFile(root, "package.json", JSON.stringify({
-      dependencies: { "@anthropic-ai/claude-agent-sdk": "1.0.0" },
+      dependencies: { "@anthropic-ai/claude-agent-sdk": "1.0.0", "@get-modular/core": "0.1.0", "@get-modular/assembly": "0.1.0" },
       name: "foundation-boundary-fixture",
       private: true,
       type: "module",
@@ -103,7 +105,7 @@ const rules = diagnostics => diagnostics.map(diagnostic => diagnostic.ruleId);
 test("the named negative suite runs exactly once through every Foundation gate", () => {
   assert.equal(
     manifest.scripts["foundation:boundaries:negative"],
-    "node --test scripts/architecture/source-dependency-adapter-boundaries.test.mjs",
+    "node --test scripts/architecture/source-dependency-adapter-boundaries.test.mjs scripts/docs/runtime-builtin-permissions.test.mjs",
   );
   assert.equal(
     manifest.scripts["foundation:check"].split("pnpm foundation:boundaries:negative").length - 1,
@@ -131,7 +133,7 @@ test("contained-turn domain and application remain dependency-free core", async 
   })).includes("architecture.source-dependencies.forbidden-package-dependency"));
 });
 
-test("production sources retain expected Node imports and the installed parser accepts them", async () => {
+test("the real parser observes every retained Node import in composition and TLS support", async () => {
   const composition = "packages/apps/embedded-runtime/src/composition";
   const host = boundariesById.get("adapter.agent-execution.host-custody");
   for (const [path, builtins] of [
@@ -148,9 +150,13 @@ test("production sources retain expected Node imports and the installed parser a
       ["node:crypto", "node:util"]],
   ]) {
     const source = await readFile(join(repositoryRoot, path), "utf8");
-    const observed = [...source.matchAll(/(?:from|import)\s+["'](node:[^"']+)["']/gu)]
-      .map(match => match[1]).toSorted();
-    assert.deepEqual(observed, builtins, path);
+    const parsed = parseSync(path, source);
+    assert.deepEqual(parsed.errors, [], path);
+    assert.deepEqual(parsed.module.dynamicImports, [], path);
+    const observed = parsed.module.staticImports
+      .map(reference => reference.moduleRequest.value)
+      .filter(specifier => specifier.startsWith("node:"));
+    assert.deepEqual(observed.toSorted(), builtins, path);
     assert.deepEqual(await analyzeFixture({
       [path]: observed.map(specifier => `import '${specifier}';`).join("\n"),
     }), [], path);
@@ -180,11 +186,33 @@ test("Embedded Runtime Node utility permission belongs only to composition", () 
     "packages/apps/embedded-runtime/src/composition",
     "packages/apps/embedded-runtime/src/composition.ts",
   ]);
-  assert.deepEqual(composition.allowedBoundaries, ["production.embedded-runtime"]);
-  assert.deepEqual(composition.allowedBuiltins, ["node:crypto", "node:fs", "node:timers/promises", "node:util"]);
+  // composition.ts re-exports the linux-codex/http-egress/darwin routing
+  // cluster, the contained-turn and contained-turn-support roles, and
+  // access-contracts; PR69 grew this directory well beyond a single
+  // entrypoint file. agent-runtime-host.ts (the only remaining real
+  // getBuiltinModule("node:util") consumer under this root) moved into its
+  // own role so this catch-all root itself no longer grants node:util.
+  assert.deepEqual(composition.allowedBoundaries, [
+    "production.embedded-runtime",
+    "composition.embedded-runtime.contained-turn",
+    "composition.embedded-runtime.contained-turn-support",
+    "composition.embedded-runtime.contained-turn-routing",
+    "composition.embedded-runtime.agent-runtime-host",
+    "core.embedded-runtime.access-contracts",
+  ]);
+  // The async-assembly-adapter Assembly root (runtime-setup-assembly.ts,
+  // default-agent-runtime-host.ts, agent-runtime-host-creation-error.ts) uses
+  // node:crypto directly and isn't yet carved into its own narrower role.
+  assert.deepEqual(composition.allowedBuiltins, ["node:crypto"]);
   assert.deepEqual(composition.allowedRuntimeReferences, []);
   const production = boundariesById.get("production.embedded-runtime");
-  assert.deepEqual(production.allowedBoundaries, []);
+  // build-claude-code-setup-view.ts/build-codex-setup-view.ts reach the
+  // contained-turn, contained-turn-support and access-contracts entrypoints.
+  assert.deepEqual(production.allowedBoundaries, [
+    "composition.embedded-runtime.contained-turn",
+    "composition.embedded-runtime.contained-turn-support",
+    "core.embedded-runtime.access-contracts",
+  ]);
   assert.deepEqual(production.allowedBuiltins, ["node:crypto", "node:timers/promises"]);
 });
 
@@ -219,14 +247,13 @@ test("transitional boundaries and adapter permissions remain exact", () => {
   assert.ok(!claude.allowedBoundaries.includes("adapter.agent-execution.host-custody"));
   assert.ok(!claude.allowedBoundaries.includes("adapter.agent-execution.legacy-contained-turn-ports"));
   assert.ok(!claude.allowedBoundaries.includes("production.agent-execution"));
+  // accepted-authority-anti-corruption.ts and authority-owner-boundary.ts import
+  // provider-access-anti-corruption.ts, which imports both of them back (a real
+  // reciprocal cycle once PR69's provider-access wiring is counted), so they
+  // moved into composition.agent-execution.boundary-data alongside it. Only
+  // host-post-claim-preparation.ts (no such cycle) remains in this role.
   assert.deepEqual(composition.roots, [
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/authority-owner-boundary.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-credential-output-inventory.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/dispatch-grant-anti-corruption.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
   ]);
   assert.deepEqual(composition.entrypoints, composition.roots);
   assert.deepEqual(composition.allowedBoundaries, [
@@ -245,6 +272,12 @@ test("transitional boundaries and adapter permissions remain exact", () => {
     "adapter.agent-execution.provider-delegation-ports",
     "composition.agent-execution.contained-turn",
     "core.agent-execution.contained-turn",
+    "adapter.agent-execution.codex-data",
+    "adapter.agent-execution.codex-primitives",
+    "adapter.agent-execution.codex-primitives-leaves",
+    "adapter.agent-execution.codex-native-broker",
+    "composition.agent-execution.boundary-data",
+    "composition.agent-execution.dispatch-grant",
   ]);
   assert.ok(!production.allowedBuiltins.includes("node:util"));
   assert.ok(!production.entrypoints.includes(paths.legacy));
@@ -255,7 +288,7 @@ test("Docker custody uses only the engine port and explicit residue construction
   const custody = boundariesById.get("adapter.agent-execution.docker-custody");
   const json = boundariesById.get("adapter.agent-execution.docker-json");
 
-  assert.deepEqual(engine.entrypoints.toSorted(), [paths.dockerConstruction, paths.dockerPort].toSorted());
+  assert.deepEqual(engine.entrypoints, [paths.dockerPort, paths.dockerConstruction]);
   assert.deepEqual(engine.allowedBoundaries, ["adapter.agent-execution.docker-json"]);
   assert.deepEqual(engine.allowedPackages, []);
   assert.deepEqual(engine.allowedRuntimeReferences, []);
@@ -293,25 +326,16 @@ test("existing Host and SDK capabilities retain their exact ownership", async ()
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-workspace-entrypoint.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-cooperative-process-custody.ts",
+    // internal.ts consumes the exact Darwin route readback directly.
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-route-durable-storage.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/native-host-custody-workspace-entrypoint.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts",
   ]);
 
   assert.deepEqual(host.allowedBuiltins, [
-    "node:buffer",
-    "node:child_process",
-    "node:crypto",
-    "node:dns/promises",
-    "node:events",
-    "node:fs",
-    "node:fs/promises",
-    "node:net",
-    "node:os",
-    "node:path",
-    "node:stream",
-    "node:timers/promises",
-    "node:tls",
-    "node:util",
+    "node:buffer", "node:child_process", "node:crypto", "node:dns/promises",
+    "node:events", "node:fs", "node:fs/promises", "node:net", "node:os",
+    "node:path", "node:stream", "node:timers/promises", "node:tls", "node:util",
   ]);
 
   for (const builtin of ["node:dns/promises", "node:net", "node:os", "node:stream", "node:tls"]) {
@@ -338,7 +362,14 @@ test("Darwin retained-owner consumers use the narrow workspace entrypoint", asyn
 test("Codex evidence utilities do not grant spawn or network ownership", async () => {
   const codex = boundariesById.get("adapter.agent-execution.codex-app-server");
   const path = `${codex.roots[0]}/negative-fixture.ts`;
-  assert.deepEqual(await analyzeFixture({ [path]: "import 'node:util';\n" }), []);
+  // The former direct getBuiltinModule("node:util") consumers under this root
+  // (effect-custody/permission-boundary/platform-tuple/config-wire/native
+  // -broker-recipe) moved into the narrower codex-primitives/codex-primitives
+  // -leaves/codex-native-broker roles; the remaining bare codex-app-server
+  // files (contained-turn-provider.ts, current-kernel-adapter.ts) never used
+  // node:util, so an arbitrary file under this root no longer inherits it.
+  assert.deepEqual(rules(await analyzeFixture({ [path]: "import 'node:util';\n" })),
+    ["architecture.source-dependencies.forbidden-builtin-dependency"]);
   for (const builtin of ["node:child_process", "node:dns/promises", "node:http", "node:net", "node:tls", "node:timers"]) {
     assert.deepEqual(rules(await analyzeFixture({ [path]: `import '${builtin}';\n` })),
       ["architecture.source-dependencies.forbidden-builtin-dependency"]);
@@ -439,6 +470,8 @@ test("Docker process composition uses its narrow entrypoint and a type-only Host
   const entry = `${base}/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.ts`;
   const internal = entry.replace("docker-provider-process-entrypoint.ts", "docker-provider-process-bridge.ts");
   const source = await readFile(join(repositoryRoot, composition), "utf8");
+  const parsed = parseSync(composition, source);
+  assert.deepEqual(parsed.errors, []);
   assert.deepEqual(await analyzeFixture({[composition]: source}), []);
   assert.match(source, /import type \{CustodiedProviderProcess, CustodiedProviderProcessRegistry\}/u);
   assert.deepEqual(rules(await analyzeFixture({[paths.host]: "import './docker/docker-provider-process-entrypoint.js';\n"})),
@@ -460,6 +493,32 @@ test("native abort subscriptions stay in physical adapters, never core or outer 
   }
 });
 
+
+test("Get Modular belongs only to Embedded Runtime composition, including type imports", async () => {
+  const packages = ["@get-modular/core", "@get-modular/assembly"];
+  for (const boundary of policy.boundaries) {
+    assert.deepEqual(boundary.allowedPackages.filter(name => packages.includes(name)).toSorted(),
+      boundary.id === "composition.embedded-runtime" ? packages.toSorted() : [], boundary.id);
+  }
+  for (const pkg of packages) {
+    for (const statement of [`import '${pkg}';`, `import type {} from '${pkg}';`]) {
+      assert.deepEqual(await analyzeFixture({
+        "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts": statement,
+      }), []);
+      for (const root of ["packages/apps/embedded-runtime/src",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn",
+        "packages/contexts/runtime-configuration/src",
+        "packages/contexts/runtime-security/src"]) {
+        for (const layer of ["application", "contracts", "domain"]) {
+          const path = `${root}/${layer}/negative-get-modular.ts`;
+          const diagnostics = await analyzeFixture({ [path]: statement });
+          assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.forbidden-package-dependency"], path);
+          assert.equal(diagnostics[0].location.path, path);
+        }
+      }
+    }
+  }
+});
 
 test("Host custody cannot import the filesystem workspace owner backwards", async () => {
   const owner = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace-owner.ts";
@@ -484,7 +543,7 @@ test("Darwin native launch consumers use declared custody and Codex entrypoints"
       entry: "contained-turn-kernel-custody-entrypoint", internal: "host-custody-launch"},
     {consumer: `${base}/composition/darwin-codex-host-post-claim-preparation.ts`,
       prefix: "../adapters/outbound/codex-app-server/", owner: `${base}/adapters/outbound/codex-app-server/`,
-      entry: "codex-app-server-launch-plan", internal: "codex-native-broker-files"},
+      entry: "codex-app-server-launch-plan", internal: "codex-native-observations"},
   ];
   for (const {consumer, prefix, owner, entry, internal} of cases) {
     assert.deepEqual(await analyzeFixture({[consumer]: `import '${prefix}${entry}.js';\n`}), []);

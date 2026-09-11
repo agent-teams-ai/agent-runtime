@@ -170,9 +170,14 @@ async function assemblyFixture() {
         catalog: {path: join(root, "catalog"), sha256: createHash("sha256").update(catalog).digest("hex")},
         durableRoot: root, qualificationTarget: {}, id: "deployment", signer: {}, dns: {}, transport: {},
         observer: {}, launcherSha256: "b".repeat(64), nodeSha256: "c".repeat(64), limits: {maximumBytes: 1024}}}};
+  let poolNumber = 0;
   class Pool {
-    async connect() {return {release() {}, async query() {return {rows: [{database: "ar69_test_assembly", username: "test", address: "127.0.0.1", port: 5432}]};}};}
-    async query() {return {rows: []};} async end() {events.push("pool closed");}
+    constructor() {this.number = ++poolNumber;}
+    async connect() {return {release() {}, async query(sql) {
+      if (sql.includes("FROM pg_stat_activity")) {return {rows: [{other_sessions: 0, prepared_transactions: 0}]};}
+      return {rows: [{database: "ar69_test_assembly", username: "test", address: "127.0.0.1", port: 5432}]};
+    }};}
+    async query() {return {rows: []};} async end() {events.push(this.number === 1 ? "pool closed" : "inspector closed");}
   }
   const methods = ["accept", "appendOutput", "claimPreparedDispatch", "commit", "identifyAcceptance",
     "listDispatchPreparations", "preventIntent", "prepareCancellation", "prepareDispatch",
@@ -185,9 +190,10 @@ async function assemblyFixture() {
   const repository = {async migrate() {}, async close() {events.push("repository closed");}, readAuthority() {}};
   const dependencies = {Pool, agentExecution: {
     async applyContainedTurnPostgresSchema() {}, async initializePostgresHttpEgressEvidence() {},
+    darwinDigest: () => "route-locator", inspectDarwinRouteRequestInventory: () => ({kind: "unknown"}),
     PostgresContainedTurnOperationStore: Store,
     createDarwinCodexEffectCustodyOwner: () => effect,
-    DarwinCooperativeProcessCustody: function Custody(input) {custodyInput = input;},
+    DarwinCooperativeProcessCustody: function Custody(input) {custodyInput = input; this.evidenceForAttempt = () => null;},
     async prepareDarwinCodexNativeLaunchInput(selection, mode) {assert.equal(mode, "workspace-write"); selected = selection; return native;},
   }, runtimeSecurity: {createNodeSha256DispatchDigest: () => ({}),
     createPostgresDispatchConsumptionRepository: () => repository,
@@ -235,8 +241,41 @@ test("full assembly joins genuine owners, retained callbacks, shared clocks and 
     await acquired.dispose();
     assert.equal(f.read().projectionInput.outputOwner.readback().closed, true);
     assert.equal(acquired.dispose(), acquired.dispose());
-    assert.deepEqual(f.events, ["effect cut", "effect closed", "decisions closed", "repository closed", "pool closed"]);
+    assert.deepEqual(f.events, ["effect cut", "effect closed", "decisions closed", "repository closed", "pool closed", "inspector closed"]);
   } finally {await acquired?.dispose(); await rm(f.root, {recursive: true, force: true});}
+});
+
+test("ar_canary Unix-socket persistence proves null server address and inspects after primary pool close", async () => {
+  const {acquireDarwinPersistenceOwners} = await import("./darwin-live-infrastructure.mjs");
+  const socketRoot = await realpath(await mkdtemp(join(tmpdir(), "ar69-pg-socket-")));
+  const events = []; let number = 0;
+  try {
+    class Pool {
+      constructor(options) {this.number = ++number; assert.equal(options.host, socketRoot);}
+      async connect() {return {release() {}, async query(sql) {
+        if (sql.includes("FROM pg_stat_activity")) {return {rows: [{other_sessions: 0, prepared_transactions: 0}]};}
+        // Real Postgres returns NULL from both inet_server_addr() and
+        // inet_server_port() for a Unix-domain-socket connection.
+        return {rows: [{database: "ar_canary_64a4c84e", username: "test", address: null, port: null}]};
+      }};}
+      async query() {return {rows: []};}
+      async end() {events.push(this.number === 1 ? "primary-close" : "inspector-close");}
+    }
+    const owner = await acquireDarwinPersistenceOwners({codex: {path: "/test/codex"},
+      turn: {operationId: "op", scope: {tenantId: "t", projectId: "p"}}, infrastructure: {
+      database: {connection: {database: "ar_canary_64a4c84e", host: socketRoot, port: 54469, user: "test"}},
+      providerAccess: {codexHome: "/test/auth", sandbox: "/test/sandbox", operatorApproval: {}},
+      runtimeSecurity: {policyRevision: "policy"}}}, {Pool,
+      agentExecution: {async applyContainedTurnPostgresSchema() {}, async initializePostgresHttpEgressEvidence() {}},
+      runtimeSecurity: {createNodeSha256DispatchDigest: () => ({}),
+        createPostgresDispatchConsumptionRepository: () => ({async migrate() {}, async close() {}}),
+        createPostgresDispatchAcceptanceStore: () => ({async migrate() {}, async close() {}}),
+        createDispatchAcceptanceFeature: () => ({})}});
+    await owner.dispose();
+    assert.deepEqual(events, ["primary-close", "inspector-close"]);
+    assert.deepEqual(owner.readCleanup(), {persistence: {repositoryClosed: true, decisionsClosed: true},
+      pool: {closed: true}, database: {kind: "observed", otherSessions: 0, preparedTransactions: 0, inspectorClosed: true}});
+  } finally {await rm(socketRoot, {recursive: true, force: true});}
 });
 
 test("full assembly failure cleans persistence and native output; activation functions never execute", async () => {
@@ -244,7 +283,7 @@ test("full assembly failure cleans persistence and native output; activation fun
   try {
     f.dependencies.agentExecution.createDarwinCodexEffectCustodyOwner = () => {throw new Error("effect refused");};
     await assert.rejects(acquireDarwinInfrastructureOwners(f.activation, f.dependencies), /effect refused/);
-    assert.deepEqual(f.events, ["decisions closed", "repository closed", "pool closed"]);
+    assert.deepEqual(f.events, ["decisions closed", "repository closed", "pool closed", "inspector closed"]);
     let called = false;
     await assert.rejects(acquireDarwinInfrastructureOwners({...f.activation, get callback() {called = true; return {}; }}, f.dependencies));
     assert.equal(called, false);

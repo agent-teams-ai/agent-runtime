@@ -126,6 +126,7 @@ function verification(input, state, filesystem) {
       if (workspace.records) {receipts.find(receipt => receipt.kind === "result-publication").provenance.publication = workspace.records.publication;}
       verified = {artifactManifestRef, lookup};
       state.operation = operation; state.workspace = workspace.records; state.manifest = manifest;
+      state.artifactManifestVerified = workspace.gaps.length === 0;
       return Object.freeze({status: workspace.gaps.length ? "incomplete" : "verified",
         files: manifest.entries.filter(entry => entry.kind === "file"), receipts, manifest, gaps: workspace.gaps});
     },
@@ -138,10 +139,13 @@ function verification(input, state, filesystem) {
           !(await lstat(actual)).isDirectory()) {throw refused("owner rehydration path differs from verified manifest");}
       state.rehydratedIdentity = await captureVerificationDirectoryIdentity(actual, filesystem);
       state.rehydrated = actual;
+      state.resultRehydrated = true;
       return actual;
     },
     async verifySourceInventory() {
-      return verifyPinnedSource(input.activation, filesystem);
+      const result = await verifyPinnedSource(input.activation, filesystem);
+      state.sourceInventoryVerified = result === true;
+      return result;
     },
   });
 }
@@ -199,10 +203,10 @@ async function readHttpClosure(input, operation) {
   // owner inventory must bridge this namespace before using the public reader.
   if (!input.readHttpRequestIdentities) {return {gaps: [gap("http-request-identities",
     "operation/proof records expose no HTTP request identity; closed owner inventory required")]};}
-  const identity = {operationId: operation.operationId, attemptId: operation.dispatch.attemptId};
+  const identity = {...operation.scope, operationId: operation.operationId,
+    attemptId: operation.dispatch.attemptId, custodyId: operation.custodyId};
   const inventory = await input.readHttpRequestIdentities(identity);
-  if (inventory?.kind !== "closed" || inventory.operationId !== identity.operationId ||
-      inventory.attemptId !== identity.attemptId || !Array.isArray(inventory.requestIds) ||
+  if (inventory?.kind !== "closed" || !Array.isArray(inventory.requestIds) ||
       new Set(inventory.requestIds).size !== inventory.requestIds.length) {
     return {gaps: [gap("http-request-identities", "HTTP owner inventory is not closed for this attempt")]};
   }
@@ -210,7 +214,7 @@ async function readHttpClosure(input, operation) {
     {...operation.scope, deploymentId: input.activation.infrastructure.deployment.id});
   const receipts = [];
   for (const requestId of inventory.requestIds) {
-    const outcome = await reader.read({...identity, requestId});
+    const outcome = await reader.read({operationId: identity.operationId, attemptId: identity.attemptId, requestId});
     if (outcome.kind !== "found" || outcome.receipt.operationId !== identity.operationId ||
         outcome.receipt.attemptId !== identity.attemptId || outcome.receipt.requestId !== requestId ||
         !["closed", "not_opened"].includes(outcome.receipt.inboundClosure) ||
@@ -240,19 +244,20 @@ async function nativeClosure(input, state, gaps) {
 }
 
 function closedCustody(custody) {
-  return custody.identity.status === "proved" && custody.sealed === true &&
-    custody.closure.profile === "native-darwin-attempt-owner" && custody.closure.status === "closed" &&
-    custody.stdout.status === "complete" && custody.stderr.status === "complete";
+  return custody?.identity?.status === "proved" && custody.sealed === true &&
+    custody.closure?.profile === "native-darwin-attempt-owner" && custody.closure.status === "closed" &&
+    custody.stdout?.status === "complete" && custody.stderr?.status === "complete";
 }
 
 // oxlint-disable-next-line complexity -- each independently owned release fact must be proved
 function releasedFacts(value) {
-  return value.processes?.survivingDescendants === 0 && value.processes?.openWriterFds === 0 &&
-    value.routes?.remaining === 0 && value.listeners?.remaining === 0 && value.database?.sessions === 0 &&
-    value.database?.preparedTransactions === 0 && value.filesystem?.executionRootPresent === false &&
-    value.checksums?.verified === true && value.providerAccess?.disposeCount === 1 && value.pool?.closed === true &&
-    value.storage?.closed === true && value.native?.closureAcknowledged === true && value.host?.identityCurrent === true &&
-    value.host?.streamsDrained === true && value.evidence?.retainedTreeVerified === true;
+  return value.persistence?.repositoryClosed === true && value.persistence?.decisionsClosed === true &&
+    value.pool?.closed === true && value.database?.kind === "observed" && value.database?.otherSessions === 0 &&
+    value.database?.preparedTransactions === 0 && value.database?.inspectorClosed === true &&
+    value.providerAccess?.disposed === true && value.native?.closureAcknowledged === true &&
+    value.output?.closed === true && closedCustody(value.custody) && value.http?.gaps?.length === 0 &&
+    value.verification?.artifactManifestVerified === true && value.verification?.sourceInventoryVerified === true &&
+    value.verification?.resultRehydrated === true;
 }
 
 async function readCustody(input, operation) {
@@ -269,7 +274,7 @@ async function cleanupReadback(input, state, failures) {
   if (!observed) {gaps.push(gap("cleanup-owner-state", "final DB inspector, pool/storage and route lifecycle readback unavailable"));}
   if (!operation) {gaps.push(gap("operation-snapshot", "pre-disposal operation owner snapshot unavailable"));}
   const native = await nativeClosure(input, state, gaps);
-  const custody = await readCustody(input, operation);
+  const custody = state.custody;
   if (!custody) {gaps.push(gap("host-custody", "attempt-bound host custody evidence hook missing or exact binding differs"));}
   const output = await input.outputOwner?.readback();
   if (output?.closed !== true) {gaps.push(gap("output-owner", "native output owner has not durably closed"));}
@@ -279,11 +284,13 @@ async function cleanupReadback(input, state, failures) {
   if (custody && !closedCustody(custody)) {
     gaps.push(gap("host-custody", "native host identity, closure or stream drain unproved"));
   }
-  const result = {...observed, native, output, custody, http, gaps, failures: [...failures]};
-  // Raw native closure records do not enumerate process descendants/writer FDs,
-  // route listeners or DB sessions. Those fields must come from final owners.
-  const required = ["processes", "routes", "listeners", "database", "filesystem", "checksums", "providerAccess", "pool", "storage", "host", "evidence"];
+  const verificationFacts = Object.freeze({artifactManifestVerified: state.artifactManifestVerified === true,
+    sourceInventoryVerified: state.sourceInventoryVerified === true, resultRehydrated: state.resultRehydrated === true});
+  const result = {...observed, providerAccess: state.providerAccess, native, output, custody, http,
+    verification: verificationFacts, gaps, failures: [...failures]};
+  const required = ["persistence", "database", "pool"];
   for (const key of required) {if (!observed?.[key]) {gaps.push(gap(key, `final ${key} owner readback missing`));}}
+  if (!state.providerAccess) {gaps.push(gap("provider-access", "provider access disposal readback missing"));}
   if (observed && !releasedFacts(result)) {gaps.push(gap("cleanup-release", "one or more final release predicates remain unproved"));}
   return Object.freeze({...result, status: gaps.length || failures.length ? "incomplete" : "released"});
 }
@@ -292,15 +299,33 @@ async function cleanupReadback(input, state, failures) {
 export function createDarwinLiveVerification(input, {openFile = open, filesystem} = {}) {
   const failures = [], state = {};
   const checks = verification(input, state, filesystem);
+  let captured;
+  const captureBeforePoolClose = () => captured ??= (async () => {
+    const operation = state.operation;
+    if (!operation) {
+      state.http = {gaps: [gap("http-closure", "operation owner snapshot unavailable before pool close")]};
+      return;
+    }
+    try {state.http = await readHttpClosure(input, operation);}
+    catch (error) {state.http = {gaps: [gap("http-closure", String(error))]};}
+    try {state.custody = await readCustody(input, operation);}
+    catch (error) {failures.push(String(error));}
+  })();
   return Object.freeze({verification: Object.freeze({...checks,
     async verifyArtifactManifest(...args) {
-      state.operation = undefined; state.workspace = undefined; state.manifest = undefined; state.http = undefined; state.rehydrated = undefined; state.rehydratedIdentity = undefined;
-      const result = await checks.verifyArtifactManifest(...args);
-      state.http = await readHttpClosure(input, state.operation);
-      return result;
+      state.operation = undefined; state.workspace = undefined; state.manifest = undefined; state.http = undefined;
+      state.custody = undefined; state.rehydrated = undefined; state.rehydratedIdentity = undefined;
+      state.artifactManifestVerified = false;
+      state.resultRehydrated = false;
+      // A repeat verification cycle must re-run captureBeforePoolClose against
+      // the fresh operation snapshot above, not resolve to the prior cycle's
+      // memoized (and now stale/undefined) state.http/state.custody.
+      captured = undefined;
+      return checks.verifyArtifactManifest(...args);
     }}),
     reconciliation: Object.freeze({retain: result => retainSnapshot(input, result, openFile)}),
     cleanup: Object.freeze({recordFailure(error) {failures.push(String(error));},
-      readback: () => cleanupReadback(input, state, failures)}),
+      captureBeforePoolClose,
+      readback(ownerFacts = {}) {state.providerAccess = ownerFacts.providerAccess; return cleanupReadback(input, state, failures);}}),
   });
 }

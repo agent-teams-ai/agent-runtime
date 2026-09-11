@@ -203,14 +203,6 @@ export const changes = Object.freeze([
     id: "codex-boundary-test-hardening",
     revision: "65fb9b836862f82ab8bc905cb6e244168505c868",
   }),
-  Object.freeze({
-    id: "runtime-security-setup-authorization-ports",
-    revision: "60e58809eec1a80f27d23df8799b12c48c21975f",
-  }),
-  Object.freeze({
-    id: "runtime-security-setup-authorization-export-fix",
-    revision: "a078ce983ef9ab2100bd8c3a6cc6776f1f1b59b3",
-  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
@@ -221,8 +213,8 @@ export const sourceRevisionArtifactDigests = Object.freeze({
     sha256: "2f185db9f8cd0bd29ed28b08d862dbf23846ce19e14c657d8e6afad9c3e769fc",
   }),
   sources: Object.freeze({
-    fileCount: 665,
-    sha256: "2bef8d76c9dc4775498280631e3020e3fdb02347732ccd394c9359d64aac7c1e",
+    fileCount: 661,
+    sha256: "ce31be82d931ca2de943fc16e2b6a6be9f822902ee9dd8352332cd866cf6dad0",
   }),
   tests: Object.freeze({
     fileCount: 610,

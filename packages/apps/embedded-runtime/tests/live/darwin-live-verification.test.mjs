@@ -213,10 +213,11 @@ test("joins genuine workspace records and operation proofs into all five receipt
   await assert.rejects(createDarwinLiveVerification(value.input).verification.verifyArtifactManifest(manifestRef, "result"), /linkage differs/u);
 });
 
-test("DI projection joins supplied native/HTTP evidence before its borrowed pool closes", async () => {
+test("DI projection captures supplied native/HTTP evidence before its borrowed pool closes", async () => {
   const {input} = nativeFixture(); let poolClosed = false;
   input.activation.infrastructure = {deployment: {id: "deployment"}};
-  input.readHttpRequestIdentities = async () => ({kind: "closed", operationId: "op", attemptId: "attempt", requestIds: ["owned-request"]});
+  input.readHttpRequestIdentities = async identity => {assert.deepEqual(identity, {tenantId: "tenant", projectId: "project",
+    operationId: "op", attemptId: "attempt", custodyId: "custody"}); return {kind: "closed", requestIds: ["owned-request"]};};
   input.agentExecution.PostgresHttpEgressEvidence = class {
     async read(identity) {assert.equal(poolClosed, false); assert.equal(identity.requestId, "owned-request");
       return {kind: "found", receipt: {...identity, inboundClosure: "closed", upstreamClosure: "closed"}};}
@@ -225,16 +226,15 @@ test("DI projection joins supplied native/HTTP evidence before its borrowed pool
     return {kind: "found", ...identity, evidence: {identity: {status: "proved"}, sealed: true,
     closure: {profile: "native-darwin-attempt-owner", status: "closed"}, stdout: {status: "complete"}, stderr: {status: "complete"}}};};
   input.outputOwner = {readback: () => ({closed: true})};
-  input.readCleanup = async () => ({status: "released", processes: {survivingDescendants: 0, openWriterFds: 0},
-    routes: {remaining: 0}, listeners: {remaining: 0}, database: {sessions: 0, preparedTransactions: 0},
-    filesystem: {executionRootPresent: false}, checksums: {verified: true}, providerAccess: {disposeCount: 1},
-    pool: {closed: true}, storage: {closed: true}, host: {identityCurrent: true, streamsDrained: true},
-    evidence: {retainedTreeVerified: true}});
+  input.readCleanup = async () => ({persistence: {repositoryClosed: true, decisionsClosed: true}, pool: {closed: true},
+    database: {kind: "observed", otherSessions: 0, preparedTransactions: 0, inspectorClosed: true}});
   const projection = createDarwinLiveVerification(input);
-  await projection.verification.verifyArtifactManifest(manifestRef, "result"); poolClosed = true;
-  const actual = await projection.cleanup.readback();
-  assert.equal(actual.status, "released"); assert.equal(actual.native.record.receiptRef, "native-closed");
-  assert.equal(actual.http.receipts[0].requestId, "owned-request"); assert.deepEqual(actual.gaps, []);
+  await projection.verification.verifyArtifactManifest(manifestRef, "result");
+  await projection.cleanup.captureBeforePoolClose(); poolClosed = true;
+  const actual = await projection.cleanup.readback({providerAccess: {disposed: true}});
+  assert.equal(actual.status, "incomplete"); assert.equal(actual.native.record.receiptRef, "native-closed");
+  assert.equal(actual.http.receipts[0].requestId, "owned-request");
+  assert.ok(actual.gaps.every(item => !["http-closure", "host-custody"].includes(item.kind)));
 });
 
 test("source verification checks the pinned manifest, complete inventory and every file digest", async () => {
@@ -295,6 +295,7 @@ test("an unrelated closure request ID never becomes an HTTP request identity", a
   input.agentExecution.PostgresHttpEgressEvidence = class {read() {reads += 1; throw new Error("must not infer HTTP identity");}};
   const projection = createDarwinLiveVerification(input);
   await projection.verification.verifyArtifactManifest(manifestRef, "result");
+  await projection.cleanup.captureBeforePoolClose();
   const cleanup = await projection.cleanup.readback();
   assert.equal(reads, 0); assert.equal(cleanup.status, "incomplete");
   assert.ok(cleanup.gaps.some(item => item.kind === "http-request-identities"));

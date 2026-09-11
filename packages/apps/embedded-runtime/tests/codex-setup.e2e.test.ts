@@ -1,3 +1,4 @@
+import { createAgentRuntimeHost as createClosedAgentRuntimeHost } from "../dist/composition/agent-runtime-host.js";
 import assert from "node:assert/strict";
 import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -7,7 +8,6 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import {
   AgentRuntimeHostDisposalIncompleteError,
-  createAgentRuntimeHost as createClosedAgentRuntimeHost,
   createClaudeCodeSetupInspectionPlanner,
   createCodexSetupInspectionPlanner,
   createDefaultAgentRuntimeHost,
@@ -78,7 +78,7 @@ test(
     "personality = 'pragmatic'\n",
   );
 
-  const host = createDefaultAgentRuntimeHost();
+  const host = await createDefaultAgentRuntimeHost();
   t.after(() => host.dispose());
   const access = host.bindAccess(runtimeScope({
     configurationDialect: "codex-0.134",
@@ -129,7 +129,7 @@ test(
   t.after(() => rm(root, { force: true, recursive: true }));
   const mutableEntries = [join(root, "bin")];
   await mkdir(mutableEntries[0]!, { recursive: true });
-  const host = createDefaultAgentRuntimeHost();
+  const host = await createDefaultAgentRuntimeHost();
   const access = host.bindAccess(runtimeScope({
     configurationDialect: "codex-0.134",
     configurationSources: [],
@@ -180,7 +180,7 @@ test(
   const config = join(root, "config.toml");
   await writeFile(config, "model = [\n");
 
-  const host = createDefaultAgentRuntimeHost();
+  const host = await createDefaultAgentRuntimeHost();
   t.after(() => host.dispose());
   const access = host.bindAccess(runtimeScope({
     configurationDialect: "codex-0.134",

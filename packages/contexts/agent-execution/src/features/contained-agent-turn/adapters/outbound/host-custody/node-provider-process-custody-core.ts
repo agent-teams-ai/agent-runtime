@@ -73,6 +73,7 @@ import {inspectDarwinNativeLaunchObservation, startDarwinNativeExecution, readDa
   cutoffDarwinNativeExecution} from "./darwin-attempt-owner-selection.js";
 import {DeferredNativeProviderProcess, DeferredNativeSdkProcess} from "./deferred-native-sdk-process.js";
 import {isNativeHostCustodyWorkspaceAuthority, retireNativeHostCustodyWorkspaceAuthority} from "./native-host-custody-workspace-authority.js";
+import {validateContainedTurnIdentity} from "../../../domain/contained-turn-identities.js";
 export type { NodeProviderProcessCustodyOptions } from "./node-provider-process-custody-state.js";
 export { assertDarwinNativeHostGenerationBinding } from "./node-provider-process-custody-native-reservation.js";
 export class NodeProviderProcessCustodyCore implements
@@ -164,6 +165,28 @@ export class NodeProviderProcessCustodyCore implements
     const live = this.#byRef.get(custodyRef);
     if (live === undefined || live.fingerprint === undefined) {return undefined;}
     return snapshotEvidence(live);
+  }
+  /** Inert owner lookup for recovery callers that retain the public attempt
+   * identity but never receive the Host-private custody reference. */
+  public evidenceForAttempt(input: Readonly<{operationId: string; attemptId: string}>): HostCustodyEvidence | undefined {
+    input = custodyDataRecord(input);
+    const keys = Reflect.ownKeys(input);
+    if (keys.length !== 2 || !keys.includes("operationId") || !keys.includes("attemptId") ||
+        typeof input.operationId !== "string" || typeof input.attemptId !== "string") {
+      throw new TypeError("Host Custody attempt evidence identity is invalid");
+    }
+    validateContainedTurnIdentity("operation", input.operationId);
+    validateContainedTurnIdentity("attempt", input.attemptId);
+    const live = this.#byAttempt.get(input.attemptId);
+    const tombstone = this.#tombstonesByAttempt.get(input.attemptId);
+    // A valid owner has exactly one binding for an attempt. Ambiguous internal
+    // state cannot be projected as evidence for either operation.
+    if (live !== undefined && tombstone !== undefined) {return undefined;}
+    if (tombstone !== undefined) {
+      return tombstone.operationId === input.operationId ? tombstone.evidence : undefined;
+    }
+    return live?.operationId === input.operationId && live.fingerprint !== undefined
+      ? snapshotEvidence(live) : undefined;
   }
 
   public async release(input: {

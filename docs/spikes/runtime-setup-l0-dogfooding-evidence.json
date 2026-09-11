@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "evidenceKind": "runtime-setup-l0-direct-composition",
-  "sourceRevision": "a078ce983ef9ab2100bd8c3a6cc6776f1f1b59b3",
+  "sourceRevision": "51aa81a9185d80db11e765e6ceb6190359ca1a9c",
   "authority": "ADR-0008",
   "productOutcome": "detached-safe-runtime-setup-preview",
   "taxonomyAuthority": "experiment-local-non-qualification-rubric",
@@ -40,13 +40,13 @@
   "capture": {
     "command": "pnpm --filter @agent-teams/embedded-runtime check",
     "exitCode": 0,
-    "outputSha256": "2153e9c0f8d2ff90e7a7fb868410b581b2abfcf73e1c51944f3aac3585c5d1a6",
+    "outputSha256": "631ea191e4afe8908c7da8ad047723d7ca5079be188744753a1b80d48d80b173",
     "architecture": "arm64",
     "nodeVersion": "v24.18.0",
     "platform": "darwin",
     "testSummary": {
-      "tests": 5,
-      "pass": 5,
+      "tests": 331,
+      "pass": 331,
       "fail": 0,
       "cancelled": 0,
       "skipped": 0
@@ -54,16 +54,16 @@
   },
   "artifactDigests": {
     "fixtures": {
-      "fileCount": 56,
-      "sha256": "2f185db9f8cd0bd29ed28b08d862dbf23846ce19e14c657d8e6afad9c3e769fc"
+      "fileCount": 52,
+      "sha256": "eac8c866ebb03e4f46ea55586d0468466c535e413cefcdb6d2c454e900278ff7"
     },
     "sources": {
-      "fileCount": 665,
-      "sha256": "2bef8d76c9dc4775498280631e3020e3fdb02347732ccd394c9359d64aac7c1e"
+      "fileCount": 456,
+      "sha256": "98ba6f04addd89af9bf28b648431d515bc10e8b34f25166d56c12978c041d164"
     },
     "tests": {
-      "fileCount": 610,
-      "sha256": "a81f56010117ed0e89d9bfb5b68ab3239ff00930bbaa9b46f2a35b3221668282"
+      "fileCount": 404,
+      "sha256": "43239889826baee95acc185421eef184e2bf5133efaa28156b2e021fe48e115c"
     }
   },
   "historicalChanges": [
@@ -1253,354 +1253,6 @@
         "before": 231,
         "after": 231,
         "retained": 231,
-        "reusePercent": 100
-      }
-    },
-    {
-      "id": "runtime-setup-current-product-anchor",
-      "revision": "e615369d50ed73cac6e00909fcc8f6705b0d6973",
-      "files": 3,
-      "additions": 117,
-      "deletions": 22,
-      "binaryFiles": 0,
-      "composition": {
-        "files": 0,
-        "additions": 0,
-        "deletions": 0
-      },
-      "production": {
-        "files": 1,
-        "additions": 45,
-        "deletions": 4
-      },
-      "tests": {
-        "files": 2,
-        "additions": 72,
-        "deletions": 18
-      },
-      "behaviorFixtures": {
-        "before": 358,
-        "after": 358,
-        "retained": 358,
-        "reusePercent": 100
-      }
-    },
-    {
-      "id": "custody-test-seam-relocation",
-      "revision": "c75940cccc7f0d03ffd776dbe2efee9446a90fa8",
-      "files": 1,
-      "additions": 15,
-      "deletions": 4,
-      "binaryFiles": 0,
-      "composition": {
-        "files": 0,
-        "additions": 0,
-        "deletions": 0
-      },
-      "production": {
-        "files": 0,
-        "additions": 0,
-        "deletions": 0
-      },
-      "tests": {
-        "files": 1,
-        "additions": 15,
-        "deletions": 4
-      },
-      "behaviorFixtures": {
-        "before": 369,
-        "after": 369,
-        "retained": 369,
-        "reusePercent": 100
-      }
-    },
-    {
-      "id": "production-module-role-classification",
-      "revision": "01dc2418c963586d43e92221a01ebcdb11e756f4",
-      "files": 19,
-      "additions": 874,
-      "deletions": 201,
-      "binaryFiles": 0,
-      "composition": {
-        "files": 0,
-        "additions": 0,
-        "deletions": 0
-      },
-      "production": {
-        "files": 0,
-        "additions": 0,
-        "deletions": 0
-      },
-      "tests": {
-        "files": 0,
-        "additions": 0,
-        "deletions": 0
-      },
-      "behaviorFixtures": {
-        "before": 369,
-        "after": 369,
-        "retained": 369,
-        "reusePercent": 100
-      }
-    },
-    {
-      "id": "custody-composition-surface",
-      "revision": "3adac9884ae86d6acbe7fd92c5a5fdadd0119dbd",
-      "files": 43,
-      "additions": 82,
-      "deletions": 45,
-      "binaryFiles": 0,
-      "composition": {
-        "files": 1,
-        "additions": 31,
-        "deletions": 0
-      },
-      "production": {
-        "files": 30,
-        "additions": 65,
-        "deletions": 34
-      },
-      "tests": {
-        "files": 10,
-        "additions": 10,
-        "deletions": 9
-      },
-      "behaviorFixtures": {
-        "before": 369,
-        "after": 369,
-        "retained": 369,
-        "reusePercent": 100
-      }
-    },
-    {
-      "id": "custody-feature-activation",
-      "revision": "09cbb717578a39e5788a4f43ca950bcf91e2ef67",
-      "files": 50,
-      "additions": 2700,
-      "deletions": 2228,
-      "binaryFiles": 0,
-      "composition": {
-        "files": 1,
-        "additions": 7,
-        "deletions": 5
-      },
-      "production": {
-        "files": 17,
-        "additions": 904,
-        "deletions": 784
-      },
-      "tests": {
-        "files": 20,
-        "additions": 1513,
-        "deletions": 1423
-      },
-      "behaviorFixtures": {
-        "before": 369,
-        "after": 369,
-        "retained": 369,
-        "reusePercent": 100
-      }
-    },
-    {
-      "id": "configuration-digest-port",
-      "revision": "b7c5817d93c0d0dd6553739ebb67154dd42251b0",
-      "files": 8,
-      "additions": 78,
-      "deletions": 22,
-      "binaryFiles": 0,
-      "composition": {
-        "files": 0,
-        "additions": 0,
-        "deletions": 0
-      },
-      "production": {
-        "files": 2,
-        "additions": 2,
-        "deletions": 3
-      },
-      "tests": {
-        "files": 6,
-        "additions": 76,
-        "deletions": 19
-      },
-      "behaviorFixtures": {
-        "before": 369,
-        "after": 369,
-        "retained": 369,
-        "reusePercent": 100
-      }
-    },
-    {
-      "id": "reviewed-scope-guard",
-      "revision": "2184584a8f3fcebfe7721024bcb2e81ce76127bf",
-      "files": 6,
-      "additions": 148,
-      "deletions": 24,
-      "binaryFiles": 0,
-      "composition": {
-        "files": 0,
-        "additions": 0,
-        "deletions": 0
-      },
-      "production": {
-        "files": 0,
-        "additions": 0,
-        "deletions": 0
-      },
-      "tests": {
-        "files": 3,
-        "additions": 2,
-        "deletions": 2
-      },
-      "behaviorFixtures": {
-        "before": 369,
-        "after": 369,
-        "retained": 369,
-        "reusePercent": 100
-      }
-    },
-    {
-      "id": "codex-application-models",
-      "revision": "6dfffbff6abbe28ffbb8fb528d13647b3e09e013",
-      "files": 9,
-      "additions": 284,
-      "deletions": 50,
-      "binaryFiles": 0,
-      "composition": {
-        "files": 1,
-        "additions": 4,
-        "deletions": 1
-      },
-      "production": {
-        "files": 7,
-        "additions": 184,
-        "deletions": 48
-      },
-      "tests": {
-        "files": 1,
-        "additions": 96,
-        "deletions": 0
-      },
-      "behaviorFixtures": {
-        "before": 369,
-        "after": 369,
-        "retained": 369,
-        "reusePercent": 100
-      }
-    },
-    {
-      "id": "claude-code-vocabulary-parity",
-      "revision": "24755bd012239973ef043459c2dd2960406baa33",
-      "files": 9,
-      "additions": 253,
-      "deletions": 49,
-      "binaryFiles": 0,
-      "composition": {
-        "files": 1,
-        "additions": 8,
-        "deletions": 1
-      },
-      "production": {
-        "files": 5,
-        "additions": 156,
-        "deletions": 38
-      },
-      "tests": {
-        "files": 1,
-        "additions": 53,
-        "deletions": 0
-      },
-      "behaviorFixtures": {
-        "before": 369,
-        "after": 369,
-        "retained": 369,
-        "reusePercent": 100
-      }
-    },
-    {
-      "id": "codex-boundary-test-hardening",
-      "revision": "65fb9b836862f82ab8bc905cb6e244168505c868",
-      "files": 3,
-      "additions": 81,
-      "deletions": 23,
-      "binaryFiles": 0,
-      "composition": {
-        "files": 0,
-        "additions": 0,
-        "deletions": 0
-      },
-      "production": {
-        "files": 2,
-        "additions": 7,
-        "deletions": 6
-      },
-      "tests": {
-        "files": 1,
-        "additions": 74,
-        "deletions": 17
-      },
-      "behaviorFixtures": {
-        "before": 369,
-        "after": 369,
-        "retained": 369,
-        "reusePercent": 100
-      }
-    },
-    {
-      "id": "runtime-security-setup-authorization-ports",
-      "revision": "60e58809eec1a80f27d23df8799b12c48c21975f",
-      "files": 10,
-      "additions": 269,
-      "deletions": 182,
-      "binaryFiles": 0,
-      "composition": {
-        "files": 1,
-        "additions": 12,
-        "deletions": 2
-      },
-      "production": {
-        "files": 10,
-        "additions": 269,
-        "deletions": 182
-      },
-      "tests": {
-        "files": 0,
-        "additions": 0,
-        "deletions": 0
-      },
-      "behaviorFixtures": {
-        "before": 369,
-        "after": 369,
-        "retained": 369,
-        "reusePercent": 100
-      }
-    },
-    {
-      "id": "runtime-security-setup-authorization-export-fix",
-      "revision": "a078ce983ef9ab2100bd8c3a6cc6776f1f1b59b3",
-      "files": 1,
-      "additions": 0,
-      "deletions": 1,
-      "binaryFiles": 0,
-      "composition": {
-        "files": 1,
-        "additions": 0,
-        "deletions": 1
-      },
-      "production": {
-        "files": 1,
-        "additions": 0,
-        "deletions": 1
-      },
-      "tests": {
-        "files": 0,
-        "additions": 0,
-        "deletions": 0
-      },
-      "behaviorFixtures": {
-        "before": 369,
-        "after": 369,
-        "retained": 369,
         "reusePercent": 100
       }
     }

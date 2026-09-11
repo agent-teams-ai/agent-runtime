@@ -132,7 +132,7 @@ try {
     sourceReader: configurationComposition.createClaudeCodeConfigurationSourceReaderAdapter(sourceReader),
   });
 
-  const host = embeddedComposition.createAgentRuntimeHost({
+  const host = (await import("../../dist/composition/agent-runtime-host.js")).createAgentRuntimeHost({
     claudeCodeSetup: {
       authorizeClaudeCodeSetupInspection: security.authorizeClaudeCodeSetupInspection,
       discoverClaudeCodeInstallations: execution.discoverClaudeCodeInstallations,

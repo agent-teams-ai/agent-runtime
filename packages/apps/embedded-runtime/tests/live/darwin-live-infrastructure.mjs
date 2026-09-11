@@ -10,17 +10,35 @@ const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const quote = value => `"${value.replaceAll('"', '""')}"`;
 const databaseConnection = value => {
   if (!value || Object.keys(value).some(key => !["database", "host", "port", "user"].includes(key)) ||
-      !/^ar69_test_[a-z0-9_]+$/u.test(value.database ?? "") || !["127.0.0.1", "::1"].includes(value.host) ||
+      !/^(?:ar69_test|ar_canary)_[a-z0-9_]+$/u.test(value.database ?? "") ||
+      (!["127.0.0.1", "::1"].includes(value.host) && !isAbsolute(value.host ?? "")) ||
       !Number.isInteger(value.port) || value.port < 1 || value.port > 65535 ||
       typeof value.user !== "string" || value.user.length === 0) {throw refused("dedicated test database configuration required");}
-  return {database: value.database, host: value.host, port: value.port, user: value.user};
+  return {database: value.database, host: value.host, port: value.port, user: value.user,
+    transport: isAbsolute(value.host) ? "unix" : "tcp"};
+};
+const verifyDatabaseSocket = async connection => {
+  if (connection.transport !== "unix") {return;}
+  const directory = await lstat(connection.host);
+  if (await realpath(connection.host) !== connection.host || !directory.isDirectory() || directory.isSymbolicLink()) {
+    throw refused("database socket directory is not canonical");
+  }
 };
 const verifyDatabaseIdentity = async (client, connection) => {
   const identity = await client.query("SELECT current_database() AS database, current_user AS username, inet_server_addr()::text AS address, inet_server_port() AS port");
+  // Postgres returns NULL from both inet_server_addr() and inet_server_port()
+  // for a Unix-domain-socket connection (documented, unconditional server
+  // behavior) -- the connection's own port still identifies which socket file
+  // (.s.PGSQL.<port>) was dialed, but the server-reported port column cannot
+  // echo it back over that transport, so it needs the same unix exception
+  // already applied to address.
+  const expectedAddress = connection.transport === "unix" ? null : connection.host;
+  const expectedPort = connection.transport === "unix" ? null : connection.port;
   if (identity.rows.length !== 1 || identity.rows[0].database !== connection.database ||
-      identity.rows[0].username !== connection.user || identity.rows[0].address !== connection.host ||
-      identity.rows[0].port !== connection.port) {throw refused("database identity differs");}
+      identity.rows[0].username !== connection.user || identity.rows[0].address !== expectedAddress ||
+      identity.rows[0].port !== expectedPort) {throw refused("database identity differs");}
 };
+const postgresConnection = ({transport: _transport, ...connection}) => connection;
 const socketProbe = path => new Promise((resolve, reject) => {
   const socket = createConnection(path);
   socket.setTimeout(2000);
@@ -88,8 +106,9 @@ export async function preflightDarwinInfrastructure(activation, dependencies) {
   const scope = activation.turn?.scope;
   validatePreflightPaths(scope, host, activation.turn, filesystem);
   const connection = databaseConnection(database?.connection);
+  await verifyDatabaseSocket(connection);
   const Pool = dependencies?.Pool ?? (await import("pg")).Pool;
-  const pool = new Pool({...connection, max: 1, connectionTimeoutMillis: 2000,
+  const pool = new Pool({...postgresConnection(connection), max: 1, connectionTimeoutMillis: 2000,
     statement_timeout: 2000, query_timeout: 3000});
   let client;
   try {
@@ -139,16 +158,41 @@ export async function acquireDarwinPersistenceOwners(activation, dependencies) {
     ]);
     return {agentExecution, runtimeSecurity, Pool: postgres.Pool};
   })();
-  const pool = new deps.Pool({...connection, max: 4, connectionTimeoutMillis: 2000});
-  const actions = [() => pool.end()];
+  await verifyDatabaseSocket(connection);
+  const pool = new deps.Pool({...postgresConnection(connection), max: 4, connectionTimeoutMillis: 2000});
+  const cleanupState = {repositoryClosed: false, decisionsClosed: false, poolClosed: false,
+    database: {kind: "unavailable", inspectorClosed: false}};
+  const actions = [async () => {await pool.end(); cleanupState.poolClosed = true;}];
   const lifetime = new AbortController();
-  let generation = 1, closing;
+  let generation = 1, closing, inspectOnDispose = false;
+  const inspectReleasedDatabase = async () => {
+    const inspectorPool = new deps.Pool({...postgresConnection(connection), max: 1, connectionTimeoutMillis: 2000,
+      statement_timeout: 2000, query_timeout: 3000});
+    let client;
+    try {
+      client = await inspectorPool.connect();
+      await verifyDatabaseIdentity(client, connection);
+      const result = await client.query("SELECT (SELECT count(*)::integer FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()) AS other_sessions, (SELECT count(*)::integer FROM pg_prepared_xacts WHERE database = current_database()) AS prepared_transactions");
+      if (result.rows.length !== 1 || !Number.isInteger(result.rows[0].other_sessions) ||
+          !Number.isInteger(result.rows[0].prepared_transactions)) {throw refused("database cleanup inspection differs");}
+      cleanupState.database = {kind: "observed", otherSessions: result.rows[0].other_sessions,
+        preparedTransactions: result.rows[0].prepared_transactions, inspectorClosed: false};
+    } finally {
+      try {client?.release(true);} finally {
+        await inspectorPool.end();
+        cleanupState.database = {...cleanupState.database, inspectorClosed: true};
+      }
+    }
+  };
   const dispose = () => {
     if (closing) {return closing;}
     lifetime.abort(); generation += 1;
     closing = (async () => {
       const failures = [];
       for (const action of actions.toReversed()) {try {await action();} catch (error) {failures.push(error);}}
+      if (inspectOnDispose && cleanupState.poolClosed) {
+        try {await inspectReleasedDatabase();} catch (error) {failures.push(error);}
+      }
       if (failures.length) {throw new AggregateError(failures, "Darwin persistence cleanup failed");}
     })();
     return closing;
@@ -165,9 +209,9 @@ export async function acquireDarwinPersistenceOwners(activation, dependencies) {
     const digest = deps.runtimeSecurity.createNodeSha256DispatchDigest();
     const sql = {pool, connectTimeoutMs: 2000, queryTimeoutMs: 5000, transactionTimeoutMs: 10000};
     const repository = deps.runtimeSecurity.createPostgresDispatchConsumptionRepository({...sql, digest});
-    actions.push(() => repository.close());
+    actions.push(async () => {await repository.close(); cleanupState.repositoryClosed = true;});
     const decisions = deps.runtimeSecurity.createPostgresDispatchAcceptanceStore(sql);
-    actions.push(() => decisions.close());
+    actions.push(async () => {await decisions.close(); cleanupState.decisionsClosed = true;});
     await repository.migrate(); await decisions.migrate();
     const policy = Object.freeze({async read(intent) {
       if (lifetime.signal.aborted || intent.operationId !== activation.turn.operationId ||
@@ -188,9 +232,13 @@ export async function acquireDarwinPersistenceOwners(activation, dependencies) {
       executable: activation.codex.path, codexHome: config.providerAccess.codexHome,
       sandbox: config.providerAccess.sandbox, generation,
       readGeneration: () => generation, signal: lifetime.signal, deadline: performance.now() + 60000});
+    inspectOnDispose = true;
     return Object.freeze({pool, repository, acceptance, privateAuth,
       operatorApproval: plainJson(config.providerAccess.operatorApproval),
-      policyRevision: config.runtimeSecurity.policyRevision, dispose});
+      policyRevision: config.runtimeSecurity.policyRevision, dispose,
+      readCleanup: () => Object.freeze({persistence: Object.freeze({repositoryClosed: cleanupState.repositoryClosed,
+        decisionsClosed: cleanupState.decisionsClosed}), pool: Object.freeze({closed: cleanupState.poolClosed}),
+        database: Object.freeze({...cleanupState.database})})});
   } catch (error) {
     try {await dispose();} catch (cleanupError) {throw persistenceAcquisitionFailure(error, cleanupError);}
     throw error;
@@ -401,6 +449,9 @@ export async function acquireDarwinInfrastructureOwners(rawActivation, dependenc
     if (!Number.isSafeInteger(duration) || duration < 1 || duration > 3600000) {throw refused("operation deadline invalid");}
     const deadline = clock.now() + duration;
     const capturedFiles = await capturePreparationFiles(activation);
+    const operationLocator = deps.agentExecution.darwinDigest(JSON.stringify(["darwin-operation-locator/v1",
+      activation.turn.scope.tenantId, activation.turn.scope.projectId, activation.turn.operationId]));
+    const routeLifecyclePath = join(capturedFiles.durableRoot.path, `${operationLocator}.darwin-lifecycle-v1`);
     // Current-kernel reservations supply the genuine issued launch directly.
     // The generic fallback resolver cannot launch anything.
     const hostCustody = new deps.agentExecution.DarwinCooperativeProcessCustody({
@@ -409,7 +460,14 @@ export async function acquireDarwinInfrastructureOwners(rawActivation, dependenc
       monotonicNow: () => performance.now()});
     const projection = await deps.verification.createDarwinLiveVerification({activation, pool: persistence.pool,
       operationStore, agentExecution: deps.agentExecution, getWorkspaceOwner: () => workspaceOwner,
-      getArtifacts: () => artifacts, outputOwner, lifetime, hostCustody});
+      getArtifacts: () => artifacts, outputOwner, lifetime, hostCustody, readCleanup: persistence.readCleanup,
+      readHostCustodyEvidence(identity) {
+        const evidence = hostCustody.evidenceForAttempt(identity);
+        return evidence ? Object.freeze({kind: "found", ...identity, evidence}) : Object.freeze({kind: "missing", ...identity});
+      },
+      readHttpRequestIdentities(identity) {
+        return deps.agentExecution.inspectDarwinRouteRequestInventory(routeLifecyclePath, identity);
+      }});
     let consumersBound = false;
     const nativeConsumers = completion => {
       if (consumersBound || lifetime.signal.aborted) {throw refused("native consumers already bound or closed");}

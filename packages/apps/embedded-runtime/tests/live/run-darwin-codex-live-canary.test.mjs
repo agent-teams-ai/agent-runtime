@@ -53,6 +53,7 @@ test("CLI preflight passes the verified canonical activation to root packet vali
   await main(["--preflight", "/fixed/activation.json"], {
     loadActivation: async () => ({manifest: {sourceRevision: "a".repeat(40)}, manifestPath: "/canonical/activation.json"}),
     prepareRootLaunch: async path => {prepared = path;},
+    withOperatorProviderAccess: async manifest => manifest,
     preflightInfrastructure: async () => ({hostEndpointReachable: true, databaseEmpty: true,
       sourceResultAbsent: true, providerAuthoritiesFresh: true, mutated: false}),
   });
@@ -65,6 +66,7 @@ const preflightDependencies = readback => ({
   loadActivation: async () => ({manifest: {sourceRevision: "a".repeat(40),
     routeInstalled: true, routeReadbackCurrent: true}, manifestPath: "/canonical/activation.json"}),
   prepareRootLaunch: async () => {},
+  withOperatorProviderAccess: async manifest => manifest,
   preflightInfrastructure: async () => readback,
 });
 
@@ -181,11 +183,16 @@ test("activation generator pins exact closure bytes", async () => {
   finally {await rm(value.root, {recursive: true, force: true});}
 });
 
-test("cleanup predicate requires released resources and checksum readback", () => {
-  assert.doesNotThrow(() => verifyReleasedCleanup({status: "released", processes: {survivingDescendants: 0, openWriterFds: 0},
-    routes: {remaining: 0}, listeners: {remaining: 0}, database: {sessions: 0, preparedTransactions: 0},
-    filesystem: {executionRootPresent: false}, checksums: {verified: true}, providerAccess: {disposeCount: 1},
-    pool: {closed: true}, storage: {closed: true}, native: {closureAcknowledged: true},
-    host: {identityCurrent: true, streamsDrained: true}, evidence: {retainedTreeVerified: true}}));
-  assert.throws(() => verifyReleasedCleanup({status: "released", processes: {survivingDescendants: 1}}), /cleanup release/);
+test("cleanup predicate requires only concrete final owner readbacks", () => {
+  const released = {status: "released", persistence: {repositoryClosed: true, decisionsClosed: true}, pool: {closed: true},
+    database: {kind: "observed", otherSessions: 0, preparedTransactions: 0, inspectorClosed: true},
+    providerAccess: {disposed: true}, native: {closureAcknowledged: true}, output: {closed: true},
+    custody: {identity: {status: "proved"}, sealed: true,
+      closure: {profile: "native-darwin-attempt-owner", status: "closed"},
+      stdout: {status: "complete"}, stderr: {status: "complete"}},
+    http: {receipts: [], gaps: []}, verification: {artifactManifestVerified: true,
+      sourceInventoryVerified: true, resultRehydrated: true}, gaps: [], failures: []};
+  assert.doesNotThrow(() => verifyReleasedCleanup(released));
+  assert.throws(() => verifyReleasedCleanup({...released,
+    database: {...released.database, otherSessions: 1}}), /cleanup release/);
 });

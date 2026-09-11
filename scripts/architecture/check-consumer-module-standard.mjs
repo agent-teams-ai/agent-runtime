@@ -5,8 +5,8 @@ import { fileURLToPath } from "node:url";
 import { parseSync, Visitor } from "oxc-parser";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const profilePath = "architecture/consumer-module-standard/profile.json";
-const decisionPath = "docs/decisions/0015-consumer-module-standard-pending-adoption.md";
+const profilePath = "architecture/consumer-module-standard/contained-turn-profile.json";
+const decisionPath = "docs/decisions/0016-contained-turn-consumer-module-standard-adoption.md";
 const decisionRegistryPath = "architecture/decisions/accepted-decisions.json";
 const packagePath = "package.json";
 const entrypointPath = "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts";
@@ -30,7 +30,7 @@ export const EXPECTED_PROFILE = Object.freeze({
       gitBlob: "d0bfff2033faf544fe65268c1dcdfd524d093015",
       sha256: "851653f96643cf0466b67ab22963661976b00de44840fa3144a48a8c054f95fa",
     },
-    proposedAdr: "ADR-0015",
+    proposedAdr: "ADR-0016",
     decisionPath,
   },
   scope: {
@@ -69,14 +69,14 @@ export const EXPECTED_PROFILE = Object.freeze({
       "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts": 2,
     },
     authority: "ADR-0012",
-    rationale: "The existing closed seven-port Pure DI boundary predates Consumer Module Standard adoption and has no Get Modular Assembly declaration or profile.",
+    rationale: "The existing closed seven-port Pure DI boundary is outside the passive setup Assembly adoption and has no contained-turn Assembly declaration or profile.",
     reviewTrigger: "Any new replaceable or cross-module relationship, or any change to the entrypoint, factory, dependency declaration, or exact slot set.",
   }],
   exceptions: [],
   outstandingWork: [
-    "Pin reviewed exact Get Modular Core and Assembly package artifacts under package policy.",
-    "Replace the legacy direct wiring with consumer-owned declarations, profile bindings, and one Assembly composition root.",
-    "Add independent binding parity, preparation failure, cleanup, isolation, typed rejection, and packed-import evidence before changing status to active.",
+    "Keep the legacy direct seven-port boundary classified until a contained-turn Assembly migration is separately accepted.",
+    "Replace the legacy direct wiring only under a later contained-turn decision with consumer-owned declarations, profile bindings, and one Assembly composition root.",
+    "Add contained-turn binding parity, preparation failure, cleanup, isolation, typed rejection, and packed-import evidence before changing this scoped profile to active.",
   ],
   enforcement: {
     topology: "pnpm foundation:check",
@@ -95,7 +95,7 @@ const gateChain = "pnpm test:consumer-modules && pnpm architecture:consumer-modu
 const requiredPaths = Object.freeze([
   profilePath,
   decisionPath,
-  "docs/architecture/consumer-module-standard-adoption.md",
+  "docs/architecture/contained-turn-consumer-module-standard-adoption.md",
   entrypointPath,
   declarationPath,
   factoryPath,
@@ -367,16 +367,16 @@ export async function loadConsumerModuleStandardInputs(root = repositoryRoot) {
 }
 
 const validatePendingDecision = inputs => {
-  const decision = inputs.decisionRegistry.decisions?.find(record => record.id === "ADR-0015");
-  assert.equal(decision, undefined, "proposed ADR-0015 cannot enter the immutable accepted-decision registry");
+  const decision = inputs.decisionRegistry.decisions?.find(record => record.id === "ADR-0016");
+  assert.equal(decision, undefined, "proposed ADR-0016 cannot enter the immutable accepted-decision registry");
   const decisionSource = inputs.decisionBytes.toString("utf8");
   const frontmatterMatch = /^---\n([\s\S]*?)\n---/u.exec(decisionSource);
   const frontmatter = frontmatterMatch?.[1] ?? "";
   assert.deepEqual([...frontmatter.matchAll(/^status:\s*(.+)$/gmu)].map(match => match[1]), ["proposed"],
-    "ADR-0015 frontmatter must declare proposed exactly once");
+    "ADR-0016 frontmatter must declare proposed exactly once");
   const body = decisionSource.slice(frontmatterMatch?.[0].length ?? 0);
   assert.deepEqual([...body.matchAll(/^Status:\s*(.+)$/gmu)].map(match => match[1]), ["proposed"],
-    "ADR-0015 body must declare proposed exactly once");
+    "ADR-0016 body must declare proposed exactly once");
 
 };
 
@@ -401,13 +401,6 @@ export function validateConsumerModuleStandard(inputs) {
     const topologyIndex = command.indexOf(EXPECTED_PROFILE.enforcement.topology);
     assert.ok(topologyIndex >= 0 && topologyIndex < command.indexOf(gateChain),
       `${gate} must run topology enforcement before the consumer checker`);
-  }
-
-  for (const section of [inputs.packageManifest.dependencies, inputs.packageManifest.devDependencies]) {
-    assert.equal(Object.hasOwn(section ?? {}, "@get-modular/core"), false,
-      "pending adoption cannot install Get Modular Core");
-    assert.equal(Object.hasOwn(section ?? {}, "@get-modular/assembly"), false,
-      "pending adoption cannot install Get Modular Assembly");
   }
 
   const declaration = inputs.sources.get(declarationPath);
