@@ -125,7 +125,6 @@ export type {
   TrustedEgressHostIdentityV1,
 } from "./features/contained-turn-egress/composition.js";
 export type { NodeEd25519SignerIdentity } from "./features/contained-turn-egress/node-ed25519.js";
-export { createAuthorizeClaudeCodeSetupInspection } from "./features/setup-source-inspection-authorization/application/authorize-claude-code-setup-inspection.js";
 export type { PathCanonicalizer } from "./features/setup-source-inspection-authorization/application/ports/outbound/path-canonicalizer.js";
 export {
   createSetupInspectionAuthorizationFeature,
