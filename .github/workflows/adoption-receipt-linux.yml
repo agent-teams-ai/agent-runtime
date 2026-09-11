@@ -13,6 +13,8 @@ on:
       - refactor/fms-contained-turn-egress
       - refactor/fms-host-boundaries
       - refactor/fms-final-integration
+      - refactor/fms-rs-egress-primitives
+      - fix/contained-turn-final-qualification
       - fix/contained-turn-final-qualification
 
 permissions:
