@@ -1,8 +1,6 @@
 // Fake SQL infrastructure only: no PostgreSQL server, durability or isolation claim.
 // Real PA repositories execute their statements and validate their own records.
-import {materializationPostgresSchemaDigest} from '@agent-teams/provider-access/dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-schema.js';
-import {routeSelectionSchemaDigest} from '@agent-teams/provider-access/dist/features/contained-turn-access/adapters/outbound/postgres/route-selection-schema.js';
-import {dispatchOperationSchemaDigest} from '@agent-teams/provider-access/dist/features/contained-turn-access/adapters/outbound/postgres/dispatch-operation-schema.js';
+import {materializationPostgresSchemaDigest, routeSelectionSchemaDigest, dispatchOperationSchemaDigest} from '@agent-teams/provider-access/composition';
 const row=x=>({rows:[structuredClone(x)],rowCount:1});
 const empty=()=>({rows:[],rowCount:0});
 export function syntheticPool({conflict=false,corruptReadback=false}={}) {

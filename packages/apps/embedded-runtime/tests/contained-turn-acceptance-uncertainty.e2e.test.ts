@@ -6,7 +6,7 @@ import { createContainedTurnFeature } from "@agent-teams/agent-execution/composi
 import {
   createDependencies,
   operationId as fixtureOperationId,
-} from "@agent-teams/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
+} from "./support/external/agent-execution/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 
 import {
   AgentRuntimeHostLifecycleError,

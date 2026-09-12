@@ -11,10 +11,16 @@ export {
 } from "./adapters/outbound/filesystem/node-contained-turn-workspace.js";
 export {
   createCodexAppServerPermissionBoundary,
+  CODEX_APP_SERVER_BINARY_REVISION,
+  CODEX_APP_SERVER_BINARY_SHA256,
+  codexTurnSandboxPolicy,
   type CodexAppServerPermissionBoundary,
 } from "./adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
 export {decodeCodexResponseEnvelope} from "./adapters/outbound/codex-app-server/codex-app-server-jsonl.js";
 export {
+  CODEX_APP_SERVER_ADAPTER_REVISION,
+  CODEX_APP_SERVER_DARWIN_ARM64_TUPLE,
+  CODEX_CAPABILITY_MANIFEST_REVISION,
   type CodexAppServerPlatformTarget,
 } from "./adapters/outbound/codex-app-server/codex-app-server-platform-tuple.js";
 export {
@@ -25,6 +31,11 @@ export {
   DarwinCooperativeProcessCustody,
   type DarwinCooperativeProcessCustodyOptions,
 } from "./adapters/outbound/host-custody/darwin-cooperative-process-custody.js";
+export {ContainedTurnKernelCustodyAdapter, type ContainedTurnHostCustodyPort} from
+  "./adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.js";
+export {CONTAINED_TURN_DEPENDENCY_NAMES} from "./application/ports/outbound/contained-turn-ports.js";
+export type {ContainedTurnKernelCustodyPort} from "./application/ports/outbound/contained-turn-ports.js";
+export {containedTurnOperationCutoffRevision} from "./domain/contained-turn-output-authority.js";
 export {inspectDarwinRouteRequestInventory, type DarwinRouteRequestInventory,
   type DarwinRouteRequestInventoryIdentity} from "./adapters/outbound/host-custody/darwin-route-durable-storage.js";
 export {
@@ -157,3 +168,63 @@ export {captureRootDarwinAttemptWorkspace}
 export type {NativePreparedAttemptBinding, RetainedNativeAttemptAuthority,
   DarwinAttemptRetainedOwners, DarwinAttemptRetainedCompletion, DarwinAttemptRetainedOwnerFactory}
   from "./adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
+export {
+  HTTP_EVIDENCE_FENCE, NodeProviderProcessCustodyCore, createHostHttpAdmissionGuard,
+  createPreparedHttpRequestV1, createStrictHttpEgressBroker, initialHttpEgressState,
+  materializationAuthorizationRequest, projectPreparedRequest,
+} from "./adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
+export {
+  CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT, CODEX_APP_SERVER_CURRENT_KERNEL_MANIFEST,
+} from "./adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
+export {CodexAppServerContainedTurnProvider} from "./adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.js";
+export {
+  CODEX_LOCAL_BROKER_CAPABILITY_ENV, createCodexNativeBrokerRecipe, renderCodexNativeBrokerConfig,
+} from "./adapters/outbound/codex-app-server/codex-native-broker-recipe.js";
+export {prepareCodexNativeBrokerFiles} from "./adapters/outbound/codex-app-server/codex-native-broker-files.js";
+export {
+  CONTAINED_TURN_PREPARATION_CLOSURE_LIMIT, bindContainedTurnPreparationGrantRequests,
+  claimContainedTurnDispatchPreparation, containedTurnPreparationClosureBinding,
+  recordContainedTurnPreparationCleanup, retireContainedTurnDispatchPreparation,
+} from "./domain/contained-turn-dispatch-preparation.js";
+export {
+  CONTAINED_TURN_REQUIRED_PROOF_KINDS, containedTurnAuthorityVectorDigest,
+  containedTurnCommandFingerprint, containedTurnProviderAccessSnapshotDigest, containedTurnScopeDigest,
+} from "./domain/contained-turn-authority.js";
+export {appendContainedTurnOutputForOwnerStore} from "./domain/contained-turn-output-transitions.js";
+export {asContainedTurnCommandFingerprint, digestContainedTurnCanonicalValue} from "./domain/contained-turn-codecs.js";
+export {committedDispatchProofV1} from "./domain/committed-dispatch-proof-v1.js";
+export {
+  containedTurnDispatchClaimBindingDigest, validateContainedTurnConsumedGrantReceipts,
+} from "./domain/contained-turn-dispatch-authority.js";
+export {containedTurnIdentity} from "./domain/contained-turn-identities.js";
+export {containedTurnSatisfactionDigest} from "./domain/contained-turn-satisfaction.js";
+export {
+  containedTurnAcceptanceConstraintsDigestV1, containedTurnAcceptanceIntentDigestV1,
+  createContainedTurnEngine, createContainedTurnOperation,
+} from "./application/contained-turn-engine.js";
+export {mutateContainedTurnOperation} from "./domain/contained-turn-transitions.js";
+export {validateContainedTurnOperation} from "./domain/contained-turn-validation.js";
+export {acceptedProviderPreparation} from "./composition/accepted-authority-anti-corruption.js";
+export {
+  CGROUP2_SUPER_MAGIC, DOCKER_CUSTODY_BOOTSTRAP_PATH, DOCKER_CUSTODY_INIT_ARGUMENTS,
+  DOCKER_CUSTODY_INIT_PROTOCOL, DOCKER_CUSTODY_NODE_PATH, DockerCustodyFrameDecoder,
+  DockerCustodyJournal, DockerCustodyJournalConflictError, DockerEngineError,
+  DockerHostCustodyLifecycle, DockerHttpNetworkResources, DockerOperationNetwork, FakeDockerEngine,
+  HostHttpEgressV4Journal, HostHttpEgressV4NodeStorage, NodeDockerCustodyJournalStorage,
+  NodeUnixSocketDockerEngine, PROC_SUPER_MAGIC, assertNetworkContainer, assertNetworkEngine,
+  composeLinuxDockerResidueCustody, createDockerImageInitOwner, createSpecificationSha256,
+  decodeEngineIdentity, decodeInspection, decodeOperationNetwork, dockerCustodyOwnerIdentitySha256,
+  dockerHttpOperationNetworkRecipe, encodeCreateRequest, encodeDockerCustodyFrame,
+  installLinuxExclusiveRoute, isConcreteLinuxDockerLifecycle, linuxExclusiveRouteSeccomp,
+  networkBinding, networkDigest, operationNetworkLabels, operationNetworkName, residueLeaf,
+  residueParent, snapshotDockerEnginePolicy, snapshotDockerImageInitLock, v4Decode, v4Hash, v4Replay,
+} from "./adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
+export {DockerConsumptionObservations} from "./composition/docker-consumption-observations.js";
+export {
+  computeContainedTurnArtifactTreeDigest, decodeContainedTurnArtifactManifest,
+  encodeContainedTurnArtifactManifest,
+} from "./adapters/outbound/filesystem/contained-turn-artifact-manifest.js";
+export {createDockerOperationNetworkOwner} from "./composition/docker-operation-network-owner.js";
+export {createWorkspaceCapabilityRetention} from "./adapters/outbound/filesystem/contained-turn-workspace-capability.js";
+export {parseResultPublicationRecord} from "./adapters/outbound/filesystem/contained-turn-result-publication.js";
+export {parseWorkspaceSealRecord} from "./adapters/outbound/filesystem/contained-turn-workspace-state.js";

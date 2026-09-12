@@ -1,9 +1,9 @@
 import {createHash} from 'node:crypto';
 import {constants, openSync, closeSync, fstatSync, lstatSync, readSync, opendirSync} from 'node:fs';
 import {isAbsolute, resolve} from 'node:path';
-import {decodeContainedTurnArtifactManifest} from '@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-manifest.js';
-import {parseResultPublicationRecord} from '@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-result-publication.js';
-import {parseWorkspaceSealRecord} from '@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-state.js';
+import {decodeContainedTurnArtifactManifest} from '@agent-teams/agent-execution/composition';
+import {parseResultPublicationRecord} from '@agent-teams/agent-execution/composition';
+import {parseWorkspaceSealRecord} from '@agent-teams/agent-execution/composition';
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const requireEvidence = condition => {if (!condition) {throw new Error('Invalid or incomplete live artifact evidence');}};

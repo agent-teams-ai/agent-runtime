@@ -27,7 +27,13 @@ export {DOCKER_CUSTODY_NODE_PATH, DOCKER_CUSTODY_BOOTSTRAP_PATH, DOCKER_CUSTODY_
 export type {DockerImageInitLock} from "./engine/docker-engine-composition.js";
 export {parseDockerImageReference} from "./engine/docker-engine-composition.js";
 
-export {NodeUnixSocketDockerEngine, snapshotDockerImageInitLock, snapshotDockerEnginePolicy} from "./engine/docker-engine-composition.js";
+export {
+  NodeUnixSocketDockerEngine, snapshotDockerImageInitLock, snapshotDockerEnginePolicy,
+  DockerEngineError, DockerOperationNetwork, FakeDockerEngine, assertNetworkContainer,
+  assertNetworkEngine, createSpecificationSha256, decodeEngineIdentity, decodeInspection,
+  decodeOperationNetwork, encodeCreateRequest, networkBinding, networkDigest,
+  operationNetworkLabels, operationNetworkName,
+} from "./engine/docker-engine-composition.js";
 
 // Private composition construction of existing durable resource owners.
 export {NodeDockerCustodyJournalStorage} from "./journal/node-docker-custody-journal-storage.js";
@@ -38,3 +44,14 @@ export {captureDockerWorkspaceCustody, readDockerWorkspaceCustody} from "./node-
 
 export {createNodeDockerRouteProvenance} from "./node-docker-route-provenance.js";
 export type {NodeDockerRouteSubject} from "./node-docker-route-provenance.js";
+export {CGROUP2_SUPER_MAGIC, PROC_SUPER_MAGIC} from "./linux-docker-residue-io.js";
+export {DOCKER_CUSTODY_INIT_PROTOCOL, DockerCustodyFrameDecoder, encodeDockerCustodyFrame} from "./init/docker-custody-init-protocol.js";
+export {DockerCustodyJournal} from "./journal/docker-custody-journal.js";
+export {DockerCustodyJournalConflictError} from "./journal/docker-custody-journal-types.js";
+export {composeLinuxDockerResidueCustody} from "./node-linux-docker-residue-custody.js";
+export {dockerCustodyOwnerIdentitySha256} from "./journal/docker-custody-journal-codec.js";
+export {installLinuxExclusiveRoute} from "./linux-exclusive-route-owner.js";
+export {linuxExclusiveRouteSeccomp} from "./linux-exclusive-route-policy.js";
+export {residueLeaf, residueParent} from "./linux-docker-residue-parsers.js";
+export {v4Decode, v4Hash} from "./journal/host-http-egress-v4-codec.js";
+export {v4Replay} from "./journal/host-http-egress-v4-replay.js";

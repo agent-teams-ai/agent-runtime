@@ -7,9 +7,9 @@ import {
   assertNetworkEngine, assertNetworkContainer, decodeOperationNetwork, networkBinding,
   networkDigest, operationNetworkLabels, operationNetworkName,
   type DockerOperationNetworkBinding,
-} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-operation-network-codec.js";
+} from "@agent-teams/agent-execution/composition";
 import type {DockerEngineIdentity, DockerContainerAuthority} from
-  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.js";
+  "@agent-teams/agent-execution/composition";
 
 export type FirewallCommand = (tool: "iptables" | "ip" | "docker", argv: readonly string[]) => Promise<string>;
 /** Installed absolute executable paths only. No shell, installation, inherited Docker

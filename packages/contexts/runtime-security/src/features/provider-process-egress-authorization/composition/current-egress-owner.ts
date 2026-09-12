@@ -147,3 +147,6 @@ export const createCurrentEgressOwner = (value: CurrentEgressOwnerInput):
     dispose: close,
   });
 };
+
+export { canonicalEgressValue } from "../application/egress-canonical.js";
+export { captureCurrentEgressResolve, currentEgressDigest } from "./current-egress-validation.js";

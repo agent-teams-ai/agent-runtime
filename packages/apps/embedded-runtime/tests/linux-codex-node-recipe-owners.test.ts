@@ -1,20 +1,20 @@
 import {NodeDockerCustodyJournalStorage, HostHttpEgressV4Journal, HostHttpEgressV4NodeStorage}
-  from "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
+  from "@agent-teams/agent-execution/composition";
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {mkdir, mkdtemp, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {createNodeDockerDeploymentRecipe, type NodeDockerDeploymentRecipeInput}
-  from "@agent-teams/agent-execution/dist/features/contained-agent-turn/composition/node-docker-deployment-recipe.js";
+  from "@agent-teams/agent-execution/composition";
 import {createNodeDockerDeploymentRecipe as curatedFactory} from "@agent-teams/agent-execution/composition";
 import {NodeUnixSocketDockerEngine}
-  from "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/node-unix-socket-docker-engine.js";
+  from "@agent-teams/agent-execution/composition";
 import {isConcreteLinuxDockerLifecycle}
-  from "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/node-linux-docker-residue-custody.js";
+  from "@agent-teams/agent-execution/composition";
 import {policy, call, HOST, HOST_BOOT, DAEMON_BOOT}
-  from "@agent-teams/agent-execution/tests/fixtures/docker-engine-test-fixture.ts";
-import {subject, MemoryV4Storage} from "@agent-teams/agent-execution/tests/fixtures/host-http-egress-v4-fixture.ts";
+  from "./support/external/agent-execution/fixtures/docker-engine-test-fixture.ts";
+import {subject, MemoryV4Storage} from "./support/external/agent-execution/fixtures/host-http-egress-v4-fixture.ts";
 
 const options = (root: string): NodeDockerDeploymentRecipeInput => {
   const {allowedNetworkName: _network, ...enginePolicy} = policy(root);
@@ -115,7 +115,7 @@ for (const field of ["selectedDockerAuthorityDigest", "networkNamespaceIdentity"
 
 test("actual recipe opening command persists through the real V4 journal and codec", async t => {
   const {v4Decode} = await import(
-    "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-codec.js");
+    "@agent-teams/agent-execution/composition");
   // Replace only external identity/storage boundaries; prepare and record validation stay real.
   t.mock.method(NodeUnixSocketDockerEngine.prototype, "identity", async () => identity);
   t.mock.method(NodeDockerCustodyJournalStorage, "open", async () => ({}));

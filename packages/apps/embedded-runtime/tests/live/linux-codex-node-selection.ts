@@ -3,8 +3,8 @@ import {createHash, randomBytes, randomUUID} from "node:crypto";
 import {isAbsolute, normalize, relative} from "node:path";
 import type {LinuxCodexNodeRecipeSelection} from "../../dist/composition/linux-codex-node-recipe.js";
 import type {LinuxCodexDeploymentInfrastructure} from "../../dist/composition/linux-codex-deployment.js";
-import type {ContainedTurnDispatchGrantSubject} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
-import type {DockerCustodyInitConfiguration} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/init/docker-custody-init-configuration.js";
+import type {ContainedTurnDispatchGrantSubject} from "@agent-teams/agent-execution/composition";
+import type {DockerCustodyInitConfiguration} from "@agent-teams/agent-execution/composition";
 
 type Selection = LinuxCodexNodeRecipeSelection;
 type Input = Parameters<LinuxCodexDeploymentInfrastructure["recipe"]>[0];

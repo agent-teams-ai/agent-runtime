@@ -9,22 +9,22 @@ import {
 import {
   CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT as adapterSnapshot,
   CODEX_APP_SERVER_CURRENT_KERNEL_MANIFEST as capabilityManifest,
-} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
+} from "@agent-teams/agent-execution/composition";
 import {CODEX_LOCAL_BROKER_CAPABILITY_ENV} from
-  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.js";
+  "@agent-teams/agent-execution/composition";
 import {containedTurnAcceptanceConstraintsDigestV1, containedTurnAcceptanceIntentDigestV1} from
-  "@agent-teams/agent-execution/dist/features/contained-agent-turn/application/contained-turn-acceptance-digests.js";
+  "@agent-teams/agent-execution/composition";
 import {digestContainedTurnCanonicalValue} from
-  "@agent-teams/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
+  "@agent-teams/agent-execution/composition";
 import {containedTurnScopeDigest} from
-  "@agent-teams/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-authority.js";
+  "@agent-teams/agent-execution/composition";
 import {snapshotDockerImageInitLock} from
-  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-image-init-lock.js";
+  "@agent-teams/agent-execution/composition";
 import {createCredentialMaterializationRequestDigest} from "@agent-teams/provider-access/composition";
 import {createNodePathCanonicalizer, createSetupInspectionAuthorizationFeature} from
   "@agent-teams/runtime-security/composition";
 import {currentEgressDigest} from
-  "@agent-teams/runtime-security/dist/features/provider-process-egress-authorization/composition/current-egress-validation.js";
+  "@agent-teams/runtime-security/composition";
 import {
   createClaudeCodeConfigurationInspectionFeature, createClaudeCodeConfigurationSemanticClassifierV2,
   createClaudeCodeConfigurationSourceReaderAdapter, createCodexConfigurationInspectionFeature,

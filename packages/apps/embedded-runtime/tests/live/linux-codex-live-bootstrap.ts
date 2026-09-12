@@ -11,13 +11,13 @@ import {
   createPostgresRouteSelectionOwner,
 } from "@agent-teams/provider-access/composition";
 import {createPostgresMaterializationRepository} from
-  "@agent-teams/provider-access/dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.js";
+  "@agent-teams/provider-access/composition";
 import {
   createDispatchAcceptanceFeature, createNodeSha256DispatchDigest,
   createPostgresDispatchAcceptanceStore,
 } from "@agent-teams/runtime-security/composition";
 import {createPostgresDispatchConsumptionRepository} from
-  "@agent-teams/runtime-security/dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.js";
+  "@agent-teams/runtime-security/composition";
 import {
   createHostCustodiedAgentRuntimeHost, type HostCustodiedAgentRuntimeHostDependencies,
 } from "../../dist/composition/host-custodied-agent-runtime-host.js";

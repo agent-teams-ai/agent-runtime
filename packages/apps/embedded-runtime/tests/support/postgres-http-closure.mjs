@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import {PostgresContainedTurnOperationStore, applyContainedTurnPostgresSchema} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/postgres/postgres-contained-turn-operation-store.js";
-import {intentAuthority} from "@agent-teams/agent-execution/tests/features/contained-agent-turn/support/intent-guard-fixture.ts";
-import {createDependencies} from "@agent-teams/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
-import {createContainedTurnEngine} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/application/contained-turn-engine.js";
-import {validateDisposablePostgresUrl} from "@agent-teams/provider-access/tests/features/contained-turn-access/postgres-materialization-url.fixtures.ts";
+import {PostgresContainedTurnOperationStore, applyContainedTurnPostgresSchema} from "@agent-teams/agent-execution/composition";
+import {intentAuthority} from "./external/agent-execution/features/contained-agent-turn/support/intent-guard-fixture.ts";
+import {createDependencies} from "./external/agent-execution/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
+import {createContainedTurnEngine} from "@agent-teams/agent-execution/composition";
+import {validateDisposablePostgresUrl} from "./external/provider-access/features/contained-turn-access/postgres-materialization-url.fixtures.ts";
 
 // This database must be newly provisioned for this one test. Never reset an
 // existing schema, and never substitute the memory fixture's closure callbacks.

@@ -2,15 +2,15 @@ import assert from "node:assert/strict";
 import {test} from "node:test";
 import {createLinuxCodexLiveFirewallWiring} from "./linux-codex-live-firewall-wiring.ts";
 import type {FirewallCommand} from "./linux-codex-live-admin-firewall.ts";
-import {networkFixture, call} from "@agent-teams/agent-execution/tests/fixtures/docker-operation-network-fixture.ts";
+import {networkFixture, call} from "../support/external/agent-execution/fixtures/docker-operation-network-fixture.ts";
 import {dockerHttpOperationNetworkRecipe} from
-  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-network-resources.js";
+  "@agent-teams/agent-execution/composition";
 
 import {createDockerOperationNetworkOwner} from
-  "@agent-teams/agent-execution/dist/features/contained-agent-turn/composition/docker-operation-network-owner.js";
+  "@agent-teams/agent-execution/composition";
 import {HostHttpEgressV4Journal} from
-  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-journal.js";
-import {MemoryV4Storage} from "@agent-teams/agent-execution/tests/fixtures/host-http-egress-v4-fixture.ts";
+  "@agent-teams/agent-execution/composition";
+import {MemoryV4Storage} from "../support/external/agent-execution/fixtures/host-http-egress-v4-fixture.ts";
 
 // Synthetic command/listener boundaries only; no socket, daemon or firewall IO.
 async function fixture() {

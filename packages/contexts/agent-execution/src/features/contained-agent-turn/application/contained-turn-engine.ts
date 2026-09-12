@@ -1,4 +1,8 @@
-export { containedTurnAcceptanceIntentDigestV1 } from "./contained-turn-acceptance-digests.js";
+export {
+  containedTurnAcceptanceIntentDigestV1,
+  containedTurnAcceptanceConstraintsDigestV1,
+} from "./contained-turn-acceptance-digests.js";
+export { createContainedTurnOperation } from "../domain/contained-turn-creation.js";
 import type {
   ContainedTurnIntent,
   ContainedTurnProvider,
