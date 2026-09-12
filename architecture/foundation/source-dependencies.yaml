@@ -29,6 +29,7 @@ governedRoots:
 - scripts/architecture
 - scripts/docs
 - scripts/foundation
+- scripts/native-helper
 - packages/apps/embedded-runtime/scripts
 - packages/contexts/provider-access/scripts
 - packages/contexts/runtime-security/scripts
@@ -2332,3 +2333,18 @@ boundaries:
     - node:zlib
     runtimeReferences:
     - dynamic
+- id: test.filesystem-custody.native-helper
+  dependencyMode: development
+  roots:
+  - scripts/native-helper
+  entrypoints: []
+  allow:
+    boundaries: []
+    packages: []
+    builtins:
+    - node:assert/strict
+    - node:fs
+    - node:path
+    - node:test
+    - node:vm
+    runtimeReferences: []

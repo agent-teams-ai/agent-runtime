@@ -26,6 +26,7 @@ on:
       - refactor/fms-host-validation
       - refactor/fms-host-runtime-validation
       - refactor/fms-host-http-egress
+      - chore/classify-native-helper-test
       - cursor/fms-darwin-deploy-7d17
 
 permissions:
