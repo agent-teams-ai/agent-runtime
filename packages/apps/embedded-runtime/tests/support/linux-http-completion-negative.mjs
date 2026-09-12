@@ -98,6 +98,10 @@ mock.module("@agent-teams/runtime-security/composition", {exports: {
   createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate() {
     return {hostEgressVerifierV2: {signingKey: {publicKeyDigest: `sha256:${"b".repeat(64)}`}}, dispose() {}};
   },
+  snapshotDispatchAuthorityHead() {throw Error("unexpected dispatch authority snapshot");},
+}});
+mock.module("@agent-teams/provider-access/composition", {exports: {
+  snapshotRouteSelectionCurrent() {throw Error("unexpected route selection snapshot");},
 }});
 mock.module(new URL(`${composition}contained-turn-current-egress-owners.js`, import.meta.url),
   {exports: {
@@ -112,6 +116,10 @@ mock.module(new URL(`${composition}contained-turn-http-egress-upstream.js`, impo
   {exports: {
     createContainedTurnHttpEgressRoute() {throw Error("unexpected HTTP egress route");},
     createContainedTurnHttpUpstreamTransport() {throw Error("unexpected HTTP egress transport");},
+  }});
+mock.module(new URL(`${composition}contained-turn-linux-route-binding.js`, import.meta.url),
+  {exports: {
+    createContainedTurnLinuxRouteBinding() {throw Error("unexpected Linux route binding");},
   }});
 
 const {createLinuxCodexContainedTurnOwner} = await import(
