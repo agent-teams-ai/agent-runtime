@@ -12,6 +12,9 @@ The complementary architecture foundation is indexed in
 - [Execution generation model](docs/architecture/execution-generation-model.md)
 - [Communication boundaries](docs/architecture/communication-boundaries.md)
 - [OpenCode integration](docs/architecture/opencode-integration.md)
+- [Contained Agent Turn V1 delivery plan](docs/architecture/contained-agent-turn-v1-delivery-plan.md)
+- [Subscription-runtime port candidates](docs/architecture/subscription-runtime-port-candidates.md)
+  (`SR-AP-1` … `SR-AP-11`)
 
 Promoted evidence links are in
 `docs/architecture/evidence-traceability.md`. Exact target qualification is in

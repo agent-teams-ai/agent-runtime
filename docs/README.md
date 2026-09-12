@@ -31,6 +31,10 @@ Read documents in this order:
    deliberately narrow Contained Agent Turn V1 authority, and its
    synthetic executable oracle at
    `../experiments/runtime-profile-behavior/spec/runtime-operation-oracle/README.md`.
+   For contained-turn vs the sibling product, also read
+   `architecture/subscription-runtime-port-candidates.md` — protocol
+   encyclopedia and named anti-patterns `SR-AP-1` … `SR-AP-11`, not a spawn
+   template.
    Documentation changes follow accepted
    `decisions/0007-deterministic-documentation-governance.md`, which is pinned
    in the immutable accepted-decision registry. Production application
@@ -180,6 +184,9 @@ Read documents in this order:
 42. `spikes/opencode-acp-1-18-25-contract-validation.md` - synthetic official
    SDK and Host/OpenCode policy characterization, retained normalized OpenCode
    observation boundaries, and explicit production deferrals.
+43. `architecture/subscription-runtime-port-candidates.md` - sibling
+   subscription-runtime as a protocol encyclopedia; named contained-turn
+   anti-patterns `SR-AP-1` … `SR-AP-11`. Not production authority.
 
 Document status vocabulary:
 

@@ -77,3 +77,6 @@ off and finish the optional profile later:
   keep the private handle and contained-turn composition boundary.
 - [ADR-0010](../decisions/0010-contained-agent-turn-v1-operation-authority.md)
   keeps the one-attempt operation contract.
+- [Subscription-runtime port candidates](subscription-runtime-port-candidates.md#host-custody-vs-ordinary-user-session)
+  records that Host Custody optionality is not permission to copy
+  subscription-runtime spawn ([SR-AP-1](subscription-runtime-port-candidates.md#sr-ap-1-provider-owns-the-process)).

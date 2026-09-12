@@ -206,6 +206,12 @@ Use the stable Codex App Server JSONL protocol over stdio under AR Host Custody.
 The ordinary CLI is diagnostics only. The first slice has no automatic CLI or
 SDK fallback. The adapter maps negotiated App Server capabilities into the
 provider-neutral turn port and reports unsupported functionality explicitly.
+Do not copy subscription-runtime App Server spawn, systemd launcher, slot
+pool, resume, or CLI fallback
+([SR-AP-2](subscription-runtime-port-candidates.md#sr-ap-2-silent-second-attempt),
+[SR-AP-4](subscription-runtime-port-candidates.md#sr-ap-4-process-reuse-across-operations)).
+See
+[subscription-runtime-port-candidates.md](subscription-runtime-port-candidates.md#codex).
 
 ### Claude Code
 
@@ -214,6 +220,13 @@ Host Custody callback. AR, not the SDK default launcher, owns the process group,
 environment allowlist, workspace, stop deadline, and termination evidence. The
 adapter consumes the SDK iterator until complete drain and keeps SDK session
 objects outside domain and public contracts.
+`persistSession` is false; resume/fork are not V1. This spawn split is the
+intended design, not a temporary hack. Do not copy subscription-runtime
+default SDK spawn, CLI print, or Claude BG
+([SR-AP-1](subscription-runtime-port-candidates.md#sr-ap-1-provider-owns-the-process),
+[SR-AP-3](subscription-runtime-port-candidates.md#sr-ap-3-provider-session-as-continuation)).
+See
+[subscription-runtime-port-candidates.md](subscription-runtime-port-candidates.md#claude-code).
 
 ### OpenCode
 
