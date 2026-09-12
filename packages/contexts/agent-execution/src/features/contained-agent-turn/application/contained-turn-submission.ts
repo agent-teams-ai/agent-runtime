@@ -1,3 +1,4 @@
+import { containedTurnAcceptanceConstraintsDigestV1 } from "./contained-turn-acceptance-digests.js";
 import {
   containedTurnAuthorityVectorDigest,
   containedTurnCommandFingerprint,
@@ -7,7 +8,6 @@ import {
 } from "../domain/contained-turn-authority.js";
 import { containedTurnIdentity } from "../domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
-import { mutateContainedTurnOperation } from "../domain/contained-turn-transitions.js";
 import {
   assertContainedTurnExactRecord,
   detachAndFreezeContainedTurnValue,
@@ -24,6 +24,7 @@ import {
   ContainedTurnIndeterminateCommitError,
 } from "./contained-turn-committer.js";
 import { dispatchContainedTurn } from "./contained-turn-dispatch.js";
+import { resumeContainedTurnCancellation } from "./contained-turn-cancellation.js";
 import { quarantineLosingContainedTurnWorkspace } from "./contained-turn-preparation-cleanup.js";
 import type {
   ContainedTurnApplicationSubmitInput,
@@ -45,6 +46,9 @@ const resumeReplayedTerminalization = async (
   operation: ContainedTurnKernelOperation,
   trustedScope: ContainedTurnApplicationSubmitInput["scope"],
 ): Promise<ContainedTurnKernelOperation> => {
+  if (operation.cancellation.kind === "requested" && operation.dispatch.kind !== "claimed") {
+    return resumeContainedTurnCancellation(dependencies, operation, trustedScope);
+  }
   if (operation.terminal.kind === "final" || operation.reconciliation.kind === "required" ||
       operation.providerExecution.kind !== "closed") {
     return operation;
@@ -64,8 +68,9 @@ const continueAfterAcceptance = async (
   trustedScope: ContainedTurnApplicationSubmitInput["scope"],
 ): Promise<ContainedTurnApplicationSubmitOutcome> => {
   const current = await readContainedTurnOwnedOperation(dependencies, accepted.operationId, trustedScope);
-  if (current === undefined || current.cancellation.kind === "requested") {
-    return { operation: current ?? accepted, status: "observed" };
+  if (current === undefined) {return { operation: accepted, status: "observed" };}
+  if (current.cancellation.kind === "requested") {
+    return { operation: await resumeContainedTurnCancellation(dependencies, current, trustedScope), status: "observed" };
   }
   let workspace: Awaited<ReturnType<ContainedTurnKernelDependencies["workspace"]["create"]>>;
   try {
@@ -120,13 +125,14 @@ const finishContainedTurnAcceptance = async (
     return { code: "command_fingerprint_conflict", status: "conflict" };
   }
   if (accepted.kind === "potential_acceptance") {
-    const potential = mutateContainedTurnOperation(accepted.candidateOperation, {
-      evidenceId: accepted.evidenceId,
-      kind: "record_reconciliation_debt",
-      source: "store_commit",
+    // No durable operation was returned. Preserve reconciliation references without
+    // fabricating kernel state or invoking the confirmed-acceptance callback.
+    return Object.freeze({
+      candidateOperationId: accepted.candidateOperation.operationId,
+      commandId: accepted.candidateOperation.commandId,
+      evidenceId: containedTurnIdentity("evidence", accepted.evidenceId),
+      status: "potential_acceptance",
     });
-    try {options?.onAccepted?.(potential);} catch {}
-    return { operation: potential, status: "observed" };
   }
   if (accepted.kind === "replayed") {
     try {options?.onAccepted?.(accepted.operation);} catch {}
@@ -196,13 +202,19 @@ export const submitContainedTurn = async (
       status: "observed",
     };
   }
+  const constraintsDigest = containedTurnAcceptanceConstraintsDigestV1({
+    adapterSnapshot: adapter, capabilityManifest: manifest, intent: input.intent,
+  });
   const [access, security] = await Promise.all([
     dependencies.providerAccess.resolveForAcceptance({
+      operationId: identity.operationId,
       intent: input.intent,
       provider: adapter.provider,
       scope: input.scope,
     }),
     dependencies.security.authorizeForAcceptance({
+      operationId: identity.operationId,
+      constraintsDigest,
       intent: input.intent,
       provider: adapter.provider,
       scope: input.scope,

@@ -7,6 +7,7 @@ const MAX_COMMANDS_PER_SESSION = 64;
 const MAX_SMALL_ERROR_BYTES = 4 * 1024;
 
 export type ProbeAnomalyCode =
+  | "closure_failed"
   | "closure_timeout"
   | "diagnostic_truncated"
   | "evidence_anomaly_limit_exceeded"

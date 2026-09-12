@@ -1,4 +1,4 @@
-import { isAbsolute, relative, resolve } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 
 import type {
   HostCustodyLaunchPlan,
@@ -103,7 +103,7 @@ const normalizedAbsolute = (name: string, path: string): string => {
 
 const isWithin = (parent: string, candidate: string): boolean => {
   const path = relative(parent, candidate);
-  return path === "" || (!path.startsWith("..") && !isAbsolute(path));
+  return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 };
 
 export const isClaudeAgentSdkPrivateProjectionUsable = async (

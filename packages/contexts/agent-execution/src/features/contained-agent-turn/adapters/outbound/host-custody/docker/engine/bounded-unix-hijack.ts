@@ -17,6 +17,7 @@ export interface UnixHijackChannel {
 
 interface HijackInput {
   readonly call: DockerEngineCall;
+  readonly observationCall?: DockerEngineCall;
   readonly effectiveMs: number;
   readonly path: string;
   readonly release: () => Promise<void>;
@@ -46,8 +47,11 @@ const validateUpgrade = (response: IncomingMessage): void => {
     if (headers.has(name)) {throw new DockerEngineError("protocol-violation");}
     headers.set(name, rawValue.trim().toLowerCase());
   }
+  // Non-TTY attach uses multiplexed frames under either supported Docker media type.
+  const contentType = headers.get("content-type");
   if (headers.get("connection") !== "upgrade" || headers.get("upgrade") !== "tcp" ||
-      headers.get("content-type") !== "application/vnd.docker.raw-stream" ||
+      (contentType !== "application/vnd.docker.raw-stream" &&
+       contentType !== "application/vnd.docker.multiplexed-stream") ||
       headers.has("content-length") || headers.has("transfer-encoding")) {
     throw new DockerEngineError("protocol-violation");
   }
@@ -59,6 +63,7 @@ const failure = (call: DockerEngineCall, expired: boolean): DockerEngineError =>
 };
 
 export const openBoundedUnixHijack = (input: HijackInput): Promise<UnixHijackChannel> => new Promise((resolve, reject) => {
+  const observationCall = input.observationCall ?? input.call;
   const agent = new Agent({keepAlive: false, maxSockets: 1});
   agent.createConnection = () => input.socket;
   let expired = false;
@@ -98,6 +103,9 @@ export const openBoundedUnixHijack = (input: HijackInput): Promise<UnixHijackCha
     try {operation?.destroy();} catch {}
     try {input.socket.destroy();} catch {}
     void release();
+  };
+  const observationAbort = (): void => {
+    try {input.socket.destroy(failure(observationCall, sessionExpired));} catch {}
   };
   const abort = (): void => {
     const error = failure(input.call, expired || sessionExpired);
@@ -141,10 +149,10 @@ export const openBoundedUnixHijack = (input: HijackInput): Promise<UnixHijackCha
           throw new DockerEngineError("daemon-disconnected");
         }
         const checkSessionCall = (): void => {
-          if (input.call.signal.aborted) {throw new DockerEngineError("aborted");}
-          if (Date.now() >= input.call.deadlineEpochMs) {
+          if (observationCall.signal.aborted) {throw new DockerEngineError("aborted");}
+          if (Date.now() >= observationCall.deadlineEpochMs) {
             sessionExpired = true;
-            abort();
+            observationAbort();
             throw new DockerEngineError("deadline-exceeded");
           }
         };
@@ -161,7 +169,9 @@ export const openBoundedUnixHijack = (input: HijackInput): Promise<UnixHijackCha
           },
         });
         if (head.byteLength > 0) {socket.unshift(head);}
-        sessionTimer = setTimeout(() => {sessionExpired = true; abort();}, remaining);
+        checkSessionCall();
+        sessionTimer = setTimeout(() => {sessionExpired = true; observationAbort();},
+          Math.min(2_147_483_647, observationCall.deadlineEpochMs - Date.now()));
         sessionTimer.unref();
         // Upgrade detaches the socket from ClientRequest error handling. Keep an
         // error sink installed before exposing the hijack so abort cannot race
@@ -170,7 +180,7 @@ export const openBoundedUnixHijack = (input: HijackInput): Promise<UnixHijackCha
         const close = async (): Promise<void> => {
           if (establishmentTimer !== undefined) {try {clearTimeout(establishmentTimer);} catch {}}
           if (sessionTimer !== undefined) {try {clearTimeout(sessionTimer);} catch {}}
-          try {input.call.signal.removeEventListener("abort", abort);} catch {}
+          try {observationCall.signal.removeEventListener("abort", observationAbort);} catch {}
           if (!socket.destroyed) {try {socket.destroy();} catch {}}
           await release();
           try {socket.removeListener("error", ignoreSocketError);} catch {}
@@ -180,10 +190,13 @@ export const openBoundedUnixHijack = (input: HijackInput): Promise<UnixHijackCha
         socket.once("close", lifetimeClose);
         if (establishmentSocketError !== undefined) {socket.removeListener("error", establishmentSocketError);}
         if (establishmentSocketClose !== undefined) {socket.removeListener("close", establishmentSocketClose);}
-        settled = true; cleanupOpening(false);
+        settled = true; cleanupOpening();
+        observationCall.signal.addEventListener("abort", observationAbort, {once: true});
+        if (observationCall.signal.aborted) {observationAbort();}
         const output = async function* (): AsyncIterable<Uint8Array> {
-          for await (const chunk of socket) {yield chunk as Uint8Array;}
+          for await (const chunk of socket) {checkSessionCall(); yield chunk as Uint8Array;}
           await input.verifyCustody();
+          checkSessionCall();
         };
         resolve({close, input: socket, output: output()});
       } catch (error) {fail(error);}

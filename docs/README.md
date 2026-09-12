@@ -47,6 +47,14 @@ Read documents in this order:
    `decisions/0014-darwin-provider-candidate-platform-qualification.md`, which
    accepts only the narrow unqualified Darwin arm64 provider candidate
    direction without changing ADR-0010 operation semantics or Linux authority.
+   Then read
+   `decisions/0017-feature-module-production-scope-roles.md`, which classifies
+   every production module by its real role, keeps the four unmigrated modules
+   explicitly pending, and owns the Filesystem Custody platform identity.
+   Finally read proposed
+   `decisions/0016-contained-turn-consumer-module-standard-adoption.md`, which
+   keeps the existing seven-port composition explicitly outside the active
+   passive setup Assembly scope.
 2. `architecture/evidence-traceability.md` - canonical mapping from scoped
    observations to the smallest promoted architecture rules.
    Immediately after it, read
@@ -182,9 +190,9 @@ Document status vocabulary:
 - `falsified`: a hypothesis contradicted by later evidence.
 
 Production code must not use an evidence document as its architecture source
-of truth. Accepted ADR-0001 through ADR-0010 and ADR-0012 through ADR-0014,
-excluding proposed ADR-0006 and the unassigned ADR identities, plus the
-promoted-rule column of the traceability matrix are normative for production
+of truth. Accepted ADR-0001 through ADR-0010, ADR-0012 through ADR-0015, and
+ADR-0017 through ADR-0019, excluding proposed ADR-0006, proposed ADR-0016, and the unassigned ADR
+identities, plus the promoted-rule column of the traceability matrix are normative for production
 architecture. ADR-0007 governs deterministic documentation changes.
 Supporting architecture documents are accepted only as amended by the ADRs.
 Readiness status is intentionally separate and cannot change domain ownership. A spike's
@@ -202,3 +210,7 @@ shapes, duplicate/conflicting tuples, readiness links, evidence files, and
 pinned SHA-256 identities. The same command accepts `--target-json
 '<eight-dimension JSON object>'` for an exact whole-tuple lookup; an unmatched
 target returns `unqualified`.
+
+Current passive composition adoption: [ADR-0015](decisions/0015-passive-setup-static-assembly-adoption.md)
+and [Get Modular adoption](architecture/get-modular-adoption.md). This is authority
+groundwork, not delivered adoption or provider qualification.

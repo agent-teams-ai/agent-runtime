@@ -2,7 +2,7 @@ import {
   PathCustodyError,
   openStablePath,
   type OpenedStablePath,
-} from "@agent-teams/filesystem-custody";
+} from "@agent-teams/filesystem-custody/composition";
 import { lstat, realpath } from "node:fs/promises";
 
 import type {

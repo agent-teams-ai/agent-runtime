@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdir, rename, stat } from "node:fs/promises";
+import { mkdir, rename, stat, unlink } from "node:fs/promises";
 import { after, test, type TestContext } from "node:test";
 
 import { containedTurnIdentity } from
   "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
-import { createNodeContainedTurnWorkspaceOwner } from
+import { createNodeContainedTurnWorkspaceOwner, isNodeContainedTurnNativeWorkspaceOwner,
+  withNodeContainedTurnNativeWorkspaceSelection, readNodeContainedTurnNativeWorkspaceClosure } from
   "../../../dist/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace-owner.js";
 import {
   cleanupTrackedFilesystemLayouts,
@@ -245,4 +246,122 @@ linuxTest("durable identity substitution fails closed before the launch callback
     await owner.dispose();
     await layout.cleanup();
   }
+});
+
+linuxTest("artifact attachment rejects structural owner clones and another workspace root", async () => {
+  const { createNodeContainedTurnArtifacts } = await import(
+    "../../../dist/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-artifacts.js"
+  );
+  const layout = await createSyntheticFilesystemLayout();
+  const other = await createSyntheticFilesystemLayout();
+  const owner = await createNodeContainedTurnWorkspaceOwner(layout.workspaceOptions);
+  try {
+    await assert.rejects(createNodeContainedTurnArtifacts({
+      ...layout.artifactOptions,
+      testFaults: { checkpoint() {} },
+      workspaceOwner: Object.freeze({ ...owner }),
+    }), /workspace owner is not issued/u);
+    await assert.rejects(createNodeContainedTurnArtifacts({
+      ...other.artifactOptions,
+      testFaults: { checkpoint() {} },
+      workspaceOwner: owner,
+    }), /workspace root belongs to another owner/u);
+    const artifacts = await createNodeContainedTurnArtifacts({
+      ...layout.artifactOptions,
+      workspaceOwner: owner,
+    });
+    assert.equal(typeof artifacts.ensureSealed, "function");
+  } finally {await owner.dispose();}
+});
+
+
+test("native owner discriminator rejects unknown objects without reading properties", () => {
+  const hostile = new Proxy({}, { get() { throw new Error("must not inspect properties"); } });
+  for (const value of [{}, { native: true }, Object.create(null), hostile]) {
+    assert.equal(isNodeContainedTurnNativeWorkspaceOwner(value), false);
+    assert.equal(isNodeContainedTurnNativeWorkspaceOwner(value), false);
+  }
+});
+
+linuxTest("native owner discriminator rejects issued Linux owners and structural clones", async () => {
+  const layout = await createSyntheticFilesystemLayout();
+  const owner = await createNodeContainedTurnWorkspaceOwner({ ...layout.workspaceOptions, limits: LIMITS });
+  try {
+    assert.equal(isNodeContainedTurnNativeWorkspaceOwner(owner), false);
+    assert.equal(isNodeContainedTurnNativeWorkspaceOwner({ ...owner }), false);
+    assert.equal(isNodeContainedTurnNativeWorkspaceOwner(owner), false);
+  } finally { await owner.dispose(); }
+});
+
+linuxTest("native handoff rejects a cloned owner and an issued non-native owner without callback entry", async () => {
+  const layout = await createSyntheticFilesystemLayout();
+  const owner = await createNodeContainedTurnWorkspaceOwner(layout.workspaceOptions);
+  try {
+    const operation = operationId("native-rejection");
+    const created = await owner.workspace.create({ operationId: operation, scope: SCOPE });
+    const input = { operationId: operation, workspaceId: created.workspaceId,
+      attemptId: attemptId("native-rejection") };
+    let calls = 0;
+    const consume = async () => {calls += 1;};
+    assert.throws(() => withNodeContainedTurnNativeWorkspaceSelection(
+      { ...owner }, input, consume,
+    ), /owner is not issued/u);
+    await assert.rejects(withNodeContainedTurnNativeWorkspaceSelection(owner, input, consume),
+      /no selected native authority/u);
+    await owner.dispose();
+    await assert.rejects(withNodeContainedTurnNativeWorkspaceSelection(owner, input, consume),
+      /no selected native authority/u);
+    assert.equal(calls, 0);
+  } finally {await owner.dispose();}
+});
+
+linuxTest("durable closure recovery repeats observations and restores a missing kernel binding", async () => {
+  const { createNodeContainedTurnArtifacts } = await import(
+    "../../../dist/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-artifacts.js"
+  );
+  const { digestContainedTurnCanonicalValue: digest } = await import(
+    "../../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js"
+  );
+  const { kernelClosureRecordName } = await import(
+    "../../../dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-kernel-closure-record.js"
+  );
+  const layout = await createSyntheticFilesystemLayout();
+  const owner = await createNodeContainedTurnWorkspaceOwner(layout.workspaceOptions);
+  try {
+    const operation = operationId("closure-recovery");
+    const created = await owner.workspace.create({ operationId: operation, scope: SCOPE });
+    const artifacts = await createNodeContainedTurnArtifacts({
+      ...layout.artifactOptions, workspaceOwner: owner,
+    });
+    const binding = { operationId: operation, workspaceId: created.workspaceId,
+      authorityVectorDigest: digest({ authority: "closure-recovery" }) };
+    const sealed = await artifacts.ensureSealed({ ...binding, output: [],
+      requestDigest: digest({ stage: "artifact" }),
+      requestId: containedTurnIdentity("closure_request", "closure-request:recovery-artifact"),
+    });
+    assert.equal(sealed.kind, "proved");
+    const request = { ...binding, requestDigest: digest({ stage: "workspace" }),
+      requestId: containedTurnIdentity("closure_request", "closure-request:recovery-workspace") };
+    const closed = await owner.workspace.ensureClosed(request);
+    assert.equal(closed.kind, "proved");
+    // Simulate interrupted adoption: the caller discards the first observation.
+    await owner.workspace.queryClosure(request);
+    assert.deepEqual(await owner.workspace.queryClosure(request), closed);
+    await unlink(`${layout.workspaceRoot}/receipts/${kernelClosureRecordName(
+      "workspace_closure", request.requestDigest,
+    )}`);
+    assert.equal((await owner.workspace.queryClosure(request)).kind, "indeterminate");
+    assert.deepEqual(await owner.workspace.ensureClosed(request), closed);
+    assert.deepEqual(await owner.workspace.queryClosure(request), closed);
+  } finally {await owner.dispose();}
+});
+
+test("native closure readback rejects structural owners before observing input", () => {
+  const input = Object.defineProperties({}, {
+    operationId: {get() {throw new Error("caller input accessed");}},
+    workspaceId: {get() {throw new Error("caller input accessed");}},
+  }) as Parameters<typeof readNodeContainedTurnNativeWorkspaceClosure>[1];
+  assert.throws(() => readNodeContainedTurnNativeWorkspaceClosure(
+    {} as Parameters<typeof readNodeContainedTurnNativeWorkspaceClosure>[0], input,
+  ), /not issued/u);
 });

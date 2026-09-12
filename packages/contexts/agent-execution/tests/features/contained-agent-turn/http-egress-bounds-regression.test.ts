@@ -98,11 +98,41 @@ describe("HTTP egress bounded evidence regressions", () => {
       const fixture = createEgressFixture({ responseSource: response() });
       const receipt = await createStrictHttpEgressBroker(fixture.ports).execute(fixture.operation);
       assert.equal(receipt.outcome, "reconcile_required");
+      assert.equal(receipt.anomalyCode, ending === "extra" ? "upstream_malformed"
+        : ending === "throw" ? "upstream_stalled" : "upstream_truncated");
       assert.equal(receipt.outboundResponseBytes,
         fixture.observations.outboundWrites.reduce((sum, part) => sum + part.byteLength, 0));
       assert.ok(receipt.outboundResponseBytes > 0);
       assert.equal(receipt.outboundResponseWriteUncertain, false);
+      assert.equal(receipt.attemptCount, 1);
+      assert.equal(fixture.observations.dispatches, 1);
+      assert.equal(fixture.observations.closes, 1);
     });
+  }
+
+  for (const frame of ["Content-Length: 1\r\n\r\nx", "Transfer-Encoding: chunked\r\n\r\n1\r\nx\r\n0\r\n\r\n"]) {
+    for (const limit of ["within", "wire", "buffer"] as const) {
+      test(`late surplus preserves confirmed output and ${limit} bounds for ${frame}`, async () => {
+        const framed = `HTTP/1.1 200 OK\r\n${frame}`;
+        const surplus = bytes("z".repeat(limit === "buffer" ? 129 : 1));
+        const fixture = createEgressFixture({response: [framed, new Uint8Array(), surplus]});
+        const receipt = await createStrictHttpEgressBroker(fixture.ports).execute({...fixture.operation, limits: {
+          ...fixture.operation.limits,
+          maxUpstreamWireBytes: limit === "wire" ? bytes(framed).byteLength : fixture.operation.limits.maxUpstreamWireBytes,
+        }});
+        assert.equal(receipt.outcome, "reconcile_required");
+        assert.equal(receipt.anomalyCode, limit === "within" ? "upstream_malformed" : "output_oversized");
+        assert.equal(receipt.upstreamResponseBytes, bytes(framed).byteLength + surplus.byteLength);
+        assert.equal(receipt.outboundResponseBytes, bytes("HTTP/1.1 200 Upstream\r\nConnection: close\r\n\r\nx").byteLength);
+        assert.equal(receipt.outboundResponseWriteUncertain, false);
+        assert.equal(fixture.observations.outboundWrites.at(-1)?.byteLength, 1);
+        assert.equal(receipt.attemptCount, 1);
+        assert.equal(fixture.observations.dispatches, 1);
+        assert.equal(fixture.observations.closes, 1);
+        assert.equal(fixture.ports.guard.snapshot().state, "closed");
+        assert.deepEqual(fixture.observations.receipts, [receipt]);
+      });
+    }
   }
 
   test("failed downstream writes retain byte uncertainty instead of claiming no write", async () => {
@@ -139,10 +169,10 @@ describe("HTTP egress bounded evidence regressions", () => {
     });
   }
 
-  test("cancellation during route observation remains cancellation", async () => {
+  test("cancellation during Provider Access authorization remains cancellation", async () => {
     const controller = new AbortController();
     const fixture = createEgressFixture({ signal: controller.signal });
-    const ports = { ...fixture.ports, routeAuthority: { ...fixture.ports.routeAuthority, observe: async () => {
+    const ports = { ...fixture.ports, providerAccess: { ...fixture.ports.providerAccess, authorize: async () => {
       controller.abort();
       throw new Error("synthetic interrupted observation");
     } } };

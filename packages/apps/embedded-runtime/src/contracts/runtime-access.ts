@@ -248,9 +248,16 @@ export interface SubmitRuntimeContainedTurnInput {
 }
 
 export type SubmitRuntimeContainedTurnOutcome =
+  | {
+      /** Acceptance is unresolved; these references are evidence, not a persisted operation or retry permission. */
+      readonly candidateOperationId: string;
+      readonly commandId: string;
+      readonly evidenceId: string;
+      readonly status: "potential_acceptance";
+    }
   | { readonly code: "capability_unavailable"; readonly status: "unsupported" }
   | { readonly code: "command_fingerprint_conflict"; readonly status: "conflict" }
-  | { readonly code: "mode_unsupported" | "provider_mismatch" | "provider_unsupported"; readonly status: "unsupported" }
+  | { readonly code: "caller_invalid" | "mode_unsupported" | "provider_mismatch" | "provider_unsupported"; readonly status: "unsupported" }
   | { readonly status: "denied" }
   | { readonly operationId: string; readonly status: "accepted" };
 
@@ -266,7 +273,10 @@ export interface RuntimeContainedTurnAccess {
     operationId: string,
     options?: { readonly signal?: AbortSignal },
   ): Promise<CancelRuntimeContainedTurnOutcome>;
-  observe(operationId: string): Promise<ObserveRuntimeContainedTurnOutcome>;
+  observe(
+    operationId: string,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<ObserveRuntimeContainedTurnOutcome>;
   submit(
     input: SubmitRuntimeContainedTurnInput,
     options?: { readonly signal?: AbortSignal },

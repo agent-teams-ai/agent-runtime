@@ -1,0 +1,78 @@
+{
+  "version": "0.153.4",
+  "binarySha256": "b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3",
+  "sourceCommit": "3d2ee51ca2d5db578f328aa75e20aa22c0197c9a",
+  "observedAt": "2026-09-05T17:04:26.728352+00:00",
+  "platform": "darwin-arm64",
+  "root": "/tmp/ar69-r99/codex-0.153.4-schema-utcu4ez0",
+  "isolatedNetwork": "sandbox-exec deny network*",
+  "authFilesSupplied": false,
+  "providerTurnRequested": false,
+  "commands": [
+    {
+      "name": "version",
+      "args": [
+        "--version"
+      ],
+      "returnCode": 0,
+      "stdoutSha256": "616dba4e87de2b1f07e61fe30ff4a5b3b075986c986c466ac5d244597eac0f36",
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "generate-json-schema-help",
+      "args": [
+        "app-server",
+        "generate-json-schema",
+        "--help"
+      ],
+      "returnCode": 0,
+      "stdoutSha256": "c119fb866c02811bd66e23b7792f76fc16df91452caf8b47b34788c6ac97da1b",
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "generate-ts-help",
+      "args": [
+        "app-server",
+        "generate-ts",
+        "--help"
+      ],
+      "returnCode": 0,
+      "stdoutSha256": "fc67b780ffc3bd53299b95b687ba016e2fe0d1e40daf92c319a32913c85d4956",
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "schema",
+      "args": [
+        "app-server",
+        "generate-json-schema",
+        "--out",
+        "/tmp/ar69-r99/codex-0.153.4-schema-utcu4ez0/schema",
+        "--experimental"
+      ],
+      "returnCode": 0,
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "types",
+      "args": [
+        "app-server",
+        "generate-ts",
+        "--out",
+        "/tmp/ar69-r99/codex-0.153.4-schema-utcu4ez0/types",
+        "--experimental"
+      ],
+      "returnCode": 0,
+      "stdoutSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "schema": {
+    "fileCount": 416,
+    "manifestSha256": "60c1b926bc9720e7695c23bcc6f8cb1dd7dcfa92601dd3e9d7b9267804f28c87"
+  },
+  "types": {
+    "fileCount": 827,
+    "manifestSha256": "6884b9a77fe389ca3f0ed5c327115d5fa9398307390a2b080e6402c66c1e406b"
+  }
+}

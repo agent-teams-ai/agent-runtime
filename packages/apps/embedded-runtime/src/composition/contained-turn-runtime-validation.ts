@@ -1,10 +1,11 @@
+import { isContainedTurnAccessAuthorityIdentity } from "./contained-turn-access-authority.js";
 import type {
   ObserveRuntimeContainedTurnOutcome,
   RuntimeContainedTurnView,
   SubmitRuntimeContainedTurnInput,
   SubmitRuntimeContainedTurnOutcome,
 } from "../contracts/runtime-access.js";
-import { ContainedTurnOwnerContractError } from "./agent-runtime-host-disposal.js";
+import { ContainedTurnOwnerContractError } from "./contained-turn-owner-contract-error.js";
 import type { ContainedTurnCompositionOperationRef } from "./contained-turn-operation-ref.js";
 import type {
   OwnerTurnObservation,
@@ -16,8 +17,8 @@ export const unavailableOutcome = Object.freeze({
   status: "unsupported" as const,
 });
 
-export const providerUnsupportedOutcome = Object.freeze({
-  code: "provider_unsupported" as const,
+export const callerInvalidOutcome = Object.freeze({
+  code: "caller_invalid" as const,
   status: "unsupported" as const,
 });
 
@@ -25,11 +26,11 @@ const MAX_PROVIDER_IDENTITY_LENGTH = 128;
 const MAX_COMMAND_ID_LENGTH = 256;
 const MAX_PROMPT_BYTES = 65_536;
 const MAX_OWNER_IDENTITY_LENGTH = 512;
-const MAX_OUTPUT_CHUNKS = 10_000;
-const MAX_OUTPUT_TEXT_LENGTH = 1_000_000;
+export const MAX_OUTPUT_CHUNKS = 10_000;
+export const MAX_OUTPUT_TEXT_LENGTH = 1_000_000;
 
 export const isBoundedIdentity = (value: unknown): value is string =>
-  typeof value === "string" && value.length > 0 && value.length <= MAX_OWNER_IDENTITY_LENGTH &&
+  typeof value === "string" && !isContainedTurnAccessAuthorityIdentity(value) && value.length > 0 && value.length <= MAX_OWNER_IDENTITY_LENGTH &&
   // oxlint-disable-next-line no-control-regex -- the owner identity contract excludes exact C0/C1 ranges.
   value.isWellFormed() && !/\s/u.test(value) && !/[\u0000-\u001f\u007f-\u009f]/u.test(value);
 
@@ -41,15 +42,15 @@ export const contractViolation = (
   code: ConstructorParameters<typeof ContainedTurnOwnerContractError>[0],
 ): never => {throw new ContainedTurnOwnerContractError(code);};
 
-const copyProviderIdentity = (value: unknown): string | undefined =>
-  typeof value === "string" && value.length > 0 && value.length <= MAX_PROVIDER_IDENTITY_LENGTH &&
+export const copyProviderIdentity = (value: unknown): string | undefined =>
+  typeof value === "string" && !isContainedTurnAccessAuthorityIdentity(value) && value.length > 0 && value.length <= MAX_PROVIDER_IDENTITY_LENGTH &&
     // oxlint-disable-next-line no-control-regex -- the owner identity contract excludes exact C0/C1 ranges.
     value.isWellFormed() && !/[\u0000-\u001f\u007f-\u009f]/u.test(value)
     ? value
     : undefined;
 
 const copyCommandId = (value: unknown): string | undefined =>
-  typeof value === "string" && value.length > 0 && value.length <= MAX_COMMAND_ID_LENGTH &&
+  typeof value === "string" && !isContainedTurnAccessAuthorityIdentity(value) && value.length > 0 && value.length <= MAX_COMMAND_ID_LENGTH &&
     /^[\x20-\x7E]+$/u.test(value) && value.isWellFormed() &&
     !value.includes("\u0000")
     ? value
@@ -160,7 +161,10 @@ const snapshotOwnerObservationOutcome = (
   }
 };
 
-export const isTerminalTurnStatus = (status: OwnerTurnObservation["status"]): boolean =>
+/** Shared terminal-status predicate; accepts any status-shaped string so host-lifecycle callers with wider status unions can reuse it. */
+export const isTerminalTurnStatus = (
+  status: string,
+): status is "cancelled" | "failed" | "succeeded" =>
   status === "cancelled" || status === "failed" || status === "succeeded";
 
 // oxlint-disable-next-line complexity -- this anti-corruption boundary validates every detached DTO field.
@@ -248,25 +252,26 @@ export const copyInput = (
     const expectedProvider = copyProviderIdentity(input.expectedProvider);
     const intent = input.intent;
     const prompt = copyPrompt(intent.prompt);
+    const mode = intent.mode;
     if (commandId === undefined || expectedProvider === undefined || prompt === undefined ||
-      (intent.mode !== "analysis" && intent.mode !== "workspace-write")) {
+      (mode !== "analysis" && mode !== "workspace-write")) {
       return;
     }
     return Object.freeze({
       commandId,
       expectedProvider,
-      intent: Object.freeze({ mode: intent.mode, prompt }),
+      intent: Object.freeze({ mode, prompt }),
     });
   } catch {
     return;
   }
 };
 
-export const copyAcceptedOperation = (
+export const copyAcceptedOperation = <Scope extends ContainedTurnCompositionScope>(
   operation: ContainedTurnCompositionOperationRef,
-  boundScope: ContainedTurnCompositionScope,
+  boundScope: Scope,
   onOperationId?: (operationId: unknown) => void,
-): ContainedTurnCompositionOperationRef => {
+): ContainedTurnCompositionOperationRef<Scope> => {
   let snapshot: OwnerSnapshot<Readonly<{
     operationId: unknown;
     projectId: unknown;
@@ -316,6 +321,9 @@ export interface CopiedSubmitOutcome {
 }
 
 interface OwnerSubmitOutcomeSnapshot {
+  readonly candidateOperationId: unknown;
+  readonly commandId: unknown;
+  readonly evidenceId: unknown;
   readonly code: unknown;
   readonly status: unknown;
   readonly turn: OwnerTurnSnapshot | undefined;
@@ -336,7 +344,12 @@ const snapshotOwnerSubmitOutcome = (
     const code = record.code;
     return Object.freeze({
       kind: "snapshot" as const,
-      value: Object.freeze({ code, status, turn }),
+      value: Object.freeze({
+        candidateOperationId: record.candidateOperationId,
+        commandId: record.commandId,
+        evidenceId: record.evidenceId,
+        code, status, turn,
+      }),
     });
   } catch {
     return ownerContractViolation;
@@ -351,7 +364,18 @@ export const copySubmitOutcome = (
   if (snapshot.kind === "contract_violation") {
     return contractViolation("malformed_owner_outcome");
   }
-  const { code, status, turn } = snapshot.value;
+  const { candidateOperationId, commandId, evidenceId, code, status, turn } = snapshot.value;
+  if (status === "potential_acceptance") {
+    const copiedCommandId = copyCommandId(commandId);
+    if (turn !== undefined || !isBoundedIdentity(candidateOperationId) ||
+      copiedCommandId === undefined || !isBoundedIdentity(evidenceId)) {
+      return contractViolation("malformed_owner_outcome");
+    }
+    return Object.freeze({ outcome: Object.freeze({
+      candidateOperationId, commandId: copiedCommandId, evidenceId,
+      status: "potential_acceptance" as const,
+    }) });
+  }
   if (status === "observed") {
     if (turn === undefined) {
       return contractViolation("malformed_owner_outcome");
@@ -371,7 +395,7 @@ export const copySubmitOutcome = (
   if (status === "conflict" && code === "command_fingerprint_conflict") {
     return Object.freeze({ outcome: Object.freeze({ code, status: "conflict" as const }) });
   }
-  if (status === "unsupported" && (code === "mode_unsupported" ||
+  if (status === "unsupported" && (code === "caller_invalid" || code === "mode_unsupported" ||
     code === "provider_mismatch" || code === "provider_unsupported")) {
     return Object.freeze({ outcome: Object.freeze({ code, status: "unsupported" as const }) });
   }

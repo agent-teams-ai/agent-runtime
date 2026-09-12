@@ -1,3 +1,4 @@
+export type { ContainedTurnAcceptedAuthorityHandoff } from "../../contained-turn-accepted-authority.js";
 import type { ContainedTurnScope } from "../../../domain/contained-turn-authority.js";
 import type {
   ContainedTurnEvidenceId,
@@ -97,7 +98,7 @@ export const validateContainedTurnKernelDependencies = (
   const requiredMethods = Object.freeze({
     artifacts: ["ensureSealed", "querySeal"],
     custody: ["attestContainment", "ensurePhysicalContainment", "queryContainmentAttestation", "queryPhysicalContainment", "releaseRetiredReservation"],
-    operationStore: ["claimPreparedDispatch", "recordDispatchPreparationCleanup", "retireDispatchPreparation"],
+    operationStore: ["preventIntent", "claimPreparedDispatch", "recordDispatchPreparationCleanup", "retireDispatchPreparation"],
     providerAccess: ["consumeForDispatch", "settleConsumedGrant"],
     security: ["consumeForDispatch", "settleConsumedGrant"],
     workspace: ["ensureClosed", "queryClosure"],

@@ -53,7 +53,11 @@ test("root API exposes only product capabilities and keeps Host in composition",
   const manifest = JSON.parse(
     await readFile(join(packageRoot, "package.json"), "utf8"),
   ) as { readonly exports: Readonly<Record<string, unknown>> };
-  assert.deepEqual(Object.keys(manifest.exports).toSorted(), [".", "./composition"]);
+  assert.deepEqual(Object.keys(manifest.exports).toSorted(), [
+    ".",
+    "./composition",
+    "./scripts/run-package-tests.mjs",
+  ]);
 });
 
 test("contained-turn declarations stay owned across root and composition closure", async () => {
@@ -91,7 +95,7 @@ test("contained-turn declarations stay owned across root and composition closure
   ]);
   assert.doesNotMatch(rootClosure, /@agent-teams\/agent-execution|\bContainedTurnView\b|ContainedTurnFeatureApi/u);
   assert.doesNotMatch(compositionClosure, /\bContainedTurnView\b|ContainedTurnFeatureApi/u);
-  assert.doesNotMatch(rootClosure, /readonly revision:/u);
+  assert.doesNotMatch(rootClosure, /readonly revision:|authorityRevision|ContainedTurnAccessAuthority|AuthorityBound|bindContainedTurnCapabilityAuthority|runtime-access-authority/u);
   assert.doesNotMatch(compositionClosure, /readonly revision:/u);
   assert.match(compositionClosure, /interface ContainedTurnCapabilityBundle/u);
   assert.match(compositionClosure, /expectedProvider: string/u);
@@ -100,13 +104,21 @@ test("contained-turn declarations stay owned across root and composition closure
 test("passive setup slice has no process, network, ambient env or write adapter", async () => {
   const repositoryRoot = resolve(packageRoot, "../../..");
   const roots = [
-    join(repositoryRoot, "packages", "apps", "embedded-runtime", "src"),
+    join(repositoryRoot, "packages", "apps", "embedded-runtime", "src", "application"),
     join(repositoryRoot, "packages", "contexts", "agent-execution", "src", "features", "runtime-installation-discovery"),
     join(repositoryRoot, "packages", "contexts", "runtime-configuration", "src"),
     join(repositoryRoot, "packages", "contexts", "runtime-security", "src"),
-    join(repositoryRoot, "packages", "platform", "filesystem-custody", "src"),
   ];
-  const files: string[] = [];
+  const filesystemCustodyRoot = join(
+    repositoryRoot, "packages", "platform", "filesystem-custody", "src",
+  );
+  const custodyFeature = join(filesystemCustodyRoot, "features", "stable-filesystem-custody");
+  const files: string[] = [
+    join(filesystemCustodyRoot, "index.ts"),
+    join(filesystemCustodyRoot, "composition.ts"),
+    join(custodyFeature, "adapters", "outbound", "filesystem", "stable-directory-capability.ts"),
+    join(custodyFeature, "adapters", "outbound", "filesystem", "stable-path-custody.ts"),
+  ];
   const walk = async (directory: string): Promise<void> => {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
@@ -168,4 +180,16 @@ test("application and contracts stay independent from adapters and runtime frame
       `forbidden inward dependency in ${file}`,
     );
   }
+});
+
+
+test("private default composition is async and synchronous leaf is internal", async () => {
+  const composition = await import("../dist/composition.js");
+  assert.equal("createAgentRuntimeHost" in composition, false);
+  assert.equal("createRuntimeSetupAttempt" in composition, false);
+  const pending = composition.createDefaultAgentRuntimeHost();
+  assert.ok(pending instanceof Promise);
+  await (await pending).dispose();
+  const ordinary = await readDeclarationClosure(join(packageRoot, "dist", "index.d.ts"));
+  assert.doesNotMatch(ordinary, /@get-modular|CapabilityContract|FactoryHandle/u);
 });

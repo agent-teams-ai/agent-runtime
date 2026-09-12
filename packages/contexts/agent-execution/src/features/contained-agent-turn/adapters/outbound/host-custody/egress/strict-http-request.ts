@@ -80,8 +80,9 @@ const parseRequestLine = (
   const [method, path, version] = requestParts as [string, string, string];
   if (!TOKEN.test(method) || version !== "HTTP/1.1") {throw new StrictHttpRequestError("malformed");}
   const unsafeTarget = method === "CONNECT" || !path.startsWith("/") || path.startsWith("//")
-    || path.includes("?") || path.includes("#");
+    || path.includes("#");
   if (unsafeTarget) {throw new StrictHttpRequestError("smuggling");}
+  // The entire origin-form, including the query, is the route identity.
   if (method !== expected.method || path !== expected.path) {throw new StrictHttpRequestError("route_mismatch");}
   return Object.freeze({ method, path });
 };
@@ -113,7 +114,8 @@ const parseContentLength = (
   counts: ReadonlyMap<string, number>,
   expected: HttpEgressExpectedRequest,
 ): number => {
-  if (counts.get("content-length") !== 1 || counts.get("host") !== 1) {
+  const bodyForbidden = expected.bodyMode === "forbidden";
+  if ((!bodyForbidden && counts.get("content-length") !== 1) || counts.get("host") !== 1) {
     throw new StrictHttpRequestError("smuggling");
   }
   const forbiddenFraming = ["transfer-encoding", "trailer", "expect", "upgrade"]
@@ -121,8 +123,14 @@ const parseContentLength = (
   if (forbiddenFraming) {throw new StrictHttpRequestError("smuggling");}
   const host = headers.find(header => header.name === "host")?.value;
   if (host !== expected.host) {throw new StrictHttpRequestError("route_mismatch");}
-  const text = headers.find(header => header.name === "content-length")?.value ?? "";
-  if (!/^(0|[1-9][0-9]*)$/.test(text)) {throw new StrictHttpRequestError("smuggling");}
+  const text = headers.find(header => header.name === "content-length")?.value;
+  // Missing length is legal only under an explicit body-forbidden profile.
+  // Preserve the received fields; never manufacture Content-Length: 0.
+  if (bodyForbidden) {
+    if (text === undefined || text === "0") {return 0;}
+    throw new StrictHttpRequestError("smuggling");
+  }
+  if (text === undefined || !/^(0|[1-9][0-9]*)$/.test(text)) {throw new StrictHttpRequestError("smuggling");}
   const contentLength = Number(text);
   if (!Number.isSafeInteger(contentLength)) {throw new StrictHttpRequestError("body_oversized");}
   return contentLength;
@@ -162,12 +170,17 @@ const nextWithDeadline = async (
   }
 };
 
-const parseBoundedRequestHead = (
+// Owner-local reuse by TCP framing; the generic iterable still requires EOF.
+export const parseBoundedRequestHead = (
   buffered: Uint8Array,
   headerEnd: number,
   expected: HttpEgressExpectedRequest,
   limits: HttpEgressLimits,
 ): ParsedRequestHead => {
+  if (expected.bodyMode !== undefined && (expected.bodyMode !== "forbidden"
+    || expected.method !== "HEAD" || limits.maxInboundBodyBytes !== 0)) {
+    throw new StrictHttpRequestError("malformed");
+  }
   if (headerEnd + CRLFCRLF.byteLength > limits.maxInboundHeaderBytes) {
     throw new StrictHttpRequestError("headers_oversized");
   }

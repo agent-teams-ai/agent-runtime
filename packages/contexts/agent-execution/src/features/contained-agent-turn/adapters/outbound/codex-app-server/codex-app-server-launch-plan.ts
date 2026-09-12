@@ -1,10 +1,14 @@
+import { assertIssuedCodexPermissionBoundary } from "./codex-native-broker-boundary.js";
+import { markDarwinNativeRootLaunchPlan, inspectDarwinNativeLaunchObservation, assertDarwinNativeLaunchObservationCurrent, type DarwinNativeLaunchObservation } from "../host-custody/contained-turn-kernel-custody-entrypoint.js";
+import { createHash } from "node:crypto";
+import { types } from "node:util";
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 
-import type { HostCustodyLaunchPlan } from "../host-custody/custodied-provider-process.js";
+import { createImmutableHostCustodyLaunchPlan, createFinalizableHostCustodyLaunchPlan, type HostCustodyLaunchPlan } from "../host-custody/custodied-provider-process.js";
 import {
+  codexDarwinNativeLaunchObservation,
   CODEX_PERMISSION_PROFILE_ID,
-  canonicalCodexJson,
   validateCodexDirectoryIdentity,
   type CodexAppServerPermissionBoundary,
   type CodexDirectoryIdentity,
@@ -15,19 +19,62 @@ import {
   type CodexAppServerPlatformTarget,
 } from "./codex-app-server-platform-tuple.js";
 
-const DISABLED_CODEX_FEATURES = Object.freeze([
-  "apps",
-  "browser_use",
-  "computer_use",
-  "image_generation",
-  "multi_agent",
-  "multi_agent_v2",
-  "plugins",
-  "remote_plugin",
-] as const);
+import { DISABLED_CODEX_FEATURES } from "./codex-app-server-config-defaults.js";
+
+import {
+  darwinCodexInstallationMaterial, codexNativeBrokerDarwinStateDirectory, assertCodexNativeBrokerBoundary, CODEX_LOCAL_BROKER_CAPABILITY_ENV,
+  CODEX_NATIVE_BROKER_DISABLED_FEATURES, renderCodexNativeBrokerConfig, snapshotCodexNativeInput,
+  type CodexNativeBrokerRecipe,
+} from "./codex-native-broker-recipe.js";
+import { validateCodexNativeBrokerFiles, type CodexNativeBrokerFiles } from "./codex-native-broker-files.js";
+
+interface NativeBrokerLaunchInput {
+  readonly recipe: CodexNativeBrokerRecipe;
+  readonly files: CodexNativeBrokerFiles;
+  readonly localCapability: string;
+}
+const nativeLaunches = new WeakMap<HostCustodyLaunchPlan, Readonly<NativeBrokerLaunchInput>>();
+const issuedLaunchPlans = new WeakSet<object>();
+const nativeRootBoundaries = new WeakMap<HostCustodyLaunchPlan, CodexAppServerPermissionBoundary>();
+const finalNativeObservations = new WeakMap<HostCustodyLaunchPlan, DarwinNativeLaunchObservation>();
+
+/** Same-object native protocol selection; the provider rechecks retained material. */
+export const isCodexNativeBrokerLaunchPlan = (plan: HostCustodyLaunchPlan): boolean => nativeLaunches.has(plan);
+
+/** Private adapter recognition, not route authority. Only this factory can add
+ * an immutable plan; callers cannot register or transfer recognition to copies.
+ */
+export const isIssuedCodexAppServerLaunchPlan = (plan: unknown): plan is CodexAppServerLaunchPlan =>
+  typeof plan === "object" && plan !== null && issuedLaunchPlans.has(plan);
+
+/** Same-object provenance; a cloned plan or Proxy can never recover this mode. */
+export const codexNativeBrokerLaunchInput = (plan: HostCustodyLaunchPlan): Readonly<NativeBrokerLaunchInput> => {
+  const native = nativeLaunches.get(plan);
+  if (native === undefined) {throw new TypeError("Codex native broker launch rejected");}
+  return native;
+};
+
+const nativeLaunchInput = (options: CodexAppServerLaunchPlanOptions): Readonly<NativeBrokerLaunchInput> | undefined => {
+  if (options.nativeBroker === undefined) {return undefined;}
+  const data = snapshotCodexNativeInput(options.nativeBroker, ["recipe", "files", "localCapability"]);
+  const recipe = data.recipe as CodexNativeBrokerRecipe;
+  const files = data.files as CodexNativeBrokerFiles;
+  assertCodexNativeBrokerBoundary(recipe, options.boundary);
+  const stateDirectory = codexNativeBrokerDarwinStateDirectory(recipe);
+  if (stateDirectory !== undefined && (options.platformTarget?.platform !== "darwin" || stateDirectory !== options.tmpDir)) {
+    throw new TypeError("Darwin native state differs from reserved TMPDIR");
+  }
+  if (typeof data.localCapability !== "string" || data.localCapability.length < 32 || data.localCapability.length > 128
+    || /[^A-Za-z0-9_-]/u.test(data.localCapability)) {
+    throw new TypeError("Codex native broker capability rejected");
+  }
+  validateCodexNativeBrokerFiles(files, recipe);
+  return Object.freeze({ recipe, files, localCapability: data.localCapability });
+};
 
 export interface CodexAppServerLaunchPlanOptions {
   readonly boundary: CodexAppServerPermissionBoundary;
+  readonly nativeBroker?: NativeBrokerLaunchInput;
   readonly executablePath: string;
   readonly intentMode: "analysis" | "workspace-write";
   readonly platformTarget: CodexAppServerPlatformTarget;
@@ -84,15 +131,74 @@ const privateTmpIdentity = (value: string): CodexDirectoryIdentity => {
   return Object.freeze({ device: directory.dev, inode: directory.ino, path: value });
 };
 
-const isDirectoryIdentity = (value: unknown): value is CodexDirectoryIdentity =>
-  typeof value === "object" && value !== null
-  && typeof (value as Partial<CodexDirectoryIdentity>).device === "number"
-  && typeof (value as Partial<CodexDirectoryIdentity>).inode === "number"
-  && typeof (value as Partial<CodexDirectoryIdentity>).path === "string";
+const isDirectoryIdentity = (value: unknown): value is CodexDirectoryIdentity => {
+  try {
+    const data = snapshotCodexNativeInput(value, ["device", "inode", "path"]);
+    return typeof data.device === "number" && typeof data.inode === "number" && typeof data.path === "string";
+  } catch {return false;}
+};
+
+const snapshotDirectoryIdentity = (value: CodexDirectoryIdentity): CodexDirectoryIdentity => {
+  const data = snapshotCodexNativeInput(value, ["device", "inode", "path"]);
+  if (typeof data.device !== "number" || typeof data.inode !== "number" || typeof data.path !== "string") {
+    throw new TypeError("Codex launch directory identity must contain inert data");
+  }
+  return Object.freeze({ device: data.device, inode: data.inode, path: data.path });
+};
+
+const validateLaunchEnvironment = (plan: HostCustodyLaunchPlan): void => {
+  const native = nativeLaunches.get(plan);
+  if (native !== undefined) {validateCodexNativeBrokerFiles(native.files, native.recipe);}
+  const roots = plan as CodexAppServerLaunchPlan;
+  const nativeBoundary = nativeRootBoundaries.get(plan);
+  const nativeObservation = nativeBoundary === undefined ? undefined : codexDarwinNativeLaunchObservation(nativeBoundary);
+  const nativeFacts = nativeObservation === undefined ? undefined : inspectDarwinNativeLaunchObservation(nativeObservation);
+  const exactEnvironment = {
+    ...(native === undefined ? {} : { [CODEX_LOCAL_BROKER_CAPABILITY_ENV]: native.localCapability }),
+    CODEX_HOME: roots.codexHome, HOME: nativeFacts?.privateRoot.path ?? roots.codexHome,
+    LANG: "C.UTF-8", PATH: nativeFacts === undefined ? "/usr/local/bin:/usr/bin:/bin" : "/usr/bin:/bin",
+    TMPDIR: roots.tmpDir,
+  };
+  const environment = snapshotCodexNativeInput(plan.environment, Object.keys(exactEnvironment));
+  if (Object.entries(exactEnvironment).some(([key, value]) => environment[key] !== value)) {
+    throw new TypeError("exact Codex App Server launch environment does not match the validated roots");
+  }
+};
+
+const assertInertLaunchPlan = (plan: HostCustodyLaunchPlan): void => {
+  if (typeof plan !== "object" || plan === null || types.isProxy(plan)
+    || Object.getPrototypeOf(plan) !== Object.prototype
+    || Object.values(Object.getOwnPropertyDescriptors(plan)).some(d => !("value" in d))) {
+    throw new TypeError("Codex launch plan must contain inert data");
+  }
+};
+
+const validateNativeLaunchRoots = (
+  plan: CodexAppServerLaunchPlan, boundary: CodexAppServerPermissionBoundary, platformOs: string,
+): void => {
+  const observation = codexDarwinNativeLaunchObservation(boundary);
+  if (observation === undefined || platformOs !== "macos") {
+    throw new TypeError("Native Codex launch observation or tuple rejected");
+  }
+  const captured = finalNativeObservations.get(plan);
+  if (captured !== undefined) {
+    assertDarwinNativeLaunchObservationCurrent(captured);
+    if (captured !== observation) {throw new TypeError("Native final launch generation changed");}
+  }
+  const facts = inspectDarwinNativeLaunchObservation(observation);
+  for (const [expected, actual] of [[plan.codexHomeIdentity, facts.codexHome],
+    [plan.tmpDirIdentity, facts.tmpDir], [plan.workspaceIdentity, facts.workspace]] as const) {
+    if (expected.path !== actual.path || expected.device !== Number(actual.dev) || expected.inode !== Number(actual.ino)) {
+      throw new TypeError("Native Codex launch identity changed");
+    }
+  }
+  if (plan.privateRootPath !== facts.privateRoot.path) {throw new TypeError("Native Codex launch root changed");}
+};
 
 export const validateCodexAppServerLaunchPlanRoots = (
   plan: HostCustodyLaunchPlan,
 ): void => {
+  assertInertLaunchPlan(plan);
   const platformTuple = codexAppServerTupleForBinaryRevision(plan.binaryRevision);
   if (plan.containmentProfile !== platformTuple.containmentProfile
     || plan.executableSha256 !== platformTuple.binarySha256) {
@@ -109,42 +215,36 @@ export const validateCodexAppServerLaunchPlanRoots = (
     || plan.workspaceIdentity.path !== plan.workspaceRef) {
     throw new TypeError("exact Codex App Server launch plan is missing canonical root identities");
   }
-  validateCodexDirectoryIdentity("codexHome", plan.codexHomeIdentity);
-  validateCodexDirectoryIdentity("tmpDir", plan.tmpDirIdentity);
-  validateCodexDirectoryIdentity("workspaceRef", plan.workspaceIdentity, false);
-  const exactEnvironment = {
-    CODEX_HOME: plan.codexHome,
-    HOME: plan.codexHome,
-    LANG: "C.UTF-8",
-    PATH: "/usr/local/bin:/usr/bin:/bin",
-    TMPDIR: plan.tmpDir,
-  };
-  if (canonicalCodexJson(plan.environment) !== canonicalCodexJson(exactEnvironment)) {
-    throw new TypeError("exact Codex App Server launch environment does not match the validated roots");
+  const boundary = nativeRootBoundaries.get(plan);
+  if (boundary === undefined) {
+    validateCodexDirectoryIdentity("codexHome", plan.codexHomeIdentity);
+    validateCodexDirectoryIdentity("tmpDir", plan.tmpDirIdentity);
+    validateCodexDirectoryIdentity("workspaceRef", plan.workspaceIdentity, false);
+  } else {
+    validateNativeLaunchRoots(plan as CodexAppServerLaunchPlan, boundary, platformTuple.platformOs);
+  }
+  validateLaunchEnvironment(plan);
+};
+
+const assertLaunchRootData = (executablePath: string, boundary: CodexAppServerPermissionBoundary): void => {
+  if (typeof executablePath !== "string" || typeof boundary.codexHome !== "string"
+    || typeof boundary.workspaceRef !== "string" || typeof boundary.effectivePolicyDigest !== "string") {
+    throw new TypeError("Codex launch roots and executable must contain inert data");
   }
 };
 
-export const createCodexAppServerLaunchPlan = (
-  options: CodexAppServerLaunchPlanOptions,
-): CodexAppServerLaunchPlan => {
-  const platformTuple = selectCodexAppServerPlatformTuple(options.platformTarget);
-  const intentMode = acceptedIntentMode(options.intentMode);
-  if (options.boundary.intentMode !== intentMode) {
-    throw new TypeError("Codex launch intent mode does not match the permission boundary");
-  }
-  validateCodexDirectoryIdentity("codexHome", options.boundary.codexHomeIdentity);
-  validateCodexDirectoryIdentity("workspaceRef", options.boundary.workspaceIdentity, false);
-  const tmpDirIdentity = privateTmpIdentity(options.tmpDir);
-  const privateRootPath = privateRoot(options.privateRootPath, options.boundary.workspaceRef);
+const validatePrivateRootLayout = (
+  privateRootPath: string, boundary: CodexAppServerPermissionBoundary, tmpDir: string,
+): void => {
   if (
-    !contains(privateRootPath, options.boundary.codexHome)
-    || privateRootPath === options.boundary.codexHome
-    || !contains(privateRootPath, options.tmpDir)
-    || privateRootPath === options.tmpDir
+    !contains(privateRootPath, boundary.codexHome)
+    || privateRootPath === boundary.codexHome
+    || !contains(privateRootPath, tmpDir)
+    || privateRootPath === tmpDir
   ) {
     throw new TypeError("Codex private home and TMPDIR must be strictly within privateRootPath");
   }
-  const roots = [options.boundary.workspaceRef, options.boundary.codexHome, options.tmpDir] as const;
+  const roots = [boundary.workspaceRef, boundary.codexHome, tmpDir] as const;
   for (let left = 0; left < roots.length; left += 1) {
     for (let right = left + 1; right < roots.length; right += 1) {
       if (contains(roots[left]!, roots[right]!) || contains(roots[right]!, roots[left]!)) {
@@ -152,6 +252,43 @@ export const createCodexAppServerLaunchPlan = (
       }
     }
   }
+};
+
+export const createCodexAppServerLaunchPlan = (
+  options: CodexAppServerLaunchPlanOptions,
+): CodexAppServerLaunchPlan => {
+  options = snapshotCodexNativeInput(options, [
+    "boundary", "executablePath", "intentMode", "platformTarget", "privateRootPath", "tmpDir",
+  ], ["nativeBroker"]) as unknown as CodexAppServerLaunchPlanOptions;
+  const platformTarget = snapshotCodexNativeInput(options.platformTarget, ["architecture", "platform"]);
+  const platformTuple = selectCodexAppServerPlatformTuple(platformTarget as unknown as CodexAppServerPlatformTarget);
+  assertIssuedCodexPermissionBoundary(options.boundary);
+  const native = nativeLaunchInput(options);
+  // Both selected 0.153.4 tuples use the captured native config. Darwin keeps
+  // canonical paths and cooperative custody; Host selects its execution material.
+  const intentMode = acceptedIntentMode(options.intentMode);
+  const boundary = snapshotCodexNativeInput(options.boundary, [
+    "codexHome", "codexHomeIdentity", "effectivePolicyDigest", "permissionProfile",
+    "permissionProfileId", "intentMode", "workspaceRef", "workspaceIdentity",
+  ]) as unknown as CodexAppServerPermissionBoundary;
+  assertLaunchRootData(options.executablePath, boundary);
+  const codexHomeIdentity = snapshotDirectoryIdentity(boundary.codexHomeIdentity);
+  const workspaceIdentity = snapshotDirectoryIdentity(boundary.workspaceIdentity);
+  if (boundary.intentMode !== intentMode) {
+    throw new TypeError("Codex launch intent mode does not match the permission boundary");
+  }
+  const observation = codexDarwinNativeLaunchObservation(options.boundary);
+  const facts = observation === undefined ? undefined : inspectDarwinNativeLaunchObservation(observation);
+  if (facts === undefined) {
+    validateCodexDirectoryIdentity("codexHome", codexHomeIdentity);
+    validateCodexDirectoryIdentity("workspaceRef", workspaceIdentity, false);
+  } else if (platformTarget.platform !== "darwin" || options.privateRootPath !== facts.privateRoot.path ||
+      options.tmpDir !== facts.tmpDir.path) {throw new TypeError("Native Codex launch selection mismatch");}
+  const tmpDirIdentity = facts === undefined ? privateTmpIdentity(options.tmpDir) : Object.freeze({
+    device: Number(facts.tmpDir.dev), inode: Number(facts.tmpDir.ino), path: facts.tmpDir.path,
+  });
+  const privateRootPath = privateRoot(options.privateRootPath, boundary.workspaceRef);
+  validatePrivateRootLayout(privateRootPath, boundary, options.tmpDir);
   const launchArguments = [
     "app-server",
     "--stdio",
@@ -159,31 +296,99 @@ export const createCodexAppServerLaunchPlan = (
     "-c",
     `default_permissions=${JSON.stringify(CODEX_PERMISSION_PROFILE_ID)}`,
   ];
-  for (const feature of DISABLED_CODEX_FEATURES) {launchArguments.push("--disable", feature);}
-  return Object.freeze({
-    arguments: Object.freeze(launchArguments),
+  for (const feature of native === undefined ? DISABLED_CODEX_FEATURES : CODEX_NATIVE_BROKER_DISABLED_FEATURES) {launchArguments.push("--disable", feature);}
+  const plan = createImmutableHostCustodyLaunchPlan<CodexAppServerLaunchPlan>({
+    arguments: launchArguments,
     binaryRevision: platformTuple.binaryRevision,
-    codexHome: options.boundary.codexHome,
-    codexHomeIdentity: options.boundary.codexHomeIdentity,
+    codexHome: boundary.codexHome,
+    codexHomeIdentity,
     containmentProfile: platformTuple.containmentProfile,
-    effectivePolicyDigest: options.boundary.effectivePolicyDigest,
-    environment: Object.freeze({
-      CODEX_HOME: options.boundary.codexHome,
-      HOME: options.boundary.codexHome,
+    effectivePolicyDigest: boundary.effectivePolicyDigest,
+    environment: {
+      ...(native === undefined ? {} : { [CODEX_LOCAL_BROKER_CAPABILITY_ENV]: native.localCapability }),
+      CODEX_HOME: boundary.codexHome,
+      HOME: facts?.privateRoot.path ?? boundary.codexHome,
       LANG: "C.UTF-8",
-      PATH: "/usr/local/bin:/usr/bin:/bin",
+      PATH: facts === undefined ? "/usr/local/bin:/usr/bin:/bin" : "/usr/bin:/bin",
       TMPDIR: options.tmpDir,
-    }),
+    },
     executablePath: options.executablePath,
     executableSha256: platformTuple.binarySha256,
     intentMode,
     permissionProfileId: CODEX_PERMISSION_PROFILE_ID,
     privateRootPath,
-    provider: "codex",
-    spawnMode: "sdk-delegated",
+    provider: "codex" as const,
+    spawnMode: "sdk-delegated" as const,
     tmpDir: options.tmpDir,
     tmpDirIdentity,
-    workspaceRef: options.boundary.workspaceRef,
-    workspaceIdentity: options.boundary.workspaceIdentity,
+    workspaceRef: boundary.workspaceRef,
+    workspaceIdentity,
   });
+  if (facts !== undefined) {markDarwinNativeRootLaunchPlan(plan);}
+  if (native !== undefined) {
+    nativeLaunches.set(plan, native);
+    const finalObservation = codexDarwinNativeLaunchObservation(options.boundary);
+    if (finalObservation !== undefined) {finalNativeObservations.set(plan, finalObservation);}
+  }
+  if (codexDarwinNativeLaunchObservation(options.boundary) !== undefined) {nativeRootBoundaries.set(plan, options.boundary);}
+  issuedLaunchPlans.add(plan);
+  return plan;
 };
+
+/** Selected by the current owner before reservation when post-claim native
+ * preparation is required. Captures original inputs; no later replacement
+ * options or caller-provided capability/digest can complete this plan.
+ */
+export const createCodexAppServerFinalizableLaunchPlan = (
+  input: Omit<CodexAppServerLaunchPlanOptions, "nativeBroker">,
+  providerAccess: Readonly<{provider: string; providerRouteRef: string; credentialGeneration: number;
+    credentialBindingRef: string; ownerAuthorityDigest: string}>,
+): CodexAppServerLaunchPlan => {
+  const options = snapshotCodexNativeInput(input, [
+    "boundary", "executablePath", "intentMode", "platformTarget", "privateRootPath", "tmpDir",
+  ]) as unknown as Omit<CodexAppServerLaunchPlanOptions, "nativeBroker">;
+  const target = snapshotCodexNativeInput(options.platformTarget, ["architecture", "platform"]);
+  const captured = Object.freeze({...options, platformTarget: Object.freeze(target) as unknown as CodexAppServerPlatformTarget});
+  const base = createCodexAppServerLaunchPlan(captured);
+  const plan = createFinalizableHostCustodyLaunchPlan<CodexAppServerLaunchPlan>(base, {
+    providerAccess,
+    build(material, localCapability) {
+      const data = snapshotCodexNativeInput(material, ["recipe", "files"]);
+      const recipe = data.recipe as CodexNativeBrokerRecipe;
+      const files = data.files as CodexNativeBrokerFiles;
+      // WeakMap lookups precede all material property reads (including proxies).
+      assertCodexNativeBrokerBoundary(recipe, captured.boundary);
+      validateCodexNativeBrokerFiles(files, recipe);
+      validateCodexAppServerLaunchPlanRoots(base);
+      const final = createCodexAppServerLaunchPlan({...captured, nativeBroker: {recipe, files, localCapability}});
+      const materialSha256 = createHash("sha256").update(JSON.stringify([
+        ... (darwinCodexInstallationMaterial(recipe) === undefined ? [] : [darwinCodexInstallationMaterial(recipe)]),
+        recipe.kind, recipe.profile, recipe.endpoint, renderCodexNativeBrokerConfig(recipe), recipe.catalogSha256,
+        recipe.catalogPath, final.workspaceRef, final.codexHome, final.tmpDir, final.executablePath,
+        final.containmentProfile,
+      ])).digest("hex");
+      return Object.freeze({plan: final, materialSha256,
+        validate: () => validateCodexAppServerLaunchPlanRoots(final)});
+    },
+  });
+  if (codexDarwinNativeLaunchObservation(options.boundary) !== undefined) {
+    nativeRootBoundaries.set(plan, options.boundary);
+    markDarwinNativeRootLaunchPlan(plan);
+  }
+  issuedLaunchPlans.add(plan);
+  return plan;
+};
+export {codexNativeBrokerDockerPaths, snapshotCodexDataRecord} from "./codex-native-broker-recipe.js";
+
+export {renderCodexNativeBrokerConfig} from "./codex-native-broker-recipe.js";
+
+export {createCodexNativeBrokerRecipe, type CodexNativeBrokerRecipe} from "./codex-native-broker-recipe.js";
+export {prepareCodexNativeBrokerFiles} from "./codex-native-broker-files.js";
+
+export {codexNativeBrokerBoundary,
+  CODEX_NATIVE_CATALOG_BYTES, CODEX_NATIVE_CATALOG_SHA256} from "./codex-native-broker-recipe.js";
+
+export {DarwinCodexNativeFiles} from "./darwin-codex-native-files.js";
+export {createDarwinCodexNativeBrokerRecipe} from "./codex-native-broker-recipe.js";
+
+export {installCodexDarwinNativeBrokerFiles, readCodexDarwinNativeMaterial, codexDarwinNativeMaterialIdentity} from "./codex-native-broker-files.js";

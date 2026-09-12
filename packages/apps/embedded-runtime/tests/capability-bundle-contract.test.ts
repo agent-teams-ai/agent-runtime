@@ -1,8 +1,8 @@
+import { createAgentRuntimeHost } from "../dist/composition/agent-runtime-host.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  createAgentRuntimeHost,
   createClaudeCodeSetupInspectionPlanner,
   createCodexSetupInspectionPlanner,
 } from "../dist/composition.js";
@@ -26,6 +26,7 @@ const codexSetup = Object.freeze({
 });
 
 const containedTurn = Object.freeze({
+  authorityRevision: "runtime-access-authority:fixture",
   cancel: { execute: unavailable },
   observe: { execute: unavailable },
   submit: { execute: unavailable },
@@ -161,4 +162,30 @@ test("snapshots accessor-backed capability bundles and binding methods exactly o
   });
   assert.equal(codexBundleReads, 1);
   assert.equal(authorizationMethodReads, 1);
+});
+
+test("captured planner method retains its receiver after caller mutation", async t => {
+  const planner = {
+    calls: 0,
+    result: { status: "unsupported" } as const,
+    plan() {
+      this.calls += 1;
+      return this.result;
+    },
+  };
+  const host = createAgentRuntimeHost({
+    claudeCodeSetup,
+    codexSetup: { ...codexSetup, planCodexSetupInspection: planner },
+  });
+  t.after(() => host.dispose());
+  planner.plan = unavailable;
+  const access = host.bindAccess({ codexSetup: {
+    configurationDialect: "codex-0.134", configurationSources: [],
+    explicitCodexExecutablePaths: [], knownExecutableDirectories: [],
+    observationEpoch: "TEST-receiver", pathEntries: [], roots: [], scopeId: "TEST-receiver",
+  } });
+  for (let invocation = 0; invocation < 2; invocation += 1) {
+    assert.deepEqual(await access.codexSetup.inspect({}), { diagnostics: [], status: "unsupported" });
+  }
+  assert.equal(planner.calls, 2);
 });

@@ -1,3 +1,4 @@
+import { addAbortListener } from "node:events";
 import { DockerEngineError } from "./docker-engine-error.js";
 import type { DockerEngineFailureCode } from "./docker-engine-error.js";
 import type {
@@ -214,11 +215,21 @@ export const snapshotDockerEngineCall = (value: unknown): DockerEngineCall => {
     const nativeThrowIfAborted = THROW_IF_ABORTED as (...args: unknown[]) => unknown;
     const propagateAbort = (): void => {
       if (!nativeAborted.call(source)) {return;}
+      nativeRemove.call(source, "abort", propagateAbort);
       controller.abort(nativeReason.call(source));
     };
     propagateAbort();
     if (!nativeAborted.call(source)) {
-      nativeAdd.call(source, "abort", propagateAbort, { once: true });
+      // Subscribe on the ORIGINAL native receiver, bypassing source expandos.
+      // Preserve Node's resistant subscription options at this first boundary.
+      // A synthetic event cannot consume the listener before the real abort.
+      addAbortListener({
+        get aborted() {return nativeAborted.call(source);},
+        addEventListener(type: string, listener: unknown, options: object) {
+          nativeAdd.call(source, type, listener, {...options, once: false});
+        },
+        removeEventListener: (...args: unknown[]) => nativeRemove.apply(source, args),
+      } as AbortSignal, propagateAbort);
     }
     Object.defineProperties(snapshot, {
       aborted: {

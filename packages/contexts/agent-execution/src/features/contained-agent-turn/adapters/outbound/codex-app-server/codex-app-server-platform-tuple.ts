@@ -1,17 +1,17 @@
 import type { HostCustodyContainmentProfile } from "../host-custody/custodied-provider-process.js";
 
-export const CODEX_APP_SERVER_VERSION = "0.150.1";
-export const CODEX_APP_SERVER_PACKAGE_REVISION = "@openai/codex@0.150.1";
-export const CODEX_APP_SERVER_SCHEMA_SHA256 = "9f28c7c4c42a02af6b8a31e978188df6c14547be3c1c8dbe824313b1a8b5fa56";
-export const CODEX_APP_SERVER_BINDINGS_SHA256 = "3b4836d6282a30cdba8ace7c3ad6fa8ee968da77ca4bf6430c05ff7c525d4fcc";
+export const CODEX_APP_SERVER_VERSION = "0.153.4";
+export const CODEX_APP_SERVER_PACKAGE_REVISION = "@openai/codex@0.153.4";
+export const CODEX_APP_SERVER_SCHEMA_SHA256 = "60c1b926bc9720e7695c23bcc6f8cb1dd7dcfa92601dd3e9d7b9267804f28c87";
+export const CODEX_APP_SERVER_BINDINGS_SHA256 = "6884b9a77fe389ca3f0ed5c327115d5fa9398307390a2b080e6402c66c1e406b";
 // Native permission/configuration behavior is part of the adapter contract.
 // Keep the provider package, binary, and schema revisions stable while
 // changing the immutable adapter identity for this admitted candidate behavior;
 // retained evidence does not qualify behavior, route, or deployment.
-export const CODEX_APP_SERVER_ADAPTER_REVISION = "codex-app-server-contained-turn:0.150.1+native-permission-config-v2";
+export const CODEX_APP_SERVER_ADAPTER_REVISION = "codex-app-server-contained-turn:0.153.4+native-permission-config-v2";
 export const CODEX_PERMISSION_PROFILE_ID = "agent-runtime-contained-v1";
 export const CODEX_CAPABILITY_MANIFEST_REVISION =
-  `contained-turn:v1:codex-app-server:0.150.1:schema-${CODEX_APP_SERVER_SCHEMA_SHA256}:bindings-${CODEX_APP_SERVER_BINDINGS_SHA256}:agent-runtime-contained-v1:native-permission-config-v2`;
+  `contained-turn:v1:codex-app-server:0.153.4:schema-${CODEX_APP_SERVER_SCHEMA_SHA256}:bindings-${CODEX_APP_SERVER_BINDINGS_SHA256}:agent-runtime-contained-v1:native-permission-config-v2`;
 
 export type CodexAppServerPlatform = "darwin" | "linux";
 export type CodexAppServerArchitecture = "arm64" | "x64";
@@ -46,17 +46,17 @@ const tuple = (value: CodexAppServerPlatformTuple): CodexAppServerPlatformTuple 
 export const CODEX_APP_SERVER_LINUX_X64_TUPLE = tuple({
   adapterRevision: CODEX_APP_SERVER_ADAPTER_REVISION,
   architecture: "x64",
-  binaryRevision: "@openai/codex:0.150.1+linux-x64",
-  binarySha256: "abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386",
+  binaryRevision: "@openai/codex:0.153.4+linux-x64",
+  binarySha256: "56ef98ab4032d317ab26e9b5e5a175650717351edb16ed9cde0cb6d1734d62da",
   clientName: "agent-runtime",
   containmentProfile: "strict-linux-cgroup-v2",
-  nativeDependencyAliasRevision: "@openai/codex-linux-x64@0.150.1",
+  nativeDependencyAliasRevision: "@openai/codex-linux-x64@0.153.4",
   packageRevision: CODEX_APP_SERVER_PACKAGE_REVISION,
   platform: "linux",
   platformFamily: "unix",
   platformOs: "linux",
   protocolRevision: CODEX_CAPABILITY_MANIFEST_REVISION,
-  resolvedNativePackageRevision: "@openai/codex@0.150.1-linux-x64",
+  resolvedNativePackageRevision: "@openai/codex@0.153.4-linux-x64",
   userAgentArchitecture: "x86_64",
   userAgentOsName: "Ubuntu",
   version: CODEX_APP_SERVER_VERSION,
@@ -65,17 +65,17 @@ export const CODEX_APP_SERVER_LINUX_X64_TUPLE = tuple({
 export const CODEX_APP_SERVER_DARWIN_ARM64_TUPLE = tuple({
   adapterRevision: CODEX_APP_SERVER_ADAPTER_REVISION,
   architecture: "arm64",
-  binaryRevision: "@openai/codex:0.150.1+darwin-arm64",
-  binarySha256: "a14f9a907c12c8812878b70e6b7d65f81c39ed795513e46a55817d7428c0ca6b",
+  binaryRevision: "@openai/codex:0.153.4+darwin-arm64",
+  binarySha256: "b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3",
   clientName: "agent-runtime",
   containmentProfile: "cooperative-darwin-posix-process-group",
-  nativeDependencyAliasRevision: "@openai/codex-darwin-arm64@0.150.1",
+  nativeDependencyAliasRevision: "@openai/codex-darwin-arm64@0.153.4",
   packageRevision: CODEX_APP_SERVER_PACKAGE_REVISION,
   platform: "darwin",
   platformFamily: "unix",
   platformOs: "macos",
   protocolRevision: CODEX_CAPABILITY_MANIFEST_REVISION,
-  resolvedNativePackageRevision: "@openai/codex@0.150.1-darwin-arm64",
+  resolvedNativePackageRevision: "@openai/codex@0.153.4-darwin-arm64",
   userAgentArchitecture: "arm64",
   userAgentOsName: "Mac OS",
   version: CODEX_APP_SERVER_VERSION,

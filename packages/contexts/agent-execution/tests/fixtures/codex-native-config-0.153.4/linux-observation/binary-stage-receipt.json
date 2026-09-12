@@ -1,0 +1,11 @@
+{
+  "observedAt": "2026-09-05T22:19:41.119127+00:00",
+  "url": "https://registry.npmjs.org/@openai/codex/-/codex-0.153.4-linux-x64.tgz",
+  "archiveSha256": "54818cb9fce3360cc6e44cfc5a96952cd5c1243efb43cbe488e11dda84663e08",
+  "archiveSriVerified": true,
+  "archiveBytes": 129272137,
+  "binarySha256": "56ef98ab4032d317ab26e9b5e5a175650717351edb16ed9cde0cb6d1734d62da",
+  "binaryBytes": 258659424,
+  "allocatedPeakBytes": 388476928,
+  "extraction": "one verified regular binary only; no install"
+}

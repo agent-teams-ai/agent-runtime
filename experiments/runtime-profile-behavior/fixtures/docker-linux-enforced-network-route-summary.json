@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "campaign": "docker-linux-enforced-network-route",
+  "status": "accepted-implementation-evidence-for-one-exact-target",
+  "sourceRevision": "6d5c76313f1753052d684ca13b9397cf216ae6da",
+  "facts": {
+    "routeAdmissionIsTheLastGateBeforeProviderExecution": true,
+    "missingRouteOwnerRefusedBeforeAnyEngineEffect": true,
+    "networkNameBoundBeforeContainerCreate": true,
+    "listenerBindsTheObservedGatewayOnly": true,
+    "canonicalSetupOrderEnforcedByV4Ledger": true,
+    "admissionAndPreparationAreOneUse": true,
+    "unpinnedToolKeepsNamespaceQuarantined": true,
+    "namespaceReleasedOnlyAfterProvenContainerAbsence": true,
+    "firstWriteConsumedExactlyOnceAdjacentToBytes": true,
+    "capabilityMintedOnlyFromCompleteRouteBinding": true,
+    "structuralTwinsAndProxiesCarryNoTarget": true,
+    "gateRequiresAuthenticCapabilityAndRegistryRow": true,
+    "registryVerdictNeverCached": true,
+    "providerAccessFactsTransportedVerbatim": true
+  },
+  "evidence": {
+    "agentExecutionRouteAndEgressTests": 115,
+    "agentExecutionLiveCanaryTests": 7,
+    "embeddedRuntimeTests": 29,
+    "totalTests": 151,
+    "failures": 0,
+    "kernelRouteInstalled": false,
+    "liveProviderTurnClaimed": false,
+    "cryptographicExecutionAttestationClaimed": false
+  },
+  "excluded": [
+    "real nftables transactions, namespace entry and pinned tool digests",
+    "real Docker Engine image pull, network allocation and container lifecycle",
+    "real provider credentials, provider origins and TLS upstream sessions",
+    "live contained turn receipts bound to this source revision",
+    "the Claude candidate, the codex-api credential recipe and every non-Linux host"
+  ]
+}

@@ -1,3 +1,4 @@
+import { intentAuthority } from "./intent-guard-fixture.ts";
 import assert from "node:assert/strict";
 
 import type { Pool } from "pg";
@@ -67,10 +68,11 @@ export const postgresClaimInput = (
     scopeDigest: bound.acceptedAuthorityVector.scopeDigest,
     workspaceId,
   }));
-  const receipt = (owner: "provider_access" | "runtime_security") => {
+  const receipt = <Owner extends "provider_access" | "runtime_security">(owner: Owner) => {
     const request = owner === "provider_access" ? subject.providerAccessRequest : subject.runtimeSecurityRequest;
     return normalizeContainedTurnConsumedGrantReceipt(owner, subject, {
-      authorityFacts: owner === "provider_access" ? subject.providerAccessExpectation : subject.runtimeSecurityExpectation,
+      authorityFacts: (owner === "provider_access" ? subject.providerAccessExpectation : subject.runtimeSecurityExpectation) as
+        Parameters<typeof normalizeContainedTurnConsumedGrantReceipt<Owner>>[2]["authorityFacts"],
       claimBeforeControlTime: 100,
       claimBindingDigest: request.claimBindingDigest,
       consumedAtControlTime: 50,
@@ -84,7 +86,7 @@ export const postgresClaimInput = (
       scope: Object.freeze({ ...subject.scope, scopeDigest: subject.scopeDigest }),
     });
   };
-  const receipts = Object.freeze([receipt("provider_access"), receipt("runtime_security")]) as const;
+  const receipts = Object.freeze([receipt("provider_access"), receipt("runtime_security")] as const);
   return Object.freeze({
     claimInput: Object.freeze({
       authority: operationAuthority(bound),
@@ -110,7 +112,7 @@ export const postgresClaimInput = (
 };
 
 export const preparePostgresClaim = async (pool: Pool, suffix: string) => {
-  const store = new PostgresContainedTurnOperationStore({ pool });
+  const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
   const initial = operationForProject(`project:${suffix}`, suffix);
   assert.equal((await store.accept(initial, operationAuthority(initial))).kind, "accepted");
   const workspaceId = containedTurnIdentity("workspace", `workspace:${suffix}`);

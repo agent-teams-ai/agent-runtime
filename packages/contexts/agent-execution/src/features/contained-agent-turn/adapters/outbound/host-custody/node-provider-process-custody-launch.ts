@@ -12,6 +12,10 @@ import {
   descriptorBoundEnvironment,
 } from "./host-custody-descriptor-launch.js";
 import { acquireDarwinLaunchAuthority } from "./host-custody-darwin-launch.js";
+import {
+  DescriptorAuthorityAcquisitionError,
+  GuardianConstructionError,
+} from "./host-custody-launch-failure.js";
 import type { VerifiedLaunchDescriptors } from "./host-custody-launch.js";
 import { NodeCustodiedSdkProcess } from "./host-custody-process-tree.js";
 import { StableProcessGroupGuardian } from "./host-custody-stable-guardian.js";
@@ -52,9 +56,6 @@ export interface GuardedProviderLaunch {
   readonly stderr: HostStderrIngress;
   readonly stdout: HostStdoutIngress;
 }
-
-class DescriptorAuthorityAcquisitionError extends Error {}
-class GuardianConstructionError extends Error {}
 
 const descriptorFailureClass = (error: unknown): string => {
   if (!(error instanceof Error)) {return "UnknownDescriptorFailure";}
@@ -99,7 +100,12 @@ export const launchGuardedProvider = (options: GuardedProviderLaunchOptions): Gu
   let guardian: StableProcessGroupGuardian;
   try {
     const cooperative = live.plan?.containmentProfile === "cooperative-darwin-posix-process-group";
+    const route = live.httpReservation.darwinRoute;
+    // The owner records allocation intent only after every clock/pin/storage
+    // preflight succeeds, so a preflight rejection remains proven no-start.
+    const allocation = route?.prepareGuardianAllocation(options.spawnAcknowledgementAfterMs);
     guardian = new StableProcessGroupGuardian({
+      ...(allocation === undefined ? {} : {darwinRoute: allocation.projection}),
       arguments: cooperative
         ? options.arguments
         : descriptorBoundArguments(options.arguments, live.workspaceRef, authority.workspaceDescriptor.childDescriptor),
@@ -107,7 +113,10 @@ export const launchGuardedProvider = (options: GuardedProviderLaunchOptions): Gu
       environment: cooperative
         ? options.environment
         : descriptorBoundEnvironment(options.environment, authority.privatePathDescriptors),
-      beforeLaunch: pid => live.residueAuthority?.attachGuardian(pid) ?? Promise.resolve(false),
+      beforeLaunch: async pid => {
+        const attached = await (live.residueAuthority?.attachGuardian(pid) ?? Promise.resolve(false));
+        return attached && (route === undefined || route.beforeLaunch());
+      },
       ...(cooperative ? { canonicalLaunch: {
         command: live.plan!.executablePath,
         cwd: live.workspaceRef,
@@ -117,8 +126,8 @@ export const launchGuardedProvider = (options: GuardedProviderLaunchOptions): Gu
         workspaceDev: live.workspace!.dev.toString(),
         workspaceIno: live.workspace!.ino.toString(),
       } } : {}),
-      launchPermitted: () => !live.sealed,
-    }, options.spawnAcknowledgementAfterMs);
+      launchPermitted: () => live.launchBinding.executionPermitted(live),
+    }, allocation?.acknowledgementAfterMs ?? options.spawnAcknowledgementAfterMs);
   } catch {authority.close(); throw new GuardianConstructionError();}
   const child = guardian.child;
   const stdout = new HostStdoutIngress(options.stdoutHighWaterBytes, options.maxStdoutBytes, options.onOverflow);

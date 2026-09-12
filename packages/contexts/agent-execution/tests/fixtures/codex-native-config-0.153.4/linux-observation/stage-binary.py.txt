@@ -1,0 +1,27 @@
+from pathlib import Path
+import base64,datetime,hashlib,json,os,shutil,tarfile,urllib.request
+root=Path('/var/data/worker-jobs/ar69-r117')
+assert Path('/etc/machine-id').read_text().strip()=='be0aad971ea647fab370acd110b469b7'
+archive=root/'verified-codex.tgz';binary=root/'codex-linux-0.153.4'
+assert not archive.exists() and not binary.exists()
+assert shutil.disk_usage(root).free-512*1024**2>=5*1024**3
+url='https://registry.npmjs.org/@openai/codex/-/codex-0.153.4-linux-x64.tgz'
+sha=hashlib.sha256();sri=hashlib.sha512();size=0
+with urllib.request.urlopen(url,timeout=30) as response,archive.open('xb') as out:
+ assert response.url==url
+ while chunk:=response.read(1024**2):
+  size+=len(chunk);assert size<=129272137
+  assert shutil.disk_usage(root).free>=5*1024**3
+  sha.update(chunk);sri.update(chunk);out.write(chunk)
+assert size==129272137 and sha.hexdigest()=='54818cb9fce3360cc6e44cfc5a96952cd5c1243efb43cbe488e11dda84663e08'
+assert base64.b64encode(sri.digest()).decode()=='x1EcwBlY3AObM1VTUHNM2AzAJQsyreGdagpF+qFiYi/Oa30VBktvvG0C6tLtCzqW6hjZNWkGZQWmeVk7MuJKWg=='
+with tarfile.open(archive,'r:gz') as tar:
+ member=tar.getmember('package/vendor/x86_64-unknown-linux-musl/bin/codex');assert member.isfile() and member.size==258659424
+ stream=tar.extractfile(member);assert stream is not None
+ with binary.open('xb') as out:
+  shutil.copyfileobj(stream,out,1024**2)
+with binary.open('rb') as stream:actual=hashlib.file_digest(stream,'sha256').hexdigest()
+assert actual=='56ef98ab4032d317ab26e9b5e5a175650717351edb16ed9cde0cb6d1734d62da';binary.chmod(0o700)
+allocated=sum(p.lstat().st_blocks*512 for p in root.rglob('*'));assert allocated<512*1024**2
+receipt={'observedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),'url':url,'archiveSha256':sha.hexdigest(),'archiveSriVerified':True,'archiveBytes':size,'binarySha256':actual,'binaryBytes':binary.stat().st_size,'allocatedPeakBytes':allocated,'extraction':'one verified regular binary only; no install'}
+(root/'binary-stage-receipt.json').write_text(json.dumps(receipt,indent=2)+'\n');print(json.dumps(receipt))

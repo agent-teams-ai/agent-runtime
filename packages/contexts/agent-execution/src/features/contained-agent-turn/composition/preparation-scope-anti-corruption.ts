@@ -24,6 +24,7 @@ const trustedArrayFrom = Array.from;
 const trustedArrayIsArray = Array.isArray;
 const trustedArrayPrototype = Array.prototype;
 const trustedFreeze = Object.freeze;
+const trustedIsFrozen = Object.isFrozen;
 const trustedFromEntries = Object.fromEntries;
 const trustedGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
 const trustedGetOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
@@ -40,7 +41,7 @@ const PORT_VALUE_MAXIMUM_PROPERTIES = 16_384;
 
 type PortScalar = boolean | number | string | null;
 type PortValue = PortScalar | readonly PortValue[] | { readonly [key: string]: PortValue };
-type PortCloneState = { readonly seen: WeakSet<object>; nodes: number; properties: number };
+type PortCloneState = { readonly preserveFrozen: boolean; readonly seen: WeakSet<object>; nodes: number; properties: number };
 
 const readBoundedContainedTurnDescriptors = (
   candidate: object,
@@ -127,14 +128,21 @@ const cloneContainedTurnPortEntry = (
   }
   state.seen.add(candidate);
   const descriptors = readBoundedContainedTurnDescriptors(candidate, state);
-  return trustedArrayIsArray(candidate)
+  const output = trustedArrayIsArray(candidate)
     ? cloneContainedTurnPortArray(candidate, descriptors, depth, state)
     : cloneContainedTurnPortRecord(candidate, descriptors, depth, state);
+  return state.preserveFrozen && trustedIsFrozen(candidate) ? trustedFreeze(output) : output;
 };
 
 /** Rejects Proxy exotica before reflection and reads every caller property once. */
-const cloneContainedTurnPortValue = <Value>(value: Value): Value => {
-  const state: PortCloneState = { seen: new TrustedWeakSet<object>(), nodes: 0, properties: 0 };
+export const cloneContainedTurnPortValue = <Value>(value: Value): Value => {
+  const state: PortCloneState = { preserveFrozen: false, seen: new TrustedWeakSet<object>(), nodes: 0, properties: 0 };
+  return cloneContainedTurnPortEntry(value, 0, state) as Value;
+};
+
+/** Detach owner data without upgrading mutable records to frozen authority. */
+export const cloneContainedTurnOwnerOutput = <Value>(value: Value): Value => {
+  const state: PortCloneState = { preserveFrozen: true, seen: new TrustedWeakSet<object>(), nodes: 0, properties: 0 };
   return cloneContainedTurnPortEntry(value, 0, state) as Value;
 };
 
@@ -144,6 +152,30 @@ const awaitContainedTurnOwnerPromise = async <Value>(promise: Promise<Value>): P
     throw new TypeError("owner port call must return a native Promise, not a thenable or aggregate");
   }
   return promise;
+};
+
+type AcceptanceOwnerOutcome = Awaited<ReturnType<ContainedTurnKernelDependencies["operationStore"]["accept"]>>;
+
+const projectAcceptanceOwnerOutcome = (outcome: AcceptanceOwnerOutcome): AcceptanceOwnerOutcome => {
+  // Capture hostile owner data once, before scope checks or caller projections.
+  const safeOutcome = cloneContainedTurnPortValue(outcome);
+  if (safeOutcome.kind === "accepted" || safeOutcome.kind === "replayed") {
+    assertContainedTurnExactRecord("confirmed acceptance outcome", safeOutcome, ["kind", "operation"]);
+    return trustedFreeze({ kind: safeOutcome.kind, operation: snapshotContainedTurnOwnedOperation(safeOutcome.operation) });
+  }
+  if (safeOutcome.kind === "potential_acceptance") {
+    assertContainedTurnExactRecord("potential acceptance outcome", safeOutcome, ["candidateOperation", "evidenceId", "kind"]);
+    return trustedFreeze({
+      candidateOperation: snapshotContainedTurnOwnedOperation(safeOutcome.candidateOperation),
+      evidenceId: validateContainedTurnIdentity("evidence", safeOutcome.evidenceId),
+      kind: "potential_acceptance",
+    });
+  }
+  if (safeOutcome.kind === "not_found" || safeOutcome.kind === "fingerprint_conflict") {
+    assertContainedTurnExactRecord("absent acceptance outcome", safeOutcome, ["kind"]);
+    return trustedFreeze({ kind: safeOutcome.kind });
+  }
+  throw new TypeError("unknown acceptance owner outcome");
 };
 
 type GrantOwnerOutcome = Awaited<ReturnType<NonNullable<
@@ -346,6 +378,8 @@ export const createContainedTurnPreparationScopeDependencies = (
     provider: snapshotBoundaryPort("provider", raw("provider")) as ContainedTurnKernelDependencies["provider"],
   });
   validateContainedTurnKernelDependencies(rawDependencies);
+  const accept = rawOperationStore.accept;
+  const proveClosure = rawOperationStore.proveDispatchPreparationClosure;
   const claim = rawOperationStore.claimPreparedDispatch;
   const retire = rawOperationStore.retireDispatchPreparation;
   const record = rawOperationStore.recordDispatchPreparationCleanup;
@@ -356,6 +390,14 @@ export const createContainedTurnPreparationScopeDependencies = (
   const custodyRelease = rawCustody.releaseRetiredReservation;
 
   const operationStore = overrideBoundaryPort(rawOperationStore, trustedFreeze({
+    accept: async (...args: Parameters<typeof accept>) =>
+      projectAcceptanceOwnerOutcome(await awaitContainedTurnOwnerPromise(accept(...args))),
+    proveDispatchPreparationClosure: async (input: Parameters<NonNullable<typeof proveClosure>>[0]) => {
+      if (proveClosure === undefined) {return;}
+      const outcome = await awaitContainedTurnOwnerPromise(proveClosure(input));
+      if (outcome === undefined) {return;}
+      return trustedFreeze(cloneContainedTurnPortValue(outcome));
+    },
     claimPreparedDispatch: async (input: Parameters<typeof claim>[0]) => {
       const outcome = projectClaimOwnerOutcome(await awaitContainedTurnOwnerPromise(claim(input)));
       if (outcome.kind !== "claimed") {return outcome;}

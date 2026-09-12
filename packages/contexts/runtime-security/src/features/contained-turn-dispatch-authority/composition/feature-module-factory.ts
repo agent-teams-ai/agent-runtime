@@ -1,4 +1,4 @@
-import { createContainedTurnDispatchAuthority } from "../application/contained-turn-dispatch-authority.js";
+import { createContainedTurnDispatchAuthority } from "../adapters/inbound/contained-turn-dispatch-authority-v1.js";
 import type { DispatchControlClock } from "../application/ports/outbound/control-clock.js";
 import type { DispatchConsumptionRepository } from "../application/ports/outbound/dispatch-consumption-repository.js";
 import type { DispatchDigest } from "../application/ports/outbound/dispatch-digest.js";

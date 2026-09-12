@@ -1,3 +1,4 @@
+import { types } from "node:util";
 import type { ContainedTurnHostProviderSelection } from "./contained-turn-feature-composition.js";
 
 export interface ContainedTurnProviderSelectionSnapshot {
@@ -29,17 +30,16 @@ const assertExactSelectionKeys = (selection: object): void => {
 
 /**
  * Captures the tagged provider choice only through exact own data descriptors.
- * A Proxy is rejected when its observable traps drift, but JavaScript exposes no
- * sound universal Proxy detector; an observationally ordinary Proxy is equivalent here.
+ * Reject Proxies before reflection: their traps can change between snapshots.
  */
 export const snapshotContainedTurnProviderSelection = (
   dependencies: unknown,
 ): ContainedTurnProviderSelectionSnapshot => {
   try {
-    if (typeof dependencies !== "object" || dependencies === null) {throw invalidSelection();}
+    if (typeof dependencies !== "object" || dependencies === null || types.isProxy(dependencies)) {throw invalidSelection();}
     const selectionDescriptor = ownDataDescriptor(dependencies, "selectedProvider");
     const selection = selectionDescriptor.value;
-    if (typeof selection !== "object" || selection === null || Array.isArray(selection)) {
+    if (typeof selection !== "object" || selection === null || types.isProxy(selection) || Array.isArray(selection)) {
       throw invalidSelection();
     }
     const prototype = Object.getPrototypeOf(selection);

@@ -107,7 +107,10 @@ test("provider launch plan factories fail closed for missing or invalid trusted 
   };
   assert.throws(() => createCodexAppServerLaunchPlan({
     ...codexBase, platformTarget: undefined,
-  } as never), /No exact/u);
+  } as never), {name: "TypeError", message: "Codex native broker recipe rejected"});
+  assert.throws(() => createCodexAppServerLaunchPlan({
+    ...codexBase, platformTarget: {architecture: "x64", platform: "darwin"},
+  }), /No exact/u);
   assert.throws(() => createCodexAppServerLaunchPlan({ ...codexBase, intentMode: undefined } as never), /intentMode/u);
   assert.throws(() => createCodexAppServerLaunchPlan({ ...codexBase, privateRootPath: undefined } as never), /privateRootPath/u);
   assert.throws(() => createCodexAppServerLaunchPlan({ ...codexBase, privateRootPath: value.workspaceRef }), /disjoint/u);

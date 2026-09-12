@@ -6,9 +6,11 @@
   "scripts": {
     "build": "tsc --project tsconfig.json --pretty false",
     "check": "pnpm run clean && pnpm run typecheck && pnpm run build && pnpm run test",
+    "precheck": "pnpm --filter @agent-teams/filesystem-custody run build",
     "clean": "node -e \"const fs=require('node:fs'); for (const path of ['dist','.cache']) fs.rmSync(path, { recursive: true, force: true })\"",
     "test": "node --test --test-concurrency=1 tests/*.test.ts",
-    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"
+    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false",
+    "test:postgres": "node --import ./scripts/require-postgres-qualification.mjs --test --test-concurrency=1 tests/postgres-dispatch-durability.test.ts"
   },
   "agentTeamsArchitecture": {
     "role": "bounded-context",
@@ -17,7 +19,9 @@
   "dependencies": {
     "@agent-teams/filesystem-custody": "workspace:*"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -27,5 +31,9 @@
       "types": "./dist/composition.d.ts",
       "import": "./dist/composition.js"
     }
+  },
+  "devDependencies": {
+    "@types/pg": "catalog:",
+    "pg": "catalog:"
   }
 }

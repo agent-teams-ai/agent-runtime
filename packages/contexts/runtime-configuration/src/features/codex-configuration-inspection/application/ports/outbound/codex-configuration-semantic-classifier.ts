@@ -1,18 +1,18 @@
 import type {
-  CodexConfigurationDiagnostic,
-  PortableCodexSettingKey,
-} from "../../../contracts/codex-configuration-inspection.js";
+  CodexInspectionDiagnostic,
+  CodexSettingKey,
+} from "../../models/codex-inspection-models.js";
 
 export const codexConfigurationSemanticClassifierContract =
   "codex-configuration-semantic-classifier/v1" as const;
 
 export interface CodexConfigurationSemanticClassification {
   readonly diagnostics: readonly Pick<
-    CodexConfigurationDiagnostic,
+    CodexInspectionDiagnostic,
     "code" | "setting"
   >[];
   readonly settings: readonly {
-    readonly key: PortableCodexSettingKey;
+    readonly key: CodexSettingKey;
     readonly value: string;
   }[];
 }

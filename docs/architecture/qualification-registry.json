@@ -1,7 +1,7 @@
 {
   "$schema": "./qualification-registry.schema.json",
   "schemaVersion": 1,
-  "generatedAt": "2026-09-01",
+  "generatedAt": "2026-09-07",
   "matchingPolicy": {
     "default": "unqualified",
     "dimensionRule": "exact-match-whole-target-tuple",
@@ -1106,6 +1106,44 @@
           "storageTopology": "process-local-deterministic-binary-lifecycle-state",
           "transportTopology": "in-process-lifecycle-model",
           "failureDomain": "single-process"
+        }
+      ]
+    },
+    {
+      "id": "docker-linux-codex-enforced-network-route",
+      "qualification": "implementation",
+      "evidence": [
+        {
+          "kind": "human-report",
+          "path": "docs/spikes/docker-linux-enforced-network-route-results.md",
+          "sha256": "5d487260dc6957de60dc550b06eb860a7abd1e2f4855a6b104a47ef720b6ce5d"
+        },
+        {
+          "kind": "redacted-summary",
+          "path": "experiments/runtime-profile-behavior/fixtures/docker-linux-enforced-network-route-summary.json",
+          "sha256": "e50e7c99bd9becaa4d8a7300403be6bc589bb359c5c96b641a6c9dfb3b31750c"
+        }
+      ],
+      "readinessSections": [
+        "Status vocabulary",
+        "Execution, tools, and child agents"
+      ],
+      "limitations": [
+        "Source-level implementation evidence only: no kernel route was installed. The exclusive nftables transaction, namespace entry and pinned nsenter/nft digest checks require Linux x64 and euid 0, so this row rests on ordering, ownership, one-use admission, first-write adjacency, autonomous expiry and typed refusals exercised through the adapter's deterministic kernel seam.",
+        "No live turn: no provider process was started, no container was created on a real Docker Engine, no operation network was allocated by a real daemon, no credential was rendered and no provider origin was contacted.",
+        "Necessary and not sufficient. The product entrypoint admits a contained turn only when an authentic route-enforcement capability minted from the complete route binding accompanies this row, and the ids, resolver and evidence broker session ports still have no production owner in this repository.",
+        "Only this exact tuple is qualified. The api-key credential recipe, the Claude candidate, every non-Linux host and every other binary or adapter revision remain unqualified, and the five deployment-composition dimensions must equal the trusted composition byte for byte."
+      ],
+      "targets": [
+        {
+          "provider": "codex",
+          "providerAdapter": "codex-app-server-contained-turn:0.153.4+native-permission-config-v2",
+          "binaryClosure": "@openai/codex:0.153.4+linux-x64",
+          "platform": "linux-x64",
+          "credentialRoute": "provider-access-endorsed-codex-chatgpt-host-materialized-credential-binding",
+          "storageTopology": "digest-pinned-readonly-rootfs-with-disposable-host-bound-workspace-and-private-home",
+          "transportTopology": "codex-native-http-over-nftables-exclusive-route-to-host-broker-then-host-tls-to-provider-origin",
+          "failureDomain": "single-linux-host-container-with-host-custodied-broker"
         }
       ]
     }

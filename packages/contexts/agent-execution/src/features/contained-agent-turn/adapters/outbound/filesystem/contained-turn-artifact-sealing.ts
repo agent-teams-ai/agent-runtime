@@ -1,4 +1,5 @@
-import type { FileHandle } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody/composition";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
 import type { ContainedTurnFilesystemArtifactPort as ContainedTurnArtifactPort } from "./contained-turn-filesystem-port.js";
@@ -10,9 +11,7 @@ import {
   type ContainedTurnArtifactOutputRecord,
 } from "./contained-turn-artifact-manifest.js";
 import type { VerifiedStoredArtifact } from "./contained-turn-artifact-store.js";
-import {
-  closeContainedTurnArtifactHandles,
-} from "./contained-turn-artifact-custody.js";
+import { closeWorkspaceHandles } from "./contained-turn-workspace-io.js";
 import {
   inspectFileHandle,
   isMissingFilesystemEntry,
@@ -49,6 +48,7 @@ import {
 import {
   scanContainedTurnWorkspace,
   type ContainedTurnWorkspaceTreeLimits,
+  type ContainedTurnWorkspaceTree,
 } from "./contained-turn-workspace-tree.js";
 
 const WORKSPACE_NAME = /^operation-[a-f\d]{64}$/u;
@@ -59,6 +59,9 @@ export interface ContainedTurnArtifactSealingContext {
   readonly contentDigest: (domain: "blob" | "manifest", bytes: Uint8Array) => string;
   readonly custodyRoots: readonly BoundContainedTurnRoot[];
   readonly limits: ContainedTurnWorkspaceTreeLimits;
+  readonly nativeSource?: Readonly<{
+    freeze(request: ArtifactSealInput): Promise<ContainedTurnWorkspaceTree>;
+  }> | undefined;
   readonly resultPublications: BoundContainedTurnRoot;
   readonly testFaults?: ContainedTurnFilesystemFaults | undefined;
   readonly verifyArtifact: (digest: string) => Promise<VerifiedStoredArtifact>;
@@ -81,14 +84,14 @@ interface ProjectedOutput {
 }
 
 interface SealDirectories {
-  readonly active: FileHandle;
-  readonly creations: FileHandle;
-  readonly frozen: FileHandle;
-  readonly handles: readonly FileHandle[];
-  readonly metadataStaging: FileHandle;
-  readonly receipts: FileHandle;
-  readonly results: FileHandle;
-  readonly seals: FileHandle;
+  readonly active: StableFilesystemHandle;
+  readonly creations: StableFilesystemHandle;
+  readonly frozen: StableFilesystemHandle;
+  readonly handles: readonly StableFilesystemHandle[];
+  readonly metadataStaging: StableFilesystemHandle;
+  readonly receipts: StableFilesystemHandle;
+  readonly results: StableFilesystemHandle;
+  readonly seals: StableFilesystemHandle;
 }
 
 const prefixedFaults = (
@@ -98,7 +101,7 @@ const prefixedFaults = (
   checkpoint: (point: string) => faults.checkpoint(`${prefix}.${point}`),
 });
 
-const directoryExistsAt = async (parent: FileHandle, name: string): Promise<boolean> => {
+const directoryExistsAt = async (parent: StableFilesystemHandle, name: string): Promise<boolean> => {
   try {
     const child = await openDirectoryEntry(parent, name);
     await child.close();
@@ -110,7 +113,7 @@ const directoryExistsAt = async (parent: FileHandle, name: string): Promise<bool
 };
 
 const readOptionalFileAt = async (
-  parent: FileHandle, name: string, maxBytes: number,
+  parent: StableFilesystemHandle, name: string, maxBytes: number,
 ): Promise<Buffer | undefined> => {
   try {return await readStableFileAt(parent, name, maxBytes);} catch (error) {
     if (isMissingFilesystemEntry(error)) {return undefined;}
@@ -185,7 +188,7 @@ const assertOperationWorkspaceIdentity = (
 };
 
 const assertFrozenSealIdentity = async (
-  frozen: FileHandle, name: string, seal: ContainedTurnWorkspaceSealRecord,
+  frozen: StableFilesystemHandle, name: string, seal: ContainedTurnWorkspaceSealRecord,
 ): Promise<void> => {
   if (!await directoryExistsAt(frozen, name)) {return;}
   const workspace = await openDirectoryEntry(frozen, name);
@@ -199,7 +202,7 @@ const assertFrozenSealIdentity = async (
 };
 
 const assertDirectoryIdentityAt = async (
-  parent: FileHandle, name: string, expected: Readonly<{ dev: string; ino: string }>,
+  parent: StableFilesystemHandle, name: string, expected: Readonly<{ dev: string; ino: string }>,
 ): Promise<void> => {
   const directory = await openDirectoryEntry(parent, name);
   try {
@@ -278,6 +281,7 @@ const assertResultPublication = (input: {
 const replaySealedArtifact = async (input: {
   readonly directories: SealDirectories;
   readonly name: string;
+  readonly nativeTree?: ContainedTurnWorkspaceTree | undefined;
   readonly operationId: string;
   readonly output: readonly ContainedTurnArtifactOutputRecord[];
   readonly receiptName: string;
@@ -307,7 +311,13 @@ const replaySealedArtifact = async (input: {
   if (await directoryExistsAt(directories.active, name)) {
     throw new Error("contained turn sealed workspace reappeared in active custody");
   }
-  await assertFrozenSealIdentity(directories.frozen, name, seal);
+  if (input.nativeTree === undefined) {
+    await assertFrozenSealIdentity(directories.frozen, name, seal);
+  } else if (input.nativeTree.treeDigest !== seal.treeDigest ||
+    input.nativeTree.rootIdentity.dev.toString() !== seal.rootIdentity.dev ||
+    input.nativeTree.rootIdentity.ino.toString() !== seal.rootIdentity.ino) {
+    throw new Error("contained turn native artifact replay conflicts with retained frozen tree");
+  }
   if (publicationBytes === undefined) {return undefined;}
   return assertResultPublication({
     manifestDigest,
@@ -359,6 +369,35 @@ const freezeWorkspace = async (input: {
   await context.testFaults?.checkpoint("artifact.seal.workspace-frozen");
 };
 
+const assertNativeArtifactTree = (
+  tree: ContainedTurnWorkspaceTree,
+  context: ContainedTurnArtifactSealingContext,
+): void => {
+  if (tree.entries.length > context.limits.maxEntries ||
+    tree.files.length !== tree.entries.filter(entry => entry.kind === "file").length) {
+    throw new Error("contained turn native frozen tree inventory exceeds limits or is incomplete");
+  }
+  const files = new Map(tree.files.map(file => [file.relativePath, file]));
+  if (files.size !== tree.files.length) {
+    throw new Error("contained turn native frozen tree has duplicate file observations");
+  }
+  for (const entry of tree.entries) {
+    const depth = entry.relativePath.split("/").length - (entry.kind === "file" ? 1 : 0);
+    if (depth > context.limits.maxDepth) {
+      throw new Error("contained turn native frozen tree exceeded its depth limit");
+    }
+    if (entry.kind === "directory") {continue;}
+    const file = files.get(entry.relativePath);
+    if (file === undefined || file.mode !== entry.mode || file.size !== entry.size ||
+      file.digest !== entry.digest || file.bytes.length !== file.size ||
+      file.size > context.limits.maxFileBytes ||
+      createHash("sha256").update(file.bytes).digest("hex") !== file.digest ||
+      context.contentDigest("blob", file.bytes) !== file.digest) {
+      throw new Error("contained turn native frozen file bytes conflict with complete inventory");
+    }
+  }
+};
+
 const createManifest = async (input: {
   readonly context: ContainedTurnArtifactSealingContext;
   readonly name: string;
@@ -370,14 +409,15 @@ const createManifest = async (input: {
   treeDigest: string;
 }>> => {
   const { context, name, projectedOutput, request } = input;
-  const tree = await scanContainedTurnWorkspace(
+  const tree = context.nativeSource === undefined ? await scanContainedTurnWorkspace(
     join(context.workspaceRoots.frozen.canonicalPath, name), context.limits, {
       checkpoint: point => context.testFaults?.checkpoint([
         "artifact.scan", point.phase, point.kind ?? "entry", encodeURIComponent(point.relativePath),
       ].join(".")),
       contentDigest: bytes => context.contentDigest("blob", bytes),
     },
-  );
+  ) : await context.nativeSource.freeze(request);
+  if (context.nativeSource !== undefined) {assertNativeArtifactTree(tree, context);}
   const entries: ContainedTurnArtifactEntry[] = tree.entries.map(entry => entry.kind === "directory"
     ? Object.freeze({ kind: entry.kind, mode: entry.mode, path: entry.relativePath })
     : Object.freeze({
@@ -497,13 +537,29 @@ export const sealContainedTurnArtifact = async (
     ) {
       throw new Error("contained turn artifact seal conflicts with workspace creation binding");
     }
+    const nativeTree = await context.nativeSource?.freeze(request);
+    if (nativeTree !== undefined) {
+      assertNativeArtifactTree(nativeTree, context);
+      if (nativeTree.rootIdentity.dev.toString() !== creation.rootIdentity.dev ||
+        nativeTree.rootIdentity.ino.toString() !== creation.rootIdentity.ino) {
+        throw new Error("contained turn native frozen tree is not the original creation inode");
+      }
+    }
     const replayed = await replaySealedArtifact({
+      nativeTree,
       directories, name, operationId: request.operationId, output: projectedOutput.records,
       receiptName: recordName, scope: request.scope, verifyArtifact: context.verifyArtifact,
     });
     if (replayed !== undefined) {return replayed;}
-    await freezeWorkspace({ context, creation, directories, name });
+    if (context.nativeSource === undefined) {
+      await freezeWorkspace({ context, creation, directories, name });
+    }
     const manifest = await createManifest({ context, name, projectedOutput, request });
+    if (context.nativeSource !== undefined &&
+      (manifest.tree.rootIdentity.dev.toString() !== creation.rootIdentity.dev ||
+        manifest.tree.rootIdentity.ino.toString() !== creation.rootIdentity.ino)) {
+      throw new Error("contained turn native frozen tree replaced the original creation inode");
+    }
     const manifestDigest = await publishManifestContent({
       context, manifestBytes: manifest.manifestBytes, projectedOutput, tree: manifest.tree,
     });
@@ -516,5 +572,5 @@ export const sealContainedTurnArtifact = async (
       context, directories, manifestDigest, name, recordName, request,
       rootIdentity: manifest.tree.rootIdentity, treeDigest: manifest.treeDigest,
     });
-  } finally {await closeContainedTurnArtifactHandles(directories.handles);}
+  } finally {await closeWorkspaceHandles(directories.handles);}
 };

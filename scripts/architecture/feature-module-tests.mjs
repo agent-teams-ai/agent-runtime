@@ -17,13 +17,16 @@ const SOURCE_EXTENSIONS = new Set([".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx",
 const TEST_FILE = /(?:^|\/)[^/]+\.(?:test|spec)\.(?:[cm]?[jt]sx?)$/u;
 const compareText = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 
-const curatedPackageExports = (exports) => {
-  if (!exports || Object.keys(exports).toSorted(compareText).join(",") !== ".,./composition") {return false;}
+const EXPORT_STEMS = Object.freeze({ ".": "index", "./composition": "composition" });
+
+const curatedPackageExports = (exports, curated) => {
+  if (!exports || !curated?.length) {return false;}
+  if (Object.keys(exports).toSorted(compareText).join(",") !== [...curated].toSorted(compareText).join(",")) {return false;}
   const matches = (entry, stem) => entry
     && Object.keys(entry).toSorted(compareText).join(",") === "import,types"
     && entry.types === `./dist/${stem}.d.ts`
     && entry.import === `./dist/${stem}.js`;
-  return matches(exports["."], "index") && matches(exports["./composition"], "composition");
+  return curated.every((key) => matches(exports[key], EXPORT_STEMS[key]));
 };
 
 const importBindingNames = (program, sourceSpecifier) => (program.body ?? [])
@@ -126,11 +129,31 @@ const invalidResolutionIssue = (context, sourcePath, imported, resolved) => cont
   resolved.alias ? `configured import cannot resolve to one owned source: ${imported.specifier}` : "import target must have one canonical, repository-contained identity",
 );
 
+// A test may consume another governed module exactly where production code may:
+// through a curated assembly entry of a module its owner declares an edge to.
+// Anything else that leaves the package stays a resolution failure, so a
+// nonexistent path or a reach into a sibling module's internals still fails.
+const declaredModuleConsumption = (context, resolved) => {
+  if (resolved.self !== true || typeof resolved.path !== "string") {return false;}
+  // A package export map names the emitted specifier, so the resolved target can
+  // still carry the build-output extension.
+  const targetPath = resolved.path.replace(/\.js$/u, ".ts");
+  const modules = [...context.declaredModules.values()];
+  const owner = modules.find(({ sourceRoot }) => sourceRoot === context.productionRoot);
+  const target = modules
+    .filter(({ sourceRoot }) => targetPath === sourceRoot || targetPath.startsWith(`${sourceRoot}/`))
+    .toSorted((left, right) => right.sourceRoot.length - left.sourceRoot.length)[0];
+  if (!owner || !target || owner.id === target.id) {return false;}
+  const curated = target.curatedExports.map((entry) => `${target.sourceRoot}/${entry === "." ? "index.ts" : "composition.ts"}`);
+  return curated.includes(targetPath) && Boolean(context.declaredModuleEdges?.has(`${owner.id}->${target.id}`));
+};
+
 const detectedSourceFeatures = async (context, parsed, visited) => {
   const detected = new Set(), direct = new Set(), issues = [];
   let overflow = false;
   for (const imported of parsed.imports ?? []) {
     const resolved = context.localPackageImports.resolve(parsed.testPath, imported.specifier, context.packagePathIndex);
+    if (declaredModuleConsumption(context, resolved)) {continue;}
     if (resolved.kind === "invalid") {
       issues.push(invalidResolutionIssue(context, parsed.testPath, imported, resolved));
       continue;
@@ -201,11 +224,13 @@ const packageTestIssues = async (context, packageFiles) => {
 };
 
 const packageIssues = async (context, productionRoot) => {
+  context = { ...context, productionRoot };
   const parent = posix.dirname(productionRoot), packageRoot = parent === "." ? "" : parent;
   const packagePath = posix.join(packageRoot, "package.json");
   const ownedPackage = context.localPackageImports.packages.find((candidate) => candidate.productionRoot === productionRoot);
-  const issues = curatedPackageExports(ownedPackage?.packageJson?.exports) ? []
-    : [context.issue("FM_PACKAGE_EXPORT_MAP", packagePath, 1, "package exports must expose only the public and composition assembly files")];
+  const curated = context.declaredModules.get(productionRoot)?.curatedExports;
+  const issues = curatedPackageExports(ownedPackage?.packageJson?.exports, curated) ? []
+    : [context.issue("FM_PACKAGE_EXPORT_MAP", packagePath, 1, `package exports must expose only the curated assembly files declared for this module: ${(curated ?? []).join(" ")}`)];
   const inventory = await inventoryRepositoryFiles({
     root: context.root,
     startPath: packageRoot,

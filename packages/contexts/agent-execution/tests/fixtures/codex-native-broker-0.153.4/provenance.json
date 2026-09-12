@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "status": "offline native config/read only; no route/auth/provider success qualification",
+  "version": "0.153.4",
+  "platform": "darwin-arm64",
+  "binarySha256": "b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3",
+  "source": {
+    "officialSourceCommit": "3d2ee51ca2d5db578f328aa75e20aa22c0197c9a",
+    "retrieval": "gh api contents at exact commit"
+  },
+  "files": {
+    "capture.darwin-analysis.json": "2d8d78666929d8e218837c8a59a784dfaa261f2f6d06524f559fe8b3c87fa24c",
+    "capture.darwin-workspace-write.json": "de7fe32a6dc7ea68606fe04ca05d50f6b7045e0ab160e79ee328aade139456db",
+    "models.json": "d7136a413cfac1b5b1686d9e0dcc5c80ca05bebed5e9fc3911376561d0ef6ee8",
+    "input-config.analysis.toml": "241af322bdae1dc074ea75c55549a081b7441384e37f55ae6688eaf2c9802fb7",
+    "capture-script.mjs.txt": "3072f65b5ebba819c20ea44592253bf10a310c43a077476f3586905a0e277e9e"
+  },
+  "sourceFiles": {
+    "codex-rs/models-manager/models.json": "d7136a413cfac1b5b1686d9e0dcc5c80ca05bebed5e9fc3911376561d0ef6ee8",
+    "codex-rs/model-provider-info/src/lib.rs": "03ba8ea303b9763f7c5e25a468b7f6675c9970dfb91109205beb6d0509f574d1",
+    "codex-rs/protocol/src/config_types.rs": "96b4050a2498275ba5a11da0021bc75d5fb2fd2c50802f0930629aa7716a282a",
+    "codex-rs/protocol/src/shell_environment.rs": "e16f61ea96db99307e3d8d2eb2fbb1b6fc703ce0ca7651fa97170dd6e0557da0",
+    "codex-rs/config/src/shell_environment_policy.rs": "93a3c447504f940a266a50ecbb0467dcf08fd7e920f5434455c6e09fad2b25c5"
+  },
+  "captures": {
+    "analysis": {
+      "originalRoot": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR",
+      "syntheticRoot": "/synthetic/agent-runtime-native-broker/analysis",
+      "normalizedSha256": "1240e284ae3fbe17def49e37034afe0c211c5b8cc76e3ef709e372a6c98f1c2d",
+      "configFields": 99,
+      "origins": 36,
+      "layers": 3
+    },
+    "workspace-write": {
+      "originalRoot": "/private/tmp/ar69-r99/codex-native-darwin-broker-workspace-write/disposable-ORodFS",
+      "syntheticRoot": "/synthetic/agent-runtime-native-broker/workspace-write",
+      "normalizedSha256": "20866436cae1160feba53ae7f278883171ffc42986daaba87e6fe30806136cd3",
+      "configFields": 99,
+      "origins": 36,
+      "layers": 3
+    }
+  },
+  "normalization": "Select config result; rebase root strings/keys; recompute canonical layer and matching origin hashes. Separate native captures for both intents.",
+  "safety": "sandbox-exec deny network*, private home/workspace, no credentials or provider turn. SIGTERM and removed test projects.",
+  "limits": [
+    "Linux native configuration and live provider compatibility remain pending.",
+    "No new provider/model/interaction capability."
+  ],
+  "priorEvidence": {
+    "version": "0.150.1",
+    "commit": "7a9e44200873f899a90ca8f5e0aa286c856e1168"
+  }
+}

@@ -10,12 +10,18 @@ export type {
   HttpEgressBrokerPorts,
   HttpEgressClock,
   HttpEgressEvidence,
-  HttpEgressFinalAuthorizer,
-  HttpEgressRouteAuthority,
-  HttpEgressCredentialCustody,
-  HttpEgressProvisionalAuthorizer,
+  HttpEgressRouteFirstWrite,
+  HttpEgressRouteFirstWriteReservation,
   HttpEgressTrustedResolver,
   HttpEgressUpstreamTransport,
 } from "./http-egress-ports.js";
 export { isPublicEgressAddress, resolutionIsSafe } from "./public-address-policy.js";
 export { createStrictHttpEgressBroker } from "./strict-http-egress-broker.js";
+export { createHostHttpEgressSession } from "./host-http-egress-session.js";
+export type { HostHttpEgressSessionDependencies } from "./host-http-egress-session.js";
+export {
+  NodeTlsHttpEgressError,
+  NodeTlsHttpEgressTransport,
+} from "./node-tls-http-egress-transport.js";
+export type { NodeTlsHttpEgressTransportOptions } from "./node-tls-http-egress-transport.js";
+export {NodeHttpEgressTrustedResolver, type NodeHttpEgressTrustedResolverOptions} from "./node-http-egress-trusted-resolver.js";

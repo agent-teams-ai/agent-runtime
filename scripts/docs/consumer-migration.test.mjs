@@ -91,6 +91,9 @@ test("Source Dependencies uses schema v3 with root package and every workspace p
     "scripts/architecture",
     "scripts/docs",
     "scripts/foundation",
+    "packages/apps/embedded-runtime/scripts",
+    "packages/contexts/provider-access/scripts",
+    "packages/contexts/runtime-security/scripts",
   ]);
   const source = await read("scripts/architecture/source-dependency-adapter-boundaries.test.mjs");
   assert.doesNotMatch(source, /engineering-foundation\/dist\/capabilities/u);
@@ -104,8 +107,7 @@ test("qualified stable20 integration and generated state preserve exact evidence
     "architecture/foundation/docs-protocol-managed-state.json": "23d0c21ef21f9f2385fe013f219d38e7a01ca0aaeb9c65ca3728ebba2b5eaedc",
     "architecture/foundation/docs-protocol-qualification.json": "1f7e50ec5b0e6ecc991668b83790b2367062240043c4b885c58377855968969b",
     "architecture/foundation/document-authoring.yaml": "d6f5ba4b178e742e122f6711c9d989d52a77768eb68527b0ecdf3c9a9699c6d2",
-    // Current migration evidence: reviewed scaffold source-policy overlay.
-    "architecture/foundation/source-dependencies.yaml": "301c1b4f6bddee4863acd9402fa422508641e01af3bcda8d24ad2a9d59a2bfed"
+    "architecture/foundation/source-dependencies.yaml": "7f258bf9577f99d36e47402131be690eeb43ca9feb0d177fc62a69f5f5c8ff67",
 };
   for (const [path, digest] of Object.entries(expected)) {
     assert.equal(createHash("sha256").update(await read(path)).digest("hex"), digest, path);

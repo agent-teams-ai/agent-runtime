@@ -3,6 +3,7 @@ import type {
   HostCustodyLaunchPlan,
   HostCustodyLaunchPlanResolver,
 } from "./custodied-provider-process.js";
+import { assertInertHostLaunchData, snapshotHostCustodyLaunchPlan } from "./host-custody-launch-plan-snapshot.js";
 
 export interface StaticHostCustodyLaunchPlan {
   readonly plan: HostCustodyLaunchPlan;
@@ -42,14 +43,19 @@ const snapshotPlan = (plan: HostCustodyLaunchPlan): HostCustodyLaunchPlan => Obj
 export const createStaticHostCustodyLaunchPlanResolver = (
   records: readonly StaticHostCustodyLaunchPlan[],
 ): HostCustodyLaunchPlanResolver => {
+  assertInertHostLaunchData(records);
+  if (!Array.isArray(records)) {throw new TypeError("Host Custody launch records must be an array");}
   const byBinding = new Map<string, HostCustodyLaunchPlan>();
-  for (const record of records) {
-    const key = authorityKey(record.providerBinding, record.plan.intentMode);
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index]!;
+    assertInertHostLaunchData(record);
+    const plan = snapshotHostCustodyLaunchPlan(record.plan);
+    const key = authorityKey(record.providerBinding, plan.intentMode);
     if (byBinding.has(key)) {throw new Error("duplicate Host Custody launch authority");}
-    if (record.plan.provider !== record.providerBinding.provider || record.plan.binaryRevision !== record.providerBinding.binaryRevision) {
+    if (plan.provider !== record.providerBinding.provider || plan.binaryRevision !== record.providerBinding.binaryRevision) {
       throw new Error("Host Custody launch plan conflicts with its provider binding");
     }
-    byBinding.set(key, snapshotPlan(record.plan));
+    byBinding.set(key, plan === record.plan ? plan : snapshotPlan(plan));
   }
   const resolver: HostCustodyLaunchPlanResolver = {
     async resolve(input) {

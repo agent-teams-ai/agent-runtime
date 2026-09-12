@@ -1,4 +1,4 @@
-/** Redacted shapes observed from exact Codex 0.150.1 config/read, not AR's internal policy model. */
+/** Redacted shapes observed from exact Codex 0.153.4 config/read, not AR's internal policy model. */
 export const codexUserPermissionProfile = (codexHome: string, mode: "analysis" | "workspace-write" = "analysis") => ({
   extends: mode === "analysis" ? ":read-only" : ":workspace",
   filesystem: { [codexHome]: "deny", ":tmpdir": "read", ":slash_tmp": "read" },

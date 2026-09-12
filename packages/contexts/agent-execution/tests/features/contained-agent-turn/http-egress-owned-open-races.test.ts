@@ -221,9 +221,9 @@ test("authorization bytes completing after lifecycle timeout are zeroed", async 
   const renderGate = deferred<void>();
   const fixture = createEgressFixture();
   const lateAuthorization = bytes("Bearer late-secret-material");
-  let renderPromise: Promise<Uint8Array> | undefined;
-  const credentialCustody = { renderAuthorization: () => {
-    renderPromise = renderGate.promise.then(() => lateAuthorization);
+  let renderPromise: Promise<readonly Readonly<{name: string; valueBytes: Uint8Array}>[]> | undefined;
+  const materializer = { render: () => {
+    renderPromise = renderGate.promise.then(() => [Object.freeze({name: "authorization", valueBytes: lateAuthorization})]);
     return renderPromise;
   } };
   const clock: HttpEgressClock = {
@@ -235,11 +235,11 @@ test("authorization bytes completing after lifecycle timeout are zeroed", async 
     },
   };
   const receipt = await createStrictHttpEgressBroker({
-    ...fixture.ports, credentialCustody, clock,
+    ...fixture.ports, materializer, clock,
   }).execute(fixture.operation);
   assert.equal(receipt.outcome, "denied");
   assert.equal(receipt.anomalyCode, "credential_render_failed");
-  assert.equal(receipt.upstreamClosure, "closed");
+  assert.equal(receipt.upstreamClosure, "not_opened");
   renderGate.resolve();
   if (renderPromise === undefined) {throw new Error("synthetic credential render was not requested");}
   await renderPromise;

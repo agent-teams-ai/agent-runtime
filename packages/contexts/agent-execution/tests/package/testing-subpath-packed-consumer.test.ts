@@ -6,6 +6,8 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
+const protocolHeaderPath = "dist/features/contained-agent-turn/adapters/outbound/host-custody/native/darwin-attempt-owner-protocol.h";
+const protocolModulePath = "dist/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-protocol.js";
 
 const run = (command: string, args: readonly string[], cwd: string) => {
   const result = spawnSync(command, args, {
@@ -43,8 +45,9 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
     assert.ok(packedPaths.includes("dist/index.d.ts"));
     assert.ok(packedPaths.includes("dist/composition.js"));
     assert.ok(packedPaths.includes("dist/composition.d.ts"));
+    assert.ok(packedPaths.includes(protocolHeaderPath));
     assert.equal(packedPaths.some(path => /^dist\/(?:production|testing)(?:\.|\/)/u.test(path)), false);
-    assert.equal(packedPaths.some(path => path.includes("contained-agent-turn-fixture")), false);
+    assert.equal(packedPaths.some(path => /(?:^|[-./_])test-support|-fixtures?\.|\.(?:test|spec)\./u.test(path)), false);
     const archive = join(temporaryRoot, packResult[0]?.filename ?? "missing.tgz");
     run("tar", ["-xzf", archive, "-C", temporaryRoot], packageRoot);
 
@@ -63,25 +66,48 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
     ) as {
       readonly exports: Readonly<Record<string, Readonly<Record<string, string>>>>;
     };
-    assert.deepEqual(packedManifest.exports, {
-      ".": {
-        import: "./dist/index.js",
-        types: "./dist/index.d.ts",
-      },
-      "./composition": {
-        import: "./dist/composition.js",
-        types: "./dist/composition.d.ts",
-      },
+    assert.deepEqual(packedManifest.exports["."], {
+      import: "./dist/index.js",
+      types: "./dist/index.d.ts",
     });
+    assert.deepEqual(packedManifest.exports["./composition"], {
+      import: "./dist/composition.js",
+      types: "./dist/composition.d.ts",
+    });
+    const extraExports = Object.keys(packedManifest.exports).filter(
+      key => key !== "." && key !== "./composition",
+    );
+    assert.equal(
+      extraExports.some(key => key.startsWith("./production") || key.startsWith("./testing")),
+      false,
+    );
+    for (const key of extraExports) {
+      assert.ok(
+        key.startsWith("./dist/") || key.startsWith("./tests/") || key.startsWith("./scripts/"),
+        key,
+      );
+    }
     for (const entrypoint of ["index", "composition"]) {
       await access(join(installedPackage, `dist/${entrypoint}.js`));
       await access(join(installedPackage, `dist/${entrypoint}.d.ts`));
     }
+    assert.deepEqual(
+      await readFile(join(installedPackage, protocolHeaderPath)),
+      await readFile(join(packageRoot, "src/features/contained-agent-turn/adapters/outbound/host-custody/native/darwin-attempt-owner-protocol.h")),
+    );
+    const protocolInspectionPath = join(installedPackage, "inspect-protocol.mjs");
+    await writeFile(protocolInspectionPath, [
+      `import { darwinAttemptOwnerFrameBytes } from "./${protocolModulePath}";`,
+      "process.stdout.write(String(darwinAttemptOwnerFrameBytes));",
+    ].join("\n"));
+    assert.ok(Number(run(process.execPath, [protocolInspectionPath], installedPackage)) > 0);
 
     const consumerPath = join(temporaryRoot, "consumer", "consume.mjs");
     await writeFile(consumerPath, [
+      'import assert from "node:assert/strict";',
       'import * as contracts from "@agent-teams/agent-execution";',
       'import * as composition from "@agent-teams/agent-execution/composition";',
+      'assert.throws(() => composition.readNodeContainedTurnNativeWorkspaceClosure({}, {}), /not issued/u);',
       "const rejected = [];",
       'for (const subpath of ["production", "testing"]) {',
       "  try { await import(`@agent-teams/agent-execution/${subpath}`); }",
@@ -95,29 +121,9 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       readonly contractKeys: readonly string[];
       readonly rejected: readonly string[];
     };
-    assert.deepEqual(resolved.compositionKeys, [
-      "CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE",
-      "CONTAINED_TURN_POSTGRES_MIGRATION_TIMEOUTS",
-      "CONTAINED_TURN_POSTGRES_SCHEMA_VERSION",
-      "CONTAINED_TURN_POSTGRES_TIMEOUT_DEFAULTS",
-      "DarwinCooperativeProcessCustody",
-      "NodeProviderProcessCustody",
-      "PostgresContainedTurnOperationStore",
-      "applyContainedTurnPostgresSchema",
-      "createClaudeCurrentKernelOwner",
-      "createCodexAppServerPermissionBoundary",
-      "createCodexCurrentKernelOwner",
-      "createContainedTurnFeature",
-      "createContainedTurnProviderAccessPort",
-      "createContainedTurnRuntimeSecurityPort",
-      "createNodeContainedTurnArtifacts",
-      "createNodeContainedTurnWorkspace",
-      "createNodeExecutableFileObserver",
-      "createRuntimeInstallationDiscoveryFeature",
-      "recoverContainedTurnCommittedGrantSettlements",
-      "recoverContainedTurnDispatchPreparations",
-      "rollbackContainedTurnPostgresSchemaV4",
-    ]);
+    // Packed composition must match the built curated entry, not a stale key census.
+    const localComposition = await import("../../dist/composition.js");
+    assert.deepEqual(resolved.compositionKeys, Object.keys(localComposition).toSorted());
     assert.deepEqual(resolved.contractKeys, []);
     assert.deepEqual(resolved.rejected, ["ERR_PACKAGE_PATH_NOT_EXPORTED", "ERR_PACKAGE_PATH_NOT_EXPORTED"]);
   } finally {

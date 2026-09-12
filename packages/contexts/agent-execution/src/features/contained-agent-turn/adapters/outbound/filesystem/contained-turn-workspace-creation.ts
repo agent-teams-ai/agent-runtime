@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -37,6 +38,7 @@ import {
 import {
   DEFAULT_CONTAINED_TURN_WORKSPACE_LIMITS,
   scanContainedTurnWorkspace,
+  type ContainedTurnWorkspaceTree,
 } from "./contained-turn-workspace-tree.js";
 
 type CreateInput = Parameters<ContainedTurnWorkspacePort["create"]>[0];
@@ -282,4 +284,90 @@ export const createContainedTurnWorkspace = async (
     }
     throw error;
   } finally {await closeWorkspaceHandles(directories.handles);}
+};
+
+const materializationInventory = (tree: ContainedTurnWorkspaceTree): string => JSON.stringify(
+  tree.entries.map(entry => entry.kind === "directory"
+    ? [entry.kind, entry.relativePath, entry.mode]
+    : [entry.kind, entry.relativePath, entry.mode, entry.size, entry.digest]),
+);
+
+/** Compare semantic inventory and owned bytes; source inode is intentionally different. */
+export const assertCompleteWorkspaceMaterialization = (
+  source: ContainedTurnWorkspaceTree,
+  destination: ContainedTurnWorkspaceTree,
+): void => {
+  if (source.rootIdentity.dev === destination.rootIdentity.dev &&
+    source.rootIdentity.ino === destination.rootIdentity.ino) {
+    throw new Error("contained turn native materialization returned the canonical source inode");
+  }
+  const sourceInventory = materializationInventory(source);
+  const destinationInventory = materializationInventory(destination);
+  if (sourceInventory !== destinationInventory ||
+    createHash("sha256").update(sourceInventory).digest("hex") !== source.treeDigest ||
+    createHash("sha256").update(destinationInventory).digest("hex") !== destination.treeDigest ||
+    source.files.length !== destination.files.length ||
+    destination.files.length !== destination.entries.filter(entry => entry.kind === "file").length) {
+    throw new Error("contained turn native materialization complete inventory mismatch");
+  }
+  for (const [index, file] of source.files.entries()) {
+    const actual = destination.files[index];
+    const entry = destination.entries.find(candidate => candidate.relativePath === file.relativePath);
+    if (actual === undefined || entry?.kind !== "file" ||
+      actual.relativePath !== file.relativePath || actual.mode !== file.mode ||
+      actual.size !== file.size || actual.digest !== file.digest ||
+      JSON.stringify([actual.mode, actual.size, actual.digest]) !==
+        JSON.stringify([entry.mode, entry.size, entry.digest]) ||
+      actual.bytes.length !== actual.size || !actual.bytes.equals(file.bytes) ||
+      createHash("sha256").update(actual.bytes).digest("hex") !== actual.digest) {
+      throw new Error("contained turn native materialization file observation mismatch");
+    }
+  }
+};
+
+/** The native receiver owns the original destination inode and validates it again at commit. */
+export const createNativeContainedTurnWorkspace = async (
+  request: CreateInput,
+  context: ContainedTurnWorkspaceContext,
+  native: Pick<ReturnType<typeof import("./darwin-attempt-workspace-backend.js").selectDarwinAttemptWorkspaceBackend>,
+    "materializeComplete" | "commitCreation">,
+): Promise<{ readonly workspaceRef: string }> => {
+  await revalidateBoundRoots(context.custodyRoots);
+  const name = workspaceName(request.operationId, request.scope);
+  const handles = await openBoundDirectories([context.roots.creations, context.roots.staging]);
+  const [creations, staging] = handles;
+  try {
+    // An interrupted transaction cannot be replayed from a receipt alone.
+    if (await readOptionalWorkspaceFileAt(creations, `${name}.json`) !== undefined) {
+      throw new Error("contained turn native creation already has durable state; outcome requires observation");
+    }
+    const limits = context.options.limits ?? DEFAULT_CONTAINED_TURN_WORKSPACE_LIMITS;
+    const source = await scanContainedTurnWorkspace(context.options.canonicalProjectRoot, limits, {
+      requirePrivateRoot: false,
+    });
+    const destination = await native.materializeComplete(source, limits);
+    assertCompleteWorkspaceMaterialization(source, destination);
+    const creation: ContainedTurnWorkspaceCreationRecord = Object.freeze({
+      materializationDigest: destination.treeDigest,
+      operationId: request.operationId,
+      rootIdentity: Object.freeze({
+        dev: destination.rootIdentity.dev.toString(), ino: destination.rootIdentity.ino.toString(),
+      }),
+      schemaVersion: 1,
+      scope: request.scope,
+      workspaceName: name,
+    });
+    await writeImmutableFileAt({
+      bytes: encodeWorkspaceCreationRecord(creation),
+      faults: prefixedWorkspaceFaults(context.options.testFaults, "workspace.creation"),
+      finalDirectory: creations,
+      finalName: `${name}.json`,
+      stagingDirectory: staging,
+      temporaryKind: "metadata",
+    });
+    await context.options.testFaults?.checkpoint("workspace.create.creation-recorded");
+    await native.commitCreation();
+    await context.options.testFaults?.checkpoint("workspace.create.published");
+    return Object.freeze({ workspaceRef: join(context.roots.active.canonicalPath, name) });
+  } finally {await closeWorkspaceHandles(handles);}
 };

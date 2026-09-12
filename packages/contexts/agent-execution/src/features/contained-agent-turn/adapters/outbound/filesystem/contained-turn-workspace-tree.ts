@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import { open, type FileHandle } from "node:fs/promises";
+import { open } from "node:fs/promises";
+import { isNativeHostDescriptor, openNativeHostEntry, duplicateNativeHostDescriptor, type StableFilesystemHandle as FileHandle } from "@agent-teams/filesystem-custody/composition";
 import { join } from "node:path";
 
 import {
@@ -182,7 +183,7 @@ const digestFile = async (bytes: Uint8Array, state: TraversalState): Promise<str
 };
 
 const openInspectedEntry = async (parent: FileHandle, name: string): Promise<FileHandle> => {
-  const child = await open(
+  const child = isNativeHostDescriptor(parent) ? openNativeHostEntry(parent, name, "inspect") : await open(
     descriptorChildPath(parent, name),
     LINUX_O_PATH | constants.O_NOFOLLOW,
   );
@@ -200,7 +201,7 @@ const openReadableFileEntry = async (
   retained: FileHandle,
   expected: ContainedTurnFilesystemObservation,
 ): Promise<FileHandle> => {
-  const readable = await open(
+  const readable = isNativeHostDescriptor(retained) ? duplicateNativeHostDescriptor(retained) : await open(
     descriptorChildPath(retained),
     constants.O_RDONLY | constants.O_NONBLOCK,
   );
@@ -278,6 +279,7 @@ const visitDirectory = async (
   validateEntryNames(names);
   await checkpoint(state, "after-directory-enumeration", relativeDirectoryPath, "directory");
   for (const name of names) {
+    if (state.entries.length >= state.limits.maxEntries) {throw new Error("contained turn workspace exceeded its entry limit");}
     const relativePath = relativeDirectoryPath === "" ? name : `${relativeDirectoryPath}/${name}`;
     await checkpoint(state, "before-entry-open", relativePath);
     const inspected = await openInspectedEntry(handle, name);
@@ -439,7 +441,7 @@ export const scanContainedTurnWorkspaceHandle = async (
     throw new Error("contained turn retained workspace root is not a directory");
   }
   const reopenRoot = async (): Promise<FileHandle> => {
-    const reopened = await open(
+    const reopened = isNativeHostDescriptor(rootHandle) ? duplicateNativeHostDescriptor(rootHandle) : await open(
       descriptorChildPath(rootHandle),
       constants.O_RDONLY | constants.O_DIRECTORY,
     );

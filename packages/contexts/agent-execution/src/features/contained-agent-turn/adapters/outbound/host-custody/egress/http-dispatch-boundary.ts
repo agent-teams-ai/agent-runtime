@@ -1,11 +1,11 @@
-import { zeroHttpBytes } from "./http-byte-intrinsics.js";
+import type { PreparedHttpRequestCustodyV1 } from "./prepared-http-request-v1.js";
 
 /**
  * Ephemeral handoff, not the durable Host first-byte journal or an operation
  * retry guard. Host Custody still owns that separate durable consumption proof.
  */
 export const createHttpDispatchBoundary = (
-  bytes: Uint8Array,
+  custody: Pick<PreparedHttpRequestCustodyV1, "wireBytes" | "dispose">,
   validate: () => boolean,
 ): Readonly<{
   consume(): Uint8Array | undefined;
@@ -26,9 +26,9 @@ export const createHttpDispatchBoundary = (
         return;
       }
       consumed = true;
-      return bytes;
+      return custody.wireBytes;
     },
-    seal: () => { open = false; zeroHttpBytes(bytes); },
+    seal: () => { if (!open) {return;} open = false; custody.dispose(); },
     wasConsumed: () => consumed,
     wasRequested: () => requested,
   });

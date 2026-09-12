@@ -4,14 +4,13 @@ import {
 } from "../application/contained-turn-engine.js";
 import type { ContainedTurnKernelDependencies } from "../application/ports/outbound/contained-turn-ports.js";
 import type {
-  ContainedTurnFeatureApi,
   ObserveContainedTurnInput,
-  RequestContainedTurnCancellationInput,
   SubmitContainedTurnInput,
   SubmitContainedTurnOptions,
   ContainedTurnOperationRef,
   ContainedTurnScope,
 } from "../contracts/contained-agent-turn.js";
+import { createContainedTurnPrivateCancellation, type ContainedTurnPrivateFeatureApi } from "./contained-turn-intent-cancellation.js";
 import { createContainedTurnPreparationScopeDependencies } from "./preparation-scope-anti-corruption.js";
 
 export type ContainedTurnFeatureDependencies = ContainedTurnKernelDependencies;
@@ -28,20 +27,12 @@ const mapOperationRef = (operationId: string, scope: ContainedTurnScope): Contai
 
 export const createContainedTurnFeature = (
   dependencies: ContainedTurnFeatureDependencies,
-): ContainedTurnFeatureApi => {
+): ContainedTurnPrivateFeatureApi => {
   const application = createContainedTurnEngine(
     createContainedTurnPreparationScopeDependencies(dependencies),
   );
-  const feature: ContainedTurnFeatureApi = {
-    cancel: Object.freeze({
-      execute: async (input: RequestContainedTurnCancellationInput, options?: { readonly signal?: AbortSignal }) => {
-        options?.signal?.throwIfAborted();
-        const outcome = await application.cancel({ operationId: input.operationId, scope: mapScope(input.scope) });
-        return outcome.status === "not_found"
-          ? Object.freeze({ status: "not_found" as const })
-          : Object.freeze({ status: "observed" as const, turn: containedTurnApplicationView(outcome.operation) });
-      },
-    }),
+  const feature: ContainedTurnPrivateFeatureApi = {
+    cancel: createContainedTurnPrivateCancellation(application),
     observe: Object.freeze({
       execute: async (input: ObserveContainedTurnInput) => {
         const outcome = await application.observe({ operationId: input.operationId, scope: mapScope(input.scope) });

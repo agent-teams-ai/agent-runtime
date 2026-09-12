@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "runtime-setup-static-assembly-construction",
+  "sourceRevision": "15f92b38d0fec8a56fbd6d6324d02de2566cccb7",
+  "authority": {
+    "id": "ADR-0015",
+    "path": "docs/decisions/0015-passive-setup-static-assembly-adoption.md",
+    "sha256": "7d5c46260f30b22044091d63bd6b1ba4df57674648d5de788da6d87f3dbcdf12",
+    "immutableDigest": "sha256:f8bd0ab5f9d7a4937095b45fd533da34f83964b8da6b766dc2a93d459396e9df"
+  },
+  "historical": {
+    "path": "docs/spikes/runtime-setup-l0-dogfooding-evidence.json",
+    "sha256": "f0f259e8cb07400f581e516511d3ee9a93eca5593306590c0f1a7e8a53f6f99f",
+    "sourceRevision": "51aa81a9185d80db11e765e6ceb6190359ca1a9c"
+  },
+  "artifactDigests": {
+    "fixtures": {
+      "fileCount": 56,
+      "sha256": "f09a1952783fdd51b22d3fe1d7c937456394669dc9ef92eaa476221233ddd29e"
+    },
+    "sources": {
+      "fileCount": 596,
+      "sha256": "95257ccd94391f2316b6cf71e8ded24eb268a4409b6f839b7869f4d1b1e6c373"
+    },
+    "tests": {
+      "fileCount": 475,
+      "sha256": "0f769ecd686bcff694575a52dec1f93c445541b13e951cfc28fa8e4b9721f10d"
+    }
+  },
+  "construction": [
+    {
+      "owner": "embedded-runtime",
+      "path": "packages/apps/embedded-runtime/src/composition/default-agent-runtime-host.ts",
+      "symbols": [
+        "createDefaultAgentRuntimeHost"
+      ]
+    },
+    {
+      "owner": "embedded-runtime",
+      "path": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+      "symbols": []
+    },
+    {
+      "owner": "embedded-runtime",
+      "path": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+      "symbols": [
+        "createAgentRuntimeHost"
+      ]
+    },
+    {
+      "owner": "embedded-runtime",
+      "path": "packages/apps/embedded-runtime/tests/helpers/assembly-direct-reference.ts",
+      "symbols": [
+        "createDirectReferenceHost"
+      ]
+    }
+  ],
+  "capture": {
+    "command": "pnpm --filter @agent-teams/embedded-runtime check",
+    "exitCode": 0,
+    "outputSha256": "91505816cfd53822579976554905ffbfacff0df05a7d1382e7e3ed78129c6dfb",
+    "architecture": "arm64",
+    "nodeVersion": "v24.18.0",
+    "platform": "darwin",
+    "testSummary": {
+      "tests": 406,
+      "pass": 406,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    }
+  },
+  "scope": "embedded-runtime passive setup",
+  "limitations": [
+    "historical-L1-HOLD-unchanged",
+    "benefit-not-established-by-construction-evidence",
+    "contained-turn-not-adopted",
+    "no-provider-qualification",
+    "no-repository-wide-conformance"
+  ]
+}

@@ -1,3 +1,4 @@
+import { capturePostClaimPreparation } from "./host-post-claim-preparation.js";
 import type { ContainedTurnProviderBinding } from "../contracts/contained-agent-turn.js";
 import type {
   ContainedTurnKernelProviderPort,
@@ -28,6 +29,7 @@ import type {
 import {
   ContainedTurnKernelCustodyAdapter,
   type ContainedTurnHostCustodyPort,
+  type ContainedTurnHostPostClaimPreparation,
   type ContainedTurnKernelCustodyAttemptOwner,
   type ContainedTurnKernelWorkspaceOwner,
 } from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
@@ -65,6 +67,8 @@ export interface CreateClaudeCurrentKernelOwnerOptions {
   readonly launchRecords: ClaudeCurrentKernelLaunchRecordResolver;
   readonly manifest: ContainedTurnCapabilityManifest;
   readonly platformTarget: ClaudeCurrentKernelPlatformTarget;
+  /** Trusted Host preparation only; omission preserves legacy semantics without route admission. */
+  readonly postClaimPreparation?: ContainedTurnHostPostClaimPreparation;
   readonly privateDirectoryCustody: PrivateDirectoryCustodyPort;
   readonly queryFactory?: ClaudeAgentSdkContainedTurnProviderOptions["queryFactory"];
   readonly workspaceOwner: ContainedTurnKernelWorkspaceOwner;
@@ -75,6 +79,7 @@ export type ClaudeCurrentKernelPlatformTarget =
 export interface ClaudeCurrentKernelOwner {
   readonly custody: ContainedTurnKernelCustodyAdapter;
   readonly provider: ContainedTurnKernelProviderPort;
+  sealAdmission(): void;
   dispose(): void;
 }
 interface PreparedRecord {
@@ -134,6 +139,7 @@ const assertProductionTuple = (options: CreateClaudeCurrentKernelOwnerOptions) =
 export const createClaudeCurrentKernelOwner = (
   options: CreateClaudeCurrentKernelOwnerOptions,
 ): ClaudeCurrentKernelOwner => {
+  const postClaimPreparation = capturePostClaimPreparation(options);
   const platformTuple = assertProductionTuple(options);
   const records = new Map<string, PreparedRecord>();
   const privateDirectoryCustody = captureClaudePrivateDirectoryCustody(options.privateDirectoryCustody);
@@ -197,6 +203,7 @@ export const createClaudeCurrentKernelOwner = (
     retire(input: OwnerRetireInput) {records.delete(input.custodyId);},
   });
   const custody = new ContainedTurnKernelCustodyAdapter(options.hostCustody, {
+    postClaimPreparation,
     attemptOwner, hostBootId: options.hostBootId, hostInstanceId: options.hostInstanceId,
     workspaceOwner: options.workspaceOwner,
   });
@@ -206,5 +213,7 @@ export const createClaudeCurrentKernelOwner = (
     platformTuple,
     ...(options.queryFactory === undefined ? {} : { queryFactory: options.queryFactory }),
   });
-  return Object.freeze({custody, dispose() {disposed = true; records.clear();}, provider});
+  const sealAdmission = (): void => {disposed = true; custody.sealAdmission();};
+  return Object.freeze({custody, sealAdmission,
+    dispose() {sealAdmission();}, provider});
 };

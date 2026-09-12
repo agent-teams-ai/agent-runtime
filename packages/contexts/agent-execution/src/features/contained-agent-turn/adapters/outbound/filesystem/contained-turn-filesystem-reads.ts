@@ -1,4 +1,5 @@
-import { opendir, type FileHandle } from "node:fs/promises";
+import { opendir } from "node:fs/promises";
+import { isNativeHostDescriptor, nativeHostNames, type StableFilesystemHandle as FileHandle } from "@agent-teams/filesystem-custody/composition";
 
 import {
   descriptorChildPath,
@@ -16,6 +17,14 @@ export const readDirectoryNamesBounded = async (
   }
   const before = await inspectFileHandle(handle);
   if (!before.isDirectory) {throw new Error("contained turn descriptor is not a directory");}
+  if (isNativeHostDescriptor(handle)) {
+    const names = nativeHostNames(handle, maximumEntries);
+    const after = await inspectFileHandle(handle);
+    if (!sameFilesystemObservation(before, after)) {
+      throw new Error("contained turn directory changed during bounded enumeration");
+    }
+    return names;
+  }
   const directory = await opendir(descriptorChildPath(handle));
   const names: string[] = [];
   try {

@@ -1,0 +1,8 @@
+[permissions.agent-runtime-contained-v1]
+extends = ":read-only"
+[permissions.agent-runtime-contained-v1.filesystem]
+"/var/data/worker-jobs/ar69-r117/codex-native-linux-permission-analysis/disposable-rjtOvU/private-home" = "deny"
+":tmpdir" = "read"
+":slash_tmp" = "read"
+[permissions.agent-runtime-contained-v1.network]
+enabled = false

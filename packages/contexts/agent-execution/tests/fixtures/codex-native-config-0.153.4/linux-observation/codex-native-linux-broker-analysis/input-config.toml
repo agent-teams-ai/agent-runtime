@@ -1,0 +1,31 @@
+model_provider = "ar_broker"
+model = "gpt-5.4"
+model_catalog_json = "/var/data/worker-jobs/ar69-r117/codex-native-linux-broker-analysis/disposable-RYgrL0/private-home/models.json"
+cli_auth_credentials_store = "file"
+allow_login_shell = false
+shell_environment_policy = { exclude = ["AR_PRIVATE_BROKER_CAPABILITY"] }
+[model_providers.ar_broker]
+name = "OpenAI"
+base_url = "http://10.203.0.1:43129/backend-api/codex"
+wire_api = "responses"
+requires_openai_auth = false
+env_key = "AR_PRIVATE_BROKER_CAPABILITY"
+supports_websockets = false
+supports_standalone_web_search = false
+request_max_retries = 0
+stream_max_retries = 0
+http_headers = { version = "0.153.4" }
+[analytics]
+enabled = false
+[otel]
+exporter = "none"
+trace_exporter = "none"
+metrics_exporter = "none"
+[permissions.agent-runtime-contained-v1]
+extends = ":read-only"
+[permissions.agent-runtime-contained-v1.filesystem]
+"/var/data/worker-jobs/ar69-r117/codex-native-linux-broker-analysis/disposable-RYgrL0/private-home" = "deny"
+":tmpdir" = "read"
+":slash_tmp" = "read"
+[permissions.agent-runtime-contained-v1.network]
+enabled = false

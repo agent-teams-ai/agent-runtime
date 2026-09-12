@@ -1,3 +1,4 @@
+import { intentAuthority } from "./support/intent-guard-fixture.ts";
 import assert from "node:assert/strict";
 
 import { type Pool, type PoolClient } from "pg";
@@ -74,7 +75,7 @@ postgresTest("lost claim COMMIT acknowledgement exposes no proof and replay only
         };
       },
     }) as unknown as Pool;
-    const ambiguous = new PostgresContainedTurnOperationStore({ pool: ambiguousPool });
+    const ambiguous = new PostgresContainedTurnOperationStore({ intentAuthority, pool: ambiguousPool });
     let returned: Awaited<ReturnType<typeof ambiguous.claimPreparedDispatch>> | undefined;
     await assert.rejects(async () => {
       returned = await ambiguous.claimPreparedDispatch(fixture.claim.claimInput);

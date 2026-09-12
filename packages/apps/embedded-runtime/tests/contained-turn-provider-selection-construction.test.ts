@@ -37,6 +37,7 @@ const harness = (disposeFailure?: Error) => {
   const calls = {claude: 0, codex: 0, dispose: 0, feature: 0};
   const owner = Object.freeze({
     custody: Object.freeze({}),
+    sealAdmission() {},
     dispose() {calls.dispose += 1; if (disposeFailure !== undefined) {throw disposeFailure;}},
     provider: Object.freeze({}),
   });
@@ -277,16 +278,16 @@ test("cleanup failure publishes only a fixed private bounded diagnostic", () => 
   assert.equal(error.name, "ContainedTurnConstructionCleanupError");
   assert.equal(error.message, "Contained turn construction cleanup failed");
   assert.equal(error.stack, undefined);
-  assert.equal("cause" in error, false);
+  assert.equal((error as { cause: unknown }).cause, primary);
   assert.equal("errors" in error, false);
-  assert.deepEqual(Reflect.ownKeys(error).toSorted(), ["code", "message", "name"]);
+  assert.deepEqual(Reflect.ownKeys(error).toSorted(), ["cause", "code", "message", "name"]);
   assert.doesNotMatch(`${error.name}:${error.message}:${error.stack ?? ""}:${JSON.stringify(error)}`,
     /primary-secret|cleanup-secret/u);
   assert.deepEqual(probe.calls, {claude: 1, codex: 0, dispose: 1, feature: 1});
 });
 
 test("provider owner result is captured as exact data before feature dependencies are observed", () => {
-  const valid = Object.freeze({custody: Object.freeze({}), dispose() {}, provider: Object.freeze({})});
+  const valid = Object.freeze({custody: Object.freeze({}), sealAdmission() {}, dispose() {}, provider: Object.freeze({})});
   let hostileTrapCalls = 0;
   const hostileHandler = {
     get() {hostileTrapCalls += 1; throw new Error("owner-proxy-secret");},
@@ -299,15 +300,16 @@ test("provider owner result is captured as exact data before feature dependencie
     custody: {enumerable: true, value: Object.freeze({})},
     dispose: {enumerable: true, get() {hostileTrapCalls += 1; return () => {};}},
     provider: {enumerable: true, value: Object.freeze({})},
+    sealAdmission: {enumerable: true, value: () => {}},
   }));
   const cases = [
     new Proxy(valid, hostileHandler),
-    {custody: valid.custody, dispose: valid.dispose, provider: valid.provider},
+    {custody: valid.custody, dispose: valid.dispose, provider: valid.provider, sealAdmission: valid.sealAdmission},
     Object.freeze({custody: valid.custody, dispose: valid.dispose}),
     Object.freeze({...valid, extra: true}),
     Object.freeze(Object.assign(Object.create({authority: true}), valid)),
     accessor,
-    Object.freeze({custody: valid.custody, dispose: disposeProxy, provider: valid.provider}),
+    Object.freeze({custody: valid.custody, dispose: disposeProxy, provider: valid.provider, sealAdmission: valid.sealAdmission}),
   ];
   for (const owner of cases) {
     const probe = harness();
@@ -381,6 +383,7 @@ test("contained owner disposal is retryable and redacts the failed attempt", () 
   let disposeCalls = 0;
   const owner = Object.freeze({
     custody: Object.freeze({}),
+    sealAdmission() {},
     dispose() {
       disposeCalls += 1;
       if (disposeCalls === 1) {throw new Error("owner-disposal-secret");}
@@ -407,9 +410,10 @@ test("later Host construction failure disposes the contained owner and publishes
   let disposed = 0;
   let published: unknown;
   assert.throws(() => {published = composeHostCustodiedAgentRuntimeHost({
+    authorityRevision: "runtime-access-authority:fixture",
     capabilities: Object.freeze({claudeCodeSetup: Object.freeze({}), codexSetup: Object.freeze({})}),
     containedTurn: Object.freeze({}),
-  } as never, () => Object.freeze({feature: capability, dispose: () => {disposed += 1;}}),
+  } as never, () => Object.freeze({feature: capability, sealAdmission() {}, dispose: () => {disposed += 1;}}),
   () => {throw failure;});}, error => error === failure);
   assert.equal(published, undefined);
   assert.equal(disposed, 1);
@@ -419,19 +423,21 @@ test("Host construction plus owner-cleanup failure is redacted", () => {
   const primary = new Error("host-construction-primary-secret");
   const cleanup = new Error("host-construction-cleanup-secret");
   const error = captureThrown(() => composeHostCustodiedAgentRuntimeHost({
+    authorityRevision: "runtime-access-authority:fixture",
     capabilities: Object.freeze({claudeCodeSetup: Object.freeze({}), codexSetup: Object.freeze({})}),
     containedTurn: Object.freeze({}),
   } as never, () => Object.freeze({
     feature: capability,
+    sealAdmission() {},
     dispose() {throw cleanup;},
   }), () => {throw primary;}));
   assert.ok(error instanceof ContainedTurnConstructionCleanupError);
   assert.equal(error.name, "ContainedTurnConstructionCleanupError");
   assert.equal(error.message, "Contained turn construction cleanup failed");
   assert.equal(error.stack, undefined);
-  assert.equal("cause" in error, false);
+  assert.equal((error as { cause: unknown }).cause, primary);
   assert.equal("errors" in error, false);
-  assert.deepEqual(Reflect.ownKeys(error).toSorted(), ["code", "message", "name"]);
+  assert.deepEqual(Reflect.ownKeys(error).toSorted(), ["cause", "code", "message", "name"]);
   assert.doesNotMatch(`${error.name}:${error.message}:${error.stack ?? ""}:${JSON.stringify(error)}`,
     /host-construction-(primary|cleanup)-secret/u);
 });
@@ -440,10 +446,12 @@ test("Host wrapper retries contained-owner disposal after a failed attempt", asy
   let hostDisposals = 0;
   let ownerDisposals = 0;
   const host = composeHostCustodiedAgentRuntimeHost({
+    authorityRevision: "runtime-access-authority:fixture",
     capabilities: Object.freeze({claudeCodeSetup: Object.freeze({}), codexSetup: Object.freeze({})}),
     containedTurn: Object.freeze({}),
   } as never, () => Object.freeze({
     feature: capability,
+    sealAdmission() {},
     dispose() {
       ownerDisposals += 1;
       if (ownerDisposals === 1) {throw new ContainedTurnOwnerDisposalError();}

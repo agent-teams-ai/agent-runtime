@@ -243,3 +243,37 @@ test("early spawn ENOENT settles once as not-started and closes the held descrip
   assert.equal(messages.filter(message => message.kind === "provider-observation" && message.observation === "spawn-failed").length, 1);
   await assert.rejects(readFile(descriptorPath));
 });
+
+for (const observed of [{uid: 65_533, gid: 65_534}, {uid: 65_534, gid: 65_533}, {uid: 0, gid: 65_534}, {uid: 65_534, gid: 0}]) {
+  test(`restricted identity mismatch ${observed.uid}:${observed.gid} prevents spawn`, async t => {
+    const root = await mkdtemp(join(tmpdir(), "ar-provider-spawn-failure-"));
+    t.after(async () => {await rm(root, {force: true, recursive: true});});
+    const executablePath = join(root, "provider-entrypoint");
+    await copyFile("/bin/cat", executablePath); await chmod(executablePath, 0o555);
+    const executableSha256 = createHash("sha256").update(await readFile(executablePath)).digest("hex");
+    const input = new PassThrough(); const output = new PassThrough();
+    const decoder = new DockerCustodyFrameDecoder(); const messages: DockerCustodyProtocolMessage[] = [];
+    output.on("data", chunk => {messages.push(...decoder.push(chunk));});
+    let spawnCalls = 0;
+    const driver = new NodeDockerCustodyInitDriver({
+      allowedEnvironmentNames: [], controlInput: input, controlOutput: output, executablePath, executableSha256,
+      maximumProviderRuntimeMs: 1_000, maximumStderrBytes: 65_536, maximumStdinBytes: 65_536,
+      maximumStdoutBytes: 65_536, observedIdentity: identity, shutdownGraceMs: 10, tickIntervalMs: 1,
+    }, {
+      observeRestrictedIdentity: () => observed,
+      observeTopology: () => ({gid: 65_534, groups: [65_534], noNewPrivileges: true,
+        parentName: "docker-init", parentPid: 1, pid: 2, uid: 65_534}),
+      spawnProcess: () => {spawnCalls += 1; throw new Error("mismatched identity must not spawn");},
+    });
+    const completion = driver.run();
+    input.write(encodeDockerCustodyFrame(handshake));
+    input.write(encodeDockerCustodyFrame({argv: ["provider-entrypoint"], environment: [], executableSha256,
+      executableSlot: "provider-entrypoint", gid: 65_534, handshakeNonce: "driver-nonce", kind: "provider-exec",
+      launchFingerprintSha256: digest("c"), requestId: "spawn-failure", uid: 65_534, wallDeadlineUnixMs: Date.now() + 500}));
+    assert.equal(await completion, 1);
+    decoder.finish();
+    assert.equal(messages.filter(message => message.kind === "provider-exec-ack" && message.observation === "not-started").length, 1);
+    assert.equal(messages.filter(message => message.kind === "provider-observation" && message.observation === "spawn-failed").length, 1);
+    assert.equal(spawnCalls, 0);
+  });
+}

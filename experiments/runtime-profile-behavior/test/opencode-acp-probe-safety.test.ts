@@ -299,3 +299,36 @@ test("releases stubborn child handles after bounded SIGKILL uncertainty", async 
   assert.deepEqual(calls, ["SIGTERM", "SIGKILL", "stdin", "stdout", "stderr", "unref"]);
   assert.equal(evidence.anomalies.at(-1)?.code, "termination_unconfirmed");
 });
+
+test("a successful late settlement cannot replace timeout ambiguity", async () => {
+  const evidence = new ProbeEvidence();
+  const late = Promise.withResolvers<{ stopReason: string }>();
+  const request = requestWithDeadline({
+    method: "session/prompt", invoke: () => late.promise, timeoutMs: 5, evidence,
+  });
+  await assert.rejects(request, /request_timeout_ambiguity/);
+  late.resolve({ stopReason: "end_turn" });
+  await new Promise(resolve => {setImmediate(resolve);});
+  await assert.rejects(request, /request_timeout_ambiguity/);
+  assert.deepEqual(evidence.anomalies, [
+    { code: "request_timeout_ambiguity", field: "session/prompt" },
+    { code: "late_request_resolved_after_timeout", field: "session/prompt" },
+  ]);
+});
+
+test("throwing close and rejected closed retain bounded failure before cleanup", async () => {
+  for (const throws of [true, false]) {
+    const evidence = new ProbeEvidence();
+    const outcome = await awaitBoundedConnectionClose({
+      connection: {
+        close: () => {if (throws) {throw new Error("TOKEN=close-secret");}},
+        closed: Promise.reject(new Error("TOKEN=closed-secret")),
+      },
+      timeoutMs: 5, evidence,
+    });
+    assert.equal(outcome, "closure_failed");
+    assert.ok(evidence.anomalies.every(value => value.code === "closure_failed"));
+    assert.ok(evidence.anomalies.length > 0);
+    assert.doesNotMatch(JSON.stringify(evidence.anomalies), /TOKEN|secret/);
+  }
+});

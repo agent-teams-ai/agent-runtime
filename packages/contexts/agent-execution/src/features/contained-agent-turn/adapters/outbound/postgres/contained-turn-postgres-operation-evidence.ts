@@ -4,6 +4,7 @@ import type {
 import { containedTurnCancellationFingerprint } from "../../../domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../../../domain/contained-turn-codecs.js";
 import { containedTurnIdentity } from "../../../domain/contained-turn-identities.js";
+import type { ContainedTurnProof } from "../../../domain/contained-turn-proofs.js";
 import { containedTurnSatisfactionDigest } from "../../../domain/contained-turn-satisfaction.js";
 import {
   assertContainedTurnPostgresAuthority as assertAuthority,
@@ -73,9 +74,19 @@ export class ContainedTurnPostgresOperationEvidence {
 
   public async proofsForPrevention(
     input: Parameters<ContainedTurnKernelOperationStore["proofsForPrevention"]>[0],
-  ) {
+  ): ReturnType<ContainedTurnKernelOperationStore["proofsForPrevention"]> {
     assertAuthority(input.authority, input.operation);
     const binding = operationBinding(input.operation);
+    const cancellation = input.operation.cancellation;
+    const cancellationCutoff = cancellation.kind === "requested"
+      ? input.operation.proofs.find((candidate): candidate is Extract<ContainedTurnProof, { readonly kind: "cutoff" }> =>
+        candidate.kind === "cutoff" &&
+        "cancellationCommandId" in candidate.binding &&
+        candidate.binding.cancellationCommandId === cancellation.command.cancellationCommandId)
+      : undefined;
+    if (cancellation.kind === "requested" && cancellationCutoff === undefined) {
+      throw new TypeError("cancellation prevention requires its durable cutoff proof");
+    }
     const seed = digestContainedTurnCanonicalValue({
       operationId: input.operation.operationId,
       preventionProofId: input.preventionProofId,
@@ -84,7 +95,7 @@ export class ContainedTurnPostgresOperationEvidence {
     const proof = (role: string) => containedTurnIdentity("proof", this.#identities.nextId("proof", `prevention:${seed}:${role}`));
     return Object.freeze({
       containmentProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "containment_not_required" as const, proofId: proof("containment") },
-      cutoffProof: { binding, kind: "cutoff" as const, proofId: proof("cutoff") },
+      cutoffProof: cancellationCutoff ?? { binding, kind: "cutoff" as const, proofId: proof("cutoff") },
       effectProof: { binding: { ...binding, disposition: "not_committed" as const, effectId: input.operation.effectId }, kind: "effect_no_start" as const, proofId: proof("effect") },
       executionProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "no_start" as const, proofId: proof("execution") },
       hostCustodyProof: { binding: { ...binding, effectId: input.operation.effectId }, kind: "host_custody_no_start" as const, proofId: proof("custody") },

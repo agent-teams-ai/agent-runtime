@@ -32,7 +32,7 @@ const strings = (value: JsonRecord, keys: readonly string[]): boolean =>
 
 export const CODEX_THREAD_ITEM_UNION_TYPES = Object.freeze([
   "agentMessage", "collabAgentToolCall", "commandExecution", "contextCompaction", "dynamicToolCall",
-  "enteredReviewMode", "exitedReviewMode", "fileChange", "hookPrompt", "imageGeneration", "imageView",
+  "enteredReviewMode", "exitedReviewMode", "fileChange", "functionCallOutput", "hookPrompt", "imageGeneration", "imageView",
   "mcpToolCall", "plan", "reasoning", "sleep", "subAgentActivity", "userMessage", "webSearch",
 ] as const);
 
@@ -49,10 +49,10 @@ const threadItemShape = (
   schemaAllowsAdditionalProperties: true,
 });
 
-/** Static decoder contract checked byte-for-byte against the pinned 0.150.1 ThreadItem union in tests. */
+/** Static decoder contract checked byte-for-byte against the pinned 0.153.4 ThreadItem union in tests. */
 export const CODEX_THREAD_ITEM_DECODER_AUTHORITY = Object.freeze({
-  agentMessage: threadItemShape(["id", "text", "type"], ["delivery", "memoryCitation", "phase"],
-    { delivery: null, memoryCitation: null, phase: null }),
+  agentMessage: threadItemShape(["id", "text", "type"], ["delivery", "memoryCitation", "phase", "questions"],
+    { delivery: null, memoryCitation: null, phase: null, questions: null }),
   collabAgentToolCall: threadItemShape(
     ["agentsStates", "id", "receiverThreadIds", "senderThreadId", "status", "tool", "type"],
     ["model", "prompt", "reasoningEffort"],
@@ -66,6 +66,7 @@ export const CODEX_THREAD_ITEM_DECODER_AUTHORITY = Object.freeze({
   enteredReviewMode: threadItemShape(["id", "review", "type"]),
   exitedReviewMode: threadItemShape(["id", "review", "type"]),
   fileChange: threadItemShape(["changes", "id", "status", "type"]),
+  functionCallOutput: threadItemShape(["id", "name", "output", "type"], ["namespace"]),
   hookPrompt: threadItemShape(["fragments", "id", "type"]),
   imageGeneration: threadItemShape(["id", "result", "status", "type"],
     ["failure", "revisedPrompt", "savedPath", "transparentBackground"],
@@ -127,7 +128,7 @@ export const CODEX_COMMAND_DECODER_AUTHORITY = Object.freeze({
 });
 
 export const CODEX_CONSUMED_THREAD_ITEM_SHAPES = Object.freeze({
-  agentMessage: Object.freeze(["delivery", "id", "memoryCitation", "phase", "text", "type"]),
+  agentMessage: Object.freeze(["delivery", "id", "memoryCitation", "phase", "questions", "text", "type"]),
   commandExecution: Object.freeze([
     "aggregatedOutput", "command", "commandActions", "cwd", "durationMs", "exitCode", "id",
     "pluginId", "processId", "scriptPath", "source", "status", "type",
@@ -253,6 +254,8 @@ const exactHookPrompt = (item: JsonRecord): boolean =>
 const exactAgentMessage = (item: JsonRecord): boolean =>
   exactKeys(item, CODEX_CONSUMED_THREAD_ITEM_SHAPES.agentMessage)
   && typeof item.text === "string"
+  // V1 has no asynchronous question/answer contract; do not silently discard a request.
+  && item.questions === null
   && (item.phase === null || CODEX_CONSUMED_THREAD_ITEM_NESTED_AUTHORITY.agentMessage.phases.includes(
     item.phase as "commentary" | "final_answer",
   ))
@@ -376,11 +379,11 @@ const validateCodexThreadItemAdmission = (
   mode: "analysis" | "workspace-write",
 ): JsonRecord => {
   if (!isRecord(value) || typeof value.type !== "string") {
-    throw new CodexAppServerProtocolError("Codex item did not match the 0.150.1 item union", true);
+    throw new CodexAppServerProtocolError("Codex item did not match the 0.153.4 item union", true);
   }
   const normalized = validateAndNormalizeCodexThreadItem(value) as JsonRecord | undefined;
   if (normalized === undefined) {
-    throw new CodexAppServerProtocolError("Codex item did not match the complete generated 0.150.1 item schema", true);
+    throw new CodexAppServerProtocolError("Codex item did not match the complete generated 0.153.4 item schema", true);
   }
   if (EFFECTFUL_ITEM_TYPES.has(normalized.type as string) && normalized.type !== "commandExecution"
     && (mode === "analysis" || normalized.type !== "fileChange")) {
@@ -389,7 +392,7 @@ const validateCodexThreadItemAdmission = (
   const validEffect = normalized.type === "commandExecution" ? exactCommandExecution(normalized)
     : mode === "workspace-write" && normalized.type === "fileChange" && exactFileChange(normalized);
   if ((!SAFE_ITEM_TYPES.has(normalized.type as string) || !exactSafeItem(normalized)) && !validEffect) {
-    throw new CodexAppServerProtocolError("Codex item did not match an admitted 0.150.1 item-union member", true);
+    throw new CodexAppServerProtocolError("Codex item did not match an admitted 0.153.4 item-union member", true);
   }
   if (typeof normalized.id !== "string" || normalized.id.length === 0) {
     throw new CodexAppServerProtocolError("Codex item identity is invalid", true);

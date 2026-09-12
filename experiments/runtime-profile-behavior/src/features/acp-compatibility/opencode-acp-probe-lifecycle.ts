@@ -14,19 +14,30 @@ export const awaitBoundedConnectionClose = async (input: {
   readonly connection: Pick<ClientConnection, "close" | "closed">;
   readonly timeoutMs: number;
   readonly evidence: ProbeEvidence;
-}): Promise<"closed" | "closure_timeout"> => {
-  input.connection.close();
+}): Promise<"closed" | "closure_timeout" | "closure_failed"> => {
   const timeout = Promise.withResolvers<"closure_timeout">();
   const timer = setTimeout(() => timeout.resolve("closure_timeout"), input.timeoutMs);
-  const result = await Promise.race([
-    input.connection.closed.then(() => "closed" as const),
-    timeout.promise,
-  ]);
-  clearTimeout(timer);
-  if (result === "closure_timeout") {
-    input.evidence.anomaly("closure_timeout", "sdk_connection");
+  try {
+    // Observe rejection before calling close, including when close itself throws.
+    const closed = input.connection.closed.then(
+      () => "closed" as const,
+      (error: unknown) => {
+        input.evidence.anomaly("closure_failed", "sdk_connection", error);
+        return "closure_failed" as const;
+      },
+    );
+    input.connection.close();
+    const result = await Promise.race([closed, timeout.promise]);
+    if (result === "closure_timeout") {
+      input.evidence.anomaly("closure_timeout", "sdk_connection");
+    }
+    return result;
+  } catch (error) {
+    input.evidence.anomaly("closure_failed", "sdk_connection", error);
+    return "closure_failed";
+  } finally {
+    clearTimeout(timer);
   }
-  return result;
 };
 
 const exited = async (

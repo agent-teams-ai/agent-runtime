@@ -403,7 +403,10 @@
         "localOwnership.architectureDocument.owner",
         "localOwnership.decisionRecords.0.id",
         "localOwnership.decisionRecords.0.path",
-        "localOwnership.decisionRecords.0.owner"
+        "localOwnership.decisionRecords.0.owner",
+        "localOwnership.decisionRecords.1.id",
+        "localOwnership.decisionRecords.1.path",
+        "localOwnership.decisionRecords.1.owner"
       ],
       "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
     },
@@ -449,7 +452,10 @@
       "acceptActivationAdr": true,
       "useDecisionRegistry": true,
       "files": { "architecture/decisions/accepted-decisions.json": null },
-      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+      "expected": [
+        { "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 },
+        { "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }
+      ]
     },
     {
       "name": "active-profile-rejects-duplicate-accepted-decision-ids",
@@ -460,7 +466,10 @@
       "files": {
         "architecture/decisions/accepted-decisions.json": "{\"decisions\":[{\"id\":\"ADR-0013\",\"path\":\"docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md\"},{\"id\":\"ADR-0013\",\"path\":\"docs/decisions/0013-shadow.md\"}]}\n"
       },
-      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+      "expected": [
+        { "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 },
+        { "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }
+      ]
     },
     {
       "name": "active-profile-rejects-proposed-authority",
@@ -1004,7 +1013,15 @@
     {
       "name": "hard-link-across-production-roots-fails-closed",
       "profileExtra": {
-        "scope": { "productionRoots": ["src", "other/src"], "outOfScope": ["everything else"] },
+        "scope": {
+          "workspaceContainers": [],
+          "productionModules": [
+            { "id": "fixture-runtime", "role": "bounded-context", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" },
+            { "id": "fixture-other", "role": "bounded-context", "moduleRoot": "other", "sourceRoot": "other/src", "packageName": "@fixture/other", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }
+          ],
+          "productionRoots": ["src", "other/src"],
+          "outOfScope": ["everything else"]
+        },
         "assemblyFiles": ["src/index.ts", "src/composition.ts", "other/src/index.ts", "other/src/composition.ts"]
       },
       "files": {
@@ -1687,6 +1704,291 @@
       "name": "configuration-byte-ceiling-is-bounded-and-deterministic",
       "generatedLargeFile": { "path": "tsconfig.json", "bytes": 1048577 },
       "assertOverflow": true
+    },
+    {
+      "name": "production-module-must-declare-its-public-entry",
+      "productionModules": [{ "id": "fixture-runtime", "role": "bounded-context", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": ["./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "feature-edges-cannot-cross-production-modules",
+      "secondModule": true,
+      "alphaRoles": ["domain", "adapters"],
+      "edges": [{ "from": "alpha", "to": "gamma", "kinds": ["type"] }],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "module-edge-type-cycles-fail-closed",
+      "secondModule": true,
+      "alphaRoles": ["contracts", "domain", "adapters"],
+      "gammaRoles": ["contracts", "adapters"],
+      "moduleEdges": [
+        { "from": "fixture-runtime", "to": "fixture-other", "kinds": ["type"] },
+        { "from": "fixture-other", "to": "fixture-runtime", "kinds": ["type"] }
+      ],
+      "files": {
+        "src/features/alpha/adapters/value.ts": "import type { GammaValue } from \"@fixture/other\";\nexport const adapterValue: GammaValue = { gamma: true };\n",
+        "other/src/features/gamma/adapters/gamma.ts": "import type { Value } from \"@fixture/runtime\";\nexport const gamma: Value = { value: \"\" };\n",
+        "src/features/alpha/contracts/public-value.ts": "export interface Value { readonly value: string }\n",
+        "src/features/alpha/index.ts": "export type { Value } from \"./contracts/public-value.js\";\n",
+        "src/index.ts": "export type { Value } from \"./features/alpha/index.js\";\n"
+      },
+      "expected": [
+        { "code": "FM_TYPE_CYCLE", "path": "other/src/features/gamma/adapters/gamma.ts", "line": 1 },
+        { "code": "FM_TYPE_CYCLE", "path": "src/features/alpha/adapters/value.ts", "line": 1 }
+      ]
+    },
+    {
+      "name": "module-edges-of-opposite-kinds-are-not-a-cycle",
+      "secondModule": true,
+      "alphaRoles": ["contracts", "domain", "adapters"],
+      "gammaRoles": ["contracts", "adapters"],
+      "moduleEdges": [
+        { "from": "fixture-runtime", "to": "fixture-other", "kinds": ["runtime"] },
+        { "from": "fixture-other", "to": "fixture-runtime", "kinds": ["type"] }
+      ],
+      "files": {
+        "src/features/alpha/adapters/value.ts": "import { gamma } from \"@fixture/other/composition\";\nexport const adapterValue = gamma;\n",
+        "other/src/features/gamma/adapters/gamma.ts": "import type { Value } from \"@fixture/runtime\";\nexport const gamma: Value = { value: \"\" };\n",
+        "src/features/alpha/contracts/public-value.ts": "export interface Value { readonly value: string }\n",
+        "src/features/alpha/index.ts": "export type { Value } from \"./contracts/public-value.js\";\n",
+        "src/index.ts": "export type { Value } from \"./features/alpha/index.js\";\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "public-package-entry-cannot-reexport-another-module",
+      "secondModule": true,
+      "alphaRoles": ["contracts", "domain"],
+      "moduleEdges": [{ "from": "fixture-runtime", "to": "fixture-other", "kinds": ["type"] }],
+      "files": {
+        "src/features/alpha/contracts/public-value.ts": "export interface Value { readonly value: string }\n",
+        "src/features/alpha/index.ts": "export type { Value } from \"./contracts/public-value.js\";\n",
+        "src/index.ts": "export type { Value } from \"./features/alpha/index.js\";\nexport type { GammaValue } from \"@fixture/other\";\n"
+      },
+      "expected": [{ "code": "FM_INVALID_LAYER_DIRECTION", "path": "src/index.ts", "line": 2 }]
+    },
+    {
+      "name": "declared-module-edge-permits-test-consumption",
+      "nestedModules": true,
+      "moduleEdges": [{ "from": "fixture-alpha-module", "to": "fixture-gamma-module", "kinds": ["runtime"] }],
+      "files": {
+        "packages/a/src/features/alpha/adapters/alpha.ts": "import { gamma } from \"@fixture/gamma-module/composition\";\nexport const value = gamma;\n",
+        "packages/a/tests/features/alpha/value.test.ts": "import { gamma } from \"@fixture/gamma-module/composition\";\nvoid gamma;\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "module-test-consumption-requires-a-declared-module-edge",
+      "nestedModules": true,
+      "files": { "packages/a/tests/features/alpha/value.test.ts": "import { gamma } from \"@fixture/gamma-module/composition\";\nvoid gamma;\n" },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "packages/a/tests/features/alpha/value.test.ts", "line": 1 }]
+    },
+    {
+      "name": "module-test-cannot-reach-another-module-by-relative-path",
+      "nestedModules": true,
+      "moduleEdges": [{ "from": "fixture-alpha-module", "to": "fixture-gamma-module", "kinds": ["runtime"] }],
+      "files": {
+        "packages/a/src/features/alpha/adapters/alpha.ts": "import { gamma } from \"@fixture/gamma-module/composition\";\nexport const value = gamma;\n",
+        "packages/a/tests/features/alpha/value.test.ts": "import { gamma } from \"../../../../b/src/composition.js\";\nvoid gamma;\n"
+      },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "packages/a/tests/features/alpha/value.test.ts", "line": 1 }]
+    },
+    {
+      "name": "module-test-cannot-reach-a-nonexistent-path-outside-its-package",
+      "nestedModules": true,
+      "files": { "packages/a/tests/features/alpha/value.test.ts": "import { ghost } from \"../../../../nowhere/ghost.js\";\nvoid ghost;\n" },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "packages/a/tests/features/alpha/value.test.ts", "line": 1 }]
+    },
+    {
+      "name": "module-production-deep-import-into-a-sibling-module-fails-closed",
+      "nestedModules": true,
+      "moduleEdges": [{ "from": "fixture-alpha-module", "to": "fixture-gamma-module", "kinds": ["runtime"] }],
+      "files": {
+        "packages/a/src/features/alpha/adapters/alpha.ts": "import { gamma } from \"../../../../../b/src/features/gamma/adapters/gamma.js\";\nexport const value = gamma;\n"
+      },
+      "expected": [{ "code": "FM_MODULE_DEEP_IMPORT", "path": "packages/a/src/features/alpha/adapters/alpha.ts", "line": 1 }]
+    },
+    {
+      "name": "declared-module-edge-permits-curated-consumption",
+      "secondModule": true,
+      "alphaRoles": ["domain", "adapters"],
+      "moduleEdges": [{ "from": "fixture-runtime", "to": "fixture-other", "kinds": ["runtime"] }],
+      "files": { "src/features/alpha/adapters/value.ts": "import { gamma } from \"@fixture/other/composition\";\nexport const adapterValue = gamma;\n" },
+      "expected": []
+    },
+    {
+      "name": "module-consumption-requires-a-declared-module-edge",
+      "secondModule": true,
+      "alphaRoles": ["domain", "adapters"],
+      "files": { "src/features/alpha/adapters/value.ts": "import { gamma } from \"@fixture/other/composition\";\nexport const adapterValue = gamma;\n" },
+      "expected": [{ "code": "FM_UNDECLARED_MODULE_EDGE", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "module-consumption-rejects-a-feature-deep-import",
+      "secondModule": true,
+      "alphaRoles": ["domain", "adapters"],
+      "moduleEdges": [{ "from": "fixture-runtime", "to": "fixture-other", "kinds": ["runtime"] }],
+      "files": { "src/features/alpha/adapters/value.ts": "import { gamma } from \"../../../../other/src/features/gamma/adapters/gamma.js\";\nexport const adapterValue = gamma;\n" },
+      "expected": [{ "code": "FM_MODULE_DEEP_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "module-consumption-rejects-an-undeclared-curated-entry",
+      "secondModule": true,
+      "alphaRoles": ["domain", "adapters"],
+      "moduleEdges": [{ "from": "fixture-runtime", "to": "fixture-other", "kinds": ["runtime"] }],
+      "productionModules": [
+        { "id": "fixture-runtime", "role": "bounded-context", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" },
+        { "id": "fixture-other", "role": "platform", "moduleRoot": "other", "sourceRoot": "other/src", "packageName": "@fixture/other", "ownerDocument": "ADR-0005", "curatedExports": ["."], "adoption": "active", "activationAuthority": "ADR-0005" }
+      ],
+      "files": {
+        "other/package.json": "{\"name\":\"@fixture/other\",\"agentTeamsArchitecture\":{\"role\":\"platform\",\"ownerDocument\":\"ADR-0005\"},\"exports\":{\".\":{\"types\":\"./dist/index.d.ts\",\"import\":\"./dist/index.js\"}}}\n",
+        "src/features/alpha/adapters/value.ts": "import { gamma } from \"../../../../other/src/composition.js\";\nexport const adapterValue = gamma;\n"
+      },
+      "expected": [{ "code": "FM_MODULE_DEEP_IMPORT", "path": "src/features/alpha/adapters/value.ts", "line": 1 }]
+    },
+    {
+      "name": "domain-cannot-consume-another-production-module",
+      "secondModule": true,
+      "alphaRoles": ["domain"],
+      "moduleEdges": [{ "from": "fixture-runtime", "to": "fixture-other", "kinds": ["runtime"] }],
+      "files": { "src/features/alpha/domain/value.ts": "import { gamma } from \"@fixture/other/composition\";\nexport const value = gamma;\n" },
+      "expected": [{ "code": "FM_INVALID_LAYER_DIRECTION", "path": "src/features/alpha/domain/value.ts", "line": 1 }]
+    },
+    {
+      "name": "unused-module-edge-is-future-state-metadata",
+      "secondModule": true,
+      "moduleEdges": [{ "from": "fixture-runtime", "to": "fixture-other", "kinds": ["runtime"] }],
+      "expected": [{ "code": "FM_UNUSED_EDGE", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "module-edge-must-connect-two-distinct-declared-modules",
+      "secondModule": true,
+      "moduleEdges": [{ "from": "fixture-runtime", "to": "fixture-missing", "kinds": ["runtime"] }],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "module-edge-requires-both-modules-to-be-active",
+      "moduleEdges": [{ "from": "fixture-runtime", "to": "fixture-pending", "kinds": ["runtime"] }],
+      "productionModules": [
+        { "id": "fixture-runtime", "role": "bounded-context", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" },
+        { "id": "fixture-pending", "role": "platform", "moduleRoot": "packages/pending", "sourceRoot": "packages/pending/src", "packageName": "@fixture/pending", "ownerDocument": "ADR-0005", "curatedExports": ["."], "adoption": "pending" }
+      ],
+      "files": { "packages/pending/package.json": "{\"name\":\"@fixture/pending\",\"agentTeamsArchitecture\":{\"role\":\"platform\",\"ownerDocument\":\"ADR-0005\"},\"exports\":{\".\":{\"types\":\"./dist/index.d.ts\",\"import\":\"./dist/index.js\"}}}\n" },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "module-edge-cycles-fail-closed",
+      "secondModule": true,
+      "alphaRoles": ["domain", "adapters"],
+      "gammaRoles": ["contracts", "adapters"],
+      "moduleEdges": [
+        { "from": "fixture-runtime", "to": "fixture-other", "kinds": ["runtime"] },
+        { "from": "fixture-other", "to": "fixture-runtime", "kinds": ["runtime"] }
+      ],
+      "files": {
+        "src/features/alpha/adapters/value.ts": "import { gamma } from \"@fixture/other/composition\";\nexport const adapterValue = gamma;\n",
+        "other/src/features/gamma/adapters/gamma.ts": "import { value } from \"@fixture/runtime/composition\";\nexport const gamma = value;\n"
+      },
+      "expected": [
+        { "code": "FM_RUNTIME_CYCLE", "path": "other/src/features/gamma/adapters/gamma.ts", "line": 1 },
+        { "code": "FM_RUNTIME_CYCLE", "path": "src/features/alpha/adapters/value.ts", "line": 1 }
+      ]
+    },
+    {
+      "name": "pending-production-module-declaration-must-match-its-manifest",
+      "productionModules": [
+        { "id": "fixture-runtime", "role": "bounded-context", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" },
+        { "id": "fixture-pending", "role": "platform", "moduleRoot": "packages/pending", "sourceRoot": "packages/pending/src", "packageName": "@fixture/pending", "ownerDocument": "ADR-0005", "curatedExports": ["."], "adoption": "pending" }
+      ],
+      "files": { "packages/pending/package.json": "{\"name\": \"@fixture/pending\", \"agentTeamsArchitecture\": {\"role\": \"bounded-context\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}}}\n" },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "packages/pending/package.json", "line": 1 }]
+    },
+    {
+      "name": "pending-production-module-requires-a-real-manifest",
+      "productionModules": [
+        { "id": "fixture-runtime", "role": "bounded-context", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" },
+        { "id": "fixture-pending", "role": "platform", "moduleRoot": "packages/pending", "sourceRoot": "packages/pending/src", "packageName": "@fixture/pending", "ownerDocument": "ADR-0005", "curatedExports": ["."], "adoption": "pending" }
+      ],
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "packages/pending/package.json", "line": 1 }]
+    },
+    {
+      "name": "workspace-container-rejects-unclassified-production-module",
+      "workspaceContainers": ["packages"],
+      "files": { "packages/extra/package.json": "{\"name\": \"@fixture/extra\"}\n" },
+      "expected": [{ "code": "FM_UNCLASSIFIED_MODULE", "path": "packages/extra/package.json", "line": 1 }]
+    },
+    {
+      "name": "workspace-container-accepts-a-classified-pending-module",
+      "workspaceContainers": ["packages"],
+      "productionModules": [
+        { "id": "fixture-runtime", "role": "bounded-context", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" },
+        { "id": "fixture-pending", "role": "platform", "moduleRoot": "packages/pending", "sourceRoot": "packages/pending/src", "packageName": "@fixture/pending", "ownerDocument": "ADR-0005", "curatedExports": ["."], "adoption": "pending" }
+      ],
+      "files": {
+        "packages/pending/package.json": "{\"name\": \"@fixture/pending\", \"agentTeamsArchitecture\": {\"role\": \"platform\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}}}\n",
+        "packages/pending/src/custody.ts": "export const custody = true;\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "workspace-container-ignores-directories-without-a-manifest",
+      "workspaceContainers": ["packages"],
+      "files": { "packages/notes/README.md": "# notes\n" },
+      "expected": []
+    },
+    {
+      "name": "production-module-activation-requires-an-accepted-decision",
+      "productionModules": [{ "id": "fixture-runtime", "role": "bounded-context", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-9999" }],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "pending-production-module-cannot-declare-an-activation-authority",
+      "files": { "packages/pending/package.json": "{\"name\": \"@fixture/pending\", \"agentTeamsArchitecture\": {\"role\": \"platform\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}}}\n" },
+      "productionModules": [
+        { "id": "fixture-runtime", "role": "bounded-context", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" },
+        { "id": "fixture-pending", "role": "platform", "moduleRoot": "packages/pending", "sourceRoot": "packages/pending/src", "packageName": "@fixture/pending", "ownerDocument": "ADR-0005", "curatedExports": ["."], "adoption": "pending", "activationAuthority": "ADR-0005" }
+      ],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "production-module-role-must-match-the-package-manifest",
+      "productionModules": [{ "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "package.json", "line": 1 }]
+    },
+    {
+      "name": "production-module-must-own-its-declared-package-name",
+      "productionModules": [{ "id": "fixture-runtime", "role": "bounded-context", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/renamed", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "package.json", "line": 1 }]
+    },
+    {
+      "name": "host-app-module-keeps-both-curated-assembly-exports",
+      "productionModules": [{ "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "files": { "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"host-app\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n" },
+      "expected": []
+    },
+    {
+      "name": "platform-module-exports-only-its-public-assembly-file",
+      "productionModules": [{ "id": "fixture-runtime", "role": "platform", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": ["."], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "files": { "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"platform\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}}}\n" },
+      "expected": []
+    },
+    {
+      "name": "platform-module-rejects-an-extra-composition-export",
+      "productionModules": [{ "id": "fixture-runtime", "role": "platform", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": ["."], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "files": { "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"platform\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n" },
+      "expected": [{ "code": "FM_PACKAGE_EXPORT_MAP", "path": "package.json", "line": 1 }]
+    },
+    {
+      "name": "active-profile-keeps-pending-modules-excluded",
+      "status": "active",
+      "acceptActivationAdr": true,
+      "files": { "packages/pending/package.json": "{\"name\": \"@fixture/pending\", \"agentTeamsArchitecture\": {\"role\": \"platform\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}}}\n" },
+      "productionModules": [
+        { "id": "fixture-runtime", "role": "bounded-context", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" },
+        { "id": "fixture-pending", "role": "platform", "moduleRoot": "packages/pending", "sourceRoot": "packages/pending/src", "packageName": "@fixture/pending", "ownerDocument": "ADR-0005", "curatedExports": ["."], "adoption": "pending" }
+      ],
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
     }
   ]
 }

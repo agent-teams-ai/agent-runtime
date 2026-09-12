@@ -118,19 +118,21 @@ try {
 
   const sourceReader = configurationComposition.createNodeConfigurationSourceReader();
   const codexConfiguration = configurationComposition.createCodexConfigurationInspectionFeature({
+    digest: configurationComposition.createNodeCodexConfigurationDigest(),
     parser: configurationComposition.createSmolTomlParser(),
     semanticClassifier: configurationComposition.createCodexConfigurationSemanticClassifierV1(),
     sourceIdentityKey: new Uint8Array(32).fill(3),
     sourceReader,
   });
   const claudeConfiguration = configurationComposition.createClaudeCodeConfigurationInspectionFeature({
+    digest: configurationComposition.createNodeClaudeCodeConfigurationDigest(),
     parser: configurationComposition.createStrictClaudeCodeJsonParser(),
     semanticClassifier: configurationComposition.createClaudeCodeConfigurationSemanticClassifierV2(),
     sourceIdentityKey: new Uint8Array(32).fill(5),
     sourceReader: configurationComposition.createClaudeCodeConfigurationSourceReaderAdapter(sourceReader),
   });
 
-  const host = embeddedComposition.createAgentRuntimeHost({
+  const host = (await import("../../dist/composition/agent-runtime-host.js")).createAgentRuntimeHost({
     claudeCodeSetup: {
       authorizeClaudeCodeSetupInspection: security.authorizeClaudeCodeSetupInspection,
       discoverClaudeCodeInstallations: execution.discoverClaudeCodeInstallations,

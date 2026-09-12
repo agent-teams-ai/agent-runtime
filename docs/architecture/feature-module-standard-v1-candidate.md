@@ -8,6 +8,8 @@ related:
   - ADR-0005
   - ADR-0007
   - ADR-0013
+  - ADR-0017
+  - ADR-0018
 code_anchors:
   - enforcement: required
     pattern: architecture/feature-module-standard/**
@@ -26,9 +28,13 @@ owned by `agent-teams-ai/.github` at
 `d0bfff2033faf544fe65268c1dcdfd524d093015`, with SHA-256
 `851653f96643cf0466b67ab22963661976b00de44840fa3144a48a8c054f95fa`.
 
-This is scoped active conformance for exactly three named features. It is not a
-claim of repository-wide conformance, and no unlisted package, application,
-feature, experiment, or bounded context is included.
+This is scoped active conformance for exactly the four named features listed
+below. It is not a claim of repository-wide conformance, and no unlisted package,
+application, feature, experiment, or bounded context is included.
+
+ADR-0017 additionally classifies every production module in the reviewed
+workspace containers by its real role, so the profile describes what each module
+is even while three of the six are checked.
 
 ## New production features
 
@@ -70,8 +76,11 @@ unowned production behavior, deep imports, undeclared edges or cycles, empty
 layers, and undeclared modules or exceptions. Include semantic review because
 static discovery alone cannot detect every capability hidden in legacy code.
 
-The existing three-feature checker does not automatically scan excluded roots.
-Its reviewed feature identities and roots are hardcoded. A new feature outside
+The existing three-feature checker does not inspect behavior inside excluded
+roots. Its reviewed feature identities and roots are hardcoded. It does detect a
+new production package in a declared workspace container and rejects it until a
+reviewed change classifies it, but classification is not conformance. A new
+feature outside
 that scope, or one requiring checker evolution, needs explicit scoped adoption
 through a new or superseding accepted ADR, with exact paths, ownership,
 compatibility decisions, and deterministic evidence. Preserve ADR-0013 bytes
@@ -117,15 +126,146 @@ beside it. The active production scope contains only:
 
 - `packages/contexts/agent-execution/src/**`;
 - `packages/contexts/provider-access/src/**`;
+- `packages/platform/filesystem-custody/src/**`;
 - the package assembly files `src/index.ts` and `src/composition.ts` in those
-  two packages;
-- the features `runtime-installation-discovery`, `contained-agent-turn`, and
-  `contained-turn-access`.
+  three packages;
+- the features `runtime-installation-discovery`, `contained-agent-turn`,
+  `contained-turn-access`, and `stable-filesystem-custody`.
 
-Embedded Runtime, Runtime Configuration, Runtime Security, Filesystem Custody,
-Module Kit, experiments, and tooling other than this checker are explicitly
-out of scope. Foundation supplies package-level dependency evidence only; it
+Embedded Runtime, Runtime Configuration, Runtime Security, Module Kit,
+experiments, and tooling other than this checker are explicitly out of scope. Foundation supplies package-level dependency evidence only; it
 does not implement or prove this feature policy.
+
+## Production module classification
+
+The profile classifies every module under `packages/apps`, `packages/contexts`,
+and `packages/platform` with exactly one role and one adoption state:
+
+| Module | Role | Owner document | Adoption |
+| --- | --- | --- | --- |
+| Agent Execution | `bounded-context` | ADR-0005 | active under ADR-0013 |
+| Provider Access | `bounded-context` | ADR-0005 | active under ADR-0013 |
+| Runtime Configuration | `bounded-context` | ADR-0005 | pending |
+| Runtime Security | `bounded-context` | ADR-0005 | pending |
+| Embedded Runtime | `host-app` | ADR-0008 | pending |
+| Filesystem Custody | `platform` | ADR-0017 | active under ADR-0019 |
+
+All six modules expose `.` and `./composition` today. The set is a per-module
+fact rather than a consequence of the role, which is what let Filesystem Custody
+gain its composition entry and then its activation without the rule changing.
+
+Each module declares its own curated export set from the two recognized assembly
+entries `.` and `./composition`, matching what its manifest exposes today. Every
+pending module stays an excluded root and is not checked as a feature module,
+but its declared package name, role, owner document and curated export keys are
+still compared with its real manifest, so the classification cannot drift into a
+future-state promise.
+
+## Dependencies between production modules
+
+ADR-0018 governs every dependency between two active governed modules. The
+profile declares it as a `moduleEdges` entry with its exact kind, `runtime` or
+`type`, and both ends must be declared, distinct and active. A dependency on a
+pending module is not governed by this rule, because a pending module's sources
+stay outside the checked tree; activation is what brings it under the rule. The
+import must resolve to one of the target module's curated assembly entries; any
+other path inside the target, including a path inside one of its features, is
+rejected as `FM_MODULE_DEEP_IMPORT`. Only the importing module's own
+`composition.ts` or a feature's `adapters` or `composition` layer may hold such
+an import: the public package entry still exposes only its own contracts.
+
+A feature edge is correspondingly a relationship inside one module. Declaring one
+between features of different modules is rejected.
+
+Declared module edges follow the same discipline as feature edges: an unobserved
+declaration is rejected as future-state permission, and observed edges are
+checked for runtime and type cycles. `moduleEdges` stays empty until a delivery
+needs an edge.
+
+A production package that exists inside one of those containers and is not
+classified fails the gate with `FM_UNCLASSIFIED_MODULE`. Activating a pending
+module is a separate reviewed change to both the profile and the reviewed
+registry in `scripts/architecture/feature-module-profile.mjs`, with its own
+accepted authority; a profile edit alone cannot widen the checked tree.
+
+## Outstanding work per pending module
+
+Recorded here so a partially migrated module reads as transit rather than as a
+contradiction. None of this is a conformance claim, and no gate asserts any of it.
+
+Runtime Configuration has two features. `codex-configuration-inspection`
+already owns its application models and translates through one inbound
+adapter. `claude-code-configuration-inspection` now owns its vocabulary the
+same way: the constants it needs live in its own `models/claude-code-vocabulary.ts`
+application model, and its remaining import from `../contracts` is type-only.
+Both features now route their package assembly through curated feature
+entrypoints (`index.ts` for `.`, `internal.ts` for `./composition`) rather
+than deep imports into `adapters` and `application/ports`. Their tests now
+live under feature ownership (`tests/features/...`) with the package assembly
+surface check in `tests/package/`; the module itself remains pending.
+
+Runtime Security has four features. Setup-source authorization now owns its
+Node path and source-identity digest behind explicit outbound ports
+(`PathAlgebra`, `SourceIdentityDigest`), with a Node adapter supplying both;
+its application layer no longer imports `node:path` or `node:crypto` directly.
+`contained-turn-egress` is no longer a flat directory: it has real
+domain/application/composition/adapters ownership, and its write-authorization
+lease window now reads a `MonotonicClock` the composition root injects, rather
+than an ambient `performance.now()` binding. The clock stays a
+composition-root detail — the public `ContainedTurnEgressDependencies` shape
+does not accept one — so revalidation timing remains under trusted-code
+control. Module composition's `containedTurnEgressProviderBindingDigest`
+delegates route-binding digest computation to the egress feature's own domain
+`validation` module instead of computing it inline, and the underlying
+`node:crypto` hashing and the `exactObject`/`snapshotUint8Array` validation
+primitives it needs have moved out of `composition.ts` into the feature's own
+`adapters/outbound/node-security-primitives.ts`, called by the same two egress
+call sites there. That closes the base document's complaint for this feature
+the same way the sibling features already closed it, each behind its own
+outbound Node adapter (`node-sha256-dispatch-digest.ts`,
+`node-egress-cryptography.ts`, `node-source-identity-digest.ts`). One gap
+remains narrower rather than fully closed: those three sibling ports are each
+declared under `application/ports/outbound/`, while `EgressSecurityPrimitives`
+is still declared in the feature's `domain/validation.ts`, so egress does not
+yet match the same port-location convention. Domain and application layers in
+this package do not import Node
+builtins directly today, but nothing in `architecture/foundation/source-dependencies.yaml`
+enforces that split within the single flat `production.runtime-security`
+boundary, unlike Embedded Runtime's narrower allowed-builtins list. Dispatch
+authority's external V1 wrapper now lives in `adapters/inbound/` and maps
+request DTOs onto the consume, settle, and observe use cases; digest and
+result projection stays in application
+(`contained-turn-dispatch-authority-v1-result-mappers.ts`) so outbound
+Postgres and those use cases never import inbound. Its
+composition-root clock design differs from egress's by choice, not as an
+outstanding gap: dispatch authority's own
+`ContainedTurnDispatchAuthorityFeatureDependencies` requires callers to
+supply `clock` explicitly, while egress keeps the clock a composition-root
+detail its public dependencies shape does not accept.
+
+Embedded Runtime is the host application. Its activation waited on the
+accepted asynchronous setup assembly work, which has since landed. The setup
+view's Claude Code and Codex reference-digest computation is now behind an
+outbound `OpaqueReferenceDigest` port with a Host adapter, so
+`application/build-claude-code-setup-view.ts` and
+`application/build-codex-setup-view.ts` no longer import `node:crypto`
+directly, and the package boundary now rejects that import from application
+code. Runtime-access coordination now lives under
+`src/features/contained-turn-runtime-access/` with curated `index.ts` /
+`internal.ts` entrypoints. Host composition re-exports that feature entry from
+`src/composition/contained-turn-runtime-access.ts`, so existing composition
+imports keep working. The implementation is not yet an inward `application/`
+layer: it still imports Host composition helpers, so it stays at the feature
+root rather than under `application/`. HTTP Provider Access now lives under
+`src/features/contained-turn-http-provider-access/` with curated `index.ts` /
+`internal.ts` entrypoints. Host composition re-exports that feature entry from
+`src/composition/contained-turn-http-provider-access.ts`, so existing
+composition and test imports keep working. The implementation stays at the
+feature root rather than under `application/`: it still imports Agent
+Execution composition types, which L0 treats as an inward leak from
+`application/`. Process lifecycle, readiness and rollback stay in
+composition. Provider Access and Runtime Security anti-corruption adapters
+and external input/output validation remain. The module stays pending.
 
 The deterministic syntax-aware checker is
 `scripts/architecture/check-feature-modules.mjs`. Run
@@ -181,16 +321,20 @@ remove or reorder the active root gate. The exact candidate command reports
 zero production diagnostics without exceptions, deviations, extensions,
 wildcards, automatic widening, or scope changes.
 
-ADR-0013 is accepted at its exact governed path and is pinned in the immutable
-accepted-decision registry by the final SHA-256 of its accepted bytes. The
-profile is `active`, has no blockers, binds its authority to ADR-0013, records
-an empty exact governed-record set, and records these commands as evidence:
+ADR-0013, ADR-0017, ADR-0018 and ADR-0019 are accepted at their exact governed
+paths and are pinned in the immutable accepted-decision registry by the digest
+Foundation computes over their accepted bytes and metadata. The profile is
+`active`, has no blockers, binds its profile-wide activation authority to
+ADR-0013, names the two ownership decisions, records each module's own activation
+authority on the module, records an empty exact governed-record set, and records
+these commands as evidence:
 
 - fixture evidence: `pnpm test:feature-modules`;
 - zero-diagnostic production evidence: `pnpm architecture:feature-modules:candidate`;
 - blocking active gate: `pnpm architecture:feature-modules:active`.
 
 This evidence proves conformance only for `runtime-installation-discovery`,
-`contained-agent-turn`, and `contained-turn-access` within the two declared
-production roots and assembly files. It does not prove repository-wide Feature
-Module Standard conformance.
+`contained-agent-turn`, `contained-turn-access`, and `stable-filesystem-custody`
+within the three declared production roots and assembly files. It does not prove
+repository-wide Feature Module Standard conformance: Runtime Configuration,
+Runtime Security and Embedded Runtime remain pending.

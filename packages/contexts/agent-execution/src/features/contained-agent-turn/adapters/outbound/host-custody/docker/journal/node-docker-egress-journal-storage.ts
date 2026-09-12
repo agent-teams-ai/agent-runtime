@@ -2,7 +2,7 @@ import { constants, type BigIntStats, type Dirent } from "node:fs";
 import { lstat, open, opendir, realpath, unlink, type FileHandle } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 
-import { withStableDirectoryProcessLock } from "@agent-teams/filesystem-custody";
+import { withStableDirectoryProcessLock } from "@agent-teams/filesystem-custody/composition";
 
 import {
   DockerEgressJournalBusyError,

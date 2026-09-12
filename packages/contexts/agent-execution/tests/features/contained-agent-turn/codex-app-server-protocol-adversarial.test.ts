@@ -15,7 +15,7 @@ import type { CodexEffectCustodyAuthority } from "../../../dist/features/contain
 import type { CustodiedProviderProcess } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.js";
 import { agentMessage, commandExecution, emitAgentCompleted, emitAgentStarted, fileChange,
   generatedTurn } from "../../codex-app-server-test-messages.mjs";
-import { codexEffectivePermissionProfile, codexUserPermissionProfile } from "./codex-permission-profile-fixture.ts";
+import { nativeConfigResult } from "../../fixtures/codex-native-config-0.153.4/fixture.ts";
 
 type Message = Record<string, unknown>;
 
@@ -105,37 +105,13 @@ class ProtocolProcess implements CustodiedProviderProcess {
   #handshake(message: Message): boolean {
     if (message.method === "initialize") {
       this.emit({ id: message.id, result: {
-        codexHome, platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)",
+        codexHome, platformFamily: "unix", platformOs: "linux", userAgent: "agent-runtime/0.153.4 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.153.4+native-permission-config-v2)",
       } });
       return true;
     }
     if (message.method === "initialized") {return true;}
     if (message.method === "config/read") {
-      this.emit({ id: message.id, result: {
-        config: {
-          default_permissions: boundary.permissionProfileId,
-          permissions: { [boundary.permissionProfileId]: codexEffectivePermissionProfile(codexHome, this.#mode) },
-        },
-        layers: [
-          { config: {}, disabledReason: null, name: { file: "/etc/codex/config.toml", type: "system" }, version: "1" },
-          {
-            config: { permissions: { [boundary.permissionProfileId]: codexUserPermissionProfile(codexHome, this.#mode) } },
-            disabledReason: null,
-            name: { file: `${codexHome}/config.toml`, profile: null, type: "user" },
-            version: "2",
-          },
-          {
-            config: { default_permissions: boundary.permissionProfileId },
-            disabledReason: null,
-            name: { type: "sessionFlags" },
-            version: "3",
-          },
-        ],
-        origins: {
-          default_permissions: { name: { type: "sessionFlags" }, version: "3" },
-          permissions: { name: { file: `${codexHome}/config.toml`, profile: null, type: "user" }, version: "2" },
-        },
-      } });
+      this.emit({ id: message.id, result: nativeConfigResult(codexHome, this.#mode) });
       return true;
     }
     if (message.method === "permissionProfile/list") {
@@ -251,7 +227,7 @@ test("never treats unsolicited or unacknowledged interrupted notifications as ca
   assert.equal("containmentRequired" in beforeAcknowledgement && beforeAcknowledgement.containmentRequired, true);
 });
 
-test("fails closed for unknown and non-command effectful 0.150.1 item-union members", async () => {
+test("fails closed for unknown and non-command effectful 0.153.4 item-union members", async () => {
   const unknown = { id: "item:unknown", type: "unknownTool" };
   const effectStarted = fileChange("item:effect");
   for (const { completed, started } of [

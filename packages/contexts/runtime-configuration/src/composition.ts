@@ -1,26 +1,32 @@
-export { createNodeConfigurationSourceReader } from "./features/codex-configuration-inspection/adapters/outbound/node-configuration-source-reader.js";
-export { createCodexConfigurationSemanticClassifierV1 } from "./features/codex-configuration-inspection/adapters/outbound/codex-configuration-semantic-classifier-v1.js";
-export { createSmolTomlParser } from "./features/codex-configuration-inspection/adapters/outbound/smol-toml-parser.js";
 export {
+  createNodeConfigurationSourceReader,
+  createNodeConfigurationDigest as createNodeCodexConfigurationDigest,
+  type ConfigurationDigest as CodexConfigurationDigest,
+  createCodexConfigurationSemanticClassifierV1,
+  createSmolTomlParser,
   codexConfigurationSemanticClassifierContract,
   type CodexConfigurationSemanticClassification,
   type CodexConfigurationSemanticClassifier,
-} from "./features/codex-configuration-inspection/application/ports/outbound/codex-configuration-semantic-classifier.js";
-export type { CodexTomlParser } from "./features/codex-configuration-inspection/application/ports/outbound/codex-toml-parser.js";
-export type { ConfigurationSourceReader } from "./features/codex-configuration-inspection/application/ports/outbound/configuration-source-reader.js";
-export {
+  type CodexTomlParser,
+  type ConfigurationSourceReader,
   createCodexConfigurationInspectionFeature,
   type CodexConfigurationInspectionDependencies,
-} from "./features/codex-configuration-inspection/composition/feature-module-factory.js";
-export { createStrictClaudeCodeJsonParser } from "./features/claude-code-configuration-inspection/adapters/outbound/strict-claude-code-json-parser.js";
-export { createClaudeCodeConfigurationSemanticClassifierV2 } from "./features/claude-code-configuration-inspection/adapters/outbound/claude-code-configuration-semantic-classifier-v2.js";
-export { createClaudeCodeConfigurationSourceReaderAdapter } from "./features/claude-code-configuration-inspection/adapters/outbound/claude-code-configuration-source-reader-adapter.js";
+} from "./features/codex-configuration-inspection/internal.js";
 export {
+  createStrictClaudeCodeJsonParser,
+  createNodeConfigurationDigest as createNodeClaudeCodeConfigurationDigest,
+  type ConfigurationDigest as ClaudeCodeConfigurationDigest,
+  createClaudeCodeConfigurationSemanticClassifierV2,
+  createClaudeCodeConfigurationSourceReaderAdapter,
   claudeCodeConfigurationSemanticClassifierContract,
+  type ClassifyClaudeCodeConfigurationResult,
+  type ClaudeCodeConfigurationSemanticClassifier,
+  type ClaudeCodeConfigurationSourceReader,
+  type ClaudeCodeJsonParser,
   type DeferredClaudeCodeDefinition,
+  type ParseClaudeCodeJsonResult,
   type PortableClaudeCodeDefinition,
-} from "./features/claude-code-configuration-inspection/application/ports/outbound/claude-code-configuration-semantic-classifier.js";
-export {
+  type ReadClaudeCodeConfigurationSourceResult,
   createClaudeCodeConfigurationInspectionFeature,
   type ClaudeCodeConfigurationInspectionDependencies,
-} from "./features/claude-code-configuration-inspection/composition/feature-module-factory.js";
+} from "./features/claude-code-configuration-inspection/internal.js";

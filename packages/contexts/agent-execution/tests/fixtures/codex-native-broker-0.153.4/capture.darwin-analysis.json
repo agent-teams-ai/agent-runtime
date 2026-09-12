@@ -1,0 +1,627 @@
+{
+  "schemaVersion": 1,
+  "intent": "analysis",
+  "recipe": "broker",
+  "platform": "darwin-arm64",
+  "kind": "offline-native-custom-broker-config-only",
+  "binarySha256": "b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3",
+  "project": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR",
+  "isolatedNetwork": "sandbox-exec deny network*",
+  "authFilesSupplied": false,
+  "providerTurnRequested": false,
+  "stage": "complete",
+  "sawConfig": true,
+  "closeResult": {
+    "code": null,
+    "signal": "SIGTERM"
+  },
+  "messages": [
+    {
+      "id": "init",
+      "result": {
+        "userAgent": "agent-runtime/0.153.4 (Mac OS 15.6.1; arm64) unknown (agent-runtime; codex-app-server-contained-turn:0.153.4+native-permission-config-v2)",
+        "codexHome": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home",
+        "platformFamily": "unix",
+        "platformOs": "macos"
+      }
+    },
+    {
+      "method": "remoteControl/status/changed",
+      "params": {
+        "status": "disabled",
+        "serverName": "MacBook-Pro-belief.local",
+        "installationId": "d4b82635-3222-4120-b063-d3bef602d895",
+        "environmentId": null
+      },
+      "emittedAtMs": 1788627913681
+    },
+    {
+      "id": "config",
+      "result": {
+        "config": {
+          "model": "gpt-5.4",
+          "review_model": null,
+          "model_context_window": null,
+          "model_auto_compact_token_limit": null,
+          "model_auto_compact_token_limit_scope": null,
+          "model_provider": "ar_broker",
+          "approval_policy": null,
+          "approvals_reviewer": null,
+          "sandbox_mode": null,
+          "sandbox_workspace_write": null,
+          "forced_chatgpt_workspace_id": null,
+          "forced_login_method": null,
+          "web_search": null,
+          "tools": null,
+          "instructions": null,
+          "developer_instructions": null,
+          "compact_prompt": null,
+          "model_reasoning_effort": null,
+          "model_reasoning_summary": null,
+          "model_verbosity": null,
+          "service_tier": null,
+          "analytics": {
+            "enabled": false
+          },
+          "apps": null,
+          "browser_use": null,
+          "computer_use": null,
+          "desktop": null,
+          "tool_suggest": null,
+          "otel": {
+            "tool_result": {
+              "max_bytes": 2048
+            },
+            "log_user_prompt": null,
+            "environment": null,
+            "exporter": "none",
+            "trace_exporter": "none",
+            "metrics_exporter": "none",
+            "span_attributes": null,
+            "tracestate": null
+          },
+          "check_for_update_on_startup": null,
+          "skills": null,
+          "plan_mode_reasoning_effort": null,
+          "features": {
+            "multi_agent_v2": false,
+            "network_proxy": null,
+            "apps": false,
+            "browser_use": false,
+            "computer_use": false,
+            "enable_request_compression": false,
+            "image_generation": false,
+            "multi_agent": false,
+            "plugins": false,
+            "remote_plugin": false,
+            "unbounded_connection_retries": false,
+            "auth_elicitation": true,
+            "background_paginated_rollout_migration": false,
+            "mcp_2026_07_28": false,
+            "memories": false,
+            "mentions_v2": true,
+            "remote_control": false,
+            "tool_suggest": true
+          },
+          "shell_environment_policy": {
+            "inherit": null,
+            "ignore_default_excludes": null,
+            "exclude": [
+              "AR_PRIVATE_BROKER_CAPABILITY"
+            ],
+            "set": null,
+            "include_only": null,
+            "filters": null,
+            "experimental_use_profile": null
+          },
+          "realtime": null,
+          "tool_output_token_limit": null,
+          "background_terminal_max_timeout": 300000,
+          "history": {
+            "persistence": "save-all",
+            "max_bytes": null
+          },
+          "include_environment_context": true,
+          "allow_login_shell": false,
+          "log_dir": null,
+          "mcp_oauth_callback_url": null,
+          "profile": null,
+          "tui": null,
+          "hooks": null,
+          "cli_auth_credentials_store": "file",
+          "notice": null,
+          "oss_provider": null,
+          "include_permissions_instructions": true,
+          "model_instructions_file": null,
+          "mcp_oauth_credentials_store": "auto",
+          "responses_api_metadata": null,
+          "memories": null,
+          "chatgpt_base_url": "https://chatgpt.com/backend-api/",
+          "project_root_markers": [
+            ".git"
+          ],
+          "include_collaboration_mode_instructions": true,
+          "experimental_realtime_webrtc_call_base_url": null,
+          "marketplaces": {},
+          "apps_mcp_product_sku": null,
+          "model_catalog_json": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/models.json",
+          "personality": null,
+          "model_providers": {
+            "ar_broker": {
+              "name": "OpenAI",
+              "base_url": "http://10.203.0.1:43129/backend-api/codex",
+              "env_key": "AR_PRIVATE_BROKER_CAPABILITY",
+              "env_key_instructions": null,
+              "experimental_bearer_token": null,
+              "auth": null,
+              "aws": null,
+              "wire_api": "responses",
+              "query_params": null,
+              "http_headers": {
+                "version": "0.153.4"
+              },
+              "env_http_headers": null,
+              "request_max_retries": 0,
+              "stream_max_retries": 0,
+              "stream_idle_timeout_ms": null,
+              "websocket_connect_timeout_ms": null,
+              "requires_openai_auth": false,
+              "supports_websockets": false,
+              "supports_standalone_web_search": false
+            }
+          },
+          "js_repl_node_path": null,
+          "project_doc_fallback_filenames": [],
+          "file_opener": "vscode",
+          "openai_base_url": null,
+          "audio": null,
+          "experimental_thread_store": null,
+          "disable_paste_burst": null,
+          "plugins": {},
+          "experimental_realtime_ws_model": null,
+          "sqlite_home": null,
+          "experimental_realtime_ws_backend_prompt": null,
+          "show_raw_agent_reasoning": null,
+          "experimental_thread_store_endpoint": null,
+          "experimental_realtime_ws_startup_context": null,
+          "permissions": {
+            "agent-runtime-contained-v1": {
+              "description": null,
+              "extends": ":read-only",
+              "workspace_roots": null,
+              "filesystem": {
+                "glob_scan_max_depth": null,
+                "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home": "deny",
+                ":slash_tmp": "read",
+                ":tmpdir": "read"
+              },
+              "network": {
+                "enabled": false,
+                "proxy_url": null,
+                "enable_socks5": null,
+                "socks_url": null,
+                "enable_socks5_udp": null,
+                "allow_upstream_proxy": null,
+                "dangerously_allow_non_loopback_proxy": null,
+                "dangerously_allow_all_unix_sockets": null,
+                "mode": null,
+                "domains": null,
+                "unix_sockets": null,
+                "allow_local_binding": null,
+                "mitm": null
+              }
+            }
+          },
+          "mcp_optional_startup_grace_ms": null,
+          "experimental_realtime_ws_base_url": null,
+          "mcp_servers": {},
+          "include_apps_instructions": true,
+          "orchestrator": null,
+          "projects": null,
+          "suppress_unstable_features_warning": null,
+          "notify": null,
+          "project_doc_max_bytes": 32768,
+          "default_permissions": "agent-runtime-contained-v1",
+          "goals": null,
+          "ghost_snapshot": null,
+          "experimental_compact_prompt_file": null,
+          "experimental_use_unified_exec_tool": null,
+          "profiles": {},
+          "feedback": null,
+          "auto_review": null,
+          "hide_agent_reasoning": false,
+          "mcp_oauth_callback_port": null,
+          "agents": null,
+          "js_repl_node_module_dirs": null,
+          "experimental_realtime_start_instructions": null,
+          "windows": null
+        },
+        "origins": {
+          "allow_login_shell": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "model_providers.ar_broker.wire_api": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "model_providers.ar_broker.name": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "model": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "features.enable_request_compression": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "features.image_generation": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "model_providers.ar_broker.requires_openai_auth": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "model_providers.ar_broker.supports_websockets": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "permissions.agent-runtime-contained-v1.filesystem.:tmpdir": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "default_permissions": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "otel.exporter": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "features.plugins": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "features.unbounded_connection_retries": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "shell_environment_policy.exclude.0": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "permissions.agent-runtime-contained-v1.filesystem.:slash_tmp": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "permissions.agent-runtime-contained-v1.filesystem./private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "features.multi_agent": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "permissions.agent-runtime-contained-v1.network.enabled": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "cli_auth_credentials_store": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "model_providers.ar_broker.stream_max_retries": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "model_providers.ar_broker.request_max_retries": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "permissions.agent-runtime-contained-v1.extends": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "analytics.enabled": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "model_providers.ar_broker.env_key": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "features.remote_plugin": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "otel.trace_exporter": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "features.browser_use": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "model_provider": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "features.apps": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "features.multi_agent_v2.enabled": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "otel.metrics_exporter": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "features.computer_use": {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5"
+          },
+          "model_providers.ar_broker.http_headers.version": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "model_providers.ar_broker.base_url": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "model_catalog_json": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          },
+          "model_providers.ar_broker.supports_standalone_web_search": {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0"
+          }
+        },
+        "layers": [
+          {
+            "name": {
+              "type": "sessionFlags"
+            },
+            "version": "sha256:564096747982a73e3648f1e5769f1b2c0a90726163c7193bb04a6d97bd7c3de5",
+            "config": {
+              "default_permissions": "agent-runtime-contained-v1",
+              "features": {
+                "apps": false,
+                "browser_use": false,
+                "computer_use": false,
+                "image_generation": false,
+                "multi_agent": false,
+                "multi_agent_v2": false,
+                "plugins": false,
+                "remote_plugin": false,
+                "unbounded_connection_retries": false,
+                "enable_request_compression": false
+              }
+            }
+          },
+          {
+            "name": {
+              "type": "user",
+              "file": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/config.toml",
+              "profile": null
+            },
+            "version": "sha256:cc035d281f6850bdc46352fd182dc180a5d22b007808bcaa392099c9ce7bd0d0",
+            "config": {
+              "model_provider": "ar_broker",
+              "model": "gpt-5.4",
+              "model_catalog_json": "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home/models.json",
+              "cli_auth_credentials_store": "file",
+              "allow_login_shell": false,
+              "shell_environment_policy": {
+                "exclude": [
+                  "AR_PRIVATE_BROKER_CAPABILITY"
+                ]
+              },
+              "model_providers": {
+                "ar_broker": {
+                  "name": "OpenAI",
+                  "base_url": "http://10.203.0.1:43129/backend-api/codex",
+                  "wire_api": "responses",
+                  "requires_openai_auth": false,
+                  "env_key": "AR_PRIVATE_BROKER_CAPABILITY",
+                  "supports_websockets": false,
+                  "supports_standalone_web_search": false,
+                  "request_max_retries": 0,
+                  "stream_max_retries": 0,
+                  "http_headers": {
+                    "version": "0.153.4"
+                  }
+                }
+              },
+              "analytics": {
+                "enabled": false
+              },
+              "otel": {
+                "exporter": "none",
+                "trace_exporter": "none",
+                "metrics_exporter": "none"
+              },
+              "permissions": {
+                "agent-runtime-contained-v1": {
+                  "extends": ":read-only",
+                  "filesystem": {
+                    "/private/tmp/ar69-r99/codex-native-darwin-broker-analysis/disposable-37uogR/private-home": "deny",
+                    ":tmpdir": "read",
+                    ":slash_tmp": "read"
+                  },
+                  "network": {
+                    "enabled": false
+                  }
+                }
+              }
+            }
+          },
+          {
+            "name": {
+              "type": "system",
+              "file": "/etc/codex/config.toml"
+            },
+            "version": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "config": {}
+          }
+        ]
+      }
+    },
+    {
+      "id": "permission-list",
+      "result": {
+        "data": [
+          {
+            "id": ":read-only",
+            "description": null,
+            "allowed": true
+          },
+          {
+            "id": ":workspace",
+            "description": null,
+            "allowed": true
+          },
+          {
+            "id": ":danger-full-access",
+            "description": null,
+            "allowed": true
+          },
+          {
+            "id": "agent-runtime-contained-v1",
+            "description": null,
+            "allowed": true
+          }
+        ],
+        "nextCursor": null
+      }
+    }
+  ],
+  "stderr": ""
+}

@@ -39,9 +39,9 @@ test("qualification schema declares and requires every registry root field", asy
 test("qualification registry pins every promoted evidence row", async () => {
   const result = await validateQualificationRegistry(repositoryRoot);
   assert.deepEqual(result, {
-    entryCount: 30,
-    evidenceArtifactCount: 57,
-    traceabilityRowCount: 30,
+    entryCount: 31,
+    evidenceArtifactCount: 59,
+    traceabilityRowCount: 31,
   });
 });
 

@@ -9,7 +9,7 @@ export type {
   InspectCodexConfigurationResult,
   PortableCodexSettingKey,
   PortableCodexSettingObservation,
-} from "./features/codex-configuration-inspection/contracts/codex-configuration-inspection.js";
+} from "./features/codex-configuration-inspection/index.js";
 export {
   CLAUDE_CODE_CONFIGURATION_BUDGETS,
   CLAUDE_CODE_EFFORT_VALUES,
@@ -19,7 +19,7 @@ export {
   CLAUDE_CODE_PROVIDER_ROUTE_KEYS,
   CLAUDE_CODE_PROVIDER_ROUTE_VOCABULARY_REVISION,
   CLAUDE_CODE_SETTINGS_DIALECT,
-} from "./features/claude-code-configuration-inspection/contracts/claude-code-configuration-inspection.js";
+} from "./features/claude-code-configuration-inspection/index.js";
 export type {
   ClaudeCodeConfigurationDiagnostic,
   ClaudeCodeConfigurationDiagnosticCode,
@@ -39,18 +39,4 @@ export type {
   InspectClaudeCodeConfigurationResult,
   ObservedPortableClaudeCodeIntent,
   TrustedClaudeCodeObservedSourcePlan,
-} from "./features/claude-code-configuration-inspection/contracts/claude-code-configuration-inspection.js";
-export type {
-  ClaudeCodeJsonParser,
-  ParseClaudeCodeJsonResult,
-} from "./features/claude-code-configuration-inspection/application/ports/outbound/claude-code-json-parser.js";
-export type {
-  ClaudeCodeConfigurationSemanticClassifier,
-  ClassifyClaudeCodeConfigurationResult,
-  DeferredClaudeCodeDefinition,
-  PortableClaudeCodeDefinition,
-} from "./features/claude-code-configuration-inspection/application/ports/outbound/claude-code-configuration-semantic-classifier.js";
-export type {
-  ClaudeCodeConfigurationSourceReader,
-  ReadClaudeCodeConfigurationSourceResult,
-} from "./features/claude-code-configuration-inspection/application/ports/outbound/claude-code-configuration-source-reader.js";
+} from "./features/claude-code-configuration-inspection/index.js";

@@ -53,6 +53,9 @@ async function analyze(files, config = policy) {
           await write(path);
         } else {
           await mkdir(join(consumer, path), { recursive: true });
+          if ((boundary.packageExports ?? []).length > 0) {
+            await write(`${path}/__boundary-package-owner__.js`);
+          }
         }
       }
       for (const path of boundary.entrypoints) {
@@ -144,7 +147,16 @@ test("domain, application, sibling adapters and sibling composition never inheri
     `${embedded}application/trusted-claude-code-setup-scope.ts`,
     `${agent}adapters/outbound/codex-app-server/codex-app-server-jsonl.ts`,
     `${agent}composition/dispatch-grant-anti-corruption.ts`,
-    `${embedded}composition/contained-turn-runtime-access.ts`,
+    // Host contained-turn-runtime-access is not listed here: the
+    // first Host checkpoint still coordinates through composition-owned
+    // validation, authority unwrapping, and lifecycle helpers in
+    // composition.embedded-runtime.contained-turn-support. PR69 gave that
+    // pairing a real runtime edge to/from contained-turn-authority-capability.ts
+    // (disposal.ts re-exports authority-capability's util-consuming exports, and
+    // authority-capability imports the capability bundle type), a genuine
+    // reciprocal pair that cannot be split into a util-free and a util-bearing
+    // role without recreating the cycle. See composition.embedded-runtime
+    // .contained-turn-support in source-dependencies.yaml.
   ];
   for (const content of ['void process.getBuiltinModule("node:util");\n', 'import "node:util";\n']) {
     expectForbidden(await analyze(Object.fromEntries(paths.map(path => [path, content]))), paths);

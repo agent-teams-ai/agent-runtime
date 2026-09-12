@@ -1,6 +1,7 @@
+import { capturePostClaimPreparation } from "./host-post-claim-preparation.js";
 import type { ContainedTurnProviderBinding } from "../contracts/contained-agent-turn.js";
-import type { ContainedTurnKernelProviderPort } from "../application/ports/outbound/contained-turn-ports.js";
-import { createCodexAppServerLaunchPlan } from "../adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
+import type { ContainedTurnKernelProviderPort, ContainedTurnKernelCustodyPort } from "../application/ports/outbound/contained-turn-ports.js";
+import { createCodexAppServerLaunchPlan, createCodexAppServerFinalizableLaunchPlan, isIssuedCodexAppServerLaunchPlan } from "../adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
 import type { CodexAppServerPermissionBoundary } from "../adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
 import {
   selectCodexAppServerPlatformTuple,
@@ -12,17 +13,21 @@ import {
 } from "../adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
 import { CodexAppServerContainedTurnProvider } from "../adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.js";
 import type { CodexEffectCustodyAuthority } from "../adapters/outbound/codex-app-server/codex-app-server-effect-custody.js";
-import type {
-  CustodiedProviderProcessRegistry,
-  CustodiedSdkProcessLauncher,
-  HostCustodyLaunchPlan,
+import {
+  startHostCustodyLaunch,
+  type ReservedHostLaunchView,
+  type CustodiedProviderProcessRegistry,
+  type CustodiedSdkProcessLauncher,
+  type HostCustodyLaunchPlan,
 } from "../adapters/outbound/host-custody/custodied-provider-process.js";
 import {
   ContainedTurnKernelCustodyAdapter,
   type ContainedTurnHostCustodyPort,
+  type ContainedTurnHostPostClaimPreparation,
   type ContainedTurnKernelCustodyAttemptOwner,
   type ContainedTurnKernelWorkspaceOwner,
 } from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
+import { NodeProviderProcessCustody } from "../adapters/outbound/host-custody/node-provider-process-custody.js";
 import { snapshotCodexCredentialOutputTokens } from "./codex-credential-output-inventory.js";
 
 type KernelOpen = Parameters<ContainedTurnKernelCustodyAttemptOwner["prepare"]>[0]["kernel"];
@@ -60,19 +65,23 @@ export interface CodexCurrentKernelLaunchRecordResolver {
   }>): Promise<CodexCurrentKernelLaunchRecord | undefined>;
 }
 export interface CreateCodexCurrentKernelOwnerOptions {
-  /** Mandatory opened-object authority for every Codex command/file effect lifecycle. */
-  readonly effectCustody: CodexEffectCustodyAuthority;
+  /** Required by the direct Node owner (validated before I/O). The Docker Host
+   * owner instead constructs its authority from captured filesystem confinement. */
+  readonly effectCustody?: CodexEffectCustodyAuthority;
   readonly hostBootId: string;
   readonly hostCustody: ContainedTurnHostCustodyPort & Processes;
   readonly hostInstanceId: string;
   readonly launchRecords: CodexCurrentKernelLaunchRecordResolver;
   /** Mandatory explicit target selected at this outer provider composition seam. */
   readonly platformTarget: CodexAppServerPlatformTarget;
+  /** Trusted Host preparation only; omission preserves legacy semantics without route admission. */
+  readonly postClaimPreparation?: ContainedTurnHostPostClaimPreparation;
   readonly workspaceOwner: ContainedTurnKernelWorkspaceOwner;
 }
 export interface CodexCurrentKernelOwner {
-  readonly custody: ContainedTurnKernelCustodyAdapter;
+  readonly custody: ContainedTurnKernelCustodyPort;
   readonly provider: ContainedTurnKernelProviderPort;
+  sealAdmission(): void;
   dispose(): void;
 }
 
@@ -84,6 +93,7 @@ interface PreparedRecord {
   readonly sensitiveOutputTokens: readonly string[];
   readonly workspaceRef: string;
   custodyRef?: string;
+  launchView?: ReservedHostLaunchView;
 }
 const sameAttempt = (record: PreparedRecord, input: AttemptInput): boolean =>
   record.kernel.operationId === input.operationId && record.kernel.attemptId === input.attemptId &&
@@ -100,12 +110,12 @@ const sameAttempt = (record: PreparedRecord, input: AttemptInput): boolean =>
 export const createCodexCurrentKernelOwner = (
   options: CreateCodexCurrentKernelOwnerOptions,
 ): CodexCurrentKernelOwner => {
+  const postClaimPreparation = capturePostClaimPreparation(options);
   const platformTuple = selectCodexAppServerPlatformTuple(options.platformTarget);
   const platformTarget: CodexAppServerPlatformTarget = Object.freeze({
     architecture: platformTuple.architecture, platform: platformTuple.platform,
   });
-  const delegatedCwd = platformTuple.containmentProfile === "strict-linux-cgroup-v2"
-    ? "/proc/self/fd/4" : undefined;
+  const nativeRequired = postClaimPreparation !== "current-owner";
   const custodyOwner = options.effectCustody;
   const custodyDescriptor = custodyOwner === undefined
     ? undefined : Object.getOwnPropertyDescriptor(custodyOwner, "admit");
@@ -130,18 +140,16 @@ export const createCodexCurrentKernelOwner = (
         throw new TypeError("Codex prepared attempt identity mismatch");
       }
       records.delete(input.custodyId);
+      const final = nativeRequired ? record.launchView?.readFinal() : undefined;
+      if (nativeRequired && final === undefined) {throw new TypeError("Codex final launch is unavailable");}
+      const plan = final?.plan ?? record.plan;
+      if (!isIssuedCodexAppServerLaunchPlan(plan)) {throw new TypeError("Codex issued launch is unavailable");}
       let created = false;
       return Object.freeze({
         createProcess: () => {
+          if (disposed) {throw new TypeError("Codex current-kernel owner is disposed");}
           if (created) {throw new TypeError("Codex prepared attempt is one-use");}
           created = true;
-          options.hostCustody.start(record.custodyRef!, {
-            arguments: record.plan.arguments,
-            command: record.plan.executablePath,
-            cwd: delegatedCwd ?? record.workspaceRef,
-            environment: record.plan.environment,
-            signal: new AbortController().signal,
-          });
           const provider = new CodexAppServerContainedTurnProvider({
             boundary: record.record.boundary,
             effectCustody,
@@ -150,11 +158,17 @@ export const createCodexCurrentKernelOwner = (
               providerBinding: record.binding,
               supportedModes: Object.freeze(["analysis", "workspace-write"]),
             },
-            privateRootPath: record.plan.privateRootPath,
+            privateRootPath: plan.privateRootPath,
+            ...(final === undefined ? {} : {nativeBrokerLaunchPlan: plan}),
             processes,
             sensitiveOutputTokens: record.sensitiveOutputTokens,
             tmpDir: record.record.tmpDir,
           });
+          if (final === undefined) {
+            startHostCustodyLaunch(options.hostCustody, record.custodyRef!, plan, new AbortController().signal);
+          } else {
+            NodeProviderProcessCustody.startFinalized(options.hostCustody, record.custodyRef!, final, new AbortController().signal);
+          }
           return Object.freeze({
             custody: Object.freeze({ custodyRef: record.custodyRef! }),
             kernelCustodyId: record.kernel.custodyId, provider,
@@ -183,11 +197,14 @@ export const createCodexCurrentKernelOwner = (
         throw new TypeError("Codex launch record is unavailable or workspace-bound incorrectly");
       }
       const sensitiveOutputTokens = snapshotCodexCredentialOutputTokens(launch, input.kernel.providerAccessSnapshot);
-      const plan = createCodexAppServerLaunchPlan({
+      const launchInput = {
         boundary: launch.boundary, executablePath: launch.executablePath,
         intentMode: input.kernel.intentMode, platformTarget,
         privateRootPath: launch.privateRootPath, tmpDir: launch.tmpDir,
-      });
+      };
+      const plan = nativeRequired
+        ? createCodexAppServerFinalizableLaunchPlan(launchInput, input.kernel.providerAccessSnapshot)
+        : createCodexAppServerLaunchPlan(launchInput);
       records.set(input.kernel.custodyId, {
         binding: input.providerBinding, kernel: input.kernel, plan, record: launch, sensitiveOutputTokens,
         workspaceRef: input.workspaceAuthority.canonicalPath,
@@ -201,17 +218,25 @@ export const createCodexCurrentKernelOwner = (
           record.custodyRef !== undefined) {
         throw new TypeError("Codex Host reservation identity mismatch");
       }
+      if (nativeRequired) {
+        const view = NodeProviderProcessCustody.launchView(options.hostCustody, input.underlyingCustodyRef);
+        if (view === undefined) {throw new TypeError("Codex native finalization requires actual Host custody");}
+        record.launchView = view;
+      }
       record.custodyRef = input.underlyingCustodyRef;
     },
     retire(input: OwnerRetireInput) {records.delete(input.custodyId);},
   });
   const custody = new ContainedTurnKernelCustodyAdapter(options.hostCustody, {
+    postClaimPreparation,
     attemptOwner, hostBootId: options.hostBootId, hostInstanceId: options.hostInstanceId,
     workspaceOwner: options.workspaceOwner,
   });
+  const sealAdmission = (): void => {disposed = true; custody.sealAdmission();};
   return Object.freeze({
     custody,
-    dispose() {disposed = true; records.clear();},
+    sealAdmission,
+    dispose() {sealAdmission();},
     provider: new CodexAppServerCurrentKernelAdapter({ attempts, platformTarget }),
   });
 };

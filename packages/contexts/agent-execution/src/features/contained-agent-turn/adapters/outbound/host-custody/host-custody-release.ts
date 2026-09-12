@@ -64,6 +64,8 @@ const forgetLiveHandles = (live: LiveCustody): void => {
   delete live.stdout;
   live.launchAuthority?.close();
   delete live.launchAuthority;
+  live.privateRootCleanupAuthority?.close();
+  delete live.privateRootCleanupAuthority;
   delete live.residueAuthority;
 };
 
@@ -72,14 +74,26 @@ const closeLiveCustody = async (
   live: LiveCustody,
   input: HostCustodyReleaseInput,
 ): Promise<HostCustodyReleaseOutcome> => {
-  const cooperativeDarwin = live.fingerprint?.containmentProfile === "cooperative-darwin-posix-process-group";
-  const provedNoStart = isCompleteProvedNoStart(live);
-  if (cooperativeDarwin && !provedNoStart) {
-    if (!quarantinePrivateRootForReconciliation(live)) {
-      return unprovenResult("private-root-quarantine-unproven", input, live);
-    }
-    return unprovenResult("darwin-cooperative-reconciliation-required", input, live);
+  // HTTP closure is resource custody only. Never remove its reconciliation owner
+  // or private root while preparation/retirement/endpoint release is unresolved.
+  if (live.residueAllocation === "uncertain") {
+    return unprovenResult("operation-cgroup-release-unproven", input, live);
   }
+  const httpClosed = await boundedPromise(live.httpReservation.cleanup(), state.cleanupAfterMs);
+  if (httpClosed !== true) {return unprovenResult("http-resources-release-unproven", input, live);}
+  if (live.nativeExecutionLease !== undefined && live.evidenceSealed &&
+      (live.nativeExit !== undefined || isCompleteProvedNoStart(live))) {
+    live.privateRootClosure = Object.freeze({...live.privateRootClosure, status: "deleted" as const});
+    const tombstone: CustodyTombstone = Object.freeze({
+      ...(live.privateReservationPlan === undefined ? {} : {privateReservationPlan: live.privateReservationPlan}),
+      attemptId: live.attemptId, custodyRef: live.custodyRef, evidence: snapshotEvidence(live),
+      inputIdentitySha256: live.inputIdentitySha256, operationId: live.operationId, receiptRef: input.receiptRef,
+    });
+    state.tombstonesByAttempt.set(live.attemptId, tombstone); state.tombstonesByRef.set(live.custodyRef, tombstone);
+    state.byAttempt.delete(live.attemptId); state.byRef.delete(live.custodyRef); forgetLiveHandles(live);
+    return Object.freeze({kind: "released" as const});
+  }
+  const cooperativeDarwin = live.fingerprint?.containmentProfile === "cooperative-darwin-posix-process-group";
   if (cooperativeDarwin) {
     if (!quarantinePrivateRootForReconciliation(live)) {
       return unprovenResult("private-root-quarantine-unproven", input, live);
@@ -96,7 +110,7 @@ const closeLiveCustody = async (
     return unprovenResult("private-root-quarantine-unproven", input, live);
   }
   const cgroupClosed = await boundedPromise(
-    live.residueAuthority?.close() ?? Promise.resolve(false),
+    live.residueAuthority?.close() ?? Promise.resolve(live.residueAllocation === "not-allocated"),
     Math.max(1, live.cleanupDeadline - state.monotonicNow()),
   );
   if (cgroupClosed !== true || state.monotonicNow() >= live.cleanupDeadline) {
@@ -108,6 +122,7 @@ const closeLiveCustody = async (
     );
   }
   const tombstone: CustodyTombstone = Object.freeze({
+    ...(live.privateReservationPlan === undefined ? {} : {privateReservationPlan: live.privateReservationPlan}),
     attemptId: live.attemptId,
     custodyRef: live.custodyRef,
     evidence: snapshotEvidence(live),

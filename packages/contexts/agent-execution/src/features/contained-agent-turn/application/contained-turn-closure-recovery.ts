@@ -1,6 +1,6 @@
 import type { ContainedTurnScope } from "../domain/contained-turn-authority.js";
 import type { ContainedTurnClosureRecovery, ContainedTurnClosureStage } from "../domain/contained-turn-closure-recovery.js";
-import { containedTurnNoWorkspaceClosureFact } from "../domain/contained-turn-closure-recovery.js";
+import { containedTurnNoWorkspaceClosureFact, isContainedTurnClosureStageCompleted } from "../domain/contained-turn-closure-recovery.js";
 import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
 import { containedTurnIdentity } from "../domain/contained-turn-identities.js";
 import type { ContainedTurnEvidenceId, ContainedTurnProofId } from "../domain/contained-turn-identities.js";
@@ -26,6 +26,18 @@ interface ClosureStageDriver<Proof> {
 
 const hasProofIds = (operation: ContainedTurnKernelOperation, proofIds: readonly ContainedTurnProofId[]): boolean =>
   proofIds.every(proofId => operation.proofs.some(proof => proof.proofId === proofId));
+
+const matchesRequest = (recovery: ContainedTurnClosureRecovery, request: PendingClosure): boolean =>
+  recovery.kind === "required" && recovery.stage === request.stage && recovery.debtId === request.debtId &&
+  recovery.requestId === request.requestId && recovery.requestDigest === request.requestDigest;
+
+const observedStageOutcome = (
+  operation: ContainedTurnKernelOperation,
+  stage: ContainedTurnClosureStage,
+  reason: Extract<ResumeContainedTurnClosureOutcome, { kind: "debt" }>["reason"],
+): ResumeContainedTurnClosureOutcome => isContainedTurnClosureStageCompleted(operation, stage)
+  ? { kind: "completed", operation }
+  : { kind: "debt", operation, reason };
 
 interface ClosureCommitOutcome {
   readonly applied: boolean;
@@ -74,7 +86,7 @@ const ensureDurableStageDebt = async (
 ): Promise<Readonly<{ operation: ContainedTurnKernelOperation; useQuery: boolean }>> => {
   let current = initial;
   for (let attempt = 0; attempt < MAX_LOCAL_CLOSURE_CAS_ATTEMPTS; attempt += 1) {
-    if (current.closureRecovery.kind === "proved_no_workspace") {
+    if (isContainedTurnClosureStageCompleted(current, stage)) {
       return { operation: current, useQuery: true };
     }
     if (current.closureRecovery.kind === "required") {
@@ -100,13 +112,15 @@ const retainUnknownClosureDebt = async (
   trustedScope: ContainedTurnScope,
   evidenceId: ContainedTurnEvidenceId,
 ): Promise<ContainedTurnKernelOperation> => {
+  const request = operation.closureRecovery;
+  if (request.kind !== "required") {return operation;}
   let current = operation;
   for (let attempt = 0; attempt < MAX_LOCAL_CLOSURE_CAS_ATTEMPTS; attempt += 1) {
-    if (current.closureRecovery.kind !== "required") {return current;}
+    if (isContainedTurnClosureStageCompleted(current, request.stage) || !matchesRequest(current.closureRecovery, request)) {return current;}
     const committed = await commitMutation(dependencies, current, trustedScope, {
       evidenceId,
       kind: "note_closure_stage_unknown",
-      request: current.closureRecovery,
+      request,
     });
     if (committed === undefined) {return current;}
     current = committed.operation;
@@ -171,6 +185,7 @@ export const resumeContainedTurnClosureStage = async <Proof>(
 ): Promise<ResumeContainedTurnClosureOutcome> => {
   const staged = await ensureDurableStageDebt(dependencies, initial, trustedScope, driver.stage);
   let current = staged.operation;
+  if (isContainedTurnClosureStageCompleted(current, driver.stage)) {return { kind: "completed", operation: current };}
   if (current.closureRecovery.kind !== "required" || current.closureRecovery.stage !== driver.stage) {
     return { kind: "debt", operation: current, reason: "cas_exhausted" };
   }
@@ -182,30 +197,31 @@ export const resumeContainedTurnClosureStage = async <Proof>(
       current = await retainUnknownClosureDebt(
         dependencies, current, trustedScope, closureUnknownEvidenceId(current, request, "missing_observer"),
       );
-      return { kind: "debt", operation: current, reason: "indeterminate" };
+      return observedStageOutcome(current, driver.stage, "indeterminate");
     }
     outcome = await observer(request, current);
   } catch {
     current = await retainUnknownClosureDebt(
       dependencies, current, trustedScope, closureUnknownEvidenceId(current, request, "observer_threw"),
     );
-    return { kind: "debt", operation: current, reason: "indeterminate" };
+    return observedStageOutcome(current, driver.stage, "indeterminate");
   }
   if (outcome.kind !== "proved") {
     current = await retainUnknownClosureDebt(dependencies, current, trustedScope, outcome.evidenceId);
-    return { kind: "debt", operation: current, reason: outcome.kind };
+    return observedStageOutcome(current, driver.stage, outcome.kind);
   }
   if (outcome.requestId !== request.requestId || outcome.requestDigest !== request.requestDigest) {
     throw new TypeError("closure ensure outcome substituted request identity or digest");
   }
   const proofIds = driver.proofIds(outcome.proof);
   for (let attempt = 0; attempt < MAX_LOCAL_CLOSURE_CAS_ATTEMPTS; attempt += 1) {
+    if (isContainedTurnClosureStageCompleted(current, driver.stage) && hasProofIds(current, proofIds)) {
+      return { kind: "completed", operation: current };
+    }
     if (current.closureRecovery.kind !== "required") {
-      if (hasProofIds(current, proofIds)) {return { kind: "completed", operation: current };}
       return { kind: "debt", operation: current, reason: "identity_conflict" };
     }
-    if (current.closureRecovery.stage !== driver.stage || current.closureRecovery.debtId !== request.debtId ||
-        current.closureRecovery.requestId !== request.requestId || current.closureRecovery.requestDigest !== request.requestDigest) {
+    if (!matchesRequest(current.closureRecovery, request)) {
       return { kind: "debt", operation: current, reason: "identity_conflict" };
     }
     const committed = await commitMutation(
@@ -217,7 +233,7 @@ export const resumeContainedTurnClosureStage = async <Proof>(
     if (committed === undefined) {return { kind: "debt", operation: current, reason: "indeterminate" };}
     current = committed.operation;
   }
-  return current.closureRecovery.kind !== "required" && hasProofIds(current, proofIds)
+  return isContainedTurnClosureStageCompleted(current, driver.stage) && hasProofIds(current, proofIds)
     ? { kind: "completed", operation: current }
     : { kind: "debt", operation: current, reason: "cas_exhausted" };
 };

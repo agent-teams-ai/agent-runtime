@@ -1,3 +1,6 @@
+import { inspectNodeCustodyReservation, assertNativeBoundReservation } from "./node-provider-process-custody-native-reservation.js";
+import { createNodeCustodyHttpPreparation } from "./node-provider-process-custody-http-preparation.js";
+import { containNodeCustody } from "./node-provider-process-custody-containment.js";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
@@ -17,12 +20,9 @@ import {
   type HostCustodySpawnAcknowledgement,
   type ProviderProcessCustodyPort,
 } from "./custodied-provider-process.js";
-import { containCustody, snapshotEvidence, unprovenResult, type ContainmentResult } from "./host-custody-evidence.js";
+import { identityBase, snapshotEvidence,
+  unprovenResult, type ContainmentResult } from "./host-custody-evidence.js";
 import {
-  assertDelegatedStartFingerprint,
-  canonicalJson,
-  createFingerprint,
-  inputIdentity,
   positiveInteger,
   resolveLaunchCandidate,
   sha256,
@@ -32,16 +32,18 @@ import {
   delegatedStartAbortError,
   NodeCustodiedSdkProcess,
 } from "./host-custody-process-tree.js";
-import type { OperationResidueAuthorityFactory } from "./host-custody-cgroup-v2.js";
+import { OperationResidueNotAllocatedError, type OperationResidueAuthorityFactory } from "./host-custody-cgroup-v2.js";
+import { bindCooperativeProcessGroupGuardian } from "./host-custody-posix-process-group.js";
+import { DescriptorAuthorityAcquisitionError } from "./host-custody-launch-failure.js";
 import { launchGuardedProvider } from "./node-provider-process-custody-launch.js";
 import {
   assertHostCustodyReservationMode,
   openHostCustodyReservation,
 } from "./node-provider-process-custody-open.js";
-import { replayCustody } from "./node-provider-process-custody-replay.js";
+import { assertPrivateReservationReplay, snapshotPrivateReservationReplayInput, replayCustody } from "./node-provider-process-custody-replay.js";
 import { releaseHostCustody } from "./host-custody-release.js";
-import { quarantinePrivateRootForReconciliation } from "./host-custody-private-root.js";
 import {
+  descriptorWorkspaceAuthority,
   assertRetainedWorkspaceAuthority,
   assertReservedWorkspaceAuthority,
   bindPrivateHostCustodyReservation,
@@ -50,7 +52,6 @@ import {
 import {
   createLiveCustody,
   HOST_CUSTODY_LIMITS,
-  isCompleteProvedNoStart,
   type CustodyTombstone,
   type LiveCustody,
   type NodeProviderProcessCustodyOptions,
@@ -60,7 +61,21 @@ import {
   type ProcessCustodyRuntimeProfile,
 } from "./host-custody-runtime-profile.js";
 import { acknowledgeProviderSpawn } from "./node-provider-process-custody-spawn-acknowledgement.js";
+import { readCustodyStartAdmission } from "./node-provider-process-custody-start-admission.js";
+import {
+  custodyDataRecord,
+  type NodeCustodyHttpPreparation,
+} from "./node-provider-process-custody-http-reservation.js";
+import type { FinalHostLaunch } from "./host-launch-finalization.js";
+import { startHostCustodyLaunch } from "./host-custody-start-projection.js";
+import { snapshotHostCustodyLaunchPlan } from "./host-custody-launch-plan-snapshot.js";
+import {inspectDarwinNativeLaunchObservation, startDarwinNativeExecution, readDarwinNativeImage,
+  cutoffDarwinNativeExecution} from "./darwin-attempt-owner-selection.js";
+import {DeferredNativeProviderProcess, DeferredNativeSdkProcess} from "./deferred-native-sdk-process.js";
+import {isNativeHostCustodyWorkspaceAuthority, retireNativeHostCustodyWorkspaceAuthority} from "./native-host-custody-workspace-authority.js";
+import {validateContainedTurnIdentity} from "../../../domain/contained-turn-identities.js";
 export type { NodeProviderProcessCustodyOptions } from "./node-provider-process-custody-state.js";
+export { assertDarwinNativeHostGenerationBinding } from "./node-provider-process-custody-native-reservation.js";
 export class NodeProviderProcessCustodyCore implements
   ProviderProcessCustodyPort,
   CustodiedProviderProcessRegistry,
@@ -94,7 +109,32 @@ export class NodeProviderProcessCustodyCore implements
   readonly #tombstonesByAttempt = new Map<string, CustodyTombstone>();
   readonly #tombstonesByRef = new Map<string, CustodyTombstone>();
 
+  readonly #httpPreparation = createNodeCustodyHttpPreparation(this.#byRef);
+
+  /** Provider gets a view of the reservation slot, never its mutation owner. */
+  public static launchView(owner: unknown, custodyRef: string) {
+    if (typeof owner !== "object" || owner === null || !(#byRef in owner)) {return;}
+    return owner.#byRef.get(custodyRef)?.launchBinding.view;
+  }
+
+  public static startFinalized(owner: unknown, custodyRef: string, bundle: FinalHostLaunch, signal: AbortSignal) {
+    if (typeof owner !== "object" || owner === null || !(#byRef in owner)) {throw new HostCustodyLaunchRejectedError();}
+    const live = owner.#byRef.get(custodyRef);
+    if (live === undefined) {throw new HostCustodyLaunchRejectedError();}
+    live.launchBinding.assertStart(bundle);
+    if (live.launchBinding.view.readFinal() !== bundle) {throw new HostCustodyLaunchRejectedError();}
+    return startHostCustodyLaunch({start: (reference, input) => owner.#start(reference, input, bundle)}, custodyRef, bundle.plan, signal);
+  }
+
+  /** Host-private inspection is inert, including foreign/proxied owners. No package export. */
+  public static httpPreparation(owner: unknown): NodeCustodyHttpPreparation | undefined {
+    return typeof owner === "object" && owner !== null && #httpPreparation in owner
+      ? owner.#httpPreparation : undefined;
+  }
+
   public constructor(options: NodeProviderProcessCustodyOptions, runtimeProfile: ProcessCustodyRuntimeProfile) {
+    options = custodyDataRecord(options);
+    runtimeProfile = custodyDataRecord(runtimeProfile);
     assertRuntimeProfilePlatform(runtimeProfile);
     this.#runtimeProfile = runtimeProfile;
     this.#launchPlans = options.launchPlans;
@@ -126,6 +166,28 @@ export class NodeProviderProcessCustodyCore implements
     if (live === undefined || live.fingerprint === undefined) {return undefined;}
     return snapshotEvidence(live);
   }
+  /** Inert owner lookup for recovery callers that retain the public attempt
+   * identity but never receive the Host-private custody reference. */
+  public evidenceForAttempt(input: Readonly<{operationId: string; attemptId: string}>): HostCustodyEvidence | undefined {
+    input = custodyDataRecord(input);
+    const keys = Reflect.ownKeys(input);
+    if (keys.length !== 2 || !keys.includes("operationId") || !keys.includes("attemptId") ||
+        typeof input.operationId !== "string" || typeof input.attemptId !== "string") {
+      throw new TypeError("Host Custody attempt evidence identity is invalid");
+    }
+    validateContainedTurnIdentity("operation", input.operationId);
+    validateContainedTurnIdentity("attempt", input.attemptId);
+    const live = this.#byAttempt.get(input.attemptId);
+    const tombstone = this.#tombstonesByAttempt.get(input.attemptId);
+    // A valid owner has exactly one binding for an attempt. Ambiguous internal
+    // state cannot be projected as evidence for either operation.
+    if (live !== undefined && tombstone !== undefined) {return undefined;}
+    if (tombstone !== undefined) {
+      return tombstone.operationId === input.operationId ? tombstone.evidence : undefined;
+    }
+    return live?.operationId === input.operationId && live.fingerprint !== undefined
+      ? snapshotEvidence(live) : undefined;
+  }
 
   public async release(input: {
     readonly attemptId: string;
@@ -136,6 +198,10 @@ export class NodeProviderProcessCustodyCore implements
     const live = input.custodyRef === undefined
       ? this.#byAttempt.get(input.attemptId)
       : this.#byRef.get(input.custodyRef);
+    if (live?.attemptId === input.attemptId && live.operationId === input.operationId &&
+        live.contained?.receiptRef === input.receiptRef && live.evidenceSealed) {
+      live.httpReservation.cutoff();
+    }
     const outcome = await releaseHostCustody({
       byAttempt: this.#byAttempt,
       byRef: this.#byRef,
@@ -145,7 +211,10 @@ export class NodeProviderProcessCustodyCore implements
       tombstonesByAttempt: this.#tombstonesByAttempt,
       tombstonesByRef: this.#tombstonesByRef,
     }, input);
-    if (outcome.kind === "released" && live !== undefined) {closeRetainedWorkspaceAuthority(live);}
+    if (outcome.kind === "released" && live !== undefined) {
+      closeRetainedWorkspaceAuthority(live);
+      if (live.nativeWorkspaceAuthority !== undefined) {await retireNativeHostCustodyWorkspaceAuthority(live.nativeWorkspaceAuthority);}
+    }
     return outcome;
   }
 
@@ -154,6 +223,22 @@ export class NodeProviderProcessCustodyCore implements
   }
 
   public async reserve(input: HostCustodyReservationInput): Promise<ContainedTurnCustodyHandle> {
+    if (isNativeHostCustodyWorkspaceAuthority(input.workspaceAuthority)) {
+      const plan = snapshotHostCustodyLaunchPlan(input.launchPlan);
+      let consumed = false;
+      return this.#open(input, "sdk-delegated", Object.freeze({resolve: async () => {
+        if (consumed) {throw new TypeError("Native launch plan already consumed");}
+        consumed = true; return plan;
+      }}));
+    }
+    const replayInput = snapshotPrivateReservationReplayInput(input);
+    const prior = this.#byAttempt.get(replayInput.attemptId) ?? this.#tombstonesByAttempt.get(replayInput.attemptId);
+    if (prior !== undefined) {
+      assertPrivateReservationReplay(prior, replayInput);
+      if ("opening" in prior) {await prior.opening;}
+      return Object.freeze({custodyRef: prior.custodyRef});
+    }
+    input = replayInput;
     const reservation = await bindPrivateHostCustodyReservation(input, this, this.#runtimeProfile);
     try {
       const opened = await this.#open(
@@ -173,22 +258,19 @@ export class NodeProviderProcessCustodyCore implements
     reservationLaunchPlans?: HostCustodyLaunchPlanResolver,
     retainedWorkspaceAuthority?: import("./private-host-custody-reservation.js").RetainedHostCustodyWorkspaceAuthority,
   ): Promise<ContainedTurnCustodyHandle> {
-    const baseIdentitySha256 = inputIdentity(input);
-    const identitySha256 = "workspaceAuthority" in input
-      ? sha256(canonicalJson([
-        baseIdentitySha256,
-        input.workspaceAuthority.canonicalPath,
-        input.workspaceAuthority.identity.dev.toString(),
-        input.workspaceAuthority.identity.ino.toString(),
-        input.workspaceAuthority.identity.mountId,
-      ]))
-      : baseIdentitySha256;
+    const {nativeAuthority, native, nativeLease, identitySha256} = inspectNodeCustodyReservation(input, this.#hostLifecycleGenerationSha256);
     const tombstone = this.#tombstonesByAttempt.get(input.attemptId);
     const existing = this.#byAttempt.get(input.attemptId);
     if (tombstone !== undefined && requiredSpawnMode !== undefined) {
       assertHostCustodyReservationMode(tombstone.evidence.fingerprint, requiredSpawnMode);
     }
     if (tombstone !== undefined || existing !== undefined) {
+      if ("launchPlan" in input) {
+        const prior = tombstone ?? existing!;
+        assertPrivateReservationReplay(prior, input);
+        if (existing !== undefined) {await existing.opening;}
+        return Object.freeze({custodyRef: prior.custodyRef});
+      }
       const replay = await replayCustody(
         input, identitySha256, tombstone, existing,
         () => this.#resolveCandidate(input, requiredSpawnMode),
@@ -209,8 +291,12 @@ export class NodeProviderProcessCustodyCore implements
       identitySha256,
       {
         containmentProfile: this.#runtimeProfile.containmentProfile,
+        ...("launchPlan" in input ? {privateReservationPlan: snapshotHostCustodyLaunchPlan(input.launchPlan)} : {}),
         opening,
-        ...("workspaceAuthority" in input ? { workspaceAuthority: input.workspaceAuthority } : {}),
+        ...(native === undefined && "workspaceAuthority" in input ? { workspaceAuthority: descriptorWorkspaceAuthority(input.workspaceAuthority) } : {}),
+        ...(native === undefined ? {} : {nativeWorkspaceAuthority: nativeAuthority!,
+          nativeWorkspaceFacts: inspectDarwinNativeLaunchObservation(native.observation),
+          nativeExecutionLease: nativeLease!}),
         ...(retainedWorkspaceAuthority === undefined ? {} : { retainedWorkspaceAuthority }),
       },
     );
@@ -223,85 +309,118 @@ export class NodeProviderProcessCustodyCore implements
       launchPlans: reservationLaunchPlans ?? this.#launchPlans,
       live,
       opening,
-      rejectOpening,
+      rejectOpening: error => {
+        live.sealed = true;
+        live.httpReservation.cutoff();
+        rejectOpening?.(error);
+      },
       removeUnfingerprintedReservation: () => {
+        live.httpReservation.cutoff();
         this.#byAttempt.delete(live.attemptId);
         this.#byRef.delete(live.custodyRef);
       },
-      residueAuthorityFactory: this.#residueAuthorityFactory,
+      residueAuthorityFactory: {create: async reference => {
+        live.residueAllocation = "uncertain";
+        try {
+          const authority = await this.#residueAuthorityFactory.create(reference);
+          live.residueAuthority = authority;
+          live.residueAllocation = "retained";
+          return authority;
+        } catch (error) {
+          if (error instanceof OperationResidueNotAllocatedError) {live.residueAllocation = "not-allocated";}
+          throw error;
+        }
+      }},
       expectedContainmentProfile: this.#runtimeProfile.containmentProfile,
       ...(requiredSpawnMode === undefined ? {} : { requiredSpawnMode }),
       resolveOpening,
       spawn: (reserved, arguments_, environment) => {this.#spawn(reserved, arguments_, environment);},
-      ...(reservationLaunchPlans === undefined ? {} : { assertBoundReservation: assertReservedWorkspaceAuthority }),
+      ...(native !== undefined ? {assertBoundReservation: assertNativeBoundReservation} : reservationLaunchPlans === undefined ? {} : { assertBoundReservation: assertReservedWorkspaceAuthority }),
     });
   }
 
-  public start(custodyRef: string, input: {
+  public start(custodyRef: string, input: Parameters<CustodiedSdkProcessLauncher["start"]>[1]): CustodiedSdkProcess {
+    return this.#start(custodyRef, input);
+  }
+
+  #start(custodyRef: string, input: {
     readonly arguments: readonly string[];
     readonly command: string;
     readonly cwd: string | undefined;
     readonly environment: Readonly<Record<string, string | undefined>>;
     readonly signal: AbortSignal;
-  }): CustodiedSdkProcess {
+  }, bundle?: FinalHostLaunch): CustodiedSdkProcess {
     const live = this.#byRef.get(custodyRef);
     if (live === undefined) {throw new Error("Host Custody reservation does not exist");}
+    live.httpReservation.assertActive();
     if (live.sealed) {throw new Error("Host Custody reservation is sealed");}
+    live.launchBinding.assertStart(bundle);
     const plan = live.plan;
     if (plan === undefined || (plan.spawnMode ?? "eager") !== "sdk-delegated") {
       throw new Error("Host Custody reservation does not permit delegated SDK start");
     }
-    const environment = assertDelegatedStartFingerprint(input, plan, live.workspaceRef);
-    const startIdentitySha256 = sha256(canonicalJson([
-      live.fingerprint?.planSha256,
-      sha256(input.command),
-      input.cwd === undefined ? undefined : sha256(input.cwd),
-      input.arguments,
-      Object.keys(environment).toSorted(),
-    ]));
+    const admission = readCustodyStartAdmission(input, live);
+    const disposeAbort = (): void => {
+      // Also removes a listener if registration threw before returning a handle.
+      admission.abort.remove(requestAbort);
+    };
     const requestAbort = (): void => {
       live.abortRequested = true;
       void this.#triggerAbortContainment(live);
+      disposeAbort();
     };
-    input.signal.addEventListener("abort", requestAbort, { once: true });
-    if (input.signal.aborted) {
-      requestAbort();
-      input.signal.removeEventListener("abort", requestAbort);
-      throw delegatedStartAbortError();
-    }
-    if (live.startIdentitySha256 !== undefined) {
-      if (live.startIdentitySha256 !== startIdentitySha256 || live.sdkProcess === undefined) {
-        input.signal.removeEventListener("abort", requestAbort);
-        throw new HostCustodyFingerprintConflictError("Host Custody delegated start fingerprint conflict");
-      }
-      void live.exit?.finally(() => input.signal.removeEventListener("abort", requestAbort));
-      return live.sdkProcess;
-    }
-    live.startIdentitySha256 = startIdentitySha256;
-    const startFingerprint = createFingerprint({
-      attemptId: live.attemptId,
-      intentMode: plan.intentMode,
-      operationId: live.operationId,
-      providerBinding: live.providerBinding,
-      workspaceRef: live.workspaceRef,
-    }, plan, live.workspaceRef, input.arguments);
-    if (live.fingerprint?.fingerprintSha256 !== startFingerprint.fingerprintSha256) {
-      throw new HostCustodyFingerprintConflictError("Host Custody delegated start fingerprint conflict");
-    }
-    let sdkProcess: NodeCustodiedSdkProcess;
     try {
-      sdkProcess = this.#spawn(live, input.arguments, environment);
+      if (admission.replay === undefined) {live.launchBinding.firstStart(live);}
+      // All caller data, both fingerprints and replay eligibility are now fixed.
+      // Own the entire admitted phase, including cancellation and return setup.
+      live.startIdentitySha256 = admission.startIdentitySha256;
+      if (admission.abort.aborted) {requestAbort(); throw delegatedStartAbortError();}
+      admission.abort.subscribe(requestAbort);
+      let sdkProcess = admission.replay;
+      if (sdkProcess === undefined) {
+        if (live.nativeExecutionLease !== undefined) {
+          const provider = new DeferredNativeProviderProcess(live.custodyRef, live.workspaceRef);
+          const sdk = new DeferredNativeSdkProcess(
+            () => {void cutoffDarwinNativeExecution(live.nativeExecutionLease!).catch(() => {});}, provider.stdout,
+          );
+          live.process = provider; live.sdkProcess = sdk; live.spawnStatus = "ambiguous";
+          const started = startDarwinNativeExecution(live.nativeExecutionLease);
+          live.exit = started.then(process => process.waitForExit());
+          live.spawnAcknowledgement = started.then(process => {
+            try {
+              provider.bind(process); sdk.bind(process);
+              const image = readDarwinNativeImage(live.nativeExecutionLease!); const child = image?.child;
+              if (image === undefined || child === undefined) {throw new Error("native provider image unavailable");}
+              live.httpReservation.installNativeExecution(live.nativeExecutionLease!);
+              live.childProcessInstanceSha256 = sha256(JSON.stringify(child));
+              live.identity = Object.freeze({...identityBase(live, this.#hostLifecycleGenerationSha256),
+                pid: child.pid, pgid: child.pgid, proofRef: `native-darwin:${image.attestation}`, status: "proved" as const});
+              live.spawnStatus = "acknowledged";
+            }
+            catch (error) {provider.fail(error); sdk.fail(error); throw error;}
+            return "acknowledged" as const;
+          }, error => {provider.fail(error); sdk.fail(error); live.spawnStatus = "ambiguous"; throw error;});
+          sdkProcess = sdk;
+        } else {sdkProcess = this.#spawn(live, admission.arguments, admission.environment);}
+      }
+      if (live.exit === undefined) {throw new HostCustodyLaunchRejectedError();}
+      void live.exit.then(disposeAbort, disposeAbort);
+      if (admission.abort.aborted) {requestAbort();}
+      return sdkProcess!;
     } catch (error) {
-      input.signal.removeEventListener("abort", requestAbort);
+      try {live.httpReservation.cutoff();}
+      finally {
+        // Cleanup failure cannot strand resources already retained by launch.
+        void this.#triggerStartFailureContainment(live);
+        disposeAbort();
+      }
+      if (live.abortRequested) {throw delegatedStartAbortError();}
       if (
         error instanceof HostCustodyFingerprintConflictError ||
         error instanceof HostCustodyUnsupportedError
       ) {throw error;}
       throw new HostCustodyLaunchRejectedError();
     }
-    if (input.signal.aborted) {requestAbort();}
-    void live.exit?.finally(() => input.signal.removeEventListener("abort", requestAbort));
-    return sdkProcess;
   }
 
   public requestContainment(input: {
@@ -329,9 +448,10 @@ export class NodeProviderProcessCustodyCore implements
     arguments_: readonly string[],
     environment: Readonly<Record<string, string>>,
   ): NodeCustodiedSdkProcess {
+    live.httpReservation.assertActive();
     if (live.sealed) {throw new Error("Host Custody reservation is sealed");}
     if (live.child !== undefined || live.spawnAcknowledgement !== undefined) {
-      if (live.sdkProcess !== undefined) {return live.sdkProcess;}
+      if (live.sdkProcess instanceof NodeCustodiedSdkProcess) {return live.sdkProcess;}
       throw new Error("Host Custody process start is already in flight");
     }
     if (
@@ -343,6 +463,9 @@ export class NodeProviderProcessCustodyCore implements
       throw new Error("Host Custody launch reservation is incomplete");
     }
     if (live.retainedWorkspaceAuthority !== undefined) {assertRetainedWorkspaceAuthority(live);}
+    // A thrown admitted launch cannot itself prove that no process started.
+    const spawnStatusBeforeLaunch = live.spawnStatus;
+    live.spawnStatus = "ambiguous";
     let launched: ReturnType<typeof launchGuardedProvider>;
     try {
       launched = launchGuardedProvider({
@@ -363,14 +486,32 @@ export class NodeProviderProcessCustodyCore implements
           workspaceDescriptorPath: live.retainedWorkspaceAuthority.descriptorPath,
         }),
       });
+      // Retain every returned resource before descriptor release or observation
+      // can fail. Containment must still own a launch whose start call rejects.
+      live.launchAuthority = launched.authority;
+      live.guardian = launched.guardian;
+      live.child = launched.child;
+      live.exit = launched.exit;
+      live.process = launched.process;
+      live.sdkProcess = launched.sdkProcess;
+      live.stderr = launched.stderr;
+      live.stdout = launched.stdout;
+      live.spawnStatus = "ambiguous";
+    } catch (error) {
+      // Descriptor authority acquisition refuses before the guardian constructor,
+      // whose first statement spawns. Only that class proves no process exists,
+      // so only it retracts the mark, back to the classification the reservation
+      // already held. Every other refusal keeps the honest ambiguous evidence.
+      if (error instanceof DescriptorAuthorityAcquisitionError) {live.spawnStatus = spawnStatusBeforeLaunch;}
+      throw error;
     } finally {
       closeRetainedWorkspaceAuthority(live);
     }
     live.childProcessInstanceSha256 = sha256(randomUUID());
     live.executable = launched.authority.executable;
-    live.launchAuthority = launched.authority;
-    live.spawnStatus = "ambiguous";
-    live.guardian = launched.guardian;
+    if (this.#runtimeProfile.containmentProfile === "cooperative-darwin-posix-process-group") {
+      bindCooperativeProcessGroupGuardian(live.residueAuthority, launched.guardian);
+    }
     live.spawnAcknowledgement = acknowledgeProviderSpawn(live, launched.guardian, {
       hostLifecycleGenerationSha256: this.#hostLifecycleGenerationSha256,
       identityObservationAfterMs: this.#identityObservationAfterMs,
@@ -380,12 +521,6 @@ export class NodeProviderProcessCustodyCore implements
       spawnAcknowledgementAfterMs: this.#spawnAcknowledgementAfterMs,
       spawnAcknowledgementObserver: this.#spawnAcknowledgementObserver,
     });
-    live.child = launched.child;
-    live.exit = launched.exit;
-    live.process = launched.process;
-    live.sdkProcess = launched.sdkProcess;
-    live.stderr = launched.stderr;
-    live.stdout = launched.stdout;
     return launched.sdkProcess;
   }
 
@@ -394,8 +529,10 @@ export class NodeProviderProcessCustodyCore implements
     input: { readonly attemptId: string; readonly custodyRef?: string; readonly operationId: string },
   ): Promise<ContainmentResult> {
     if (live.containment !== undefined) {return live.containment;}
-    const containment = this.#contain(live, input);
+    // Publish single-flight ownership before synchronous abort listeners can reenter.
+    const {promise: containment, resolve, reject} = Promise.withResolvers<ContainmentResult>();
     live.containment = containment;
+    void this.#contain(live, input).then(resolve, reject);
     void containment.then(
       result => {
         if (result.kind === "unproven" && live.containment === containment) {
@@ -411,27 +548,15 @@ export class NodeProviderProcessCustodyCore implements
     return containment;
   }
 
-  async #contain(
-    live: LiveCustody,
-    input: { readonly attemptId: string; readonly custodyRef?: string; readonly operationId: string },
-  ): Promise<ContainmentResult> {
-    live.sealed = true;
-    live.containmentDeadline ??= this.#monotonicNow() + this.#containmentAfterMs;
-    try {
-      return await containCustody(live, input, {
-        containmentAfterMs: this.#containmentAfterMs,
-        drainAfterMs: this.#drainAfterMs,
-        forceKillAfterMs: this.#forceKillAfterMs,
-        hostLifecycleGenerationSha256: this.#hostLifecycleGenerationSha256,
-        monotonicNow: this.#monotonicNow,
-        terminateAfterMs: this.#terminateAfterMs,
-      });
-    } finally {
-      if (live.fingerprint?.containmentProfile === "cooperative-darwin-posix-process-group" &&
-          !isCompleteProvedNoStart(live)) {
-        quarantinePrivateRootForReconciliation(live);
-      }
-    }
+  #contain(live: LiveCustody, input: { readonly attemptId: string; readonly custodyRef?: string; readonly operationId: string }): Promise<ContainmentResult> {
+    return containNodeCustody(live, input, {
+      containmentAfterMs: this.#containmentAfterMs,
+      drainAfterMs: this.#drainAfterMs,
+      forceKillAfterMs: this.#forceKillAfterMs,
+      hostLifecycleGenerationSha256: this.#hostLifecycleGenerationSha256,
+      monotonicNow: this.#monotonicNow,
+      terminateAfterMs: this.#terminateAfterMs,
+    });
   }
 
   async #triggerOverflowContainment(live: LiveCustody): Promise<void> {

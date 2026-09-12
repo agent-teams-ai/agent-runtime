@@ -50,11 +50,15 @@ observe and cancellation remain bound to the trusted tenant/project scope.
 Caller abort only detaches its waiter. Host disposal submits durable
 cancellation and cannot manufacture containment or terminal truth.
 
-Focused evidence is green: 58 Agent Execution tests, 63 Embedded Runtime
-tests, and five PostgreSQL restart/concurrency/corruption tests. The exact
-Codex `0.150.1` hosted Linux x64 canary harness and static tuple are retained
-candidate implementation evidence; no content-addressed successful live-turn
-receipt bound to the current source SHA is committed.
+Historical focused evidence at `735f2422` was green: 58 Agent Execution tests,
+63 Embedded Runtime tests, and five PostgreSQL restart/concurrency/corruption
+tests. The exact Codex `0.150.1` hosted Linux x64 canary harness and static tuple
+are retained historical candidate implementation evidence; no content-addressed
+successful live-turn receipt bound to the current source SHA is committed.
+As of candidate `32c639e396a6c1f886545c33d45bfead865d42da`, the current static
+Codex candidate supersedes `0.150.1` with `@openai/codex@0.153.4` to match
+the source-pinned platform tuples and protocol fixtures; this revision sync
+does not transfer historical evidence or promote live qualification.
 Its bounded credential inventory is only a pre-spawn observation: it does not
 prove the exact bytes later opened by Codex and does not close same-UID file
 mutation. That proof remains part of route and deployment qualification.
@@ -164,7 +168,12 @@ Included:
   workspace;
 - durable PostgreSQL-backed operation, command, effect, output, and receipt
   records for the hosted path;
-- streaming observations with bounded backpressure and cursor continuity;
+- streaming observations with bounded backpressure and cursor continuity,
+  except the Codex App Server admission path, which accepts each turn as a
+  whole-turn buffered unit rather than incremental per-item streaming with
+  backpressure; Claude Agent SDK admission remains incremental. This is an
+  accepted provider-specific admission design, not an unmet streaming
+  requirement;
 - cancellation request, process-tree stop, complete drain, and honest ambiguous
   state;
 - deterministic result manifest and content-addressed artifact capture;
@@ -421,7 +430,7 @@ appear below composition.
 5. Implement the ADR-0004 pre-materialization negative guard in the model before
    any provider adapter exists.
 6. Record provider version and capability fixtures at exact revisions. The
-   current static candidates are Codex `@openai/codex@0.150.1` and Claude SDK
+   current static candidates are Codex `@openai/codex@0.153.4` and Claude SDK
    `@anthropic-ai/claude-agent-sdk@0.3.251`; static characterization must not be
    described as behavior qualification. Do not use floating versions or mutable evidence.
 7. Freeze an identity matrix proving module/generation identities are disjoint
@@ -491,6 +500,13 @@ and route policy remain outside Agent Execution, Host Custody, Embedded
 Runtime, and module composition.
 
 ### Phase 3: production Host Custody
+
+Owner ruling 2026-09-12: Host Custody is an **optional contained-turn
+profile**, product default **off**. Ordinary user-session runtime does not
+require it. Current delivery leaves that profile unfinished; see
+[Host Custody optional default](host-custody-optional-default.md). The
+checklist below remains the Host Custody contract when the profile is selected
+later. It is not a PR #69 merge gate.
 
 Build a product-owned custody adapter rather than promoting the existing Rust
 Guardian evidence spike to production by assumption. It must prove:
@@ -595,9 +611,12 @@ credentials.
 ## Hosted worker execution model
 
 All heavy research, implementation, fault injection, and E2E work should run on
-subscription-runtime hosted workers in isolated worktrees. Planning and final
-architecture reviews use `gpt-5.6-sol` with `xhigh` reasoning; implementation
-uses `gpt-5.6-sol` with `medium` reasoning; fast mode is enabled as requested.
+subscription-runtime hosted workers in isolated worktrees. For the current
+PR #69 delivery, the owner's accepted setting is `gpt-6-astra`, `xhigh`
+reasoning, and normal service (`--service-tier default`) for both writers and
+independent reviewers. The owner's 2026-09-06 instruction to disable fast mode
+supersedes the earlier fast-service setting. Apply it to all subsequent launches
+and continuations; completed fast runs retain their historical evidence.
 
 Parallel ownership:
 
@@ -616,7 +635,8 @@ Parallel ownership:
 Every lane receives the exact accepted decisions, this plan, immutable provider
 evidence, scope exclusions, and test safety rules. Contract changes are proposed
 to the kernel owner rather than silently edited across lanes. Integration happens
-in small dependency-ordered PRs, not one giant merge.
+in dependency-ordered checkpoints. The accepted PR #69 exception below keeps
+this existing delivery in one PR; future deliveries retain the normal PR budget.
 
 Independent reviews occur after Phase 0, after the kernel, after each provider
 adapter, and on the final exact head. Reviewers classify findings as product
@@ -647,7 +667,10 @@ test pass rate, tests added, review defects, and iterations to stable head.
 - PostgreSQL restart, lease expiry, split-brain claimant, and projection rebuild;
 - adapter reports each unsupported capability without emulation;
 - packed package has no forbidden dependency or private DTO export;
-- Codex and Claude conformance fixtures produce the same product-level outcomes;
+- Codex and Claude conformance fixtures produce the same product-level outcomes,
+  except cancellation-during-stream on Claude, which closes as
+  `reconcile_required` instead of `cancelled`, because the Claude Agent SDK
+  does not expose a cancelled/aborted terminal state distinct from failed;
 - OpenCode ACP fixture validates the neutral contract without production launch.
 - direct composition rejects missing, unknown, duplicate, or ambiguous provider
   selection before factory invocation, handle publication, or effects;
@@ -669,6 +692,75 @@ oracle case only when a minimized counterexample demonstrates a missing state or
 transition. Adapter conformance and E2E suites may reuse oracle scenario IDs.
 
 ## Pull request sequence
+
+### PR #69 delivery scope amendment (owner accepted 2026-09-08)
+
+The owner explicitly selected one real Linux Codex E2E as the delivery boundary
+for this existing PR. Claude Linux, Codex macOS and Claude macOS live acceptance
+and production qualification move to the next delivery stage. This supersedes
+the four-combination merge prerequisite in the earlier completion sequence;
+it does not declare the original V1 program complete or weaken its invariants.
+
+Keep already implemented deferred-provider code and regression coverage.
+Unqualified paths must remain fail-closed and must not acquire production claims
+from this merge. Review and required CI still cover all retained PR code.
+Do not add new Claude/macOS implementation lanes before this checkpoint ships.
+
+Current acceptance requires a real disposable Linux Codex turn through the
+existing seven ports, real PA/RS and PostgreSQL ownership, committed claim,
+pre-spawn route enforcement, provider output/exit and cleanup evidence. Finish
+exact-head independent review, required checks, qualified Linux-only registry
+and L0 evidence, then normal push/merge under the owner's current authorization.
+Do not bypass checks or substitute synthetic evidence. Reuse unchanged evidence;
+run the final full gate once on the stable candidate and rerun affected checks
+only after subsequent changes.
+
+Report current-PR completion separately from original-program completion. The
+three deferred live combinations remain outstanding in the original program;
+changing the delivery denominator is a scope change, not implementation progress.
+
+### PR #69 completion simplification (owner accepted 2026-09-06)
+
+This execution update preserves the approved V1 scope, ADR invariants, required
+tests, and complete Definition of Done. It overrides the replacement-stack
+sequence for the existing PR #69 only. Preserve its branch and review history;
+do not create a late replacement stack or install dependencies to continue.
+
+Deliver three concrete results in order, running independent owners in parallel:
+
+1. Complete one disposable Linux Codex turn through the existing seven ports:
+   committed claim, Host/Provider Access/Runtime Security assembly, enforced
+   provider route, actual output and exit, and cleanup receipts. Connect the
+   existing owners; do not add another lifecycle or application port.
+2. Complete Claude and the existing cooperative macOS path through that same
+   contract. Qualify all four original provider/platform combinations and the
+   required PostgreSQL boundaries using explicitly test-owned credentials and
+   disposable projects. Hosted worker accounts alone are not canary bindings.
+3. Seal the stable code SHA, qualification registry, and L0 evidence; finish
+   independent review, one final full check/required CI cycle, the final push,
+   and normal merge. Verify the merge SHA in main without bypassing checks.
+
+Use focused compiled tests before review. Review related changes that share an
+invariant as one bounded cumulative diff after the producer's focused checks;
+do not queue separate reviews of nearly identical intermediate snapshots. Each
+review records its exact base/head, complete owned paths, dependencies, and
+actual validation limits. An unreviewed dependency cannot become approved by
+being omitted from the diff. Fix concrete P0-P2 findings and re-review the
+remediation; optional generalization does not block delivery.
+
+Reuse passing evidence only when the tested inputs, relevant dependency and
+tool versions, and environment assumptions are unchanged and identifiable by
+SHA or digest. If they change, rerun the affected check. Reconcile the final
+canaries and required CI with the final code SHA. An ordinary infrastructure
+timeout permits a bounded retry of only the unproved phase; an ambiguous
+provider execution must first be reconciled, never blindly repeated.
+
+Docker/V4 journals and helpers are implementation choices, not additional
+product goals. Add code only for a missing accepted invariant or a reproduced
+defect. Do not expand into a general HTTP gateway, resource platform, public
+SDK, Desktop, Module Kit/ADR-0011, Windows production, or production OpenCode.
+The three results above group delivery work; they do not remove acceptance
+gates or change the fixed progress-report denominator.
 
 ### Delivery ratchet
 
@@ -750,6 +842,13 @@ Stop and request a new decision when:
 - more than 30 percent of production changes are generic framework glue;
 - a second TCK or competing state machine appears;
 - hosted E2E would require a real user project or ambient live session.
+
+## Deferred Rust custody discussion
+
+TODO after this delivery: discuss the [Rust custody migration follow-up](rust-custody-migration-follow-up.md).
+The owner explicitly deferred that transfer to separate work on 2026-09-06.
+Keep PR #69's existing implementation scope and acceptance criteria unchanged;
+the future migration estimate is not part of this plan's progress denominator.
 
 ## Definition of Done
 

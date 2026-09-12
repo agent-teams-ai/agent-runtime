@@ -1,7 +1,7 @@
-import { containedTurnProviderAccessSnapshotDigest, containedTurnScopeDigest, type ContainedTurnScope } from "../domain/contained-turn-authority.js";
+import { createContainedTurnAcceptedAuthorityHandoff, prepareContainedTurnAcceptedSubject } from "./contained-turn-accepted-authority.js";
+import type { ContainedTurnScope } from "../domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
 import {
-  completeContainedTurnDispatchGrantSubject,
   containedTurnDispatchClaimBindingDigest,
   containedTurnDispatchGrantRequestId,
   containedTurnGrantSettlementRequestId,
@@ -55,13 +55,14 @@ const unavailableGrantConsumptionEvidenceId = (
 );
 
 export type ClaimContainedTurnWithConsumedGrantsOutcome =
+  | { readonly kind: "stopped"; readonly operation: ContainedTurnKernelOperation }
   | { readonly committedDispatchProof: CommittedDispatchProofV1; readonly kind: "claimed"; readonly operation: ContainedTurnKernelOperation }
   | (UnclaimedGrantOutcomeEvidence & { readonly kind: "observed_claim"; readonly operation: ContainedTurnKernelOperation })
   | (UnclaimedGrantOutcomeEvidence & { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" })
   | (UnclaimedGrantOutcomeEvidence & { readonly kind: "prevented"; readonly preventionProofId: ContainedTurnProofId })
   | (UnclaimedGrantOutcomeEvidence & { readonly kind: "unavailable" });
 
-const settleConsumedGrantReceipts = async (
+const grantSettlementFailed = async (
   dependencies: ContainedTurnKernelDependencies,
   receipts: UnclaimedGrantOutcomeEvidence["consumedGrantReceipts"],
   disposition: "abandoned_without_claim" | "claim_committed",
@@ -96,6 +97,16 @@ export const claimContainedTurnWithConsumedGrants = async (
   subject: ContainedTurnDispatchGrantSubject,
   hostCustodyProof: Extract<Awaited<ReturnType<ContainedTurnKernelDependencies["custody"]["open"]>>["hostCustodyProof"], { readonly kind: "host_custody" }>,
 ): Promise<ClaimContainedTurnWithConsumedGrantsOutcome> => {
+  let accepted: ReturnType<typeof createContainedTurnAcceptedAuthorityHandoff>;
+  try {
+    accepted = createContainedTurnAcceptedAuthorityHandoff(operation, trustedScope, subject);
+  } catch {
+    // No owner was called; retain the existing retirement and cleanup path.
+    return Object.freeze({
+      kind: "unavailable", consumedGrantReceipts: Object.freeze({}),
+      consumedGrantRequestIds: Object.freeze({}), consumptionEvidenceIds: Object.freeze({}),
+    });
+  }
   const providerAccessConsume = dependencies.providerAccess.consumeForDispatch;
   const runtimeSecurityConsume = dependencies.security.consumeForDispatch;
   const claim = dependencies.operationStore.claimPreparedDispatch;
@@ -103,8 +114,8 @@ export const claimContainedTurnWithConsumedGrants = async (
     "provider_access", subject,
   );
   const [providerAccessResult, runtimeSecurityResult] = await Promise.allSettled([
-    providerAccessConsume.call(dependencies.providerAccess, { grantRequestId: providerAccessGrantRequestId, subject }),
-    runtimeSecurityConsume.call(dependencies.security, { subject }),
+    providerAccessConsume.call(dependencies.providerAccess, { accepted, grantRequestId: providerAccessGrantRequestId, subject }),
+    runtimeSecurityConsume.call(dependencies.security, { accepted, subject }),
   ]);
   const providerAccess = providerAccessResult.status === "fulfilled"
     ? providerAccessResult.value : undefined;
@@ -172,21 +183,28 @@ export const claimContainedTurnWithConsumedGrants = async (
         const committedDispatchProof = validateCommittedDispatchClaimV1(
           outcome.committedDispatchProof, outcome.operation, subject, hostCustodyProof,
         );
-        if (await settleConsumedGrantReceipts(dependencies, consumedGrantReceipts, "claim_committed")) { await recordContainedTurnRejectedDebt(dependencies, outcome.operation, trustedScope, "grant_settlement_rejected", "dispatch_authority"); }
+        if (await grantSettlementFailed(dependencies, consumedGrantReceipts, "claim_committed")) {
+          // The claim remains committed, but debt closes the dispatch cutoff.
+          // Settlement replay cannot restore this one-shot start authority.
+          const indebted = await recordContainedTurnRejectedDebt(
+            dependencies, outcome.operation, trustedScope, "grant_settlement_rejected", "dispatch_authority",
+          );
+          return Object.freeze({ kind: "stopped", operation: indebted });
+        }
         return Object.freeze({
           kind: "claimed",
           operation: outcome.operation,
           committedDispatchProof,
         });
       }
-      if (await settleConsumedGrantReceipts(dependencies, consumedGrantReceipts, "claim_committed")) { await recordContainedTurnRejectedDebt(dependencies, outcome.operation, trustedScope, "grant_settlement_rejected", "dispatch_authority"); }
+      if (await grantSettlementFailed(dependencies, consumedGrantReceipts, "claim_committed")) { await recordContainedTurnRejectedDebt(dependencies, outcome.operation, trustedScope, "grant_settlement_rejected", "dispatch_authority"); }
       return Object.freeze({ ...unclaimedEvidence, kind: "observed_claim", operation: outcome.operation });
     }
     if (outcome.kind === "stale") {
       if (!isContainedTurnPreparedClaimOperation(authority, subject, outcome.current)) {
         return Object.freeze({ ...unclaimedEvidence, kind: "unavailable" });
       }
-      if (await settleConsumedGrantReceipts(dependencies, consumedGrantReceipts, "claim_committed")) {
+      if (await grantSettlementFailed(dependencies, consumedGrantReceipts, "claim_committed")) {
         await recordContainedTurnRejectedDebt(dependencies, outcome.current, trustedScope, "grant_settlement_rejected", "dispatch_authority");
       }
       return Object.freeze({ ...unclaimedEvidence, kind: "observed_claim", operation: outcome.current });
@@ -222,39 +240,17 @@ export const claimPreparedContainedTurn = async (input: Readonly<{
 }>): Promise<ClaimPreparedContainedTurnOutcome> => {
   const { custody, dependencies, operation, preparation, preparationToken, trustedScope } = input;
   if (operation.workspaceId === undefined) {return { kind: "stopped", operation };}
-  const providerAccess = operation.providerAccessSnapshot;
-  const providerBindingDigest = containedTurnProviderAccessSnapshotDigest(providerAccess);
-  const subject: ContainedTurnDispatchGrantSubject = completeContainedTurnDispatchGrantSubject(Object.freeze({
-    attemptId: preparation.attemptId, custodyId: preparation.custodyId, effectId: operation.effectId,
-    executionGenerationId: preparation.executionGenerationId, hostBootId: custody.hostBootId,
-    hostInstanceId: custody.hostInstanceId, operationCutoffRevision: operation.operationCutoff.revision,
-    operationId: operation.operationId, preparationToken, provider: operation.adapterSnapshot.provider,
-    providerAccessExpectation: Object.freeze({
-      acceptedAuthorityDigest: operation.acceptedAuthorityVectorDigest, accessRef: providerAccess.accessRef,
-      authorityHeadDigest: providerAccess.ownerAuthorityDigest, bindingDigest: providerBindingDigest,
-      bindingRevision: providerAccess.revision, credentialBindingDigest: providerAccess.credentialBindingDigest,
-      credentialBindingRef: providerAccess.credentialBindingRef, credentialGeneration: providerAccess.credentialGeneration,
-      providerAccountRef: providerAccess.providerAccountRef, providerRouteRef: providerAccess.providerRouteRef,
-    }),
-    purpose: "contained_turn_provider_start_v1",
-    runtimeSecurityExpectation: Object.freeze({
-      acceptedAuthorityDigest: operation.acceptedAuthorityVector.securityDecisionDigest,
-      authorityGeneration: operation.acceptedAuthorityVector.operationAuthorityRevision,
-      authorityHeadDigest: operation.acceptedAuthorityVector.securityDecisionDigest,
-      authorityRevision: operation.acceptedAuthorityVector.securityAuthorityRevision,
-      constraintsDigest: digestContainedTurnCanonicalValue({
-        adapterSnapshot: operation.adapterSnapshot, capabilityManifest: operation.capabilityManifest,
-        intentMode: operation.intent.mode,
-      } as never),
-      containmentPolicyDigest: operation.acceptedAuthorityVector.containmentPolicyDigest,
-      providerBindingDigest, providerId: operation.adapterSnapshot.provider,
-    }),
-    scope: trustedScope, scopeDigest: containedTurnScopeDigest(trustedScope), workspaceId: operation.workspaceId,
-  }));
+  const subject = prepareContainedTurnAcceptedSubject(
+    { ...operation, workspaceId: operation.workspaceId }, trustedScope, {
+      attemptId: preparation.attemptId, custodyId: preparation.custodyId,
+      executionGenerationId: preparation.executionGenerationId,
+      hostBootId: custody.hostBootId, hostInstanceId: custody.hostInstanceId, preparationToken,
+    },
+  );
   const claim = await claimContainedTurnWithConsumedGrants(
     dependencies, operation, trustedScope, subject, custody.hostCustodyProof,
   );
-  if (claim.kind === "claimed") {return claim;}
+  if (claim.kind === "claimed" || claim.kind === "stopped") {return claim;}
   if (claim.kind === "observed_claim") {
     const cleanup = await retireAndCleanupContainedTurnPreparation(
       dependencies, operation, trustedScope, subject, "claim_lost", claim.consumedGrantRequestIds,
@@ -269,10 +265,12 @@ export const claimPreparedContainedTurn = async (input: Readonly<{
     claim.consumptionEvidenceIds,
   );
   if (cleanup.kind === "claimed") {
-    if (await settleConsumedGrantReceipts(dependencies, claim.consumedGrantReceipts, "claim_committed")) { await recordContainedTurnRejectedDebt(dependencies, cleanup.operation, trustedScope, "grant_settlement_rejected", "dispatch_authority"); }
+    if (await grantSettlementFailed(dependencies, claim.consumedGrantReceipts, "claim_committed")) { await recordContainedTurnRejectedDebt(dependencies, cleanup.operation, trustedScope, "grant_settlement_rejected", "dispatch_authority"); }
     return { kind: "observed", operation: cleanup.operation };
   }
-  if (claim.kind === "prevented") {
+  // No-dispatch closure also asserts that Host custody is no longer required.
+  // Only durable cleanup of the reservation and both grants permits that path.
+  if (claim.kind === "prevented" && cleanup.kind === "cleanup_closed") {
     return { kind: "prevented", operation: cleanup.operation, preventionProofId: claim.preventionProofId };
   }
   const reconciled = cleanup.operation.reconciliation.kind === "required"

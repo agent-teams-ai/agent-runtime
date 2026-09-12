@@ -57,10 +57,42 @@ export interface DockerCustodyProviderExecRequest {
   readonly gid: number;
   readonly handshakeNonce: string;
   readonly kind: "provider-exec";
+  readonly observationBinding?: DockerCustodyObservationBinding;
   readonly launchFingerprintSha256: string;
   readonly requestId: string;
   readonly uid: number;
   readonly wallDeadlineUnixMs: number;
+}
+
+/** Optional request extension; legacy messages remain parseable but carry no instance proof. */
+export interface DockerCustodyObservationBinding {
+  readonly challenge: string;
+  readonly generation: string;
+}
+export interface DockerCustodyProviderInstanceFacts {
+  readonly childInstanceId: string;
+  readonly executableMapping?: DockerCustodyExecutableMapping;
+  readonly executableSha256: string;
+  readonly initInstanceId: string;
+  readonly pid: number;
+}
+/** Trusted init's point-in-time kernel file-object comparison; not a pidfd or a lifetime claim.
+ * The surrounding instance binds the held SHA, child/init identity, request, launch and challenge.
+ * Absence preserves the legacy wire shape and means executable mapping is unproven.
+ */
+export interface DockerCustodyExecutableMapping {
+  readonly device: string;
+  readonly inode: string;
+  readonly kind: "linux-procfs-exe-v1";
+  readonly scope: "spawn-observation";
+  readonly startTimeTicks: string;
+}
+export interface DockerCustodyProviderInstance extends DockerCustodyProviderInstanceFacts {
+  readonly binding: DockerCustodyObservationBinding;
+  readonly handshakeNonce: string;
+  readonly kind: "provider-instance";
+  readonly launchFingerprintSha256: string;
+  readonly requestId: string;
 }
 
 export interface DockerCustodyProviderExecAcknowledgement {
@@ -144,7 +176,7 @@ export type DockerCustodyHostMessage = DockerCustodyHostHandshake | DockerCustod
   DockerCustodyProviderExecRequest | DockerCustodyProviderInput | DockerCustodyProviderInputEof;
 export type DockerCustodyInitMessage =
   | DockerCustodyContainmentRequest | DockerCustodyInitReady | DockerCustodyProviderDrainComplete | DockerCustodyProviderDrainFailed
-  | DockerCustodyProviderExecAcknowledgement | DockerCustodyProviderObservation | DockerCustodyProviderOutput | DockerCustodySignalObservation;
+  | DockerCustodyProviderExecAcknowledgement | DockerCustodyProviderInstance | DockerCustodyProviderObservation | DockerCustodyProviderOutput | DockerCustodySignalObservation;
 export type DockerCustodyProtocolMessage = DockerCustodyHostMessage | DockerCustodyInitMessage;
 
 export class DockerCustodyProtocolError extends Error {
@@ -254,6 +286,16 @@ export const decodeDockerCustodyProviderBytes = (value: string): Uint8Array =>
 
 const parseProviderIoMessage = (value: JsonObject, kind: string): DockerCustodyProtocolMessage | undefined => {
   switch (kind) {
+    case "provider-instance": {
+      const extension = Object.hasOwn(value, "executableMapping") ? {executableMapping: executableMapping(value.executableMapping)} : {};
+      exactKeys(value, ["binding", "childInstanceId", "executableSha256", "handshakeNonce", "initInstanceId", "kind",
+        "launchFingerprintSha256", "pid", "requestId", ...Object.keys(extension)], kind);
+      return Object.freeze({...extension, binding: observationBinding(value.binding), childInstanceId: digest(value.childInstanceId, "childInstanceId"),
+        executableSha256: digest(value.executableSha256, "executableSha256"), handshakeNonce: token(value.handshakeNonce, "handshakeNonce"),
+        initInstanceId: digest(value.initInstanceId, "initInstanceId"), kind,
+        launchFingerprintSha256: digest(value.launchFingerprintSha256, "launchFingerprintSha256"),
+        pid: integer(value.pid, "pid", 2, 2_147_483_647), requestId: token(value.requestId, "requestId")});
+    }
     case "provider-input":
       exactKeys(value, ["bytesBase64", "kind", "requestId"], kind);
       return Object.freeze({bytesBase64: providerBytes(value.bytesBase64, "bytesBase64"), kind,
@@ -271,6 +313,22 @@ const parseProviderIoMessage = (value: JsonObject, kind: string): DockerCustodyP
         signal: literal(value.signal, DOCKER_CUSTODY_HOST_SIGNALS, "signal")});
     default: return undefined;
   }
+};
+
+const kernelInteger = (value: unknown, label: string, minimum: bigint): string => {
+  const result = string(value, label, 20);
+  if (!/^(?:0|[1-9][0-9]*)$/u.test(result) || BigInt(result) < minimum || BigInt(result) > 18_446_744_073_709_551_615n) {
+    return fail(`${label} must be a canonical unsigned kernel integer`);
+  }
+  return result;
+};
+const executableMapping = (input: unknown): DockerCustodyExecutableMapping => {
+  const value = object(input, "executableMapping");
+  exactKeys(value, ["device", "inode", "kind", "scope", "startTimeTicks"], "executableMapping");
+  return Object.freeze({device: kernelInteger(value.device, "device", 0n), inode: kernelInteger(value.inode, "inode", 1n),
+    kind: literal(value.kind, ["linux-procfs-exe-v1"], "executableMapping.kind"),
+    scope: literal(value.scope, ["spawn-observation"], "executableMapping.scope"),
+    startTimeTicks: kernelInteger(value.startTimeTicks, "startTimeTicks", 1n)});
 };
 
 export const parseDockerCustodyIdentity = (input: unknown, label = "identity"): DockerCustodyIdentity => {
@@ -306,6 +364,15 @@ const argumentsList = (input: unknown): readonly string[] => {
   return Object.freeze(items.map((item, index) => boundedText(item, `argv[${index}]`, MAX_VALUE_BYTES)));
 };
 
+const observationBinding = (input: unknown): DockerCustodyObservationBinding => {
+  const value = object(input, "observationBinding");
+  exactKeys(value, ["challenge", "generation"], "observationBinding");
+  return Object.freeze({challenge: digest(value.challenge, "challenge"), generation: token(value.generation, "generation")});
+};
+
+const optionalObservationBinding = (value: JsonObject): Pick<DockerCustodyProviderExecRequest, "observationBinding"> =>
+  Object.hasOwn(value, "observationBinding") ? {observationBinding: observationBinding(value.observationBinding)} : {};
+
 export const parseDockerCustodyProtocolMessage = (input: unknown): DockerCustodyProtocolMessage => {
   const value = object(input, "frame");
   const kind = string(ownValue(value, "kind", "frame.kind"), "frame.kind");
@@ -322,13 +389,17 @@ export const parseDockerCustodyProtocolMessage = (input: unknown): DockerCustody
       return Object.freeze({kind, launchFingerprintSha256: digest(value.launchFingerprintSha256, "launchFingerprintSha256"),
         nonce: token(value.nonce, "nonce"), observedIdentity: parseDockerCustodyIdentity(value.observedIdentity, "observedIdentity"),
         protocol: literal(value.protocol, [DOCKER_CUSTODY_INIT_PROTOCOL], "protocol")});
-    case "provider-exec":
-      exactKeys(value, ["argv", "environment", "executableSha256", "executableSlot", "gid", "handshakeNonce", "kind", "launchFingerprintSha256", "requestId", "uid", "wallDeadlineUnixMs"], kind);
-      return Object.freeze({argv: argumentsList(value.argv), environment: environment(value.environment),
+    case "provider-exec": {
+      const extension = optionalObservationBinding(value);
+      exactKeys(value, ["argv", "environment", "executableSha256", "executableSlot", "gid", "handshakeNonce", "kind", "launchFingerprintSha256", "requestId", "uid", "wallDeadlineUnixMs",
+        ...Object.keys(extension)], kind);
+      return Object.freeze({...extension,
+        argv: argumentsList(value.argv), environment: environment(value.environment),
         executableSha256: digest(value.executableSha256, "executableSha256"), executableSlot: literal(value.executableSlot, ["provider-entrypoint"], "executableSlot"),
         gid: integer(value.gid, "gid", 1, 2_147_483_647), handshakeNonce: token(value.handshakeNonce, "handshakeNonce"), kind,
         launchFingerprintSha256: digest(value.launchFingerprintSha256, "launchFingerprintSha256"), requestId: token(value.requestId, "requestId"),
         uid: integer(value.uid, "uid", 1, 2_147_483_647), wallDeadlineUnixMs: integer(value.wallDeadlineUnixMs, "wallDeadlineUnixMs", 1, Number.MAX_SAFE_INTEGER)});
+    }
     case "provider-exec-ack":
       exactKeys(value, ["kind", "observation", "requestId"], kind);
       return Object.freeze({kind, observation: literal(value.observation, ["acceptance-unknown", "not-started", "started"], "observation"), requestId: token(value.requestId, "requestId")});
