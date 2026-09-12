@@ -3,12 +3,12 @@ name: adoption-receipt-darwin
 # Temporary workflow: Darwin arm64 adoption receipt for Runtime Security
 # activation identity ab9a942a stacked on RC activation D d2c28df4.
 # The job always checks out that SHA so this workflow-only commit does not
-# enter the receipt identity. Safe to delete after the paired Runtime Security receipt is merged.
+# enter the receipt identity. Safe to delete after the paired Host assembly-grammar receipt is merged.
 
 on:
   push:
     branches:
-      - cursor/fms-darwin-gha-capture-rs-activation-7d17
+      - cursor/fms-darwin-gha-capture-host-assembly-grammar-7d17
 
 permissions:
   contents: read
@@ -19,16 +19,16 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     steps:
-      - name: Checkout frozen Runtime Security activation SHA
+      - name: Checkout frozen Host assembly-grammar SHA
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: ab9a942afd9810cf41b4e7e837f4f90a5a0c180e
+          ref: 3c6b425bde4cfeff33e719b35e82ef399f4cfb9c
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "ab9a942afd9810cf41b4e7e837f4f90a5a0c180e"
+        run: test "$(git rev-parse HEAD)" = "3c6b425bde4cfeff33e719b35e82ef399f4cfb9c"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
