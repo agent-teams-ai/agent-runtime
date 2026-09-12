@@ -22,7 +22,7 @@ import {
 import { createEvidenceInputs } from "./runtime-setup-l0-evidence-inputs.mjs";
 
 import {
-  adoptionPaths, adoptionConstruction, assertAdoptionAuthority,
+  adoptionPaths, adoptionConstruction, assertAdoptionAuthority, retainedHistoricalEvidenceRoots,
   createAdoptionEvidenceInputs, validateAdoptionReport,
 } from "./runtime-setup-l0-evidence-adoption.mjs";
 
