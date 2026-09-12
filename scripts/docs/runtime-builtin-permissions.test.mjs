@@ -144,7 +144,7 @@ test("domain, application, sibling adapters and sibling composition never inheri
     `${provider}domain/provider-access-binding.ts`,
     `${provider}application/ports/outbound/provider-access-binding-repository.ts`,
     `${embedded}index.ts`,
-    `${embedded}contracts/runtime-access.ts`,
+    `${embedded}features/contained-turn-runtime-access/runtime-access.ts`,
     `${agent}adapters/outbound/codex-app-server/codex-app-server-jsonl.ts`,
     `${agent}composition/dispatch-grant-anti-corruption.ts`,
     // Host contained-turn-runtime-access is not listed here: the

@@ -371,7 +371,7 @@ export const traces = Object.freeze({
     claudeCode: Object.freeze([
       Object.freeze({
         owner: "embedded-runtime",
-        path: "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+        path: "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts",
         symbols: Object.freeze(["RuntimeAccessHandle", "ClaudeCodeRuntimeSetupQueries"]),
       }),
       Object.freeze({
@@ -398,7 +398,7 @@ export const traces = Object.freeze({
     codex: Object.freeze([
       Object.freeze({
         owner: "embedded-runtime",
-        path: "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+        path: "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts",
         symbols: Object.freeze(["RuntimeAccessHandle", "CodexRuntimeSetupQueries"]),
       }),
       Object.freeze({

@@ -1670,6 +1670,11 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
           "to": "packages/apps/embedded-runtime/src/composition/opaque-reference-digest.ts",
           "mode": "runtime"
         },
@@ -1682,11 +1687,6 @@
           "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
           "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
           "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
-          "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
-          "mode": "type-only"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/claude-code-setup-inspection-planner.ts",
@@ -1720,12 +1720,12 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-claude-code-setup-view.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
           "mode": "type-only"
         },
         {
           "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-claude-code-setup-view.ts",
-          "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
           "mode": "type-only"
         },
         {
@@ -1745,12 +1745,12 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-codex-setup-view.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
           "mode": "type-only"
         },
         {
           "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-codex-setup-view.ts",
-          "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
           "mode": "type-only"
         },
         {
@@ -2354,6 +2354,11 @@
           "mode": "runtime"
         },
         {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts",
+          "mode": "type-only"
+        },
+        {
           "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts",
           "to": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/internal.ts",
           "mode": "runtime"
@@ -2435,7 +2440,12 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/contained-turn-runtime-access.ts",
-          "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/index.ts",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts",
           "mode": "type-only"
         },
         {
@@ -2460,12 +2470,12 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/contained-turn-runtime-validation.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
           "mode": "type-only"
         },
         {
           "from": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/contained-turn-runtime-validation.ts",
-          "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
           "mode": "type-only"
         },
         {
@@ -2518,10 +2528,10 @@
       "id": "core.embedded-runtime.access-contracts",
       "owner": "embedded-runtime",
       "roots": [
-        "packages/apps/embedded-runtime/src/contracts/runtime-access.ts"
+        "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts"
       ],
       "entrypoints": [
-        "packages/apps/embedded-runtime/src/contracts/runtime-access.ts"
+        "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts"
       ],
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
@@ -3960,7 +3970,7 @@
       "relationships": [
         {
           "from": "packages/apps/embedded-runtime/src/index.ts",
-          "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts",
           "mode": "type-only"
         }
       ]
