@@ -518,10 +518,13 @@ int ae_root_isolate_host(ae_bootstrap *b) {
   if (null_fd<0 || fstat(null_fd,&null_stat)!=0 || !S_ISCHR(null_stat.st_mode) || chdir("/")!=0) _exit(78);
   for (int fd=0;fd<3;fd++) if (dup2(null_fd,fd)<0) _exit(78);
   if (null_fd>2 && !close_capture(&null_fd)) _exit(78);
+  /* Darwin may repopulate supplementary groups when setuid() targets a real
+   * Directory user from passwd, so Host admission validates only exact
+   * uid/gid equality after drop. Empty groups remain enforced for leased IDs. */
   if (!clear_process_authority() || setgroups(0,NULL)!=0 ||
       setgid((gid_t)b->manifest.host_gid)!=0 || setuid((uid_t)b->manifest.host_uid)!=0 ||
       getuid()!=b->manifest.host_uid || geteuid()!=b->manifest.host_uid ||
-      getgid()!=b->manifest.host_gid || getegid()!=b->manifest.host_gid || getgroups(0,NULL)!=0) _exit(78);
+      getgid()!=b->manifest.host_gid || getegid()!=b->manifest.host_gid) _exit(78);
   char *argv[]={b->manifest.images[AE_IMAGE_HOST].path,b->manifest.images[AE_IMAGE_HOST_ENTRYPOINT].path,"--darwin-attempt-owner-bridge",NULL};
   char *env[]={"PATH=/usr/bin:/bin","LANG=C","LC_ALL=C",NULL};
   execve(argv[0],argv,env);

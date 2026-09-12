@@ -325,3 +325,14 @@ int main(void) {
     }
   } finally {rmSync(temporary, { recursive: true, force: true });}
 });
+
+test("host isolate drop keeps uid gid fail-closed without requiring empty groups after setuid", () => {
+  const source = readFileSync(join(native, "darwin-attempt-owner-admission.c"), "utf8");
+  const isolate = source.slice(source.indexOf("int ae_root_isolate_host("), source.indexOf("char *argv[]={b->manifest.images[AE_IMAGE_HOST].path"));
+  assert.ok(isolate.includes("Darwin may repopulate supplementary groups"));
+  assert.ok(isolate.includes("setgroups(0,NULL)!=0"));
+  const postSetuid = isolate.slice(isolate.indexOf("setuid((uid_t)b->manifest.host_uid)!=0"));
+  assert.equal(postSetuid.includes("getgroups(0,NULL)!=0"), false);
+  assert.ok(postSetuid.includes("getuid()!=b->manifest.host_uid"));
+  assert.ok(postSetuid.includes("getgid()!=b->manifest.host_gid"));
+});

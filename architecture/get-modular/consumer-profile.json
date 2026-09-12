@@ -20,7 +20,7 @@
   },
   "fms": {
     "profile": "architecture/feature-module-standard/candidate-profile.json",
-    "sha256": "6ac48de5c8c10abbc8695adbf0553892f36804419afd4fe0c6508b05e3cc883a",
+    "sha256": "f31d4ac720d7b2d2e96647d924c3dee12d050a905520e942e15c1ec74110f060",
     "features": [
       "runtime-installation-discovery",
       "contained-agent-turn",

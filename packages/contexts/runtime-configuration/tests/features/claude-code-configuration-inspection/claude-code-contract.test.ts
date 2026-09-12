@@ -4,7 +4,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 
-import { findRepoRoot } from "./helpers/repo-root.ts";
+import { findRepoRoot } from "../../helpers/repo-root.ts";
 
 const { readCustodiedRepositoryFile } = await import(pathToFileURL(join(
   findRepoRoot(),
@@ -18,8 +18,8 @@ import {
   CLAUDE_CODE_MODEL_DEFAULT,
   CLAUDE_CODE_OBSERVED_SOURCE_PLAN_CONTRACT,
   CLAUDE_CODE_SETTINGS_DIALECT,
-} from "../dist/index.js";
-import { claudeCodePortableIntentExample } from "./fixtures/claude-code-portable-intent-example.ts";
+} from "../../../dist/index.js";
+import { claudeCodePortableIntentExample } from "../../fixtures/claude-code-portable-intent-example.ts";
 
 test("freezes the Claude Code dialect, allowlists, budgets and test-fixture example", async () => {
   assert.equal(CLAUDE_CODE_SETTINGS_DIALECT, "claude-code-settings@2026-08-28");
@@ -47,6 +47,6 @@ test("freezes the Claude Code dialect, allowlists, budgets and test-fixture exam
 });
 
 test("keeps the portable-intent example out of production exports", async () => {
-  const declaration = await readFile(new URL("../dist/index.d.ts", import.meta.url), "utf8");
+  const declaration = await readFile(new URL("../../../dist/index.d.ts", import.meta.url), "utf8");
   assert.doesNotMatch(declaration, /PORTABLE_INTENT_EXAMPLE|claudeCodePortableIntentExample/u);
 });

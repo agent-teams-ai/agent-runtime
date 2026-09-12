@@ -40,7 +40,8 @@
         "ownerDocument": "ADR-0008",
         "curatedExports": [
           ".",
-          "./composition"
+          "./composition",
+          "./scripts/run-package-tests.mjs"
         ],
         "adoption": "pending"
       },

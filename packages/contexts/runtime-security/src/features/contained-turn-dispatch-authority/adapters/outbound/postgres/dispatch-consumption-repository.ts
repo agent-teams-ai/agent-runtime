@@ -4,7 +4,7 @@ import type { DispatchConsumptionRepository, PersistedConsumption } from
 import type { DispatchAuthorityHead } from "../../../domain/dispatch-authority-head.js";
 import { snapshotExactDispatchVariant } from "../../../domain/dispatch-exact-record.js";
 import { mapConsumeResultToV1, mapSettlementResultToV1 } from
-  "../../../application/contained-turn-dispatch-authority-v1-mappers.js";
+  "../../../application/contained-turn-dispatch-authority-v1-result-mappers.js";
 import { isNodeDispatchProxy } from "../../node-dispatch-proxy.js";
 import { dispatchSchemaV1 } from "./schema.js";
 import { createDispatchPgTransactions } from "./transaction.js";

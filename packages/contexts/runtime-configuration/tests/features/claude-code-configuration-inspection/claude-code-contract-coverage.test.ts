@@ -3,7 +3,7 @@ import test from "node:test";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { findRepoRoot } from "./helpers/repo-root.ts";
+import { findRepoRoot } from "../../helpers/repo-root.ts";
 
 const repoRoot = findRepoRoot();
 const { readCustodiedRepositoryFile } = await import(pathToFileURL(join(

@@ -15,7 +15,9 @@ on:
       - refactor/fms-final-integration
       - refactor/fms-rs-egress-primitives
       - refactor/fms-runtime-configuration-entrypoints
+      - refactor/fms-rc-feature-tests
       - fix/contained-turn-final-qualification
+      - cursor/fms-rs-v1-mapper-split-7d17
       - cursor/fms-host-runtime-access-7d17
       - cursor/fms-host-http-pa-7d17
 

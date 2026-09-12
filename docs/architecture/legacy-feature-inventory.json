@@ -13,7 +13,7 @@
           "evidence": {
             "repository": "current",
             "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
-            "path": "packages/contexts/runtime-configuration/tests/semantic-boundary.test.ts",
+            "path": "packages/contexts/runtime-configuration/tests/features/codex-configuration-inspection/semantic-boundary.test.ts",
             "locator": "test:rejects secret-shaped classifier output without exposing it",
             "claim": "Current semantic-boundary tests reject secret-shaped output without disclosure; every future capability must supply equivalent owner-local evidence."
           }
@@ -327,7 +327,7 @@
           "evidence": {
             "repository": "current",
             "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
-            "path": "packages/contexts/runtime-configuration/tests/codex-configuration-inspection.test.ts",
+            "path": "packages/contexts/runtime-configuration/tests/features/codex-configuration-inspection/codex-configuration-inspection.test.ts",
             "locator": "test:applies user, selected external profile, and project precedence deterministically",
             "claim": "Codex user, selected-profile, and workspace precedence is tested."
           }
@@ -401,7 +401,7 @@
           "evidence": {
             "repository": "current",
             "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
-            "path": "packages/contexts/runtime-configuration/tests/codex-configuration-inspection.test.ts",
+            "path": "packages/contexts/runtime-configuration/tests/features/codex-configuration-inspection/codex-configuration-inspection.test.ts",
             "locator": "test:Codex semantic classifier v1 owns dialect and portable-value policy",
             "claim": "The versioned Codex classifier owns portable intent policy."
           }
@@ -485,7 +485,7 @@
           "evidence": {
             "repository": "current",
             "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
-            "path": "packages/contexts/runtime-configuration/tests/semantic-boundary.test.ts",
+            "path": "packages/contexts/runtime-configuration/tests/features/codex-configuration-inspection/semantic-boundary.test.ts",
             "locator": "test:rejects secret-shaped classifier output without exposing it",
             "claim": "Secret-shaped classifier output is rejected without disclosure."
           }
@@ -559,7 +559,7 @@
           "evidence": {
             "repository": "current",
             "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
-            "path": "packages/contexts/runtime-configuration/tests/codex-configuration-inspection.test.ts",
+            "path": "packages/contexts/runtime-configuration/tests/features/codex-configuration-inspection/codex-configuration-inspection.test.ts",
             "locator": "test:reports a selected native profile missing only from the merged configuration",
             "claim": "A missing selected native profile remains an explicit observation."
           }
@@ -2325,7 +2325,7 @@
           "evidence": {
             "repository": "current",
             "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
-            "path": "packages/contexts/runtime-configuration/tests/claude-code-configuration-inspection.test.ts",
+            "path": "packages/contexts/runtime-configuration/tests/features/claude-code-configuration-inspection/claude-code-configuration-inspection.test.ts",
             "locator": "test:classifies default, every alias, exact dated names and 1m names without claiming compatibility",
             "claim": "The current preview tests its frozen model/effort classifier; this does not qualify live model availability."
           }
@@ -2424,7 +2424,7 @@
           "evidence": {
             "repository": "current",
             "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
-            "path": "packages/contexts/runtime-configuration/tests/claude-code-configuration-inspection.test.ts",
+            "path": "packages/contexts/runtime-configuration/tests/features/claude-code-configuration-inspection/claude-code-configuration-inspection.test.ts",
             "locator": "test:returns value-free provider deployment and arbitrary selector deferrals with redaction equality",
             "claim": "Provider deployment and arbitrary selector values are deferred without exposing their original values."
           }

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-const packageRoot = fileURLToPath(new URL("../", import.meta.url));
+const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
 
 const specifiers = (source: string): string[] =>
   [...source.matchAll(/(?:\bfrom|\bimport|\brequire)\s*\(?\s*["'`]([^"'`]+)["'`]/gu)]
@@ -24,7 +24,7 @@ test("package assembly reaches features only through curated entrypoints", async
 });
 
 test("the public entry exposes only portable contracts while composition carries the runtime", async () => {
-  const publicEntry = await import("../dist/index.js") as Record<string, unknown>;
+  const publicEntry = await import("../../dist/index.js") as Record<string, unknown>;
   assert.deepEqual(Object.keys(publicEntry).toSorted(), [
     "CLAUDE_CODE_CONFIGURATION_BUDGETS",
     "CLAUDE_CODE_EFFORT_VALUES",
@@ -39,7 +39,7 @@ test("the public entry exposes only portable contracts while composition carries
     assert.notEqual(typeof publicEntry[name], "function", `public entry must not export factory ${name}`);
   }
 
-  const composition = await import("../dist/composition.js") as Record<string, unknown>;
+  const composition = await import("../../dist/composition.js") as Record<string, unknown>;
   for (const name of [
     "createClaudeCodeConfigurationInspectionFeature",
     "createClaudeCodeConfigurationSemanticClassifierV2",

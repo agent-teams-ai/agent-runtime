@@ -13,6 +13,7 @@ export {
   createCodexAppServerPermissionBoundary,
   type CodexAppServerPermissionBoundary,
 } from "./adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
+export {decodeCodexResponseEnvelope} from "./adapters/outbound/codex-app-server/codex-app-server-jsonl.js";
 export {
   type CodexAppServerPlatformTarget,
 } from "./adapters/outbound/codex-app-server/codex-app-server-platform-tuple.js";

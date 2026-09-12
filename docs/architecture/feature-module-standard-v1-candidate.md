@@ -200,9 +200,9 @@ same way: the constants it needs live in its own `models/claude-code-vocabulary.
 application model, and its remaining import from `../contracts` is type-only.
 Both features now route their package assembly through curated feature
 entrypoints (`index.ts` for `.`, `internal.ts` for `./composition`) rather
-than deep imports into `adapters` and `application/ports`. Their tests still
-live at the package root rather than under feature ownership; that remains
-open.
+than deep imports into `adapters` and `application/ports`. Their tests now
+live under feature ownership (`tests/features/...`) with the package assembly
+surface check in `tests/package/`; the module itself remains pending.
 
 Runtime Security has four features. Setup-source authorization now owns its
 Node path and source-identity digest behind explicit outbound ports
@@ -232,9 +232,11 @@ this package do not import Node
 builtins directly today, but nothing in `architecture/foundation/source-dependencies.yaml`
 enforces that split within the single flat `production.runtime-security`
 boundary, unlike Embedded Runtime's narrower allowed-builtins list. Dispatch
-authority's external V1 wrapper and mapper
-(`contained-turn-dispatch-authority-v1-mappers.ts`) still live in
-`application/`, not in an inbound adapter; that move remains open too. Its
+authority's external V1 wrapper now lives in `adapters/inbound/` and maps
+request DTOs onto the consume, settle, and observe use cases; digest and
+result projection stays in application
+(`contained-turn-dispatch-authority-v1-result-mappers.ts`) so outbound
+Postgres and those use cases never import inbound. Its
 composition-root clock design differs from egress's by choice, not as an
 outstanding gap: dispatch authority's own
 `ContainedTurnDispatchAuthorityFeatureDependencies` requires callers to

@@ -279,7 +279,15 @@
         "sourceRoot": { "$ref": "#/$defs/repositoryPath" },
         "packageName": { "type": "string", "minLength": 1, "maxLength": 214, "pattern": "^[!-~]+$" },
         "ownerDocument": { "type": "string", "pattern": "^ADR-[0-9]{4}$" },
-        "curatedExports": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": [".", "./composition"] } },
+        "curatedExports": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^(?:\\.|\\./[a-z0-9]+(?:[-/][a-z0-9.]+)*)$"
+          }
+        },
         "adoption": { "enum": ["active", "pending"] },
         "activationAuthority": { "type": "string", "pattern": "^ADR-[0-9]{4}$" }
       },

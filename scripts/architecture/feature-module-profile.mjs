@@ -56,6 +56,7 @@ const STANDARD_ROLES = ["contracts", "domain", "application", "adapters", "compo
 export const MODULE_ROLES = Object.freeze(["bounded-context", "host-app", "platform"]);
 export const MODULE_ADOPTION_STATES = Object.freeze(["active", "pending"]);
 const CURATED_EXPORT_SET = Object.freeze([".", "./composition"]);
+const EMBEDDED_RUNTIME_EXPORT_SET = Object.freeze([...CURATED_EXPORT_SET, "./scripts/run-package-tests.mjs"]);
 export const REVIEWED_WORKSPACE_CONTAINERS = Object.freeze(["packages/apps", "packages/contexts", "packages/platform"]);
 // Every production module that exists in the reviewed workspace is named here
 // with its real role and its exact adoption state. The JSON profile must match
@@ -63,7 +64,7 @@ export const REVIEWED_WORKSPACE_CONTAINERS = Object.freeze(["packages/apps", "pa
 // change and never a silent profile edit.
 const REVIEWED_PRODUCTION_MODULES = Object.freeze([
   { id: "agent-execution", role: "bounded-context", moduleRoot: "packages/contexts/agent-execution", packageName: "@agent-teams/agent-execution", ownerDocument: "ADR-0005", curatedExports: [".", "./composition"], adoption: "active", activationAuthority: "ADR-0013" },
-  { id: "embedded-runtime", role: "host-app", moduleRoot: "packages/apps/embedded-runtime", packageName: "@agent-teams/embedded-runtime", ownerDocument: "ADR-0008", curatedExports: [".", "./composition"], adoption: "pending" },
+  { id: "embedded-runtime", role: "host-app", moduleRoot: "packages/apps/embedded-runtime", packageName: "@agent-teams/embedded-runtime", ownerDocument: "ADR-0008", curatedExports: EMBEDDED_RUNTIME_EXPORT_SET, adoption: "pending" },
   { id: "filesystem-custody", role: "platform", moduleRoot: "packages/platform/filesystem-custody", packageName: "@agent-teams/filesystem-custody", ownerDocument: "ADR-0017", curatedExports: [".", "./composition"], adoption: "active", activationAuthority: "ADR-0019" },
   { id: "provider-access", role: "bounded-context", moduleRoot: "packages/contexts/provider-access", packageName: "@agent-teams/provider-access", ownerDocument: "ADR-0005", curatedExports: [".", "./composition"], adoption: "active", activationAuthority: "ADR-0013" },
   { id: "runtime-configuration", role: "bounded-context", moduleRoot: "packages/contexts/runtime-configuration", packageName: "@agent-teams/runtime-configuration", ownerDocument: "ADR-0005", curatedExports: [".", "./composition"], adoption: "pending" },
@@ -233,7 +234,9 @@ const declaredModuleIsWellFormed = (declared, acceptedDecisions) => Boolean(
   && canonicalModuleName(declared.packageName)
   && acceptedDecisionPath(declared.ownerDocument, acceptedDecisions.get(declared.ownerDocument))
   && declared.curatedExports.includes(".")
-  && sameOrderedValues(declared.curatedExports, CURATED_EXPORT_SET.filter((entry) => declared.curatedExports.includes(entry)))
+  && declared.curatedExports.every((entry) => typeof entry === "string"
+    && (entry === "." || /^\.\/[a-z0-9]+(?:[-/][a-z0-9.]+)*$/u.test(entry)))
+  && !duplicateValues(declared.curatedExports).length
   && (declared.adoption === "pending"
     ? declared.activationAuthority === undefined
     : acceptedDecisionPath(declared.activationAuthority, acceptedDecisions.get(declared.activationAuthority))),
