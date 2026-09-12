@@ -12,7 +12,7 @@ const unused = () => {throw Error('unexpected unrelated owner call');};
 let system;
 let acknowledge;
 let privilegeCalls = 0;
-const stub = (url, namedExports) => mock.module(url, {exports: namedExports});
+const stub = (url, namedExports) => mock.module(String(url), {exports: namedExports});
 // Isolated worker: all kernel effects and transport are simulated, never real I/O.
 // Copy the fs API, not its ESM namespace: namespace.default would retain the
 // original object whose nonconfigurable constants Node's mock loader redefines.
@@ -131,7 +131,7 @@ const {createHash}=await import('node:crypto');
 const {persistentKernel}=await import('./route-provenance-kernel.ts');
 const {BoundedUnixHttpClient}=await imp('engine/bounded-unix-http.js');
 const {createNodeDockerDeploymentRecipe}=await import(new URL('composition/node-docker-deployment-recipe.js',feature));
-const {createLinuxCodexDeploymentResources}=await import(new URL('./packages/apps/embedded-runtime/dist/composition/linux-codex-deployment.js',auditRoot));
+const {createLinuxCodexDeploymentResources}=await import(new URL('linux-codex-deployment.js', linuxDeployment));
 const pinBytes=Buffer.from('pinned synthetic tool');
 const pin={path:'/synthetic/tool',sha256:createHash('sha256').update(pinBytes).digest('hex')};
 const descriptors=new Map(); const kernels=new Map(); let nextFd=40;
