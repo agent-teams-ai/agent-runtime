@@ -2,4 +2,4 @@ export {
   snapshotContainedTurnAuthority,
   captureContainedTurnCurrentAuthority,
   type ContainedTurnAuthorityDependencies,
-} from "../features/contained-turn-current-authority/internal.js";
+} from "./contained-turn-current-authority.js";
