@@ -65,6 +65,10 @@ boundaries:
   - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-satisfaction.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-transitions.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-validation.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-engine.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-ports.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-model.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-validation.ts
   allow:
     boundaries: []
     packages: []
@@ -355,6 +359,7 @@ boundaries:
   entrypoints:
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-item-schema.ts
   allow:
     boundaries:
     - adapter.agent-execution.host-custody
@@ -559,6 +564,11 @@ boundaries:
     - adapter.agent-execution.codex-native-broker
     - composition.agent-execution.boundary-data
     - composition.agent-execution.dispatch-grant
+    - adapter.agent-execution.ordinary-provider
+    - adapter.agent-execution.ordinary-filesystem
+    - adapter.agent-execution.ordinary-process
+    - adapter.agent-execution.ordinary-postgres
+    - composition.agent-execution.ordinary
     packages:
     - '@agent-teams/filesystem-custody'
     - pg
@@ -578,65 +588,6 @@ boundaries:
   dependencyMode: runtime
   roots:
   - packages/contexts/provider-access/src/composition.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/dispatch-consumption-data.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/contained-turn-provider-access-mapper.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/dispatch-consumption-mapper.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/materialization-authorization-mapper.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-bytes.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-lifetime.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-owner.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-contracts.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-data.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-repository.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/in-memory-dispatch-consumption-repository.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-generation-acquisition.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-material-bytes.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-selection.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-operation-schema.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-operation-store.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-control.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-data.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-repository.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-schema.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-binding-repository.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-schema.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-transactions.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-postgres.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-schema.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/sha256-dispatch-consumption-digest.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/static-provider-access-binding-repository.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/application/dispatch-consumption-v1.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/application/materialization-authorization-v1.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/application/observe-provider-access-binding.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/application/persistence-validation.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-clock.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-digest.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.conformance.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-digest.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-repository.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/application/resolve-contained-turn-provider-access.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/application/revalidate-contained-turn-provider-access.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/composition/credential-rendering-owner-factory.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/composition/dispatch-consumption-v1-factory.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/composition/feature-module-factory.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/composition/materialization-authorization-v1-factory.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/composition/operation-dispatch-consumption.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/composition/package-composition.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-credential-rendering-owner.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-current-provider-access.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-dispatch-consumption.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-materialization-authorization.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-operation-dispatch-consumption.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/composition/route-selection-owner.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/contracts/contained-turn-provider-access.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/contracts/dispatch-consumption-v1.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/contracts/materialization-authorization-v1.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/domain/dispatch-consumption.ts
-  - packages/contexts/provider-access/src/features/contained-turn-access/domain/materialization-authorization.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/index.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/internal.ts
   - packages/contexts/provider-access/src/index.ts
@@ -647,6 +598,9 @@ boundaries:
     boundaries:
     - adapter.provider-access.boundary-data
     - core.provider-access.binding
+    - adapter.provider-access.ordinary
+    - composition.provider-access.ordinary
+    - core.provider-access.ordinary
     packages: []
     builtins: []
     runtimeReferences: []
@@ -678,12 +632,109 @@ boundaries:
 - id: production.runtime-security
   dependencyMode: runtime
   roots:
-  - packages/contexts/runtime-security/src
+  - packages/contexts/runtime-security/src/composition.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/dispatch-boundary-value.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/inbound/contained-turn-dispatch-authority-v1-request-mappers.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/inbound/contained-turn-dispatch-authority-v1.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/node-dispatch-proxy.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/in-memory-dispatch-consumption-operations.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/in-memory-dispatch-consumption-repository.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/in-memory-dispatch-consumption-state.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/node-sha256-dispatch-digest.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-acceptance-store.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/records.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/schema.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/consume-for-dispatch.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/contained-turn-dispatch-authority-v1-result-mappers.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/dispatch-acceptance.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/dispatch-authority-dependencies.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/dispatch-canonical.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/dispatch-consumption-models.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/immutable.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/observe-dispatch-consumption.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/outbound/control-clock.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/outbound/dispatch-acceptance-owner.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/outbound/dispatch-consumption-repository.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/outbound/dispatch-digest.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/publish-dispatch-authority.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/settle-dispatch-consumption.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/dispatch-acceptance-factory.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/feature-module-factory.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/node-dispatch-boundary.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-authority-head.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/adapters/outbound/node-ed25519.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/adapters/outbound/node-monotonic-clock.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/adapters/outbound/node-security-primitives.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/adapters/outbound/node-session-transport-boundary.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/application/capture-boundary-ports.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/application/complete-exchange.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/application/contained-turn-egress-dependencies.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/application/contained-turn-egress.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/application/first-write.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/application/lifecycle.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/egress-authorization-signer.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/egress-exchange.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/egress-policy-time-authority.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/monotonic-clock.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/provider-route-authority.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/application/prepare.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/application/revalidate-write.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/application/sign-write.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/application/write-authorization.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/composition/gateway.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/domain/authorization-evidence.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/domain/egress-authorization.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/domain/egress-policy.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/domain/egress-request.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/domain/host-identity.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/domain/network-address.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/domain/provider-route-authority.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/domain/results.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/domain/validation.ts
+  - packages/contexts/runtime-security/src/features/provider-process-egress-authorization/adapters/node-egress-boundary.ts
+  - packages/contexts/runtime-security/src/features/provider-process-egress-authorization/adapters/outbound/node-egress-cryptography.ts
+  - packages/contexts/runtime-security/src/features/provider-process-egress-authorization/application/egress-canonical.ts
+  - packages/contexts/runtime-security/src/features/provider-process-egress-authorization/application/immutable.ts
+  - packages/contexts/runtime-security/src/features/provider-process-egress-authorization/application/ports/outbound/egress-authority-owner.ts
+  - packages/contexts/runtime-security/src/features/provider-process-egress-authorization/application/ports/outbound/egress-control-clock.ts
+  - packages/contexts/runtime-security/src/features/provider-process-egress-authorization/application/ports/outbound/egress-cryptography.ts
+  - packages/contexts/runtime-security/src/features/provider-process-egress-authorization/application/provider-process-egress-authorization.ts
+  - packages/contexts/runtime-security/src/features/provider-process-egress-authorization/composition/current-egress-inputs.ts
+  - packages/contexts/runtime-security/src/features/provider-process-egress-authorization/composition/current-egress-owner.ts
+  - packages/contexts/runtime-security/src/features/provider-process-egress-authorization/composition/current-egress-validation.ts
+  - packages/contexts/runtime-security/src/features/provider-process-egress-authorization/composition/ed25519-v2-candidate-factory.ts
+  - packages/contexts/runtime-security/src/features/provider-process-egress-authorization/composition/feature-module-factory.ts
+  - packages/contexts/runtime-security/src/features/provider-process-egress-authorization/contracts/provider-process-egress-authorization-v1.ts
+  - packages/contexts/runtime-security/src/features/provider-process-egress-authorization/contracts/provider-process-egress-authorization-v2.ts
+  - packages/contexts/runtime-security/src/features/provider-process-egress-authorization/domain/egress-values.ts
+  - packages/contexts/runtime-security/src/features/provider-process-egress-authorization/domain/provider-process-egress-model.ts
+  - packages/contexts/runtime-security/src/features/provider-process-egress-authorization/domain/public-address.ts
+  - packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/adapters/outbound/node-path-algebra.ts
+  - packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/adapters/outbound/node-path-canonicalizer.ts
+  - packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/adapters/outbound/node-source-identity-digest.ts
+  - packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/authorize-claude-code-setup-inspection.ts
+  - packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/authorize-setup-inspection.ts
+  - packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/claude-code-candidate-scope.ts
+  - packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/claude-code-path-authorization.ts
+  - packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/claude-code-source-scope.ts
+  - packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/deep-freeze-authorization.ts
+  - packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/ports/outbound/path-algebra.ts
+  - packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/ports/outbound/path-canonicalizer.ts
+  - packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/ports/outbound/source-identity-digest.ts
+  - packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/composition/feature-module-factory.ts
+  - packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/contracts/claude-code-setup-inspection-authorization.ts
+  - packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/contracts/setup-inspection-authorization.ts
+  - packages/contexts/runtime-security/src/index.ts
   entrypoints:
   - packages/contexts/runtime-security/src/index.ts
   - packages/contexts/runtime-security/src/composition.ts
   allow:
-    boundaries: []
+    boundaries:
+    - adapter.runtime-security.ordinary
+    - core.runtime-security.ordinary
+    - composition.runtime-security.ordinary
     packages:
     - '@agent-teams/filesystem-custody'
     builtins:
@@ -722,8 +773,26 @@ boundaries:
   - packages/apps/embedded-runtime/src/composition/default-agent-runtime-host.ts
   - packages/apps/embedded-runtime/src/composition/host-custodied-agent-runtime-host.ts
   - packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts
+  - packages/apps/embedded-runtime/src/composition/ordinary-agent-runtime-host.ts
+  - packages/apps/embedded-runtime/src/composition/ordinary-runtime-assembly.ts
+  - packages/apps/embedded-runtime/src/features/ordinary-session-runtime/adapters/ordinary-observation-journal.ts
+  - packages/apps/embedded-runtime/src/features/ordinary-session-runtime/adapters/ordinary-owner-acl.ts
+  - packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts
+  - packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts
+  - packages/apps/embedded-runtime/src/features/ordinary-session-runtime/contracts/ordinary-session-observation.ts
+  - packages/apps/embedded-runtime/src/features/ordinary-session-runtime/index.ts
+  - packages/apps/embedded-runtime/src/features/ordinary-session-runtime/internal.ts
   entrypoints:
   - packages/apps/embedded-runtime/src/composition.ts
+  - packages/apps/embedded-runtime/src/composition/ordinary-agent-runtime-host.ts
+  - packages/apps/embedded-runtime/src/composition/ordinary-runtime-assembly.ts
+  - packages/apps/embedded-runtime/src/features/ordinary-session-runtime/adapters/ordinary-observation-journal.ts
+  - packages/apps/embedded-runtime/src/features/ordinary-session-runtime/adapters/ordinary-owner-acl.ts
+  - packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts
+  - packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts
+  - packages/apps/embedded-runtime/src/features/ordinary-session-runtime/contracts/ordinary-session-observation.ts
+  - packages/apps/embedded-runtime/src/features/ordinary-session-runtime/index.ts
+  - packages/apps/embedded-runtime/src/features/ordinary-session-runtime/internal.ts
   allow:
     boundaries:
     - production.embedded-runtime
@@ -741,6 +810,9 @@ boundaries:
     - '@get-modular/assembly'
     builtins:
     - node:crypto
+    - node:fs
+    - node:path
+    - node:util
     runtimeReferences: []
 - id: composition.embedded-runtime.agent-runtime-host
   dependencyMode: runtime
@@ -1217,6 +1289,17 @@ boundaries:
     - tooling.filesystem-custody.scripts
     - tooling.foundation-scaffolding
     - tooling.foundation-scaffolding-tests
+    - adapter.agent-execution.ordinary-provider
+    - adapter.agent-execution.ordinary-filesystem
+    - adapter.agent-execution.ordinary-process
+    - adapter.agent-execution.ordinary-postgres
+    - composition.agent-execution.ordinary
+    - adapter.provider-access.ordinary
+    - composition.provider-access.ordinary
+    - core.provider-access.ordinary
+    - adapter.runtime-security.ordinary
+    - core.runtime-security.ordinary
+    - composition.runtime-security.ordinary
     packages:
     - '@agent-teams/agent-execution'
     - '@agent-teams/docs-protocol'
@@ -1337,6 +1420,17 @@ boundaries:
     - tooling.filesystem-custody.scripts
     - tooling.foundation-scaffolding
     - tooling.foundation-scaffolding-tests
+    - adapter.agent-execution.ordinary-provider
+    - adapter.agent-execution.ordinary-filesystem
+    - adapter.agent-execution.ordinary-process
+    - adapter.agent-execution.ordinary-postgres
+    - composition.agent-execution.ordinary
+    - adapter.provider-access.ordinary
+    - composition.provider-access.ordinary
+    - core.provider-access.ordinary
+    - adapter.runtime-security.ordinary
+    - core.runtime-security.ordinary
+    - composition.runtime-security.ordinary
     packages:
     - '@agent-teams/agent-execution'
     - '@agent-teams/docs-protocol'
@@ -1455,6 +1549,17 @@ boundaries:
     - tooling.filesystem-custody.scripts
     - tooling.foundation-scaffolding
     - tooling.foundation-scaffolding-tests
+    - adapter.agent-execution.ordinary-provider
+    - adapter.agent-execution.ordinary-filesystem
+    - adapter.agent-execution.ordinary-process
+    - adapter.agent-execution.ordinary-postgres
+    - composition.agent-execution.ordinary
+    - adapter.provider-access.ordinary
+    - composition.provider-access.ordinary
+    - core.provider-access.ordinary
+    - adapter.runtime-security.ordinary
+    - core.runtime-security.ordinary
+    - composition.runtime-security.ordinary
     packages:
     - '@agent-teams/agent-execution'
     - '@agent-teams/docs-protocol'
@@ -1572,6 +1677,17 @@ boundaries:
     - tooling.filesystem-custody.scripts
     - tooling.foundation-scaffolding
     - tooling.foundation-scaffolding-tests
+    - adapter.agent-execution.ordinary-provider
+    - adapter.agent-execution.ordinary-filesystem
+    - adapter.agent-execution.ordinary-process
+    - adapter.agent-execution.ordinary-postgres
+    - composition.agent-execution.ordinary
+    - adapter.provider-access.ordinary
+    - composition.provider-access.ordinary
+    - core.provider-access.ordinary
+    - adapter.runtime-security.ordinary
+    - core.runtime-security.ordinary
+    - composition.runtime-security.ordinary
     packages:
     - '@agent-teams/agent-execution'
     - '@agent-teams/docs-protocol'
@@ -1689,6 +1805,17 @@ boundaries:
     - tooling.filesystem-custody.scripts
     - tooling.foundation-scaffolding
     - tooling.foundation-scaffolding-tests
+    - adapter.agent-execution.ordinary-provider
+    - adapter.agent-execution.ordinary-filesystem
+    - adapter.agent-execution.ordinary-process
+    - adapter.agent-execution.ordinary-postgres
+    - composition.agent-execution.ordinary
+    - adapter.provider-access.ordinary
+    - composition.provider-access.ordinary
+    - core.provider-access.ordinary
+    - adapter.runtime-security.ordinary
+    - core.runtime-security.ordinary
+    - composition.runtime-security.ordinary
     packages:
     - '@agent-teams/agent-execution'
     - '@agent-teams/docs-protocol'
@@ -1806,6 +1933,17 @@ boundaries:
     - tooling.filesystem-custody.scripts
     - tooling.foundation-scaffolding
     - tooling.foundation-scaffolding-tests
+    - adapter.agent-execution.ordinary-provider
+    - adapter.agent-execution.ordinary-filesystem
+    - adapter.agent-execution.ordinary-process
+    - adapter.agent-execution.ordinary-postgres
+    - composition.agent-execution.ordinary
+    - adapter.provider-access.ordinary
+    - composition.provider-access.ordinary
+    - core.provider-access.ordinary
+    - adapter.runtime-security.ordinary
+    - core.runtime-security.ordinary
+    - composition.runtime-security.ordinary
     packages:
     - '@agent-teams/agent-execution'
     - '@agent-teams/docs-protocol'
@@ -1923,6 +2061,17 @@ boundaries:
     - tooling.filesystem-custody.scripts
     - tooling.foundation-scaffolding
     - tooling.foundation-scaffolding-tests
+    - adapter.agent-execution.ordinary-provider
+    - adapter.agent-execution.ordinary-filesystem
+    - adapter.agent-execution.ordinary-process
+    - adapter.agent-execution.ordinary-postgres
+    - composition.agent-execution.ordinary
+    - adapter.provider-access.ordinary
+    - composition.provider-access.ordinary
+    - core.provider-access.ordinary
+    - adapter.runtime-security.ordinary
+    - core.runtime-security.ordinary
+    - composition.runtime-security.ordinary
     packages:
     - '@agent-teams/agent-execution'
     - '@agent-teams/docs-protocol'
@@ -2039,6 +2188,17 @@ boundaries:
     - tooling.docs
     - tooling.foundation-scaffolding
     - tooling.foundation-scaffolding-tests
+    - adapter.agent-execution.ordinary-provider
+    - adapter.agent-execution.ordinary-filesystem
+    - adapter.agent-execution.ordinary-process
+    - adapter.agent-execution.ordinary-postgres
+    - composition.agent-execution.ordinary
+    - adapter.provider-access.ordinary
+    - composition.provider-access.ordinary
+    - core.provider-access.ordinary
+    - adapter.runtime-security.ordinary
+    - core.runtime-security.ordinary
+    - composition.runtime-security.ordinary
     packages:
     - '@agent-teams/agent-execution'
     - '@agent-teams/docs-protocol'
@@ -2155,6 +2315,17 @@ boundaries:
     - tooling.filesystem-custody.scripts
     - tooling.foundation-scaffolding
     - tooling.foundation-scaffolding-tests
+    - adapter.agent-execution.ordinary-provider
+    - adapter.agent-execution.ordinary-filesystem
+    - adapter.agent-execution.ordinary-process
+    - adapter.agent-execution.ordinary-postgres
+    - composition.agent-execution.ordinary
+    - adapter.provider-access.ordinary
+    - composition.provider-access.ordinary
+    - core.provider-access.ordinary
+    - adapter.runtime-security.ordinary
+    - core.runtime-security.ordinary
+    - composition.runtime-security.ordinary
     packages:
     - '@agent-teams/agent-execution'
     - '@agent-teams/docs-protocol'
@@ -2271,6 +2442,17 @@ boundaries:
     - tooling.filesystem-custody.scripts
     - tooling.foundation-scaffolding
     - tooling.foundation-scaffolding-tests
+    - adapter.agent-execution.ordinary-provider
+    - adapter.agent-execution.ordinary-filesystem
+    - adapter.agent-execution.ordinary-process
+    - adapter.agent-execution.ordinary-postgres
+    - composition.agent-execution.ordinary
+    - adapter.provider-access.ordinary
+    - composition.provider-access.ordinary
+    - core.provider-access.ordinary
+    - adapter.runtime-security.ordinary
+    - core.runtime-security.ordinary
+    - composition.runtime-security.ordinary
     packages:
     - '@agent-teams/agent-execution'
     - '@agent-teams/docs-protocol'
@@ -2352,4 +2534,333 @@ boundaries:
     - node:path
     - node:test
     - node:vm
+    runtimeReferences: []
+- id: adapter.agent-execution.ordinary-provider
+  dependencyMode: runtime
+  roots:
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-items.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts
+  entrypoints:
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-items.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts
+  allow:
+    boundaries:
+    - core.agent-execution.contained-turn
+    - adapter.agent-execution.codex-primitives-leaves
+    - adapter.agent-execution.codex-app-server
+    - adapter.agent-execution.ordinary-process
+    packages: []
+    builtins:
+    - node:crypto
+    - node:fs
+    - node:fs/promises
+    - node:path
+    runtimeReferences: []
+- id: adapter.agent-execution.ordinary-filesystem
+  dependencyMode: runtime
+  roots:
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-artifacts.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-workspace.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/ordinary-files.ts
+  entrypoints:
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-artifacts.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-workspace.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/ordinary-files.ts
+  allow:
+    boundaries:
+    - core.agent-execution.contained-turn
+    packages: []
+    builtins:
+    - node:crypto
+    - node:fs
+    - node:fs/promises
+    - node:path
+    runtimeReferences: []
+- id: adapter.agent-execution.ordinary-process
+  dependencyMode: runtime
+  roots:
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-process/node-ordinary-process.ts
+  entrypoints:
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-process/node-ordinary-process.ts
+  allow:
+    boundaries:
+    - core.agent-execution.contained-turn
+    packages: []
+    builtins:
+    - node:child_process
+    - node:crypto
+    runtimeReferences: []
+- id: adapter.agent-execution.ordinary-postgres
+  dependencyMode: runtime
+  roots:
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-postgres-store.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-state-codec.ts
+  entrypoints:
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-postgres-store.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-state-codec.ts
+  allow:
+    boundaries:
+    - core.agent-execution.contained-turn
+    packages:
+    - pg
+    builtins:
+    - node:crypto
+    runtimeReferences: []
+- id: composition.agent-execution.ordinary
+  dependencyMode: runtime
+  roots:
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/ordinary-feature-factory.ts
+  entrypoints:
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/ordinary-feature-factory.ts
+  allow:
+    boundaries:
+    - core.agent-execution.contained-turn
+    - adapter.agent-execution.ordinary-provider
+    - adapter.agent-execution.ordinary-filesystem
+    - adapter.agent-execution.ordinary-process
+    - adapter.agent-execution.ordinary-postgres
+    packages: []
+    builtins: []
+    runtimeReferences: []
+- id: adapter.provider-access.ordinary
+  dependencyMode: runtime
+  roots:
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-capture.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-contracts.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-files.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-ipc.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-json.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-protocol.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-broker.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-secret-guard.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-upstream.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-schema.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-store.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/dispatch-consumption-data.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/contained-turn-provider-access-mapper.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/dispatch-consumption-mapper.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/materialization-authorization-mapper.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-bytes.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-lifetime.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-owner.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-contracts.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-data.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-repository.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/in-memory-dispatch-consumption-repository.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-generation-acquisition.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-material-bytes.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-selection.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-operation-schema.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-operation-store.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-control.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-data.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-repository.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-schema.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-binding-repository.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-schema.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-transactions.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-postgres.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-schema.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/sha256-dispatch-consumption-digest.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/static-provider-access-binding-repository.ts
+  entrypoints:
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-capture.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-contracts.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-files.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-ipc.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-json.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-protocol.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-broker.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-secret-guard.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-upstream.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-schema.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-store.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/dispatch-consumption-data.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/contained-turn-provider-access-mapper.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/dispatch-consumption-mapper.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/materialization-authorization-mapper.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-bytes.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-lifetime.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-owner.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-contracts.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-data.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-repository.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/in-memory-dispatch-consumption-repository.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-generation-acquisition.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-material-bytes.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-selection.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-operation-schema.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-operation-store.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-control.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-data.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-repository.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-schema.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-binding-repository.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-schema.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-transactions.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-postgres.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-schema.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/sha256-dispatch-consumption-digest.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/static-provider-access-binding-repository.ts
+  allow:
+    boundaries:
+    - core.provider-access.ordinary
+    - adapter.provider-access.boundary-data
+    - core.provider-access.binding
+    packages: []
+    builtins:
+    - node:child_process
+    - node:crypto
+    - node:fs
+    - node:fs/promises
+    - node:http
+    - node:https
+    - node:net
+    - node:path
+    - node:util
+    runtimeReferences: []
+- id: composition.provider-access.ordinary
+  dependencyMode: runtime
+  roots:
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/credential-rendering-owner-factory.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/dispatch-consumption-v1-factory.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/feature-module-factory.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/materialization-authorization-v1-factory.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/operation-dispatch-consumption.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/package-composition.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-credential-rendering-owner.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-current-provider-access.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-dispatch-consumption.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-materialization-authorization.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-operation-dispatch-consumption.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/route-selection-owner.ts
+  entrypoints:
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/credential-rendering-owner-factory.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/dispatch-consumption-v1-factory.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/feature-module-factory.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/materialization-authorization-v1-factory.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/operation-dispatch-consumption.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/package-composition.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-credential-rendering-owner.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-current-provider-access.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-dispatch-consumption.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-materialization-authorization.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-operation-dispatch-consumption.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/composition/route-selection-owner.ts
+  allow:
+    boundaries:
+    - core.provider-access.ordinary
+    - adapter.provider-access.ordinary
+    - adapter.provider-access.boundary-data
+    - core.provider-access.binding
+    packages: []
+    builtins:
+    - node:crypto
+    - node:util
+    runtimeReferences: []
+- id: core.provider-access.ordinary
+  dependencyMode: runtime
+  roots:
+  - packages/contexts/provider-access/src/features/contained-turn-access/contracts/ordinary-provider-access.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/domain/ordinary-provider-access.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/dispatch-consumption-v1.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/materialization-authorization-v1.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/observe-provider-access-binding.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/persistence-validation.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-clock.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-digest.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.conformance.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-digest.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-repository.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/resolve-contained-turn-provider-access.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/revalidate-contained-turn-provider-access.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/contracts/contained-turn-provider-access.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/contracts/dispatch-consumption-v1.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/contracts/materialization-authorization-v1.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/domain/dispatch-consumption.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/domain/materialization-authorization.ts
+  entrypoints:
+  - packages/contexts/provider-access/src/features/contained-turn-access/contracts/ordinary-provider-access.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/domain/ordinary-provider-access.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/dispatch-consumption-v1.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/materialization-authorization-v1.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/observe-provider-access-binding.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/persistence-validation.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-clock.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-digest.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.conformance.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-digest.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-repository.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/resolve-contained-turn-provider-access.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/revalidate-contained-turn-provider-access.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/contracts/contained-turn-provider-access.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/contracts/dispatch-consumption-v1.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/contracts/materialization-authorization-v1.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/domain/dispatch-consumption.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/domain/materialization-authorization.ts
+  allow:
+    boundaries:
+    - adapter.provider-access.boundary-data
+    - core.provider-access.binding
+    packages: []
+    builtins: []
+    runtimeReferences: []
+- id: adapter.runtime-security.ordinary
+  dependencyMode: runtime
+  roots:
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-owner.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-transactions.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/transaction.ts
+  entrypoints:
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-owner.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-transactions.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/transaction.ts
+  allow:
+    boundaries:
+    - core.runtime-security.ordinary
+    packages: []
+    builtins:
+    - node:crypto
+    runtimeReferences: []
+- id: core.runtime-security.ordinary
+  dependencyMode: runtime
+  roots:
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts
+  entrypoints:
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts
+  allow:
+    boundaries: []
+    packages: []
+    builtins: []
+    runtimeReferences: []
+- id: composition.runtime-security.ordinary
+  dependencyMode: runtime
+  roots:
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/ordinary-security-factory.ts
+  entrypoints:
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/ordinary-security-factory.ts
+  allow:
+    boundaries:
+    - core.runtime-security.ordinary
+    - adapter.runtime-security.ordinary
+    packages: []
+    builtins: []
     runtimeReferences: []

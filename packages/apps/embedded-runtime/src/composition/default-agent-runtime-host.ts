@@ -1,8 +1,10 @@
+import {createOrdinaryAgentRuntimeHost, type OrdinaryAgentRuntimeHostOptions} from "../features/ordinary-session-runtime/internal.js";
+export type {OrdinaryAgentRuntimeHostOptions} from "../features/ordinary-session-runtime/internal.js";
 import { compileComposition } from "@get-modular/core";
 import type { AssemblyOutcome } from "@get-modular/assembly";
 import type { AgentRuntimeHost } from "./agent-runtime-host.js";
 import { AgentRuntimeHostCreationError, assemblyErrorCodes, projectDiagnostics, type AgentRuntimeHostCreationPhase } from "./agent-runtime-host-creation-error.js";
-import { bindRuntimeSetup, createRuntimeSetupFactories, runtimeSetupDeclarations, runtimeSetupProfile, type RuntimeSetupFactories, type RuntimeSetupRootCompletion } from "./runtime-setup-assembly.js";
+import { bindRuntimeSetup, createRuntimeSetupFactories, runtimeSetupDeclarations, runtimeSetupProfile, runtimeOrdinarySetupDeclarations, runtimeOrdinarySetupProfile, type OrdinaryRuntimeAssemblyInput, type RuntimeSetupFactories, type RuntimeSetupRootCompletion } from "./runtime-setup-assembly.js";
 
 export interface DefaultAgentRuntimeHostOptions { readonly signal?: AbortSignal; }
 
@@ -16,11 +18,14 @@ export async function createDefaultAgentRuntimeHost(options?: DefaultAgentRuntim
   return createRuntimeSetupAttempt(options);
 }
 
+const selectedComposition = (ordinary: OrdinaryRuntimeAssemblyInput | undefined) => ordinary === undefined ? {declarations: runtimeSetupDeclarations, profile: runtimeSetupProfile} : {declarations: runtimeOrdinarySetupDeclarations, profile: runtimeOrdinarySetupProfile};
+
 // Owner-local seam; never exported through the package composition surface.
 export async function createRuntimeSetupAttempt(
   options?: DefaultAgentRuntimeHostOptions,
   factoriesForAttempt: (platform: NodeJS.Platform) => RuntimeSetupFactories = createRuntimeSetupFactories,
   checkpoints: RuntimeSetupAttemptCheckpoints = {},
+  ordinary?: OrdinaryRuntimeAssemblyInput,
 ): Promise<AgentRuntimeHost> {
   let phase: AgentRuntimeHostCreationPhase = "options";
   let signal: AbortSignal | undefined;
@@ -39,12 +44,12 @@ export async function createRuntimeSetupAttempt(
     const platform = process.platform;
     checkCancellation();
     phase = "compile";
-    const composition = await compileComposition({ declarations: runtimeSetupDeclarations, profile: runtimeSetupProfile });
+    const composition = await compileComposition(selectedComposition(ordinary));
     if (!composition.ok) { throw failureForAttempt("invalid_composition", phase, {
       cancellationObserved: signal?.aborted, diagnostics: projectDiagnostics(composition.diagnostics) }); }
     checkCancellation();
     phase = "bind";
-    const bindings = bindRuntimeSetup(factoriesForAttempt(platform), (host) => { ownedHost = host; }, checkpoints.completeRoot);
+    const bindings = bindRuntimeSetup(factoriesForAttempt(platform), (host) => { ownedHost = host; }, checkpoints.completeRoot, ordinary);
     phase = "prepare";
     const preparation = await bindings.assembly.prepare({ composition, factories: bindings.factories, roots: bindings.roots });
     if (preparation.status === "failed") { throw failureForAttempt(
@@ -88,8 +93,11 @@ function assertSuccessfulOutcome(
     throw failure(assemblyErrorCodes[outcome.code] ?? "internal_failure", "run", {
       cancellationObserved: outcome.cancellation !== undefined || signal?.aborted === true,
       cause: outcome.cause,
-      moduleId: runtimeSetupDeclarations.find(({ implementationId }) => implementationId === outcome.implementationId)?.moduleId,
+      moduleId: runtimeOrdinarySetupDeclarations.find(({ implementationId }) => implementationId === outcome.implementationId)?.moduleId,
     });
   }
   if (outcome.status === "cancelled") { throw failure("cancelled", "run", { cancellationObserved: true }); }
 }
+
+export const createAgentRuntimeHost = (options: OrdinaryAgentRuntimeHostOptions) => createOrdinaryAgentRuntimeHost(options,
+  (signal, ordinary) => createRuntimeSetupAttempt(signal === undefined ? undefined : {signal}, createRuntimeSetupFactories, {}, ordinary));

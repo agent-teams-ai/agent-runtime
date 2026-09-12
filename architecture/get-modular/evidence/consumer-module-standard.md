@@ -144,12 +144,12 @@ does not prove all ownership or domain design rules.
 
 ### Executable examples and adoption status
 
-The existing [synthetic Host source](../../packages/assembly/tests/fixture.mjs)
-and [runtime assertions](../../packages/assembly/tests/runtime.test.mjs) exercise
+The existing [synthetic Host source](../../tests/assembly/fixture.mjs)
+and [runtime assertions](../../tests/assembly/runtime.test.mjs) exercise
 required, optional and ordered-many bindings, sharing and Host cleanup.
-[Preparation regressions](../../packages/assembly/tests/preparation.test.mjs)
-check invalid wiring before effects; [typed fixtures](../../packages/assembly/tests/types.test.mjs)
-and the [packed consumer](../../packages/assembly/tests/packed-consumer.mjs)
+[Preparation regressions](../../tests/assembly/preparation.test.mjs)
+check invalid wiring before effects; [typed fixtures](../../tests/assembly/types.test.mjs)
+and the [packed consumer](../../tests/assembly/packed-consumer.mjs)
 cover the public carrier. These belong to the existing `pnpm assembly:test`
 command, invoked by both fast and full gates, after `pnpm assembly:build`.
 Consumers must additionally link their own executable slice and independent

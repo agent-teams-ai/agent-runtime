@@ -49,8 +49,9 @@ function fixture() {
   return { profile, evidence };
 }
 
-test('repository profile activates only the scoped passive setup', () => {
+test('repository profile retains passive authority with additive ordinary activation', () => {
   assert.equal(validateProfile(pending).status, 'active');
+  assert.equal(ordinaryScopeProfile.authority, 'ADR-0020');
   const profile = structuredClone(pending); profile.status = 'pending'; profile.pending = ['missing evidence'];
   assert.throws(() => verifyAdoption(profile, {}), /pending/);
 });
@@ -254,7 +255,8 @@ test('active profile retains the two direct contained-turn seams without claimin
     assert.ok(composition.relationships.some(edge => edge.from.endsWith('/host-custodied-agent-runtime-host.ts') && edge.to.endsWith(`/${leaf}.ts`) && edge.mode === 'runtime'));
   }
   assert.match(composition.rationale, /contained-turn.*remains direct/);
-  assert.equal(pending.compositions.length, 1);
+  assert.equal(pending.compositions.length, 2);
+  assert.equal(pending.compositions[1].authority, 'ADR-0020');
   assert.equal(pending.compositions[0].factorySymbol, 'createDefaultAgentRuntimeHost');
 });
 
@@ -320,7 +322,8 @@ test('PR71 reviewed owners and helpers retain exact live relationships without e
   assert.match(pending.boundaries.find(b => b.id === 'production.agent-execution').rationale,
     /fixed feature-local route helper.*not separate graph nodes/);
   assert.deepEqual(pending.boundaries.filter(b => b.status === 'adopted').map(b => b.id), ['composition.embedded-runtime']);
-  assert.deepEqual(pending.compositions.map(c => c.factorySymbol), ['createDefaultAgentRuntimeHost']);
+  assert.deepEqual(pending.compositions.filter(c => c.authority === undefined).map(c => c.factorySymbol), ['createDefaultAgentRuntimeHost']);
+  assert.deepEqual(pending.compositions.filter(c => c.authority === 'ADR-0020').map(c => c.factorySymbol), ['bindOrdinaryRuntime']);
   assert.deepEqual(pending.exceptions, []);
 });
 
@@ -339,3 +342,20 @@ for (const direction of ['export-new-host', 'wrap-existing-entrypoint']) {
     await assert.rejects(checkAdoption(f.root), /relationships drift/);
   });
 }
+
+
+test('reviewed documentation pin preserves the normative standard and rejects stale bytes', async () => {
+  const review = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/ordinary-session-pin-review.json', import.meta.url)));
+  const retained = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard.md', import.meta.url), 'utf8');
+  assert.equal(pending.standard.commit, review.upstream);
+  assert.equal(pending.standard.sha256, review.upstreamSha256);
+  assert.equal(digest(retained), review.upstreamSha256);
+  const prior = retained.replaceAll('../../tests/assembly/', '../../packages/assembly/tests/');
+  assert.equal(digest(prior), review.pinnedSha256);
+  assert.notEqual(digest(prior), pending.standard.sha256);
+  assert.equal((retained.match(/\.\.\/\.\.\/tests\/assembly\//g) ?? []).length, 5);
+  assert.equal(review.migrationStatus, 'reviewed-documentation-migrated');
+});
+
+// Additive ADR-0020 scope and graph rejecting evidence remains in the canonical gate.
+import {profile as ordinaryScopeProfile} from './check-ordinary-feature-scope.test.mjs';

@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "status": "active",
+  "authority": "ADR-0020",
+  "files": [
+    "packages/apps/embedded-runtime/src/composition/ordinary-agent-runtime-host.ts",
+    "packages/apps/embedded-runtime/src/composition/ordinary-runtime-assembly.ts",
+    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/adapters/ordinary-observation-journal.ts",
+    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/adapters/ordinary-owner-acl.ts",
+    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
+    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
+    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/contracts/ordinary-session-observation.ts",
+    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/index.ts",
+    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/internal.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-items.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-artifacts.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-workspace.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/ordinary-files.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-process/node-ordinary-process.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-postgres-store.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-state-codec.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-engine.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-ports.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/ordinary-feature-factory.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-model.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-validation.ts",
+    "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-capture.ts",
+    "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-contracts.ts",
+    "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-files.ts",
+    "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-ipc.ts",
+    "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-json.ts",
+    "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-protocol.ts",
+    "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-broker.ts",
+    "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-secret-guard.ts",
+    "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-upstream.ts",
+    "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-schema.ts",
+    "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-store.ts",
+    "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
+    "packages/contexts/provider-access/src/features/contained-turn-access/contracts/ordinary-provider-access.ts",
+    "packages/contexts/provider-access/src/features/contained-turn-access/domain/ordinary-provider-access.ts",
+    "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-owner.ts",
+    "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-transactions.ts",
+    "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts",
+    "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/ordinary-security-factory.ts",
+    "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts"
+  ],
+  "feature": {
+    "id": "ordinary-session-runtime",
+    "root": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime",
+    "roles": [
+      "contracts",
+      "adapters",
+      "composition"
+    ],
+    "entrypoints": {
+      "public": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/index.ts",
+      "internal": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/internal.ts"
+    }
+  },
+  "moduleEdges": [
+    {
+      "from": "embedded-runtime",
+      "to": "agent-execution",
+      "kinds": [
+        "runtime",
+        "type"
+      ]
+    },
+    {
+      "from": "embedded-runtime",
+      "to": "provider-access",
+      "kinds": [
+        "runtime"
+      ]
+    },
+    {
+      "from": "embedded-runtime",
+      "to": "runtime-security",
+      "kinds": [
+        "runtime",
+        "type"
+      ]
+    }
+  ],
+  "featureEdges": [],
+  "facades": [
+    "packages/apps/embedded-runtime/src/composition/ordinary-agent-runtime-host.ts",
+    "packages/apps/embedded-runtime/src/composition/ordinary-runtime-assembly.ts"
+  ],
+  "compositionDependencies": [
+    {
+      "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
+      "to": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+      "kind": "type"
+    },
+    {
+      "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
+      "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
+      "kind": "runtime"
+    },
+    {
+      "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
+      "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+      "kind": "type"
+    },
+    {
+      "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
+      "to": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+      "kind": "type"
+    },
+    {
+      "from": "packages/apps/embedded-runtime/src/composition/ordinary-agent-runtime-host.ts",
+      "to": "packages/apps/embedded-runtime/src/composition/default-agent-runtime-host.ts",
+      "kind": "runtime",
+      "facade": true
+    }
+  ]
+}

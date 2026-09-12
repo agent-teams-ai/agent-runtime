@@ -164,3 +164,15 @@ export {
   snapshotDockerEnginePolicy, snapshotDockerImageInitLock, v4Decode, v4Hash, v4Replay,
   validateContainedTurnConsumedGrantReceipts, validateContainedTurnOperation,
 } from "./features/contained-agent-turn/internal.js";
+
+export {createOrdinaryTurnFeature, applyOrdinaryPostgresSchema, PostgresOrdinaryOperationStore, ORDINARY_PROFILE,
+  createOrdinaryCodexAdapter, createNodeOrdinaryProcess, type OrdinaryCodexAdapterOptions, type OrdinaryCodexObservation,
+  type NodeOrdinaryProcessOptions, type OrdinaryLaunchSpecification,
+  type OrdinaryFeature, type OrdinaryTurnDependencies, type OrdinaryOperation, type OrdinaryAuthoritySnapshot,
+  type OrdinaryReceipt, type OrdinaryReceiptOf, type OrdinaryOperationStore, type OrdinarySecurityPort,
+  type OrdinaryProviderAccessPort, type OrdinarySecurityGrant, type OrdinaryProviderGrant,
+  type OrdinaryCredentialMaterial, type OrdinaryWorkspaceHandle, type OrdinaryWorkspaceSnapshot,
+  type OrdinaryWorkspacePort, type OrdinaryArtifactsPort, type OrdinaryProcessPort,
+  type OrdinaryProcessReservation, type OrdinaryTransport, type OrdinaryProviderPort,
+} from "./features/contained-agent-turn/internal.js";
+export {createNodeOrdinaryWorkspace, createNodeOrdinaryArtifacts, readNodeOrdinaryArtifact, type NodeOrdinaryWorkspaceOptions, type NodeOrdinaryArtifactsOptions} from "./features/contained-agent-turn/internal.js";

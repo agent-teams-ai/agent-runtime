@@ -1,0 +1,11 @@
+{
+  "upstream": "714d6194afd24e0bb4375f4d38e2422c892ad021",
+  "pinned": "a05f2cb51553e1efc5ba89be352e4aba04675088",
+  "path": "docs/architecture/common-assembly.md",
+  "upstreamSha256": "63bbf8f6e0c92a74116bce40ac96e4fc5f1c4ed3d28325be79b5c75448a23bc3",
+  "pinnedSha256": "ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d",
+  "migrationStatus": "reviewed-documentation-migrated",
+  "deltaFile": "ordinary-session-pin-delta.diff",
+  "semanticDelta": "None: five executable-example link relocations only.",
+  "ordinaryAdoption": "contract accepted in ADR-0020; implementation, scoped adoption and rejecting evidence pending"
+}

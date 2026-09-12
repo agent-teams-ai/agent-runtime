@@ -89,6 +89,8 @@ immutable evidence; a later change uses an explicit superseding decision.
 - [ADR-0019: Stable filesystem custody feature activation](0019-stable-filesystem-custody-feature-activation.md)
   activates the Filesystem Custody platform module as one cohesive feature with
   a contracts-only public entry and its runtime behind the composition entry.
+- [ADR-0020: Ordinary user-session Codex execution profile](0020-ordinary-user-session-codex-execution-profile.md)
+
 ## Superseded
 
 No superseded decisions.

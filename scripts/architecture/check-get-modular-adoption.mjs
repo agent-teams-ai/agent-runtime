@@ -4,6 +4,8 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import { resolve, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv';
+import {ordinaryCompositionPath, ordinaryAuthorityPath, verifyOrdinaryGraph} from './ordinary-composition-evidence.mjs';
+import {checkOrdinaryFeatureScope} from './check-ordinary-feature-scope.mjs';
 import { foundationModule, readSourceCensus, requireSourceDiagnostics, verifySourceCensus } from './get-modular-source-census.mjs';
 
 const schema = JSON.parse(await readFile(new URL('../../architecture/get-modular/consumer-profile.schema.json', import.meta.url)));
@@ -28,7 +30,22 @@ export function validateProfile(profile) {
   assert.ok(profile.boundaries.some(b => b.status === 'adopted') && profile.compositions.length, 'active adoption requires a materialized composition');
   equalSet(profile.packages.map(p => p.name), ['@get-modular/core', '@get-modular/assembly'], 'exact package pair');
   assert.equal(new Set(profile.boundaries.map(b => b.id)).size, profile.boundaries.length, 'duplicate boundary');
+  if (profile.boundaries.some(b => b.roots.some(path => path.includes('/ordinary-session-runtime/')))) {
+    assert.equal(profile.compositions.filter(c => c.authority === 'ADR-0020').length, 1, 'ordinary source requires one explicitly authorized composition');
+  }
   return { status: 'active' };
+}
+
+function verifyOrdinaryComposition(composition, decisions, get) {
+    if (composition.authority !== undefined) {
+      assert.equal(composition.authority, 'ADR-0020', 'ordinary authority drift');
+      assert.ok(decisions.some(d => d.id === composition.authority && d.path === ordinaryAuthorityPath), 'ordinary accepted authority missing');
+      assert.equal(composition.scopedFms, 'architecture/feature-module-standard/ordinary-scope.json', 'ordinary FMS mapping missing');
+      assert.equal(composition.declarations, ordinaryCompositionPath, 'ordinary declaration identity drift');
+      verifyOrdinaryGraph(get(ordinaryCompositionPath));
+    } else {
+      assert.ok(!composition.entrypoint.includes('ordinary') && !composition.declarations.includes('ordinary'), 'ordinary composition must retain explicit authority');
+    }
 }
 
 /** Inputs must come from the current checkout: Foundation policy,
@@ -75,6 +92,7 @@ export function verifyAdoption(profile, evidence) {
     assert.ok(profile.boundaries.some(b => b.id === composition.boundary && b.status === 'adopted' && b.entrypoints.includes(composition.entrypoint)), 'mapping boundary mismatch');
     [composition.entrypoint, ...(composition.implementation ? [composition.implementation] : []), composition.declarations, composition.profile, composition.factories, ...composition.tests].forEach(get);
     assert.ok(composition.tests.length, 'mapping tests missing');
+    verifyOrdinaryComposition(composition, decisions, get);
   }
   for (const exception of profile.exceptions) {
     assert.ok(profile.boundaries.some(b => b.id === exception.boundary), 'stale exception boundary');
@@ -188,6 +206,9 @@ export async function checkAdoption(root) {
   assert.ok(profile.sourceCensus, 'live source census missing');
   await requireSourceDiagnostics(consumerRoot);
   verifySourceCensus(profile, await readSourceCensus(consumerRoot, policy));
+  if (profile.compositions.some(c => c.authority === 'ADR-0020')) {
+    assert.deepEqual(await checkOrdinaryFeatureScope({root: consumerRoot}), [], 'ordinary scoped FMS diagnostics');
+  }
   return { ...result, status: 'verified', reviewRequired: ['new capabilities inside existing source paths', 'semantic ownership'] };
 }
 

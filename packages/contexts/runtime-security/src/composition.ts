@@ -146,3 +146,8 @@ export { createPostgresDispatchAcceptanceStore } from
   './features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-acceptance-store.js';
 export { createPostgresDispatchConsumptionRepository } from
   './features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.js';
+
+export {createOrdinarySecurityOwner, type OrdinarySecurityOwnerOptions, type OrdinarySecurityOwner,
+  type OrdinarySecurityGrant, type OrdinarySecurityObservation, type OrdinarySecurityScope,
+  type OrdinarySecurityInput, type OrdinarySecurityPolicy, type OrdinarySecurityAuthority,
+  type OrdinarySecuritySettlement} from "./features/contained-turn-dispatch-authority/composition/ordinary-security-factory.js";

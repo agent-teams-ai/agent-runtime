@@ -221,3 +221,5 @@ target returns `unqualified`.
 Current passive composition adoption: [ADR-0015](decisions/0015-passive-setup-static-assembly-adoption.md)
 and [Get Modular adoption](architecture/get-modular-adoption.md). This is authority
 groundwork, not delivered adoption or provider qualification.
+
+- [ADR-0020: Ordinary user-session Codex execution profile](decisions/0020-ordinary-user-session-codex-execution-profile.md) accepts the ordinary contract; implementation and qualification remain pending.

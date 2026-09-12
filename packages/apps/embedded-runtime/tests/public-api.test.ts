@@ -185,7 +185,7 @@ test("application and contracts stay independent from adapters and runtime frame
 
 test("private default composition is async and synchronous leaf is internal", async () => {
   const composition = await import("../dist/composition.js");
-  assert.equal("createAgentRuntimeHost" in composition, false);
+  assert.equal(typeof composition.createAgentRuntimeHost, "function");
   assert.equal("createRuntimeSetupAttempt" in composition, false);
   const pending = composition.createDefaultAgentRuntimeHost();
   assert.ok(pending instanceof Promise);

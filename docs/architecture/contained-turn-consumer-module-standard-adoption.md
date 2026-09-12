@@ -22,8 +22,8 @@ code_anchors:
 Agent Runtime's passive setup adopts the Get Modular Consumer Module Standard
 under ADR-0015 and the active `architecture/get-modular/consumer-profile.json`.
 This separate contained-turn profile pins the same reviewed standard at commit
-`f1ec0152c34715395685b349844a7d1c18a2f015` and complete-document SHA-256
-`ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d`.
+`714d6194afd24e0bb4375f4d38e2422c892ad021` and complete-document SHA-256
+`63bbf8f6e0c92a74116bce40ac96e4fc5f1c4ed3d28325be79b5c75448a23bc3`.
 ADR-0016 proposes only the contained-turn seven-port classification as pending.
 It does not weaken or duplicate the active passive setup Assembly claim.
 

@@ -21,8 +21,8 @@ export const EXPECTED_PROFILE = Object.freeze({
       repository: "agent-teams-ai/get-modular",
       path: "docs/architecture/common-assembly.md",
       anchor: "consumer-module-standard",
-      gitCommit: "f1ec0152c34715395685b349844a7d1c18a2f015",
-      sha256: "ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d",
+      gitCommit: "714d6194afd24e0bb4375f4d38e2422c892ad021",
+      sha256: "63bbf8f6e0c92a74116bce40ac96e4fc5f1c4ed3d28325be79b5c75448a23bc3",
     },
     featureModuleStandard: {
       repository: "agent-teams-ai/.github",

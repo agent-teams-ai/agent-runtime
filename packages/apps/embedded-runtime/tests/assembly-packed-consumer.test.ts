@@ -104,7 +104,7 @@ import assert from 'node:assert/strict';
 import * as ordinary from '@agent-teams/embedded-runtime';
 import * as composition from '@agent-teams/embedded-runtime/composition';
 assert.deepEqual(Object.keys(ordinary), []);
-assert.equal('createAgentRuntimeHost' in composition, false);
+assert.equal(typeof composition.createAgentRuntimeHost, 'function');
 assert.equal('createRuntimeSetupAttempt' in composition, false);
 assert.throws(() => import.meta.resolve('@agent-teams/embedded-runtime/dist/composition/agent-runtime-host.js'), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
 const pending = composition.createDefaultAgentRuntimeHost();
@@ -130,9 +130,12 @@ await assert.rejects(access.claudeCodeSetup.inspect(), /Host is disposed/u);
   await writeFile(join(consumer, "consumer.ts"), `
 import type { RuntimeAccessHandle } from '@agent-teams/embedded-runtime';
 import { createDefaultAgentRuntimeHost, type AgentRuntimeHost } from '@agent-teams/embedded-runtime/composition';
-// @ts-expect-error Synchronous leaf is not exported from the installed composition root.
-import { createAgentRuntimeHost } from '@agent-teams/embedded-runtime/composition';
-void createAgentRuntimeHost;
+import { createAgentRuntimeHost, type OrdinaryAgentRuntimeHostOptions } from '@agent-teams/embedded-runtime/composition';
+declare const ordinaryOptions: OrdinaryAgentRuntimeHostOptions;
+const ordinaryPending: Promise<AgentRuntimeHost> = createAgentRuntimeHost(ordinaryOptions);
+// @ts-expect-error Active ordinary bootstrap must also be awaited.
+const ordinaryMissingAwait: AgentRuntimeHost = ordinaryPending;
+void ordinaryMissingAwait;
 const pending: Promise<AgentRuntimeHost> = createDefaultAgentRuntimeHost();
 // @ts-expect-error Async bootstrap must be awaited.
 const missingAwait: AgentRuntimeHost = pending;
