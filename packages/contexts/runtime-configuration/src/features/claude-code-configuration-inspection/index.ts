@@ -1,15 +1,3 @@
-export type {
-  CodexConfigurationDiagnostic,
-  CodexConfigurationDialect,
-  CodexConfigurationSource,
-  CodexConfigurationSourceKind,
-  CodexConfigurationSourceObservation,
-  InspectCodexConfiguration,
-  InspectCodexConfigurationInput,
-  InspectCodexConfigurationResult,
-  PortableCodexSettingKey,
-  PortableCodexSettingObservation,
-} from "./features/codex-configuration-inspection/index.js";
 export {
   CLAUDE_CODE_CONFIGURATION_BUDGETS,
   CLAUDE_CODE_EFFORT_VALUES,
@@ -19,7 +7,7 @@ export {
   CLAUDE_CODE_PROVIDER_ROUTE_KEYS,
   CLAUDE_CODE_PROVIDER_ROUTE_VOCABULARY_REVISION,
   CLAUDE_CODE_SETTINGS_DIALECT,
-} from "./features/claude-code-configuration-inspection/index.js";
+} from "./contracts/claude-code-configuration-inspection.js";
 export type {
   ClaudeCodeConfigurationDiagnostic,
   ClaudeCodeConfigurationDiagnosticCode,
@@ -39,4 +27,4 @@ export type {
   InspectClaudeCodeConfigurationResult,
   ObservedPortableClaudeCodeIntent,
   TrustedClaudeCodeObservedSourcePlan,
-} from "./features/claude-code-configuration-inspection/index.js";
+} from "./contracts/claude-code-configuration-inspection.js";

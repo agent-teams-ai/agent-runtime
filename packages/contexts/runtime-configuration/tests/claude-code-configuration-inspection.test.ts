@@ -5,7 +5,7 @@ import {
   CLAUDE_CODE_CONFIGURATION_BUDGETS, CLAUDE_CODE_EFFORT_VALUES,
   CLAUDE_CODE_MODEL_ALIASES, CLAUDE_CODE_MODEL_DEFAULT, CLAUDE_CODE_PROVIDER_ROUTE_KEYS,
   CLAUDE_CODE_PROVIDER_ROUTE_VOCABULARY_REVISION, CLAUDE_CODE_SETTINGS_DIALECT,
-  type ClaudeCodeConfigurationSource, type ClaudeCodeConfigurationSourceReader,
+  type ClaudeCodeConfigurationSource,
   type TrustedClaudeCodeObservedSourcePlan,
 } from "../dist/index.js";
 import {
@@ -14,6 +14,7 @@ import {
   createClaudeCodeConfigurationSemanticClassifierV2,
   createNodeClaudeCodeConfigurationDigest,
   createStrictClaudeCodeJsonParser,
+  type ClaudeCodeConfigurationSourceReader,
 } from "../dist/composition.js";
 
 const encoder = new TextEncoder();
