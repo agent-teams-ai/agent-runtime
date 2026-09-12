@@ -1103,6 +1103,11 @@ boundaries:
   - packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts
   - packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts
   - packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts
+  - packages/apps/embedded-runtime/src/features/linux-codex-deployment/index.ts
+  - packages/apps/embedded-runtime/src/features/linux-codex-deployment/internal.ts
+  - packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-contained-turn-owner.ts
+  - packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment-authority.ts
+  - packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment.ts
   - packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts
   - packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts
   - packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/index.ts
