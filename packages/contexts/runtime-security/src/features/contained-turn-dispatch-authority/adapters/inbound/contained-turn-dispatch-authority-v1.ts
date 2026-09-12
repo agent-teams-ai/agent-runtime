@@ -6,19 +6,21 @@ import type {
   ObserveDispatchConsumptionOutcome,
   SettleDispatchConsumptionInput,
   SettleDispatchConsumptionOutcome,
-} from "../contracts/contained-turn-dispatch-authority-v1.js";
+} from "../../contracts/contained-turn-dispatch-authority-v1.js";
+import {
+  mapConsumeResultToV1,
+  mapObservedResultToV1,
+  mapSettlementResultToV1,
+} from "../../application/contained-turn-dispatch-authority-v1-result-mappers.js";
+import { consumeForDispatch } from "../../application/consume-for-dispatch.js";
+import type { DispatchAuthorityOperations } from "../../application/dispatch-authority-dependencies.js";
+import { observeDispatchConsumption } from "../../application/observe-dispatch-consumption.js";
+import { settleDispatchConsumption } from "../../application/settle-dispatch-consumption.js";
 import {
   mapConsumeRequestFromV1,
-  mapConsumeResultToV1,
   mapObservationQueryFromV1,
-  mapObservedResultToV1,
   mapSettlementRequestFromV1,
-  mapSettlementResultToV1,
-} from "./contained-turn-dispatch-authority-v1-mappers.js";
-import { consumeForDispatch } from "./consume-for-dispatch.js";
-import type { DispatchAuthorityOperations } from "./dispatch-authority-dependencies.js";
-import { observeDispatchConsumption } from "./observe-dispatch-consumption.js";
-import { settleDispatchConsumption } from "./settle-dispatch-consumption.js";
+} from "./contained-turn-dispatch-authority-v1-request-mappers.js";
 
 const ownerUnavailable = () => Object.freeze({
   status: "indeterminate", reason: "owner_unavailable",

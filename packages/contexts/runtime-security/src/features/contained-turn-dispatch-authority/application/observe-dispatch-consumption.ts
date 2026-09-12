@@ -15,7 +15,7 @@ import {
   validConsumptionReceipt,
 } from "./dispatch-consumption-models.js";
 import { mapConsumeResultToV1, mapSettlementResultToV1 } from
-  "./contained-turn-dispatch-authority-v1-mappers.js";
+  "./contained-turn-dispatch-authority-v1-result-mappers.js";
 import {
   snapshotExactDispatchRecord, snapshotExactDispatchVariant,
 } from "../domain/dispatch-exact-record.js";

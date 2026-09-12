@@ -7,7 +7,7 @@ import type { DispatchAuthorityHead } from "../../../domain/dispatch-authority-h
 import { isBoundedDispatchIdentifier, sameConsumptionReceipt } from
   "../../../application/dispatch-consumption-models.js";
 import { mapConsumeResultToV1, mapSettlementResultToV1 } from
-  "../../../application/contained-turn-dispatch-authority-v1-mappers.js";
+  "../../../application/contained-turn-dispatch-authority-v1-result-mappers.js";
 import type {
   ConsumeTransactionSnapshot, DispatchConsumptionRepository, PersistedConsumption,
   SettlementTransactionSnapshot,
