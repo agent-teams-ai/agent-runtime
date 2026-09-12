@@ -37,6 +37,7 @@ on:
       - refactor/fms-host-http-egress
       - chore/classify-native-helper-test
       - docs/sr-contained-turn-anti-patterns
+      - refactor/fms-host-access-invariants
 
 permissions:
   contents: read

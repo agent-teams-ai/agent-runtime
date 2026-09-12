@@ -1,1 +1,4 @@
-export type { ContainedTurnConstructionCleanupError } from "./contained-turn-construction-failure.js";
+export type {
+  ContainedTurnConstructionCleanupError,
+  ContainedTurnOwnerDisposalError,
+} from "./contained-turn-construction-failure.js";
