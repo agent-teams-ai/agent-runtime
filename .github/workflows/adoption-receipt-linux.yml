@@ -29,6 +29,7 @@ on:
       - chore/classify-native-helper-test
       - chore/classify-native-helper-test
       - cursor/fms-linux-deploy-7d17
+      - cursor/fms-host-leftover-7d17
       - docs/sr-contained-turn-anti-patterns
       - refactor/fms-host-access-invariants
       - refactor/fms-host-darwin-deployment
