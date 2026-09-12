@@ -215,16 +215,19 @@ composition-root detail — the public `ContainedTurnEgressDependencies` shape
 does not accept one — so revalidation timing remains under trusted-code
 control. Module composition's `containedTurnEgressProviderBindingDigest`
 delegates route-binding digest computation to the egress feature's own domain
-`validation` module instead of computing it inline, but the underlying
+`validation` module instead of computing it inline, and the underlying
 `node:crypto` hashing and the `exactObject`/`snapshotUint8Array` validation
-primitives still live in `composition.ts` itself and are called only from the
-two egress call sites there. That part of the base document's complaint
-remains open for this feature specifically: the sibling features already
-moved past it, each behind its own outbound Node adapter
-(`node-sha256-dispatch-digest.ts`, `node-egress-cryptography.ts`,
-`node-source-identity-digest.ts`), so egress is the one still routing
-`node:crypto` through the module composition root instead of a feature-owned
-adapter. Domain and application layers in this package do not import Node
+primitives it needs have moved out of `composition.ts` into the feature's own
+`adapters/outbound/node-security-primitives.ts`, called by the same two egress
+call sites there. That closes the base document's complaint for this feature
+the same way the sibling features already closed it, each behind its own
+outbound Node adapter (`node-sha256-dispatch-digest.ts`,
+`node-egress-cryptography.ts`, `node-source-identity-digest.ts`). One gap
+remains narrower rather than fully closed: those three sibling ports are each
+declared under `application/ports/outbound/`, while `EgressSecurityPrimitives`
+is still declared in the feature's `domain/validation.ts`, so egress does not
+yet match the same port-location convention. Domain and application layers in
+this package do not import Node
 builtins directly today, but nothing in `architecture/foundation/source-dependencies.yaml`
 enforces that split within the single flat `production.runtime-security`
 boundary, unlike Embedded Runtime's narrower allowed-builtins list. Dispatch
