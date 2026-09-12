@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 import {
   createNodePathCanonicalizer,
   createSetupInspectionAuthorizationFeature,
-} from "../dist/composition.js";
+} from "../../../dist/composition.js";
 
 const execFile = promisify(execFileCallback);
 const installationCandidate = (

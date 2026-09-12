@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createPostgresDispatchAcceptanceStore, createDispatchAcceptanceFeature,
-  createNodeSha256DispatchDigest } from '../dist/composition.js';
+  createNodeSha256DispatchDigest } from '../../../dist/composition.js';
 import { createHarness, deferred, scope } from './postgres-dispatch.fixtures.ts';
 
 const fixture = async () => {

@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createContainedTurnDispatchAuthorityFeature, createInMemoryDispatchConsumptionRepository,
-  createNodeSha256DispatchDigest } from "../dist/composition.js";
+  createNodeSha256DispatchDigest } from "../../../dist/composition.js";
 import { operationId, requestId, settlementId } from
-  "../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/records.js";
+  "../../../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/records.js";
 import { dispatchSchemaV1 } from
-  "../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/schema.js";
+  "../../../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/schema.js";
 import { authority, createHarness, deferred, grant, input, operation, scope, seeded,
   settlement, unavailable } from "./postgres-dispatch.fixtures.ts";
 

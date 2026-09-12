@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { createContainedTurnDispatchAuthorityFeature, createNodeSha256DispatchDigest } from "../dist/composition.js";
+import { createContainedTurnDispatchAuthorityFeature, createNodeSha256DispatchDigest } from "../../../dist/composition.js";
 import { createPostgresDispatchConsumptionRepository } from
-  "../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.js";
+  "../../../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.js";
 import type { DispatchPgClient, DispatchPgDeadlines, DispatchPgPool } from
-  "../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/transaction.js";
+  "../../../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/transaction.js";
 import { authority, input, scope } from "./contained-turn-dispatch-authority.fixtures.ts";
 export { authority, input, scope };
 

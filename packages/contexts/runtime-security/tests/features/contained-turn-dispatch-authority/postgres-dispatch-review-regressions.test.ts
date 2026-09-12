@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createNodeSha256DispatchDigest } from "../dist/composition.js";
-import { requestCanonical, settlementCanonical } from "../dist/features/contained-turn-dispatch-authority/application/dispatch-canonical.js";
-import { requestId, settlementId } from "../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/records.js";
+import { createNodeSha256DispatchDigest } from "../../../dist/composition.js";
+import { requestCanonical, settlementCanonical } from "../../../dist/features/contained-turn-dispatch-authority/application/dispatch-canonical.js";
+import { requestId, settlementId } from "../../../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/records.js";
 import { authority, createHarness, grant, input, seeded, settlement, unavailable } from "./postgres-dispatch.fixtures.ts";
 
 for (const table of ["consume_requests", "consumptions", "settlement_requests"]) {

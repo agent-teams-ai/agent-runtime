@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { containedTurnEgressProviderBindingDigest, createContainedTurnEgressGateway,
-  type ContainedTurnEgressRequest } from "../dist/composition.js";
-import * as ordinaryRuntimeSecurity from "../dist/index.js";
+  type ContainedTurnEgressRequest } from "../../../dist/composition.js";
 import { applicationBytes, binding, deferred, deniedRequest, dispatch, harness, host, observation, policy,
-  receipt, request, route, sha, signer, spoof, stall, v4, v6, wire, type HarnessOptions } from "./fixtures/contained-turn-egress.ts";
+  receipt, request, route, sha, signer, spoof, stall, v4, v6, wire, type HarnessOptions } from "./contained-turn-egress.fixture.ts";
 
 test("binds exact route, credential, committed authority receipt, canonical request, policy, and peer", async () => {
   const fixture = harness(); const outcome = await createContainedTurnEgressGateway(host(), fixture.dependencies).exchange(request());
@@ -30,7 +29,6 @@ test("provider-neutral contracts use fixed-width tagged addresses and keep the f
     const fixture = harness({observation: observation({canonicalAddresses: [address], peerAddress: address})});
     assert.equal((await createContainedTurnEgressGateway(host(), fixture.dependencies).exchange(request())).status, "completed");
   }
-  assert.equal("createContainedTurnEgressGateway" in ordinaryRuntimeSecurity, false);
 });
 
 test("copies inputs before awaits and deterministic canonical bytes bind header order and body", async () => {

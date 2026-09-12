@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { containedTurnEgressProviderBindingDigest, createContainedTurnEgressGateway } from "../dist/composition.js";
-import { deniedRequest, dispatch, frame, harness, host, receipt, request, route, sha, wire } from "./fixtures/contained-turn-egress.ts";
+import { containedTurnEgressProviderBindingDigest, createContainedTurnEgressGateway } from "../../../dist/composition.js";
+import { deniedRequest, dispatch, frame, harness, host, receipt, request, route, sha, wire } from "./contained-turn-egress.fixture.ts";
 
 test("literal dot path segments reject requests and route authority before transport", async () => {
   for (const path of ["/.", "/..", "/./v1", "/../admin", "/v1/./turn", "/v1/../admin",

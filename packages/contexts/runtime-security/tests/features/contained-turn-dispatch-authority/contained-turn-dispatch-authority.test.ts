@@ -5,11 +5,11 @@ import {
   createContainedTurnDispatchAuthorityFeature,
   createInMemoryDispatchConsumptionRepository,
   createNodeSha256DispatchDigest,
-} from "../dist/composition.js";
+} from "../../../dist/composition.js";
 import type {
   DispatchAuthorityHead,
   DispatchConsumptionRepository,
-} from "../dist/composition.js";
+} from "../../../dist/composition.js";
 
 import {
   authority,

@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createCurrentEgressOwner } from
-  "../dist/features/provider-process-egress-authorization/composition/current-egress-owner.js";
+  "../../../dist/features/provider-process-egress-authorization/composition/current-egress-owner.js";
 import { createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate } from
-  "../dist/features/provider-process-egress-authorization/composition/ed25519-v2-candidate-factory.js";
+  "../../../dist/features/provider-process-egress-authorization/composition/ed25519-v2-candidate-factory.js";
 import { canonicalEgressValue } from
-  "../dist/features/provider-process-egress-authorization/application/egress-canonical.js";
+  "../../../dist/features/provider-process-egress-authorization/application/egress-canonical.js";
 import type { CurrentEgressOwnerInput, CurrentEgressEndorsement } from
-  "../dist/features/provider-process-egress-authorization/composition/current-egress-inputs.js";
+  "../../../dist/features/provider-process-egress-authorization/composition/current-egress-inputs.js";
 import type { ProvisionalEgressAuthorizationV2, RequestFinalEgressAuthorizationV2 } from
-  "../dist/features/provider-process-egress-authorization/contracts/provider-process-egress-authorization-v2.js";
+  "../../../dist/features/provider-process-egress-authorization/contracts/provider-process-egress-authorization-v2.js";
 
 export const digest = (value: string) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
 export const scope = () => ({ tenantId: "tenant-1", projectId: "project-1", operationId: "operation-1",

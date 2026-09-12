@@ -4,12 +4,10 @@ import {
   createContainedTurnDispatchAuthorityFeature,
   createInMemoryDispatchConsumptionRepository,
   createNodeSha256DispatchDigest,
-} from "../dist/composition.js";
-import type { DispatchAuthorityHead } from "../dist/composition.js";
-import type {
-  ConsumeForDispatchInput,
-  DispatchAuthorityScope,
-} from "../dist/index.js";
+} from "../../../dist/composition.js";
+import type { DispatchAuthorityHead, DispatchAuthorityScope } from "../../../dist/composition.js";
+import type { ConsumeForDispatchInput } from
+  "../../../dist/features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.js";
 
 export const scope: DispatchAuthorityScope = Object.freeze({
   tenantId: "tenant-a",

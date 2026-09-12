@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createContainedTurnDispatchAuthorityFeature, createNodeSha256DispatchDigest,
-  createDispatchAcceptanceFeature, createPostgresDispatchAcceptanceStore } from "../dist/composition.js";
+  createDispatchAcceptanceFeature, createPostgresDispatchAcceptanceStore } from "../../../dist/composition.js";
 import { createPostgresDispatchConsumptionRepository } from
-  "../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.js";
-import { lockId } from "../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/records.js";
+  "../../../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.js";
+import { lockId } from "../../../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/records.js";
 import type { DispatchPgPool } from
-  "../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/transaction.js";
+  "../../../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/transaction.js";
 import { authority, input, scope } from "./contained-turn-dispatch-authority.fixtures.ts";
 import { validateDisposablePostgresUrl } from "./postgres-dispatch-url.fixtures.ts";
 

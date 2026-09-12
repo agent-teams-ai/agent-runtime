@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { createNodeSha256EgressDigest } from "../dist/composition.js";
+import { createNodeSha256EgressDigest } from "../../../dist/composition.js";
 import {
   assertDeepFrozen, authorityFor, authorizeProvisional, canonical, digest, finalInput, harness,
   provisionalInput, requestProjection, scope,
@@ -496,7 +496,7 @@ test("special-use IPv6 is denied conservatively and ordinary global unicast is a
 });
 
 test("the dormant default route and Agent Execution seven-port composition remain unchanged", () => {
-  const root = new URL("../../../../", import.meta.url);
+  const root = new URL("../../../../../../", import.meta.url);
   const readiness = readFileSync(new URL("docs/architecture/readiness.md", root), "utf8");
   assert.match(readiness, /route-enforcement-unqualified/);
   const factory = readFileSync(

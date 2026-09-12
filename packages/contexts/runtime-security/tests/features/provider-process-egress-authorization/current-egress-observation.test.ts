@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createCurrentEgressOwner } from
-  "../dist/features/provider-process-egress-authorization/composition/current-egress-owner.js";
+  "../../../dist/features/provider-process-egress-authorization/composition/current-egress-owner.js";
 import { approve, candidate, changed, current, deferred, digest, finalInput, fixture, provisional,
   resolveInput, scope } from "./current-egress-owner.fixture.ts";
 

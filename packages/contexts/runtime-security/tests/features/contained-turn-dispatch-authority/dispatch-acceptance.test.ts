@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
-import { createDispatchAcceptanceFeature, createNodeSha256DispatchDigest } from '../dist/composition.js';
+import { createDispatchAcceptanceFeature, createNodeSha256DispatchDigest } from '../../../dist/composition.js';
 import type { DispatchAcceptanceDecision, DispatchAcceptancePolicy, DispatchAcceptanceIntent,
-  DispatchAcceptanceStore } from '../dist/composition.js';
+  DispatchAcceptanceStore } from '../../../dist/composition.js';
 import { createHarness, deferred, input, scope, operation, settlement } from './postgres-dispatch.fixtures.ts';
 
 const intent: DispatchAcceptanceIntent = { operationId: 'operation-a', scope,
@@ -157,7 +157,7 @@ test('missing-head result remains not_found and publication never repairs it', a
   const f = await fixture();
   assert.deepEqual(await f.api.observeDispatchConsumption(f.request), { status: 'not_found' });
   // Exercise the old consumer first, as a misordered external composition would.
-  const legacy = (await import('../dist/composition.js')).createContainedTurnDispatchAuthorityFeature({ repository: f.repository, clock: f.deps.clock, digest: f.deps.digest }).dispatchAuthorityV1;
+  const legacy = (await import('../../../dist/composition.js')).createContainedTurnDispatchAuthorityFeature({ repository: f.repository, clock: f.deps.clock, digest: f.deps.digest }).dispatchAuthorityV1;
   assert.deepEqual(await legacy.consumeForDispatch(f.request), { status: 'not_found' });
   assert.deepEqual(await f.api.publishAndConsumeForDispatch(f.prepared, f.request), { status: 'not_found' });
   assert.equal(f.db.tables.authority_heads.size, 0);

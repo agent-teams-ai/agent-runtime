@@ -7,7 +7,7 @@ import {
   type ProvisionalEgressAuthorizationV2,
   type RequestFinalEgressAuthorizationV2,
   type SignedFirstApplicationByteGrantV2,
-} from "../dist/composition.js";
+} from "../../../dist/composition.js";
 import { authorityFor, harness as v1Harness, provisionalInput as v1ProvisionalInput,
   requestProjection, scope } from "./provider-process-egress-authorization.fixtures.ts";
 

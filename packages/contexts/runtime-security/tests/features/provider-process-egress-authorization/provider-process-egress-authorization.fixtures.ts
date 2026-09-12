@@ -8,7 +8,7 @@ import {
   type RequestProvisionalEgressAuthorizationV1,
   type TrustedEgressCompositionScopeV1,
   type TrustedHostRequestProjectionV1,
-} from "../dist/composition.js";
+} from "../../../dist/composition.js";
 
 export const digest = (character: string): string => `sha256:${character.repeat(64)}`;
 export const canonical = (value: unknown): string => {

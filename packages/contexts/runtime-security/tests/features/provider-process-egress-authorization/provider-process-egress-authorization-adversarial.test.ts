@@ -7,7 +7,7 @@ import {
   createProviderProcessEgressAuthorizationFeature,
   type RequestFinalEgressAuthorizationV1,
   type RequestProvisionalEgressAuthorizationV1,
-} from "../dist/composition.js";
+} from "../../../dist/composition.js";
 import {
   assertDeepFrozen, authorityFor, authorizeProvisional, finalInput, harness, provisionalInput, scope,
 } from "./provider-process-egress-authorization.fixtures.ts";

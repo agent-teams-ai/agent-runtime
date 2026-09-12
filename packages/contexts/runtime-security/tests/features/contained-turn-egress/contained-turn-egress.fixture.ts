@@ -4,7 +4,7 @@ import { createHash, generateKeyPairSync } from "node:crypto";
 import { containedTurnEgressProviderBindingDigest, createContainedTurnEgressGateway, createNodeEd25519EgressSigner,
   type ContainedTurnEgressDependencies, type ContainedTurnEgressRequest,
   type EgressAuthorizationBodyV1, type EgressTransportV1, type NetworkAddressV1,
-  type TrustedEgressHostIdentityV1 } from "../../dist/composition.js";
+  type TrustedEgressHostIdentityV1 } from "../../../dist/composition.js";
 
 const sha = (value: string | Uint8Array) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
 const utf8 = new TextEncoder();

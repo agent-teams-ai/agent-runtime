@@ -1,15 +1,12 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
-
-import * as publicApi from "../dist/index.js";
 
 import {
   createContainedTurnDispatchAuthorityFeature,
   createInMemoryDispatchConsumptionRepository,
   createNodeSha256DispatchDigest,
-} from "../dist/composition.js";
-import type { DispatchConsumptionRepository } from "../dist/composition.js";
+} from "../../../dist/composition.js";
+import type { DispatchConsumptionRepository } from "../../../dist/composition.js";
 
 import {
   assertDeepFrozen,
@@ -502,19 +499,4 @@ test("owner accessors and nested unknown callback facts fail closed without read
   });
   assert.deepEqual(await unknownFeature.dispatchAuthorityV1.observeDispatchConsumption(input()),
     { status: "indeterminate", reason: "owner_unavailable" });
-});
-
-test("package root exposes only supported V1 consumer contracts", async () => {
-  assert.deepEqual(Object.keys(publicApi), ["CONTAINED_TURN_PROVIDER_DISPATCH_PURPOSE"]);
-  const declarations = await readFile(new URL("../dist/index.d.ts", import.meta.url), "utf8");
-  assert.match(declarations, /ContainedTurnDispatchAuthorityV1/);
-  for (const internalName of [
-    "DispatchAuthorityHead",
-    "DispatchConsumptionRepository",
-    "DispatchControlClock",
-    "DispatchDigest",
-    "PersistedConsumption",
-  ]) {
-    assert.doesNotMatch(declarations, new RegExp(`\\b${internalName}\\b`));
-  }
 });

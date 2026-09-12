@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 
-const preload = new URL("../scripts/require-postgres-qualification.mjs", import.meta.url).href;
+const preload = new URL("../../scripts/require-postgres-qualification.mjs", import.meta.url).href;
 const probe = (databaseUrl?: string) => spawnSync(process.execPath,
   ["--import", preload, "--input-type=module", "-e", "process.stdout.write('test-runner-started')"], {
     env: databaseUrl === undefined ? {} : {RS_POSTGRES_DISPOSABLE_URL: databaseUrl},
