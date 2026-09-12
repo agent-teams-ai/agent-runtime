@@ -1,8 +1,9 @@
 name: adoption-receipt-darwin
 
-# Temporary workflow: Darwin arm64 adoption receipt for frozen support-slice
-# identity 9c5163d4. The job always checks out that SHA so this workflow-only
-# commit does not enter the receipt identity. Safe to delete after merge.
+# Temporary workflow: Darwin arm64 adoption receipt for frozen remainder
+# identity 99074cdd after absorbing #112. The job always checks out that SHA
+# so this workflow-only commit does not enter the receipt identity. Safe to
+# delete after merge.
 
 on:
   push:
@@ -18,16 +19,16 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     steps:
-      - name: Checkout frozen support-slice SHA
+      - name: Checkout frozen remainder SHA
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: 9c5163d4f465e5c570faf2a43d345a1b04a9b7a2
+          ref: 99074cddc03f38f9f56c3aff5f44815d5bb76b11
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "9c5163d4f465e5c570faf2a43d345a1b04a9b7a2"
+        run: test "$(git rev-parse HEAD)" = "99074cddc03f38f9f56c3aff5f44815d5bb76b11"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
