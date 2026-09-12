@@ -200,9 +200,9 @@ same way: the constants it needs live in its own `models/claude-code-vocabulary.
 application model, and its remaining import from `../contracts` is type-only.
 Both features now route their package assembly through curated feature
 entrypoints (`index.ts` for `.`, `internal.ts` for `./composition`) rather
-than deep imports into `adapters` and `application/ports`. Their tests still
-live at the package root rather than under feature ownership; that remains
-open.
+than deep imports into `adapters` and `application/ports`. Their tests now
+live under feature ownership (`tests/features/...`) with the package assembly
+surface check in `tests/package/`; the module itself remains pending.
 
 Runtime Security has four features. Setup-source authorization now owns its
 Node path and source-identity digest behind explicit outbound ports

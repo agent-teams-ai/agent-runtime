@@ -8,7 +8,7 @@ import {
   createCodexConfigurationSemanticClassifierV1,
   createNodeCodexConfigurationDigest,
   createSmolTomlParser,
-} from "../dist/composition.js";
+} from "../../../dist/composition.js";
 
 const syntheticSource = {
   absolutePath: "/synthetic/config.toml",
