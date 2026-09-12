@@ -1,14 +1,14 @@
 name: adoption-receipt-darwin
 
-# Temporary workflow: Darwin arm64 adoption receipt for package-test
-# architecture-load restack identity 22986acb stacked on leftover RS D 8ba95cc9.
+# Temporary workflow: Darwin arm64 adoption receipt for Runtime Configuration
+# activation identity 3193051f stacked on architecture-load D 48971606.
 # The job always checks out that SHA so this workflow-only commit does not
 # enter the receipt identity. Safe to delete after merge.
 
 on:
   push:
     branches:
-      - cursor/fms-darwin-gha-capture-arch-load-restack-7d17
+      - cursor/fms-darwin-gha-capture-rc-activation-7d17
 
 permissions:
   contents: read
@@ -19,16 +19,16 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     steps:
-      - name: Checkout frozen package-test architecture-load restack SHA
+      - name: Checkout frozen Runtime Configuration activation SHA
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: 22986acb0ebfd96cabe49bbf72449e5105830a54
+          ref: 3193051fec993ab826654376d5d61faa366f785f
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "22986acb0ebfd96cabe49bbf72449e5105830a54"
+        run: test "$(git rev-parse HEAD)" = "3193051fec993ab826654376d5d61faa366f785f"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
