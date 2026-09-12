@@ -6,7 +6,7 @@ export const createOrdinarySecurityTransactions = (pool: DispatchPgPool) => {
   const active = new Set<AbortController>();
   const completions = new Set<Promise<void>>();
   return Object.freeze({
-    async close(): Promise<void> {closed = true; for (const controller of active) {controller.abort();} await Promise.all([...completions]);},
+    async close(): Promise<void> {closed = true; for (const controller of active) {controller.abort();} await Promise.all(completions);},
     async run<T>(work: (transaction: DispatchPgTransaction) => Promise<T>): Promise<T> {
       if (closed) {throw unavailable();}
       const controller = new AbortController(); active.add(controller);
@@ -22,7 +22,7 @@ export const createOrdinarySecurityTransactions = (pool: DispatchPgPool) => {
         const abort = (): void => {release(); broken = true; reject(unavailable());};
         controller.signal.addEventListener("abort", abort, {once: true});
         queryTimer = setTimeout(() => controller.abort(), 5000);
-        try {start().then(value => {release(); if (controller.signal.aborted) {reject(unavailable());} else {resolve(value);}}, () => {release(); reject(unavailable());});}
+        try {start().then(value => {release(); if (controller.signal.aborted) {reject(unavailable());} else {resolve(value);} return;}, () => {release(); reject(unavailable());});}
         catch {release(); reject(unavailable());}
       });
       const query: DispatchPgTransaction["query"] = async (sql, values) => {

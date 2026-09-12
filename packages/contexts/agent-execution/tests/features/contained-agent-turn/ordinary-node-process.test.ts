@@ -58,7 +58,7 @@ test("malformed UTF8 is rejected rather than rewritten into protocol data or a d
     const owner = createNodeOrdinaryProcess({prepareLaunch: async () => ({executable: process.execPath, arguments: ["-e", "process.stdout.write(Buffer.from([0xff,10]));"], cwd: root, environment: {}})});
     const reservation = await owner.reserve({binding, workspace: {workspaceId: "workspace:synthetic", cwd: root, homeDirectory: root}, credential: {materializationId: "material:synthetic", generation: 1, environment: {}, brokerEndpoint: "http://127.0.0.1:1"}, deadline: performance.now() + 5000});
     const transport = await reservation.start(claim(reservation.reservationId), new AbortController().signal);
-    await assert.rejects(async () => {for await (const _line of transport.lines) {assert.fail("malformed bytes were published");}});
+    await assert.rejects(async () => {for await (const line of transport.lines) {assert.fail(`malformed bytes were published: ${line}`);}});
     await assert.rejects(reservation.close(0));
   } finally {await rm(root, {recursive: true, force: true});}
 });

@@ -232,7 +232,7 @@ test("Node permissions do not follow imports moved into core or undeclared adapt
   }
 });
 
-test("Embedded Runtime Node utility permission belongs only to composition", () => {
+test("Embedded Runtime Node utility permission belongs to exact Host composition and ordinary adapter paths", () => {
   const composition = boundariesById.get("composition.embedded-runtime");
   assert.deepEqual(composition.roots, [
     "packages/apps/embedded-runtime/src/composition.ts",
@@ -240,13 +240,22 @@ test("Embedded Runtime Node utility permission belongs only to composition", () 
     "packages/apps/embedded-runtime/src/composition/default-agent-runtime-host.ts",
     "packages/apps/embedded-runtime/src/composition/host-custodied-agent-runtime-host.ts",
     "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+    "packages/apps/embedded-runtime/src/composition/ordinary-agent-runtime-host.ts",
+    "packages/apps/embedded-runtime/src/composition/ordinary-runtime-assembly.ts",
+    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/adapters/ordinary-observation-journal.ts",
+    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/adapters/ordinary-owner-acl.ts",
+    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
+    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
+    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/contracts/ordinary-session-observation.ts",
+    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/index.ts",
+    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/internal.ts",
   ]);
   // composition.ts re-exports the linux-codex/http-egress/darwin routing
   // cluster, the contained-turn and contained-turn-support roles, and
   // access-contracts; PR69 grew this directory well beyond a single
-  // entrypoint file. agent-runtime-host.ts (the only remaining real
-  // getBuiltinModule("node:util") consumer under this root) moved into its
-  // own role so this catch-all root itself no longer grants node:util.
+  // entrypoint file. The ordinary feature extends this same construction
+  // authority through the exact owned paths above; it does not grant a broad
+  // src/composition or src/features directory permission.
   assert.deepEqual(composition.allowedBoundaries, [
     "production.embedded-runtime",
     "composition.embedded-runtime.contained-turn",
@@ -255,10 +264,10 @@ test("Embedded Runtime Node utility permission belongs only to composition", () 
     "composition.embedded-runtime.agent-runtime-host",
     "core.embedded-runtime.access-contracts",
   ]);
-  // The async-assembly-adapter Assembly root (runtime-setup-assembly.ts,
-  // default-agent-runtime-host.ts, agent-runtime-host-creation-error.ts) uses
-  // node:crypto directly and isn't yet carved into its own narrower role.
-  assert.deepEqual(composition.allowedBuiltins, ["node:crypto"]);
+  // Ordinary Host validation and its observation journal add path/util/fs to
+  // the existing crypto permission. Scoped FMS still rejects inward builtin
+  // imports even when a feature contract shares this composition boundary.
+  assert.deepEqual(composition.allowedBuiltins, ["node:crypto", "node:fs", "node:path", "node:util"]);
   assert.deepEqual(composition.allowedRuntimeReferences, []);
   const production = boundariesById.get("production.embedded-runtime");
   // build-claude-code-setup-view.ts/build-codex-setup-view.ts reach the
@@ -336,6 +345,11 @@ test("transitional boundaries and adapter permissions remain exact", () => {
     "adapter.agent-execution.codex-native-broker",
     "composition.agent-execution.boundary-data",
     "composition.agent-execution.dispatch-grant",
+    "adapter.agent-execution.ordinary-provider",
+    "adapter.agent-execution.ordinary-filesystem",
+    "adapter.agent-execution.ordinary-process",
+    "adapter.agent-execution.ordinary-postgres",
+    "composition.agent-execution.ordinary",
   ]);
   assert.ok(!production.allowedBuiltins.includes("node:util"));
   assert.ok(!production.entrypoints.includes(paths.legacy));
@@ -575,23 +589,22 @@ test("Get Modular belongs only to Embedded Runtime composition, including type i
       assert.deepEqual(await analyzeFixture({
         "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts": statement,
       }), []);
-      for (const root of [
-        "packages/contexts/agent-execution/src/features/contained-agent-turn",
-        "packages/contexts/runtime-configuration/src",
-        "packages/contexts/runtime-security/src",
-      ]) {
-        for (const layer of ["application", "contracts", "domain"]) {
-          const path = `${root}/${layer}/negative-get-modular.ts`;
-          const diagnostics = await analyzeFixture({ [path]: statement });
-          assert.ok(
-            rules(diagnostics).includes("architecture.source-dependencies.forbidden-package-dependency"),
-            `${path}: ${JSON.stringify(rules(diagnostics))}`,
-          );
-          assert.equal(
-            diagnostics.find(d => d.ruleId === "architecture.source-dependencies.forbidden-package-dependency").location.path,
-            path,
-          );
-        }
+      // AE and Runtime Configuration retain directory roots; Runtime Security
+      // uses exact source roots, so mutate its owned files inside the disposable
+      // fixture instead of testing an unclassified src/application location.
+      const forbiddenPaths = [
+        ...[
+          "packages/contexts/agent-execution/src/features/contained-agent-turn",
+          "packages/contexts/runtime-configuration/src",
+        ].flatMap(root => ["application", "contracts", "domain"].map(layer => `${root}/${layer}/negative-get-modular.ts`)),
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts",
+      ];
+      for (const path of forbiddenPaths) {
+        const diagnostics = await analyzeFixture({ [path]: statement });
+        assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.forbidden-package-dependency"], path);
+        assert.equal(diagnostics[0].location.path, path);
       }
     }
   }

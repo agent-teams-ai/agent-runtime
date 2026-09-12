@@ -25,7 +25,7 @@ export class PostgresOrdinaryOperationStore implements OrdinaryOperationStore {
     const client = await new Promise<PoolClient>((resolve, reject) => {
       let expired = false;
       const timer = setTimeout(() => {expired = true; reject(new Error("ordinary database acquisition timed out"));}, 5000);
-      void this.#pool.connect().then(acquired => {clearTimeout(timer); if (expired) {acquired.release();} else {resolve(acquired);}}, error => {clearTimeout(timer); if (!expired) {reject(error);}});
+      void this.#pool.connect().then(acquired => {clearTimeout(timer); if (expired) {acquired.release();} else {resolve(acquired);} return;}, error => {clearTimeout(timer); if (!expired) {reject(error);}});
     }); let committing = false; let broken = false;
     try {
       await client.query(query("BEGIN"));

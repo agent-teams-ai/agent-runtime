@@ -82,17 +82,11 @@ export function validateOrdinaryOperation(value: unknown): asserts value is Ordi
   const kinds = new Set<string>(); const checked: OrdinaryReceipt[] = [];
   for (const receipt of receipts) {validateOrdinaryReceipt(receipt, binding); requireFact(!kinds.has(receipt.kind)); kinds.add(receipt.kind); checked.push(receipt);}
   if (value.preparation !== null) {validateOrdinaryPreparation(value.preparation, binding, value.input);}
-  const claim = checked.find(item => item.kind === "dispatch_claim");
-  if (value.status === "accepted") {requireFact(receipts.length === 0 && output.length === 0);}
-  if (value.status === "running") {requireFact(claim !== undefined);}
-  if (claim !== undefined) {requireFact(claim.committedRevision <= Number(value.revision) && value.preparation !== null); requireFact(claim.preparationDigest === ordinaryPreparationDigest(value.preparation)); requireFact(claim.reservationId === Reflect.get(value.preparation as object, "reservationId"));}
-  const drain = checked.find(item => item.kind === "output_drain");
-  if (drain !== undefined) {requireFact(drain.finalSequence === output.length);}
-  const snapshot = checked.find(item => item.kind === "workspace_snapshot");
-  const artifact = checked.find(item => item.kind === "artifact_published");
-  if (artifact !== undefined) {requireFact(snapshot !== undefined && artifact.snapshotDigest === snapshot.snapshotDigest && artifact.workspaceId === snapshot.workspaceId);}
-  if (value.preparation !== null) {
-    const preparation = value.preparation as Record<string, unknown>;
+  validateOperationReceiptState(value, output, checked, kinds);
+}
+const validatePreparationReceipts = (value: unknown, checked: readonly OrdinaryReceipt[]): void => {
+  if (value !== null) {
+    const preparation = value as Record<string, unknown>;
     for (const receipt of checked) {
       if (receipt.kind === "process_group_closed") {requireFact(receipt.reservationId === preparation.reservationId);}
       if (receipt.kind === "workspace_snapshot" || receipt.kind === "artifact_published") {requireFact(receipt.workspaceId === preparation.workspaceId);}
@@ -103,14 +97,30 @@ export function validateOrdinaryOperation(value: unknown): asserts value is Ordi
       }
     }
   }
-  if (value.status === "succeeded" || value.status === "failed" || (value.status === "cancelled" && claim !== undefined)) {
+};
+const validateOperationReceiptState = (value: Record<string, unknown>, output: readonly unknown[], checked: readonly OrdinaryReceipt[], kinds: ReadonlySet<string>): void => {
+  const claim = checked.find(item => item.kind === "dispatch_claim");
+  if (value.status === "accepted") {requireFact(checked.length === 0 && output.length === 0);}
+  if (value.status === "running") {requireFact(claim !== undefined);}
+  if (claim !== undefined) {requireFact(claim.committedRevision <= Number(value.revision) && value.preparation !== null); requireFact(claim.preparationDigest === ordinaryPreparationDigest(value.preparation)); requireFact(claim.reservationId === Reflect.get(value.preparation as object, "reservationId"));}
+  const drain = checked.find(item => item.kind === "output_drain");
+  if (drain !== undefined) {requireFact(drain.finalSequence === output.length);}
+  const snapshot = checked.find(item => item.kind === "workspace_snapshot");
+  const artifact = checked.find(item => item.kind === "artifact_published");
+  if (artifact !== undefined) {requireFact(snapshot !== undefined && artifact.snapshotDigest === snapshot.snapshotDigest && artifact.workspaceId === snapshot.workspaceId);}
+  validatePreparationReceipts(value.preparation, checked);
+  validateTerminalReceiptState(value, output, checked, kinds, claim !== undefined);
+};
+const validateTerminalReceiptState = (value: Record<string, unknown>, output: readonly unknown[], checked: readonly OrdinaryReceipt[], kinds: ReadonlySet<string>, claimed: boolean): void => {
+  if (value.status === "succeeded" || value.status === "failed" || (value.status === "cancelled" && claimed)) {
     requireFact(ORDINARY_REQUIRED_RECEIPTS.every(kind => kinds.has(kind)));
     const terminal = checked.find(item => item.kind === "provider_terminal");
     requireFact(terminal !== undefined && terminal.terminalStatus === (value.status === "succeeded" ? "completed" : value.status));
     for (const receipt of checked) {if (receipt.kind === "provider_grant_settled" || receipt.kind === "security_grant_settled") {requireFact(receipt.disposition === "claim_committed");}}
   }
-  if (value.status === "cancelled" && claim === undefined) {requireFact(value.cancellationRequested === true && output.length === 0);}
-}
+  if (value.status === "cancelled" && !claimed) {requireFact(value.cancellationRequested === true && output.length === 0);}
+};
+
 export const ordinaryTerminalStatus = (operation: OrdinaryOperation, receipts: readonly OrdinaryReceipt[]): OrdinaryOperation["status"] => {
   const terminal = receipts.find(item => item.kind === "provider_terminal");
   const claim = receipts.find(item => item.kind === "dispatch_claim");

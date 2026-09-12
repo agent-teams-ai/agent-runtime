@@ -46,7 +46,7 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
     if (launch.cwd !== input.workspace.cwd || !launch.executable.startsWith("/") ||
         !Array.isArray(launch.arguments)) { throw refusal(); }
     const executable = launch.executable;
-    const arguments_ = [...launch.arguments];
+    const processArguments = [...launch.arguments];
     const environment = {...launch.environment};
     const reservationId = randomUUID();
     const ownershipToken = randomUUID();
@@ -116,6 +116,9 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
       },
       async closeInput() { child?.stdin.end(); },
     });
+    const assertClosure = (unread: number, pid: number, finalSequence: number): void => {
+      if (journalFailed || streamInvalid || !closed || !exited || !stdoutClosed || !stderrClosed || unread !== 0 || groupExists(pid) || !Number.isSafeInteger(finalSequence) || finalSequence < 0) {throw refusal();}
+    };
     return Object.freeze({
       reservationId,
       async start(claim: OrdinaryReceiptOf<"dispatch_claim">, signal: AbortSignal) {
@@ -129,7 +132,7 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
         record({...binding, reservationId, kind: "launch_requested"});
         spawnInvoked = true;
         // Node installs the new session/process group before exec; no shell, uid/gid or inherited extras.
-        child = spawn(executable, arguments_, {cwd: launch.cwd, env: environment, detached: true, stdio: ["pipe", "pipe", "pipe"]});
+        child = spawn(executable, processArguments, {cwd: launch.cwd, env: environment, detached: true, stdio: ["pipe", "pipe", "pipe"]});
         child.once("error", fail);
         child.once("exit", () => { exited = true; if (child?.pid !== undefined) {try {record({...binding, reservationId, kind: "exited", pid: child.pid, processGroupId: child.pid});} catch {fail();}} });
         child.once("close", () => { closed = true; resolveClosure(); wake?.(); });
@@ -165,7 +168,7 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
           queue.length = 0;
           partial = "";
           for (const key of Object.keys(environment)) {delete environment[key];}
-          if (journalFailed || streamInvalid || !closed || !exited || !stdoutClosed || !stderrClosed || unread !== 0 || groupExists(child.pid) || !Number.isSafeInteger(finalSequence) || finalSequence < 0) { throw refusal(); }
+          assertClosure(unread, child.pid, finalSequence);
           record({...binding, reservationId, kind: "closed", pid: child.pid, processGroupId: child.pid});
           return Object.freeze([
             Object.freeze({...binding, kind: "output_drain" as const, finalSequence, stdoutClosed: true as const, stderrClosed: true as const}),

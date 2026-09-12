@@ -163,7 +163,7 @@ test("dispose waits for in-flight durable acceptance and cancels it before launc
   const ready = new Promise<void>(resolve => {entered = resolve;}); const wait = new Promise<void>(resolve => {release = resolve;});
   f.dependencies.operationStore.accept = async value => {entered(); await wait; return accept(value);};
   const feature = createOrdinaryTurnFeature(f.dependencies); const submitted = feature.submit.execute(input); await ready;
-  let disposed = false; const closing = feature.dispose().then(() => {disposed = true;});
+  let disposed = false; const closing = feature.dispose().then(() => {disposed = true; return;});
   await Promise.resolve(); assert.equal(disposed, false); release(); await closing; await submitted;
   assert.equal(f.counts().starts, 0); assert.equal(f.state().cancellationRequested, true);
 });
@@ -186,9 +186,9 @@ test("signal cancellation persistence is joined before submit and dispose settle
   const signal = new AbortController();
   const provider = {...f.dependencies.provider, execute: async () => {ready(); await pendingCancel; return {...binding, kind: "provider_terminal", terminalStatus: "completed", threadId: "thread:test", turnId: "turn:test"} as const;}};
   const feature = createOrdinaryTurnFeature({...f.dependencies, provider});
-  let submitted = false; const submission = feature.submit.execute(input, {signal: signal.signal}).then(() => {submitted = true;});
+  let submitted = false; const submission = feature.submit.execute(input, {signal: signal.signal}).then(() => {submitted = true; return;});
   await providerReady; signal.abort(); await pendingCancel; await Promise.resolve(); assert.equal(submitted, false);
-  let disposed = false; const closing = feature.dispose().then(() => {disposed = true;}); await Promise.resolve(); assert.equal(disposed, false);
+  let disposed = false; const closing = feature.dispose().then(() => {disposed = true; return;}); await Promise.resolve(); assert.equal(disposed, false);
   release(); await submission; await closing; assert.equal(submitted, true);
 });
 
