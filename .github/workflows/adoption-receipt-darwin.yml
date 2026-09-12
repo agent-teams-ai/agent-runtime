@@ -23,11 +23,11 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: 07ea44c1a570c029057016d7eaaf3323878d88d7
+          ref: 0b8bdbdfd1cac2eb9398b73311e404967486823b
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "07ea44c1a570c029057016d7eaaf3323878d88d7"
+        run: test "$(git rev-parse HEAD)" = "0b8bdbdfd1cac2eb9398b73311e404967486823b"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
