@@ -3985,82 +3985,12 @@
       "relationships": [
         {
           "from": "packages/contexts/runtime-configuration/src/composition.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/adapters/outbound/claude-code-configuration-semantic-classifier-v2.ts",
+          "to": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/internal.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/contexts/runtime-configuration/src/composition.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/adapters/outbound/claude-code-configuration-source-reader-adapter.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-configuration/src/composition.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/adapters/outbound/node-configuration-digest.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-configuration/src/composition.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/adapters/outbound/strict-claude-code-json-parser.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-configuration/src/composition.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/application/ports/outbound/claude-code-configuration-semantic-classifier.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-configuration/src/composition.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/application/ports/outbound/configuration-digest.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-configuration/src/composition.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/composition/feature-module-factory.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-configuration/src/composition.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/adapters/outbound/codex-configuration-semantic-classifier-v1.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-configuration/src/composition.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/adapters/outbound/node-configuration-digest.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-configuration/src/composition.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/adapters/outbound/node-configuration-source-reader.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-configuration/src/composition.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/adapters/outbound/smol-toml-parser.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-configuration/src/composition.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/application/ports/outbound/codex-configuration-semantic-classifier.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-configuration/src/composition.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/application/ports/outbound/codex-toml-parser.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-configuration/src/composition.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/application/ports/outbound/configuration-digest.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-configuration/src/composition.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/application/ports/outbound/configuration-source-reader.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-configuration/src/composition.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/composition/feature-module-factory.ts",
+          "to": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/internal.ts",
           "mode": "runtime"
         },
         {
@@ -4075,32 +4005,17 @@
         },
         {
           "from": "packages/contexts/runtime-configuration/src/index.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/application/ports/outbound/claude-code-configuration-semantic-classifier.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-configuration/src/index.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/application/ports/outbound/claude-code-configuration-source-reader.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-configuration/src/index.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/application/ports/outbound/claude-code-json-parser.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-configuration/src/index.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/contracts/claude-code-configuration-inspection.ts",
+          "to": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/index.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/contexts/runtime-configuration/src/index.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/contracts/claude-code-configuration-inspection.ts",
+          "to": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/index.ts",
           "mode": "type-only"
         },
         {
           "from": "packages/contexts/runtime-configuration/src/index.ts",
-          "to": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/contracts/codex-configuration-inspection.ts",
+          "to": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/index.ts",
           "mode": "type-only"
         }
       ]
