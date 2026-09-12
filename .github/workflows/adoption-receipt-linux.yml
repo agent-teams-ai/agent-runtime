@@ -22,6 +22,9 @@ on:
       - cursor/fms-host-http-pa-7d17
       - cursor/fms-host-pa-rs-7d17
       - refactor/fms-host-pa-rs
+      - cursor/fms-host-validation-7d17
+      - refactor/fms-host-validation
+      - refactor/fms-host-runtime-validation
       - chore/classify-native-helper-test
 
 permissions:

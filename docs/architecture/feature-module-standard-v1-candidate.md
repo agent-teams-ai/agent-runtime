@@ -271,15 +271,22 @@ those feature entries from the matching `src/composition/` files, so existing
 composition and test imports keep working. Both implementations stay at the
 feature root rather than under `application/`: they still import Agent
 Execution composition types (and Runtime Security composition types for the
-HTTP binding), which L0 treats as an inward leak from `application/`. Process
-lifecycle, readiness and rollback stay in composition. Host tests that
+HTTP binding), which L0 treats as an inward leak from `application/`. External
+input/output validation now lives under
+`src/features/contained-turn-runtime-validation/` with curated `index.ts` /
+`internal.ts` entrypoints. Host composition re-exports that feature entry from
+`src/composition/contained-turn-runtime-validation.ts`, so existing composition
+and test imports keep working. The implementation stays at the feature root
+rather than under `application/`: it still imports Host composition helpers,
+which L0 treats as an inward leak from `application/`. Process lifecycle,
+readiness and rollback stay in composition. Host tests that
 previously imported unpublished Agent Execution, Provider Access, and Runtime
 Security `dist/` and `tests/` package subpaths now use the curated
 `./composition` export when the symbol is public, or Host-local
 `tests/support/external/` copies of unpublished fixtures. Foundation
 `packageExports` claims for those three packages now match the curated `.` and
-`./composition` maps. External input/output validation remains. The module
-stays pending.
+`./composition` maps. Packed-consumer Provider Access `pg` anti-corruption
+remains. The module stays pending.
 
 The deterministic syntax-aware checker is
 `scripts/architecture/check-feature-modules.mjs`. Run
