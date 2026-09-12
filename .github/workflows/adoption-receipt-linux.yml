@@ -38,6 +38,7 @@ on:
       - chore/classify-native-helper-test
       - docs/sr-contained-turn-anti-patterns
       - refactor/fms-host-access-invariants
+      - refactor/fms-host-darwin-deployment
 
 permissions:
   contents: read

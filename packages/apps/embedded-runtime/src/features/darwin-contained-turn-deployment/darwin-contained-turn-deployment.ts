@@ -4,7 +4,7 @@ import {createDarwinCodexRouteEnforcement, NodeHttpEgressBoundaryIds,
 import {createCredentialMaterializationRequestDigest, type createPostgresCredentialRenderingOwner} from "@agent-teams/provider-access/composition";
 import {createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate} from "@agent-teams/runtime-security/composition";
 import {createDarwinContainedTurnAuthority, captureDarwinDeploymentData as captureData,
-  captureDarwinDeploymentPort as capturePort} from "./darwin-contained-turn-authority.js";
+  captureDarwinDeploymentPort as capturePort} from "../../composition/darwin-contained-turn-authority.js";
 import {createContainedTurnCurrentEgressOwners, type ContainedTurnCurrentEgressOwnersInput} from "../../composition/contained-turn-current-egress-owners.js";
 import {bindContainedTurnHttpEgressAuthorities, composeContainedTurnHttpEgressSession} from "../../composition/contained-turn-http-egress-authorities.js";
 import {createContainedTurnHttpUpstreamTransport} from "../../composition/contained-turn-http-egress-upstream.js";
