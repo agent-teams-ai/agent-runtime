@@ -12,6 +12,7 @@ related:
   - ADR-0018
   - ADR-0019
   - ADR-0020
+  - ADR-0021
 code_anchors:
   - enforcement: required
     pattern: architecture/feature-module-standard/**
@@ -129,14 +130,18 @@ beside it. The active production scope contains only:
 - `packages/contexts/agent-execution/src/**`;
 - `packages/contexts/provider-access/src/**`;
 - `packages/contexts/runtime-configuration/src/**`;
+- `packages/contexts/runtime-security/src/**`;
 - `packages/platform/filesystem-custody/src/**`;
 - the package assembly files `src/index.ts` and `src/composition.ts` in those
-  four packages;
+  five packages;
 - the features `runtime-installation-discovery`, `contained-agent-turn`,
   `contained-turn-access`, `stable-filesystem-custody`,
-  `codex-configuration-inspection`, and `claude-code-configuration-inspection`.
+  `codex-configuration-inspection`, `claude-code-configuration-inspection`,
+  `contained-turn-dispatch-authority`, `contained-turn-egress`,
+  `provider-process-egress-authorization`, and
+  `setup-source-inspection-authorization`.
 
-Embedded Runtime, Runtime Security, Module Kit,
+Embedded Runtime, Module Kit,
 experiments, and tooling other than this checker are explicitly out of scope. Foundation supplies package-level dependency evidence only; it
 does not implement or prove this feature policy.
 
@@ -150,7 +155,7 @@ and `packages/platform` with exactly one role and one adoption state:
 | Agent Execution | `bounded-context` | ADR-0005 | active under ADR-0013 |
 | Provider Access | `bounded-context` | ADR-0005 | active under ADR-0013 |
 | Runtime Configuration | `bounded-context` | ADR-0005 | active under ADR-0020 |
-| Runtime Security | `bounded-context` | ADR-0005 | pending |
+| Runtime Security | `bounded-context` | ADR-0005 | active under ADR-0021 |
 | Embedded Runtime | `host-app` | ADR-0008 | pending |
 | Filesystem Custody | `platform` | ADR-0017 | active under ADR-0019 |
 
@@ -198,46 +203,13 @@ contradiction. None of this is a conformance claim, and no gate asserts any of i
 
 Runtime Configuration is active under ADR-0020. Its two features,
 `codex-configuration-inspection` and `claude-code-configuration-inspection`,
-are continuously checked. The remaining pending modules are:
+are continuously checked.
 
-Runtime Security has four features. Setup-source authorization now owns its
-Node path and source-identity digest behind explicit outbound ports
-(`PathAlgebra`, `SourceIdentityDigest`), with a Node adapter supplying both;
-its application layer no longer imports `node:path` or `node:crypto` directly.
-`contained-turn-egress` is no longer a flat directory: it has real
-domain/application/composition/adapters ownership, and its write-authorization
-lease window now reads a `MonotonicClock` the composition root injects, rather
-than an ambient `performance.now()` binding. The clock stays a
-composition-root detail — the public `ContainedTurnEgressDependencies` shape
-does not accept one — so revalidation timing remains under trusted-code
-control. Module composition's `containedTurnEgressProviderBindingDigest`
-delegates route-binding digest computation to the egress feature's own domain
-`validation` module instead of computing it inline, and the underlying
-`node:crypto` hashing and the `exactObject`/`snapshotUint8Array` validation
-primitives it needs have moved out of `composition.ts` into the feature's own
-`adapters/outbound/node-security-primitives.ts`, called by the same two egress
-call sites there. That closes the base document's complaint for this feature
-the same way the sibling features already closed it, each behind its own
-outbound Node adapter (`node-sha256-dispatch-digest.ts`,
-`node-egress-cryptography.ts`, `node-source-identity-digest.ts`). One gap
-remains narrower rather than fully closed: those three sibling ports are each
-declared under `application/ports/outbound/`, while `EgressSecurityPrimitives`
-is still declared in the feature's `domain/validation.ts`, so egress does not
-yet match the same port-location convention. Domain and application layers in
-this package do not import Node
-builtins directly today, but nothing in `architecture/foundation/source-dependencies.yaml`
-enforces that split within the single flat `production.runtime-security`
-boundary, unlike Embedded Runtime's narrower allowed-builtins list. Dispatch
-authority's external V1 wrapper now lives in `adapters/inbound/` and maps
-request DTOs onto the consume, settle, and observe use cases; digest and
-result projection stays in application
-(`contained-turn-dispatch-authority-v1-result-mappers.ts`) so outbound
-Postgres and those use cases never import inbound. Its
-composition-root clock design differs from egress's by choice, not as an
-outstanding gap: dispatch authority's own
-`ContainedTurnDispatchAuthorityFeatureDependencies` requires callers to
-supply `clock` explicitly, while egress keeps the clock a composition-root
-detail its public dependencies shape does not accept.
+Runtime Security is active under ADR-0021. Its four features,
+`contained-turn-dispatch-authority`, `contained-turn-egress`,
+`provider-process-egress-authorization`, and
+`setup-source-inspection-authorization`, are continuously checked. The remaining
+pending module is:
 
 Embedded Runtime is the host application. Its activation waited on the
 accepted asynchronous setup assembly work, which has since landed. The setup
@@ -431,7 +403,7 @@ remove or reorder the active root gate. The exact candidate command reports
 zero production diagnostics without exceptions, deviations, extensions,
 wildcards, automatic widening, or scope changes.
 
-ADR-0013, ADR-0017, ADR-0018, ADR-0019 and ADR-0020 are accepted at their exact governed
+ADR-0013, ADR-0017, ADR-0018, ADR-0019, ADR-0020 and ADR-0021 are accepted at their exact governed
 paths and are pinned in the immutable accepted-decision registry by the digest
 Foundation computes over their accepted bytes and metadata. The profile is
 `active`, has no blockers, binds its profile-wide activation authority to
@@ -445,7 +417,9 @@ these commands as evidence:
 
 This evidence proves conformance only for `runtime-installation-discovery`,
 `contained-agent-turn`, `contained-turn-access`, `stable-filesystem-custody`,
-`codex-configuration-inspection`, and `claude-code-configuration-inspection`
-within the four declared production roots and assembly files. It does not prove
-repository-wide Feature Module Standard conformance: Runtime Security and
-Embedded Runtime remain pending.
+`codex-configuration-inspection`, `claude-code-configuration-inspection`,
+`contained-turn-dispatch-authority`, `contained-turn-egress`,
+`provider-process-egress-authorization`, and
+`setup-source-inspection-authorization` within the five declared production
+roots and assembly files. It does not prove repository-wide Feature Module
+Standard conformance: Embedded Runtime remains pending.

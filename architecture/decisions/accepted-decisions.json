@@ -86,6 +86,11 @@
       "id": "ADR-0020",
       "path": "docs/decisions/0020-runtime-configuration-feature-activation.md",
       "immutableDigest": "sha256:bb333c3543ebb96fe273a516cc5727fe2a2ff7388a51028a60327d6160376068"
+    },
+    {
+      "id": "ADR-0021",
+      "path": "docs/decisions/0021-runtime-security-feature-activation.md",
+      "immutableDigest": "sha256:d069d8bc82019c7efb582ba28f8006e53469be6ee873cc2b5bd5e55dc79962b0"
     }
   ]
 }
