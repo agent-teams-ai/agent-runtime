@@ -496,9 +496,18 @@ if (adoption) {
   assert.equal(createHash("sha256").update(retainedBytes).digest("hex"), retainedV1.sha256,
     "retained schema-v1 adoption bytes drifted");
   const retained = JSON.parse(retainedBytes);
+  // Retained schema-v1 authenticates against the fixture roots that existed at
+  // that source. Modern evidenceRoots may drop a directory that is gone today;
+  // those current roots must not be applied retroactively to the v1 closure.
+  const retainedAdoptionInputs = createEvidenceInputs({
+    repositoryRoot, git, readRevisionFile,
+    roots: { ...evidenceRoots, fixtures: retainedHistoricalEvidenceRoots.fixtures },
+    files: { ...evidenceFiles, sources: [...evidenceFiles.sources, ...adoptionEvidenceFiles,
+      profile.standard.evidencePath, ...profile.packages.map(pkg => pkg.archivePath)] },
+  });
   validateAdoptionReport(retained, {sourceRevision: retained.sourceRevision,
     historicalRevision: stored.sourceRevision,
-    artifactDigests: await currentInputs.artifactDigestsAtRevision(retained.sourceRevision)});
+    artifactDigests: await retainedAdoptionInputs.artifactDigestsAtRevision(retained.sourceRevision)});
   const output = resolve(option("--output") ?? join(repositoryRoot, v2ReportPath));
   if (mode === "--capture-adoption-receipt") {
     assert.ok(option("--output"), "receipt --output is required");

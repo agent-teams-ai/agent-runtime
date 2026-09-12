@@ -40,6 +40,34 @@ test("historical closure authenticates the retained Git bytes independently of m
   assert.deepEqual(await inputs.artifactDigestsAtRevision(report.sourceRevision), report.artifactDigests);
 });
 
+test("retained schema-v1 adoption fixtures stay on historical roots when modern fixtures shrink", async () => {
+  const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
+  const { evidenceRoots, evidenceFiles } = await import("./runtime-setup-l0-evidence-spec.mjs");
+  const { adoptionEvidenceFiles } = await import("./runtime-setup-l0-evidence-adoption.mjs");
+  const git = (...args) => execFileSync("git", args, { cwd: repositoryRoot, encoding: "utf8", maxBuffer: 20 * 1024 * 1024 });
+  const readRevisionFile = (revision, path) => execFileSync("git", ["show", `${revision}:${path}`], { cwd: repositoryRoot });
+  const retained = JSON.parse(await readFile(new URL(`../../${adoptionPaths.report}`, import.meta.url)));
+  const profile = JSON.parse(await readFile(new URL("../../architecture/get-modular/consumer-profile.json", import.meta.url)));
+  const files = { ...evidenceFiles, sources: [...evidenceFiles.sources, ...adoptionEvidenceFiles,
+    profile.standard.evidencePath, ...profile.packages.map(pkg => pkg.archivePath)] };
+  const modern = createEvidenceInputs({ repositoryRoot, git, readRevisionFile, roots: evidenceRoots, files });
+  const retainedFixtures = createEvidenceInputs({
+    repositoryRoot, git, readRevisionFile,
+    roots: { ...evidenceRoots, fixtures: retainedHistoricalEvidenceRoots.fixtures },
+    files,
+  });
+  const modernDigests = await modern.artifactDigestsAtRevision(retained.sourceRevision);
+  const retainedDigests = await retainedFixtures.artifactDigestsAtRevision(retained.sourceRevision);
+  assert.notEqual(modernDigests.fixtures.fileCount, retained.artifactDigests.fixtures.fileCount);
+  assert.deepEqual(retainedDigests, retained.artifactDigests);
+  validateAdoptionReport(retained, {
+    sourceRevision: retained.sourceRevision,
+    historicalRevision: retained.historical.sourceRevision,
+    artifactDigests: retainedDigests,
+    capture: retained.capture,
+  });
+});
+
 test("adoption evidence keeps historical HOLD identity separate from current construction", async () => {
   assertAdoptionAuthority(await authorityInput());
   const report = buildAdoptionReport({ ...current, capture });
