@@ -113,7 +113,6 @@ test("root Host rejects before configuration I/O or allocation and erases materi
 
 // Synthetic failures only: no database, filesystem owner or provider is started.
 import {createLinuxCodexLiveLaunchRecords, LinuxCodexLiveSetupError, setupLinuxCodexLiveBootstrap} from "./linux-codex-live-bootstrap.ts";
-
 test("bootstrap schema failure retains cleanup and excludes the original error", {skip: process.platform !== "linux"}, async () => {
   const secret = "malicious-password-/private/path";
   const pool = {async query() {throw new Error(secret);}};

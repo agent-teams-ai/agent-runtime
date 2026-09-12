@@ -181,6 +181,9 @@ const canarySelection = async (elapsedMs?: number) => {
   return {selected, configuration, input: f.input};
 };
 
+
+
+
 test("actual canary selection satisfies network cleanup constructor while outer cleanup remains 30000",
   {skip: process.platform !== "linux" || process.arch !== "x64"}, async () => {
     const {DockerHttpNetworkResources, dockerHttpOperationNetworkRecipe} = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-network-resources.js"));
@@ -207,6 +210,7 @@ test("actual canary selection satisfies network cleanup constructor while outer 
     assert.equal(calls, 0);
   });
 
+
 test("actual canary create encoder supplies reserved defaults and preserves provider environment",
   {skip: process.platform !== "linux" || process.arch !== "x64"}, async () => {
     const {encodeCreateRequest} = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-create-request.js"));
@@ -232,6 +236,8 @@ test("actual canary create encoder supplies reserved defaults and preserves prov
     assert.deepEqual(request.Env, ["HOME=/agent-private/home", "PATH=/usr/local/bin:/usr/bin:/bin", "TMPDIR=/tmp",
       `AR_CUSTODY_INIT_CONFIGURATION=${encoded}`]);
   });
+
+
 
 test("shipped canary lifetime passes route owner admission before effects as preparation spends its lease",
   {skip: process.platform !== "linux" || process.arch !== "x64"}, async t => {

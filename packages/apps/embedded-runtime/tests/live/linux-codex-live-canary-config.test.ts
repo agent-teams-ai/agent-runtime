@@ -18,6 +18,9 @@ const { containedTurnScopeDigest } = await import(workspacePackageSourceHref("@a
 
 // Constructor-only regression. Synthetic pins are not measured deployment facts;
 // no setup, credentials, daemon observation, provider or network operations.
+
+
+
 test("actual canary constructs RS acceptance port, Host access authority and engine while preserving guards",
   {skip: process.platform !== "linux" || process.arch !== "x64"}, async () => {
     const parent = await realpath(await mkdtemp(join(tmpdir(), "ar69-canary-engine-env-")));
