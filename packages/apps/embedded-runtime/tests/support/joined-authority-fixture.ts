@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createContainedTurnFeature, type ContainedTurnFeatureDependencies } from "../../../../contexts/agent-execution/dist/composition.js";
+import { createContainedTurnFeature, type ContainedTurnFeatureDependencies } from "@agent-teams/agent-execution/composition";
 import { containedTurnIdentity } from "../../../../contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 import { createDependencies } from "../../../../contexts/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 

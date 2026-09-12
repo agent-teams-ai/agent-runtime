@@ -21,7 +21,6 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "catalog:",
     "@agent-teams/filesystem-custody": "workspace:*",
-    "@types/pg": "catalog:",
     "pg": "catalog:",
     "zod": "catalog:"
   },

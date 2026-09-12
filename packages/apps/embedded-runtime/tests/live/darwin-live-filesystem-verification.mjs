@@ -17,7 +17,7 @@ const components = path => {
 /** Uses only the existing initialized acquisition guard. This never installs a
  * guard, starts a process, or falls back to path-based child opens on Darwin. */
 export async function nativeVerificationFilesystem() {
-  const api = await import("../../../../platform/filesystem-custody/dist/composition.js");
+  const api = await import("@agent-teams/filesystem-custody/composition");
   return Object.freeze({openRoot: api.openNativeHostRoot, openEntry: api.openNativeHostEntry, names: api.nativeHostNames});
 }
 

@@ -36,7 +36,8 @@ const hooks = registerHooks({
 });
 const {createDockerCodexHostKernelOwner} = await import("../../../dist/features/contained-agent-turn/composition/docker-codex-host-kernel-owner.js");
 // @ts-expect-error Test-owned synthetic module supplied by the hook above.
-const capture = await import("synthetic:early-root");
+const syntheticEarlyRoot = "synthetic:early-root";
+const capture = await import(syntheticEarlyRoot);
 hooks.deregister();
 
 const unused = () => {throw new Error("must not reach provider IO/finalization");};

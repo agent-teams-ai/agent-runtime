@@ -5,7 +5,7 @@ import {isDeepStrictEqual} from "node:util";
 import {
   NodeProviderProcessCustody, NodeTlsHttpEgressTransport, nativeHttpRequestProfile,
   createNodeExecutableFileObserver, createRuntimeInstallationDiscoveryFeature,
-} from "../../../../contexts/agent-execution/dist/composition.js";
+} from "@agent-teams/agent-execution/composition";
 import {
   CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT as adapterSnapshot,
   CODEX_APP_SERVER_CURRENT_KERNEL_MANIFEST as capabilityManifest,
@@ -20,9 +20,9 @@ import {containedTurnScopeDigest} from
   "../../../../contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 import {snapshotDockerImageInitLock} from
   "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-image-init-lock.js";
-import {createCredentialMaterializationRequestDigest} from "../../../../contexts/provider-access/dist/composition.js";
+import {createCredentialMaterializationRequestDigest} from "@agent-teams/provider-access/composition";
 import {createNodePathCanonicalizer, createSetupInspectionAuthorizationFeature} from
-  "../../../../contexts/runtime-security/dist/composition.js";
+  "@agent-teams/runtime-security/composition";
 import {currentEgressDigest} from
   "../../../../contexts/runtime-security/dist/features/provider-process-egress-authorization/composition/current-egress-validation.js";
 import {
@@ -31,7 +31,7 @@ import {
   createCodexConfigurationSemanticClassifierV1, createNodeClaudeCodeConfigurationDigest,
   createNodeCodexConfigurationDigest, createNodeConfigurationSourceReader,
   createSmolTomlParser, createStrictClaudeCodeJsonParser,
-} from "../../../../contexts/runtime-configuration/dist/composition.js";
+} from "@agent-teams/runtime-configuration/composition";
 import {createClaudeCodeSetupInspectionPlanner} from "../../dist/composition/claude-code-setup-inspection-planner.js";
 import {createCodexSetupInspectionPlanner} from "../../dist/composition/codex-setup-inspection-planner.js";
 import {setupLinuxCodexLiveAdmin, type LinuxCodexLiveAdminApproval,

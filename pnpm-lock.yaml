@@ -144,6 +144,9 @@ importers:
       '@agent-teams/agent-execution':
         specifier: workspace:*
         version: link:../../contexts/agent-execution
+      '@agent-teams/filesystem-custody':
+        specifier: workspace:*
+        version: link:../../platform/filesystem-custody
       '@agent-teams/provider-access':
         specifier: workspace:*
         version: link:../../contexts/provider-access
@@ -172,9 +175,6 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: 'catalog:'
         version: 0.3.251(@anthropic-ai/sdk@0.122.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.30.0(supports-color@8.1.1)(zod@4.4.3))(zod@4.4.3)
-      '@types/pg':
-        specifier: 'catalog:'
-        version: 8.23.1
       pg:
         specifier: 'catalog:'
         version: 8.23.0
@@ -182,6 +182,9 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
     devDependencies:
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.23.1
       oxc-parser:
         specifier: 'catalog:'
         version: 0.147.0

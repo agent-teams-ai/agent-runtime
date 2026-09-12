@@ -7,7 +7,7 @@ import test from "node:test";
 import {pathToFileURL} from "node:url";
 import {createCompositionInput, setupCapabilities, submit} from "../contained-turn-product.fixture.ts";
 import {createHostCustodiedAgentRuntimeHost, AgentRuntimeHostDisposalIncompleteError} from "../../dist/composition.js";
-import {createContainedTurnRouteEnforcement} from "../../../../contexts/agent-execution/dist/composition.js";
+import {createContainedTurnRouteEnforcement} from "@agent-teams/agent-execution/composition";
 import {renderCodexNativeBrokerConfig} from "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
 import {DeterministicCurrentOwnerHost} from "../../../../contexts/agent-execution/tests/current-owner-success-fixture.ts";
 import {policy as basePolicy, createInput} from "../../../../contexts/agent-execution/tests/features/contained-agent-turn/support/docker-host-custody-lifecycle-fixture.ts";
@@ -19,7 +19,7 @@ import {linuxExclusiveRouteSeccomp} from "../../../../contexts/agent-execution/d
 import {DOCKER_CUSTODY_NODE_PATH, DOCKER_CUSTODY_INIT_ARGUMENTS} from "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import {createEgressFixture} from "../../../../contexts/agent-execution/tests/features/contained-agent-turn/http-egress-test-fixture.ts";
 import {renderingFixture} from "../../../../contexts/provider-access/tests/features/contained-turn-access/credential-rendering-test-fixture.ts";
-import {createCredentialMaterializationRequestDigest} from "../../../../contexts/provider-access/dist/composition.js";
+import {createCredentialMaterializationRequestDigest} from "@agent-teams/provider-access/composition";
 import {joinedDocker} from "./linux-joined-docker.mjs";
 import {joinedCurrentOwners} from "./linux-joined-current.mjs";
 import {openJoinedNetwork} from "./linux-joined-network.mjs";

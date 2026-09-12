@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import type {Pool} from "pg";
-import {createNodeContainedTurnArtifacts, createNodeContainedTurnWorkspace, type ContainedTurnFeatureDependencies} from "../../../../contexts/agent-execution/dist/composition.js";
+import {createNodeContainedTurnArtifacts, createNodeContainedTurnWorkspace, type ContainedTurnFeatureDependencies} from "@agent-teams/agent-execution/composition";
 import {PostgresContainedTurnOperationStore} from "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/postgres/postgres-contained-turn-operation-store.js";
 import {containedTurnIdentity as identity} from "../../../../contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 import {intentAuthority} from "../../../../contexts/agent-execution/tests/features/contained-agent-turn/support/intent-guard-fixture.ts";

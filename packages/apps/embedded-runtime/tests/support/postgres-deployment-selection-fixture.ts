@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {createLinuxCodexDeploymentAuthority} from "../../dist/composition/linux-codex-deployment-authority.js";
-import type {ContainedTurnFeatureDependencies} from "../../../../contexts/agent-execution/dist/composition.js";
+import type {ContainedTurnFeatureDependencies} from "@agent-teams/agent-execution/composition";
 
 type Ports = Pick<ContainedTurnFeatureDependencies, "providerAccess" | "security">;
 type Readers = Parameters<typeof createLinuxCodexDeploymentAuthority>[0];

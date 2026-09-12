@@ -4,7 +4,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {test} from "node:test";
 import {decodeBytes} from "./run-linux-codex-live-canary.mjs";
-import {createContainedTurnSecurityAcceptancePort, NodeTlsHttpEgressTransport} from "../../../../contexts/agent-execution/dist/composition.js";
+import {createContainedTurnSecurityAcceptancePort, NodeTlsHttpEgressTransport} from "@agent-teams/agent-execution/composition";
 import {captureLinuxCodexDeploymentData} from "../../dist/composition/linux-codex-deployment-authority.js";
 import {bindContainedTurnCapabilityAuthority} from "../../dist/composition/contained-turn-authority-capability.js";
 import {NodeUnixSocketDockerEngine} from

@@ -3,7 +3,7 @@ import {createServer} from "node:http";
 import {once} from "node:events";
 import {openJoinedNetwork} from "./linux-joined-network.mjs";
 import {createDockerLinuxExclusiveRouteAdmission} from
-  "../../../../contexts/agent-execution/dist/composition.js";
+  "@agent-teams/agent-execution/composition";
 import {linuxExclusiveRouteSeccomp} from
   "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-policy.js";
 import {container, subject} from "../../../../contexts/agent-execution/tests/fixtures/host-http-egress-v4-fixture.ts";

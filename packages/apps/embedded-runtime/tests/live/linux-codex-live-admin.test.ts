@@ -160,7 +160,7 @@ import {createContainedTurnProviderAccessPort} from
 import { createHash } from "node:crypto";
 import {statSync} from "node:fs";
 import {getuid} from "node:process";
-import { createCodexCurrentKernelOwner } from "../../../../contexts/agent-execution/dist/composition.js";
+import { createCodexCurrentKernelOwner } from "@agent-teams/agent-execution/composition";
 import { CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT } from "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
 import {
   access, executeInput, FakeHost, ids, openInput,

@@ -32,7 +32,8 @@ test("actual composition permits physical cleanup for concrete journal-only quar
     return next(specifier, context);
   }});
   t.after(() => hook.deregister());
-  const {state} = await import("synthetic:cleanup-consumption-storage");
+  const syntheticCleanupStorage = "synthetic:cleanup-consumption-storage";
+  const {state} = await import(syntheticCleanupStorage);
   const {createNodeHostHttpConsumptionJournal} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-host-http-consumption-journal.js");
   const {postClaimFixture} = await import("./support/docker-linux-post-claim-fixture.ts");
   const {createDockerLinuxPostClaimPreparation} = await import("../../../dist/features/contained-agent-turn/composition/docker-linux-post-claim-preparation.js");

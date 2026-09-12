@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createContainedTurnOperationProviderAccessPort, createContainedTurnSecurityAcceptancePort, createContainedTurnFeature, nativeHttpRequestProfile } from "../../../contexts/agent-execution/dist/composition.js";
-import { createPostgresRouteSelectionOwner, createPostgresCurrentProviderAccess, createPostgresOperationDispatchConsumption } from "../../../contexts/provider-access/dist/composition.js";
+import { createContainedTurnOperationProviderAccessPort, createContainedTurnSecurityAcceptancePort, createContainedTurnFeature, nativeHttpRequestProfile } from "@agent-teams/agent-execution/composition";
+import { createPostgresRouteSelectionOwner, createPostgresCurrentProviderAccess, createPostgresOperationDispatchConsumption } from "@agent-teams/provider-access/composition";
 import { createPostgresMaterializationRepository } from "../../../contexts/provider-access/dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.js";
 import { issuanceFixture, fixtureHash } from "../../../contexts/provider-access/tests/features/contained-turn-access/operation-dispatch-test-fixture.ts";
 import { validateDisposablePostgresUrl } from "../../../contexts/provider-access/tests/features/contained-turn-access/postgres-materialization-url.fixtures.ts";
-import { createDispatchAcceptanceFeature, createNodeSha256DispatchDigest, createPostgresDispatchAcceptanceStore } from "../../../contexts/runtime-security/dist/composition.js";
+import { createDispatchAcceptanceFeature, createNodeSha256DispatchDigest, createPostgresDispatchAcceptanceStore } from "@agent-teams/runtime-security/composition";
 import { createPostgresDispatchConsumptionRepository } from "../../../contexts/runtime-security/dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.js";
 import { adapterSnapshot, manifest } from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/contained-turn-fixture-snapshots.ts";
 import { joinedAeSubmit } from "./support/joined-authority-fixture.ts";
