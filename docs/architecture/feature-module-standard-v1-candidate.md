@@ -250,11 +250,17 @@ outbound `OpaqueReferenceDigest` port with a Host adapter, so
 `application/build-claude-code-setup-view.ts` and
 `application/build-codex-setup-view.ts` no longer import `node:crypto`
 directly, and the package boundary now rejects that import from application
-code. The remaining separation the plan called for — external input/output
-validation, the Provider Access and Runtime Security anti-corruption adapters,
-and runtime-access coordination pulled out of composition wiring — has not
-been attempted yet. Process lifecycle, readiness and rollback legitimately
-stay with the host.
+code. Runtime-access coordination now lives under
+`src/features/contained-turn-runtime-access/` with curated `index.ts` /
+`internal.ts` entrypoints. Host composition re-exports that feature entry from
+`src/composition/contained-turn-runtime-access.ts`, so existing composition
+imports keep working. The implementation is not yet an inward `application/`
+layer: it still imports Host composition helpers, so it stays at the feature
+root rather than under `application/`. Process lifecycle, readiness and
+rollback stay in composition. HTTP Provider Access
+(`contained-turn-http-provider-access.ts`) and the Provider Access and
+Runtime Security anti-corruption adapters remain unmoved. The module stays
+pending.
 
 The deterministic syntax-aware checker is
 `scripts/architecture/check-feature-modules.mjs`. Run

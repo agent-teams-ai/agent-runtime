@@ -18,6 +18,7 @@ on:
       - refactor/fms-rc-feature-tests
       - fix/contained-turn-final-qualification
       - cursor/fms-rs-v1-mapper-split-7d17
+      - cursor/fms-host-runtime-access-7d17
 
 permissions:
   contents: read
