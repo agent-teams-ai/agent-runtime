@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { assertClaudeCodeVocabularyParity } from "../../../dist/features/claude-code-configuration-inspection/adapters/inbound/claude-code-vocabulary-parity.js";
 
 const parityModule = fileURLToPath(new URL(
-  "../dist/features/claude-code-configuration-inspection/adapters/inbound/claude-code-vocabulary-parity.js",
+  "../../../dist/features/claude-code-configuration-inspection/adapters/inbound/claude-code-vocabulary-parity.js",
   import.meta.url,
 ));
 
@@ -31,11 +31,11 @@ const drifts = {
 for (const [name, drift] of Object.entries(drifts)) {
   test(`the parity guard refuses ${name}`, async () => {
     const published = await readFile(fileURLToPath(new URL(
-      "../dist/features/claude-code-configuration-inspection/contracts/claude-code-configuration-inspection.js",
+      "../../../dist/features/claude-code-configuration-inspection/contracts/claude-code-configuration-inspection.js",
       import.meta.url,
     )), "utf8");
     const applied = await readFile(fileURLToPath(new URL(
-      "../dist/features/claude-code-configuration-inspection/application/models/claude-code-vocabulary.js",
+      "../../../dist/features/claude-code-configuration-inspection/application/models/claude-code-vocabulary.js",
       import.meta.url,
     )), "utf8");
     const drifted = drift(applied);

@@ -10,7 +10,7 @@ import {
 } from "../../../dist/composition.js";
 import { createInspectCodexConfiguration } from "../../../dist/features/codex-configuration-inspection/application/inspect-codex-configuration.js";
 
-const feature = fileURLToPath(new URL("../src/features/codex-configuration-inspection/", import.meta.url));
+const feature = fileURLToPath(new URL("../../../src/features/codex-configuration-inspection/", import.meta.url));
 const portable = (path: string): string => relative(feature, path).split(sep).join("/");
 
 const sources = async (directory: string): Promise<string[]> => {

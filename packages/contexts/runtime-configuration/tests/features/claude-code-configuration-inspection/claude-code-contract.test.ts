@@ -47,6 +47,6 @@ test("freezes the Claude Code dialect, allowlists, budgets and test-fixture exam
 });
 
 test("keeps the portable-intent example out of production exports", async () => {
-  const declaration = await readFile(new URL("../dist/index.d.ts", import.meta.url), "utf8");
+  const declaration = await readFile(new URL("../../../dist/index.d.ts", import.meta.url), "utf8");
   assert.doesNotMatch(declaration, /PORTABLE_INTENT_EXAMPLE|claudeCodePortableIntentExample/u);
 });
