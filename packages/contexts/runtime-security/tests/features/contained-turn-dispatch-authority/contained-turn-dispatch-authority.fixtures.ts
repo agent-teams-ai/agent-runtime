@@ -5,9 +5,11 @@ import {
   createInMemoryDispatchConsumptionRepository,
   createNodeSha256DispatchDigest,
 } from "../../../dist/composition.js";
-import type { DispatchAuthorityHead, DispatchAuthorityScope } from "../../../dist/composition.js";
-import type { ConsumeForDispatchInput } from
-  "../../../dist/features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.js";
+import type {
+  ConsumeForDispatchInput,
+  DispatchAuthorityHead,
+  DispatchAuthorityScope,
+} from "../../../dist/composition.js";
 
 export const scope: DispatchAuthorityScope = Object.freeze({
   tenantId: "tenant-a",

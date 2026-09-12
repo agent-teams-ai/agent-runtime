@@ -28,6 +28,7 @@ export {
   type ContainedTurnDispatchAuthorityFeatureDependencies,
 } from "./features/contained-turn-dispatch-authority/internal.js";
 export type {
+  ConsumeForDispatchInput,
   DispatchAuthorityHead,
   DispatchAuthorityScope,
 } from "./features/contained-turn-dispatch-authority/internal.js";

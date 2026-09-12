@@ -17,6 +17,7 @@ export type {
   DispatchAuthorityHead,
   DispatchAuthorityScope,
 } from "./domain/dispatch-authority-head.js";
+export type { ConsumeForDispatchInput } from "./contracts/contained-turn-dispatch-authority-v1.js";
 export { createDispatchAcceptanceFeature, type DispatchAcceptanceDependencies } from
   "./composition/dispatch-acceptance-factory.js";
 export type {
