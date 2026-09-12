@@ -1820,7 +1820,16 @@
         "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
         "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
         "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts",
-        "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts"
+        "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-deployment/index.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-deployment/internal.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-contained-turn-owner.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment-authority.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/index.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/internal.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/linux-codex-node-recipe-consumption.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/linux-codex-node-recipe.ts"
       ],
       "entrypoints": [
         "packages/apps/embedded-runtime/src/composition/contained-turn-current-authority.ts",
@@ -2010,103 +2019,108 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
-          "to": "@agent-teams/agent-execution/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
-          "to": "@agent-teams/runtime-security/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts",
+          "to": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/internal.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
-          "to": "@agent-teams/agent-execution/composition",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
-          "to": "@agent-teams/provider-access/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
-          "to": "@agent-teams/runtime-security/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-linux-route-binding.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
-          "to": "@agent-teams/agent-execution/composition",
+          "to": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/internal.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
+          "to": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/internal.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts",
-          "to": "@agent-teams/agent-execution/composition",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts",
-          "to": "@agent-teams/agent-execution/composition",
+          "to": "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/internal.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
-          "mode": "type-only"
+          "to": "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/internal.ts",
+          "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts",
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-contained-turn-owner.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-contained-turn-owner.ts",
+          "to": "@agent-teams/runtime-security/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-contained-turn-owner.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-contained-turn-owner.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-contained-turn-owner.ts",
           "to": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts",
           "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment-authority.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment-authority.ts",
+          "to": "@agent-teams/provider-access/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment-authority.ts",
+          "to": "@agent-teams/runtime-security/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment-authority.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment-authority.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment-authority.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-linux-route-binding.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/linux-codex-node-recipe-consumption.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/linux-codex-node-recipe.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/linux-codex-node-recipe.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
+          "mode": "type-only"
         }
       ]
     },
@@ -4573,6 +4587,8 @@
       "packages/apps/embedded-runtime/src/features/contained-turn-http-runtime-security",
       "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access",
       "packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation",
+      "packages/apps/embedded-runtime/src/features/linux-codex-deployment",
+      "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe",
       "packages/contexts/agent-execution/src/features/contained-agent-turn",
       "packages/contexts/agent-execution/src/features/runtime-installation-discovery",
       "packages/contexts/provider-access/src/features/contained-turn-access",

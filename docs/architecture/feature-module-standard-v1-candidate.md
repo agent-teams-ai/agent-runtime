@@ -288,7 +288,25 @@ feature entries from the matching `src/composition/` files, so existing
 composition and test imports keep working. The implementations stay at the
 feature root rather than under `application/`: they still import Agent
 Execution, Provider Access and Runtime Security composition types, which L0
-treats as an inward leak from `application/`. Process lifecycle,
+treats as an inward leak from `application/`. The Linux Codex Node recipe now
+lives under `src/features/linux-codex-node-recipe/` with curated `index.ts` /
+`internal.ts` entrypoints. Host composition re-exports that feature entry from
+`src/composition/linux-codex-node-recipe.ts` and
+`src/composition/linux-codex-node-recipe-consumption.ts`, so existing
+composition and test imports keep working. The implementation stays at the
+feature root rather than under `application/`: it still imports Host
+composition deployment types, which L0 treats as an inward leak from
+`application/`. Linux Codex contained-turn owner, deployment authority, and
+deployment resources now live under `src/features/linux-codex-deployment/`
+with curated `index.ts` / `internal.ts` entrypoints. Host composition
+re-exports those feature entries from
+`src/composition/linux-codex-contained-turn-owner.ts`,
+`src/composition/linux-codex-deployment-authority.ts`, and
+`src/composition/linux-codex-deployment.ts`, so existing composition and test
+imports keep working. The implementations stay at the feature root rather
+than under `application/`: they still import Host composition helpers or
+Agent Execution / Provider Access / Runtime Security composition types, which
+L0 treats as an inward leak from `application/`. Process lifecycle,
 readiness and rollback stay in composition. Host tests that
 previously imported unpublished Agent Execution, Provider Access, and Runtime
 Security `dist/` and `tests/` package subpaths now use the curated

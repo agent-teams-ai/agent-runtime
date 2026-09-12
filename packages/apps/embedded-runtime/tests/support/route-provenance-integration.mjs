@@ -7,11 +7,12 @@ const auditRoot = new URL('../../../../../', import.meta.url);
 const feature = new URL('packages/contexts/agent-execution/dist/features/contained-agent-turn/', auditRoot);
 const docker = new URL('adapters/outbound/host-custody/docker/', feature);
 const app = new URL('../../dist/composition/', import.meta.url);
+const linuxDeployment = new URL('../../dist/features/linux-codex-deployment/', import.meta.url);
 const unused = () => {throw Error('unexpected unrelated owner call');};
 let system;
 let acknowledge;
 let privilegeCalls = 0;
-const stub = (url, namedExports) => mock.module(url, {exports: namedExports});
+const stub = (url, namedExports) => mock.module(String(url), {exports: namedExports});
 // Isolated worker: all kernel effects and transport are simulated, never real I/O.
 // Copy the fs API, not its ESM namespace: namespace.default would retain the
 // original object whose nonconfigurable constants Node's mock loader redefines.
@@ -63,10 +64,12 @@ stub(new URL('contained-turn-http-egress-upstream.js', app), {
 });
 stub(new URL('contained-turn-linux-route-binding.js', app), {createContainedTurnLinuxRouteBinding: unused});
 // Keep real infrastructure capture; only acknowledged PA/RS receipts are synthetic.
-const authorityModule = await import(new URL('linux-codex-deployment-authority.js', app));
-stub(new URL('linux-codex-deployment-authority.js', app), {...authorityModule,
+const authorityModule = await import(new URL('linux-codex-deployment-authority.js', linuxDeployment));
+const stubAuthority = {...authorityModule,
   createLinuxCodexDeploymentAuthority: () => ({take: kernel => acknowledge(kernel), bind() {}, bindStore() {}, dispose() {}}),
-});
+};
+stub(new URL('linux-codex-deployment-authority.js', linuxDeployment), stubAuthority);
+stub(new URL('linux-codex-deployment-authority.js', app), stubAuthority);
 
 async function prepareSyntheticRouteEnvironment() {
 const imp = p=>import(new URL(p,docker));
@@ -128,7 +131,7 @@ const {createHash}=await import('node:crypto');
 const {persistentKernel}=await import('./route-provenance-kernel.ts');
 const {BoundedUnixHttpClient}=await imp('engine/bounded-unix-http.js');
 const {createNodeDockerDeploymentRecipe}=await import(new URL('composition/node-docker-deployment-recipe.js',feature));
-const {createLinuxCodexDeploymentResources}=await import(new URL('./packages/apps/embedded-runtime/dist/composition/linux-codex-deployment.js',auditRoot));
+const {createLinuxCodexDeploymentResources}=await import(new URL('linux-codex-deployment.js', linuxDeployment));
 const pinBytes=Buffer.from('pinned synthetic tool');
 const pin={path:'/synthetic/tool',sha256:createHash('sha256').update(pinBytes).digest('hex')};
 const descriptors=new Map(); const kernels=new Map(); let nextFd=40;

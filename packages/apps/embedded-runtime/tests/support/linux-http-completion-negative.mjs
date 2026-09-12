@@ -63,12 +63,43 @@ mock.module("@agent-teams/agent-execution/composition", {exports: {
       signal.removeEventListener("abort", callback);
     },
   },
+  // Feature barrels re-export internal.ts, so this worker also evaluates the
+  // Linux recipe/deployment modules that import these AE composition names.
+  createDeferredCodexNativeBrokerFiles() {
+    return {
+      install() {},
+      bindRoot() {},
+      cutoff() {},
+      async quiesce() {},
+      snapshot() {return {binding: "unbound", closed: false};},
+    };
+  },
+  createNodeDockerDeploymentRecipe() {
+    throw Error("unexpected Node Docker deployment recipe");
+  },
+  bindContainedTurnRouteEnforcement() {
+    throw Error("unexpected contained-turn route enforcement bind");
+  },
+  readContainedTurnRouteEnforcementTarget() {},
+  NodeHttpEgressBoundaryIds: class {fresh = () => {throw Error("unexpected HTTP egress id");};},
+  NodeHttpEgressTrustedResolver: class {resolve = () => {throw Error("unexpected HTTP egress resolve");};},
+  PostgresHttpEgressEvidence: class {
+    digest = () => {throw Error("unexpected HTTP egress digest");};
+    record = () => {throw Error("unexpected HTTP egress record");};
+  },
+  nativeHttpRequestProfile() {throw Error("unexpected native HTTP request profile");},
+  createNativeHttpEgressRoute() {throw Error("unexpected native HTTP egress route");},
+  NodeTlsHttpEgressTransport() {throw Error("unexpected Node TLS HTTP egress transport");},
 }});
 
 mock.module("@agent-teams/runtime-security/composition", {exports: {
   createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate() {
     return {hostEgressVerifierV2: {signingKey: {publicKeyDigest: `sha256:${"b".repeat(64)}`}}, dispose() {}};
   },
+  snapshotDispatchAuthorityHead() {throw Error("unexpected dispatch authority snapshot");},
+}});
+mock.module("@agent-teams/provider-access/composition", {exports: {
+  snapshotRouteSelectionCurrent() {throw Error("unexpected route selection snapshot");},
 }});
 mock.module(new URL(`${composition}contained-turn-current-egress-owners.js`, import.meta.url),
   {exports: {
@@ -78,6 +109,15 @@ mock.module(new URL(`${composition}contained-turn-http-egress-authorities.js`, i
   {exports: {
     bindContainedTurnHttpEgressAuthorities() {return {dispose() {}};},
     composeContainedTurnHttpEgressSession() {return {};},
+  }});
+mock.module(new URL(`${composition}contained-turn-http-egress-upstream.js`, import.meta.url),
+  {exports: {
+    createContainedTurnHttpEgressRoute() {throw Error("unexpected HTTP egress route");},
+    createContainedTurnHttpUpstreamTransport() {throw Error("unexpected HTTP egress transport");},
+  }});
+mock.module(new URL(`${composition}contained-turn-linux-route-binding.js`, import.meta.url),
+  {exports: {
+    createContainedTurnLinuxRouteBinding() {throw Error("unexpected Linux route binding");},
   }});
 
 const {createLinuxCodexContainedTurnOwner} = await import(
