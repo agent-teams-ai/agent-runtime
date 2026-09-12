@@ -1,3 +1,4 @@
+import { workspacePackageSourceHref } from "./support/workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {setImmediate as nextTurn} from "node:timers/promises";
@@ -5,10 +6,9 @@ import {types} from "node:util";
 import {createCredentialMaterializationRequestDigest} from "@agent-teams/provider-access/composition";
 import {createContainedTurnHttpCredentialMaterialization, createContainedTurnHttpProviderAccessAuthorization} from
   "../dist/composition/contained-turn-http-provider-access.js";
-import {erased, generation, renderingFixture, selectorFor} from
-  "@agent-teams/provider-access/tests/features/contained-turn-access/credential-rendering-test-fixture.ts";
-import type {CredentialGenerationOutcome, CredentialGenerationRequest} from
-  "@agent-teams/provider-access/dist/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.js";
+const { erased, generation, renderingFixture, selectorFor } = await import(workspacePackageSourceHref("@agent-teams/provider-access", "tests/features/contained-turn-access/credential-rendering-test-fixture.ts"));
+type CredentialGenerationOutcome = any;
+type CredentialGenerationRequest = any;
 import {hostWipe, pairedFixture, type HostReceipt} from "./contained-turn-http-credential-materialization-fixture.ts";
 
 const indexOf = (id: string) => Number(id.split(":").at(-1));

@@ -1,11 +1,10 @@
+import { workspacePackageSourceHref } from "../support/workspace-package-source.mjs";
 // Private test administration support. No provider, Engine or network I/O.
 import {readFile} from "node:fs/promises";
 import {createContainedTurnRouteEnforcement} from
-  "@agent-teams/agent-execution/dist/features/contained-agent-turn/composition/contained-turn-route-enforcement-capability.js";
-import {snapshotDockerEnginePolicy} from
-  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
-import {routeSelectionDigest, snapshotRouteSelectionFacts} from
-  "@agent-teams/provider-access/dist/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.js";
+  "@agent-teams/agent-execution/composition";
+const { snapshotDockerEnginePolicy } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js"));
+const { routeSelectionDigest, snapshotRouteSelectionFacts } = await import(workspacePackageSourceHref("@agent-teams/provider-access", "dist/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.js"));
 import type {LinuxCodexLivePins} from "./linux-codex-live-bootstrap.ts";
 
 const target = Object.freeze({

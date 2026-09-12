@@ -1,10 +1,11 @@
+import { workspacePackageSourceHref } from "./support/workspace-package-source.mjs";
 import { createAgentRuntimeHost } from "./helpers/create-contained-turn-host.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createContainedTurnFeature } from "@agent-teams/agent-execution/composition";
-import { recoverContainedTurnDispatchPreparations } from "@agent-teams/agent-execution/dist/features/contained-agent-turn/application/contained-turn-preparation-recovery.js";
-import { containedTurnIdentity } from "@agent-teams/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-identities.js";
-import { createDependencies, proofId } from "@agent-teams/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
+import { recoverContainedTurnDispatchPreparations } from "@agent-teams/agent-execution/composition";
+const { containedTurnIdentity } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/domain/contained-turn-identities.js"));
+const { createDependencies, proofId } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts"));
 
 import {
   AgentRuntimeHostDisposalIncompleteError,

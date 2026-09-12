@@ -1,12 +1,12 @@
+import { workspacePackageSourceHref } from "./workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import {createServer} from "node:http";
 import {once} from "node:events";
 import {openJoinedNetwork} from "./linux-joined-network.mjs";
 import {createDockerLinuxExclusiveRouteAdmission} from
   "@agent-teams/agent-execution/composition";
-import {linuxExclusiveRouteSeccomp} from
-  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-policy.js";
-import {container, subject} from "@agent-teams/agent-execution/tests/fixtures/host-http-egress-v4-fixture.ts";
+const { linuxExclusiveRouteSeccomp } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-policy.js"));
+const { container, subject } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/fixtures/host-http-egress-v4-fixture.ts"));
 
 // Explicit Linux integration entrypoint, invoked in its own outer namespace.
 // The Docker inspection boundary is synthetic. Namespace, tools, rules, sockets,

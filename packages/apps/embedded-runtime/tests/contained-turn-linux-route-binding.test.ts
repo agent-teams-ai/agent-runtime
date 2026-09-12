@@ -1,11 +1,10 @@
+import { workspacePackageSourceHref } from "./support/workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createContainedTurnLinuxRouteBinding, type ContainedTurnLinuxRouteCampaign }
   from "../dist/composition/contained-turn-linux-route-binding.js";
-import { installLinuxExclusiveRoute } from
-  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-owner.js";
-import { harness, selection } from
-  "@agent-teams/provider-access/tests/features/contained-turn-access/route-selection-fixture.ts";
+const { installLinuxExclusiveRoute } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-owner.js"));
+const { harness, selection } = await import(workspacePackageSourceHref("@agent-teams/provider-access", "tests/features/contained-turn-access/route-selection-fixture.ts"));
 
 /** Product facts the trusted deployment composition owns; none of them is a
  * Provider Access fact and none is read from the environment here. */

@@ -1,16 +1,14 @@
+import { workspacePackageSourceHref } from "../support/workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {createLinuxCodexLiveFirewallWiring} from "./linux-codex-live-firewall-wiring.ts";
 import type {FirewallCommand} from "./linux-codex-live-admin-firewall.ts";
-import {networkFixture, call} from "@agent-teams/agent-execution/tests/fixtures/docker-operation-network-fixture.ts";
-import {dockerHttpOperationNetworkRecipe} from
-  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-network-resources.js";
+const { networkFixture, call } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/fixtures/docker-operation-network-fixture.ts"));
+const { dockerHttpOperationNetworkRecipe } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-network-resources.js"));
 
-import {createDockerOperationNetworkOwner} from
-  "@agent-teams/agent-execution/dist/features/contained-agent-turn/composition/docker-operation-network-owner.js";
-import {HostHttpEgressV4Journal} from
-  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-journal.js";
-import {MemoryV4Storage} from "@agent-teams/agent-execution/tests/fixtures/host-http-egress-v4-fixture.ts";
+const { createDockerOperationNetworkOwner } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/composition/docker-operation-network-owner.js"));
+const { HostHttpEgressV4Journal } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-journal.js"));
+const { MemoryV4Storage } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/fixtures/host-http-egress-v4-fixture.ts"));
 
 // Synthetic command/listener boundaries only; no socket, daemon or firewall IO.
 async function fixture() {

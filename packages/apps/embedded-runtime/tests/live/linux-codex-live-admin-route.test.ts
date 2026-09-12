@@ -1,11 +1,11 @@
+import { workspacePackageSourceHref } from "../support/workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {createLinuxCodexLiveAdminRoute} from "./linux-codex-live-admin-route.ts";
-import {policy} from "@agent-teams/agent-execution/tests/fixtures/docker-engine-test-fixture.ts";
+const { policy } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/fixtures/docker-engine-test-fixture.ts"));
 import {readContainedTurnRouteEnforcementTarget} from
-  "@agent-teams/agent-execution/dist/features/contained-agent-turn/composition/contained-turn-route-enforcement-capability.js";
-import {snapshotRouteSelectionFacts} from
-  "@agent-teams/provider-access/dist/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.js";
+  "@agent-teams/agent-execution/composition";
+const { snapshotRouteSelectionFacts } = await import(workspacePackageSourceHref("@agent-teams/provider-access", "dist/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.js"));
 import type {LinuxCodexLivePins} from "./linux-codex-live-bootstrap.ts";
 
 // Synthetic administration only. No setup, migration, engine observation or admission.

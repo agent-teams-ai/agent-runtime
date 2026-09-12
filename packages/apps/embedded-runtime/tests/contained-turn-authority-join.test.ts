@@ -1,16 +1,17 @@
+import { workspacePackageSourceHref } from "./support/workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createContainedTurnFeatureFromProviderAccess, composeHostCustodiedContainedTurn } from "../dist/composition/contained-turn-feature-composition.js";
 import { ContainedTurnConstructionCleanupError } from "../dist/composition/contained-turn-construction-failure.js";
-import { createDependencies } from "@agent-teams/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
+const { createDependencies } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts"));
 import { createContainedTurnOperationProviderAccessPort, createContainedTurnSecurityAcceptancePort } from "@agent-teams/agent-execution/composition";
-import { containedTurnIdentity } from "@agent-teams/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-identities.js";
-import { acceptedProviderPreparation } from "@agent-teams/agent-execution/dist/features/contained-agent-turn/composition/accepted-authority-anti-corruption.js";
-import { operationHarness, fixtureHash } from "@agent-teams/provider-access/tests/features/contained-turn-access/operation-dispatch-test-fixture.ts";
-import { createHarness } from "@agent-teams/runtime-security/tests/postgres-dispatch.fixtures.ts";
+const { containedTurnIdentity } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/domain/contained-turn-identities.js"));
+const { acceptedProviderPreparation } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/composition/accepted-authority-anti-corruption.js"));
+const { operationHarness, fixtureHash } = await import(workspacePackageSourceHref("@agent-teams/provider-access", "tests/features/contained-turn-access/operation-dispatch-test-fixture.ts"));
+const { createHarness } = await import(workspacePackageSourceHref("@agent-teams/runtime-security", "tests/postgres-dispatch.fixtures.ts"));
 import { createDispatchAcceptanceFeature, createNodeSha256DispatchDigest, createPostgresDispatchAcceptanceStore } from "@agent-teams/runtime-security/composition";
 import { joinedAeSubmit } from "./support/joined-authority-fixture.ts";
-import { adapterSnapshot, manifest } from "@agent-teams/agent-execution/tests/features/contained-agent-turn/support/contained-turn-fixture-snapshots.ts";
+const { adapterSnapshot, manifest } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/features/contained-agent-turn/support/contained-turn-fixture-snapshots.ts"));
 
 const intent = Object.freeze({mode: "analysis" as const, prompt: "Independently approved synthetic joined turn"});
 const fixture = async (policyConstraints?: string) => {

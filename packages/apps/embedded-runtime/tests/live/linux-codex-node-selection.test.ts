@@ -1,3 +1,4 @@
+import { workspacePackageSourceHref } from "../support/workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import {createHash, randomUUID} from "node:crypto";
 import {test} from "node:test";
@@ -98,9 +99,8 @@ test("RS decision digest is independent of the whole authority vector and must m
 });
 
 test("selected resource handles pass the real V4 network recipe without normalization", async () => {
-  const {dockerHttpOperationNetworkRecipe} = await import(
-    "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-network-resources.js");
-  const {subject} = await import("@agent-teams/agent-execution/tests/fixtures/host-http-egress-v4-fixture.ts");
+  const {dockerHttpOperationNetworkRecipe} = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-network-resources.js"));
+  const {subject} = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/fixtures/host-http-egress-v4-fixture.ts"));
   const handles = new Set<string>();
   for (let index = 0; index < 2; index++) {
     const f = fixture(); const selected = createLinuxCodexNodeSelection(f.pins)(f.input);
@@ -123,13 +123,10 @@ test("selected resource handles pass the real V4 network recipe without normaliz
 // Never call setup or any engine/lifecycle method.
 const canarySelection = async (elapsedMs?: number) => {
   const {createLinuxCodexLiveCanaryConfiguration} = await import("./linux-codex-live-canary-config.ts");
-  const {containedTurnScopeDigest} = await import(
-    "@agent-teams/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-authority.js");
-  const {digestContainedTurnCanonicalValue} = await import(
-    "@agent-teams/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-codecs.js");
-  const {policy} = await import("@agent-teams/agent-execution/tests/fixtures/docker-engine-test-fixture.ts");
-  const {SYNTHETIC_LOOPBACK_CA} = await import(
-    "@agent-teams/agent-execution/tests/fixtures/http-egress-tls/synthetic-loopback-certificates.ts");
+  const {containedTurnScopeDigest} = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/domain/contained-turn-authority.js"));
+  const {digestContainedTurnCanonicalValue} = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/domain/contained-turn-codecs.js"));
+  const {policy} = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/fixtures/docker-engine-test-fixture.ts"));
+  const {SYNTHETIC_LOOPBACK_CA} = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/fixtures/http-egress-tls/synthetic-loopback-certificates.ts"));
   const parent = "/disposable";
   const enginePolicy = policy(parent);
   const approved = {
@@ -186,9 +183,8 @@ const canarySelection = async (elapsedMs?: number) => {
 
 test("actual canary selection satisfies network cleanup constructor while outer cleanup remains 30000",
   {skip: process.platform !== "linux" || process.arch !== "x64"}, async () => {
-    const {DockerHttpNetworkResources, dockerHttpOperationNetworkRecipe} = await import(
-      "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-network-resources.js");
-    const {subject} = await import("@agent-teams/agent-execution/tests/fixtures/host-http-egress-v4-fixture.ts");
+    const {DockerHttpNetworkResources, dockerHttpOperationNetworkRecipe} = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-network-resources.js"));
+    const {subject} = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/fixtures/host-http-egress-v4-fixture.ts"));
     const {selected, configuration} = await canarySelection();
     const actual = {...subject, ...selected.subjectFacts, imageDigest: selected.create.imageDigest,
       attempt: {...subject.attempt, launchFingerprintSha256: selected.create.launchFingerprintSha256,
@@ -213,11 +209,9 @@ test("actual canary selection satisfies network cleanup constructor while outer 
 
 test("actual canary create encoder supplies reserved defaults and preserves provider environment",
   {skip: process.platform !== "linux" || process.arch !== "x64"}, async () => {
-    const {encodeCreateRequest} = await import(
-      "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-create-request.js");
-    const {dockerHttpOperationNetworkRecipe} = await import(
-      "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-network-resources.js");
-    const {subject} = await import("@agent-teams/agent-execution/tests/fixtures/host-http-egress-v4-fixture.ts");
+    const {encodeCreateRequest} = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-create-request.js"));
+    const {dockerHttpOperationNetworkRecipe} = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-network-resources.js"));
+    const {subject} = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/fixtures/host-http-egress-v4-fixture.ts"));
     const {selected, configuration, input} = await canarySelection();
     const actual = {...subject, ...selected.subjectFacts, imageDigest: selected.create.imageDigest,
       attempt: {...subject.attempt, launchFingerprintSha256: selected.create.launchFingerprintSha256,
@@ -241,8 +235,7 @@ test("actual canary create encoder supplies reserved defaults and preserves prov
 
 test("shipped canary lifetime passes route owner admission before effects as preparation spends its lease",
   {skip: process.platform !== "linux" || process.arch !== "x64"}, async t => {
-    const {installLinuxExclusiveRoute} = await import(
-      "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-owner.js");
+    const {installLinuxExclusiveRoute} = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-owner.js"));
     const binding = {
       tenantId: "tenant:test", projectId: "project:test", scopeDigest: "scope:test", operationId: "operation:test",
       attemptId: "attempt:test", custodyId: "custody:test", sourceRevision: "f3cfa197da750f1b5da115da525d0ba83dfafd04",

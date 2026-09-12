@@ -1,9 +1,10 @@
+import { workspacePackageSourceHref } from "../support/workspace-package-source.mjs";
 import {createHash} from 'node:crypto';
 import {constants, openSync, closeSync, fstatSync, lstatSync, readSync, opendirSync} from 'node:fs';
 import {isAbsolute, resolve} from 'node:path';
-import {decodeContainedTurnArtifactManifest} from '@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-manifest.js';
-import {parseResultPublicationRecord} from '@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-result-publication.js';
-import {parseWorkspaceSealRecord} from '@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-state.js';
+const { decodeContainedTurnArtifactManifest } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-manifest.js"));
+const { parseResultPublicationRecord } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-result-publication.js"));
+const { parseWorkspaceSealRecord } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-state.js"));
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const requireEvidence = condition => {if (!condition) {throw new Error('Invalid or incomplete live artifact evidence');}};

@@ -1,9 +1,9 @@
+import { workspacePackageSourceHref } from "../support/workspace-package-source.mjs";
 import {strict as assert} from "node:assert";
 import {test} from "node:test";
 import {createLinuxCodexLiveAdminFirewall, createFirewallCommand,
   type ExpectedOwnedNetwork, type FirewallCommand} from "./linux-codex-live-admin-firewall.ts";
-import {operationNetworkLabels, operationNetworkName} from
-  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-operation-network-codec.js";
+const { operationNetworkLabels, operationNetworkName } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-operation-network-codec.js"));
 
 // Entirely synthetic CLI boundary: no live firewall, Docker, provider or network IO.
 function fixture() {

@@ -1,3 +1,4 @@
+import { workspacePackageSourceHref } from "../support/workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import {mkdtemp, realpath, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
@@ -7,17 +8,13 @@ import {decodeBytes} from "./run-linux-codex-live-canary.mjs";
 import {createContainedTurnSecurityAcceptancePort, NodeTlsHttpEgressTransport} from "@agent-teams/agent-execution/composition";
 import {captureLinuxCodexDeploymentData} from "../../dist/composition/linux-codex-deployment-authority.js";
 import {bindContainedTurnCapabilityAuthority} from "../../dist/composition/contained-turn-authority-capability.js";
-import {NodeUnixSocketDockerEngine} from
-  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-composition.js";
-import {DockerEngineError} from
-  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-error.js";
-import {policy} from "@agent-teams/agent-execution/tests/fixtures/docker-engine-test-fixture.ts";
-import {SYNTHETIC_LOOPBACK_CA} from
-  "@agent-teams/agent-execution/tests/fixtures/http-egress-tls/synthetic-loopback-certificates.ts";
+const { NodeUnixSocketDockerEngine } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-composition.js"));
+const { DockerEngineError } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-error.js"));
+const { policy } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/fixtures/docker-engine-test-fixture.ts"));
+const { SYNTHETIC_LOOPBACK_CA } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/fixtures/http-egress-tls/synthetic-loopback-certificates.ts"));
 import {allocateLinuxCodexLiveAdminDirectories} from "./linux-codex-live-admin-directories.ts";
 import {createLinuxCodexLiveCanaryConfiguration} from "./linux-codex-live-canary-config.ts";
-import {containedTurnScopeDigest} from
-  "@agent-teams/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-authority.js";
+const { containedTurnScopeDigest } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/domain/contained-turn-authority.js"));
 
 // Constructor-only regression. Synthetic pins are not measured deployment facts;
 // no setup, credentials, daemon observation, provider or network operations.

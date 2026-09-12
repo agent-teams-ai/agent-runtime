@@ -171,6 +171,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       "createNodeHostHttpConnection",
       "createNodeHostHttpListener",
       "createRuntimeInstallationDiscoveryFeature",
+      "decodeCodexResponseEnvelope",
       "hostHttpAbortOperations",
       "initializePostgresHttpEgressEvidence",
       "inspectDarwinRouteRequestInventory",

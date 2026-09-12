@@ -1,10 +1,11 @@
+import { workspacePackageSourceHref } from "./support/workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import {test} from "node:test";
-import {PostgresHttpEgressEvidence} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/postgres-http-egress-evidence.js";
-import {createPreparedHttpRequestV1} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/prepared-http-request-v1.js";
-import {materializationAuthorizationRequest, projectPreparedRequest} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-session-authority.js";
-import {createEgressFixture} from "@agent-teams/agent-execution/tests/features/contained-agent-turn/http-egress-test-fixture.ts";
-import {captureCurrentEgressResolve} from "@agent-teams/runtime-security/dist/features/provider-process-egress-authorization/composition/current-egress-validation.js";
+import {PostgresHttpEgressEvidence} from "@agent-teams/agent-execution/composition";
+const { createPreparedHttpRequestV1 } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/prepared-http-request-v1.js"));
+const { materializationAuthorizationRequest, projectPreparedRequest } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-session-authority.js"));
+const { createEgressFixture } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/features/contained-agent-turn/http-egress-test-fixture.ts"));
+const { captureCurrentEgressResolve } = await import(workspacePackageSourceHref("@agent-teams/runtime-security", "dist/features/provider-process-egress-authorization/composition/current-egress-validation.js"));
 
 const bytes = (value: string) => new TextEncoder().encode(value);
 

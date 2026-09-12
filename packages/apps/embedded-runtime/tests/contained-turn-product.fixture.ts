@@ -1,10 +1,11 @@
+import { workspacePackageSourceHref } from "./support/workspace-package-source.mjs";
 import {mkdir} from "node:fs/promises";
 import {join} from "node:path";
 import {createCodexAppServerPermissionBoundary} from "@agent-teams/agent-execution/composition";
 import {createClaudeCodeSetupInspectionPlanner, createCodexSetupInspectionPlanner,
   type ContainedTurnOuterCompositionDependencies} from "../dist/composition.js";
-import type {DeterministicCurrentOwnerHost} from "@agent-teams/agent-execution/tests/current-owner-success-fixture.ts";
-import {createDependencies} from "@agent-teams/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
+type DeterministicCurrentOwnerHost = any;
+const { createDependencies } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts"));
 
 const unavailable = (): never => {throw new Error("setup dependency must not be reached");};
 export const setupCapabilities = Object.freeze({

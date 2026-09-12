@@ -1,3 +1,4 @@
+import { workspacePackageSourceHref } from "../../support/workspace-package-source.mjs";
 import {test, beforeEach} from 'node:test';
 import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
@@ -240,7 +241,7 @@ test('failure to persist final helper cleanup record cannot release captured mat
     assert.equal(denied,1);assert.equal(db.calls.length,0);
   });
 });
-import {ContainedTurnKernelCustodyAdapter} from '@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.js';
+const { ContainedTurnKernelCustodyAdapter } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.js"));
 test('owner returned by a constructor after synchronous abort is retired before finalizer effects',async t=>{
   await inventedOfficial(t,memoryChild(),async()=>{
     const control=new AbortController();let sealed=0,finished=0,pa;

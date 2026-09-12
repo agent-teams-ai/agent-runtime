@@ -3540,6 +3540,11 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
           "mode": "runtime"
         },

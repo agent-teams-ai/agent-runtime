@@ -1,32 +1,14 @@
+import { workspacePackageSourceHref } from "./support/workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  ContainedTurnKernelCustodyAdapter,
-  type ContainedTurnHostCustodyPort,
-} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.js";
-import type {
-  ContainedTurnKernelCustodyPort,
-} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
-import {
-  containedTurnOperationCutoffRevision,
-} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-output-authority.js";
-import {
-  adapterSnapshot,
-  attemptId,
-  authorityDigest,
-  commandId,
-  custodyId,
-  effectId,
-  hostBootId,
-  hostInstanceId,
-  operationId,
-  preparationToken,
-  providerAccessSnapshot,
-  workspaceId,
-} from "@agent-teams/agent-execution/tests/contained-turn-kernel-fixtures.ts";
-import {containedTurnIdentity} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-identities.js";
-import { committedDispatchProofFixture } from "@agent-teams/agent-execution/tests/features/contained-agent-turn/support/committed-dispatch-proof-fixture.ts";
+type ContainedTurnHostCustodyPort = any;
+const { ContainedTurnKernelCustodyAdapter } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.js"));
+type ContainedTurnKernelCustodyPort = any;
+const { containedTurnOperationCutoffRevision } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/domain/contained-turn-output-authority.js"));
+const { adapterSnapshot, attemptId, authorityDigest, commandId, custodyId, effectId, hostBootId, hostInstanceId, operationId, preparationToken, providerAccessSnapshot, workspaceId } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/contained-turn-kernel-fixtures.ts"));
+const { containedTurnIdentity } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/domain/contained-turn-identities.js"));
+const { committedDispatchProofFixture } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/features/contained-agent-turn/support/committed-dispatch-proof-fixture.ts"));
 
 const EMPTY_SHA256 = "0".repeat(64);
 const drain = Object.freeze({ bytes: 0, sha256: EMPTY_SHA256, status: "complete" as const });

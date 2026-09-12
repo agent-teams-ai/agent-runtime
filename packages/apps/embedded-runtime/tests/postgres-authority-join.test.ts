@@ -1,22 +1,20 @@
+import { workspacePackageSourceHref } from "./support/workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createContainedTurnOperationProviderAccessPort, createContainedTurnSecurityAcceptancePort, createContainedTurnFeature, nativeHttpRequestProfile } from "@agent-teams/agent-execution/composition";
-import { createPostgresRouteSelectionOwner, createPostgresCurrentProviderAccess, createPostgresOperationDispatchConsumption } from "@agent-teams/provider-access/composition";
-import { createPostgresMaterializationRepository } from "@agent-teams/provider-access/dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.js";
-import { issuanceFixture, fixtureHash } from "@agent-teams/provider-access/tests/features/contained-turn-access/operation-dispatch-test-fixture.ts";
-import { validateDisposablePostgresUrl } from "@agent-teams/provider-access/tests/features/contained-turn-access/postgres-materialization-url.fixtures.ts";
-import { createDispatchAcceptanceFeature, createNodeSha256DispatchDigest, createPostgresDispatchAcceptanceStore } from "@agent-teams/runtime-security/composition";
-import { createPostgresDispatchConsumptionRepository } from "@agent-teams/runtime-security/dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.js";
-import { adapterSnapshot, manifest } from "@agent-teams/agent-execution/tests/features/contained-agent-turn/support/contained-turn-fixture-snapshots.ts";
+import { applyContainedTurnPostgresSchema, createContainedTurnOperationProviderAccessPort, createContainedTurnSecurityAcceptancePort, createContainedTurnFeature, nativeHttpRequestProfile } from "@agent-teams/agent-execution/composition";
+import { createPostgresRouteSelectionOwner, createPostgresCurrentProviderAccess, createPostgresOperationDispatchConsumption, createPostgresMaterializationRepository } from "@agent-teams/provider-access/composition";
+const { issuanceFixture, fixtureHash } = await import(workspacePackageSourceHref("@agent-teams/provider-access", "tests/features/contained-turn-access/operation-dispatch-test-fixture.ts"));
+const { validateDisposablePostgresUrl } = await import(workspacePackageSourceHref("@agent-teams/provider-access", "tests/features/contained-turn-access/postgres-materialization-url.fixtures.ts"));
+import { createDispatchAcceptanceFeature, createNodeSha256DispatchDigest, createPostgresDispatchAcceptanceStore, createPostgresDispatchConsumptionRepository } from "@agent-teams/runtime-security/composition";
+const { adapterSnapshot, manifest } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/features/contained-agent-turn/support/contained-turn-fixture-snapshots.ts"));
 import { joinedAeSubmit } from "./support/joined-authority-fixture.ts";
 
 import {createContainedTurnFeatureFromProviderAccess} from "../dist/composition/contained-turn-feature-composition.js";
-import {applyContainedTurnPostgresSchema} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-schema.js";
 import type {OwnerSubmitOutcome, OwnerObservationOutcome} from "../dist/composition/contained-turn-composition-types.js";
-import {containedTurnIdentity} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-identities.js";
+const { containedTurnIdentity } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/domain/contained-turn-identities.js"));
 import {createPostgresCurrentAuthorityFixture} from "./support/postgres-current-authority-fixture.ts";
 
-import {selection as routeSelection} from "@agent-teams/provider-access/tests/features/contained-turn-access/route-selection-fixture.ts";
+const { selection: routeSelection } = await import(workspacePackageSourceHref("@agent-teams/provider-access", "tests/features/contained-turn-access/route-selection-fixture.ts"));
 import {postgresDeploymentSelection} from "./support/postgres-deployment-selection-fixture.ts";
 import {captureContainedTurnCurrentAuthority, snapshotContainedTurnAuthority} from "../dist/composition/contained-turn-current-authority.js";
 
