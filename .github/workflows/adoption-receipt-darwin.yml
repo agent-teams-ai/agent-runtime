@@ -1,7 +1,7 @@
 name: adoption-receipt-darwin
 
 # Temporary workflow: Darwin arm64 adoption receipt for leftover Host
-# runtime-access identity c6c3a1a0 stacked on setup-views. The job always
+# runtime-access identity 48858aa9 stacked on setup-views. The job always
 # checks out that SHA so this workflow-only commit does not enter the receipt
 # identity. Safe to delete after merge.
 
@@ -24,11 +24,11 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: c6c3a1a073865e253b9eecf53638c6468acbc5b1
+          ref: 48858aa93c03255c89659eeacf5105dcfde8bc5a
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "c6c3a1a073865e253b9eecf53638c6468acbc5b1"
+        run: test "$(git rev-parse HEAD)" = "48858aa93c03255c89659eeacf5105dcfde8bc5a"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
