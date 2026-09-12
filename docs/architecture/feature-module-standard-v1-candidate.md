@@ -288,7 +288,17 @@ feature entries from the matching `src/composition/` files, so existing
 composition and test imports keep working. The implementations stay at the
 feature root rather than under `application/`: they still import Agent
 Execution, Provider Access and Runtime Security composition types, which L0
-treats as an inward leak from `application/`. Process lifecycle,
+treats as an inward leak from `application/`. Access authority, cancellation
+proof and construction-failure cleanup now live under
+`src/features/contained-turn-access-authority/`,
+`src/features/contained-turn-cancellation-proof/` and
+`src/features/contained-turn-construction-failure/`, each with curated
+`index.ts` / `internal.ts` entrypoints. Host composition re-exports those
+feature entries from the matching `src/composition/` files, so existing
+composition and test imports keep working. The implementations stay at the
+feature root rather than under `application/`: cancellation proof still
+imports Host composition helpers, which L0 treats as an inward leak from
+`application/`. Process lifecycle,
 readiness and rollback stay in composition. Host tests that
 previously imported unpublished Agent Execution, Provider Access, and Runtime
 Security `dist/` and `tests/` package subpaths now use the curated
