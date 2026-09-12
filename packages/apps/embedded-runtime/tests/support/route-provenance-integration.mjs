@@ -7,6 +7,7 @@ const auditRoot = new URL('../../../../../', import.meta.url);
 const feature = new URL('packages/contexts/agent-execution/dist/features/contained-agent-turn/', auditRoot);
 const docker = new URL('adapters/outbound/host-custody/docker/', feature);
 const app = new URL('../../dist/composition/', import.meta.url);
+const linuxDeployment = new URL('../../dist/features/linux-codex-deployment/', import.meta.url);
 const unused = () => {throw Error('unexpected unrelated owner call');};
 let system;
 let acknowledge;
@@ -63,10 +64,12 @@ stub(new URL('contained-turn-http-egress-upstream.js', app), {
 });
 stub(new URL('contained-turn-linux-route-binding.js', app), {createContainedTurnLinuxRouteBinding: unused});
 // Keep real infrastructure capture; only acknowledged PA/RS receipts are synthetic.
-const authorityModule = await import(new URL('linux-codex-deployment-authority.js', app));
-stub(new URL('linux-codex-deployment-authority.js', app), {...authorityModule,
+const authorityModule = await import(new URL('linux-codex-deployment-authority.js', linuxDeployment));
+const stubAuthority = {...authorityModule,
   createLinuxCodexDeploymentAuthority: () => ({take: kernel => acknowledge(kernel), bind() {}, bindStore() {}, dispose() {}}),
-});
+};
+stub(new URL('linux-codex-deployment-authority.js', linuxDeployment), stubAuthority);
+stub(new URL('linux-codex-deployment-authority.js', app), stubAuthority);
 
 async function prepareSyntheticRouteEnvironment() {
 const imp = p=>import(new URL(p,docker));

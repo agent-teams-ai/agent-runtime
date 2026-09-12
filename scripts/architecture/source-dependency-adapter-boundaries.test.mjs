@@ -182,10 +182,10 @@ test("the real parser observes every retained Node import in composition and TLS
   const host = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody";
   for (const [path, builtins] of [
     [`${composition}/agent-runtime-host.ts`, ["node:crypto", "node:util"]],
-    [`${composition}/contained-turn-access-authority.ts`, ["node:util"]],
-    [`${composition}/contained-turn-authority-capability.ts`, ["node:util"]],
-    [`${composition}/contained-turn-route-qualification.ts`, ["node:fs"]],
-    [`${composition}/trusted-runtime-access-scope.ts`, ["node:util"]],
+    ["packages/apps/embedded-runtime/src/features/contained-turn-access-authority/contained-turn-access-authority.ts", ["node:util"]],
+    ["packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/contained-turn-authority-capability.ts", ["node:util"]],
+    ["packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/contained-turn-route-qualification.ts", ["node:fs"]],
+    ["packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope/trusted-runtime-access-scope.ts", ["node:util"]],
     [`${host}/egress/node-tls-http-egress-transport-support.ts`,
       ["node:buffer", "node:crypto", "node:net", "node:tls"]],
     [`${host}/docker/node-linux-exclusive-route.ts`,

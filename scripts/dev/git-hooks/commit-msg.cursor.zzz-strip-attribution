@@ -1,0 +1,25 @@
+#!/bin/bash
+# Strip Cursor/cloud attribution trailers after commit-msg.cursor.co-author.
+file="$1"
+[ -n "$file" ] && [ -f "$file" ] || exit 0
+python3 - "$file" <<'PY'
+import pathlib
+import re
+import sys
+
+path = pathlib.Path(sys.argv[1])
+lines = path.read_text().splitlines()
+kept = []
+for line in lines:
+    if re.match(r"^Co-authored-by:", line, re.I):
+        continue
+    if re.search(r"cursoragent@cursor\.com", line, re.I):
+        continue
+    if re.match(r"^Made-with:\s*Cursor\b", line, re.I):
+        continue
+    kept.append(line)
+while kept and kept[-1] == "":
+    kept.pop()
+path.write_text(("\n".join(kept) + "\n") if kept else "")
+PY
+exit 0
