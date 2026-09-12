@@ -183,7 +183,6 @@ const canarySelection = async (elapsedMs?: number) => {
   return {selected, configuration, input: f.input};
 };
 
-
 test("actual canary selection satisfies network cleanup constructor while outer cleanup remains 30000",
   {skip: process.platform !== "linux" || process.arch !== "x64"}, async () => {
     const {DockerHttpNetworkResources, dockerHttpOperationNetworkRecipe} = await import(
