@@ -1,4 +1,4 @@
-import type { ContainedTurnCapabilityBundle } from "../features/contained-turn-runtime-access/internal.js";
+import type { ContainedTurnCapabilityBundle } from "./contained-turn-runtime-access.js";
 import type { ContainedTurnCompositionOperationRef } from "./contained-turn-operation-ref.js";
 import {
   copyContainedTurnAccessAuthority,
