@@ -1,4 +1,4 @@
 export {
   createContainedTurnCurrentEgressOwners,
   type ContainedTurnCurrentEgressOwnersInput,
-} from "../features/contained-turn-current-egress-owners/internal.js";
+} from "./contained-turn-current-egress-owners.js";
