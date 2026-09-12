@@ -203,6 +203,14 @@ export const changes = Object.freeze([
     id: "codex-boundary-test-hardening",
     revision: "65fb9b836862f82ab8bc905cb6e244168505c868",
   }),
+  Object.freeze({
+    id: "source-dependencies-schema-v3",
+    revision: "b42a1130ea1b2a02a5cd240a33d3cb4e7c4cf32f",
+  }),
+  Object.freeze({
+    id: "source-dependencies-v3-repo-root-test-loads",
+    revision: "01d6cc76cab4817bedbe44635d8b2b31473349c6",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";

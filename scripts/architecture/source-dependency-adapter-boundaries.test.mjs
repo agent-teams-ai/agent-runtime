@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,7 +36,7 @@ const paths = {
   claude: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/negative-fixture.ts",
   composition: "packages/contexts/agent-execution/src/composition.ts",
   core: "packages/contexts/agent-execution/src/features/contained-agent-turn/application/negative-fixture.ts",
-  docker: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/negative-fixture.ts",
+  docker: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-host-custody-lifecycle.ts",
   dockerBarrel: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.ts",
   dockerFake: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/fake-docker-engine.ts",
   dockerNode: "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/node-unix-socket-docker-engine.ts",
@@ -55,19 +55,60 @@ const writeFixtureFile = async (root, path, source = "export {};\n") => {
   await writeFile(join(root, path), source);
 };
 
+const livePathIsFile = async path => {
+  try {
+    return (await lstat(join(repositoryRoot, path))).isFile();
+  } catch {
+    return /\.(?:[cm]?[jt]s)$/u.test(path);
+  }
+};
+
+const copyWorkspacePackageManifests = async root => {
+  for (const packageRoot of Object.keys({
+    "packages/apps/embedded-runtime": true,
+    "packages/contexts/agent-execution": true,
+    "packages/contexts/provider-access": true,
+    "packages/contexts/runtime-configuration": true,
+    "packages/contexts/runtime-security": true,
+    "packages/platform/filesystem-custody": true,
+  })) {
+    await writeFixtureFile(
+      root,
+      `${packageRoot}/package.json`,
+      await readFile(join(repositoryRoot, packageRoot, "package.json"), "utf8"),
+    );
+  }
+};
+
 const analyzeFixture = async files => {
   const root = await mkdtemp(join(tmpdir(), "ar-foundation-boundaries-"));
   try {
     for (const governedRoot of policy.governedRoots) {
       await mkdir(join(root, governedRoot), { recursive: true });
     }
+    for (const boundary of policy.boundaries) {
+      for (const path of boundary.roots) {
+        if (await livePathIsFile(path)) {
+          await writeFixtureFile(root, path);
+        } else {
+          await mkdir(join(root, path), { recursive: true });
+        }
+      }
+    }
     await writeFixtureFile(root, "package.json", JSON.stringify({
       dependencies: { "@anthropic-ai/claude-agent-sdk": "1.0.0", "@get-modular/core": "0.1.0", "@get-modular/assembly": "0.1.0" },
-      name: "foundation-boundary-fixture",
+      name: "@vioxen/agent-runtime",
       private: true,
       type: "module",
     }));
-    await writeFixtureFile(root, "pnpm-workspace.yaml", "packages: []\n");
+    await writeFixtureFile(root, "pnpm-workspace.yaml", [
+      "packages:",
+      '  - "packages/apps/*"',
+      '  - "packages/contexts/*"',
+      '  - "packages/platform/*"',
+      "",
+    ].join("\n"));
+    await copyWorkspacePackageManifests(root);
     await writeFixtureFile(root, configPath, configSource);
     for (const boundary of policy.boundaries) {
       for (const entrypoint of boundary.entrypoints) {
@@ -343,7 +384,7 @@ test("existing Host and SDK capabilities retain their exact ownership", async ()
 
   for (const builtin of ["node:dns/promises", "node:net", "node:os", "node:stream", "node:tls"]) {
     assert.deepEqual(await analyzeFixture({
-      [`${host.roots[0]}/owned-import.ts`]: `import '${builtin}';\n`,
+      [host.roots[0]]: `import '${builtin}';\n`,
     }), []);
   }
   assert.deepEqual(await analyzeFixture({
@@ -414,7 +455,7 @@ test("Claude may import only narrow provider-delegation and private-directory po
   assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.forbidden-boundary-dependency"]);
 
   assert.deepEqual(await analyzeFixture({
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/negative-fixture.ts":
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-active-turn.ts":
       "import type {} from '../legacy/legacy-contained-turn-ports.js';\n",
     [paths.legacy]: "export {};\n",
   }), []);
@@ -455,7 +496,6 @@ test("Docker JSON remains neutral and cannot import its engine consumer", async 
   });
   assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.forbidden-boundary-dependency"]);
 });
-
 
 test("V4 listener composition uses one Docker entrypoint; Host still cannot import it", async () => {
   const entry = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-listener-entrypoint.ts";
@@ -554,5 +594,32 @@ test("Darwin native launch consumers use declared custody and Codex entrypoints"
       [consumer]: `import '${prefix}${internal}.js';\n`,
       [`${owner}${internal}.ts`]: "export {};\n",
     })), ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"]);
+  }
+});
+
+test("source v3 rejects includeRootPackage as an unknown public field", async () => {
+  const root = await mkdtemp(join(tmpdir(), "ar-foundation-include-root-"));
+  try {
+    await writeFixtureFile(root, "package.json", JSON.stringify({
+      name: "@vioxen/agent-runtime",
+      private: true,
+      type: "module",
+    }));
+    await writeFixtureFile(root, "pnpm-workspace.yaml", "packages: []\n");
+    await writeFixtureFile(root, configPath, `${configSource}\nincludeRootPackage: true\n`);
+    await writeFixtureFile(root, "foundation.config.yaml", JSON.stringify({
+      schemaVersion: 1,
+      project: { id: "foundation-include-root-fixture" },
+      capabilities: { "architecture.source-dependencies": { configPath } },
+    }));
+    const result = spawnSync(process.execPath, [foundationCli, "check",
+      "architecture.source-dependencies", "--consumer", root, "--json"],
+    { encoding: "utf8", timeout: 60_000, maxBuffer: 8 * 1024 * 1024 });
+    assert.equal(result.error, undefined);
+    const envelope = JSON.parse(result.stdout);
+    assert.notEqual(envelope.outcome, "passed", JSON.stringify(envelope));
+    assert.match(JSON.stringify(envelope), /includeRootPackage|unknown property|invalid-input/iu);
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });

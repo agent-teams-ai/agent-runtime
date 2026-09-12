@@ -25,6 +25,10 @@
     "pg": "catalog:",
     "zod": "catalog:"
   },
+  "devDependencies": {
+    "@types/pg": "catalog:",
+    "oxc-parser": "catalog:"
+  },
   "files": ["dist"],
   "exports": {
     ".": {

@@ -59,13 +59,39 @@ test("managed Skill remains byte-exact with the selected installed Cohort", asyn
   assert.equal(manifest.scripts["docs:protocol:check"], "pnpm docs:check && pnpm docs:governance && pnpm docs:qualification");
 });
 
-test("Source Dependencies keeps its eight v1 roots and uses the supported installed CLI", async () => {
+test("Source Dependencies uses schema v3 with root package and every workspace package", async () => {
   const policy = await yaml("architecture/foundation/source-dependencies.yaml");
-  assert.equal(policy.schemaVersion, 1);
-  assert.deepEqual(policy.governedRoots, ["experiments", "packages/apps/embedded-runtime/src",
-    "packages/contexts/agent-execution/src", "packages/contexts/provider-access/src",
-    "packages/contexts/runtime-configuration/src", "packages/contexts/runtime-security/src",
-    "packages/platform/filesystem-custody/src", "scripts/foundation"]);
+  assert.equal(policy.schemaVersion, 3);
+  assert.equal(policy.rootPackage, true);
+  assert.equal(Object.hasOwn(policy, "includeRootPackage"), false);
+  assert.deepEqual(policy.packageRoots, [
+    "packages/apps/embedded-runtime",
+    "packages/contexts/agent-execution",
+    "packages/contexts/provider-access",
+    "packages/contexts/runtime-configuration",
+    "packages/contexts/runtime-security",
+    "packages/platform/filesystem-custody",
+  ]);
+  assert.deepEqual(policy.governedRoots, [
+    "experiments",
+    "packages/apps/embedded-runtime/src",
+    "packages/apps/embedded-runtime/tests",
+    "packages/contexts/agent-execution/scripts",
+    "packages/contexts/agent-execution/src",
+    "packages/contexts/agent-execution/tests",
+    "packages/contexts/provider-access/src",
+    "packages/contexts/provider-access/tests",
+    "packages/contexts/runtime-configuration/src",
+    "packages/contexts/runtime-configuration/tests",
+    "packages/contexts/runtime-security/src",
+    "packages/contexts/runtime-security/tests",
+    "packages/platform/filesystem-custody/scripts",
+    "packages/platform/filesystem-custody/src",
+    "packages/platform/filesystem-custody/tests",
+    "scripts/architecture",
+    "scripts/docs",
+    "scripts/foundation",
+  ]);
   const source = await read("scripts/architecture/source-dependency-adapter-boundaries.test.mjs");
   assert.doesNotMatch(source, /engineering-foundation\/dist\/capabilities/u);
   assert.match(source, /foundationManifest\.bin\["agent-teams-foundation"\]/u);
@@ -78,10 +104,12 @@ test("qualified stable20 integration and generated state preserve exact evidence
     "architecture/foundation/docs-protocol-managed-state.json": "23d0c21ef21f9f2385fe013f219d38e7a01ca0aaeb9c65ca3728ebba2b5eaedc",
     "architecture/foundation/docs-protocol-qualification.json": "1f7e50ec5b0e6ecc991668b83790b2367062240043c4b885c58377855968969b",
     "architecture/foundation/document-authoring.yaml": "d6f5ba4b178e742e122f6711c9d989d52a77768eb68527b0ecdf3c9a9699c6d2",
-    // Current migration evidence: carved the Host setup-view HMAC digest adapter into the
-    // agent-runtime-host composition role and dropped node:crypto from the broader
-    // production.embedded-runtime application boundary, which no longer needs it directly.
-    "architecture/foundation/source-dependencies.yaml": "3a05a1ce13bb6f251240036d2f13255dd67c6b84d23eff0bb73b1e8592f6cbb1"
+    // Current migration evidence: merged the Host setup-view HMAC digest adapter carve-out
+    // (agent-runtime-host composition role, dropped node:crypto from the broader
+    // production.embedded-runtime application boundary) with the source-dependencies schema
+    // v3 adoption (root package + packageRoots for every workspace package). PLACEHOLDER --
+    // recomputed once source-dependencies.yaml's own conflict is resolved.
+    "architecture/foundation/source-dependencies.yaml": "PLACEHOLDER_RECOMPUTE_AFTER_YAML_MERGE"
 };
   for (const [path, digest] of Object.entries(expected)) {
     assert.equal(createHash("sha256").update(await read(path)).digest("hex"), digest, path);

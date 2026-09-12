@@ -1,8 +1,15 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
 
-import { readCustodiedRepositoryFile } from "../../../../scripts/architecture/ar2-evidence-custody.mjs";
+import { findRepoRoot } from "./helpers/repo-root.ts";
+
+const { readCustodiedRepositoryFile } = await import(pathToFileURL(join(
+  findRepoRoot(),
+  "scripts/architecture/ar2-evidence-custody.mjs",
+)).href);
 
 import {
   CLAUDE_CODE_CONFIGURATION_BUDGETS,

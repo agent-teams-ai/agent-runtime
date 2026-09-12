@@ -181,6 +181,10 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 4.4.3
+    devDependencies:
+      oxc-parser:
+        specifier: 'catalog:'
+        version: 0.147.0
 
   packages/contexts/provider-access:
     devDependencies:
