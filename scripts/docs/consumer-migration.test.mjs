@@ -107,7 +107,7 @@ test("qualified stable20 integration and generated state preserve exact evidence
     "architecture/foundation/docs-protocol-managed-state.json": "23d0c21ef21f9f2385fe013f219d38e7a01ca0aaeb9c65ca3728ebba2b5eaedc",
     "architecture/foundation/docs-protocol-qualification.json": "1f7e50ec5b0e6ecc991668b83790b2367062240043c4b885c58377855968969b",
     "architecture/foundation/document-authoring.yaml": "d6f5ba4b178e742e122f6711c9d989d52a77768eb68527b0ecdf3c9a9699c6d2",
-    "architecture/foundation/source-dependencies.yaml": "731a9171b8e572678f26bc86821f2e6244b19fbb554efd8b1a6645c273ab271d",
+    "architecture/foundation/source-dependencies.yaml": "5178030e8cc14724bd6278728064552532a1ef364b32b6013cf7e41e5dfa7987",
 };
   for (const [path, digest] of Object.entries(expected)) {
     assert.equal(createHash("sha256").update(await read(path)).digest("hex"), digest, path);

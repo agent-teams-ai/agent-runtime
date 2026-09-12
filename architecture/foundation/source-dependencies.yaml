@@ -478,6 +478,7 @@ boundaries:
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-operation-authority.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-operation-evidence.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-operation-repository.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-pool.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-preparation-recovery.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-preparation-store.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-schema-migrator.ts

@@ -1,5 +1,7 @@
-import type { Pool, PoolClient } from "pg";
-
+import type {
+  ContainedTurnPostgresClient,
+  ContainedTurnPostgresPool,
+} from "./contained-turn-postgres-pool.js";
 export interface ContainedTurnPostgresTimeouts {
   readonly connectionTimeoutMs: number;
   readonly idleInTransactionTimeoutMs: number;
@@ -41,12 +43,12 @@ export class PostgresCommitIndeterminateError extends Error {
 }
 
 export class ContainedTurnPostgresTransactions {
-  readonly #pool: Pool;
+  readonly #pool: ContainedTurnPostgresPool;
   readonly #runtimeFence: ContainedTurnPostgresRuntimeFence;
   readonly #timeouts: ContainedTurnPostgresTimeouts;
 
   public constructor(
-    pool: Pool,
+    pool: ContainedTurnPostgresPool,
     runtimeFence: ContainedTurnPostgresRuntimeFence,
     timeouts?: Partial<ContainedTurnPostgresTimeouts>,
   ) {
@@ -55,7 +57,7 @@ export class ContainedTurnPostgresTransactions {
     this.#timeouts = normalizeTimeouts(timeouts);
   }
 
-  async #connect(): Promise<PoolClient> {
+  async #connect(): Promise<ContainedTurnPostgresClient> {
     const pending = this.#pool.connect();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_resolve, reject) => {
@@ -74,7 +76,7 @@ export class ContainedTurnPostgresTransactions {
     }
   }
 
-  async #begin(client: PoolClient, readOnly = false, repeatableRead = false): Promise<void> {
+  async #begin(client: ContainedTurnPostgresClient, readOnly = false, repeatableRead = false): Promise<void> {
     await client.query(readOnly
       ? "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
       : repeatableRead ? "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ" : "BEGIN");
@@ -104,7 +106,7 @@ export class ContainedTurnPostgresTransactions {
   }
 
   public async write<Result>(
-    work: (client: PoolClient) => Promise<Result>,
+    work: (client: ContainedTurnPostgresClient) => Promise<Result>,
     repeatableRead = false,
   ): Promise<Result> {
     const client = await this.#connect();
@@ -128,7 +130,7 @@ export class ContainedTurnPostgresTransactions {
     }
   }
 
-  public async read<Result>(work: (client: PoolClient) => Promise<Result>): Promise<Result> {
+  public async read<Result>(work: (client: ContainedTurnPostgresClient) => Promise<Result>): Promise<Result> {
     const client = await this.#connect();
     let discardClient = false;
     try {

@@ -293,8 +293,9 @@ Security `dist/` and `tests/` package subpaths now use the curated
 `./composition` export when the symbol is public, or Host-local
 `tests/support/external/` copies of unpublished fixtures. Foundation
 `packageExports` claims for those three packages now match the curated `.` and
-`./composition` maps. Packed-consumer Provider Access `pg` anti-corruption
-remains. The module stays pending.
+`./composition` maps. Packed-consumer Agent Execution and Provider Access
+public composition types no longer mention `pg`; callers pass a structurally
+compatible pool. The module stays pending.
 
 The deterministic syntax-aware checker is
 `scripts/architecture/check-feature-modules.mjs`. Run
