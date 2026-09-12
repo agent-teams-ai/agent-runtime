@@ -1,14 +1,14 @@
 name: adoption-receipt-darwin
 
-# Temporary workflow: Darwin arm64 adoption receipt for leftover RC
-# layer-fix identity c444cae9 stacked on runtime-access. The job always
+# Temporary workflow: Darwin arm64 adoption receipt for leftover RS
+# barrels identity 4d81d48a stacked on RC layer-fix. The job always
 # checks out that SHA so this workflow-only commit does not enter the receipt
 # identity. Safe to delete after merge.
 
 on:
   push:
     branches:
-      - cursor/fms-darwin-gha-capture-rc-layer-7d17
+      - cursor/fms-darwin-gha-capture-rs-barrels-7d17
 
 permissions:
   contents: read
@@ -19,16 +19,16 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     steps:
-      - name: Checkout frozen leftover RC layer-fix SHA
+      - name: Checkout frozen leftover RS barrels SHA
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: c444cae95ea3dd50bb0e5a9b29b9bfbb1fe37029
+          ref: 4d81d48a08dfb96a56a4374e8da755a6f4271545
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "c444cae95ea3dd50bb0e5a9b29b9bfbb1fe37029"
+        run: test "$(git rev-parse HEAD)" = "4d81d48a08dfb96a56a4374e8da755a6f4271545"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
