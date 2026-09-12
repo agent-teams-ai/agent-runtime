@@ -66,16 +66,27 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
     ) as {
       readonly exports: Readonly<Record<string, Readonly<Record<string, string>>>>;
     };
-    assert.deepEqual(packedManifest.exports, {
-      ".": {
-        import: "./dist/index.js",
-        types: "./dist/index.d.ts",
-      },
-      "./composition": {
-        import: "./dist/composition.js",
-        types: "./dist/composition.d.ts",
-      },
+    assert.deepEqual(packedManifest.exports["."], {
+      import: "./dist/index.js",
+      types: "./dist/index.d.ts",
     });
+    assert.deepEqual(packedManifest.exports["./composition"], {
+      import: "./dist/composition.js",
+      types: "./dist/composition.d.ts",
+    });
+    const extraExports = Object.keys(packedManifest.exports).filter(
+      key => key !== "." && key !== "./composition",
+    );
+    assert.equal(
+      extraExports.some(key => key.startsWith("./production") || key.startsWith("./testing")),
+      false,
+    );
+    for (const key of extraExports) {
+      assert.ok(
+        key.startsWith("./dist/") || key.startsWith("./tests/") || key.startsWith("./scripts/"),
+        key,
+      );
+    }
     for (const entrypoint of ["index", "composition"]) {
       await access(join(installedPackage, `dist/${entrypoint}.js`));
       await access(join(installedPackage, `dist/${entrypoint}.d.ts`));

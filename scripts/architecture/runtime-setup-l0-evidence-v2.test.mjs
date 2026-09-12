@@ -247,6 +247,9 @@ async function deliveryFixture(t, caller = process.cwd(), env = process.env) {
   const revisions = new Set([historicalSpecRevision, ...historical.changes.map(c => c.revision)]);
   runGit(producer, "fetch", "--quiet", process.cwd(), ...[...revisions].map(revision => `${revision}:refs/heads/fixture-history-${revision}`));
   runGit(root, "clone", "--quiet", "--no-local", producer, consumer);
+  const packagedRuntime = resolve(consumer, "node_modules/@agent-teams");
+  fs.mkdirSync(packagedRuntime, {recursive: true});
+  fs.symlinkSync(resolve(consumer, "packages/apps/embedded-runtime"), resolve(packagedRuntime, "embedded-runtime"));
   rmSync(captures, {recursive: true}); rmSync(producer, {recursive: true});
   assert.equal(fs.existsSync(captures), false);
   assert.equal(runGit(consumer, "status", "--porcelain"), "");

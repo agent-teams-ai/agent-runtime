@@ -91,6 +91,9 @@ test("Source Dependencies uses schema v3 with root package and every workspace p
     "scripts/architecture",
     "scripts/docs",
     "scripts/foundation",
+    "packages/apps/embedded-runtime/scripts",
+    "packages/contexts/provider-access/scripts",
+    "packages/contexts/runtime-security/scripts",
   ]);
   const source = await read("scripts/architecture/source-dependency-adapter-boundaries.test.mjs");
   assert.doesNotMatch(source, /engineering-foundation\/dist\/capabilities/u);
@@ -104,12 +107,7 @@ test("qualified stable20 integration and generated state preserve exact evidence
     "architecture/foundation/docs-protocol-managed-state.json": "23d0c21ef21f9f2385fe013f219d38e7a01ca0aaeb9c65ca3728ebba2b5eaedc",
     "architecture/foundation/docs-protocol-qualification.json": "1f7e50ec5b0e6ecc991668b83790b2367062240043c4b885c58377855968969b",
     "architecture/foundation/document-authoring.yaml": "d6f5ba4b178e742e122f6711c9d989d52a77768eb68527b0ecdf3c9a9699c6d2",
-    // Current migration evidence: merged the Host setup-view HMAC digest adapter carve-out
-    // (agent-runtime-host composition role, dropped node:crypto from the broader
-    // production.embedded-runtime application boundary) with the source-dependencies schema
-    // v3 adoption (root package + packageRoots for every workspace package). PLACEHOLDER --
-    // recomputed once source-dependencies.yaml's own conflict is resolved.
-    "architecture/foundation/source-dependencies.yaml": "PLACEHOLDER_RECOMPUTE_AFTER_YAML_MERGE"
+    "architecture/foundation/source-dependencies.yaml": "0c1c0355b1d358d5423df78dc2d728d07cfaec51f84f86e1fdfb8aa1de232a2a",
 };
   for (const [path, digest] of Object.entries(expected)) {
     assert.equal(createHash("sha256").update(await read(path)).digest("hex"), digest, path);

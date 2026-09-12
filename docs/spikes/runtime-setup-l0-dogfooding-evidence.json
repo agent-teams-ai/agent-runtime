@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "evidenceKind": "runtime-setup-l0-direct-composition",
-  "sourceRevision": "PLACEHOLDER_RECOMPUTE_AT_FINAL_MERGE_SHA",
+  "sourceRevision": "51aa81a9185d80db11e765e6ceb6190359ca1a9c",
   "authority": "ADR-0008",
   "productOutcome": "detached-safe-runtime-setup-preview",
   "taxonomyAuthority": "experiment-local-non-qualification-rubric",
@@ -62,8 +62,8 @@
       "sha256": "98ba6f04addd89af9bf28b648431d515bc10e8b34f25166d56c12978c041d164"
     },
     "tests": {
-      "fileCount": 0,
-      "sha256": "PLACEHOLDER_RECOMPUTE_AT_FINAL_MERGE_SHA"
+      "fileCount": 404,
+      "sha256": "43239889826baee95acc185421eef184e2bf5133efaa28156b2e021fe48e115c"
     }
   },
   "historicalChanges": [
@@ -1253,64 +1253,6 @@
         "before": 231,
         "after": 231,
         "retained": 231,
-        "reusePercent": 100
-      }
-    },
-    {
-      "id": "source-dependencies-schema-v3",
-      "revision": "b42a1130ea1b2a02a5cd240a33d3cb4e7c4cf32f",
-      "files": 15,
-      "additions": 2027,
-      "deletions": 542,
-      "binaryFiles": 0,
-      "composition": {
-        "files": 0,
-        "additions": 0,
-        "deletions": 0
-      },
-      "production": {
-        "files": 0,
-        "additions": 0,
-        "deletions": 0
-      },
-      "tests": {
-        "files": 9,
-        "additions": 107,
-        "deletions": 24
-      },
-      "behaviorFixtures": {
-        "before": 123,
-        "after": 123,
-        "retained": 123,
-        "reusePercent": 100
-      }
-    },
-    {
-      "id": "source-dependencies-v3-repo-root-test-loads",
-      "revision": "01d6cc76cab4817bedbe44635d8b2b31473349c6",
-      "files": 1,
-      "additions": 5,
-      "deletions": 3,
-      "binaryFiles": 0,
-      "composition": {
-        "files": 0,
-        "additions": 0,
-        "deletions": 0
-      },
-      "production": {
-        "files": 0,
-        "additions": 0,
-        "deletions": 0
-      },
-      "tests": {
-        "files": 1,
-        "additions": 5,
-        "deletions": 3
-      },
-      "behaviorFixtures": {
-        "before": 123,
-        "after": 123,
-        "retained": 123,
         "reusePercent": 100
       }
     }
