@@ -1,13 +1,13 @@
 name: adoption-receipt-darwin
 
-# Temporary workflow: Darwin arm64 adoption receipt for leftover Host FMS
-# identity 415cfd70. The job always checks out that SHA so this workflow-only
+# Temporary workflow: Darwin arm64 adoption receipt for Host remainder
+# identity a6c7d6ac after absorbing #122. The job always checks out that SHA so this workflow-only
 # commit does not enter the receipt identity. Safe to delete after merge.
 
 on:
   push:
     branches:
-      - cursor/fms-darwin-gha-capture-leftover-7d17
+      - cursor/fms-darwin-gha-capture-remainder-7d17
 
 permissions:
   contents: read
@@ -18,16 +18,16 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     steps:
-      - name: Checkout frozen leftover Host SHA
+      - name: Checkout frozen remainder SHA
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: 415cfd709e4fd4aa9d6edaebcc1575c0d3d25d3f
+          ref: a6c7d6ac39b562b18383a23d354bcd5df91364ce
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "415cfd709e4fd4aa9d6edaebcc1575c0d3d25d3f"
+        run: test "$(git rev-parse HEAD)" = "a6c7d6ac39b562b18383a23d354bcd5df91364ce"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
