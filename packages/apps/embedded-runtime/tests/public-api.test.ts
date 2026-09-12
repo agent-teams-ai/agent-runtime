@@ -33,7 +33,13 @@ const readDeclarationClosure = async (entrypoint: string): Promise<string> => {
 test("root API exposes only product capabilities and keeps Host in composition", async () => {
   const rootDeclaration = await readFile(join(packageRoot, "dist", "index.d.ts"), "utf8");
   const capabilityDeclaration = await readFile(
-    join(packageRoot, "dist", "contracts", "runtime-access.d.ts"),
+    join(
+      packageRoot,
+      "dist",
+      "features",
+      "contained-turn-runtime-access",
+      "runtime-access.d.ts",
+    ),
     "utf8",
   );
   const publicSurface = `${rootDeclaration}\n${capabilityDeclaration}`;
@@ -62,11 +68,23 @@ test("root API exposes only product capabilities and keeps Host in composition",
 
 test("contained-turn declarations stay owned across root and composition closure", async () => {
   const runtimeAccessSource = await readFile(
-    join(packageRoot, "src", "contracts", "runtime-access.ts"),
+    join(
+      packageRoot,
+      "src",
+      "features",
+      "contained-turn-runtime-access",
+      "runtime-access.ts",
+    ),
     "utf8",
   );
   const runtimeAccessDeclaration = await readFile(
-    join(packageRoot, "dist", "contracts", "runtime-access.d.ts"),
+    join(
+      packageRoot,
+      "dist",
+      "features",
+      "contained-turn-runtime-access",
+      "runtime-access.d.ts",
+    ),
     "utf8",
   );
 
@@ -157,7 +175,9 @@ test("application and contracts stay independent from adapters and runtime frame
         await walk(path);
       } else if (
         entry.name.endsWith(".ts") &&
-        (path.includes("/application/") || path.includes("/contracts/"))
+        (path.includes("/application/") ||
+          path.includes("/contracts/") ||
+          path.endsWith("/contained-turn-runtime-access/runtime-access.ts"))
       ) {
         files.push(path);
       }
