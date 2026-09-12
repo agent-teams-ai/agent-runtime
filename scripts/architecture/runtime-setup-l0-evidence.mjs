@@ -22,8 +22,8 @@ import {
 import { createEvidenceInputs } from "./runtime-setup-l0-evidence-inputs.mjs";
 
 import {
-  adoptionPaths, adoptionConstruction, adoptionEvidenceFiles, assertAdoptionAuthority, retainedHistoricalEvidenceRoots,
-  validateAdoptionReport,
+  adoptionPaths, adoptionConstruction, assertAdoptionAuthority,
+  createAdoptionEvidenceInputs, validateAdoptionReport,
 } from "./runtime-setup-l0-evidence-adoption.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -486,9 +486,8 @@ if (adoption) {
   for (const name of ["@get-modular/core", "@get-modular/assembly"]) {
     assert.ok(graphImports.has(name) || defaultImports.has(name), `current construction lacks public root ${name}`);
   }
-  const currentInputs = createEvidenceInputs({ repositoryRoot, git, readRevisionFile,
-    files: { ...evidenceFiles, sources: [...evidenceFiles.sources, ...adoptionEvidenceFiles,
-      profile.standard.evidencePath, ...profile.packages.map(pkg => pkg.archivePath)] },
+  const { current: currentInputs, retained: retainedAdoptionInputs } = createAdoptionEvidenceInputs({
+    repositoryRoot, git, readRevisionFile, evidenceRoots, evidenceFiles, profile,
   });
   currentInputs.assertEvidenceRootsClean();
   // Schema-v1 remains immutable and is validated against its own source closure.
@@ -496,15 +495,6 @@ if (adoption) {
   assert.equal(createHash("sha256").update(retainedBytes).digest("hex"), retainedV1.sha256,
     "retained schema-v1 adoption bytes drifted");
   const retained = JSON.parse(retainedBytes);
-  // Retained schema-v1 authenticates against the fixture roots that existed at
-  // that source. Modern evidenceRoots may drop a directory that is gone today;
-  // those current roots must not be applied retroactively to the v1 closure.
-  const retainedAdoptionInputs = createEvidenceInputs({
-    repositoryRoot, git, readRevisionFile,
-    roots: { ...evidenceRoots, fixtures: retainedHistoricalEvidenceRoots.fixtures },
-    files: { ...evidenceFiles, sources: [...evidenceFiles.sources, ...adoptionEvidenceFiles,
-      profile.standard.evidencePath, ...profile.packages.map(pkg => pkg.archivePath)] },
-  });
   validateAdoptionReport(retained, {sourceRevision: retained.sourceRevision,
     historicalRevision: stored.sourceRevision,
     artifactDigests: await retainedAdoptionInputs.artifactDigestsAtRevision(retained.sourceRevision)});

@@ -6,7 +6,8 @@ import { createEvidenceInputs } from "./runtime-setup-l0-evidence-inputs.mjs";
 import test from "node:test";
 import {
   adoptionAuthority, adoptionConstruction, adoptionPaths, assertAdoptionAuthority,
-  buildAdoptionReport, validateAdoptionReport, retainedHistoricalEvidenceRoots,
+  buildAdoptionReport, createAdoptionEvidenceInputs, validateAdoptionReport,
+  retainedHistoricalEvidenceRoots,
 } from "./runtime-setup-l0-evidence-adoption.mjs";
 
 const capture = {
@@ -43,18 +44,12 @@ test("historical closure authenticates the retained Git bytes independently of m
 test("retained schema-v1 adoption fixtures stay on historical roots when modern fixtures shrink", async () => {
   const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
   const { evidenceRoots, evidenceFiles } = await import("./runtime-setup-l0-evidence-spec.mjs");
-  const { adoptionEvidenceFiles } = await import("./runtime-setup-l0-evidence-adoption.mjs");
   const git = (...args) => execFileSync("git", args, { cwd: repositoryRoot, encoding: "utf8", maxBuffer: 20 * 1024 * 1024 });
   const readRevisionFile = (revision, path) => execFileSync("git", ["show", `${revision}:${path}`], { cwd: repositoryRoot });
   const retained = JSON.parse(await readFile(new URL(`../../${adoptionPaths.report}`, import.meta.url)));
   const profile = JSON.parse(await readFile(new URL("../../architecture/get-modular/consumer-profile.json", import.meta.url)));
-  const files = { ...evidenceFiles, sources: [...evidenceFiles.sources, ...adoptionEvidenceFiles,
-    profile.standard.evidencePath, ...profile.packages.map(pkg => pkg.archivePath)] };
-  const modern = createEvidenceInputs({ repositoryRoot, git, readRevisionFile, roots: evidenceRoots, files });
-  const retainedFixtures = createEvidenceInputs({
-    repositoryRoot, git, readRevisionFile,
-    roots: { ...evidenceRoots, fixtures: retainedHistoricalEvidenceRoots.fixtures },
-    files,
+  const { current: modern, retained: retainedFixtures } = createAdoptionEvidenceInputs({
+    repositoryRoot, git, readRevisionFile, evidenceRoots, evidenceFiles, profile,
   });
   const modernDigests = await modern.artifactDigestsAtRevision(retained.sourceRevision);
   const retainedDigests = await retainedFixtures.artifactDigestsAtRevision(retained.sourceRevision);
