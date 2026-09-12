@@ -198,10 +198,11 @@ already owns its application models and translates through one inbound
 adapter. `claude-code-configuration-inspection` now owns its vocabulary the
 same way: the constants it needs live in its own `models/claude-code-vocabulary.ts`
 application model, and its remaining import from `../contracts` is type-only.
-Both features still route their package assembly through direct deep imports
-into `adapters` and `application/ports`, not through a curated feature
-entrypoint, and their tests still live at the package root rather than under
-feature ownership; both remain open.
+Both features now route their package assembly through curated feature
+entrypoints (`index.ts` for `.`, `internal.ts` for `./composition`) rather
+than deep imports into `adapters` and `application/ports`. Their tests still
+live at the package root rather than under feature ownership; that remains
+open.
 
 Runtime Security has four features. Setup-source authorization now owns its
 Node path and source-identity digest behind explicit outbound ports
