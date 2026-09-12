@@ -3,4 +3,4 @@ export {
   unwrapContainedTurnAuthorityOutcome,
   type AuthorityBoundContainedTurnCapability,
   type AuthorityBoundOperationRef,
-} from "../features/contained-turn-authority-capability/internal.js";
+} from "./contained-turn-authority-capability.js";

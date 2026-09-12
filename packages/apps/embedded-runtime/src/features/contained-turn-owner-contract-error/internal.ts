@@ -2,4 +2,4 @@ export {
   ContainedTurnOwnerContractError,
   containedTurnOwnerInvocationFailed,
   type ContainedTurnOwnerContractErrorCode,
-} from "../features/contained-turn-owner-contract-error/internal.js";
+} from "./contained-turn-owner-contract-error.js";

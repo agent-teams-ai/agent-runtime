@@ -28,6 +28,7 @@ on:
       - cursor/fms-host-route-gates-7d17
       - cursor/fms-linux-deployment-7d17
       - cursor/fms-darwin-deployment-7d17
+      - cursor/fms-host-support-7d17
 
 permissions:
   contents: read

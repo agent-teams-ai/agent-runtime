@@ -321,7 +321,14 @@ Host composition re-exports those feature entries from the matching
 The implementations stay at the feature root rather than under `application/`:
 they still import Host composition helpers or Agent Execution / Provider Access
 composition types, which L0 treats as an inward leak from `application/`.
-Process lifecycle,
+Authority binding, construction-failure cleanup, composition observation
+types, operation refs, and owner-contract errors now live under matching
+`src/features/` directories with curated `index.ts` / `internal.ts` entrypoints.
+Host composition re-exports those feature entries from the matching
+`src/composition/` files, so existing composition and test imports keep working.
+The implementations stay at the feature root rather than under `application/`:
+they still import Host composition helpers, which L0 treats as an inward leak
+from `application/`. Process lifecycle,
 readiness and rollback stay in composition. Host tests that
 previously imported unpublished Agent Execution, Provider Access, and Runtime
 Security `dist/` and `tests/` package subpaths now use the curated

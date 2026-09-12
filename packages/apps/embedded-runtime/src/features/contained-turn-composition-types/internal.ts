@@ -2,4 +2,4 @@ export {
   type OwnerTurnObservation,
   type OwnerObservationOutcome,
   type OwnerSubmitOutcome,
-} from "../features/contained-turn-composition-types/internal.js";
+} from "./contained-turn-composition-types.js";
