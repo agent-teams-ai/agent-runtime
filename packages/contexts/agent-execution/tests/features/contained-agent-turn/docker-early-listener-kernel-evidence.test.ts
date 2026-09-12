@@ -17,7 +17,7 @@ import {physicalEvidenceIsClosed, executionEvidenceIsClosed, noStartEvidenceIsCl
 // boundary is omitted here. No private-root or image qualification is claimed.
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "synthetic:early-root" || specifier === "./docker-host-reservation-owners.js" &&
+    if (specifier === "./support/docker-codex-kernel-fixture.ts" || specifier === "./docker-host-reservation-owners.js" &&
       /docker-codex-host-kernel-owner\.(?:js|ts)$/u.test(context.parentURL ?? "")) {
       return {url: "synthetic:early-root", shortCircuit: true};
     }
@@ -36,8 +36,7 @@ const hooks = registerHooks({
 });
 const {createDockerCodexHostKernelOwner} = await import("../../../dist/features/contained-agent-turn/composition/docker-codex-host-kernel-owner.js");
 // @ts-expect-error Test-owned synthetic module supplied by the hook above.
-const syntheticEarlyRoot = "synthetic:early-root";
-const capture = await import(syntheticEarlyRoot);
+const capture = await import("./support/docker-codex-kernel-fixture.ts");
 hooks.deregister();
 
 const unused = () => {throw new Error("must not reach provider IO/finalization");};

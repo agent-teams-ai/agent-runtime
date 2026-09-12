@@ -9,8 +9,8 @@ import { sha256 } from "../../../live/provider-candidate-build-tree.mjs";
 import { installedClosureDigest } from "../../../live/provider-candidate-clean-build.mjs";
 
 const exec = promisify(execFile);
-const AUTHORITY_FIXTURE_SPECIFIER = "agent-runtime-provider-candidate-authority-fixture";
-const BUILD_FIXTURE_SPECIFIER = "agent-runtime-provider-candidate-build-fixture";
+const AUTHORITY_FIXTURE_SPECIFIER = "../../../live/provider-candidate-evidence-envelope.mjs";
+const BUILD_FIXTURE_SPECIFIER = "../../../live/provider-candidate-clean-build.mjs";
 const dynamicFixtureTargets = new Map();
 registerHooks({resolve(specifier, context, nextResolve) {
   const target = dynamicFixtureTargets.get(specifier);
@@ -19,13 +19,13 @@ registerHooks({resolve(specifier, context, nextResolve) {
 const loadAuthorityFixture = async url => {
   if (dynamicFixtureTargets.has(AUTHORITY_FIXTURE_SPECIFIER)) {throw new Error("provider candidate authority fixture load overlaps");}
   dynamicFixtureTargets.set(AUTHORITY_FIXTURE_SPECIFIER, url);
-  try {return await import(AUTHORITY_FIXTURE_SPECIFIER);}
+  try {return await import("../../../live/provider-candidate-evidence-envelope.mjs");}
   finally {dynamicFixtureTargets.delete(AUTHORITY_FIXTURE_SPECIFIER);}
 };
 const loadBuildFixture = async url => {
   if (dynamicFixtureTargets.has(BUILD_FIXTURE_SPECIFIER)) {throw new Error("provider candidate build fixture load overlaps");}
   dynamicFixtureTargets.set(BUILD_FIXTURE_SPECIFIER, url);
-  try {return await import(BUILD_FIXTURE_SPECIFIER);}
+  try {return await import("../../../live/provider-candidate-clean-build.mjs");}
   finally {dynamicFixtureTargets.delete(BUILD_FIXTURE_SPECIFIER);}
 };
 const environment = {GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", LC_ALL: "C", PATH: "/usr/bin:/bin"};

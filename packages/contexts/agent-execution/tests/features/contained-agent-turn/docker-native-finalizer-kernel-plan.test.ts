@@ -16,6 +16,9 @@ import {isIssuedCodexAppServerLaunchPlan} from "../../../dist/features/contained
 let constructorUrl: string;
 const hooks = registerHooks({
   resolve(specifier, context, next) {
+    if (specifier === "../../../dist/features/contained-agent-turn/composition/docker-codex-current-kernel-owner.js") {
+      return {url: "synthetic:host-constructor-observer", shortCircuit: true};
+    }
     if (specifier === "./docker-linux-post-claim-preparation.js" && /docker-codex-host-kernel-owner\.(?:js|ts)$/u.test(context.parentURL ?? "")) {
       return {url: "synthetic:docker-native-plan-join", shortCircuit: true};
     }
@@ -69,8 +72,7 @@ const {hostProviderProbe} = hostModule as typeof hostModule & {
     execute(input: unknown): Promise<unknown>;
   };
 };
-const syntheticHostObserver = "synthetic:host-constructor-observer";
-const constructorObserver = await import(syntheticHostObserver);
+const constructorObserver = await import("../../../dist/features/contained-agent-turn/composition/docker-codex-current-kernel-owner.js");
 hooks.deregister();
 
 test("component evidence: kernel retains the original finalizer receiver, callback and finalizable plan", {skip: process.platform !== "linux"}, async t => {
