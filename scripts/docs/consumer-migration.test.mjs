@@ -91,6 +91,7 @@ test("Source Dependencies uses schema v3 with root package and every workspace p
     "scripts/architecture",
     "scripts/docs",
     "scripts/foundation",
+    "scripts/native-helper",
     "packages/apps/embedded-runtime/scripts",
     "packages/contexts/provider-access/scripts",
     "packages/contexts/runtime-security/scripts",
@@ -107,8 +108,8 @@ test("qualified stable20 integration and generated state preserve exact evidence
     "architecture/foundation/docs-protocol-managed-state.json": "23d0c21ef21f9f2385fe013f219d38e7a01ca0aaeb9c65ca3728ebba2b5eaedc",
     "architecture/foundation/docs-protocol-qualification.json": "1f7e50ec5b0e6ecc991668b83790b2367062240043c4b885c58377855968969b",
     "architecture/foundation/document-authoring.yaml": "d6f5ba4b178e742e122f6711c9d989d52a77768eb68527b0ecdf3c9a9699c6d2",
-    "architecture/foundation/source-dependencies.yaml": "88877c2acd2657f397d50584bfefc843c76b2abb56ab823c69203904640e6896",
-};
+    "architecture/foundation/source-dependencies.yaml": "f008deedfafcc527241cfbccc95f3b130da0ccef20951741bbb6a691747078c0",
+  };
   for (const [path, digest] of Object.entries(expected)) {
     assert.equal(createHash("sha256").update(await read(path)).digest("hex"), digest, path);
   }
