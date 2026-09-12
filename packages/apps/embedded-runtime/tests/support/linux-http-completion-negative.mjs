@@ -89,9 +89,7 @@ mock.module("@agent-teams/agent-execution/composition", {exports: {
   },
   nativeHttpRequestProfile() {throw Error("unexpected native HTTP request profile");},
   createNativeHttpEgressRoute() {throw Error("unexpected native HTTP egress route");},
-  NodeTlsHttpEgressTransport: class {
-    constructor() {throw Error("unexpected Node TLS HTTP egress transport");}
-  },
+  NodeTlsHttpEgressTransport() {throw Error("unexpected Node TLS HTTP egress transport");},
 }});
 
 mock.module("@agent-teams/runtime-security/composition", {exports: {
