@@ -1820,7 +1820,11 @@
         "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
         "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
         "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts",
-        "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts"
+        "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/index.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/internal.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/linux-codex-node-recipe-consumption.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/linux-codex-node-recipe.ts"
       ],
       "entrypoints": [
         "packages/apps/embedded-runtime/src/composition/contained-turn-current-authority.ts",
@@ -2030,22 +2034,12 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts",
-          "to": "@agent-teams/agent-execution/composition",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts",
-          "to": "@agent-teams/agent-execution/composition",
+          "to": "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/internal.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts",
+          "to": "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/internal.ts",
           "mode": "runtime"
         },
         {
@@ -2106,6 +2100,21 @@
         {
           "from": "packages/apps/embedded-runtime/src/features/contained-turn-http-runtime-security/contained-turn-http-runtime-security.ts",
           "to": "@agent-teams/runtime-security/composition",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/linux-codex-node-recipe-consumption.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/linux-codex-node-recipe.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/linux-codex-node-recipe.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
           "mode": "type-only"
         }
       ]
@@ -4574,6 +4583,7 @@
       "packages/apps/embedded-runtime/src/features/contained-turn-http-runtime-security",
       "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access",
       "packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation",
+      "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe",
       "packages/contexts/agent-execution/src/features/contained-agent-turn",
       "packages/contexts/agent-execution/src/features/runtime-installation-discovery",
       "packages/contexts/provider-access/src/features/contained-turn-access",

@@ -24,6 +24,7 @@ on:
       - cursor/fms-host-validation-7d17
       - cursor/fms-host-egress-7d17
       - cursor/fms-ae-pg-port-7d17
+      - cursor/fms-linux-recipe-7d17
 
 permissions:
   contents: read

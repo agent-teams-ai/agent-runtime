@@ -1090,6 +1090,10 @@ boundaries:
   - packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts
   - packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts
   - packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts
+  - packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/index.ts
+  - packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/internal.ts
+  - packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/linux-codex-node-recipe-consumption.ts
+  - packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/linux-codex-node-recipe.ts
   entrypoints:
   - packages/apps/embedded-runtime/src/composition/contained-turn-current-authority.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts
