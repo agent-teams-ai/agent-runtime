@@ -15,6 +15,7 @@ on:
       - refactor/fms-final-integration
       - refactor/fms-rs-egress-primitives
       - refactor/fms-runtime-configuration-entrypoints
+      - refactor/fms-restore-historical-l0-bytes
       - fix/contained-turn-final-qualification
 
 permissions:
