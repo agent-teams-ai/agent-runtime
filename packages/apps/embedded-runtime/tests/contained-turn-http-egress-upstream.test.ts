@@ -3,9 +3,9 @@ import test from "node:test";
 import { createContainedTurnHttpEgressRoute, createContainedTurnHttpUpstreamTransport }
   from "../dist/composition/contained-turn-http-egress-upstream.js";
 import { SYNTHETIC_LOOPBACK_CA } from
-  "../../../contexts/agent-execution/tests/fixtures/http-egress-tls/synthetic-loopback-certificates.ts";
+  "@agent-teams/agent-execution/tests/fixtures/http-egress-tls/synthetic-loopback-certificates.ts";
 import { harness, selection } from
-  "../../../contexts/provider-access/tests/features/contained-turn-access/route-selection-fixture.ts";
+  "@agent-teams/provider-access/tests/features/contained-turn-access/route-selection-fixture.ts";
 
 type Recipe = Parameters<typeof selection>[0];
 const endorsed = async (recipe: Recipe) => {

@@ -6,9 +6,9 @@ import {createCredentialMaterializationRequestDigest} from "@agent-teams/provide
 import {createContainedTurnHttpCredentialMaterialization, createContainedTurnHttpProviderAccessAuthorization} from
   "../dist/composition/contained-turn-http-provider-access.js";
 import {erased, generation, renderingFixture, selectorFor} from
-  "../../../contexts/provider-access/tests/features/contained-turn-access/credential-rendering-test-fixture.ts";
+  "@agent-teams/provider-access/tests/features/contained-turn-access/credential-rendering-test-fixture.ts";
 import type {CredentialGenerationOutcome, CredentialGenerationRequest} from
-  "../../../contexts/provider-access/dist/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.js";
+  "@agent-teams/provider-access/dist/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.js";
 import {hostWipe, pairedFixture, type HostReceipt} from "./contained-turn-http-credential-materialization-fixture.ts";
 
 const indexOf = (id: string) => Number(id.split(":").at(-1));

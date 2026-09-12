@@ -1,6 +1,6 @@
-import type {ContainedTurnKernelWorkspaceOwner} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-contracts.js";
-import {withWorkspaceAuthority} from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/docker-workspace-authority-fixture.ts";
-import { imageLock } from "../../../contexts/agent-execution/tests/fixtures/docker-image-init-fixture.ts";
+import type {ContainedTurnKernelWorkspaceOwner} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-contracts.js";
+import {withWorkspaceAuthority} from "@agent-teams/agent-execution/tests/features/contained-agent-turn/support/docker-workspace-authority-fixture.ts";
+import { imageLock } from "@agent-teams/agent-execution/tests/fixtures/docker-image-init-fixture.ts";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -14,16 +14,16 @@ import {
 } from "../dist/composition.js";
 import { composeCandidateHostCustodiedContainedTurnForImplementationEvidence } from
   "../dist/composition/contained-turn-feature-composition.js";
-import { DeterministicCurrentOwnerHost } from "../../../contexts/agent-execution/tests/current-owner-success-fixture.ts";
+import { DeterministicCurrentOwnerHost } from "@agent-teams/agent-execution/tests/current-owner-success-fixture.ts";
 import {setupCapabilities, createCompositionInput, submit} from "./contained-turn-product.fixture.ts";
 
 import {createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate,
   type EgressCurrentAuthorityV2, type RequestFinalEgressAuthorizationV2,
   type SignedFirstApplicationByteGrantV2} from "@agent-teams/runtime-security/composition";
-import {authorityFor, digest} from "../../../contexts/runtime-security/tests/provider-process-egress-authorization.fixtures.ts";
-import {createStrictHttpEgressBroker} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-egress-broker.js";
-import type {HostHttpGrant, HostHttpProvisionalDecision, HttpEgressBrokerPorts} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-ports.js";
-import {createEgressFixture, SECRET_MARKER} from "../../../contexts/agent-execution/tests/features/contained-agent-turn/http-egress-test-fixture.ts";
+import {authorityFor, digest} from "@agent-teams/runtime-security/tests/provider-process-egress-authorization.fixtures.ts";
+import {createStrictHttpEgressBroker} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-egress-broker.js";
+import type {HostHttpGrant, HostHttpProvisionalDecision, HttpEgressBrokerPorts} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-ports.js";
+import {createEgressFixture, SECRET_MARKER} from "@agent-teams/agent-execution/tests/features/contained-agent-turn/http-egress-test-fixture.ts";
 import {
   createCredentialMaterializationRequestDigest,
   createInMemoryContainedTurnDispatchConsumptionV1,

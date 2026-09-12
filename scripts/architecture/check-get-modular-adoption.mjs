@@ -4,7 +4,7 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import { resolve, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv';
-import { readSourceCensus, requireSourceDiagnostics, verifySourceCensus } from './get-modular-source-census.mjs';
+import { foundationModule, readSourceCensus, requireSourceDiagnostics, verifySourceCensus } from './get-modular-source-census.mjs';
 
 const schema = JSON.parse(await readFile(new URL('../../architecture/get-modular/consumer-profile.schema.json', import.meta.url)));
 const validate = new Ajv({ allErrors: true, strict: true }).compile(schema);
@@ -55,7 +55,11 @@ export function verifyAdoption(profile, evidence) {
   const fms = JSON.parse(get(profile.fms.profile));
   assert.equal(fms.status, 'active', 'FMS activation changed');
   equalSet(fms.features.map(f => f.id), profile.fms.features, 'FMS scope changed');
-  equalSet(policy.governedRoots.filter(r => r.startsWith('packages/')), profile.productionRoots, 'production roots drift');
+  equalSet(
+    policy.governedRoots.filter(r => r.startsWith('packages/') && r.endsWith('/src')),
+    profile.productionRoots,
+    'production roots drift',
+  );
   const boundaries = policy.boundaries.filter(b => b.roots.some(r => profile.productionRoots.some(p => within(r, p))));
   equalSet(boundaries.map(b => b.id), profile.boundaries.map(b => b.id), 'unknown or stale boundary');
   for (const boundary of profile.boundaries) {
@@ -137,10 +141,10 @@ export async function checkAdoption(root) {
   const profile = await json('architecture/get-modular/consumer-profile.json');
   const status = validateProfile(profile);
   if (status.status === 'pending') { return status; }
-  const { loadCapabilityConfig } = await import('../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/adapters/inbound/configuration/load-capability-config.js');
-  const { readAcceptedArchitectureDecisionEvidence } = await import('../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/governance-architecture-decisions/module.js');
-  const { loadStrictYamlFile } = await import('../../node_modules/@agent-teams/engineering-foundation/dist/features/configuration-input/node.js');
-  const { assertSchema } = await import('../../node_modules/@agent-teams/engineering-foundation/dist/schema-catalog.js');
+  const { loadCapabilityConfig } = await import(foundationModule('dist/capabilities/source-dependencies/adapters/inbound/configuration/load-capability-config.js'));
+  const { readAcceptedArchitectureDecisionEvidence } = await import(foundationModule('dist/capabilities/governance-architecture-decisions/module.js'));
+  const { loadStrictYamlFile } = await import(foundationModule('dist/features/configuration-input/node.js'));
+  const { assertSchema } = await import(foundationModule('dist/schema-catalog.js'));
   const policy = await loadCapabilityConfig({ readYaml: loadStrictYamlFile, assertSchema }, consumerRoot, 'architecture/foundation/source-dependencies.yaml');
   const accepted = await readAcceptedArchitectureDecisionEvidence({ consumerRoot,
     configPath: 'architecture/foundation/governance-architecture-decisions.yaml',

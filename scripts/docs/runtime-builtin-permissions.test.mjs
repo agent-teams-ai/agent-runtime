@@ -53,6 +53,9 @@ async function analyze(files, config = policy) {
           await write(path);
         } else {
           await mkdir(join(consumer, path), { recursive: true });
+          if ((boundary.packageExports ?? []).length > 0) {
+            await write(`${path}/__boundary-package-owner__.js`);
+          }
         }
       }
       for (const path of boundary.entrypoints) {

@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {rm} from "node:fs/promises";
-import {disposable, policy as testPolicy, createInput, engineCall} from "../../../../contexts/agent-execution/tests/features/contained-agent-turn/support/docker-host-custody-lifecycle-fixture.ts";
+import {disposable, policy as testPolicy, createInput, engineCall} from "@agent-teams/agent-execution/tests/features/contained-agent-turn/support/docker-host-custody-lifecycle-fixture.ts";
 import {joinedDocker} from "./linux-joined-docker.mjs";
-import {postClaimFixture} from "../../../../contexts/agent-execution/tests/features/contained-agent-turn/support/docker-linux-post-claim-fixture.ts";
-import {BOOT} from "../../../../contexts/agent-execution/tests/features/contained-agent-turn/support/linux-docker-residue-fixture.ts";
-import {createDockerLinuxPostClaimPreparation} from "../../../../contexts/agent-execution/dist/features/contained-agent-turn/composition/docker-linux-post-claim-preparation.js";
+import {postClaimFixture} from "@agent-teams/agent-execution/tests/features/contained-agent-turn/support/docker-linux-post-claim-fixture.ts";
+import {BOOT} from "@agent-teams/agent-execution/tests/features/contained-agent-turn/support/linux-docker-residue-fixture.ts";
+import {createDockerLinuxPostClaimPreparation} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/composition/docker-linux-post-claim-preparation.js";
 
 // Synthetic Engine/kernel metadata only. This exercises the test IO through
 // concrete production owners; it makes no live Docker or route qualification.

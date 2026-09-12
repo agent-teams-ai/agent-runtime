@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
-import { darwinRouteFixture } from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/darwin-route-capability-fixture.ts";
+import { darwinRouteFixture } from "@agent-teams/agent-execution/tests/features/contained-agent-turn/support/darwin-route-capability-fixture.ts";
 
 import { bindDarwinCodexRouteEnforcement, createContainedTurnRouteEnforcement } from "@agent-teams/agent-execution/composition";
 import {

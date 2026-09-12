@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 
 import { findRepoRoot } from "./helpers/repo-root.ts";
-import { requireContainedTurnLiveCanaryAuthorities } from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/contained-turn-live-canary-lifecycle.mjs";
+import { requireContainedTurnLiveCanaryAuthorities } from "@agent-teams/agent-execution/tests/features/contained-agent-turn/support/contained-turn-live-canary-lifecycle.mjs";
 import {
   createHostCustodiedContainedTurn, ProviderRouteEnforcementUnsupportedError,
 } from "../dist/composition/contained-turn-feature-composition.js";

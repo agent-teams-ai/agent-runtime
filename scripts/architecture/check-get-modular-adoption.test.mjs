@@ -6,11 +6,12 @@ import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { promoteArchitectureDecisionBaseline } from '../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/governance-architecture-decisions/module.js';
-import { readSourceCensus, requireSourceDiagnostics, verifySourceCensus } from './get-modular-source-census.mjs';
-import { loadCapabilityConfig } from '../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/adapters/inbound/configuration/load-capability-config.js';
-import { loadStrictYamlFile } from '../../node_modules/@agent-teams/engineering-foundation/dist/features/configuration-input/node.js';
-import { assertSchema } from '../../node_modules/@agent-teams/engineering-foundation/dist/schema-catalog.js';
+import { foundationModule, readSourceCensus, requireSourceDiagnostics, verifySourceCensus } from './get-modular-source-census.mjs';
+
+const { promoteArchitectureDecisionBaseline } = await import(foundationModule('dist/capabilities/governance-architecture-decisions/module.js'));
+const { loadCapabilityConfig } = await import(foundationModule('dist/capabilities/source-dependencies/adapters/inbound/configuration/load-capability-config.js'));
+const { loadStrictYamlFile } = await import(foundationModule('dist/features/configuration-input/node.js'));
+const { assertSchema } = await import(foundationModule('dist/schema-catalog.js'));
 import { checkAdoption, digest, validateProfile, verifyAdoption } from './check-get-modular-adoption.mjs';
 
 const loadSourcePolicy = (root, configPath = 'architecture/foundation/source-dependencies.yaml') =>

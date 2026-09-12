@@ -5,7 +5,7 @@ import {createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate,
   type EgressCurrentAuthorityV2} from "@agent-teams/runtime-security/composition";
 import {bindContainedTurnHttpRuntimeSecurity} from "../dist/composition/contained-turn-http-runtime-security.js";
 import {authorityFor, digest, scope} from
-  "../../../contexts/runtime-security/tests/provider-process-egress-authorization.fixtures.ts";
+  "@agent-teams/runtime-security/tests/provider-process-egress-authorization.fixtures.ts";
 
 const request = () => ({
   method: "POST" as const, scheme: "https" as const, authority: {hostname: "api.example.com", port: 443},

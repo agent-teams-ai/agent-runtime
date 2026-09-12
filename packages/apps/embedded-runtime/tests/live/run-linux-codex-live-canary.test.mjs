@@ -328,7 +328,7 @@ test('failed observation cannot release on a stale succeeded submit value', asyn
 test('public driver collects real admin layout before tree release (synthetic artifact bytes)', {skip: process.platform !== 'linux' && 'descriptor-relative collector requires Linux'}, async t => {
   // Keep compiled-only dependencies scoped so CLI regressions run without a build.
   const {allocateLinuxCodexLiveAdminDirectories} = await import('./linux-codex-live-admin-directories.ts');
-  const {encodeContainedTurnArtifactManifest, computeContainedTurnArtifactTreeDigest} = await import('../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-manifest.js');
+  const {encodeContainedTurnArtifactManifest, computeContainedTurnArtifactTreeDigest} = await import('@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-manifest.js');
   const {collectLinuxCodexLiveEvidence} = await import('./linux-codex-live-evidence.mjs');
   const {writeFileSync, existsSync} = await import('node:fs');
   const {driver, root, live, events} = await publicFixture(t, 'succeeded');

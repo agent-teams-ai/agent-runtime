@@ -573,6 +573,63 @@ boundaries:
   packageExports:
   - .
   - ./composition
+  - ./dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-manifest.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-store.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-result-publication.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-workspace-state.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-contracts.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-network-resources.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-create-request.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-composition.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-error.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-image-init-lock.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-operation-network-codec.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/node-unix-socket-docker-engine.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/init/docker-custody-init-configuration.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/init/docker-custody-init-protocol.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-codec.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-journal.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-docker-residue-io.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-docker-residue-parsers.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-owner.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-policy.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/node-linux-docker-residue-custody.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-egress-session.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-contracts.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-ports.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-session-authority.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-settlement.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/postgres-http-egress-evidence-transactions.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/postgres-http-egress-evidence.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/prepared-http-request-v1.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-egress-broker.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-schema.js
+  - ./dist/features/contained-agent-turn/adapters/outbound/postgres/postgres-contained-turn-operation-store.js
+  - ./dist/features/contained-agent-turn/application/contained-turn-acceptance-digests.js
+  - ./dist/features/contained-agent-turn/application/contained-turn-engine.js
+  - ./dist/features/contained-agent-turn/application/contained-turn-preparation-recovery.js
+  - ./dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js
+  - ./dist/features/contained-agent-turn/composition/accepted-authority-anti-corruption.js
+  - ./dist/features/contained-agent-turn/composition/codex-current-kernel-owner.js
+  - ./dist/features/contained-agent-turn/composition/contained-turn-route-enforcement-capability.js
+  - ./dist/features/contained-agent-turn/composition/docker-linux-post-claim-preparation.js
+  - ./dist/features/contained-agent-turn/composition/docker-operation-network-owner.js
+  - ./dist/features/contained-agent-turn/composition/node-docker-deployment-recipe.js
+  - ./dist/features/contained-agent-turn/composition/provider-access-anti-corruption.js
+  - ./dist/features/contained-agent-turn/domain/contained-turn-authority.js
+  - ./dist/features/contained-agent-turn/domain/contained-turn-codecs.js
+  - ./dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js
+  - ./dist/features/contained-agent-turn/domain/contained-turn-identities.js
+  - ./dist/features/contained-agent-turn/domain/contained-turn-output-authority.js
 - id: production.provider-access
   dependencyMode: runtime
   roots:
@@ -652,6 +709,16 @@ boundaries:
   packageExports:
   - .
   - ./composition
+  - ./dist/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.js
+  - ./dist/features/contained-turn-access/adapters/outbound/postgres/dispatch-operation-schema.js
+  - ./dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.js
+  - ./dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-schema.js
+  - ./dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-transactions.js
+  - ./dist/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.js
+  - ./dist/features/contained-turn-access/adapters/outbound/postgres/route-selection-schema.js
+  - ./dist/features/contained-turn-access/composition/postgres-credential-rendering-owner.js
+  - ./dist/features/contained-turn-access/composition/postgres-operation-dispatch-consumption.js
+  - ./dist/features/contained-turn-access/composition/route-selection-owner.js
 - id: production.runtime-configuration
   dependencyMode: runtime
   roots:
@@ -695,6 +762,10 @@ boundaries:
   packageExports:
   - .
   - ./composition
+  - ./dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.js
+  - ./dist/features/contained-turn-dispatch-authority/composition/dispatch-acceptance-factory.js
+  - ./dist/features/provider-process-egress-authorization/application/egress-canonical.js
+  - ./dist/features/provider-process-egress-authorization/composition/current-egress-validation.js
 - id: production.filesystem-custody
   dependencyMode: runtime
   roots:
@@ -793,7 +864,6 @@ boundaries:
     - '@agent-teams/runtime-security'
     builtins:
     - node:timers/promises
-    - node:crypto
     runtimeReferences: []
   packageExports:
   - .
@@ -1253,6 +1323,8 @@ boundaries:
     - node:zlib
     runtimeReferences:
     - dynamic
+  packageExports:
+  - ./scripts/run-package-tests.mjs
 - id: test.agent-execution
   dependencyMode: development
   roots:
@@ -1314,8 +1386,6 @@ boundaries:
     - '@agent-teams/runtime-security'
     - '@agentclientprotocol/sdk'
     - '@anthropic-ai/claude-agent-sdk'
-    - '@get-modular/assembly'
-    - '@get-modular/core'
     - '@opencode-ai/plugin'
     - '@types/node'
     - '@types/pg'
@@ -1371,6 +1441,33 @@ boundaries:
     - node:zlib
     runtimeReferences:
     - dynamic
+  packageExports:
+  - ./tests/codex-app-server-contained-turn-provider-fixture.ts
+  - ./tests/codex-app-server-test-messages.mjs
+  - ./tests/contained-turn-kernel-fixtures.ts
+  - ./tests/current-owner-success-fixture.ts
+  - ./tests/features/contained-agent-turn/http-egress-test-fixture.ts
+  - ./tests/features/contained-agent-turn/support/committed-dispatch-proof-fixture.ts
+  - ./tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts
+  - ./tests/features/contained-agent-turn/support/contained-turn-fixture-snapshots.ts
+  - ./tests/features/contained-agent-turn/support/contained-turn-live-canary-lifecycle.mjs
+  - ./tests/features/contained-agent-turn/support/current-provider-owner-fixture.ts
+  - ./tests/features/contained-agent-turn/support/darwin-route-capability-fixture.ts
+  - ./tests/features/contained-agent-turn/support/docker-claim-init-fixture.ts
+  - ./tests/features/contained-agent-turn/support/docker-host-custody-lifecycle-fixture.ts
+  - ./tests/features/contained-agent-turn/support/docker-linux-post-claim-fixture.ts
+  - ./tests/features/contained-agent-turn/support/docker-workspace-authority-fixture.ts
+  - ./tests/features/contained-agent-turn/support/intent-guard-fixture.ts
+  - ./tests/features/contained-agent-turn/support/linux-docker-residue-fixture.ts
+  - ./tests/filesystem-contained-turn/fixture.ts
+  - ./tests/fixtures/codex-native-broker-0.153.4/fixture.ts
+  - ./tests/fixtures/codex-native-config-0.153.4/fixture.ts
+  - ./tests/fixtures/docker-engine-synthetic-daemon.ts
+  - ./tests/fixtures/docker-engine-test-fixture.ts
+  - ./tests/fixtures/docker-image-init-fixture.ts
+  - ./tests/fixtures/docker-operation-network-fixture.ts
+  - ./tests/fixtures/host-http-egress-v4-fixture.ts
+  - ./tests/fixtures/http-egress-tls/synthetic-loopback-certificates.ts
 - id: tooling.agent-execution.scripts
   dependencyMode: development
   roots:
@@ -1433,8 +1530,6 @@ boundaries:
     - '@agent-teams/runtime-security'
     - '@agentclientprotocol/sdk'
     - '@anthropic-ai/claude-agent-sdk'
-    - '@get-modular/assembly'
-    - '@get-modular/core'
     - '@opencode-ai/plugin'
     - '@types/node'
     - '@types/pg'
@@ -1552,8 +1647,6 @@ boundaries:
     - '@agent-teams/runtime-security'
     - '@agentclientprotocol/sdk'
     - '@anthropic-ai/claude-agent-sdk'
-    - '@get-modular/assembly'
-    - '@get-modular/core'
     - '@opencode-ai/plugin'
     - '@types/node'
     - '@types/pg'
@@ -1609,6 +1702,11 @@ boundaries:
     - node:zlib
     runtimeReferences:
     - dynamic
+  packageExports:
+  - ./tests/features/contained-turn-access/credential-rendering-test-fixture.ts
+  - ./tests/features/contained-turn-access/operation-dispatch-test-fixture.ts
+  - ./tests/features/contained-turn-access/postgres-materialization-url.fixtures.ts
+  - ./tests/features/contained-turn-access/route-selection-fixture.ts
 - id: test.runtime-configuration
   dependencyMode: development
   roots:
@@ -1670,8 +1768,6 @@ boundaries:
     - '@agent-teams/runtime-security'
     - '@agentclientprotocol/sdk'
     - '@anthropic-ai/claude-agent-sdk'
-    - '@get-modular/assembly'
-    - '@get-modular/core'
     - '@opencode-ai/plugin'
     - '@types/node'
     - '@types/pg'
@@ -1789,8 +1885,6 @@ boundaries:
     - '@agent-teams/runtime-security'
     - '@agentclientprotocol/sdk'
     - '@anthropic-ai/claude-agent-sdk'
-    - '@get-modular/assembly'
-    - '@get-modular/core'
     - '@opencode-ai/plugin'
     - '@types/node'
     - '@types/pg'
@@ -1846,6 +1940,10 @@ boundaries:
     - node:zlib
     runtimeReferences:
     - dynamic
+  packageExports:
+  - ./tests/contained-turn-dispatch-authority.fixtures.ts
+  - ./tests/postgres-dispatch.fixtures.ts
+  - ./tests/provider-process-egress-authorization.fixtures.ts
 - id: test.filesystem-custody
   dependencyMode: development
   roots:
@@ -1907,8 +2005,6 @@ boundaries:
     - '@agent-teams/runtime-security'
     - '@agentclientprotocol/sdk'
     - '@anthropic-ai/claude-agent-sdk'
-    - '@get-modular/assembly'
-    - '@get-modular/core'
     - '@opencode-ai/plugin'
     - '@types/node'
     - '@types/pg'
@@ -2025,8 +2121,6 @@ boundaries:
     - '@agent-teams/runtime-security'
     - '@agentclientprotocol/sdk'
     - '@anthropic-ai/claude-agent-sdk'
-    - '@get-modular/assembly'
-    - '@get-modular/core'
     - '@opencode-ai/plugin'
     - '@types/node'
     - '@types/pg'
@@ -2143,8 +2237,6 @@ boundaries:
     - '@agent-teams/runtime-security'
     - '@agentclientprotocol/sdk'
     - '@anthropic-ai/claude-agent-sdk'
-    - '@get-modular/assembly'
-    - '@get-modular/core'
     - '@opencode-ai/plugin'
     - '@types/node'
     - '@types/pg'
@@ -2261,8 +2353,6 @@ boundaries:
     - '@agent-teams/runtime-security'
     - '@agentclientprotocol/sdk'
     - '@anthropic-ai/claude-agent-sdk'
-    - '@get-modular/assembly'
-    - '@get-modular/core'
     - '@opencode-ai/plugin'
     - '@types/node'
     - '@types/pg'

@@ -1,14 +1,14 @@
 // Private, test-only administrative entrypoint. Importing performs no I/O.
 import {createHash} from "node:crypto";
 import {digestContainedTurnCanonicalValue} from
-  "../../../../contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
+  "@agent-teams/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import {isDeepStrictEqual} from "node:util";
 import {NodeProviderProcessCustody} from "@agent-teams/agent-execution/composition";
 import {containedTurnAcceptanceIntentDigestV1} from
-  "../../../../contexts/agent-execution/dist/features/contained-agent-turn/application/contained-turn-acceptance-digests.js";
+  "@agent-teams/agent-execution/dist/features/contained-agent-turn/application/contained-turn-acceptance-digests.js";
 import type {DispatchAcceptancePolicy} from "@agent-teams/runtime-security/composition";
 import {currentEgressDigest} from
-  "../../../../contexts/runtime-security/dist/features/provider-process-egress-authorization/composition/current-egress-validation.js";
+  "@agent-teams/runtime-security/dist/features/provider-process-egress-authorization/composition/current-egress-validation.js";
 import {allocateLinuxCodexLiveAdminDirectories} from "./linux-codex-live-admin-directories.ts";
 import {createLinuxCodexLiveAdminRoute} from "./linux-codex-live-admin-route.ts";
 import {LinuxCodexLiveSetupError, setupLinuxCodexLiveBootstrap,

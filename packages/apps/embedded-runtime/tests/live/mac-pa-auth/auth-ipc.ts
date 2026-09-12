@@ -17,7 +17,7 @@ export class HelperCleanupIndeterminate extends Error {
   constructor(observation: HelperObservation) {super('HELPER_CLEANUP_INDETERMINATE'); this.observation = observation;}
 }
 
-import { decodeCodexResponseEnvelope } from '../../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.js';
+import { decodeCodexResponseEnvelope } from '@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.js';
 const refusal = () => new Error('PRIVATE_AUTH_REFUSED');
 const record = (x: unknown): Record<string, unknown> => {
   if (!x || typeof x !== 'object' || Array.isArray(x)) {throw refusal();}

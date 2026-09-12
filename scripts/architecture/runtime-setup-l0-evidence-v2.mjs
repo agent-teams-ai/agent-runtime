@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
-import { testProcesses, packagePath, reporterArg, checkStages } from "../../packages/apps/embedded-runtime/scripts/run-package-tests.mjs";
+import { testProcesses, packagePath, reporterArg, checkStages } from "@agent-teams/embedded-runtime/scripts/run-package-tests.mjs";
 import { platformSites } from "./runtime-setup-l0-evidence-platform-sites.mjs";
 
 export const targets = ["darwin-arm64", "linux-x64"];

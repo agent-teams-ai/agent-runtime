@@ -15,7 +15,10 @@ const { readAr2CoverageTestSource } = await import(pathToFileURL(join(
   "scripts/architecture/validate-ar2-contract-artifacts.mjs",
 )).href);
 
-import { ar2InventoryExecutes, readAr2TestExecutionInventory } from "../../../../scripts/architecture/ar2-test-execution-inventory.mjs";
+const { ar2InventoryExecutes, readAr2TestExecutionInventory } = await import(pathToFileURL(join(
+  repoRoot,
+  "scripts/architecture/ar2-test-execution-inventory.mjs",
+)).href);
 
 const fixtureRoot = "packages/contexts/runtime-configuration/tests/fixtures/claude-code-settings";
 const readJson = async (path: string, allowedRoot: string) => JSON.parse(

@@ -30,7 +30,14 @@
     "./composition": {
       "types": "./dist/composition.d.ts",
       "import": "./dist/composition.js"
-    }
+    },
+    "./tests/contained-turn-dispatch-authority.fixtures.ts": "./tests/contained-turn-dispatch-authority.fixtures.ts",
+    "./tests/postgres-dispatch.fixtures.ts": "./tests/postgres-dispatch.fixtures.ts",
+    "./tests/provider-process-egress-authorization.fixtures.ts": "./tests/provider-process-egress-authorization.fixtures.ts",
+    "./dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.js": "./dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.js",
+    "./dist/features/contained-turn-dispatch-authority/composition/dispatch-acceptance-factory.js": "./dist/features/contained-turn-dispatch-authority/composition/dispatch-acceptance-factory.js",
+    "./dist/features/provider-process-egress-authorization/application/egress-canonical.js": "./dist/features/provider-process-egress-authorization/application/egress-canonical.js",
+    "./dist/features/provider-process-egress-authorization/composition/current-egress-validation.js": "./dist/features/provider-process-egress-authorization/composition/current-egress-validation.js"
   },
   "devDependencies": {
     "@types/pg": "catalog:",

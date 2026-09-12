@@ -28,7 +28,21 @@
     "./composition": {
       "types": "./dist/composition.d.ts",
       "import": "./dist/composition.js"
-    }
+    },
+    "./tests/features/contained-turn-access/credential-rendering-test-fixture.ts": "./tests/features/contained-turn-access/credential-rendering-test-fixture.ts",
+    "./tests/features/contained-turn-access/operation-dispatch-test-fixture.ts": "./tests/features/contained-turn-access/operation-dispatch-test-fixture.ts",
+    "./tests/features/contained-turn-access/postgres-materialization-url.fixtures.ts": "./tests/features/contained-turn-access/postgres-materialization-url.fixtures.ts",
+    "./tests/features/contained-turn-access/route-selection-fixture.ts": "./tests/features/contained-turn-access/route-selection-fixture.ts",
+    "./dist/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.js": "./dist/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.js",
+    "./dist/features/contained-turn-access/adapters/outbound/postgres/dispatch-operation-schema.js": "./dist/features/contained-turn-access/adapters/outbound/postgres/dispatch-operation-schema.js",
+    "./dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.js": "./dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.js",
+    "./dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-schema.js": "./dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-schema.js",
+    "./dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-transactions.js": "./dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-transactions.js",
+    "./dist/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.js": "./dist/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.js",
+    "./dist/features/contained-turn-access/adapters/outbound/postgres/route-selection-schema.js": "./dist/features/contained-turn-access/adapters/outbound/postgres/route-selection-schema.js",
+    "./dist/features/contained-turn-access/composition/postgres-credential-rendering-owner.js": "./dist/features/contained-turn-access/composition/postgres-credential-rendering-owner.js",
+    "./dist/features/contained-turn-access/composition/postgres-operation-dispatch-consumption.js": "./dist/features/contained-turn-access/composition/postgres-operation-dispatch-consumption.js",
+    "./dist/features/contained-turn-access/composition/route-selection-owner.js": "./dist/features/contained-turn-access/composition/route-selection-owner.js"
   },
   "devDependencies": {
     "@types/pg": "catalog:",

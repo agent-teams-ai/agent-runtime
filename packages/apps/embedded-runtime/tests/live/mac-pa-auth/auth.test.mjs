@@ -7,7 +7,7 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {capturePrivate} from './auth-ipc.ts';
 import {createPrivateOfficialAuthOwner,BINARY_SHA256} from './owner.ts';
-import {createPostgresCredentialRenderingOwner} from '../../../../../contexts/provider-access/dist/features/contained-turn-access/composition/postgres-credential-rendering-owner.js';
+import {createPostgresCredentialRenderingOwner} from '@agent-teams/provider-access/dist/features/contained-turn-access/composition/postgres-credential-rendering-owner.js';
 async function peer(t, scenario) {
   const cwd = await mkdtemp(join(tmpdir(), 'e411-invented-peer-'));
   t.after(() => rm(cwd, {recursive:true, force:true}));

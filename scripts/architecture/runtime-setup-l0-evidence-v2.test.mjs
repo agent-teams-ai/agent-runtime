@@ -5,7 +5,7 @@ import * as fs from "node:fs";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { testProcesses, packagePath, checkStages, reporterArg } from "../../packages/apps/embedded-runtime/scripts/run-package-tests.mjs";
+import { testProcesses, packagePath, checkStages, reporterArg } from "@agent-teams/embedded-runtime/scripts/run-package-tests.mjs";
 import { targets, tools, command, sha256, json, validateStream, validateReceipt, validateCoverage, requirePostgres, validatePlatformSites } from "./runtime-setup-l0-evidence-v2.mjs";
 
 import {platformSites} from "./runtime-setup-l0-evidence-platform-sites.mjs";

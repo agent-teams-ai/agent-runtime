@@ -4,13 +4,13 @@ import test from "node:test";
 import {
   ContainedTurnKernelCustodyAdapter,
   type ContainedTurnHostCustodyPort,
-} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.js";
+} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.js";
 import type {
   ContainedTurnKernelCustodyPort,
-} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
+} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
 import {
   containedTurnOperationCutoffRevision,
-} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-output-authority.js";
+} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-output-authority.js";
 import {
   adapterSnapshot,
   attemptId,
@@ -24,9 +24,9 @@ import {
   preparationToken,
   providerAccessSnapshot,
   workspaceId,
-} from "../../../contexts/agent-execution/tests/contained-turn-kernel-fixtures.ts";
-import {containedTurnIdentity} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-identities.js";
-import { committedDispatchProofFixture } from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/committed-dispatch-proof-fixture.ts";
+} from "@agent-teams/agent-execution/tests/contained-turn-kernel-fixtures.ts";
+import {containedTurnIdentity} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-identities.js";
+import { committedDispatchProofFixture } from "@agent-teams/agent-execution/tests/features/contained-agent-turn/support/committed-dispatch-proof-fixture.ts";
 
 const EMPTY_SHA256 = "0".repeat(64);
 const drain = Object.freeze({ bytes: 0, sha256: EMPTY_SHA256, status: "complete" as const });

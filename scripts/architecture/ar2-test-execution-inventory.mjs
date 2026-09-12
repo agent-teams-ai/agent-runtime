@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   packagePath, testCommand, testProcesses,
-} from "../../packages/apps/embedded-runtime/scripts/run-package-tests.mjs";
+} from "@agent-teams/embedded-runtime/scripts/run-package-tests.mjs";
 import { readCustodiedRepositoryFile } from "./ar2-evidence-custody.mjs";
 
 // Only the reviewed launcher and literal Node test argv are supported here.

@@ -90,6 +90,9 @@ importers:
       '@agent-teams/docs-protocol-agent-teams':
         specifier: 0.2.7
         version: 0.2.7
+      '@agent-teams/embedded-runtime':
+        specifier: workspace:*
+        version: link:packages/apps/embedded-runtime
       '@agent-teams/engineering-foundation':
         specifier: 1.2.0
         version: 1.2.0(@types/node@24.13.3)

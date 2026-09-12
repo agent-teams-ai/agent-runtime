@@ -1,11 +1,19 @@
 import assert from 'node:assert/strict';
-import { createSourceTreeReader } from '../../node_modules/@agent-teams/engineering-foundation/dist/source-inventory/module.js';
-import { createWorkspaceInventoryReader } from '../../node_modules/@agent-teams/engineering-foundation/dist/workspace-inventory/module.js';
-import { OxcSourceDependencyParser } from '../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/adapters/outbound/oxc/oxc-source-dependency-parser.js';
-import { NodeSourceDependencyResolver } from '../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/adapters/outbound/node/node-source-dependency-resolver.js';
-import { buildObservedSourceGraph } from '../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/application/use-cases/build-observed-source-graph.js';
-import { createSourceDependenciesCapability } from '../../node_modules/@agent-teams/engineering-foundation/dist/capabilities/source-dependencies/module.js';
-import { assertSchema } from '../../node_modules/@agent-teams/engineering-foundation/dist/schema-catalog.js';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+export const foundationModule = (rel) => pathToFileURL(join(
+  dirname(fileURLToPath(import.meta.resolve('@agent-teams/engineering-foundation/package.json'))),
+  rel,
+)).href;
+
+const { createSourceTreeReader } = await import(foundationModule('dist/source-inventory/module.js'));
+const { createWorkspaceInventoryReader } = await import(foundationModule('dist/workspace-inventory/module.js'));
+const { OxcSourceDependencyParser } = await import(foundationModule('dist/capabilities/source-dependencies/adapters/outbound/oxc/oxc-source-dependency-parser.js'));
+const { NodeSourceDependencyResolver } = await import(foundationModule('dist/capabilities/source-dependencies/adapters/outbound/node/node-source-dependency-resolver.js'));
+const { buildObservedSourceGraph } = await import(foundationModule('dist/capabilities/source-dependencies/application/use-cases/build-observed-source-graph.js'));
+const { createSourceDependenciesCapability } = await import(foundationModule('dist/capabilities/source-dependencies/module.js'));
+const { assertSchema } = await import(foundationModule('dist/schema-catalog.js'));
 
 const within = (path, root) => path === root || path.startsWith(`${root}/`);
 const unique = values => [...new Set(values)].toSorted();

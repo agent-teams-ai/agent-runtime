@@ -1,11 +1,11 @@
 // Private test administration support. No provider, Engine or network I/O.
 import {readFile} from "node:fs/promises";
 import {createContainedTurnRouteEnforcement} from
-  "../../../../contexts/agent-execution/dist/features/contained-agent-turn/composition/contained-turn-route-enforcement-capability.js";
+  "@agent-teams/agent-execution/dist/features/contained-agent-turn/composition/contained-turn-route-enforcement-capability.js";
 import {snapshotDockerEnginePolicy} from
-  "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
+  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import {routeSelectionDigest, snapshotRouteSelectionFacts} from
-  "../../../../contexts/provider-access/dist/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.js";
+  "@agent-teams/provider-access/dist/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.js";
 import type {LinuxCodexLivePins} from "./linux-codex-live-bootstrap.ts";
 
 const target = Object.freeze({

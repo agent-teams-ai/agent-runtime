@@ -156,24 +156,24 @@ test("admin preserves every bootstrap stage and its retained cleanup without cau
 // Synthetic caller regression: actual ACL, admin producer, bootstrap resolver and
 // current owner; fake custody/process only, with no provider or runtime launch.
 import {createContainedTurnProviderAccessPort} from
-  "../../../../contexts/agent-execution/dist/features/contained-agent-turn/composition/provider-access-anti-corruption.js";
+  "@agent-teams/agent-execution/dist/features/contained-agent-turn/composition/provider-access-anti-corruption.js";
 import { createHash } from "node:crypto";
 import {statSync} from "node:fs";
 import {getuid} from "node:process";
 import { createCodexCurrentKernelOwner } from "@agent-teams/agent-execution/composition";
-import { CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT } from "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
+import { CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT } from "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
 import {
   access, executeInput, FakeHost, ids, openInput,
   syntheticCodexEffectCustody, workspaceOwner,
-} from "../../../../contexts/agent-execution/tests/features/contained-agent-turn/support/current-provider-owner-fixture.ts";
+} from "@agent-teams/agent-execution/tests/features/contained-agent-turn/support/current-provider-owner-fixture.ts";
 import {
   boundary as codexFixtureBoundary,
   FakeCodexProcess,
   standardHandshake,
   syntheticPrivateRoot as codexFixturePrivateRoot,
   syntheticTmp as codexFixtureTmp,
-} from "../../../../contexts/agent-execution/tests/codex-app-server-contained-turn-provider-fixture.ts";
-import { emitAgentCompleted, emitAgentStarted, emitTurnStarted, generatedTurn } from "../../../../contexts/agent-execution/tests/codex-app-server-test-messages.mjs";
+} from "@agent-teams/agent-execution/tests/codex-app-server-contained-turn-provider-fixture.ts";
+import { emitAgentCompleted, emitAgentStarted, emitTurnStarted, generatedTurn } from "@agent-teams/agent-execution/tests/codex-app-server-test-messages.mjs";
 
 test("admin inventory and real bootstrap resolver carry accepted ACL identity into the owner plan and redact output", async () => {
   const workspaceRef = codexFixtureBoundary.workspaceRef;

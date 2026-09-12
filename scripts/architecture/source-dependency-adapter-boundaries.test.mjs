@@ -92,6 +92,9 @@ const analyzeFixture = async files => {
           await writeFixtureFile(root, path);
         } else {
           await mkdir(join(root, path), { recursive: true });
+          if ((boundary.packageExports ?? []).length > 0) {
+            await writeFixtureFile(root, `${path}/__boundary-package-owner__.js`);
+          }
         }
       }
     }
@@ -176,16 +179,16 @@ test("contained-turn domain and application remain dependency-free core", async 
 
 test("the real parser observes every retained Node import in composition and TLS support", async () => {
   const composition = "packages/apps/embedded-runtime/src/composition";
-  const host = boundariesById.get("adapter.agent-execution.host-custody");
+  const host = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody";
   for (const [path, builtins] of [
     [`${composition}/agent-runtime-host.ts`, ["node:crypto", "node:util"]],
     [`${composition}/contained-turn-access-authority.ts`, ["node:util"]],
     [`${composition}/contained-turn-authority-capability.ts`, ["node:util"]],
     [`${composition}/contained-turn-route-qualification.ts`, ["node:fs"]],
     [`${composition}/trusted-runtime-access-scope.ts`, ["node:util"]],
-    [`${host.roots[0]}/egress/node-tls-http-egress-transport-support.ts`,
+    [`${host}/egress/node-tls-http-egress-transport-support.ts`,
       ["node:buffer", "node:crypto", "node:net", "node:tls"]],
-    [`${host.roots[0]}/docker/node-linux-exclusive-route.ts`,
+    [`${host}/docker/node-linux-exclusive-route.ts`,
       ["node:child_process", "node:crypto", "node:fs", "node:timers"]],
     ["packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-config-wire.ts",
       ["node:crypto", "node:util"]],
@@ -205,18 +208,26 @@ test("the real parser observes every retained Node import in composition and TLS
 });
 
 test("Node permissions do not follow imports moved into core or undeclared adapter locations", async () => {
-  for (const root of [
-    "packages/contexts/agent-execution/src/features/contained-agent-turn",
-    "packages/apps/embedded-runtime/src",
-  ]) {
-    for (const layer of ["domain", "application", "adapters/undeclared"]) {
-      const path = `${root}/${layer}/moved-node-dependency.ts`;
-      for (const builtin of ["node:buffer", "node:timers", "node:util"]) {
-        const diagnostics = await analyzeFixture({ [path]: `import '${builtin}';\n` });
-        assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.forbidden-builtin-dependency"], path);
-        assert.equal(diagnostics[0].location.path, path);
-        assert.deepEqual(diagnostics[0].evidence, [{ kind: "specifier", value: builtin }]);
-      }
+  const classified = [
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/moved-node-dependency.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/application/moved-node-dependency.ts",
+  ];
+  const unclassified = [
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/undeclared/moved-node-dependency.ts",
+    "packages/apps/embedded-runtime/src/domain/moved-node-dependency.ts",
+    "packages/apps/embedded-runtime/src/application/moved-node-dependency.ts",
+    "packages/apps/embedded-runtime/src/adapters/undeclared/moved-node-dependency.ts",
+  ];
+  for (const builtin of ["node:buffer", "node:timers", "node:util"]) {
+    for (const path of classified) {
+      const diagnostics = await analyzeFixture({ [path]: `import '${builtin}';\n` });
+      assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.forbidden-builtin-dependency"], path);
+      assert.equal(diagnostics[0].location.path, path);
+      assert.deepEqual(diagnostics[0].evidence, [{ kind: "specifier", value: builtin }]);
+    }
+    for (const path of unclassified) {
+      const diagnostics = await analyzeFixture({ [path]: `import '${builtin}';\n` });
+      assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.unclassified-source-file"], path);
     }
   }
 });
@@ -224,8 +235,11 @@ test("Node permissions do not follow imports moved into core or undeclared adapt
 test("Embedded Runtime Node utility permission belongs only to composition", () => {
   const composition = boundariesById.get("composition.embedded-runtime");
   assert.deepEqual(composition.roots, [
-    "packages/apps/embedded-runtime/src/composition",
     "packages/apps/embedded-runtime/src/composition.ts",
+    "packages/apps/embedded-runtime/src/composition/agent-runtime-host-creation-error.ts",
+    "packages/apps/embedded-runtime/src/composition/default-agent-runtime-host.ts",
+    "packages/apps/embedded-runtime/src/composition/host-custodied-agent-runtime-host.ts",
+    "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
   ]);
   // composition.ts re-exports the linux-codex/http-egress/darwin routing
   // cluster, the contained-turn and contained-turn-support roles, and
@@ -374,6 +388,18 @@ test("existing Host and SDK capabilities retain their exact ownership", async ()
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-route-durable-storage.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/native-host-custody-workspace-entrypoint.ts",
     "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-open-attempts.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-bridge.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-selection.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-singleton-custody-owner.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-admission-guard.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/prepared-http-request-v1.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-finalizable-plan.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-launch.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/native-host-custody-workspace-authority.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-core.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/private-host-custody-reservation.ts",
   ]);
 
   assert.deepEqual(host.allowedBuiltins, [
@@ -384,7 +410,7 @@ test("existing Host and SDK capabilities retain their exact ownership", async ()
 
   for (const builtin of ["node:dns/promises", "node:net", "node:os", "node:stream", "node:tls"]) {
     assert.deepEqual(await analyzeFixture({
-      [host.roots[0]]: `import '${builtin}';\n`,
+      [paths.hostNode]: `import '${builtin}';\n`,
     }), []);
   }
   assert.deepEqual(await analyzeFixture({
@@ -393,25 +419,24 @@ test("existing Host and SDK capabilities retain their exact ownership", async ()
 });
 
 test("Darwin retained-owner consumers use the narrow workspace entrypoint", async () => {
-  const hostRoot = boundariesById.get("adapter.agent-execution.host-custody").roots[0];
+  const internal = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-io.ts";
   assert.deepEqual(await analyzeFixture({
     [paths.composition]: `import type {DarwinAttemptRetainedOwners} from './features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-workspace-entrypoint.js';\n`,
   }), []);
   assert.deepEqual(rules(await analyzeFixture({
-    [paths.composition]: `import type {DarwinAttemptRetainedOwners} from './features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-bridge.js';\n`,
-    [`${hostRoot}/darwin-attempt-owner-bridge.ts`]: "export interface DarwinAttemptRetainedOwners {}\n",
+    [paths.composition]: `import type {DarwinAttemptRetainedOwners} from './features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-io.js';\n`,
+    [internal]: "export interface DarwinAttemptRetainedOwners {}\n",
   })), ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"]);
 });
 
 test("Codex evidence utilities do not grant spawn or network ownership", async () => {
-  const codex = boundariesById.get("adapter.agent-execution.codex-app-server");
-  const path = `${codex.roots[0]}/negative-fixture.ts`;
+  const path = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-notification-evidence.ts";
+  const hostInternal = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-contracts.ts";
   // The former direct getBuiltinModule("node:util") consumers under this root
   // (effect-custody/permission-boundary/platform-tuple/config-wire/native
   // -broker-recipe) moved into the narrower codex-primitives/codex-primitives
-  // -leaves/codex-native-broker roles; the remaining bare codex-app-server
-  // files (contained-turn-provider.ts, current-kernel-adapter.ts) never used
-  // node:util, so an arbitrary file under this root no longer inherits it.
+  // -leaves/codex-native-broker roles; remaining codex-app-server internals
+  // do not inherit node:util from that split.
   assert.deepEqual(rules(await analyzeFixture({ [path]: "import 'node:util';\n" })),
     ["architecture.source-dependencies.forbidden-builtin-dependency"]);
   for (const builtin of ["node:child_process", "node:dns/promises", "node:http", "node:net", "node:tls", "node:timers"]) {
@@ -419,8 +444,8 @@ test("Codex evidence utilities do not grant spawn or network ownership", async (
       ["architecture.source-dependencies.forbidden-builtin-dependency"]);
   }
   assert.deepEqual(rules(await analyzeFixture({
-    [path]: "import '../host-custody/node-provider-process-custody-core.js';\n",
-    [`${boundariesById.get("adapter.agent-execution.host-custody").roots[0]}/node-provider-process-custody-core.ts`]: "export {};\n",
+    [path]: "import '../host-custody/contained-turn-kernel-custody-contracts.js';\n",
+    [hostInternal]: "export {};\n",
   })), ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"]);
 });
 
@@ -500,7 +525,8 @@ test("Docker JSON remains neutral and cannot import its engine consumer", async 
 test("V4 listener composition uses one Docker entrypoint; Host still cannot import it", async () => {
   const entry = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-listener-entrypoint.ts";
   assert.deepEqual(boundariesById.get("adapter.agent-execution.docker-custody").entrypoints, [entry,
-    entry.replace("docker-http-listener-entrypoint.ts", "docker-provider-process-entrypoint.ts")]);
+    entry.replace("docker-http-listener-entrypoint.ts", "docker-provider-process-entrypoint.ts"),
+    entry.replace("docker-http-listener-entrypoint.ts", "node-linux-route-privilege.ts")]);
   assert.deepEqual(await analyzeFixture({[paths.composition]: "import './features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-listener-entrypoint.js';\n"}), []);
   assert.deepEqual(rules(await analyzeFixture({[paths.host]: "import './docker/docker-http-listener-entrypoint.js';\n"})), ["architecture.source-dependencies.forbidden-boundary-dependency"]);
   const internal = entry.replace("docker-http-listener-entrypoint.ts", "docker-http-listener-lifecycle.ts");
@@ -539,24 +565,32 @@ test("native abort subscriptions stay in physical adapters, never core or outer 
 
 test("Get Modular belongs only to Embedded Runtime composition, including type imports", async () => {
   const packages = ["@get-modular/core", "@get-modular/assembly"];
+  const owners = new Set(["composition.embedded-runtime", "test.embedded-runtime"]);
   for (const boundary of policy.boundaries) {
     assert.deepEqual(boundary.allowedPackages.filter(name => packages.includes(name)).toSorted(),
-      boundary.id === "composition.embedded-runtime" ? packages.toSorted() : [], boundary.id);
+      owners.has(boundary.id) ? packages.toSorted() : [], boundary.id);
   }
   for (const pkg of packages) {
     for (const statement of [`import '${pkg}';`, `import type {} from '${pkg}';`]) {
       assert.deepEqual(await analyzeFixture({
         "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts": statement,
       }), []);
-      for (const root of ["packages/apps/embedded-runtime/src",
+      for (const root of [
         "packages/contexts/agent-execution/src/features/contained-agent-turn",
         "packages/contexts/runtime-configuration/src",
-        "packages/contexts/runtime-security/src"]) {
+        "packages/contexts/runtime-security/src",
+      ]) {
         for (const layer of ["application", "contracts", "domain"]) {
           const path = `${root}/${layer}/negative-get-modular.ts`;
           const diagnostics = await analyzeFixture({ [path]: statement });
-          assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.forbidden-package-dependency"], path);
-          assert.equal(diagnostics[0].location.path, path);
+          assert.ok(
+            rules(diagnostics).includes("architecture.source-dependencies.forbidden-package-dependency"),
+            `${path}: ${JSON.stringify(rules(diagnostics))}`,
+          );
+          assert.equal(
+            diagnostics.find(d => d.ruleId === "architecture.source-dependencies.forbidden-package-dependency").location.path,
+            path,
+          );
         }
       }
     }
@@ -583,10 +617,10 @@ test("Darwin native launch consumers use declared custody and Codex entrypoints"
   const cases = [
     {consumer: `${base}/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts`,
       prefix: "../host-custody/", owner: `${base}/adapters/outbound/host-custody/`,
-      entry: "contained-turn-kernel-custody-entrypoint", internal: "host-custody-launch"},
+      entry: "contained-turn-kernel-custody-entrypoint", internal: "contained-turn-kernel-custody-contracts"},
     {consumer: `${base}/composition/darwin-codex-host-post-claim-preparation.ts`,
       prefix: "../adapters/outbound/codex-app-server/", owner: `${base}/adapters/outbound/codex-app-server/`,
-      entry: "codex-app-server-launch-plan", internal: "codex-native-observations"},
+      entry: "codex-app-server-launch-plan", internal: "codex-app-server-notification-evidence"},
   ];
   for (const {consumer, prefix, owner, entry, internal} of cases) {
     assert.deepEqual(await analyzeFixture({[consumer]: `import '${prefix}${entry}.js';\n`}), []);

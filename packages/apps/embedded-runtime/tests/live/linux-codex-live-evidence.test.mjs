@@ -6,12 +6,12 @@ import {tmpdir} from 'node:os';
 import {join, basename} from 'node:path';
 import {syncBuiltinESMExports} from 'node:module';
 import {collectLinuxCodexLiveEvidence} from './linux-codex-live-evidence.mjs';
-import {encodeContainedTurnArtifactManifest, computeContainedTurnArtifactTreeDigest} from '../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-manifest.js';
+import {encodeContainedTurnArtifactManifest, computeContainedTurnArtifactTreeDigest} from '@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-manifest.js';
 import {createHash} from 'node:crypto';
 
 const platform = new URL('../../../../platform/filesystem-custody/', import.meta.url);
-const {createContainedTurnArtifactStore} = await import('../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-store.js');
-const {bindContainedTurnRoot} = await import('../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.js');
+const {createContainedTurnArtifactStore} = await import('@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-store.js');
+const {bindContainedTurnRoot} = await import('@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.js');
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const approval = {markerFile: 'approved.txt', marker: 'CANARY_123'};

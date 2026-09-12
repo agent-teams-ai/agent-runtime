@@ -6,11 +6,11 @@ import {createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate, createNo
   type EgressCurrentAuthorityV2} from "@agent-teams/runtime-security/composition";
 import {createContainedTurnHttpProviderAccessAuthorization} from "../dist/composition/contained-turn-http-provider-access.js";
 import {bindContainedTurnHttpRuntimeSecurity} from "../dist/composition/contained-turn-http-runtime-security.js";
-import {canonical} from "../../../contexts/runtime-security/tests/provider-process-egress-authorization.fixtures.ts";
-import {createHostHttpEgressSession} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-egress-session.js";
-import type {HttpEgressOperation, HttpEgressReceipt} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-contracts.js";
+import {canonical} from "@agent-teams/runtime-security/tests/provider-process-egress-authorization.fixtures.ts";
+import {createHostHttpEgressSession} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-egress-session.js";
+import type {HttpEgressOperation, HttpEgressReceipt} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-contracts.js";
 import type {HostHttpGrant, HostHttpProvisionalDecision,
-  HttpEgressBrokerPorts} from "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-ports.js";
+  HttpEgressBrokerPorts} from "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-ports.js";
 
 const enc = new TextEncoder(); const SECRET = "fixture-secret-do-not-observe";
 const bytes = (value: string) => enc.encode(value);

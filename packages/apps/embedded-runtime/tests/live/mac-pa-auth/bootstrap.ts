@@ -2,12 +2,12 @@ import { types } from 'node:util';
 import { HelperCleanupIndeterminate } from './auth-ipc.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { createPrivateOfficialAuthOwner, type PrivateAuthConfig } from './owner.ts';
-import { createPostgresMaterializationRepository } from '../../../../../contexts/provider-access/dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.js';
-import { createPostgresRouteSelectionOwner, type RouteSelectionInput } from '../../../../../contexts/provider-access/dist/features/contained-turn-access/composition/route-selection-owner.js';
-import { createPostgresOperationDispatchConsumption } from '../../../../../contexts/provider-access/dist/features/contained-turn-access/composition/postgres-operation-dispatch-consumption.js';
-import { createPostgresCredentialRenderingOwner } from '../../../../../contexts/provider-access/dist/features/contained-turn-access/composition/postgres-credential-rendering-owner.js';
-import type { MaterializationPostgresPool } from '../../../../../contexts/provider-access/dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-transactions.js';
-import type { CredentialRenderingBinding } from '../../../../../contexts/provider-access/dist/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.js';
+import { createPostgresMaterializationRepository } from '@agent-teams/provider-access/dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.js';
+import { createPostgresRouteSelectionOwner, type RouteSelectionInput } from '@agent-teams/provider-access/dist/features/contained-turn-access/composition/route-selection-owner.js';
+import { createPostgresOperationDispatchConsumption } from '@agent-teams/provider-access/dist/features/contained-turn-access/composition/postgres-operation-dispatch-consumption.js';
+import { createPostgresCredentialRenderingOwner } from '@agent-teams/provider-access/dist/features/contained-turn-access/composition/postgres-credential-rendering-owner.js';
+import type { MaterializationPostgresPool } from '@agent-teams/provider-access/dist/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-transactions.js';
+import type { CredentialRenderingBinding } from '@agent-teams/provider-access/dist/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.js';
 export interface OperatorApproval {
   /** Retained explicit-ID compatibility for the original regressions. New callers use approveCapture. */
   readonly approvedAccountId?: string;

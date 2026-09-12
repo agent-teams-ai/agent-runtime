@@ -1,27 +1,27 @@
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {PassThrough} from "node:stream";
-import {networkFixture} from "../../../../contexts/agent-execution/tests/fixtures/docker-operation-network-fixture.ts";
-import {syntheticDaemon} from "../../../../contexts/agent-execution/tests/fixtures/docker-engine-synthetic-daemon.ts";
-import {CONTAINER, DAEMON_BOOT} from "../../../../contexts/agent-execution/tests/fixtures/docker-engine-test-fixture.ts";
+import {networkFixture} from "@agent-teams/agent-execution/tests/fixtures/docker-operation-network-fixture.ts";
+import {syntheticDaemon} from "@agent-teams/agent-execution/tests/fixtures/docker-engine-synthetic-daemon.ts";
+import {CONTAINER, DAEMON_BOOT} from "@agent-teams/agent-execution/tests/fixtures/docker-engine-test-fixture.ts";
 import {archive, chunks, imageLock, IMAGE_CONFIG, NODE_BYTES, BOOTSTRAP_BYTES} from
-  "../../../../contexts/agent-execution/tests/fixtures/docker-image-init-fixture.ts";
+  "@agent-teams/agent-execution/tests/fixtures/docker-image-init-fixture.ts";
 import {FixtureResidueIo, statText, privilegeText} from
-  "../../../../contexts/agent-execution/tests/features/contained-agent-turn/support/linux-docker-residue-fixture.ts";
+  "@agent-teams/agent-execution/tests/features/contained-agent-turn/support/linux-docker-residue-fixture.ts";
 import {MemoryStorage} from
-  "../../../../contexts/agent-execution/tests/features/contained-agent-turn/support/docker-host-custody-lifecycle-fixture.ts";
+  "@agent-teams/agent-execution/tests/features/contained-agent-turn/support/docker-host-custody-lifecycle-fixture.ts";
 import {NodeUnixSocketDockerEngine} from
-  "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-composition.js";
+  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-composition.js";
 import {composeLinuxDockerResidueCustody} from
-  "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/node-linux-docker-residue-custody.js";
+  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/node-linux-docker-residue-custody.js";
 import {PROC_SUPER_MAGIC} from
-  "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-docker-residue-io.js";
+  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-docker-residue-io.js";
 import {residueParent, residueLeaf} from
-  "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-docker-residue-parsers.js";
+  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-docker-residue-parsers.js";
 import {DOCKER_CUSTODY_NODE_PATH, DOCKER_CUSTODY_BOOTSTRAP_PATH, DOCKER_CUSTODY_INIT_ARGUMENTS} from
-  "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
+  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import {DockerCustodyFrameDecoder, encodeDockerCustodyFrame, DOCKER_CUSTODY_INIT_PROTOCOL} from
-  "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/init/docker-custody-init-protocol.js";
+  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/init/docker-custody-init-protocol.js";
 
 const json = value => ({statusCode: 200, contentType: "application/json", body: Buffer.from(JSON.stringify(value))});
 const hash = value => createHash("sha256").update(value).digest("hex");

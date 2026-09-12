@@ -2,7 +2,7 @@
 import {createLinuxCodexLiveAdminFirewall, type ExpectedOwnedNetwork, type FirewallCommand}
   from "./linux-codex-live-admin-firewall.ts";
 import {dockerHttpOperationNetworkRecipe} from
-  "../../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-network-resources.js";
+  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-network-resources.js";
 import type {LinuxCodexNodeRecipeSelection} from "../../dist/composition/linux-codex-node-recipe.js";
 
 export type LinuxCodexLiveFirewallPins = Readonly<{

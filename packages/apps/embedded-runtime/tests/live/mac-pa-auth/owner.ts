@@ -4,7 +4,7 @@ import { open, lstat, realpath } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { isAbsolute, dirname } from 'node:path';
 import { capturePrivate, HelperCleanupIndeterminate } from './auth-ipc.ts';
-import type { CredentialRenderingSelection, OperationCredentialMaterialAdmission } from '../../../../../contexts/provider-access/dist/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.js';
+import type { CredentialRenderingSelection, OperationCredentialMaterialAdmission } from '@agent-teams/provider-access/dist/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.js';
 export const BINARY_SHA256 = 'b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3';
 export interface PrivateAuthConfig {
   readonly operationRef: string; readonly executable: string; readonly codexHome: string; readonly sandbox: string;

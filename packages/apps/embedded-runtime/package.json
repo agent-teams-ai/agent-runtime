@@ -36,7 +36,8 @@
     "./composition": {
       "types": "./dist/composition.d.ts",
       "import": "./dist/composition.js"
-    }
+    },
+    "./scripts/run-package-tests.mjs": "./scripts/run-package-tests.mjs"
   },
   "devDependencies": {
     "pg": "catalog:"

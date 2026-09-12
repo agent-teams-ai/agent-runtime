@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import type {AuthorizeCredentialMaterializationOutcome, CredentialMaterializationAuthorizationReceipt} from "@agent-teams/provider-access";
 import {createCredentialMaterializationRequestDigest} from "@agent-teams/provider-access/composition";
 import {createContainedTurnHttpCredentialMaterialization} from "../dist/composition/contained-turn-http-provider-access.js";
-import {renderingFixture} from "../../../contexts/provider-access/tests/features/contained-turn-access/credential-rendering-test-fixture.ts";
+import {renderingFixture} from "@agent-teams/provider-access/tests/features/contained-turn-access/credential-rendering-test-fixture.ts";
 import type {CredentialGenerationAcquisition, CredentialRecipe, CredentialRenderingOutcome} from
-  "../../../contexts/provider-access/dist/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.js";
+  "@agent-teams/provider-access/dist/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.js";
 
 type Pair = ReturnType<typeof createContainedTurnHttpCredentialMaterialization>;
 type Owner = Parameters<typeof createContainedTurnHttpCredentialMaterialization>[0];

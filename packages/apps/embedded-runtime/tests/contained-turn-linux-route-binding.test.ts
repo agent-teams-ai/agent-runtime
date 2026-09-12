@@ -3,9 +3,9 @@ import test from "node:test";
 import { createContainedTurnLinuxRouteBinding, type ContainedTurnLinuxRouteCampaign }
   from "../dist/composition/contained-turn-linux-route-binding.js";
 import { installLinuxExclusiveRoute } from
-  "../../../contexts/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-owner.js";
+  "@agent-teams/agent-execution/dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-owner.js";
 import { harness, selection } from
-  "../../../contexts/provider-access/tests/features/contained-turn-access/route-selection-fixture.ts";
+  "@agent-teams/provider-access/tests/features/contained-turn-access/route-selection-fixture.ts";
 
 /** Product facts the trusted deployment composition owns; none of them is a
  * Provider Access fact and none is read from the environment here. */
