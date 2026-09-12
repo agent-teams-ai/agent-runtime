@@ -1,3 +1,6 @@
+import type {
+  ContainedTurnPostgresClient,
+} from "./contained-turn-postgres-pool.js";
 import type { ContainedTurnKernelOperationStore } from "../../../application/ports/outbound/contained-turn-ports.js";
 import { digestContainedTurnCanonicalValue } from "../../../domain/contained-turn-codecs.js";
 import type { ContainedTurnDispatchPreparation } from "../../../domain/contained-turn-dispatch-preparation.js";
@@ -170,7 +173,7 @@ export class ContainedTurnPostgresPreparationRecovery {
         kinds.length === 0 || kinds.some(kind => kind !== "active" && kind !== "cleanup_pending")) {
       throw new TypeError("invalid dispatch preparation recovery query");
     }
-    const recover = async (client: import("pg").PoolClient, quarantine: boolean) => {
+    const recover = async (client: ContainedTurnPostgresClient, quarantine: boolean) => {
       const linkedQuarantineDebt = this.runtimeSchemaVersion >= 6;
       const scanMetadata = async (
         afterOperationId: string,

@@ -1,3 +1,1 @@
-export type {
-  ContainedTurnAccessAuthority,
-} from "./contained-turn-access-authority.js";
+export type { ContainedTurnAccessAuthority } from "./contained-turn-access-authority.js";

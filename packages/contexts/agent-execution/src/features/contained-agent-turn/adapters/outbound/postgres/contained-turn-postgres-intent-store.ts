@@ -1,5 +1,6 @@
-import type { PoolClient } from "pg";
-
+import type {
+  ContainedTurnPostgresClient,
+} from "./contained-turn-postgres-pool.js";
 import { containedTurnCancellationFingerprint, containedTurnScopeDigest, type ContainedTurnScope } from "../../../domain/contained-turn-authority.js";
 import { containedTurnIdentity } from "../../../domain/contained-turn-identities.js";
 import { containedTurnIntentAuthorityDigest, validateContainedTurnGuardDigest, validateContainedTurnPreventionCommand, type ContainedTurnIntentAuthority, type ContainedTurnPreventionReceipt } from "../../../domain/contained-turn-intent-guard.js";
@@ -34,7 +35,7 @@ export class ContainedTurnPostgresIntentStore {
   }
 
   /** Missing root authority is a dormant production seam, never inferred from request data. */
-  public async lock(client: PoolClient, scope: ContainedTurnScope): Promise<boolean> {
+  public async lock(client: ContainedTurnPostgresClient, scope: ContainedTurnScope): Promise<boolean> {
     if (this.#authorityDigest === undefined) {return false;}
     await client.query(
       `INSERT INTO agent_execution.contained_turn_intent_namespace_v1(tenant_id,project_id,authority_digest)
@@ -48,7 +49,7 @@ export class ContainedTurnPostgresIntentStore {
     return result.rows[0]?.authority_digest === this.#authorityDigest;
   }
 
-  public async readIntent(client: PoolClient, key: IntentKey): Promise<IntentRow | undefined> {
+  public async readIntent(client: ContainedTurnPostgresClient, key: IntentKey): Promise<IntentRow | undefined> {
     const result = await client.query<IntentRow>(
       "SELECT authority_digest,command_fingerprint,operation_id FROM agent_execution.contained_turn_intent_v1 WHERE tenant_id=$1 AND project_id=$2 AND command_id=$3",
       [key.scope.tenantId, key.scope.projectId, key.commandId],
@@ -62,7 +63,7 @@ export class ContainedTurnPostgresIntentStore {
     return row;
   }
 
-  public async readGuard(client: PoolClient, key: IntentKey): Promise<ContainedTurnPreventionReceipt | undefined> {
+  public async readGuard(client: ContainedTurnPostgresClient, key: IntentKey): Promise<ContainedTurnPreventionReceipt | undefined> {
     const result = await client.query<ContainedTurnGuardRow>(
       `SELECT ${CONTAINED_TURN_GUARD_SELECTION} FROM agent_execution.contained_turn_intent_guard_v1 WHERE tenant_id=$1 AND project_id=$2 AND command_id=$3`,
       [key.scope.tenantId, key.scope.projectId, key.commandId],
@@ -76,7 +77,7 @@ export class ContainedTurnPostgresIntentStore {
     return receipt;
   }
 
-  public async admission(client: PoolClient, key: IntentKey): Promise<"clear" | "denied" | "fingerprint_conflict"> {
+  public async admission(client: ContainedTurnPostgresClient, key: IntentKey): Promise<"clear" | "denied" | "fingerprint_conflict"> {
     if (!await this.lock(client, key.scope)) {return "denied";}
     const row = await this.readIntent(client, key);
     const guard = await this.readGuard(client, key);
@@ -92,7 +93,7 @@ export class ContainedTurnPostgresIntentStore {
     return "clear";
   }
 
-  public async recordAcceptance(client: PoolClient, operation: ContainedTurnKernelOperation): Promise<void> {
+  public async recordAcceptance(client: ContainedTurnPostgresClient, operation: ContainedTurnKernelOperation): Promise<void> {
     await client.query(
       `INSERT INTO agent_execution.contained_turn_intent_v1(tenant_id,project_id,command_id,command_fingerprint,authority_digest,operation_id)
        VALUES ($1,$2,$3,$4,$5,$6)`,
@@ -100,7 +101,7 @@ export class ContainedTurnPostgresIntentStore {
     );
   }
 
-  public async claimAllowed(client: PoolClient, operation: ContainedTurnKernelOperation): Promise<boolean> {
+  public async claimAllowed(client: ContainedTurnPostgresClient, operation: ContainedTurnKernelOperation): Promise<boolean> {
     const key = { commandId: operation.commandId, commandFingerprint: operation.commandFingerprint, scope: operation.scope };
     if (await this.admission(client, key) !== "clear") {return false;}
     const row = await this.readIntent(client, key);
@@ -108,7 +109,7 @@ export class ContainedTurnPostgresIntentStore {
   }
 
   async #fenceOperation(
-    client: PoolClient,
+    client: ContainedTurnPostgresClient,
     operation: ContainedTurnKernelOperation | undefined,
     command: Parameters<ContainedTurnKernelOperationStore["preventIntent"]>[0]["command"],
   ): Promise<ContainedTurnKernelOperation | undefined> {

@@ -40,6 +40,11 @@ Guardrails:
   when rejecting those shapes.
 - `pnpm check` runs only synthetic, disposable tests. Provider spike commands
   are separate and require explicit scope and safety review.
+- Git commits use `iliya <iliyazelenkog@gmail.com>` and must not include
+  Cursor author or `Co-authored-by` trailers. Cloud Agents inject those via
+  `commit-msg.cursor.co-author`. Run
+  `scripts/dev/install-human-git-identity.sh` before the first commit on a
+  new machine.
 
 Foundation `architecture.source-dependencies` is schema v3: `rootPackage: true`
 and `packageRoots` for every workspace package. Required CI runs

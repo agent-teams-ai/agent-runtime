@@ -1,0 +1,53 @@
+#!/bin/bash
+# Cloud always commits as Cursor Agent. Rewrite HEAD to iliya and drop trailers.
+set -euo pipefail
+if [ -n "${CURSOR_AUTHOR_REWRITE_DONE:-}" ]; then
+  exit 0
+fi
+git_dir="$(git rev-parse --git-dir)"
+if [ -d "$git_dir/rebase-merge" ] || [ -d "$git_dir/rebase-apply" ]; then
+  exit 0
+fi
+if [ -f "$git_dir/CHERRY_PICK_HEAD" ] || [ -f "$git_dir/REVERT_HEAD" ]; then
+  exit 0
+fi
+
+author_email="$(git log -1 --format='%ae')"
+author_name="$(git log -1 --format='%an')"
+msg="$(git log -1 --format=%B)"
+needs_author=0
+needs_msg=0
+case "$author_email" in
+  *cursoragent@cursor.com*|*cursor@cursor.com*) needs_author=1 ;;
+esac
+case "$author_name" in
+  "Cursor"|"Cursor Agent") needs_author=1 ;;
+esac
+if printf '%s\n' "$msg" | grep -qiE '^Co-authored-by:|^Made-with:[[:space:]]*Cursor|cursoragent@cursor\.com'; then
+  needs_msg=1
+fi
+if [ "$needs_author" -eq 0 ] && [ "$needs_msg" -eq 0 ]; then
+  exit 0
+fi
+
+new_msg="$(printf '%s' "$msg" | python3 -c '
+import re, sys
+lines = sys.stdin.read().splitlines()
+kept = []
+for line in lines:
+    if re.match(r"^Co-authored-by:", line, re.I):
+        continue
+    if re.search(r"cursoragent@cursor\\.com", line, re.I):
+        continue
+    if re.match(r"^Made-with:\\s*Cursor\\b", line, re.I):
+        continue
+    kept.append(line)
+while kept and kept[-1] == "":
+    kept.pop()
+sys.stdout.write("\\n".join(kept) + ("\\n" if kept else ""))
+')"
+
+export CURSOR_AUTHOR_REWRITE_DONE=1
+git -c user.name='iliya' -c user.email='iliyazelenkog@gmail.com' -c commit.gpgsign=false \
+  commit --amend --no-verify --author='iliya <iliyazelenkog@gmail.com>' -m "$new_msg"
+exit 0
