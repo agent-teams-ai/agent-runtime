@@ -1,0 +1,64 @@
+name: adoption-receipt-darwin
+
+# Temporary workflow: Darwin arm64 adoption receipt for frozen remainder SHA
+# 07ea44c1. The job always checks out that SHA so this workflow-only commit
+# does not enter the receipt identity. Safe to delete after merge.
+
+on:
+  push:
+    branches:
+      - cursor/fms-darwin-gha-capture-7d17
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    name: capture
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - name: Checkout frozen remainder SHA
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: 07ea44c1a570c029057016d7eaaf3323878d88d7
+
+      - name: Verify checkout revision
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "07ea44c1a570c029057016d7eaaf3323878d88d7"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+
+      - name: Enable pinned pnpm
+        run: |
+          corepack enable
+          corepack install --global pnpm@11.18.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace dependencies
+        run: pnpm --filter "@agent-teams/embedded-runtime^..." -r run build
+
+      - name: Capture Darwin arm64 adoption receipt
+        env:
+          CAPTURE_RUN_ID: darwin-arm64-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          mkdir -p /tmp/receipt
+          node scripts/architecture/runtime-setup-l0-evidence.mjs \
+            --capture-adoption-receipt --output /tmp/receipt/darwin-arm64.json \
+            --run-id "$CAPTURE_RUN_ID"
+
+      - name: Upload receipt
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: darwin-arm64-adoption-receipt
+          path: /tmp/receipt/
+          retention-days: 7
+          if-no-files-found: warn
