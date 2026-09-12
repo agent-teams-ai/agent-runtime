@@ -22,6 +22,7 @@ on:
       - cursor/fms-host-http-pa-7d17
       - cursor/fms-host-pa-rs-7d17
       - refactor/fms-host-pa-rs
+      - chore/classify-native-helper-test
 
 permissions:
   contents: read
