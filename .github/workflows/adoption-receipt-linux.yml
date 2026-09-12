@@ -27,6 +27,7 @@ on:
       - refactor/fms-host-runtime-validation
       - refactor/fms-host-http-egress
       - chore/classify-native-helper-test
+      - docs/sr-contained-turn-anti-patterns
 
 permissions:
   contents: read
