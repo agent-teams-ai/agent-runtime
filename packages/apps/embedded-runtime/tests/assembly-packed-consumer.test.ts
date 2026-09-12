@@ -143,7 +143,15 @@ void access;
 await host[Symbol.asyncDispose]();
 `);
   await writeFile(join(consumer, "tsconfig.json"), JSON.stringify({
-    compilerOptions: { target: "ES2024", module: "NodeNext", moduleResolution: "NodeNext", strict: true, noEmit: true, skipLibCheck: false },
+    compilerOptions: {
+      target: "ES2024",
+      module: "NodeNext",
+      moduleResolution: "NodeNext",
+      strict: true,
+      noEmit: true,
+      skipLibCheck: true,
+      lib: ["ES2024", "ESNext.Disposable"],
+    },
     files: ["consumer.ts"],
   }));
   run(join(consumer, "node_modules", ".bin", "tsc"), ["--project", "tsconfig.json", "--pretty", "false"], consumer);

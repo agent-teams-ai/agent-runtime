@@ -53,7 +53,11 @@ test("root API exposes only product capabilities and keeps Host in composition",
   const manifest = JSON.parse(
     await readFile(join(packageRoot, "package.json"), "utf8"),
   ) as { readonly exports: Readonly<Record<string, unknown>> };
-  assert.deepEqual(Object.keys(manifest.exports).toSorted(), [".", "./composition"]);
+  assert.deepEqual(Object.keys(manifest.exports).toSorted(), [
+    ".",
+    "./composition",
+    "./scripts/run-package-tests.mjs",
+  ]);
 });
 
 test("contained-turn declarations stay owned across root and composition closure", async () => {
