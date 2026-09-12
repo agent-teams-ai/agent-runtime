@@ -6,10 +6,10 @@ import test from "node:test";
 
 import {
   createClaudeCodeConfigurationSourceReaderAdapter,
-} from "../dist/composition.js";
+} from "../../../dist/composition.js";
 import {
   readClaudeCodeConfigurationSourceBytes,
-} from "../dist/features/claude-code-configuration-inspection/adapters/outbound/claude-code-configuration-source-reader-adapter.js";
+} from "../../../dist/features/claude-code-configuration-inspection/adapters/outbound/claude-code-configuration-source-reader-adapter.js";
 
 const fileIdentity = async (path: string): Promise<string> => {
   const observation = await stat(path, { bigint: true });

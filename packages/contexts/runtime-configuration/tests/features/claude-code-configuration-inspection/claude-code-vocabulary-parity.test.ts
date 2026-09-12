@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { assertClaudeCodeVocabularyParity } from "../dist/features/claude-code-configuration-inspection/adapters/inbound/claude-code-vocabulary-parity.js";
+import { assertClaudeCodeVocabularyParity } from "../../../dist/features/claude-code-configuration-inspection/adapters/inbound/claude-code-vocabulary-parity.js";
 
 const parityModule = fileURLToPath(new URL(
   "../dist/features/claude-code-configuration-inspection/adapters/inbound/claude-code-vocabulary-parity.js",

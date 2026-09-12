@@ -7,7 +7,7 @@ import {
   CLAUDE_CODE_PROVIDER_ROUTE_VOCABULARY_REVISION, CLAUDE_CODE_SETTINGS_DIALECT,
   type ClaudeCodeConfigurationSource,
   type TrustedClaudeCodeObservedSourcePlan,
-} from "../dist/index.js";
+} from "../../../dist/index.js";
 import {
   claudeCodeConfigurationSemanticClassifierContract,
   createClaudeCodeConfigurationInspectionFeature,
@@ -15,7 +15,7 @@ import {
   createNodeClaudeCodeConfigurationDigest,
   createStrictClaudeCodeJsonParser,
   type ClaudeCodeConfigurationSourceReader,
-} from "../dist/composition.js";
+} from "../../../dist/composition.js";
 
 const encoder = new TextEncoder();
 const identityKey = encoder.encode("claude-code-v2-test-source-identity-key-material");
