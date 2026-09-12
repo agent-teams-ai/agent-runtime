@@ -87,6 +87,11 @@ mock.module("@agent-teams/agent-execution/composition", {exports: {
     digest = () => {throw Error("unexpected HTTP egress digest");};
     record = () => {throw Error("unexpected HTTP egress record");};
   },
+  nativeHttpRequestProfile() {throw Error("unexpected native HTTP request profile");},
+  createNativeHttpEgressRoute() {throw Error("unexpected native HTTP egress route");},
+  NodeTlsHttpEgressTransport: class {
+    constructor() {throw Error("unexpected Node TLS HTTP egress transport");}
+  },
 }});
 
 mock.module("@agent-teams/runtime-security/composition", {exports: {
@@ -102,6 +107,11 @@ mock.module(new URL(`${composition}contained-turn-http-egress-authorities.js`, i
   {exports: {
     bindContainedTurnHttpEgressAuthorities() {return {dispose() {}};},
     composeContainedTurnHttpEgressSession() {return {};},
+  }});
+mock.module(new URL(`${composition}contained-turn-http-egress-upstream.js`, import.meta.url),
+  {exports: {
+    createContainedTurnHttpEgressRoute() {throw Error("unexpected HTTP egress route");},
+    createContainedTurnHttpUpstreamTransport() {throw Error("unexpected HTTP egress transport");},
   }});
 
 const {createLinuxCodexContainedTurnOwner} = await import(
