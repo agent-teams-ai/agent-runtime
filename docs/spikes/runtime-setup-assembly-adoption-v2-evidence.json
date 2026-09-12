@@ -9125,7 +9125,7 @@
         "sha256": "f671bbd6ac48c697d1297251dbad5d19fd0c6b4c7b3f819885963c8e4850f8d5"
       },
       {
-        "path": "scripts/native-helper/build-native-helper.test.mjs",
+        "path": "scripts/build-native-helper.test.mjs",
         "mode": "100644",
         "sha256": "d05344985e07e88a75988bc61a121d930c1ad977258c52e6f2447bc400934b07"
       },
