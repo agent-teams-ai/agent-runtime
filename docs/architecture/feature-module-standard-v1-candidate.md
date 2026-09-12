@@ -288,7 +288,16 @@ feature entries from the matching `src/composition/` files, so existing
 composition and test imports keep working. The implementations stay at the
 feature root rather than under `application/`: they still import Agent
 Execution, Provider Access and Runtime Security composition types, which L0
-treats as an inward leak from `application/`. Process lifecycle,
+treats as an inward leak from `application/`. Darwin contained-turn
+authority and deployment now live under
+`src/features/darwin-contained-turn-deployment/` with curated `index.ts` /
+`internal.ts` entrypoints. Host composition re-exports those feature entries
+from `src/composition/darwin-contained-turn-authority.ts` and
+`src/composition/darwin-contained-turn-deployment.ts`, so existing composition
+and test imports keep working. The implementations stay at the feature root
+rather than under `application/`: they still import Host composition helpers
+or Agent Execution / Provider Access / Runtime Security composition types,
+which L0 treats as an inward leak from `application/`. Process lifecycle,
 readiness and rollback stay in composition. Host tests that
 previously imported unpublished Agent Execution, Provider Access, and Runtime
 Security `dist/` and `tests/` package subpaths now use the curated
