@@ -3,7 +3,7 @@ name: adoption-receipt-darwin
 # Temporary workflow: Darwin arm64 adoption receipt for Runtime Security
 # activation identity ab9a942a stacked on RC activation D d2c28df4.
 # The job always checks out that SHA so this workflow-only commit does not
-# enter the receipt identity. Safe to delete after the paired receipt is merged.
+# enter the receipt identity. Safe to delete after the paired Runtime Security receipt is merged.
 
 on:
   push:
