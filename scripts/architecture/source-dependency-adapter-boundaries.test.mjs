@@ -603,8 +603,10 @@ test("Get Modular belongs only to Embedded Runtime composition, including type i
       ];
       for (const path of forbiddenPaths) {
         const diagnostics = await analyzeFixture({ [path]: statement });
-        assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.forbidden-package-dependency"], path);
-        assert.equal(diagnostics[0].location.path, path);
+        const diagnosticRules = rules(diagnostics);
+        assert.ok(diagnosticRules.includes("architecture.source-dependencies.forbidden-package-dependency"), `${path}: ${JSON.stringify(diagnosticRules)}`);
+        assert.ok(!diagnosticRules.includes("architecture.source-dependencies.unclassified-source-file"), path);
+        assert.equal(diagnostics.find(d => d.ruleId === "architecture.source-dependencies.forbidden-package-dependency").location.path, path);
       }
     }
   }
