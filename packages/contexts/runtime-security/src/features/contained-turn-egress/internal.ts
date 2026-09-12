@@ -17,10 +17,13 @@ export type {
   EgressAuthorizationEnvelopeV1,
   EgressTransportObservationV1,
 } from "./domain/egress-authorization.js";
-export type { ContainedTurnEgressRequest, ContainedTurnEgressResult } from "./domain/egress-request.js";
+export type {
+  ContainedTurnEgress,
+  ContainedTurnEgressRequest,
+  ContainedTurnEgressResult,
+} from "./contracts/contained-turn-egress-v1.js";
 export type { EgressPolicyTimeSnapshotV1 } from "./domain/egress-policy.js";
 export type { NetworkAddressV1 } from "./domain/network-address.js";
-export type { ContainedTurnEgress } from "./application/contained-turn-egress.js";
 export type { EgressAuthorizationSignerV1 } from "./application/ports/outbound/egress-authorization-signer.js";
 export type { EgressPolicyTimeAuthorityV1 } from "./application/ports/outbound/egress-policy-time-authority.js";
 export type { ProviderRouteAuthorityV1 } from "./application/ports/outbound/provider-route-authority.js";

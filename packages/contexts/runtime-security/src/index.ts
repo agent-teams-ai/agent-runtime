@@ -26,6 +26,15 @@ export {
   type SettleDispatchConsumptionInput,
   type SettleDispatchConsumptionOutcome,
 } from "./features/contained-turn-dispatch-authority/index.js";
+export {
+  EGRESS_DISPATCH_PURPOSE,
+  type ContainedTurnEgress,
+  type ContainedTurnEgressRequest,
+  type ContainedTurnEgressResult,
+  type EgressDispatchConsumptionReceipt,
+  type EgressDispatchObservation,
+  type EgressDispatchScope,
+} from "./features/contained-turn-egress/index.js";
 export type {
   AuthorizeClaudeCodeSetupInspection,
   AuthorizeClaudeCodeSetupInspectionResult,

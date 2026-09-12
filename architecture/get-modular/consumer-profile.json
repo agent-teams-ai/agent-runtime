@@ -4337,6 +4337,11 @@
         },
         {
           "from": "packages/contexts/runtime-security/src/index.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/index.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/index.ts",
           "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/index.ts",
           "mode": "type-only"
         },

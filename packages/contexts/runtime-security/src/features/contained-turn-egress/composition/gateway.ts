@@ -13,6 +13,7 @@ import { completeExchange } from "../application/complete-exchange.js";
 import { captureClose } from "../adapters/outbound/node-session-transport-boundary.js";
 import type { MonotonicClock } from "../application/ports/outbound/monotonic-clock.js";
 import { createNodeMonotonicClock } from "../adapters/outbound/node-monotonic-clock.js";
+import { createContainedTurnEgressV1 } from "../adapters/inbound/contained-turn-egress-v1.js";
 import { createNodeEgressSecurityPrimitives } from "../adapters/outbound/node-security-primitives.js";
 import type { ProviderRouteAuthoritySnapshotV1 } from "../domain/provider-route-authority.js";
 const freeze = Object.freeze;
@@ -71,12 +72,12 @@ const primitives = createNodeEgressSecurityPrimitives();
 export const createContainedTurnEgressGateway = (
   identity: TrustedEgressHostIdentityV1,
   dependencies: ContainedTurnEgressDependencies,
-) => createContainedTurnEgressGatewayCore(
+) => createContainedTurnEgressV1(createContainedTurnEgressGatewayCore(
   identity,
   dependencies,
   primitives,
   createNodeMonotonicClock(),
-);
+));
 
 /** Pure private-composition projection for the dormant route candidate's dispatch grant.
  * The existing dispatch owner must commit this digest before egress; legacy/unbound digests fail closed.
