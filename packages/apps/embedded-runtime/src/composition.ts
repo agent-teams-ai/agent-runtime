@@ -14,7 +14,7 @@ export {
   type ClaudeCodeSetupCapabilityBundle,
   type CodexSetupCapabilityBundle,
 } from "./composition/agent-runtime-host.js";
-export type { ContainedTurnCapabilityBundle } from "./composition/contained-turn-runtime-access.js";
+export type { ContainedTurnCapabilityBundle } from "./features/contained-turn-runtime-access/internal.js";
 export {
   CLAUDE_ROUTE_ENFORCEMENT_UNSUPPORTED_DETAIL,
   createContainedTurnFeatureFromProviderAccess,
