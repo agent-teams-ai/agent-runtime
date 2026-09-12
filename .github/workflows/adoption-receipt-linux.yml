@@ -21,6 +21,7 @@ on:
       - cursor/fms-host-runtime-access-7d17
       - cursor/fms-host-http-pa-7d17
       - cursor/fms-host-pa-rs-7d17
+      - cursor/fms-host-validation-7d17
 
 permissions:
   contents: read
