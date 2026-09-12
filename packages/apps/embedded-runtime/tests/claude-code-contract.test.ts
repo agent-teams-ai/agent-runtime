@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { createBuildClaudeCodeSetupView } from "../dist/application/build-claude-code-setup-view.js";
+import { createBuildClaudeCodeSetupView } from "../dist/features/setup-inspection-planning/build-claude-code-setup-view.js";
 import { createNodeOpaqueReferenceDigest } from "../dist/composition/opaque-reference-digest.js";
 
 const referenceDigest = createNodeOpaqueReferenceDigest();

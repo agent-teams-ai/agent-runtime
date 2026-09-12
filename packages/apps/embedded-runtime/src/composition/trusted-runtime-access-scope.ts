@@ -5,5 +5,6 @@ export {
   copyTrustedContainedTurnScope,
   type ContainedTurnCompositionScope,
   type TrustedRuntimeAccessScope,
+  type TrustedClaudeCodeSetupScope,
   type TrustedCodexSetupScope,
 } from "../features/trusted-runtime-access-scope/internal.js";

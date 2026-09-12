@@ -17,10 +17,10 @@ import type {
   CodexSetupDiagnostic,
   InspectCodexRuntimeSetup,
   InspectCodexRuntimeSetupOutcome,
-} from "../contracts/runtime-access.js";
-import type { CodexSetupInspectionPlanner } from "./ports/outbound/codex-setup-inspection-planner.js";
-import type { OpaqueReferenceDigest } from "./ports/outbound/opaque-reference-digest.js";
-import type { TrustedCodexSetupScope } from "./trusted-runtime-access-scope.js";
+} from "../../contracts/runtime-access.js";
+import type { CodexSetupInspectionPlanner } from "./codex-setup-inspection-planner.js";
+import type { OpaqueReferenceDigest } from "./opaque-reference-digest.js";
+import type { TrustedCodexSetupScope } from "../../composition/trusted-runtime-access-scope.js";
 
 export interface BuildCodexSetupViewDependencies {
   readonly authorizeSetupInspection: AuthorizeSetupInspection;

@@ -1,13 +1,29 @@
 import type {
-  ClaudeCodeSetupInspectionPlan,
-  ClaudeCodeSetupInspectionPlanner,
-} from "../../application/ports/outbound/claude-code-setup-inspection-planner.js";
-import type { TrustedClaudeCodeSetupScope } from "../../application/trusted-claude-code-setup-scope.js";
+  ClaudeCodeConfigurationSourceKind,
+  ClaudeCodeConfigurationDialect,
+} from "@agent-teams/runtime-configuration";
 
-export type {
-  ClaudeCodeSetupInspectionPlan,
-  ClaudeCodeSetupInspectionPlanner,
-} from "../../application/ports/outbound/claude-code-setup-inspection-planner.js";
+import type { TrustedClaudeCodeSetupScope } from "../../composition/trusted-runtime-access-scope.js";
+
+export type ClaudeCodeSetupInspectionPlan =
+  | { readonly status: "unsupported" }
+  | {
+      readonly candidatePaths: readonly {
+        readonly absolutePath: string;
+        readonly priorityRank: 1 | 2 | 3 | 4 | 5;
+        readonly source: "explicit" | "known-location" | "path-entry";
+      }[];
+      readonly dialect: ClaudeCodeConfigurationDialect;
+      readonly sourcePaths: readonly {
+        readonly absolutePath: string;
+        readonly kind: ClaudeCodeConfigurationSourceKind;
+      }[];
+      readonly status: "planned";
+    };
+
+export interface ClaudeCodeSetupInspectionPlanner {
+  plan(scope: TrustedClaudeCodeSetupScope): ClaudeCodeSetupInspectionPlan;
+}
 
 const appendPath = (root: string, suffix: string): string =>
   `${root.endsWith("/") ? root.slice(0, -1) : root}/${suffix}`;

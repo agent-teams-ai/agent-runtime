@@ -1,9 +1,36 @@
 import { types } from "node:util";
 import { isContainedTurnAccessAuthorityIdentity } from "../../composition/contained-turn-access-authority.js";
-import type { TrustedClaudeCodeSetupScope } from "../../application/trusted-claude-code-setup-scope.js";
-import type { TrustedCodexSetupScope } from "../../application/trusted-runtime-access-scope.js";
 
-export type { TrustedCodexSetupScope } from "../../application/trusted-runtime-access-scope.js";
+export interface TrustedClaudeCodeSetupScope {
+  readonly dialect: "claude-code-settings@2026-08-28";
+  readonly explicitExecutablePaths: readonly string[];
+  readonly homeRoot: string;
+  readonly observationEpoch: string;
+  readonly pathEntries: readonly string[];
+  readonly scopeId: string;
+  readonly workspaceRoot: string;
+  readonly workspaceTrusted: boolean;
+}
+
+export interface TrustedCodexSetupScope {
+  readonly configurationSources: readonly {
+    readonly absolutePath: string;
+    readonly kind: "external-profile" | "user" | "workspace";
+    readonly profileName?: string;
+    readonly workspaceLayer?: number;
+    readonly workspaceTrusted: boolean;
+  }[];
+  readonly configurationDialect: "codex-0.134";
+  readonly explicitCodexExecutablePaths: readonly string[];
+  readonly knownExecutableDirectories: readonly string[];
+  readonly observationEpoch: string;
+  readonly pathEntries: readonly string[];
+  readonly roots: readonly {
+    readonly absolutePath: string;
+    readonly kind: "home" | "system" | "workspace";
+  }[];
+  readonly scopeId: string;
+}
 
 export interface ContainedTurnCompositionScope {
   readonly projectId: string;

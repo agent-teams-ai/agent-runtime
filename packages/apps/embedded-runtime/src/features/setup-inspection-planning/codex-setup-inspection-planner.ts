@@ -3,16 +3,19 @@ import type {
   TrustedInstallationCandidate,
 } from "@agent-teams/runtime-security";
 
-import type {
-  CodexSetupInspectionPlan,
-  CodexSetupInspectionPlanner,
-} from "../../application/ports/outbound/codex-setup-inspection-planner.js";
-import type { TrustedCodexSetupScope } from "../../application/trusted-runtime-access-scope.js";
+import type { TrustedCodexSetupScope } from "../../composition/trusted-runtime-access-scope.js";
 
-export type {
-  CodexSetupInspectionPlan,
-  CodexSetupInspectionPlanner,
-} from "../../application/ports/outbound/codex-setup-inspection-planner.js";
+export type CodexSetupInspectionPlan =
+  | { readonly status: "unsupported" }
+  | {
+      readonly diagnostics: readonly SetupAuthorizationDiagnostic[];
+      readonly installationCandidates: readonly TrustedInstallationCandidate[];
+      readonly status: "planned";
+    };
+
+export interface CodexSetupInspectionPlanner {
+  plan(scope: TrustedCodexSetupScope): CodexSetupInspectionPlan;
+}
 
 const isDarwinAbsolutePath = (value: string): boolean => value.startsWith("/");
 
