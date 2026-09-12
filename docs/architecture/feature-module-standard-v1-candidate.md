@@ -304,7 +304,16 @@ re-exports those feature entries from
 imports keep working. The implementations stay at the feature root rather
 than under `application/`: they still import Host composition helpers or
 Agent Execution / Provider Access / Runtime Security composition types, which
-L0 treats as an inward leak from `application/`. Linux route binding, product route qualification, provider
+L0 treats as an inward leak from `application/`. Darwin contained-turn
+authority and deployment now live under
+`src/features/darwin-contained-turn-deployment/` with curated `index.ts` /
+`internal.ts` entrypoints. Host composition re-exports those feature entries
+from `src/composition/darwin-contained-turn-authority.ts` and
+`src/composition/darwin-contained-turn-deployment.ts`, so existing composition
+and test imports keep working. The implementations stay at the feature root
+rather than under `application/`: they still import Host composition helpers
+or Agent Execution / Provider Access / Runtime Security composition types,
+which L0 treats as an inward leak from `application/`. Linux route binding, product route qualification, provider
 selection, access authority, and cancellation proof now live under matching
 `src/features/` directories with curated `index.ts` / `internal.ts` entrypoints.
 Host composition re-exports those feature entries from the matching

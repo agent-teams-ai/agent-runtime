@@ -1835,6 +1835,10 @@
         "packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/contained-turn-route-qualification.ts",
         "packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/index.ts",
         "packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/internal.ts",
+        "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-authority.ts",
+        "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
+        "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/index.ts",
+        "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/internal.ts",
         "packages/apps/embedded-runtime/src/features/linux-codex-deployment/index.ts",
         "packages/apps/embedded-runtime/src/features/linux-codex-deployment/internal.ts",
         "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-contained-turn-owner.ts",
@@ -1908,62 +1912,12 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-authority.ts",
-          "to": "@agent-teams/agent-execution/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-authority.ts",
-          "to": "@agent-teams/provider-access/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-authority.ts",
-          "to": "@agent-teams/runtime-security/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-authority.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-authority.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
+          "to": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/internal.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-deployment.ts",
-          "to": "@agent-teams/agent-execution/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-deployment.ts",
-          "to": "@agent-teams/provider-access/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-deployment.ts",
-          "to": "@agent-teams/runtime-security/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-deployment.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-deployment.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-deployment.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-deployment.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-authority.ts",
+          "to": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/internal.ts",
           "mode": "runtime"
         },
         {
@@ -2064,6 +2018,61 @@
         {
           "from": "packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/contained-turn-route-qualification.ts",
           "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-authority.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-authority.ts",
+          "to": "@agent-teams/provider-access/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-authority.ts",
+          "to": "@agent-teams/runtime-security/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-authority.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-authority.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
+          "to": "@agent-teams/provider-access/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
+          "to": "@agent-teams/runtime-security/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
           "mode": "runtime"
         },
         {
@@ -4638,6 +4647,7 @@
       "packages/apps/embedded-runtime/src/features/contained-turn-route-qualification",
       "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access",
       "packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation",
+      "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment",
       "packages/apps/embedded-runtime/src/features/linux-codex-deployment",
       "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe",
       "packages/contexts/agent-execution/src/features/contained-agent-turn",
