@@ -107,16 +107,16 @@ resume, no OpenAI-compatible HTTP, no systemd-as-domain.
 AR already owns this adapter. Do not replace it with SR's App Server engine.
 
 - AR feature: [contained-agent-turn](../../packages/contexts/agent-execution/src/features/contained-agent-turn/README.md)
-- AR adapter: [codex-app-server/](../../packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/)
-- AR custody: [host-custody/](../../packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/)
+- AR adapter: [codex-app-server](../../packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts)
+- AR custody: [host-custody](../../packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-cooperative-process-custody.ts)
 - Plan: [Contained Agent Turn V1 delivery plan](contained-agent-turn-v1-delivery-plan.md#codex)
 - Evidence: [macos-codex-app-server-conformance-results](../spikes/macos-codex-app-server-conformance-results.md)
 
 SR App Server path is the closest *protocol* reference, not a spawn template:
 
-- [src/provider-codex/app-server/](/Users/belief/dev/projects/subscription-runtime/src/provider-codex/app-server)
-- [codex-app-server-execution-engine.ts](/Users/belief/dev/projects/subscription-runtime/src/provider-codex/codex-app-server-execution-engine.ts)
-- [failure-classifier.ts](/Users/belief/dev/projects/subscription-runtime/src/provider-codex/failure-classifier.ts)
+- [src/provider-codex/app-server/](https://github.com/vioxen/subscription-runtime/tree/main/src/provider-codex/app-server)
+- [codex-app-server-execution-engine.ts](https://github.com/vioxen/subscription-runtime/blob/main/src/provider-codex/codex-app-server-execution-engine.ts)
+- [failure-classifier.ts](https://github.com/vioxen/subscription-runtime/blob/main/src/provider-codex/failure-classifier.ts)
 - GitHub: [vioxen/subscription-runtime `src/provider-codex`](https://github.com/vioxen/subscription-runtime/tree/main/src/provider-codex)
 
 Worth *diffing* only after a named AR gap: exact model IDs (`gpt-5.6-sol`,
@@ -126,7 +126,7 @@ admission; protocol failure classes.
 Do not take: process factory, systemd launcher, slot pool, managed-run
 resume, App Server→CLI fallback, logical-thread slot lifecycle,
 hosted-readonly mounts as provider cwd, CLI JSON/session/agent drivers,
-[`openai-compatible-codex`](/Users/belief/dev/projects/subscription-runtime/src/openai-compatible-codex).
+[`openai-compatible-codex`](https://github.com/vioxen/subscription-runtime/tree/main/src/openai-compatible-codex).
 
 ### Claude Code
 
@@ -147,23 +147,23 @@ Known V1 limitation, still correct fail-closed: Claude interrupt without a
 terminal result stays `ambiguous` / `reconcile_required`. Do not "fix" that
 with SR cancel heuristics.
 
-- AR adapter: [claude-agent-sdk/](../../packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/)
+- AR adapter: [claude-agent-sdk](../../packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-contained-turn-provider.ts)
 - Plan: [Contained Agent Turn V1 delivery plan](contained-agent-turn-v1-delivery-plan.md#claude-code)
 - Evidence: [macos-claude-agent-sdk-conformance-results](../spikes/macos-claude-agent-sdk-conformance-results.md)
 
 SR SDK `query()` is the closest *protocol* reference. SR default spawn is
 the wrong process owner:
 
-- [claude-agent-sdk-task-execution-engine.ts](/Users/belief/dev/projects/subscription-runtime/src/provider-claude/process/claude-agent-sdk-task-execution-engine.ts)
-- [failure-classifier.ts](/Users/belief/dev/projects/subscription-runtime/src/provider-claude/failure-classifier.ts)
+- [claude-agent-sdk-task-execution-engine.ts](https://github.com/vioxen/subscription-runtime/blob/main/src/provider-claude/process/claude-agent-sdk-task-execution-engine.ts)
+- [failure-classifier.ts](https://github.com/vioxen/subscription-runtime/blob/main/src/provider-claude/failure-classifier.ts)
 - GitHub: [vioxen/subscription-runtime `src/provider-claude`](https://github.com/vioxen/subscription-runtime/tree/main/src/provider-claude)
 
 Worth *diffing* only after a named AR gap: message normalization, credential
 redaction across chunk boundaries, failure classifier, rate-limit event
 presence (not quota policy).
 
-Do not take: default SDK spawn, [`claude -p` CLI engine](/Users/belief/dev/projects/subscription-runtime/src/provider-claude/process/claude-cli-task-execution-engine.ts),
-[Claude BG](/Users/belief/dev/projects/subscription-runtime/src/provider-claude/claude-bg-provider-driver.ts),
+Do not take: default SDK spawn, [`claude -p` CLI engine](https://github.com/vioxen/subscription-runtime/blob/main/src/provider-claude/process/claude-cli-task-execution-engine.ts),
+[Claude BG](https://github.com/vioxen/subscription-runtime/blob/main/src/provider-claude/claude-bg-provider-driver.ts),
 `resume` / `forkSession` / `persistSession`, goal-completion MCP, `canUseTool`
 as a second authority beside Host + Runtime Security.
 
@@ -179,14 +179,14 @@ as a second authority beside Host + Runtime Security.
 
 | AR feature | Canonical code | SR encyclopedia (diff only) | Leave in SR |
 | --- | --- | --- | --- |
-| Contained turn kernel | [contained-agent-turn](../../packages/contexts/agent-execution/src/features/contained-agent-turn/) | — | — |
-| Host Custody | [host-custody/](../../packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/) | hosted spawn is a different owner | systemd-run, unshare, host-jobs as domain |
-| Codex provider port | [codex-app-server/](../../packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/) | [provider-codex/app-server](/Users/belief/dev/projects/subscription-runtime/src/provider-codex/app-server) | CLI exec, resume, HTTP bridge, fallback |
-| Claude provider port | [claude-agent-sdk/](../../packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/) | [SDK task engine](/Users/belief/dev/projects/subscription-runtime/src/provider-claude/process/claude-agent-sdk-task-execution-engine.ts) | default spawn, CLI print, BG, resume |
-| Runtime Security admission | [runtime-security features](../../packages/contexts/runtime-security/src/features/) | [secret-detection.ts](/Users/belief/dev/projects/subscription-runtime/src/worker-core/secret-detection.ts), [simple-secret-scanner.ts](/Users/belief/dev/projects/subscription-runtime/src/worker-local/simple-secret-scanner.ts) | a second scanner inside host-custody |
-| Access language (partial) | disposable workspace is already V1 | [access-control.ts](/Users/belief/dev/projects/subscription-runtime/src/worker-core/access-control.ts), [project-access-boundaries.md](/Users/belief/dev/projects/subscription-runtime/docs/project-access-boundaries.md) | `ProjectScopedControl`, CreateJob as contained-turn intents |
-| Account facts (no V1 slot yet) | Provider Access later | [agent-account-observability](/Users/belief/dev/projects/subscription-runtime/packages/agent-account-observability) | quota as dispatch policy |
-| JSON host contract (deferred) | ADR-0008 private handle only | [agent-runtime-task](/Users/belief/dev/projects/subscription-runtime/src/agent-runtime-task), [agent-runtime-task-bridge.md](/Users/belief/dev/projects/subscription-runtime/docs/agent-runtime-task-bridge.md) | making the JSON DTO the domain |
+| Contained turn kernel | [contained-agent-turn](../../packages/contexts/agent-execution/src/features/contained-agent-turn/README.md) | — | — |
+| Host Custody | [host-custody](../../packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-cooperative-process-custody.ts) | hosted spawn is a different owner | systemd-run, unshare, host-jobs as domain |
+| Codex provider port | [codex-app-server](../../packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts) | [provider-codex/app-server](https://github.com/vioxen/subscription-runtime/tree/main/src/provider-codex/app-server) | CLI exec, resume, HTTP bridge, fallback |
+| Claude provider port | [claude-agent-sdk](../../packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-contained-turn-provider.ts) | [SDK task engine](https://github.com/vioxen/subscription-runtime/blob/main/src/provider-claude/process/claude-agent-sdk-task-execution-engine.ts) | default spawn, CLI print, BG, resume |
+| Runtime Security admission | [contained-turn-egress](../../packages/contexts/runtime-security/src/features/contained-turn-egress/application/contained-turn-egress.ts) | [secret-detection.ts](https://github.com/vioxen/subscription-runtime/blob/main/src/worker-core/secret-detection.ts), [simple-secret-scanner.ts](https://github.com/vioxen/subscription-runtime/blob/main/src/worker-local/simple-secret-scanner.ts) | a second scanner inside host-custody |
+| Access language (partial) | disposable workspace is already V1 | [access-control.ts](https://github.com/vioxen/subscription-runtime/blob/main/src/worker-core/access-control.ts), [project-access-boundaries.md](https://github.com/vioxen/subscription-runtime/blob/main/docs/project-access-boundaries.md) | `ProjectScopedControl`, CreateJob as contained-turn intents |
+| Account facts (no V1 slot yet) | Provider Access later | [agent-account-observability](https://github.com/vioxen/subscription-runtime/tree/main/packages/agent-account-observability) | quota as dispatch policy |
+| JSON host contract (deferred) | ADR-0008 private handle only | [agent-runtime-task](https://github.com/vioxen/subscription-runtime/tree/main/src/agent-runtime-task), [agent-runtime-task-bridge.md](https://github.com/vioxen/subscription-runtime/blob/main/docs/agent-runtime-task-bridge.md) | making the JSON DTO the domain |
 
 ## What the 51k adapters are
 
@@ -238,7 +238,7 @@ authorize this anti-pattern.
 
 ### SR-AP-2. Silent second attempt
 
-[app-server-fallback-policy.ts](/Users/belief/dev/projects/subscription-runtime/src/provider-codex/app-server/application/app-server-fallback-policy.ts):
+[app-server-fallback-policy.ts](https://github.com/vioxen/subscription-runtime/blob/main/src/provider-codex/app-server/application/app-server-fallback-policy.ts):
 App Server fails, then `codex exec` runs. Also any automatic CLI/SDK
 fallback or provider racing.
 
@@ -255,7 +255,7 @@ new operation identity (ADR-0006 still proposed), not SDK resume.
 
 ### SR-AP-4. Process reuse across operations
 
-[App Server slot pool / prewarm](/Users/belief/dev/projects/subscription-runtime/src/provider-codex/app-server/application/app-server-slot-pool.ts),
+[App Server slot pool / prewarm](https://github.com/vioxen/subscription-runtime/blob/main/src/provider-codex/app-server/application/app-server-slot-pool.ts),
 worker-pool warm processes kept for the next job.
 
 Each V1 attempt gets a new process tree so empty custody can be proved.
@@ -277,7 +277,7 @@ the provider workspace.
 
 ### SR-AP-7. Privilege as the product path
 
-SR [host-jobs / systemd-run](/Users/belief/dev/projects/subscription-runtime/docs/host-job-lifecycle.md)
+SR [host-jobs / systemd-run](https://github.com/vioxen/subscription-runtime/blob/main/docs/host-job-lifecycle.md)
 and Darwin sudo/seatbelt live canary. Asking the user for root to run a
 normal turn.
 
@@ -294,7 +294,7 @@ protocol. They do not become a parallel policy engine.
 
 ### SR-AP-9. God worker module
 
-[`src/worker-codex/`](/Users/belief/dev/projects/subscription-runtime/src/worker-codex):
+[`src/worker-codex/`](https://github.com/vioxen/subscription-runtime/tree/main/src/worker-codex):
 MCP, project control, hosted, ledger, provider glue in one tree.
 
 New product features are new feature modules / bounded contexts, not more
@@ -326,13 +326,13 @@ These look useful and are the fastest way to import a worse architecture.
 
 | Id | SR piece | Why it is dangerous here |
 | --- | --- | --- |
-| SR-AP-2 | [app-server-fallback-policy.ts](/Users/belief/dev/projects/subscription-runtime/src/provider-codex/app-server/application/app-server-fallback-policy.ts) | Second attempt. |
+| SR-AP-2 | [app-server-fallback-policy.ts](https://github.com/vioxen/subscription-runtime/blob/main/src/provider-codex/app-server/application/app-server-fallback-policy.ts) | Second attempt. |
 | SR-AP-1 | Claude SDK default spawn without Host Custody | SDK inherits parent env; iterator drain is not process proof. |
 | SR-AP-3 | `resume` / `forkSession` / `persistSession` | Provider session as continuation transport. |
 | SR-AP-3 | Claude BG / tmux goal runner | Long-lived session ownership outside receipts. |
-| SR-AP-4 | [slot pool / prewarm](/Users/belief/dev/projects/subscription-runtime/src/provider-codex/app-server/application/app-server-slot-pool.ts) | Reuses a process across operations. |
+| SR-AP-4 | [slot pool / prewarm](https://github.com/vioxen/subscription-runtime/blob/main/src/provider-codex/app-server/application/app-server-slot-pool.ts) | Reuses a process across operations. |
 | SR-AP-6 | Hosted readonly mounts as provider cwd | Canonical project becomes the provider workspace. |
-| SR-AP-7 | [SR host-jobs / systemd-run](/Users/belief/dev/projects/subscription-runtime/docs/host-job-lifecycle.md) | Privilege as the product path. |
+| SR-AP-7 | [SR host-jobs / systemd-run](https://github.com/vioxen/subscription-runtime/blob/main/docs/host-job-lifecycle.md) | Privilege as the product path. |
 | SR-AP-8 | `canUseTool` / goal MCP as a second policy plane | Bypasses Runtime Security + Host. |
 | SR-AP-5 | Timeout/`not_found` → `failed` or `cancelled` | Manufactures terminal truth. |
 | SR-AP-9 | `worker-codex` as a tree | Orchestrator, MCP, ledger, hosted, and provider glued together. |
@@ -346,7 +346,7 @@ helpful helper.
 
 ## Do not copy
 
-- [`src/worker-codex/`](/Users/belief/dev/projects/subscription-runtime/src/worker-codex) as a tree, MCP god files, tmux goal runner
+- [`src/worker-codex/`](https://github.com/vioxen/subscription-runtime/tree/main/src/worker-codex) as a tree, MCP god files, tmux goal runner
 - file-backend worker pool as architecture
 - BullMQ as domain
 - OpenAI-compatible Codex HTTP bridge
