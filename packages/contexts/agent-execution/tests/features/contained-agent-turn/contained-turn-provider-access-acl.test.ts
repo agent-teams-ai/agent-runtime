@@ -3,9 +3,8 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { createContainedTurnProviderAccessPort } from "../../../dist/features/contained-agent-turn/composition/provider-access-anti-corruption.js";
-import { digestContainedTurnCanonicalValue } from "../../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
+import { acceptedAuthorityFixture } from "./support/accepted-authority-fixture.ts";
 import {
-  completeContainedTurnDispatchGrantSubject,
   containedTurnGrantSettlementRequestId,
 } from "../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
 import { containedTurnIdentity } from "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
@@ -39,14 +38,15 @@ test("Provider Access ACL preserves owner evidence and binds the exact snapshot 
   let dispatchedBinding: typeof binding | undefined;
   const port = createContainedTurnProviderAccessPort(Object.freeze({
     dispatchConsumptionV1: unusedDispatch,
-    resolve: Object.freeze({ async execute() { return { binding, evidence: evidence("acceptance"), kind: "resolved" as const }; } }),
+    resolve: Object.freeze({ async execute() { return Object.freeze({ binding, evidence: evidence("acceptance"), kind: "resolved" as const }); } }),
     revalidate: Object.freeze({ async execute(input) {
       dispatchedBinding = input.binding as typeof binding;
-      return { binding, evidence: evidence("dispatch"), kind: "valid" as const };
+      return Object.freeze({ binding, evidence: evidence("dispatch"), kind: "valid" as const });
     } }),
   }));
 
   const accepted = await port.resolveForAcceptance({
+    operationId: containedTurnIdentity("operation", "operation:one"),
     intent: { mode: "analysis", prompt: "Inspect the disposable workspace." },
     provider: "codex",
     scope,
@@ -75,10 +75,11 @@ test("Provider Access ACL preserves owner evidence and binds the exact snapshot 
 test("Provider Access ACL maps owner rejection evidence without exposing owner reasons", async () => {
   const port = createContainedTurnProviderAccessPort(Object.freeze({
     dispatchConsumptionV1: unusedDispatch,
-    resolve: Object.freeze({ async execute() { return { evidence: evidence("acceptance"), kind: "unavailable" as const, reason: "revoked" }; } }),
-    revalidate: Object.freeze({ async execute() { return { evidence: evidence("dispatch"), kind: "rejected" as const, reason: "revoked" }; } }),
+    resolve: Object.freeze({ async execute() { return Object.freeze({ evidence: evidence("acceptance"), kind: "unavailable" as const, reason: "revoked" }); } }),
+    revalidate: Object.freeze({ async execute() { return Object.freeze({ evidence: evidence("dispatch"), kind: "rejected" as const, reason: "revoked" }); } }),
   }));
   const outcome = await port.resolveForAcceptance({
+    operationId: containedTurnIdentity("operation", "operation:one"),
     intent: { mode: "analysis", prompt: "Inspect the disposable workspace." },
     provider: "codex",
     scope,
@@ -91,45 +92,22 @@ test("Provider Access ACL maps owner rejection evidence without exposing owner r
 });
 
 test("Provider Access ambiguous consumption is observed once and settled without a second consumption", async () => {
-  const scopeDigest = digestContainedTurnCanonicalValue({ scope });
-  const subject = completeContainedTurnDispatchGrantSubject({
-    attemptId: containedTurnIdentity("attempt", "attempt:provider-access-correlation"),
-    custodyId: containedTurnIdentity("custody", "custody:provider-access-correlation"),
-    effectId: containedTurnIdentity("effect", "effect:provider-access-correlation"),
-    executionGenerationId: containedTurnIdentity("execution_generation", "execution-generation:provider-access-correlation"),
-    hostBootId: containedTurnIdentity("host_boot", "host-boot:provider-access-correlation"),
-    hostInstanceId: containedTurnIdentity("host_instance", "host-instance:provider-access-correlation"),
-    operationCutoffRevision: 0, operationId: containedTurnIdentity("operation", "operation:provider-access-correlation"),
-    preparationToken: containedTurnIdentity("preparation", "preparation:provider-access-correlation"),
-    provider: "codex",
-    providerAccessExpectation: {
-      acceptedAuthorityDigest: "accepted-authority:one", accessRef: binding.accessRef, authorityHeadDigest: "authority-head:one",
-      bindingDigest: "binding-digest:one", bindingRevision: binding.revision, credentialBindingDigest: "credential-digest:one",
-      credentialBindingRef: binding.credentialBindingRef, credentialGeneration: binding.credentialGeneration,
-      providerAccountRef: binding.providerAccountRef, providerRouteRef: binding.providerRouteRef,
-    },
-    purpose: "contained_turn_provider_start_v1",
-    runtimeSecurityExpectation: {
-      acceptedAuthorityDigest: "security-accepted:one", authorityGeneration: "security-generation:one",
-      authorityHeadDigest: "security-head:one", authorityRevision: "security-revision:one",
-      constraintsDigest: "constraints:one", containmentPolicyDigest: "containment:one",
-      providerBindingDigest: "provider-binding:one", providerId: "codex",
-    },
-    scope, scopeDigest, workspaceId: containedTurnIdentity("workspace", "workspace:provider-access-correlation"),
-  });
+  const { accepted, subject } = await acceptedAuthorityFixture();
+  const acceptedScope = subject.scope;
+  const scopeDigest = subject.scopeDigest;
   const calls: string[] = [];
-  const ownerReceipt = {
+  const ownerReceipt = Object.freeze({
     ...subject.providerAccessExpectation, authorityHeadDigestAtConsumption: subject.providerAccessExpectation.authorityHeadDigest,
     claimBeforeControlTime: 100, claimBindingDigest: subject.providerAccessRequest.claimBindingDigest,
     consumedAtControlTime: 50, consumptionDigest: "provider-consumption:one",
     grantRequestId: subject.providerAccessRequest.grantRequestId, opaqueOwnerEvidenceRef: "provider-evidence:one",
     operationId: subject.operationId, provider: subject.provider, purpose: "contained-turn.provider-dispatch/v1" as const,
-    requestDigest: subject.providerAccessRequest.requestDigest, scope: { ...scope, scopeDigest },
-  };
+    requestDigest: subject.providerAccessRequest.requestDigest, scope: Object.freeze({ ...acceptedScope, scopeDigest }),
+  });
   const port = createContainedTurnProviderAccessPort(Object.freeze({
     dispatchConsumptionV1: Object.freeze({
       async consumeForDispatch() {calls.push("consume"); return { kind: "indeterminate" as const };},
-      async observeDispatchConsumption() {calls.push("observe"); return { kind: "consumed" as const, receipt: ownerReceipt };},
+      async observeDispatchConsumption() {calls.push("observe"); return Object.freeze({ kind: "consumed" as const, receipt: ownerReceipt });},
       async settleDispatchConsumption(input) {
         calls.push(`settle:${input.disposition}`);
         return Object.freeze({
@@ -145,7 +123,7 @@ test("Provider Access ambiguous consumption is observed once and settled without
     resolve: Object.freeze({ async execute() {throw new Error("unused resolve");} }),
     revalidate: Object.freeze({ async execute() {throw new Error("unused revalidate");} }),
   }));
-  const consumed = await port.consumeForDispatch({ grantRequestId: subject.providerAccessRequest.grantRequestId, subject });
+  const consumed = await port.consumeForDispatch({ accepted, grantRequestId: subject.providerAccessRequest.grantRequestId, subject });
   assert.equal(consumed.kind, "consumed");
   if (consumed.kind !== "consumed") {return;}
   assert.deepEqual(consumed.receipt.authorityFacts, subject.providerAccessExpectation);
@@ -169,3 +147,31 @@ test("production exports expose one kernel authority and isolate only non-author
   assert.match(composition, /createContainedTurnFeature/u);
   assert.match(composition, /createContainedTurnProviderAccessPort/u);
 });
+
+for (const metadata of ["name", "length"] as const) {
+  test(`existing Provider Access capture preserves receiver and behavior with a ${metadata} getter`, async () => {
+    let touched = 0; let calls = 0;
+    const resolve = Object.seal({async execute() {
+      assert.equal(this, resolve); calls++;
+      return Object.freeze({binding, evidence: evidence("acceptance"), kind: "resolved" as const});
+    }});
+    const method = resolve.execute;
+    const accessor = {configurable: true, get() {touched++; throw new Error("must not read metadata");}};
+    Object.defineProperty(method, metadata, accessor);
+    const port = createContainedTurnProviderAccessPort(Object.freeze({
+      dispatchConsumptionV1: unusedDispatch, resolve,
+      revalidate: Object.freeze({async execute() {throw new Error("unused revalidate");}}),
+    }));
+    assert.ok(Object.isFrozen(port)); assert.equal(port instanceof Promise, false);
+    assert.equal(touched, 0); assert.equal(calls, 0);
+    Object.defineProperties(method, {name: accessor, length: accessor, bind: accessor, apply: accessor});
+    Object.freeze(method);
+    resolve.execute = async () => {throw new Error("replacement must not be captured");};
+    const input = {operationId: containedTurnIdentity("operation", "operation:metadata"),
+      intent: {mode: "analysis" as const, prompt: "Synthetic capture check"}, provider: "codex" as const, scope};
+    const outcome = await port.resolveForAcceptance(input);
+    assert.equal(outcome.kind, "resolved");
+    assert.deepEqual(await port.resolveForAcceptance(input), outcome);
+    assert.equal(calls, 2); assert.equal(touched, 0);
+  });
+}

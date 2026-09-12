@@ -1,4 +1,8 @@
 import {
+  closeSync,
+  constants,
+  openSync,
+  realpathSync,
   fstatSync,
   lstatSync,
   readdirSync,
@@ -17,6 +21,41 @@ const sameDirectoryIdentity = (
 ): boolean => actual.isDirectory() && actual.dev === expected.dev && actual.ino === expected.ino &&
   actual.mode === expected.mode && actual.uid === expected.uid;
 
+// Cleanup authority proves only the captured directory identity, never process start.
+// A refused launch may have closed all launch descriptors before returning.
+export const retainPrivateRootCleanupAuthority = (live: LiveCustody): number | undefined => {
+  const launched = live.launchAuthority?.privateRootDescriptor.parentDescriptor;
+  if (launched !== undefined) {return launched;}
+  if (live.privateRootCleanupAuthority !== undefined) {return live.privateRootCleanupAuthority.descriptor;}
+  const expected = live.privatePaths?.root;
+  if (live.spawnStatus !== "never-started" || expected === undefined) {return;}
+  let descriptor: number | undefined;
+  try {
+    if (realpathSync(expected.path) !== expected.path) {return;}
+    descriptor = openSync(expected.path, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+    const observed = fstatSync(descriptor, { bigint: true });
+    // Before retention, recycled inode numbers are not authority. Once pinned,
+    // child changes may legitimately change ctime without changing identity.
+    if (!sameDirectoryIdentity(observed, expected) || observed.ctimeNs !== expected.ctimeNs) {return;}
+    const retained = descriptor;
+    let closed = false;
+    live.privateRootCleanupAuthority = Object.freeze({
+      descriptor: retained,
+      close() {
+        if (closed) {return;}
+        closeSync(retained);
+        closed = true;
+      },
+    });
+    descriptor = undefined;
+    return retained;
+  } catch {return undefined;}
+  finally {if (descriptor !== undefined) {closeSync(descriptor);}}
+};
+
+const retainedRootDescriptor = (live: LiveCustody): number | undefined =>
+  live.launchAuthority?.privateRootDescriptor.parentDescriptor ?? live.privateRootCleanupAuthority?.descriptor;
+
 const quarantinePath = (live: LiveCustody): string | undefined => {
   const expected = live.privatePaths?.root;
   return expected === undefined ? undefined : `${expected.path}.quarantine-${sha256(live.custodyRef)}`;
@@ -32,11 +71,12 @@ export const quarantinePrivateRootForReconciliation = (live: LiveCustody): boole
     live.privateRootClosure = Object.freeze({ ...live.privateRootClosure, status: "unproven" });
     return false;
   }
-  const authority = live.launchAuthority;
+  const descriptor = retainedRootDescriptor(live);
   const expected = live.privatePaths?.root;
-  if (authority === undefined || expected === undefined) {return false;}
-  const before = fstatSync(authority.privateRootDescriptor.parentDescriptor, { bigint: true });
-  if (!sameDirectoryIdentity(before, expected)) {return false;}
+  if (descriptor === undefined || expected === undefined) {return false;}
+  try {
+    if (!sameDirectoryIdentity(fstatSync(descriptor, { bigint: true }), expected)) {return false;}
+  } catch {return false;}
   const retainedPath = quarantinePath(live);
   if (retainedPath === undefined) {return false;}
   try {
@@ -72,13 +112,13 @@ export const quarantinePrivateRootForReconciliation = (live: LiveCustody): boole
 export const quarantinePrivateRoot = (live: LiveCustody): boolean => {
   if (live.privateRootClosure.status === "deleted") {return true;}
   if (!quarantinePrivateRootForReconciliation(live)) {return false;}
-  const authority = live.launchAuthority;
+  const descriptor = retainedRootDescriptor(live);
   const retainedPath = quarantinePath(live);
-  if (authority === undefined || retainedPath === undefined) {return false;}
+  if (descriptor === undefined || retainedPath === undefined) {return false;}
   try {
     const descriptorPath = live.fingerprint?.containmentProfile === "cooperative-darwin-posix-process-group"
       ? retainedPath
-      : `/proc/self/fd/${authority.privateRootDescriptor.parentDescriptor}`;
+      : `/proc/self/fd/${descriptor}`;
     for (const entry of readdirSync(descriptorPath)) {
       rmSync(`${descriptorPath}/${entry}`, { force: true, recursive: true });
     }

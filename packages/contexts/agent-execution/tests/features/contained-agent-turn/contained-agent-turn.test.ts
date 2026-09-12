@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { containedTurnIdentity } from "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 import type { ContainedTurnKernelDependencies } from "../../../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
 import { recoverContainedTurnDispatchPreparations } from "../../../dist/features/contained-agent-turn/application/contained-turn-preparation-recovery.js";
 import { createContainedTurnFeature } from "../../../dist/features/contained-agent-turn/composition/feature-module-factory.js";
@@ -87,6 +88,11 @@ test("prevention after custody reservation releases the exact reservation before
   assert.deepEqual(openedCustodies, [custodyId]);
   assert.deepEqual(custodyReleases.map(release => release.reason), ["claim_lost"]);
   assert.equal(current()?.dispatch.kind, "prevented");
+  assert.equal(current()?.terminal.kind, "final");
+  assert.equal(current()?.reconciliation.kind, "clear");
+  assert.equal((await dependencies.operationStore.listDispatchPreparations?.({
+    scope: { projectId: "project:one", tenantId: "tenant:one" },
+  }))?.length, 0);
   assert.equal(providerCalls.value, 0);
 });
 
@@ -202,25 +208,106 @@ test("abort after durable acceptance leaves owner state unchanged while explicit
   assert.equal(completed.status, "observed");
   if (completed.status === "observed") {assert.equal(completed.turn.status, "reconcile_required");}
 });
-test("potential command acceptance enters Host lifecycle custody without dispatch", async () => {
-  const { createdWorkspaces, dependencies, providerCalls } = createDependencies({
+test("potential acceptance preserves evidence without confirmed acceptance, persistence, or retry", async () => {
+  const { current, createdWorkspaces, dependencies, providerCalls } = createDependencies({
     potentialAcceptance: true,
   });
-  let acceptedOperationId: string | undefined;
-  const outcome = await createContainedTurnFeature(dependencies).submit.execute({
+  let acceptanceCalls = 0;
+  let acceptedCallbacks = 0;
+  const feature = createContainedTurnFeature({
+    ...dependencies,
+    operationStore: {
+      ...dependencies.operationStore,
+      accept: async (...args) => {
+        acceptanceCalls += 1;
+        return dependencies.operationStore.accept(...args);
+      },
+    },
+  });
+  const scope = { projectId: "project:one", tenantId: "tenant:one" };
+  const outcome = await feature.submit.execute({
     commandId: "command:one",
     expectedProvider: "codex",
     intent: { mode: "analysis", prompt: "inspect potential durable acceptance" },
-    scope: { projectId: "project:one", tenantId: "tenant:one" },
-  }, { onAccepted: operation => {acceptedOperationId = operation.operationId;} });
+    scope,
+  }, { onAccepted: () => {acceptedCallbacks += 1;} });
 
-  assert.equal(outcome.status, "observed");
-  if (outcome.status === "observed") {
-    assert.equal(outcome.turn.operationId, acceptedOperationId);
-    assert.equal(outcome.turn.status, "reconcile_required");
-  }
+  assert.deepEqual(outcome, {
+    candidateOperationId: operationId,
+    commandId: "command:one",
+    evidenceId: "evidence:potential-acceptance",
+    status: "potential_acceptance",
+  });
+  assert.equal(Object.isFrozen(outcome), true);
+  assert.equal(acceptedCallbacks, 0);
+  assert.equal(current(), undefined);
+  assert.deepEqual(await feature.observe.execute({ operationId, scope }), { status: "not_found" });
+  assert.deepEqual(await feature.cancel.execute({ operationId, scope }), { status: "not_found" });
+  assert.equal(acceptanceCalls, 1);
+  assert.equal(current(), undefined);
   assert.equal(createdWorkspaces.length, 0);
   assert.equal(providerCalls.value, 0);
+});
+
+for (const replayAt of ["identifyAcceptance", "accept"] as const) {
+  test(`confirmed ${replayAt} replay fires onAccepted without another provider attempt`, async () => {
+    const fixture = createDependencies();
+    const input = {
+      commandId: "command:one", expectedProvider: "codex",
+      intent: { mode: "analysis" as const, prompt: "inspect disposable state" },
+      scope: { projectId: "project:one", tenantId: "tenant:one" },
+    };
+    const accepted: string[] = [];
+    const options = { onAccepted: (operation: { operationId: string }) => {accepted.push(operation.operationId);} };
+    const initial = await createContainedTurnFeature(fixture.dependencies).submit.execute(input, options);
+    const durable = fixture.current();
+    assert.ok(durable);
+    const feature = createContainedTurnFeature({
+      ...fixture.dependencies,
+      operationStore: {
+        ...fixture.dependencies.operationStore,
+        [replayAt]: async () => ({ kind: "replayed" as const, operation: durable }),
+      },
+    });
+    assert.deepEqual(await feature.submit.execute(input, options), initial);
+    assert.deepEqual(accepted, [operationId, operationId]);
+    assert.equal(fixture.providerCalls.value, 1);
+    assert.equal(fixture.createdWorkspaces.length, 1);
+  });
+}
+
+test("ambiguous acknowledgement never mutates an actually persisted acceptance into invented debt", async () => {
+  const fixture = createDependencies();
+  let acceptanceCalls = 0;
+  let acceptedCallbacks = 0;
+  const feature = createContainedTurnFeature({
+    ...fixture.dependencies,
+    operationStore: {
+      ...fixture.dependencies.operationStore,
+      accept: async (candidate, authority) => {
+        acceptanceCalls += 1;
+        await fixture.dependencies.operationStore.accept(candidate, authority);
+        return {
+          kind: "potential_acceptance", candidateOperation: candidate,
+          evidenceId: containedTurnIdentity("evidence", "evidence:lost-acceptance-ack"),
+        };
+      },
+    },
+  });
+  const scope = { projectId: "project:one", tenantId: "tenant:one" };
+  const outcome = await feature.submit.execute({
+    commandId: "command:one", expectedProvider: "codex",
+    intent: { mode: "analysis", prompt: "inspect ambiguous acknowledgement" }, scope,
+  }, { onAccepted: () => {acceptedCallbacks += 1;} });
+  assert.equal(outcome.status, "potential_acceptance");
+  assert.equal(acceptedCallbacks, 0);
+  const observed = await feature.observe.execute({ operationId, scope });
+  assert.equal(observed.status, "observed");
+  if (observed.status === "observed") {assert.equal(observed.turn.status, "accepted");}
+  assert.equal(fixture.current()?.reconciliation.kind, "clear");
+  assert.equal(acceptanceCalls, 1);
+  assert.equal(fixture.providerCalls.value, 0);
+  assert.equal(fixture.createdWorkspaces.length, 0);
 });
 
 test("lost store acknowledgement is returned only with durable reconciliation debt and no provider retry", async () => {

@@ -1,4 +1,4 @@
-import type { FileHandle } from "node:fs/promises";
+import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody/composition";
 
 import type { ContainedTurnFilesystemWorkspacePort as ContainedTurnWorkspacePort } from "./contained-turn-filesystem-port.js";
 import {
@@ -35,11 +35,11 @@ import {
 } from "./contained-turn-directory-publication.js";
 
 const replayClosedWorkspace = async (input: {
-  readonly closing: FileHandle;
+  readonly closing: StableFilesystemHandle;
   readonly name: string;
   readonly receiptName: string;
-  readonly receipts: FileHandle;
-  readonly seals: FileHandle;
+  readonly receipts: StableFilesystemHandle;
+  readonly seals: StableFilesystemHandle;
 }): Promise<{ readonly receiptRef: string } | undefined> => {
   const receiptBytes = await readOptionalWorkspaceFileAt(input.receipts, input.receiptName);
   if (receiptBytes === undefined) {return undefined;}
@@ -60,10 +60,10 @@ const replayClosedWorkspace = async (input: {
 };
 
 const assertReceiptCustody = async (input: {
-  readonly active: FileHandle;
-  readonly cleanup: FileHandle;
-  readonly closed: FileHandle;
-  readonly frozen: FileHandle;
+  readonly active: StableFilesystemHandle;
+  readonly cleanup: StableFilesystemHandle;
+  readonly closed: StableFilesystemHandle;
+  readonly frozen: StableFilesystemHandle;
   readonly name: string;
   readonly rootIdentity: Readonly<{ dev: string; ino: string }>;
 }): Promise<void> => {
@@ -77,7 +77,8 @@ const assertReceiptCustody = async (input: {
   await assertDirectoryIdentityAt(input.closed, input.name, input.rootIdentity);
 };
 
-/** Read-only replay of the durable closure owner facts used by kernel recovery. */
+/** Repeatable durable recovery with a fresh native closed-inode query.
+ * Post-release readClosed belongs to the later native release/readback lifecycle. */
 export const queryContainedTurnWorkspaceClosure = async (
   input: Parameters<ContainedTurnWorkspacePort["close"]>[0],
   context: ContainedTurnWorkspaceContext,
@@ -116,20 +117,24 @@ export const queryContainedTurnWorkspaceClosure = async (
       workspaceName(existing.operationId, existing.scope) !== name) {
       throw new Error("contained turn workspace closure query identity mismatch");
     }
-    await assertReceiptCustody({
-      active, cleanup, closed, frozen, name, rootIdentity: creation.rootIdentity,
-    });
+    if (context.nativeWorkspace === undefined) {
+      await assertReceiptCustody({
+        active, cleanup, closed, frozen, name, rootIdentity: creation.rootIdentity,
+      });
+    } else if (!sameWorkspaceClosureRecord(await context.nativeWorkspace.queryClosed(), existing)) {
+      throw new Error("contained turn native closed observation conflicts with genuine closure");
+    }
     return Object.freeze({ receiptRef: existing.receiptRef });
   } finally {await closeWorkspaceHandles(handles);}
 };
 
 const prepareClosedWorkspaceCustody = async (input: {
-  readonly active: FileHandle;
-  readonly cleanup: FileHandle;
-  readonly closed: FileHandle;
+  readonly active: StableFilesystemHandle;
+  readonly cleanup: StableFilesystemHandle;
+  readonly closed: StableFilesystemHandle;
   readonly closingBytes: Buffer | undefined;
   readonly faults: ContainedTurnWorkspaceContext["options"]["testFaults"];
-  readonly frozen: FileHandle;
+  readonly frozen: StableFilesystemHandle;
   readonly name: string;
   readonly seal: ReturnType<typeof parseWorkspaceSealRecord>;
 }): Promise<void> => {
@@ -168,6 +173,29 @@ const prepareClosedWorkspaceCustody = async (input: {
   }
 };
 
+const readBoundClosureSeal = async (
+  seals: StableFilesystemHandle, recordName: string, name: string,
+  input: Parameters<ContainedTurnWorkspacePort["close"]>[0],
+  creation: ReturnType<typeof parseWorkspaceCreationRecord>,
+) => {
+  const sealBytes = await readOptionalWorkspaceFileAt(seals, recordName);
+  if (sealBytes === undefined) {throw new Error("contained turn workspace has no frozen artifact seal");}
+  const seal = parseWorkspaceSealRecord(sealBytes);
+  if (
+      seal.workspaceName !== name || workspaceName(seal.operationId, seal.scope) !== name ||
+      seal.operationId !== input.operationId || !sameScope(seal.scope, input.scope)
+  ) {
+      throw new Error("contained turn workspace seal identity mismatch");
+  }
+  if (
+      seal.rootIdentity.dev !== creation.rootIdentity.dev ||
+      seal.rootIdentity.ino !== creation.rootIdentity.ino
+  ) {
+      throw new Error("contained turn workspace seal conflicts with creation root identity");
+  }
+  return seal;
+};
+
 export const closeContainedTurnWorkspace = async (
   input: Parameters<ContainedTurnWorkspacePort["close"]>[0],
   context: ContainedTurnWorkspaceContext,
@@ -195,25 +223,21 @@ export const closeContainedTurnWorkspace = async (
       throw new Error("contained turn workspace close conflicts with creation binding");
     }
     if (await readOptionalWorkspaceFileAt(receipts, recordName) !== undefined) {
-      await assertReceiptCustody({ active, cleanup, closed, frozen, name, rootIdentity: creation.rootIdentity });
+      if (context.nativeWorkspace === undefined) {
+        await assertReceiptCustody({ active, cleanup, closed, frozen, name, rootIdentity: creation.rootIdentity });
+      } else {
+        const observed = await context.nativeWorkspace.queryClosed();
+        const recorded = parseWorkspaceClosureRecord(await readStableFileAt(
+          receipts, recordName, workspaceRecordBytes,
+        ));
+        if (!sameWorkspaceClosureRecord(observed, recorded)) {
+          throw new Error("contained turn native closed observation conflicts with genuine closure");
+        }
+      }
     }
     const replayed = await replayClosedWorkspace({ closing, name, receiptName: recordName, receipts, seals });
     if (replayed !== undefined) {return replayed;}
-    const sealBytes = await readOptionalWorkspaceFileAt(seals, recordName);
-    if (sealBytes === undefined) {throw new Error("contained turn workspace has no frozen artifact seal");}
-    const seal = parseWorkspaceSealRecord(sealBytes);
-    if (
-      seal.workspaceName !== name || workspaceName(seal.operationId, seal.scope) !== name ||
-      seal.operationId !== input.operationId || !sameScope(seal.scope, input.scope)
-    ) {
-      throw new Error("contained turn workspace seal identity mismatch");
-    }
-    if (
-      seal.rootIdentity.dev !== creation.rootIdentity.dev ||
-      seal.rootIdentity.ino !== creation.rootIdentity.ino
-    ) {
-      throw new Error("contained turn workspace seal conflicts with creation root identity");
-    }
+    const seal = await readBoundClosureSeal(seals, recordName, name, input, creation);
     const expectedClosure = createWorkspaceClosureRecord(name, seal);
     const closingBytes = await readOptionalWorkspaceFileAt(closing, recordName);
     if (closingBytes !== undefined && !sameWorkspaceClosureRecord(
@@ -221,9 +245,11 @@ export const closeContainedTurnWorkspace = async (
     )) {
       throw new Error("contained turn workspace closing record conflicts with its frozen seal");
     }
-    await prepareClosedWorkspaceCustody({
-      active, cleanup, closed, closingBytes, faults: options.testFaults, frozen, name, seal,
-    });
+    if (context.nativeWorkspace === undefined) {
+      await prepareClosedWorkspaceCustody({
+        active, cleanup, closed, closingBytes, faults: options.testFaults, frozen, name, seal,
+      });
+    } else {await context.nativeWorkspace.cleanup();}
     const closureBytes = encodeWorkspaceClosureRecord(expectedClosure);
     if (closingBytes === undefined) {
       await writeImmutableFileAt({
@@ -235,7 +261,10 @@ export const closeContainedTurnWorkspace = async (
         temporaryKind: "metadata",
       });
     }
-    if (await directoryExistsAt(cleanup, name)) {
+    if (context.nativeWorkspace !== undefined) {
+      await context.nativeWorkspace.close();
+      await options.testFaults?.checkpoint("workspace.close.retained");
+    } else if (await directoryExistsAt(cleanup, name)) {
       await assertDirectoryIdentityAt(cleanup, name, seal.rootIdentity);
       requireDirectoryPublication(await moveDirectoryNoReplace({
         checkpoint: "workspace.close.cleanup-to-closed",
@@ -250,7 +279,9 @@ export const closeContainedTurnWorkspace = async (
       }), "workspace retained closure");
       await options.testFaults?.checkpoint("workspace.close.retained");
     }
-    await assertDirectoryIdentityAt(closed, name, seal.rootIdentity);
+    if (context.nativeWorkspace === undefined) {
+      await assertDirectoryIdentityAt(closed, name, seal.rootIdentity);
+    }
     await writeImmutableFileAt({
       bytes: closureBytes,
       faults: prefixedWorkspaceFaults(options.testFaults, "workspace.receipt"),
@@ -259,6 +290,7 @@ export const closeContainedTurnWorkspace = async (
       stagingDirectory: metadataStaging,
       temporaryKind: "metadata",
     });
+    await context.nativeWorkspace?.acknowledgeClosure();
     await unlinkOptionalAt(closing, recordName);
     return { receiptRef: expectedClosure.receiptRef };
   } finally {await closeWorkspaceHandles(handles);}

@@ -15,7 +15,7 @@ export const INSPECT_FIELDS = Object.freeze([
   "AppArmorProfile", "Args", "Config", "Created", "Driver", "ExecIDs", "GraphDriver", "HostConfig",
   "HostnamePath", "HostsPath", "Id", "Image", "ImageManifestDescriptor", "LogPath", "MountLabel", "Mounts",
   "Name", "NetworkSettings", "Node", "Path", "Platform", "ProcessLabel", "ResolvConfPath", "RestartCount", "SizeRootFs",
-  "SizeRw", "State",
+  "SizeRw", "State", "Storage",
 ]);
 
 export const CONFIG_FIELDS = Object.freeze([

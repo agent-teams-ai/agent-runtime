@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "build": "tsc --project tsconfig.json --pretty false",
-    "check": "pnpm run clean && pnpm run typecheck && pnpm run build && pnpm run test",
+    "check": "node scripts/run-package-tests.mjs --check",
     "clean": "node -e \"const fs=require('node:fs'); for (const path of ['dist','.cache']) fs.rmSync(path, { recursive: true, force: true })\"",
-    "test": "node --test --test-concurrency=1 tests/capability-bundle-contract.test.ts tests/codex-setup.e2e.test.ts tests/claude-code-setup.e2e.test.ts tests/claude-code-semantic-correction.e2e.test.ts tests/contained-turn.e2e.test.ts tests/contained-turn-provider-access-integration.test.ts tests/contained-turn-host-custody-integration.test.ts tests/contained-turn-provider-selection-construction.test.ts tests/provider-candidate-route-gate.test.ts tests/contained-turn-disposal-races.e2e.test.ts tests/contained-turn-malformed-custody.e2e.test.ts tests/contained-turn-nonterminal-custody.e2e.test.ts tests/runtime-access-boundaries.e2e.test.ts tests/trusted-runtime-access-scope.unit.test.ts tests/public-api.test.ts tests/claude-code-contract.test.ts",
-    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"
+    "test": "node scripts/run-package-tests.mjs",
+    "test:joined:linux": "node scripts/run-linux-joined-product.mjs",
+    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false",
+    "test:http-completion": "node --experimental-test-module-mocks --test tests/support/linux-http-completion-negative.mjs"
   },
   "agentTeamsArchitecture": {
     "role": "host-app",
@@ -16,13 +18,16 @@
   },
   "dependencies": {
     "@agent-teams/agent-execution": "workspace:*",
+    "@agent-teams/filesystem-custody": "workspace:*",
+    "@agent-teams/provider-access": "workspace:*",
     "@agent-teams/runtime-configuration": "workspace:*",
-    "@agent-teams/runtime-security": "workspace:*"
+    "@agent-teams/runtime-security": "workspace:*",
+    "@get-modular/assembly": "catalog:",
+    "@get-modular/core": "catalog:"
   },
-  "devDependencies": {
-    "@agent-teams/provider-access": "workspace:*"
-  },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -31,6 +36,10 @@
     "./composition": {
       "types": "./dist/composition.d.ts",
       "import": "./dist/composition.js"
-    }
+    },
+    "./scripts/run-package-tests.mjs": "./scripts/run-package-tests.mjs"
+  },
+  "devDependencies": {
+    "pg": "catalog:"
   }
 }

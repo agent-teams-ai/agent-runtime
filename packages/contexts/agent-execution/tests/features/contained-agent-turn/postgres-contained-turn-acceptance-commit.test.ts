@@ -1,3 +1,4 @@
+import { intentAuthority } from "./support/intent-guard-fixture.ts";
 import assert from "node:assert/strict";
 
 import { type Pool, type PoolClient } from "pg";
@@ -41,6 +42,10 @@ const poolWithLostAcceptanceCommit = (
                 acceptanceAttempts += 1;
                 acceptanceAttempted = true;
               }
+              if (typeof statement === "string" &&
+                  statement.startsWith("SELECT authority_digest,command_fingerprint,operation_id")) {
+                acceptanceAttempted = true;
+              }
               if (typeof statement === "string" && statement === "COMMIT" &&
                   acceptanceAttempted && loseCommit) {
                 loseCommit = false;
@@ -68,7 +73,7 @@ postgresTest("lost initial acceptance COMMIT reconciles exact durable accepted t
     await resetSchema(pool);
     const operation = operationForProject("project:accept-commit-loss", "accept-commit-loss");
     const ambiguous = poolWithLostAcceptanceCommit(pool);
-    const store = new PostgresContainedTurnOperationStore({ pool: ambiguous.pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool: ambiguous.pool });
 
     const outcome = await store.accept(operation, operationAuthority(operation));
 
@@ -85,10 +90,10 @@ postgresTest("lost exact-replay COMMIT reconciles the durable replay without ret
   await withPool(async pool => {
     await resetSchema(pool);
     const operation = operationForProject("project:accept-replay-loss", "accept-replay-loss");
-    const normal = new PostgresContainedTurnOperationStore({ pool });
+    const normal = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     assert.equal((await normal.accept(operation, operationAuthority(operation))).kind, "accepted");
     const ambiguous = poolWithLostAcceptanceCommit(pool);
-    const store = new PostgresContainedTurnOperationStore({ pool: ambiguous.pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool: ambiguous.pool });
 
     const outcome = await store.accept(operation, operationAuthority(operation));
 
@@ -115,15 +120,15 @@ postgresTest("lost fingerprint-conflict COMMIT reconciles the exact durable conf
       providerAccessSnapshot: winner.providerAccessSnapshot,
       scope: winner.scope,
     });
-    const normal = new PostgresContainedTurnOperationStore({ pool });
+    const normal = new PostgresContainedTurnOperationStore({ intentAuthority, pool });
     assert.equal((await normal.accept(winner, operationAuthority(winner))).kind, "accepted");
     const ambiguous = poolWithLostAcceptanceCommit(pool);
-    const store = new PostgresContainedTurnOperationStore({ pool: ambiguous.pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool: ambiguous.pool });
 
     const outcome = await store.accept(conflict, operationAuthority(conflict));
 
     assert.equal(outcome.kind, "fingerprint_conflict");
-    assert.equal(ambiguous.acceptanceAttempts(), 1);
+    assert.equal(ambiguous.acceptanceAttempts(), 0);
   });
 });
 
@@ -132,7 +137,7 @@ postgresTest("unavailable post-COMMIT observation returns typed potential accept
     await resetSchema(pool);
     const operation = operationForProject("project:accept-unknown", "accept-unknown");
     const ambiguous = poolWithLostAcceptanceCommit(pool, { failObservation: true });
-    const store = new PostgresContainedTurnOperationStore({ pool: ambiguous.pool });
+    const store = new PostgresContainedTurnOperationStore({ intentAuthority, pool: ambiguous.pool });
 
     const outcome = await store.accept(operation, operationAuthority(operation));
 
@@ -142,7 +147,7 @@ postgresTest("unavailable post-COMMIT observation returns typed potential accept
       assert.equal(outcome.candidateOperation.operationId, operation.operationId);
       assert.match(outcome.evidenceId, /^evidence:postgres-acceptance-commit:/u);
     }
-    const durable = await new PostgresContainedTurnOperationStore({ pool }).read({
+    const durable = await new PostgresContainedTurnOperationStore({ intentAuthority, pool }).read({
       operationId: operation.operationId,
       scope: operation.scope,
     });

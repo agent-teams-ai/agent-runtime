@@ -11,7 +11,7 @@ const layersOf = (config: ReturnType<typeof exactConfigResult>) => config.layers
 
 test("pins the divergent generated ConfigLayer schema and TypeScript evidence", () => {
   const fixture = JSON.parse(readFileSync(new URL(
-    "../../fixtures/linux-codex-app-server-0.150.1-permission-contract.json",
+    "../../fixtures/codex-app-server-0.153.4-permission-contract.json",
     import.meta.url,
   ), "utf8")) as {readonly configLayerEvidence: {
     readonly jsonSchema: {readonly disabledReason: {readonly required: boolean; readonly types: readonly string[]};
@@ -23,16 +23,16 @@ test("pins the divergent generated ConfigLayer schema and TypeScript evidence", 
     disabledReason: { required: false, types: ["string", "null"] },
     required: ["config", "name", "version"],
     source: "v2/ConfigReadResponse.json",
-    sourceSha256: "2de702bfaedcf8f4362b0122299ae412bdc0c244564a376a30fc9624c7df2514",
+    sourceSha256: "96a04a3f7fff2dc7fafc9f831e8bcd422e021d697dd2c14c801f098a9f21396d",
   });
   assert.equal(fixture.configLayerEvidence.typeScript.disabledReasonRequired, true);
   assert.equal(fixture.configLayerEvidence.typeScript.source, "v2/ConfigLayer.ts");
   assert.match(fixture.configLayerEvidence.typeScript.fragment, /disabledReason: string \| null/u);
   assert.match(fixture.configLayerEvidence.wireValidationBasis, /generated JSON Schema/u);
-  assert.match(fixture.configLayerEvidence.wireValidationBasis, /observed Codex 0\.150\.1 wire/u);
+  assert.match(fixture.configLayerEvidence.wireValidationBasis, /observed Codex 0\.153\.4 wire/u);
 });
 
-test("accepts omitted or null disabledReason from the exact 0.150.1 config wire", () => {
+test("accepts omitted or null disabledReason from the exact 0.153.4 config wire", () => {
   for (const omitted of [true, false]) {
     const config = exactConfigResult();
     for (const layer of layersOf(config)) {
@@ -44,7 +44,9 @@ test("accepts omitted or null disabledReason from the exact 0.150.1 config wire"
 
 test("admits only an empty exact system placeholder, never a system policy or duplicate layer", () => {
   const config = exactConfigResult();
-  const [system, ...remaining] = layersOf(config);
+  const all = layersOf(config);
+  const system = all.find(layer => layer.name.type === "system");
+  const remaining = all.filter(layer => layer !== system);
   assert.ok(system);
   for (const replacement of [
     {...system, config: {model: "unqualified-system-policy"}},
@@ -52,9 +54,9 @@ test("admits only an empty exact system placeholder, never a system policy or du
     {...system, name: {type: "system", file: "/other/config.toml"}},
     {...system, extra: true},
   ]) {
-    assert.throws(() => validateCodexConfigEvidence({...config, layers: [replacement, ...remaining]}, boundary), /rejected/u);
+    assert.throws(() => validateCodexConfigEvidence({...config, layers: [...remaining, replacement]}, boundary), /rejected/u);
   }
-  assert.throws(() => validateCodexConfigEvidence({...config, layers: [system, system, ...remaining]}, boundary), /rejected/u);
+  assert.throws(() => validateCodexConfigEvidence({...config, layers: [...remaining, system, system]}, boundary), /rejected/u);
   assert.throws(() => validateCodexConfigEvidence({...config, layers: remaining}, boundary), /rejected/u);
 });
 
@@ -74,17 +76,18 @@ test("rejects extra effective, layer, origin, and policy-bearing keys", () => {
   const effectiveConfig = exact.config as Record<string, unknown>;
   const effectivePermissions = effectiveConfig.permissions as Record<string, unknown>;
   const origins = exact.origins as Record<string, Origin>;
+  const leaf = `permissions.${boundary.permissionProfileId}.extends`;
   const user = layers.find(layer => layer.name.type === "user")!;
   const session = layers.find(layer => layer.name.type === "sessionFlags")!;
   const mutations = [
-    { ...exact, config: { ...effectiveConfig, mcp_servers: {} } },
+    { ...exact, config: { ...effectiveConfig, mcp_servers: { injected: {} } } },
     { ...exact, config: { ...effectiveConfig, permissions: { ...effectivePermissions, extra: {} } } },
     { ...exact, layers: layers.map(layer => layer === user ? { ...layer, config: { ...layer.config, instructions: "unsafe" } } : layer) },
     { ...exact, layers: layers.map(layer => layer === session ? { ...layer, config: { ...layer.config, policy: "unsafe" } } : layer) },
-    { ...exact, origins: { ...origins, extra: origins.permissions } },
-    { ...exact, origins: { ...origins, permissions: { ...origins.permissions, version: "1" } } },
-    { ...exact, origins: { ...origins, permissions: { ...origins.permissions, name: { ...origins.permissions.name, file: "/other/config.toml" } } } },
-    { ...exact, origins: { ...origins, permissions: { ...origins.permissions, name: { ...origins.permissions.name, type: "system", file: "/etc/codex/config.toml" } } } },
+    { ...exact, origins: { ...origins, extra: origins[leaf] } },
+    { ...exact, origins: { ...origins, [leaf]: { ...origins[leaf], version: "1" } } },
+    { ...exact, origins: { ...origins, [leaf]: { ...origins[leaf], name: { ...origins[leaf].name, file: "/other/config.toml" } } } },
+    { ...exact, origins: { ...origins, [leaf]: { ...origins[leaf], name: { ...origins[leaf].name, type: "system", file: "/etc/codex/config.toml" } } } },
   ];
   for (const mutation of mutations) {
     assert.throws(() => validateCodexConfigEvidence(mutation, boundary), /rejected/u);

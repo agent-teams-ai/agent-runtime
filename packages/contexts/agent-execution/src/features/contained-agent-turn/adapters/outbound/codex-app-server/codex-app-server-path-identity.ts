@@ -1,3 +1,4 @@
+import {codexProtocolPaths} from "./codex-docker-path-projection.js";
 import { lstatSync, readdirSync, realpathSync } from "node:fs";
 import type { BigIntStats } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -147,8 +148,10 @@ export const observeCodexWorkspaceEndpoint = (
   if (boundary.workspaceIdentity.path !== boundary.workspaceRef) {
     throw new TypeError("Codex workspace path does not match its validated filesystem identity");
   }
-  const candidate = normalizedEndpointCandidate(value, boundary.workspaceRef);
-  const suffix = containedEndpointSuffix(candidate, boundary.workspaceRef, allowWorkspaceRoot);
+  const wireRoot = codexProtocolPaths(boundary).workspaceRef;
+  const wireCandidate = normalizedEndpointCandidate(value, wireRoot);
+  const suffix = containedEndpointSuffix(wireCandidate, wireRoot, allowWorkspaceRoot);
+  const candidate = resolve(boundary.workspaceRef, suffix);
   return Object.freeze({ endpointObservation: captureEndpointObservation(candidate, suffix, boundary), path: candidate });
 };
 
@@ -156,8 +159,13 @@ export const diagnoseCodexWorkspaceEndpoint = (
   endpointObservation: CodexEndpointPathObservation,
   boundary: CodexAppServerPermissionBoundary,
 ): void => {
-  const current = observeCodexWorkspaceEndpoint(endpointObservation.path, boundary,
-    endpointObservation.path === boundary.workspaceRef).endpointObservation;
+  if (boundary.workspaceIdentity.path !== boundary.workspaceRef) {
+    throw new TypeError("Codex workspace path does not match its validated filesystem identity");
+  }
+  // These are already Host observations; never reinterpret them as child input.
+  const candidate = normalizedEndpointCandidate(endpointObservation.path, boundary.workspaceRef);
+  const suffix = containedEndpointSuffix(candidate, boundary.workspaceRef, candidate === boundary.workspaceRef);
+  const current = captureEndpointObservation(candidate, suffix, boundary);
   if (current.existing.length < endpointObservation.existing.length) {
     throw new TypeError("Codex provider endpoint observation disappeared after admission");
   }

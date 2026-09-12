@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
-import { unlink, type FileHandle } from "node:fs/promises";
+import type { StableFilesystemHandle as FileHandle } from "@agent-teams/filesystem-custody/composition";
 import { basename, dirname, isAbsolute, resolve } from "node:path";
 
 import type { ContainedTurnScope } from "../../../contracts/contained-agent-turn.js";
 import {
-  descriptorChildPath,
+  unlinkFileEntry,
   fsyncDirectoryHandle,
   inspectFileHandle,
   isMissingFilesystemEntry,
@@ -21,7 +21,12 @@ import type { ContainedTurnWorkspaceRoots } from "./contained-turn-workspace-cus
 const WORKSPACE_NAME = /^operation-[a-f\d]{64}$/u;
 const RECORD_BYTES = 64 * 1_024;
 
+export type SelectedNativeWorkspaceBackend = ReturnType<
+  typeof import("./darwin-attempt-workspace-backend.js").selectDarwinAttemptWorkspaceBackend
+>;
+
 export interface ContainedTurnWorkspaceContext {
+  readonly nativeWorkspace?: SelectedNativeWorkspaceBackend | undefined;
   readonly custodyRoots: readonly BoundContainedTurnRoot[];
   readonly options: Readonly<{
     readonly canonicalProjectRoot: string;
@@ -75,7 +80,7 @@ export const readOptionalWorkspaceFileAt = async (
 
 export const unlinkOptionalAt = async (parent: FileHandle, name: string): Promise<void> => {
   try {
-    await unlink(descriptorChildPath(parent, name));
+    await unlinkFileEntry(parent, name);
     await fsyncDirectoryHandle(parent);
   } catch (error) {
     if (!isMissingFilesystemEntry(error)) {throw error;}

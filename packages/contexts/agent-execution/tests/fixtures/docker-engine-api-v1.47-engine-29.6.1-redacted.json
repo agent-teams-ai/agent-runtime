@@ -1,5 +1,6 @@
 {
   "fixtureVersion": 1,
+  "compatibilityEvidence": "Synthetic correction from route report section 5.2 (source 51aa81a); not a fresh Engine capture. OOM null compatibility is supported for observed Engine 29.6.1/cgroup v2 by Moby 8ec5ab355a34b2a0e2b3238d67bdefe77fefa982 daemon/daemon_unix.go lines 366-368 and 447-454, and Docker runmetrics cgroup-v2 documentation (discarded toggle; default OOM killer enabled).",
   "dockerApiVersion": "v1.47",
   "dockerEngineVersion": "29.6.1",
   "platform": "linux-amd64-cgroup-v2",
@@ -114,7 +115,7 @@
       "Cgroup": "",
       "Links": null,
       "OomScoreAdj": 0,
-      "PidMode": "private",
+      "PidMode": "",
       "Privileged": false,
       "PublishAllPorts": false,
       "ReadonlyRootfs": true,
@@ -137,7 +138,7 @@
       "BlkioDeviceWriteBps": [],
       "BlkioDeviceReadIOps": [],
       "BlkioDeviceWriteIOps": [],
-      "CpuPeriod": 100000,
+      "CpuPeriod": 0,
       "CpuQuota": 0,
       "CpuRealtimePeriod": 0,
       "CpuRealtimeRuntime": 0,
@@ -149,15 +150,15 @@
       "MemoryReservation": 0,
       "MemorySwap": 100663296,
       "MemorySwappiness": null,
-      "OomKillDisable": false,
+      "OomKillDisable": null,
       "PidsLimit": 32,
       "Ulimits": [],
       "MaskedPaths": [],
       "ReadonlyPaths": [],
       "Init": true,
       "Mounts": [
-        {"Type": "bind", "Source": "__WORKSPACE_SOURCE__", "Target": "/workspace", "ReadOnly": false, "Consistency": "default", "BindOptions": {"Propagation": "rprivate", "NonRecursive": false, "CreateMountpoint": false, "ReadOnlyNonRecursive": false}},
-        {"Type": "bind", "Source": "__PRIVATE_SOURCE__", "Target": "/agent-private", "ReadOnly": false, "Consistency": "default", "BindOptions": {"Propagation": "rprivate", "NonRecursive": false, "CreateMountpoint": false, "ReadOnlyNonRecursive": false}}
+        {"Type": "bind", "Source": "__WORKSPACE_SOURCE__", "Target": "/workspace", "Consistency": "default", "BindOptions": {"Propagation": "rprivate", "NonRecursive": false, "CreateMountpoint": false, "ReadOnlyNonRecursive": false}},
+        {"Type": "bind", "Source": "__PRIVATE_SOURCE__", "Target": "/agent-private", "Consistency": "default", "BindOptions": {"Propagation": "rprivate", "NonRecursive": false, "CreateMountpoint": false, "ReadOnlyNonRecursive": false}}
       ]
     },
     "GraphDriver": {"Data": {}, "Name": "overlay2"},
@@ -182,7 +183,6 @@
       "Volumes": null,
       "WorkingDir": "/workspace",
       "Entrypoint": ["/usr/local/bin/provider"],
-      "NetworkDisabled": false,
       "Labels": {
         "com.agent-runtime.contained-turn": "v1",
         "com.agent-runtime.host-identity-sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

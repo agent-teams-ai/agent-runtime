@@ -1,5 +1,3 @@
-import { createHmac } from "node:crypto";
-
 import type {
   ClaudeCodeInstallationCandidate,
   DiscoverClaudeCodeInstallations,
@@ -17,6 +15,7 @@ import type {
 } from "@agent-teams/runtime-security";
 
 import type { ClaudeCodeSetupInspectionPlanner } from "./ports/outbound/claude-code-setup-inspection-planner.js";
+import type { OpaqueReferenceDigest } from "./ports/outbound/opaque-reference-digest.js";
 import type { TrustedClaudeCodeSetupScope } from "./trusted-claude-code-setup-scope.js";
 import type {
   ClaudeCodeSetupDiagnostic,
@@ -57,13 +56,15 @@ const invokeAsPromise = <T>(operation: () => Promise<T>): Promise<T> =>
   Promise.resolve().then(operation);
 
 const hmacRef = (
+  digest: OpaqueReferenceDigest,
   key: Uint8Array,
   domain: "claude-code-setup-observation" | "claude-code-setup-installation" | "claude-code-setup-source",
   scope: TrustedClaudeCodeSetupScope,
   identity?: string,
-): string => `${domain}:${createHmac("sha256", key)
-  .update(JSON.stringify([domain, scope.scopeId, scope.observationEpoch, identity ?? ""]))
-  .digest("hex")}`;
+): string => `${domain}:${digest.hex(
+  key,
+  JSON.stringify([domain, scope.scopeId, scope.observationEpoch, identity ?? ""]),
+)}`;
 
 const mapCandidate = (
   candidate: AuthorizedClaudeCodeExecutableCandidate,
@@ -143,26 +144,31 @@ type ConfigurationInspection = Awaited<ReturnType<InspectClaudeCodeConfiguration
 interface ProjectionInput {
   readonly authorization: AuthorizedInspection;
   readonly configuration: ConfigurationInspection;
+  readonly digest: OpaqueReferenceDigest;
   readonly installations: InstallationInspection;
   readonly referenceKey: Uint8Array;
   readonly scope: TrustedClaudeCodeSetupScope;
 }
 
 const projectObservedSetup = ({
-  authorization, configuration, installations, referenceKey, scope,
+  authorization, configuration, digest, installations, referenceKey, scope,
 }: ProjectionInput): InspectClaudeCodeRuntimeSetupOutcome => {
+    const ref = (
+      domain: "claude-code-setup-observation" | "claude-code-setup-installation" | "claude-code-setup-source",
+      identity?: string,
+    ): string => hmacRef(digest, referenceKey, domain, scope, identity);
     const deferredConfiguration = configuration.deferredObservations;
     const observedConfiguration = configuration.observedPortableIntent;
     const sourceModel = configuration.sourceModel;
     const sourceReferences = new Map(configuration.sources.map(source => [
       source.sourceRef,
-      hmacRef(referenceKey, "claude-code-setup-source", scope, source.sourceRef),
+      ref("claude-code-setup-source", source.sourceRef),
     ]));
     const mapSafeRef = (safeRef?: string): string | undefined =>
       safeRef === undefined
         ? undefined
         : sourceReferences.get(safeRef) ??
-          hmacRef(referenceKey, "claude-code-setup-source", scope, safeRef);
+          ref("claude-code-setup-source", safeRef);
     const referencesByRole = Map.groupBy(configuration.sources, source => source.role);
     const publicSourceReference = new Map<string, string>();
     for (const [role, sources] of referencesByRole) {
@@ -176,12 +182,7 @@ const projectObservedSetup = ({
         ...(diagnostic.candidateRef === undefined
           ? {}
           : {
-              safeRef: hmacRef(
-                referenceKey,
-                "claude-code-setup-installation",
-                scope,
-                diagnostic.candidateRef,
-              ),
+              safeRef: ref("claude-code-setup-installation", diagnostic.candidateRef),
             }),
       })),
       ...configuration.diagnostics.map(diagnostic => {
@@ -212,16 +213,11 @@ const projectObservedSetup = ({
       expectedLimitations,
       installations: installations.installations.map(installation => ({
         aliases: installation.aliases.map(alias => ({ ...alias })),
-        installationRef: hmacRef(
-          referenceKey,
-          "claude-code-setup-installation",
-          scope,
-          installation.installationRef,
-        ),
+        installationRef: ref("claude-code-setup-installation", installation.installationRef),
         status: installation.status,
       })),
       nextActions: [...nextActions].toSorted(),
-      observationRef: hmacRef(referenceKey, "claude-code-setup-observation", scope, JSON.stringify({
+      observationRef: ref("claude-code-setup-observation", JSON.stringify({
         sourceModel,
         sources: configuration.sources.map(source => ({
           semanticDigest: source.semanticDigest ?? null, sourceRef: source.sourceRef, status: source.status,
@@ -231,12 +227,12 @@ const projectObservedSetup = ({
         form: observation.form,
         key: observation.key,
         sourceRef: sourceReferences.get(observation.sourceRef) ??
-          hmacRef(referenceKey, "claude-code-setup-source", scope, observation.sourceRef),
+          ref("claude-code-setup-source", observation.sourceRef),
         status: observation.status,
       })),
       observedPortableIntent: observedConfiguration.map(intent => {
         const sourceRef = sourceReferences.get(intent.sourceRef) ??
-          hmacRef(referenceKey, "claude-code-setup-source", scope, intent.sourceRef);
+          ref("claude-code-setup-source", intent.sourceRef);
         if (intent.key === "effortLevel") {
           return { key: intent.key, sourceRef, value: intent.value };
         }
@@ -253,7 +249,7 @@ const projectObservedSetup = ({
         selectionBasis: source.selectionBasis,
         ...(source.semanticDigest === undefined ? {} : { semanticDigest: source.semanticDigest }),
         sourceRef: sourceReferences.get(source.sourceRef) ??
-          hmacRef(referenceKey, "claude-code-setup-source", scope, source.sourceRef),
+          ref("claude-code-setup-source", source.sourceRef),
         status: source.status,
       })),
       sourceModel: {
@@ -274,6 +270,7 @@ const inspectClaudeCodeSetup = async (
   scope: TrustedClaudeCodeSetupScope,
   dependencies: BuildClaudeCodeSetupViewDependencies,
   referenceKey: Uint8Array,
+  digest: OpaqueReferenceDigest,
   options?: { readonly signal?: AbortSignal },
 ): Promise<InspectClaudeCodeRuntimeSetupOutcome> => {
   options?.signal?.throwIfAborted();
@@ -327,7 +324,7 @@ const inspectClaudeCodeSetup = async (
   if (installationSettlement.status === "rejected") {throw installationSettlement.reason;}
   if (configurationSettlement.status === "rejected") {throw configurationSettlement.reason;}
   return projectObservedSetup({
-    authorization, configuration: configurationSettlement.value,
+    authorization, configuration: configurationSettlement.value, digest,
     installations: installationSettlement.value, referenceKey, scope,
   });
 };
@@ -335,6 +332,7 @@ const inspectClaudeCodeSetup = async (
 export const createBuildClaudeCodeSetupView = (
   dependencies: BuildClaudeCodeSetupViewDependencies,
   opaqueReferenceKey: Uint8Array,
+  referenceDigest: OpaqueReferenceDigest,
 ) => {
   if (opaqueReferenceKey.byteLength < 32) {
     throw new TypeError("opaqueReferenceKey must contain at least 32 bytes");
@@ -344,5 +342,5 @@ export const createBuildClaudeCodeSetupView = (
     scope: TrustedClaudeCodeSetupScope,
     options?: { readonly signal?: AbortSignal },
   ): Promise<InspectClaudeCodeRuntimeSetupOutcome> =>
-    inspectClaudeCodeSetup(scope, dependencies, referenceKey, options);
+    inspectClaudeCodeSetup(scope, dependencies, referenceKey, referenceDigest, options);
 };

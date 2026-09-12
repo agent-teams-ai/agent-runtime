@@ -69,6 +69,23 @@ const closureRequestValue = (
 const proofId = <Kind extends string>(operation: ContainedTurnKernelOperation, kind: Kind): ContainedTurnProofId | undefined =>
   operation.proofs.find(proof => proof.kind === kind)?.proofId;
 
+/** Completion is retained in validated owner facts even while a later stage has debt. */
+export const isContainedTurnClosureStageCompleted = (
+  operation: ContainedTurnKernelOperation,
+  stage: ContainedTurnClosureStage,
+): boolean => {
+  switch (stage) {
+    case "physical_containment": return operation.physicalContainment.kind === "contained";
+    case "artifact_seal": return operation.artifactManifestRef !== undefined && operation.resultRef !== undefined &&
+      proofId(operation, "artifact_manifest_seal") !== undefined && proofId(operation, "result_publication") !== undefined;
+    case "workspace_close": return operation.proofs.some(proof =>
+      proof.kind === "workspace_closure" && proof.binding.workspaceId === operation.workspaceId,
+    );
+    case "containment_attestation": return operation.containment.kind === "contained";
+    case "no_workspace": return operation.closureRecovery.kind === "proved_no_workspace";
+  }
+};
+
 /**
  * Derives the authority-defined non-applicability fact only from an already
  * persisted prevention decision and its independently issued no-start proofs.

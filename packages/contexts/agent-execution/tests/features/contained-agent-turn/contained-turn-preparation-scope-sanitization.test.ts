@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { createContainedTurnAcceptedAuthorityHandoff, prepareContainedTurnAcceptedSubject } from "../../../dist/features/contained-agent-turn/application/contained-turn-accepted-authority.js";
 import { claimContainedTurnWithConsumedGrants } from "../../../dist/features/contained-agent-turn/application/contained-turn-grant-claim.js";
 import { retireAndCleanupContainedTurnPreparation } from "../../../dist/features/contained-agent-turn/application/contained-turn-preparation-cleanup.js";
 import type { ContainedTurnKernelDependencies } from "../../../dist/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.js";
 import { createContainedTurnPreparationScopeDependencies } from "../../../dist/features/contained-agent-turn/composition/preparation-scope-anti-corruption.js";
-import { containedTurnProviderAccessSnapshotDigest, containedTurnScopeDigest } from "../../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
+import { containedTurnScopeDigest } from "../../../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import { completeContainedTurnDispatchGrantSubject } from "../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
 import {
@@ -35,44 +36,16 @@ import {
 import { committedDispatchProofForClaim } from "./support/committed-dispatch-proof-fixture.ts";
 
 const initial = mutateContainedTurnOperation(createOperation(), { kind: "bind_workspace", workspaceId });
-const subject = completeContainedTurnDispatchGrantSubject(Object.freeze({
+// Use the accepted-operation contract so outcome sanitization is reached only
+// after both owners consume grants bound to the actual accepted constraints.
+const subject = prepareContainedTurnAcceptedSubject({ ...initial, workspaceId }, scope, {
   attemptId,
   custodyId,
-  effectId,
   executionGenerationId,
   hostBootId,
   hostInstanceId,
-  operationCutoffRevision: initial.operationCutoff.revision,
-  operationId,
   preparationToken,
-  purpose: "contained_turn_provider_start_v1" as const,
-  provider: "codex" as const,
-  providerAccessExpectation: Object.freeze({
-    acceptedAuthorityDigest: initial.acceptedAuthorityVectorDigest,
-    accessRef: initial.providerAccessSnapshot.accessRef,
-    authorityHeadDigest: initial.providerAccessSnapshot.ownerAuthorityDigest,
-    bindingDigest: containedTurnProviderAccessSnapshotDigest(initial.providerAccessSnapshot),
-    bindingRevision: initial.providerAccessSnapshot.revision,
-    credentialBindingDigest: initial.providerAccessSnapshot.credentialBindingDigest,
-    credentialBindingRef: initial.providerAccessSnapshot.credentialBindingRef,
-    credentialGeneration: initial.providerAccessSnapshot.credentialGeneration,
-    providerAccountRef: initial.providerAccessSnapshot.providerAccountRef,
-    providerRouteRef: initial.providerAccessSnapshot.providerRouteRef,
-  }),
-  runtimeSecurityExpectation: Object.freeze({
-    acceptedAuthorityDigest: initial.acceptedAuthorityVectorDigest,
-    authorityGeneration: initial.acceptedAuthorityVector.operationAuthorityRevision,
-    authorityHeadDigest: initial.acceptedAuthorityVector.securityDecisionDigest,
-    authorityRevision: initial.acceptedAuthorityVector.securityAuthorityRevision,
-    constraintsDigest: digestContainedTurnCanonicalValue({ constraints: "scope-sanitization" }),
-    containmentPolicyDigest: initial.acceptedAuthorityVector.containmentPolicyDigest,
-    providerBindingDigest: containedTurnProviderAccessSnapshotDigest(initial.providerAccessSnapshot),
-    providerId: "codex",
-  }),
-  scope,
-  scopeDigest: containedTurnScopeDigest(scope),
-  workspaceId,
-}));
+});
 const hostCustodyProof = Object.freeze({
   binding: Object.freeze({
     attemptId,
@@ -152,6 +125,7 @@ const canonicalDependencies = (
 ): ContainedTurnKernelDependencies => {
   return createContainedTurnPreparationScopeDependencies(Object.freeze({
     operationStore: Object.freeze({
+      preventIntent: unavailablePreparationDependency,
       claimPreparedDispatch: unavailablePreparationDependency,
       recordDispatchPreparationCleanup: unavailablePreparationDependency,
       retireDispatchPreparation: unavailablePreparationDependency,
@@ -183,6 +157,50 @@ const claimDependencies = (
   security: {
     consumeForDispatch: async () => ({ kind: "consumed", receipt: consumedReceipt("runtime_security") }),
   },
+});
+
+test("prepared claim fixture rejects stale accepted authority facts before consuming grants", async () => {
+  const accepted = createContainedTurnAcceptedAuthorityHandoff(initial, scope, subject);
+  assert.equal(accepted.constraintsDigest, digestContainedTurnCanonicalValue({
+    adapterSnapshot: initial.adapterSnapshot,
+    capabilityManifest: initial.capabilityManifest,
+    intentMode: initial.intent.mode,
+  } as never));
+  assert.equal(subject.runtimeSecurityExpectation.constraintsDigest, accepted.constraintsDigest);
+  assert.equal(
+    subject.runtimeSecurityExpectation.acceptedAuthorityDigest,
+    initial.acceptedAuthorityVector.securityDecisionDigest,
+  );
+
+  let ownerCalls = 0;
+  const unexpectedOwnerCall = async (): Promise<never> => {
+    ownerCalls += 1;
+    throw new Error("stale accepted facts must not reach an owner");
+  };
+  const dependencies = canonicalDependencies({
+    operationStore: { claimPreparedDispatch: unexpectedOwnerCall },
+    providerAccess: { consumeForDispatch: unexpectedOwnerCall },
+    security: { consumeForDispatch: unexpectedOwnerCall },
+  });
+  for (const staleFacts of [
+    { constraintsDigest: digestContainedTurnCanonicalValue({ constraints: "scope-sanitization" }) },
+    { acceptedAuthorityDigest: initial.acceptedAuthorityVectorDigest },
+  ]) {
+    // Recompute request IDs and digests, isolating each false authority fact
+    // from an unrelated malformed owner request or malicious outcome.
+    const staleSubject = completeContainedTurnDispatchGrantSubject({
+      ...subject,
+      runtimeSecurityExpectation: { ...subject.runtimeSecurityExpectation, ...staleFacts },
+    });
+    const result = await claimContainedTurnWithConsumedGrants(
+      dependencies, initial, scope, staleSubject, hostCustodyProof,
+    );
+    assert.deepEqual(result, {
+      kind: "unavailable", consumedGrantReceipts: {},
+      consumedGrantRequestIds: {}, consumptionEvidenceIds: {},
+    });
+  }
+  assert.equal(ownerCalls, 0);
 });
 
 const foreignOperationMutations: readonly ((operation: ContainedTurnKernelOperation) => ContainedTurnKernelOperation)[] = [
@@ -373,6 +391,7 @@ test("preparation dependencies are one-time snapshots in frozen plain facades", 
   let mutatedReads = 0;
   let callableGetterInvocations = 0;
   const operationStore = {
+    preventIntent: unavailablePreparationDependency,
     claimPreparedDispatch: unavailablePreparationDependency,
     read: async () => {originalReads += 1; return;},
     recordDispatchPreparationCleanup: unavailablePreparationDependency,

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { PassThrough } from "node:stream";
 import { test } from "node:test";
 
 import {
@@ -11,15 +10,13 @@ import {
   NodeUnixSocketDockerEngine,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.js";
 import { snapshotDockerEngineCall } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-boundary-snapshot.js";
-import type { DockerEngineCall, DockerLogFrame } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.js";
+import type { DockerLogFrame } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.js";
 import { createSpecificationMutations } from "../../fixtures/docker-create-specification-mutations.ts";
 import {
   CONTAINER,
   DAEMON_BOOT,
   HOST_BOOT,
-  IMAGE,
   NONCE,
-  SECCOMP_JSON,
   call,
   createInput,
   disposable,
@@ -28,269 +25,9 @@ import {
 import {
   drain,
   jsonResponse,
-  multiplex,
 } from "./docker-engine-transport-test-fixture.ts";
 
-interface MutationPlan {
-  readonly body?: unknown;
-  readonly effect: boolean;
-  readonly failure?: "disconnect";
-  readonly statusCode: number;
-}
-
-interface SyntheticDaemon {
-  readonly bodies: unknown[];
-  readonly client: {
-    buffered(input: { readonly beforeWrite?: () => void; readonly body?: Uint8Array; readonly call: DockerEngineCall; readonly method: "DELETE" | "GET" | "POST"; readonly path: string }): Promise<{ readonly body: Uint8Array; readonly contentType: string; readonly statusCode: number }>;
-    endpointIdentity(): Promise<{ readonly canonicalSocketPath: string; readonly daemonBootGenerationSha256: string; readonly hostBootGenerationSha256: string }>;
-    hijack(input: {readonly call: DockerEngineCall; readonly path: string}): Promise<{
-      readonly input: PassThrough; readonly output: AsyncIterable<Uint8Array>; close(): Promise<void>;
-    }>;
-    stream(input: { readonly call: DockerEngineCall; readonly method: "DELETE" | "GET" | "POST"; readonly path: string }): Promise<{ readonly body: AsyncIterable<Uint8Array>; readonly contentType: string; readonly statusCode: number }>;
-  };
-  daemonBoot: string;
-  extraInfoField: boolean;
-  infoCgroupVersion: unknown;
-  inspectTransform: ((value: Record<string, unknown>) => void) | undefined;
-  readonly hijackCloseCount: number;
-  logLeavesRunning: boolean;
-  loseNextCreate: boolean;
-  oversizeNextCreate: boolean;
-  mutationPlan: MutationPlan | undefined;
-  rawCreateBody: Uint8Array | undefined;
-  failHijack(): void;
-  pauseNextMutationWrite(at: "after" | "before"): { readonly reached: Promise<void>; release(): void };
-  readonly routes: string[];
-}
-
-const syntheticDaemon = (): SyntheticDaemon => {
-  const routes: string[] = [];
-  const bodies: unknown[] = [];
-  const state = {
-    daemonBoot: DAEMON_BOOT,
-    extraInfoField: false,
-    infoCgroupVersion: "2" as unknown,
-    inspectTransform: undefined as ((value: Record<string, unknown>) => void) | undefined,
-    logLeavesRunning: false,
-    loseNextCreate: false,
-    oversizeNextCreate: false,
-    mutationPlan: undefined as MutationPlan | undefined,
-    present: false,
-    rawCreateBody: undefined as Uint8Array | undefined,
-    running: false,
-    terminal: false,
-  };
-  let hijackCloseCount = 0;
-  let hijackInput: PassThrough | undefined;
-  let mutationBarrier: {
-    readonly at: "after" | "before";
-    readonly reached: () => void;
-    readonly released: Promise<void>;
-  } | undefined;
-  let created: Record<string, unknown> | undefined;
-  const inspect = (): Record<string, unknown> => {
-    const body = created ?? {};
-    const host = body.HostConfig as Record<string, unknown> | undefined;
-    const configuredMounts = Array.isArray(host?.Mounts) ? host.Mounts as Array<Record<string, unknown>> : [];
-    const value: Record<string, unknown> = {
-      AppArmorProfile: "agent-runtime-contained-turn-v1",
-      Config: {
-        AttachStderr: body.AttachStderr,
-        AttachStdin: body.AttachStdin,
-        AttachStdout: body.AttachStdout,
-        Cmd: body.Cmd,
-        Entrypoint: body.Entrypoint,
-        Env: body.Env,
-        Image: IMAGE,
-        Labels: body.Labels,
-        NetworkDisabled: body.NetworkDisabled,
-        OpenStdin: body.OpenStdin,
-        StdinOnce: body.StdinOnce,
-        StopSignal: body.StopSignal,
-        Tty: body.Tty,
-        User: "65532:65532",
-        WorkingDir: "/workspace",
-      },
-      HostConfig: {
-        AutoRemove: false,
-        CapDrop: ["ALL"],
-        CgroupParent: host?.CgroupParent,
-        CgroupnsMode: "private",
-        CpuPeriod: 100_000,
-        Init: true,
-        IpcMode: "private",
-        Memory: 100_663_296,
-        MemorySwap: 100_663_296,
-        Mounts: host?.Mounts,
-        NanoCpus: 500_000_000,
-        NetworkMode: "ar-operation-gateway",
-        OomKillDisable: false,
-        PidMode: "private",
-        PidsLimit: 32,
-        Privileged: false,
-        ReadonlyRootfs: true,
-        RestartPolicy: { MaximumRetryCount: 0, Name: "no" },
-        SecurityOpt: [
-          "no-new-privileges=true",
-          `seccomp=${SECCOMP_JSON}`,
-          "apparmor=agent-runtime-contained-turn-v1",
-        ],
-        StorageOpt: { size: "33554432" },
-        Tmpfs: { "/tmp": "rw,nosuid,nodev,noexec,size=16777216,mode=1777" },
-      },
-      Id: CONTAINER,
-      Mounts: configuredMounts.map(mount => ({
-        Destination: mount.Target,
-        Propagation: "rprivate",
-        RW: mount.ReadOnly !== true,
-        Source: mount.Source,
-        Type: "bind",
-      })),
-      Name: `/ar-turn-${(body.Labels as Record<string, unknown> | undefined)?.["com.agent-runtime.operation-nonce-sha256"] ?? NONCE}`,
-      State: {
-        Dead: false,
-        Error: "",
-        ExitCode: state.terminal ? 0 : 0,
-        FinishedAt: state.terminal ? "2026-01-01T00:00:01Z" : "0001-01-01T00:00:00Z",
-        OOMKilled: false,
-        Paused: false,
-        Pid: state.running ? 4242 : 0,
-        Restarting: false,
-        Running: state.running,
-        StartedAt: state.running || state.terminal ? "2026-01-01T00:00:00Z" : "0001-01-01T00:00:00Z",
-        Status: state.running ? "running" : state.terminal ? "exited" : "created",
-      },
-    };
-    state.inspectTransform?.(value);
-    return value;
-  };
-  const applyMutation = (path: string): void => {
-    if (path.includes("/start")) {state.running = true; state.terminal = false;}
-    else if (path.includes("/stop") || path.includes("/kill")) {state.running = false; state.terminal = true;}
-    else if (path.includes("?force=")) {state.present = false;}
-  };
-  const client = {
-    async buffered(request: {
-      readonly beforeWrite?: () => void;
-      readonly body?: Uint8Array;
-      readonly method: string;
-      readonly path: string;
-    }) {
-      routes.push(`${request.method} ${request.path}`);
-      if (request.path === "/v1.47/info") {
-        const value: Record<string, unknown> = {
-          CgroupDriver: "systemd",
-          CgroupVersion: state.infoCgroupVersion,
-          Driver: "overlay2",
-          ID: "persistent-synthetic-daemon",
-          ServerVersion: "29.6.1",
-        };
-        if (state.extraInfoField) {value.Unexpected = true;}
-        return jsonResponse(200, value);
-      }
-      if (request.method === "POST" && request.path.startsWith("/v1.47/containers/create?name=")) {
-        const body = JSON.parse(Buffer.from(request.body ?? []).toString("utf8")) as Record<string, unknown>;
-        bodies.push(body);
-        created = body;
-        state.present = true;
-        state.running = false;
-        state.terminal = false;
-        const plan = state.mutationPlan;
-        if (plan !== undefined) {
-          state.mutationPlan = undefined;
-          if (plan.statusCode !== 201) {return jsonResponse(plan.statusCode, { message: "synthetic rejection" });}
-        }
-        if (state.loseNextCreate) {state.loseNextCreate = false; throw new DockerEngineError("daemon-disconnected");}
-        if (state.oversizeNextCreate) {
-          state.oversizeNextCreate = false;
-          throw new DockerEngineError("response-too-large");
-        }
-        if (state.rawCreateBody !== undefined) {
-          const response = { body: state.rawCreateBody, contentType: "application/json", statusCode: 201 };
-          state.rawCreateBody = undefined;
-          return response;
-        }
-        return jsonResponse(201, { Id: CONTAINER, Warnings: [] });
-      }
-      if (request.method === "GET" && request.path.endsWith("/json")) {
-        return state.present ? jsonResponse(200, inspect()) : jsonResponse(404, { message: "gone" });
-      }
-      if (request.path.includes("/wait?")) {return jsonResponse(200, { StatusCode: 0 });}
-      const barrier = mutationBarrier;
-      mutationBarrier = undefined;
-      if (barrier?.at === "before") {barrier.reached(); await barrier.released;}
-      request.beforeWrite?.();
-      if (barrier?.at === "after") {barrier.reached(); await barrier.released;}
-      const plan = state.mutationPlan ?? { effect: true, statusCode: 204 };
-      state.mutationPlan = undefined;
-      if (plan.effect) {applyMutation(request.path);}
-      if (plan.failure === "disconnect") {throw new DockerEngineError("daemon-disconnected");}
-      const body = plan.body ?? (plan.statusCode >= 400 ? { message: "synthetic rejection" } : undefined);
-      return jsonResponse(plan.statusCode, body);
-    },
-    async endpointIdentity() {
-      return {
-        canonicalSocketPath: "/policy/docker.sock",
-        daemonBootGenerationSha256: state.daemonBoot,
-        hostBootGenerationSha256: HOST_BOOT,
-      };
-    },
-    async hijack(request: {readonly path: string}) {
-      routes.push(`POST ${request.path}`);
-      const input = new PassThrough();
-      hijackInput = input;
-      const output = new PassThrough();
-      let closed = false;
-      return {close: async () => {
-        if (closed) {return;}
-        closed = true; hijackCloseCount += 1; input.destroy(); output.destroy();
-      }, input, output};
-    },
-    async stream(request: { readonly method: string; readonly path: string }) {
-      routes.push(`${request.method} ${request.path}`);
-      const bytes = Buffer.concat([multiplex(1, Buffer.from("out")), multiplex(2, Buffer.from("err"))]);
-      async function* logChunks(): AsyncIterable<Uint8Array> {
-        yield bytes.subarray(0, 5);
-        yield bytes.subarray(5);
-        if (!state.logLeavesRunning) {state.running = false; state.terminal = true;}
-      }
-      return { body: logChunks(), contentType: "application/vnd.docker.raw-stream", statusCode: 200 };
-    },
-  };
-  return {
-    bodies,
-    client,
-    get daemonBoot() {return state.daemonBoot;},
-    set daemonBoot(value: string) {state.daemonBoot = value;},
-    get extraInfoField() {return state.extraInfoField;},
-    set extraInfoField(value: boolean) {state.extraInfoField = value;},
-    get infoCgroupVersion() {return state.infoCgroupVersion;},
-    set infoCgroupVersion(value: unknown) {state.infoCgroupVersion = value;},
-    get hijackCloseCount() {return hijackCloseCount;},
-    get inspectTransform() {return state.inspectTransform;},
-    set inspectTransform(value: ((record: Record<string, unknown>) => void) | undefined) {state.inspectTransform = value;},
-    get logLeavesRunning() {return state.logLeavesRunning;},
-    set logLeavesRunning(value: boolean) {state.logLeavesRunning = value;},
-    get loseNextCreate() {return state.loseNextCreate;},
-    set loseNextCreate(value: boolean) {state.loseNextCreate = value;},
-    get oversizeNextCreate() {return state.oversizeNextCreate;},
-    set oversizeNextCreate(value: boolean) {state.oversizeNextCreate = value;},
-    get mutationPlan() {return state.mutationPlan;},
-    set mutationPlan(value: MutationPlan | undefined) {state.mutationPlan = value;},
-    get rawCreateBody() {return state.rawCreateBody;},
-    set rawCreateBody(value: Uint8Array | undefined) {state.rawCreateBody = value;},
-    failHijack() {hijackInput?.destroy(new Error("synthetic hijack failure"));},
-    pauseNextMutationWrite(at: "after" | "before") {
-      let reached!: () => void;
-      let release!: () => void;
-      const reachedPromise = new Promise<void>(resolve => {reached = resolve;});
-      const released = new Promise<void>(resolve => {release = resolve;});
-      mutationBarrier = {at, reached, released};
-      return {reached: reachedPromise, release};
-    },
-    routes,
-  };
-};
+import { syntheticDaemon } from "../../fixtures/docker-engine-synthetic-daemon.ts";
 
 test("Node adapter emits the closed schema and completes lifecycle only by exact observations", async t => {
   const root = await disposable();
@@ -325,7 +62,7 @@ test("Node adapter emits the closed schema and completes lifecycle only by exact
     .every(route => route.includes(CONTAINER)));
 });
 
-test("API v1.47 decoders accept a synthetic owner-binding projection of the retained Engine 29.6.1 fixture", async t => {
+test("API v1.47 fixture accepts evidenced OOM null with the synthetic owner-binding projection", async t => {
   const root = await disposable();
   t.after(async () => {await rm(root, { force: true, recursive: true });});
   const fixtureUrl = new URL("../../fixtures/docker-engine-api-v1.47-engine-29.6.1-redacted.json", import.meta.url);
@@ -334,10 +71,10 @@ test("API v1.47 decoders accept a synthetic owner-binding projection of the reta
     .replaceAll("__PRIVATE_SOURCE__", join(root, "private", "operation"));
   const fixture = JSON.parse(fixtureSource) as {
     readonly info: unknown;
-    readonly inspect: { readonly Config: { readonly Labels: Record<string, string>; OpenStdin: boolean; StdinOnce: boolean } };
+    readonly inspect: { readonly HostConfig: { OomKillDisable: unknown }; readonly Config: { readonly Labels: Record<string, string>; OpenStdin: boolean; StdinOnce: boolean } };
   };
-  // The captured fixture predates owner binding. Project only this synthetic test
-  // response; preserve the historical capture bytes and their original evidence.
+  // This corrected diagnostic fixture is not a fresh capture. Project the current
+  // owner/stdin contract only in this synthetic test.
   fixture.inspect.Config.Labels["com.agent-runtime.owner-identity-sha256"] = createInput(root).ownerIdentitySha256;
   fixture.inspect.Config.OpenStdin = true;
   fixture.inspect.Config.StdinOnce = true;
@@ -364,8 +101,11 @@ test("API v1.47 decoders accept a synthetic owner-binding projection of the reta
     async stream() {throw new DockerEngineError("protocol-violation");},
   };
   const engine = new NodeUnixSocketDockerEngine({ client, policy: policy(root) });
+  assert.equal(fixture.inspect.HostConfig.OomKillDisable, null);
   const authority = await engine.create(createInput(root), call());
   assert.equal(authority.containerId, CONTAINER);
+  assert.equal((await engine.inspect(authority, call())).existence, "present");
+  fixture.inspect.HostConfig.OomKillDisable = false;
   assert.equal((await engine.inspect(authority, call())).existence, "present");
 });
 
@@ -555,197 +295,6 @@ test("ambiguous and 304 mutation acknowledgements require exact postconditions a
   });
 });
 
-test("attach invalidation fences start at the synchronous transport-write seam", async t => {
-  const root = await disposable();
-  t.after(async () => {await rm(root, { force: true, recursive: true });});
-  for (const mode of ["close", "error", "abort"] as const) {
-    await t.test(mode, async () => {
-      const daemon = syntheticDaemon();
-      const engine = new NodeUnixSocketDockerEngine({client: daemon.client, policy: policy(root)});
-      const authority = await engine.create(createInput(root, createHash("sha256").update(mode).digest("hex")), call());
-      const controller = new AbortController();
-      const channel = await engine.attachCustody(authority, {
-        deadlineEpochMs: Date.now() + 10_000,
-        signal: controller.signal,
-      });
-      const barrier = daemon.pauseNextMutationWrite("before");
-      const starting = engine.start(authority, call());
-      await barrier.reached;
-      if (mode === "close") {await channel.close();}
-      if (mode === "error") {daemon.failHijack();}
-      if (mode === "abort") {controller.abort();}
-      await new Promise<void>(resolve => {setImmediate(resolve);});
-      barrier.release();
-      await assert.rejects(starting, {code: mode === "abort" ? "aborted" : "daemon-disconnected"});
-      const observation = await engine.inspect(authority, call());
-      assert.equal(observation.existence, "present");
-      if (observation.existence === "present") {assert.equal(observation.state.status, "created");}
-      await channel.close();
-      controller.abort();
-      assert.equal(daemon.hijackCloseCount, 1);
-      await assert.rejects(engine.attachCustody(authority, call()), {code: "protocol-violation"});
-    });
-  }
-});
-
-test("attach invokes a private-field-shaped hijack client with its receiver intact", async t => {
-  const root = await disposable();
-  t.after(async () => {await rm(root, { force: true, recursive: true });});
-  const daemon = syntheticDaemon();
-  class ReceiverSensitiveClient {
-    readonly #delegate = daemon.client;
-    public constructor() {
-      for (const name of ["buffered", "endpointIdentity", "hijack", "stream"] as const) {
-        Object.defineProperty(this, name, {
-          configurable: true, enumerable: true, value: ReceiverSensitiveClient.prototype[name], writable: true,
-        });
-      }
-      Object.setPrototypeOf(this, Object.prototype);
-    }
-    public buffered(...args: Parameters<typeof daemon.client.buffered>) {return this.#delegate.buffered(...args);}
-    public endpointIdentity(...args: Parameters<typeof daemon.client.endpointIdentity>) {
-      return this.#delegate.endpointIdentity(...args);
-    }
-    public hijack(...args: Parameters<typeof daemon.client.hijack>) {return this.#delegate.hijack(...args);}
-    public stream(...args: Parameters<typeof daemon.client.stream>) {return this.#delegate.stream(...args);}
-  }
-  const engine = new NodeUnixSocketDockerEngine({
-    client: new ReceiverSensitiveClient() as unknown as SyntheticDaemon["client"], policy: policy(root),
-  });
-  const authority = await engine.create(createInput(root), call());
-  const channel = await engine.attachCustody(authority, call());
-  await channel.close();
-  assert.equal(daemon.hijackCloseCount, 1);
-});
-
-test("attach awaits exact hijack closure when the socket dies during post-hijack identity verification", async t => {
-  const root = await disposable();
-  t.after(async () => {await rm(root, { force: true, recursive: true });});
-  const daemon = syntheticDaemon();
-  let hijackInput: PassThrough | undefined;
-  let closeFinished = false;
-  let identityReached!: () => void;
-  let releaseIdentity!: () => void;
-  const reached = new Promise<void>(resolve => {identityReached = resolve;});
-  const identityWait = new Promise<void>(resolve => {releaseIdentity = resolve;});
-  let hijacked = false;
-  const client = {
-    buffered: daemon.client.buffered,
-    async endpointIdentity() {
-      if (hijacked) {identityReached(); await identityWait;}
-      return daemon.client.endpointIdentity();
-    },
-    async hijack(input: Parameters<typeof daemon.client.hijack>[0]) {
-      const raw = await daemon.client.hijack(input);
-      hijacked = true;
-      hijackInput = raw.input;
-      return {...raw, close: async () => {await raw.close(); closeFinished = true;}};
-    },
-    stream: daemon.client.stream,
-  };
-  const engine = new NodeUnixSocketDockerEngine({client, policy: policy(root)});
-  const authority = await engine.create(createInput(root), call());
-  const opening = engine.attachCustody(authority, call());
-  await reached;
-  hijackInput?.destroy();
-  releaseIdentity();
-  await assert.rejects(opening, {code: "daemon-disconnected"});
-  assert.equal(closeFinished, true);
-  assert.equal(daemon.hijackCloseCount, 1);
-});
-
-test("attach rejects when post-hijack identity observation resolves after the hard deadline", async t => {
-  const root = await disposable();
-  t.after(async () => {await rm(root, { force: true, recursive: true });});
-  const daemon = syntheticDaemon();
-  let identityReached!: () => void;
-  let releaseIdentity!: () => void;
-  const reached = new Promise<void>(resolve => {identityReached = resolve;});
-  const identityWait = new Promise<void>(resolve => {releaseIdentity = resolve;});
-  let hijacked = false;
-  const client = {
-    buffered: daemon.client.buffered,
-    async endpointIdentity() {
-      if (hijacked) {identityReached(); await identityWait;}
-      return daemon.client.endpointIdentity();
-    },
-    async hijack(input: Parameters<typeof daemon.client.hijack>[0]) {
-      const raw = await daemon.client.hijack(input);
-      hijacked = true;
-      return raw;
-    },
-    stream: daemon.client.stream,
-  };
-  const engine = new NodeUnixSocketDockerEngine({client, policy: policy(root)});
-  const authority = await engine.create(createInput(root), call());
-  const now = Date.now();
-  t.mock.timers.enable({apis: ["Date", "setTimeout"], now});
-  try {
-    const opening = engine.attachCustody(authority, {
-      deadlineEpochMs: now + 1_000,
-      signal: new AbortController().signal,
-    });
-    await reached;
-    t.mock.timers.setTime(now + 1_001);
-    releaseIdentity();
-    await assert.rejects(opening, {code: "deadline-exceeded"});
-    assert.equal(daemon.hijackCloseCount, 1);
-  } finally {
-    releaseIdentity();
-    t.mock.timers.reset();
-  }
-});
-
-test("hijack loss after start bytes is acknowledgement-unknown and removal retires the generation", async t => {
-  const root = await disposable();
-  t.after(async () => {await rm(root, { force: true, recursive: true });});
-  const daemon = syntheticDaemon();
-  const engine = new NodeUnixSocketDockerEngine({client: daemon.client, policy: policy(root)});
-  const authority = await engine.create(createInput(root), call());
-  const channel = await engine.attachCustody(authority, call());
-  const barrier = daemon.pauseNextMutationWrite("after");
-  const starting = engine.start(authority, call());
-  await barrier.reached;
-  await channel.close();
-  barrier.release();
-  await assert.rejects(starting, {code: "start-acknowledgement-unknown"});
-  assert.equal(daemon.hijackCloseCount, 1);
-  await engine.stop(authority, call());
-  await engine.remove(authority, call());
-
-  const replacement = await engine.create(createInput(root, "8".repeat(64)), call());
-  const replacementChannel = await engine.attachCustody(replacement, call());
-  await channel.close();
-  await replacementChannel.write(Buffer.from("replacement-generation"));
-  await replacementChannel.close();
-  assert.equal(daemon.hijackCloseCount, 2);
-});
-
-test("error and abort after the start write never return clean started success", async t => {
-  const root = await disposable();
-  t.after(async () => {await rm(root, { force: true, recursive: true });});
-  for (const mode of ["error", "abort"] as const) {
-    await t.test(mode, async () => {
-      const daemon = syntheticDaemon();
-      const engine = new NodeUnixSocketDockerEngine({client: daemon.client, policy: policy(root)});
-      const authority = await engine.create(createInput(
-        root,
-        createHash("sha256").update(`after-${mode}`).digest("hex"),
-      ), call());
-      const controller = new AbortController();
-      await engine.attachCustody(authority, {deadlineEpochMs: Date.now() + 10_000, signal: controller.signal});
-      const barrier = daemon.pauseNextMutationWrite("after");
-      const starting = engine.start(authority, call());
-      await barrier.reached;
-      if (mode === "error") {daemon.failHijack();} else {controller.abort();}
-      await new Promise<void>(resolve => {setImmediate(resolve);});
-      barrier.release();
-      await assert.rejects(starting, {code: "start-acknowledgement-unknown"});
-      assert.equal(daemon.hijackCloseCount, 1);
-    });
-  }
-});
-
 test("log EOF is incomplete while running and wait requires an exact terminal observation", async t => {
   const root = await disposable();
   t.after(async () => {await rm(root, { force: true, recursive: true });});
@@ -784,5 +333,157 @@ test("inspection state decoding enforces bounded values, Docker timestamps, and 
       createInput(root, createHash("sha256").update(`state-${index}`).digest("hex")),
       call(),
     ), { code: "malformed-response" });
+  }
+});
+
+test("Docker wire defaults preserve exact create authority and mount access", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, {force: true, recursive: true});});
+  for (const workspaceWritable of [true, false]) {
+    const daemon = syntheticDaemon();
+    daemon.inspectTransform = value => {
+      const config = value.Config as Record<string, unknown>;
+      delete config.NetworkDisabled;
+      const host = value.HostConfig as Record<string, unknown>;
+      for (const mount of host.Mounts as Array<Record<string, unknown>>) {
+        if (mount.ReadOnly === false) {delete mount.ReadOnly;}
+      }
+      // Informational inspect metadata, never a replacement for StorageOpt.
+      value.Storage = {RootFS: {Snapshot: {Name: "redacted"}}};
+    };
+    const engine = new NodeUnixSocketDockerEngine({client: daemon.client, policy: policy(root)});
+    const authority = await engine.create({...createInput(root), workspaceWritable}, call());
+    const request = daemon.bodies[0] as {HostConfig: Record<string, unknown>};
+    assert.equal(request.HostConfig.NanoCpus, policy(root).cpuNanoCpus);
+    assert.equal(request.HostConfig.CpuPeriod, 0);
+    assert.equal(request.HostConfig.PidMode, "");
+    assert.equal(request.HostConfig.OomKillDisable, false);
+    const observed = await engine.inspect(authority, call());
+    assert.equal(observed.existence, "present");
+    if (observed.existence === "present") {
+      assert.equal(observed.resources.workspaceWritable, workspaceWritable);
+      assert.equal(observed.resources.pidNamespaceMode, "private");
+      assert.equal(observed.resources.cpuNanoCpus, policy(root).cpuNanoCpus);
+    }
+  }
+});
+
+test("wire compatibility rejects unrelated nulls, unsafe modes, and foreign resource authority", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, {force: true, recursive: true});});
+  const changes: Array<(value: Record<string, unknown>) => void> = [];
+  for (const [key, values] of [
+    ["CpuPeriod", [100_000, null, "0"]],
+    ["NanoCpus", [0, 250_000_000, null]],
+    ["PidMode", ["private", "host", "container:foreign", null]],
+    ["OomKillDisable", [true, "false", 0, {}, []]],
+    ["Memory", [null, 1]],
+    ["NetworkMode", ["host", "none"]],
+  ] as const) {
+    for (const value of values) {
+      changes.push(inspect => {(inspect.HostConfig as Record<string, unknown>)[key] = value;});
+    }
+  }
+  for (const value of [null, true, "false"]) {
+    changes.push(inspect => {(inspect.Config as Record<string, unknown>).NetworkDisabled = value;});
+    for (const index of [0, 1]) {
+      changes.push(inspect => {
+        const host = inspect.HostConfig as Record<string, unknown>;
+        (host.Mounts as Array<Record<string, unknown>>)[index]!.ReadOnly = value;
+      });
+    }
+  }
+  changes.push(inspect => {inspect.UnknownStorage = {};});
+  changes.push(inspect => {
+    const host = inspect.HostConfig as Record<string, unknown>;
+    delete host.OomKillDisable;
+  });
+  changes.push(inspect => {
+    const host = inspect.HostConfig as Record<string, unknown>;
+    delete (host.Mounts as Array<Record<string, unknown>>)[0]!.ReadOnly;
+    (inspect.Mounts as Array<Record<string, unknown>>)[0]!.RW = false;
+  });
+  for (const [index, change] of changes.entries()) {
+    await t.test(String(index), async () => {
+      const daemon = syntheticDaemon();
+      const engine = new NodeUnixSocketDockerEngine({client: daemon.client, policy: policy(root)});
+      const authority = await engine.create(createInput(root), call());
+      daemon.inspectTransform = change;
+      await assert.rejects(engine.inspect(authority, call()), error =>
+        error instanceof DockerEngineError &&
+        ["authority-conflict", "malformed-response"].includes(error.code));
+    });
+  }
+
+});
+
+test("OOM null requires the evidenced current engine and cgroup identity", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, {force: true, recursive: true});});
+  for (const [engineVersion, cgroupVersion] of [
+    ["29.6.1", "1"], ["29.6.0", "2"], ["29.6.2", "2"],
+    ["29.6.1-custom", "2"], ["", "2"], [null, "2"], [undefined, "2"],
+    ["29.6.1", "3"], ["29.6.1", null], ["29.6.1", undefined], ["29.6.1", 2],
+  ]) {
+    await t.test(`${engineVersion}/${cgroupVersion}`, async () => {
+      const daemon = syntheticDaemon();
+      daemon.infoEngineVersion = engineVersion;
+      daemon.infoCgroupVersion = cgroupVersion;
+      daemon.inspectTransform = value => {
+        (value.HostConfig as Record<string, unknown>).OomKillDisable = null;
+      };
+      const engine = new NodeUnixSocketDockerEngine({client: daemon.client, policy: policy(root)});
+      await assert.rejects(engine.create(createInput(root), call()), error =>
+        error instanceof DockerEngineError &&
+        ["authority-conflict", "malformed-response"].includes(error.code));
+    });
+  }
+});
+
+test("OOM null preserves create authority during lost-response reconciliation", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, {force: true, recursive: true});});
+  const daemon = syntheticDaemon();
+  daemon.loseNextCreate = true;
+  daemon.inspectTransform = value => {
+    (value.HostConfig as Record<string, unknown>).OomKillDisable = null;
+  };
+  const engine = new NodeUnixSocketDockerEngine({client: daemon.client, policy: policy(root)});
+  const authority = await engine.create(createInput(root), call());
+  assert.equal((daemon.bodies[0] as {HostConfig: {OomKillDisable: unknown}}).HostConfig.OomKillDisable, false);
+  assert.equal((await engine.inspect(authority, call())).existence, "present");
+  daemon.inspectTransform = undefined;
+  assert.equal((await engine.inspect(authority, call())).existence, "present");
+});
+
+test("lost create reconciles omitted defaults but never a read-only workspace downgrade", async t => {
+  const root = await disposable();
+  t.after(async () => {await rm(root, {force: true, recursive: true});});
+  for (const downgrade of [false, true]) {
+    const daemon = syntheticDaemon();
+    daemon.loseNextCreate = true;
+    daemon.inspectTransform = value => {
+      delete (value.Config as Record<string, unknown>).NetworkDisabled;
+      const host = value.HostConfig as Record<string, unknown>;
+      const mounts = host.Mounts as Array<Record<string, unknown>>;
+      delete mounts[1]!.ReadOnly;
+      if (downgrade) {
+        // Even agreeing configured/observed RW cannot replace the requested authority.
+        delete mounts[0]!.ReadOnly;
+        (value.Mounts as Array<Record<string, unknown>>)[0]!.RW = true;
+      }
+    };
+    const engine = new NodeUnixSocketDockerEngine({client: daemon.client, policy: policy(root)});
+    const creating = engine.create({...createInput(root), workspaceWritable: false}, call());
+    if (downgrade) {
+      await assert.rejects(creating, {code: "create-acknowledgement-unknown"});
+    } else {
+      const authority = await creating;
+      const observed = await engine.inspect(authority, call());
+      assert.equal(observed.existence, "present");
+      if (observed.existence === "present") {assert.equal(observed.resources.workspaceWritable, false);}
+    }
+    assert.ok(daemon.routes.includes(`GET /v1.47/containers/ar-turn-${NONCE}/json`));
+    assert.equal(daemon.bodies.length, 1);
   }
 });

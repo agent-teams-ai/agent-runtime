@@ -1,32 +1,47 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHttpDispatchBoundary } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-dispatch-boundary.js";
+import { createPreparedHttpRequestV1 } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/prepared-http-request-v1.js";
 import { createStrictHttpEgressBroker } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-egress-broker.js";
 import { bytes, chunks, createEgressFixture, defaultRoute } from "./http-egress-test-fixture.ts";
 
+const preparedCustody = () => {
+  const pending = createPreparedHttpRequestV1({methodBytes: bytes("POST"), targetBytes: bytes("/invoke"),
+    hostBytes: bytes("provider.example"), presentationFields: [], credentialHeaderNameAllowlist: [], credentialFields: [], bodyBytes: bytes("secret")});
+  const custody = pending.consume();
+  assert.ok(custody);
+  assert.equal(pending.consume(), undefined);
+  return custody;
+};
+
 test("HTTP byte handoff validates at consumption and is available only once", () => {
   let current = false;
-  const denied = createHttpDispatchBoundary(bytes("secret"), () => current);
+  const denied = createHttpDispatchBoundary(preparedCustody(), () => current);
   assert.equal(denied.consume(), undefined);
   current = true;
   assert.equal(denied.consume(), undefined);
   assert.equal(denied.wasConsumed(), false);
-  const source = bytes("secret");
-  const allowed = createHttpDispatchBoundary(source, () => current);
+  denied.seal();
+  const custody = preparedCustody();
+  const source = custody.wireBytes;
+  const allowed = createHttpDispatchBoundary(custody, () => current);
   assert.equal(allowed.consume(), source);
   assert.equal(allowed.consume(), undefined);
   allowed.seal();
+  allowed.seal();
+  assert.ok(custody.headerProjectionBytes.every(byte => byte === 0));
   assert.ok(source.every(byte => byte === 0));
   assert.equal(allowed.consume(), undefined);
 });
 
 test("late or throwing validation never reveals request bytes", () => {
-  const late = createHttpDispatchBoundary(bytes("secret"), () => true);
+  const late = createHttpDispatchBoundary(preparedCustody(), () => true);
   late.seal();
   assert.equal(late.consume(), undefined);
-  const throwing = createHttpDispatchBoundary(bytes("secret"), () => { throw new Error("synthetic authority error"); });
+  const throwing = createHttpDispatchBoundary(preparedCustody(), () => { throw new Error("synthetic authority error"); });
   assert.equal(throwing.consume(), undefined);
   assert.equal(throwing.wasConsumed(), false);
+  throwing.seal();
 });
 
 for (const change of [
@@ -68,7 +83,7 @@ test("expiry after the async preparation does not survive a queued dispatch", as
   } };
   const receipt = await createStrictHttpEgressBroker(ports).execute(fixture.operation);
   assert.equal(receipt.outcome, "denied");
-  assert.equal(receipt.anomalyCode, "final_denied");
+  assert.equal(receipt.anomalyCode, "provider_generation_drift");
   assert.equal(fixture.observations.dispatches, 0);
 });
 

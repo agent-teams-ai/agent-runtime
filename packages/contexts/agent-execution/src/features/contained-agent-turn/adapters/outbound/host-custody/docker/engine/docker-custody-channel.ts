@@ -59,9 +59,9 @@ export const createDockerCustodyChannel = (
       });
     },
     output: output(),
-    write: async (bytes: Uint8Array) => {
+    write: async (bytes: Uint8Array, assertAdmission?: () => void) => {
       if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) {throw new DockerEngineError("protocol-violation");}
-      const pending = writes.then(() => writeOnce(bytes));
+      const pending = writes.then(() => {assertAdmission?.(); return writeOnce(bytes);});
       writes = pending.catch(() => {});
       await pending;
     },

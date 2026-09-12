@@ -1,3 +1,4 @@
+import type { ContainedTurnAcceptedAuthorityHandoff } from "../../contained-turn-accepted-authority.js";
 import type {
   ContainedTurnIntent,
   ContainedTurnProvider,
@@ -59,7 +60,7 @@ export type RevalidateContainedTurnProviderAccessOutcome =
   };
 
 export interface ContainedTurnProviderAccessPort {
-  consumeForDispatch(input: Readonly<{ grantRequestId: string; subject: ContainedTurnDispatchGrantSubject }>): Promise<
+  consumeForDispatch(input: Readonly<{ accepted: ContainedTurnAcceptedAuthorityHandoff; grantRequestId: string; subject: ContainedTurnDispatchGrantSubject }>): Promise<
     | { readonly kind: "consumed"; readonly receipt: ContainedTurnConsumedGrantReceipt<"provider_access"> }
     | { readonly kind: "prevented"; readonly preventionProofId: ContainedTurnProofId }
     | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
@@ -70,6 +71,7 @@ export interface ContainedTurnProviderAccessPort {
     | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
   >;
   resolveForAcceptance(input: Readonly<{
+    operationId: ContainedTurnOperationId;
     intent: ContainedTurnIntent;
     provider: ContainedTurnProvider;
     scope: ContainedTurnScope;
@@ -82,7 +84,7 @@ export interface ContainedTurnProviderAccessPort {
 }
 
 export interface ContainedTurnKernelSecurityPort {
-  consumeForDispatch(input: Readonly<{ subject: ContainedTurnDispatchGrantSubject }>): Promise<
+  consumeForDispatch(input: Readonly<{ accepted: ContainedTurnAcceptedAuthorityHandoff; subject: ContainedTurnDispatchGrantSubject }>): Promise<
     | { readonly kind: "consumed"; readonly receipt: ContainedTurnConsumedGrantReceipt<"runtime_security"> }
     | { readonly kind: "prevented"; readonly preventionProofId: ContainedTurnProofId }
     | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
@@ -93,6 +95,8 @@ export interface ContainedTurnKernelSecurityPort {
     | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
   >;
   authorizeForAcceptance(input: Readonly<{
+    operationId: ContainedTurnOperationId;
+    constraintsDigest: ContainedTurnCanonicalDigest;
     intent: ContainedTurnIntent;
     provider: ContainedTurnProvider;
     scope: ContainedTurnScope;

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { detachedDispatchData } from "../../../dist/features/contained-turn-access/adapters/dispatch-consumption-data.js";
 import type { ConsumeForDispatchInput } from "../../../dist/index.js";
 import { createDispatchConsumptionRequestDigests, createInMemoryContainedTurnDispatchConsumptionV1 } from "../../../dist/composition.js";
 import { createInMemoryDispatchConsumptionRepository } from "../../../dist/features/contained-turn-access/adapters/outbound/in-memory-dispatch-consumption-repository.js";
@@ -86,6 +87,45 @@ const inertTransaction = (onApplicationWork: () => void): DispatchConsumptionTra
   async markBindingConsumed() {},
   async saveGrantRequest() {},
   async saveSettlement() {},
+});
+
+test("dispatch data detaches and freezes dense arrays and their nested records", () => {
+  const source = [{items: [{value: "original"}]}];
+  const detached = detachedDispatchData("synthetic dispatch data", source) as typeof source;
+  assert.deepEqual(detached, source);
+  assert.notStrictEqual(detached, source);
+  assert.notStrictEqual(detached[0], source[0]);
+  assert.notStrictEqual(detached[0]!.items, source[0]!.items);
+  assert.notStrictEqual(detached[0]!.items[0], source[0]!.items[0]);
+  for (const value of [detached, detached[0], detached[0]!.items, detached[0]!.items[0]]) {
+    assert.equal(Object.isFrozen(value), true);
+  }
+  source[0]!.items[0]!.value = "changed";
+  source[0]!.items.push({value: "new"});
+  source.length = 0;
+  assert.deepEqual(detached, [{items: [{value: "original"}]}]);
+  assert.equal(Object.isFrozen(source), false);
+  const empty = detachedDispatchData("empty dispatch data", []);
+  assert.deepEqual(empty, []);
+  assert.equal(Object.isFrozen(empty), true);
+});
+
+test("dispatch data and repository seeds reject cycles, sparse arrays and extra array keys", () => {
+  const cyclicRecord: Record<string, unknown> = {};
+  cyclicRecord.self = cyclicRecord;
+  const cyclicArray: unknown[] = [];
+  cyclicArray.push(cyclicArray);
+  const sparse = [seed(), seed(), seed()];
+  delete sparse[1];
+  const cases = [
+    ["cyclic record", [cyclicRecord]], ["cyclic array", cyclicArray], ["sparse array", sparse],
+    ["extra string key", Object.assign([seed()], {extra: true})],
+    ["extra symbol key", Object.assign([seed()], {[Symbol("extra")]: true})],
+  ] as const;
+  for (const [name, value] of cases) {
+    assert.throws(() => detachedDispatchData(name, value), TypeError, name);
+    assert.throws(() => createInMemoryDispatchConsumptionRepository(value as never, 100), TypeError, name);
+  }
 });
 
 test("every injected dependency method rejects an intrinsic-bound proxy without invoking its target", () => {

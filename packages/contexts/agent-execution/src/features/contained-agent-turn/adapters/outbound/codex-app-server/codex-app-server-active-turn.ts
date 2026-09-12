@@ -114,6 +114,8 @@ const itemShape = (keys: readonly string[], itemType: string, validate: (params:
   itemType, keys, validate,
 });
 
+// Passive payloads are lifecycle evidence only, never canonical output. Shape
+// validation alone does not authorize exposing command, plan, or reasoning text.
 const PASSIVE_SHAPES: Readonly<Record<string, PassiveShape>> = Object.freeze({
   "item/commandExecution/outputDelta": itemShape(["delta", "itemId", "threadId", "turnId"], "commandExecution", p => strings(p, ["delta"])),
   "item/commandExecution/terminalInteraction": itemShape(["itemId", "processId", "stdin", "threadId", "turnId"], "commandExecution", p => strings(p, ["processId", "stdin"])),
@@ -201,7 +203,7 @@ export const parseCodexTurn = (result: unknown): { readonly id: string; readonly
     || !Array.isArray(turn.items) || !["full", "notLoaded", "summary"].includes(String(turn.itemsView))
     || !exactTurnStatusFields(turn, status)
     || Object.keys(turn).toSorted().join("\0") !== turnKeys.join("\0")) {
-    throw new Error("Codex turn result does not match the generated 0.150.1 shape");
+    throw new Error("Codex turn result does not match the generated 0.153.4 shape");
   }
   return { id, status };
 };
@@ -235,6 +237,9 @@ const emitCodexError = async (
   progress.cursor += 1;
 };
 
+// Canonical admission is whole-turn: completed items must reconcile with the
+// full terminal receipt, and sensitive tokens may span item boundaries. Neither
+// raw deltas nor completed items can be emitted independently of that check.
 const emitCodexAssistantDelta = (
   params: JsonRecord,
   admission: {

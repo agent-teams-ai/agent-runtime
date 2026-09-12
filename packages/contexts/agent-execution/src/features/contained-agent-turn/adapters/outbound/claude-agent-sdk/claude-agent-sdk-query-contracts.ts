@@ -8,6 +8,10 @@ export interface ClaudeSdkSpawnOptions {
   readonly signal: AbortSignal;
 }
 
+/** SDK-facing spawn compatibility, not an adapter-owned exit attestation.
+ * The SDK consumes this process surface; Host Custody owns physical closure
+ * and output-drain proof. Keep exit members for official query assignability.
+ */
 export interface ClaudeSdkSpawnedProcess {
   readonly exitCode: number | null;
   readonly killed: boolean;

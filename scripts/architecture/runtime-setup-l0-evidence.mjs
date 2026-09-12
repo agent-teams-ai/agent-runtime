@@ -1,27 +1,30 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { lstat, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { parseSync, Visitor } from "oxc-parser";
 
+import {historicalSpecRevision, loadHistoricalSpec} from "./runtime-setup-l0-evidence-historical.mjs";
+import * as currentSpec from "./runtime-setup-l0-evidence-spec.mjs";
 import {
-  benchmarkSourceRevision,
-  changes,
-  evidenceRoots,
-  ownership,
-  prospectiveBenchmarks,
-  sourceRevisionArtifactDigests,
-  traces,
+  changes, evidenceFiles, evidenceRoots, traces,
 } from "./runtime-setup-l0-evidence-spec.mjs";
 import {
   GitCommandFailure,
   isHistoricalObjectClosureUnavailable,
-  parseTrackedEvidenceEntries,
+  validateCurrentEvidenceIdentity,
   validateStoredReportShape,
 } from "./runtime-setup-l0-evidence-validation.mjs";
+
+import { createEvidenceInputs } from "./runtime-setup-l0-evidence-inputs.mjs";
+
+import {
+  adoptionPaths, adoptionConstruction, adoptionEvidenceFiles, assertAdoptionAuthority, retainedHistoricalEvidenceRoots,
+  validateAdoptionReport,
+} from "./runtime-setup-l0-evidence-adoption.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const evidencePath = join(
@@ -48,6 +51,15 @@ const git = (...args) => {
   } catch (error) {
     throw new GitCommandFailure(error);
   }
+};
+
+const readRevisionFile = (revision, path) => execFileSync("git", ["show", `${revision}:${path}`], {
+  cwd: repositoryRoot, env: { ...process.env, GIT_NO_LAZY_FETCH: "1", GIT_OPTIONAL_LOCKS: "0" },
+  stdio: ["ignore", "pipe", "pipe"], maxBuffer: 20 * 1024 * 1024,
+});
+const pathExists = async path => {
+  try { await lstat(join(repositoryRoot, path)); return true; }
+  catch (error) { if (error.code === "ENOENT") { return false; } throw error; }
 };
 
 const sum = (items, field) => items.reduce((total, item) => total + item[field], 0);
@@ -124,9 +136,9 @@ const summarizeChange = ({ id, revision }) => {
   };
 };
 
-const loadHistoricalChanges = (summarize = summarizeChange) => {
+const loadHistoricalChanges = (summarize = summarizeChange, inventory = changes) => {
   try {
-    return changes.map(summarize);
+    return inventory.map(summarize);
   } catch (error) {
     if (!isHistoricalObjectClosureUnavailable(error)) {
       throw error;
@@ -136,15 +148,7 @@ const loadHistoricalChanges = (summarize = summarizeChange) => {
 
 const walkFiles = async directory => {
   const files = [];
-  let entries;
-  try {
-    entries = await readdir(directory, { withFileTypes: true });
-  } catch (error) {
-    if (error?.code === "ENOENT") {
-      return files;
-    }
-    throw error;
-  }
+  const entries = await readdir(directory, { withFileTypes: true });
   for (const entry of entries) {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) {
@@ -161,24 +165,11 @@ const collectEvidenceFiles = async roots => {
   return files.flat().toSorted();
 };
 
-const trackedEvidenceFiles = roots => parseTrackedEvidenceEntries(
-  git("ls-files", "--stage", "-z", "--", ...roots),
-);
-
-const hashFileSet = async roots => {
-  const files = trackedEvidenceFiles(roots);
-  const digest = createHash("sha256");
-  for (const { mode, path } of files) {
-    const content = await readFile(join(repositoryRoot, path));
-    digest.update(path);
-    digest.update("\0");
-    digest.update(mode);
-    digest.update("\0");
-    digest.update(createHash("sha256").update(content).digest("hex"));
-    digest.update("\n");
-  }
-  return { fileCount: files.length, sha256: digest.digest("hex") };
-};
+const {
+  artifactDigests,
+  assertEvidenceRootsClean,
+  assertEvidenceRootsMatchRevision,
+} = createEvidenceInputs({ repositoryRoot, git, readRevisionFile });
 
 const importSpecifiers = (source, path) => {
   const parsed = parseSync(path, source);
@@ -243,7 +234,7 @@ assert.deepEqual(
   "evidence import parser must cover every supported dependency form",
 );
 
-const forbiddenInwardDependency = /@agent-teams\/(?:engineering|extension)-foundation|cordis|awilix|(?:^|\/)(?:adapters|composition)(?:\/|$)|(?:^|[-/])(?:container|module-(?:graph|runtime)|registry)(?:[-/]|$)/iu;
+const forbiddenInwardDependency = /@get-modular\/(?:core|assembly)|@agent-teams\/(?:engineering|extension)-foundation|cordis|awilix|(?:^|\/)(?:adapters|composition)(?:\/|$)|(?:^|[-/])(?:container|module-(?:graph|runtime)|registry)(?:[-/]|$)/iu;
 
 assert.equal(
   importSpecifiers(
@@ -254,9 +245,14 @@ assert.equal(
   "TypeScript import types must participate in the inward dependency gate",
 );
 
-const verifyCurrentArchitecture = async () => {
+for (const packageRoot of ["@get-modular/core", "@get-modular/assembly"]) {
+  assert.ok(importSpecifiers(`type Boundary = import('${packageRoot}').Boundary;`, "adoption-boundary-self-test.ts")
+    .some(specifier => forbiddenInwardDependency.test(specifier)), "Core/Assembly import types must remain outward");
+}
+
+const verifyCurrentArchitecture = async (construction = traces.construction) => {
   const traceEntries = [
-    ...traces.construction,
+    ...construction,
     ...traces.invocations.claudeCode,
     ...traces.invocations.codex,
   ];
@@ -270,7 +266,7 @@ const verifyCurrentArchitecture = async () => {
   const sourceFiles = await collectEvidenceFiles(evidenceRoots.sources);
   const inwardFiles = sourceFiles.filter(path =>
     path.endsWith(".ts") &&
-    (path.includes("/application/") || path.includes("/contracts/")));
+    (path.includes("/application/") || path.includes("/contracts/") || path.includes("/domain/")));
   for (const path of inwardFiles) {
     const source = await readFile(path, "utf8");
     assert.equal(
@@ -281,30 +277,6 @@ const verifyCurrentArchitecture = async () => {
   }
 };
 
-const artifactDigests = async () => ({
-  fixtures: await hashFileSet(evidenceRoots.fixtures),
-  sources: await hashFileSet(evidenceRoots.sources),
-  tests: await hashFileSet(evidenceRoots.tests),
-});
-
-const assertEvidenceRootsClean = () => {
-  const roots = [...evidenceRoots.fixtures, ...evidenceRoots.sources, ...evidenceRoots.tests];
-  assert.equal(
-    git("status", "--porcelain=v1", "--untracked-files=all", "--", ...roots).trim(),
-    "",
-    "captured product source, tests, and fixtures must match the source revision",
-  );
-};
-
-const assertEvidenceRootsMatchRevision = revision => {
-  const roots = [...evidenceRoots.fixtures, ...evidenceRoots.sources, ...evidenceRoots.tests];
-  assert.equal(
-    git("diff", "--name-only", revision, "HEAD", "--", ...roots).trim(),
-    "",
-    "captured product source, tests, and fixtures must match the retained product revision",
-  );
-};
-
 const captureProductCheck = () => {
   const args = ["--filter", "@agent-teams/embedded-runtime", "check"];
   const output = execFileSync("pnpm", args, {
@@ -313,10 +285,12 @@ const captureProductCheck = () => {
     maxBuffer: 20 * 1024 * 1024,
     stdio: ["ignore", "pipe", "pipe"],
   });
-  const testSummary = Object.fromEntries(
+  const summaries = (
     [...output.matchAll(/^(?:#|ℹ)\s+(tests|pass|fail|cancelled|skipped)\s+(\d+)$/gmu)]
-      .map(([, key, value]) => [key, Number(value)]),
+      .map(([, key, value]) => [key, Number(value)])
   );
+  const testSummary = {};
+  for (const [key, value] of summaries) {testSummary[key] = (testSummary[key] ?? 0) + value;}
   assert.ok(testSummary.tests > 0, "captured embedded-runtime check must execute tests");
   assert.equal(testSummary.pass, testSummary.tests, "captured tests must all pass");
   assert.equal(testSummary.fail, 0, "captured embedded-runtime check must not fail tests");
@@ -335,8 +309,9 @@ const captureProductCheck = () => {
 
 const canonicalJsonBytes = value => `${JSON.stringify(value, null, 2)}\n`;
 
-const loadProspectiveBenchmarks = async () => {
-  const document = JSON.parse(await readFile(benchmarkEnvelopePath, "utf8"));
+const loadProspectiveBenchmarks = async (spec = currentSpec, revision) => {
+  const {benchmarkSourceRevision, prospectiveBenchmarks} = spec;
+  const document = JSON.parse(revision ? readRevisionFile(revision, relative(repositoryRoot, benchmarkEnvelopePath)) : await readFile(benchmarkEnvelopePath, "utf8"));
   assert.equal(document.schemaVersion, 1);
   assert.equal(document.evidenceKind, "redacted-hosted-worker-result-envelopes");
   assert.equal(document.sourceRevision, benchmarkSourceRevision);
@@ -373,14 +348,14 @@ const loadProspectiveBenchmarks = async () => {
   });
 };
 
-const buildReport = async ({ capture, historicalChanges, sourceRevision }) => ({
+const buildReport = async ({ capture, historicalChanges, sourceRevision, digests, spec = currentSpec, specRevision }) => ({
   schemaVersion: 3,
   evidenceKind: "runtime-setup-l0-direct-composition",
   sourceRevision,
   authority: "ADR-0008",
   productOutcome: "detached-safe-runtime-setup-preview",
   taxonomyAuthority: "experiment-local-non-qualification-rubric",
-  ownership,
+  ownership: spec.ownership,
   verdicts: {
     L0: "demonstrated-product-pure-di",
     L1: "no-go-measurement-candidate",
@@ -396,10 +371,10 @@ const buildReport = async ({ capture, historicalChanges, sourceRevision }) => ({
   },
   promotionRule: "hold-unless-two-of-three-prospective-changes-show-the-same-neutral-composition-problem",
   capture,
-  artifactDigests: await artifactDigests(),
+  artifactDigests: digests ?? await artifactDigests(),
   historicalChanges,
-  prospectiveBenchmarks: await loadProspectiveBenchmarks(),
-  traces,
+  prospectiveBenchmarks: await loadProspectiveBenchmarks(spec, specRevision),
+  traces: spec.traces,
   limitations: [
     "historical-change-size-is-not-an-authoring-benchmark",
     "historical-data-does-not-prove-incorrect-edit-count",
@@ -411,28 +386,25 @@ const buildReport = async ({ capture, historicalChanges, sourceRevision }) => ({
   ],
 });
 
-const validateStoredReport = async report => {
-  validateStoredReportShape(report, changes);
+const historicalSpec = () => loadHistoricalSpec(readRevisionFile);
+
+const validateStoredReport = async (report, historical = false) => {
+  const spec = historical ? await historicalSpec() : currentSpec;
+  const {changes: specChanges, ownership, traces: specTraces, sourceRevisionArtifactDigests, benchmarkSourceRevision} = spec;
+  const specRevision = historical ? historicalSpecRevision : undefined;
+  const digests = historical ? await createEvidenceInputs({
+    repositoryRoot, git, readRevisionFile, roots: retainedHistoricalEvidenceRoots,
+    files: { fixtures: [], sources: [], tests: [] },
+  }).artifactDigestsAtRevision(report.sourceRevision) : await artifactDigests();
+  validateStoredReportShape(report, specChanges);
   assert.equal(report.schemaVersion, 3);
-  assert.match(report.sourceRevision, /^[a-f0-9]{40}$/u);
-  assert.equal(
-    report.sourceRevision,
-    changes.at(-1)?.revision,
-    "captured source revision must be the latest retained product change",
-  );
-  const currentArtifactDigests = await artifactDigests();
-  assert.deepEqual(
-    currentArtifactDigests,
+  validateCurrentEvidenceIdentity(report, {
+    changes: specChanges,
+    currentArtifactDigests: digests,
     sourceRevisionArtifactDigests,
-    "current product roots no longer match the pinned source revision",
-  );
-  assert.deepEqual(
-    report.artifactDigests,
-    currentArtifactDigests,
-    "captured product source, tests, or fixtures drifted",
-  );
+  });
   assert.deepEqual(report.ownership, ownership);
-  assert.deepEqual(report.traces, traces);
+  assert.deepEqual(report.traces, specTraces);
   assert.equal(report.taxonomyAuthority, "experiment-local-non-qualification-rubric");
   assert.equal(report.verdicts.L0, "demonstrated-product-pure-di");
   assert.deepEqual(report.verdicts, {
@@ -443,24 +415,15 @@ const validateStoredReport = async report => {
     L4: "no-go",
     L5: "no-go",
   });
-  assert.equal(report.capture.exitCode, 0);
-  assert.match(report.capture.nodeVersion, /^v24\./u);
-  assert.ok(["arm64", "x64"].includes(report.capture.architecture));
-  assert.ok(report.capture.testSummary.tests > 0);
-  assert.equal(report.capture.testSummary.pass, report.capture.testSummary.tests);
-  assert.equal(report.capture.testSummary.fail, 0);
-  assert.equal(report.capture.testSummary.cancelled, 0);
-  assert.equal(report.capture.testSummary.skipped, 0);
-  assert.match(report.capture.outputSha256, /^[a-f0-9]{64}$/u);
   assert.ok(report.historicalChanges.length >= 3);
-  assert.equal(report.historicalChanges.length, changes.length);
+  assert.equal(report.historicalChanges.length, specChanges.length);
   assert.deepEqual(
     report.historicalChanges.map(({ id, revision }) => ({ id, revision })),
-    changes,
+    specChanges,
   );
   assert.deepEqual(
     report.prospectiveBenchmarks,
-    await loadProspectiveBenchmarks(),
+    await loadProspectiveBenchmarks(spec, specRevision),
     "retained prospective benchmark evidence drifted",
   );
   for (const benchmark of report.prospectiveBenchmarks) {
@@ -477,46 +440,96 @@ const validateStoredReport = async report => {
       capture: report.capture,
       historicalChanges: report.historicalChanges,
       sourceRevision: report.sourceRevision,
+      digests, spec, specRevision,
     }),
     "canonical non-historical evidence content drifted",
   );
 };
 
-await verifyCurrentArchitecture();
-assertEvidenceRootsClean();
+const {captureReceipt, mergeReceipts, checkV2, v2ReportPath, retainedV1} = await import("./runtime-setup-l0-evidence-v2-capture.mjs");
+const option = name => {const index = process.argv.indexOf(name); return index < 0 ? undefined : process.argv[index + 1];};
 const mode = process.argv[2] ?? "--check";
-if (mode === "--capture") {
-  const historicalChanges = loadHistoricalChanges();
-  assert.ok(historicalChanges, "full evidence object closure is required");
-  const sourceRevision = changes.at(-1)?.revision;
-  assert.ok(sourceRevision, "a retained product source revision is required");
-  assertEvidenceRootsMatchRevision(sourceRevision);
-  const report = await buildReport({
-    capture: captureProductCheck(),
-    historicalChanges,
-    sourceRevision,
+assert.ok(["--check", "--capture", "--capture-adoption-receipt", "--merge-adoption-receipts"].includes(mode), `Unsupported mode: ${mode}`);
+const profile = JSON.parse(await readFile(join(repositoryRoot, adoptionPaths.profile), "utf8"));
+const adoption = mode.includes("adoption") || profile.status === "active" ||
+  await pathExists(adoptionPaths.default) || await pathExists(adoptionPaths.graph) ||
+  await pathExists(adoptionPaths.report);
+
+if (adoption) {
+  assert.notEqual(mode, "--capture", "direct L0 recapture is forbidden after adoption starts");
+  assert.equal(profile.status, "active", "adoption not ready: consumer profile remains pending");
+  const gateOutput = execFileSync(process.execPath, [adoptionPaths.checker], {
+    cwd: repositoryRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
   });
-  await writeFile(evidencePath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
-} else if (mode === "--check") {
-  const stored = JSON.parse(await readFile(evidencePath, "utf8"));
-  await validateStoredReport(stored);
-  try {
-    assertEvidenceRootsMatchRevision(stored.sourceRevision);
-  } catch (error) {
-    if (!isHistoricalObjectClosureUnavailable(error)) {
-      throw error;
+  const historicalBytes = await readFile(evidencePath);
+  const stored = JSON.parse(historicalBytes);
+  assertAdoptionAuthority({
+    authorityBytes: await readFile(join(repositoryRoot, adoptionPaths.authority)),
+    registry: JSON.parse(await readFile(join(repositoryRoot, adoptionPaths.registry), "utf8")),
+    historicalBytes, profile, gate: JSON.parse(gateOutput),
+  });
+  // Historical content is authenticated against its own exact Git source.
+  await validateStoredReport(stored, true);
+  const originalSpec = await historicalSpec();
+  const historicalChanges = loadHistoricalChanges(summarizeChange, originalSpec.changes);
+  assert.ok(historicalChanges, "full historical evidence object closure is required for adoption");
+  assert.deepEqual(stored.historicalChanges, historicalChanges);
+  for (const entry of [...originalSpec.traces.construction, ...originalSpec.traces.invocations.claudeCode, ...originalSpec.traces.invocations.codex]) {
+    const source = readRevisionFile(stored.sourceRevision, entry.path).toString("utf8");
+    for (const symbol of entry.symbols) {
+      assert.match(source, new RegExp(`\\b${symbol}\\b`, "u"), `historical trace lacks ${symbol}`);
     }
   }
-  const historicalChanges = loadHistoricalChanges();
-  if (historicalChanges !== undefined) {
-    assert.deepEqual(
-      stored.historicalChanges,
-      historicalChanges,
-      "runtime setup L0 historical evidence is stale",
-    );
+  await verifyCurrentArchitecture([...adoptionConstruction, ...traces.construction.slice(1)]);
+  const graphImports = new Set(importSpecifiers(await readFile(join(repositoryRoot, adoptionPaths.graph), "utf8"), adoptionPaths.graph));
+  const defaultImports = new Set(importSpecifiers(await readFile(join(repositoryRoot, adoptionPaths.default), "utf8"), adoptionPaths.default));
+  for (const name of ["@get-modular/core", "@get-modular/assembly"]) {
+    assert.ok(graphImports.has(name) || defaultImports.has(name), `current construction lacks public root ${name}`);
+  }
+  const currentInputs = createEvidenceInputs({ repositoryRoot, git, readRevisionFile,
+    files: { ...evidenceFiles, sources: [...evidenceFiles.sources, ...adoptionEvidenceFiles,
+      profile.standard.evidencePath, ...profile.packages.map(pkg => pkg.archivePath)] },
+  });
+  currentInputs.assertEvidenceRootsClean();
+  // Schema-v1 remains immutable and is validated against its own source closure.
+  const retainedBytes = await readFile(join(repositoryRoot, adoptionPaths.report));
+  assert.equal(createHash("sha256").update(retainedBytes).digest("hex"), retainedV1.sha256,
+    "retained schema-v1 adoption bytes drifted");
+  const retained = JSON.parse(retainedBytes);
+  validateAdoptionReport(retained, {sourceRevision: retained.sourceRevision,
+    historicalRevision: stored.sourceRevision,
+    artifactDigests: await currentInputs.artifactDigestsAtRevision(retained.sourceRevision)});
+  const output = resolve(option("--output") ?? join(repositoryRoot, v2ReportPath));
+  if (mode === "--capture-adoption-receipt") {
+    assert.ok(option("--output"), "receipt --output is required");
+    captureReceipt(repositoryRoot, output, option("--run-id"));
+  } else if (mode === "--merge-adoption-receipts") {
+    const paths = process.argv.slice(3, process.argv.indexOf("--output"));
+    assert.ok(option("--output"), "merge --output is required");
+    mergeReceipts(repositoryRoot, paths, output);
+  } else {
+    await checkV2(repositoryRoot, output);
   }
 } else {
-  throw new Error(`Unsupported mode: ${mode}`);
+  await verifyCurrentArchitecture();
+  assertEvidenceRootsClean();
+  if (mode === "--capture") {
+    const historicalChanges = loadHistoricalChanges();
+    assert.ok(historicalChanges, "full evidence object closure is required");
+    const sourceRevision = changes.at(-1)?.revision;
+    assert.ok(sourceRevision, "a retained product source revision is required");
+    assertEvidenceRootsMatchRevision(sourceRevision);
+    const report = await buildReport({ capture: captureProductCheck(), historicalChanges, sourceRevision });
+    await writeFile(evidencePath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  } else {
+    const stored = JSON.parse(await readFile(evidencePath, "utf8"));
+    await validateStoredReport(stored);
+    try { assertEvidenceRootsMatchRevision(stored.sourceRevision); }
+    catch (error) { if (!isHistoricalObjectClosureUnavailable(error)) { throw error; } }
+    const historicalChanges = loadHistoricalChanges();
+    if (historicalChanges !== undefined) {
+      assert.deepEqual(stored.historicalChanges, historicalChanges, "runtime setup L0 historical evidence is stale");
+    }
+  }
 }
-
-console.log(`runtime-setup-l0-evidence: ${mode === "--capture" ? "captured" : "valid"}`);
+console.log(`runtime-setup-l0-evidence: ${mode === "--check" ? "valid" : "captured"}`);

@@ -2,8 +2,10 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 
 import type {
   CustodiedProviderProcess,
+  CustodiedSdkProcess,
   CustodiedProviderProcessExit,
   HostCustodyClosureEvidence,
+  HostCustodyDrainEvidence,
   HostCustodyEvidence,
   HostCustodyLaunchFingerprintEvidence,
   HostCustodyLaunchPlan,
@@ -23,12 +25,15 @@ import type {
   VerifiedLaunchDescriptors,
   WorkspaceObservation,
 } from "./host-custody-launch.js";
-import type { NodeCustodiedSdkProcess, SpawnStatus } from "./host-custody-process-tree.js";
+import type { SpawnStatus } from "./host-custody-process-tree.js";
 import type { StableProcessGroupGuardian } from "./host-custody-stable-guardian.js";
 import type { OperationResidueAuthority, OperationResidueAuthorityFactory } from "./host-custody-cgroup-v2.js";
 import type { HostStderrIngress, HostStdoutIngress } from "./host-custody-stdio.js";
 import { notStartedIdentity, strictClosure } from "./host-custody-evidence.js";
 import type { RetainedHostCustodyWorkspaceAuthority } from "./private-host-custody-reservation.js";
+import { NodeProviderProcessCustodyHttpReservation } from "./node-provider-process-custody-http-reservation.js";
+
+import { HostLaunchBinding } from "./host-launch-finalization.js";
 
 export const HOST_CUSTODY_LIMITS = Object.freeze({
   maxDiagnosticBytes: 65_536,
@@ -42,12 +47,18 @@ export interface LiveCustody {
   abortRequested: boolean;
   readonly attemptId: string;
   readonly custodyRef: string;
+  readonly launchBinding: HostLaunchBinding;
+  readonly privateReservationPlan?: HostCustodyLaunchPlan;
+  readonly httpReservation: NodeProviderProcessCustodyHttpReservation;
   readonly inputIdentitySha256: string;
   readonly operationId: string;
   readonly providerBinding: Parameters<ProviderProcessCustodyPort["open"]>[0]["providerBinding"];
   readonly workspaceRef: string;
   readonly workspaceAuthority?: HostCustodyWorkspaceAuthority;
   readonly retainedWorkspaceAuthority?: RetainedHostCustodyWorkspaceAuthority;
+  readonly nativeWorkspaceAuthority?: import("./native-host-custody-workspace-authority.js").NativeHostCustodyWorkspaceAuthority;
+  readonly nativeWorkspaceFacts?: import("./darwin-attempt-owner-protocol.js").DarwinNativeLaunchData;
+  readonly nativeExecutionLease?: import("./darwin-attempt-owner-selection.js").DarwinNativeExecutionLease;
   closureEvidence: HostCustodyClosureEvidence;
   containment?: Promise<ContainmentResult>;
   contained?: Extract<ContainmentResult, { readonly kind: "contained" }>;
@@ -56,23 +67,29 @@ export interface LiveCustody {
   evidenceSealed: boolean;
   executable?: ExecutableObservation;
   exit?: Promise<CustodiedProviderProcessExit>;
-  fingerprint?: HostCustodyLaunchFingerprintEvidence;
+  readonly fingerprint?: HostCustodyLaunchFingerprintEvidence;
   guardian?: StableProcessGroupGuardian;
   guardianNoStartAcknowledged?: boolean;
   guardianStartErrorCode?: HostCustodyStartCode;
   launchAuthority?: VerifiedLaunchDescriptors;
+  privateRootCleanupAuthority?: { readonly descriptor: number; close(): void };
   identity: HostCustodyProcessIdentityEvidence;
   identityProof?: Promise<HostCustodyProcessIdentityProof | undefined>;
   opening: Promise<void>;
   cleanupDeadline?: number;
   containmentDeadline?: number;
-  plan?: HostCustodyLaunchPlan;
-  privatePaths?: PrivateLaunchPathObservations;
+  readonly plan?: HostCustodyLaunchPlan;
+  readonly privatePaths?: PrivateLaunchPathObservations;
   privateRootClosure: { identitySha256: string; status: "active" | "deleted" | "quarantined" | "unproven" };
   process?: CustodiedProviderProcess;
   providerPid?: number;
   residueAuthority?: OperationResidueAuthority;
-  sdkProcess?: NodeCustodiedSdkProcess;
+  residueAllocation: "not-allocated" | "uncertain" | "retained";
+  sdkProcess?: CustodiedSdkProcess;
+  nativeCleanup?: Promise<boolean>;
+  nativeExit?: CustodiedProviderProcessExit;
+  nativeStdout?: HostCustodyDrainEvidence;
+  nativeStderr?: HostCustodyDrainEvidence;
   sealed: boolean;
   signalAuthorized: boolean;
   spawnAcknowledgement?: Promise<SpawnStatus>;
@@ -81,7 +98,7 @@ export interface LiveCustody {
   stdinBytes: number;
   stderr?: HostStderrIngress;
   stdout?: HostStdoutIngress;
-  workspace?: WorkspaceObservation;
+  readonly workspace?: WorkspaceObservation;
 }
 
 /** True only when every sealed observer needed to prove that no provider process started agrees. */
@@ -98,35 +115,57 @@ export const createLiveCustody = (
   hostLifecycleGenerationSha256: string,
   inputIdentitySha256: string,
   options: Readonly<{
+    privateReservationPlan?: HostCustodyLaunchPlan;
     containmentProfile: HostCustodyLaunchPlan["containmentProfile"];
     opening: Promise<void>;
     retainedWorkspaceAuthority?: RetainedHostCustodyWorkspaceAuthority;
+    nativeWorkspaceAuthority?: import("./native-host-custody-workspace-authority.js").NativeHostCustodyWorkspaceAuthority;
+    nativeWorkspaceFacts?: import("./darwin-attempt-owner-protocol.js").DarwinNativeLaunchData;
+    nativeExecutionLease?: import("./darwin-attempt-owner-selection.js").DarwinNativeExecutionLease;
     workspaceAuthority?: HostCustodyWorkspaceAuthority;
   }>,
-): LiveCustody => ({
-  abortRequested: false,
-  attemptId: input.attemptId,
-  closureEvidence: strictClosure("unproven", options.containmentProfile),
-  custodyRef,
-  evidenceSealed: false,
-  identity: notStartedIdentity(hostLifecycleGenerationSha256),
-  inputIdentitySha256,
-  opening: options.opening,
-  operationId: input.operationId,
-  providerBinding: Object.freeze({ ...input.providerBinding }),
-  privateRootClosure: Object.freeze({ identitySha256: "", status: "active" }),
-  sealed: false,
-  signalAuthorized: false,
-  spawnStatus: "never-started",
-  stdinBytes: 0,
-  workspaceRef: input.workspaceRef,
-  ...(options.workspaceAuthority === undefined ? {} : { workspaceAuthority: options.workspaceAuthority }),
-  ...(options.retainedWorkspaceAuthority === undefined ? {} : {
-    retainedWorkspaceAuthority: options.retainedWorkspaceAuthority,
-  }),
-});
+): LiveCustody => {
+  const launchBinding = new HostLaunchBinding();
+  const live: LiveCustody = {
+    launchBinding,
+    ...(options.privateReservationPlan === undefined ? {} : {privateReservationPlan: options.privateReservationPlan}),
+    abortRequested: false,
+    attemptId: input.attemptId,
+    closureEvidence: strictClosure("unproven", options.containmentProfile),
+    custodyRef,
+    evidenceSealed: false,
+    httpReservation: new NodeProviderProcessCustodyHttpReservation(),
+    identity: notStartedIdentity(hostLifecycleGenerationSha256),
+    inputIdentitySha256,
+    opening: options.opening,
+    operationId: input.operationId,
+    providerBinding: Object.freeze({ ...input.providerBinding }),
+    privateRootClosure: Object.freeze({ identitySha256: "", status: "active" }),
+    sealed: false,
+    signalAuthorized: false,
+    spawnStatus: "never-started",
+    residueAllocation: "not-allocated",
+    stdinBytes: 0,
+    workspaceRef: input.workspaceRef,
+    ...(options.workspaceAuthority === undefined ? {} : { workspaceAuthority: options.workspaceAuthority }),
+    ...(options.retainedWorkspaceAuthority === undefined ? {} : {
+      retainedWorkspaceAuthority: options.retainedWorkspaceAuthority,
+    }),
+    ...(options.nativeWorkspaceAuthority === undefined ? {} : {nativeWorkspaceAuthority: options.nativeWorkspaceAuthority}),
+    ...(options.nativeWorkspaceFacts === undefined ? {} : {nativeWorkspaceFacts: options.nativeWorkspaceFacts}),
+    ...(options.nativeExecutionLease === undefined ? {} : {nativeExecutionLease: options.nativeExecutionLease}),
+  };
+  return Object.defineProperties(live, {
+    launchBinding: {value: launchBinding, writable: false, configurable: false},
+    plan: {get: () => launchBinding.current?.plan, enumerable: true},
+    fingerprint: {get: () => launchBinding.current?.fingerprint, enumerable: true},
+    workspace: {get: () => launchBinding.current?.workspace, enumerable: true},
+    privatePaths: {get: () => launchBinding.current?.privatePaths, enumerable: true},
+  });
+};
 
 export interface CustodyTombstone {
+  readonly privateReservationPlan?: HostCustodyLaunchPlan;
   readonly attemptId: string;
   readonly custodyRef: string;
   readonly evidence: HostCustodyEvidence;

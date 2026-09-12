@@ -1,3 +1,5 @@
+import { ownerOutputValue } from "./authority-owner-boundary.js";
+import { acceptedProviderPreparation, reverseProviderBinding } from "./accepted-authority-anti-corruption.js";
 import type { ContainedTurnProviderAccessPort } from "../application/ports/outbound/contained-turn-ports.js";
 import {
   containedTurnProviderAccessSnapshotDigest,
@@ -10,14 +12,14 @@ import { containedTurnIdentity } from "../domain/contained-turn-identities.js";
 import { normalizeContainedTurnConsumedGrantReceipt } from "./dispatch-grant-anti-corruption.js";
 
 interface OuterEvidence { readonly authorityDigest: string; readonly bindingAuthorityDigest: string; readonly proofRef: string; readonly purpose: "acceptance" | "dispatch" }
-interface OuterBinding extends ContainedTurnScope {
+export interface OuterBinding extends ContainedTurnScope {
   readonly accessRef: string; readonly credentialBindingDigest: string; readonly credentialBindingRef: string;
   readonly credentialGeneration: number; readonly provider: ContainedTurnProvider; readonly providerAccountRef: string;
   readonly providerRouteRef: string; readonly revision: number;
 }
 type DispatchScope = Readonly<ContainedTurnScope & { readonly scopeDigest: string }>;
 type DispatchBinding = Parameters<ContainedTurnProviderAccessPort["consumeForDispatch"]>[0]["subject"]["providerAccessExpectation"];
-interface ProviderAccessDispatchReceipt extends DispatchBinding {
+interface ProviderAccessDispatchReceipt extends Omit<DispatchBinding, "authorityHeadDigest"> {
   readonly authorityHeadDigestAtConsumption: string; readonly claimBeforeControlTime: number;
   readonly claimBindingDigest: string; readonly consumedAtControlTime: number; readonly consumptionDigest: string;
   readonly grantRequestId: string; readonly opaqueOwnerEvidenceRef: string; readonly operationId: string;
@@ -73,7 +75,6 @@ type CapturedOwner = Readonly<{
 }>;
 
 const trustedApply = Reflect.apply;
-const trustedBind = Function.prototype.bind;
 const trustedFreeze = Object.freeze;
 const trustedGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
 const trustedGetOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
@@ -85,7 +86,7 @@ const trustedObjectPrototype = Object.prototype;
 type NodeUtilTypes = Readonly<{ isProxy(value: unknown): boolean }>;
 const trustedIsProxy = (process.getBuiltinModule("node:util") as Readonly<{ types: NodeUtilTypes }>).types.isProxy;
 
-const exactStableDataRecord = (value: unknown, keys: readonly string[]): Record<string, unknown> => {
+export const exactStableDataRecord = (value: unknown, keys: readonly string[]): Record<string, unknown> => {
   if (value === null || typeof value !== "object") {
     throw new ProviderAccessRouteCOwnerError("not_data_record");
   }
@@ -135,17 +136,14 @@ const exactFrozenDataRecord = (value: unknown, keys: readonly string[]): Record<
   return record;
 };
 
-const capturedMethod = <Method>(owner: object, value: unknown): Method => {
+export const capturedMethod = <Method>(owner: object, value: unknown): Method => {
   try {
     if (typeof value !== "function" || trustedIsProxy(value) ||
         trustedGetOwnPropertyDescriptor(value, "bind") !== undefined) {
       throw new ProviderAccessRouteCOwnerError("invalid_method");
     }
-    const bound = trustedApply(trustedBind, value, [owner]) as unknown;
-    if (typeof bound !== "function") {
-      throw new ProviderAccessRouteCOwnerError("invalid_method");
-    }
-    return trustedFreeze(bound) as unknown as Method;
+    // Native bind reads callable name/length accessors even on frozen methods.
+    return trustedFreeze((...args: unknown[]) => trustedApply(value, owner, args)) as unknown as Method;
   } catch {
     throw new ProviderAccessRouteCOwnerError("invalid_method");
   }
@@ -160,11 +158,11 @@ const captureProviderAccessOwner = (value: unknown): CapturedOwner => {
   const revalidateOwner = exactStableDataRecord(outer.revalidate, ["execute"]);
   try {
     return trustedFreeze({
-      consumeForDispatch: capturedMethod<CapturedOwner["consumeForDispatch"]>(dispatchOwner, dispatchOwner.consumeForDispatch),
-      observeDispatchConsumption: capturedMethod<CapturedOwner["observeDispatchConsumption"]>(dispatchOwner, dispatchOwner.observeDispatchConsumption),
-      resolve: capturedMethod<CapturedOwner["resolve"]>(resolveOwner, resolveOwner.execute),
-      revalidate: capturedMethod<CapturedOwner["revalidate"]>(revalidateOwner, revalidateOwner.execute),
-      settleDispatchConsumption: capturedMethod<CapturedOwner["settleDispatchConsumption"]>(dispatchOwner, dispatchOwner.settleDispatchConsumption),
+      consumeForDispatch: capturedMethod<CapturedOwner["consumeForDispatch"]>(outer.dispatchConsumptionV1 as object, dispatchOwner.consumeForDispatch),
+      observeDispatchConsumption: capturedMethod<CapturedOwner["observeDispatchConsumption"]>(outer.dispatchConsumptionV1 as object, dispatchOwner.observeDispatchConsumption),
+      resolve: capturedMethod<CapturedOwner["resolve"]>(outer.resolve as object, resolveOwner.execute),
+      revalidate: capturedMethod<CapturedOwner["revalidate"]>(outer.revalidate as object, revalidateOwner.execute),
+      settleDispatchConsumption: capturedMethod<CapturedOwner["settleDispatchConsumption"]>(outer.dispatchConsumptionV1 as object, dispatchOwner.settleDispatchConsumption),
     });
   } catch {
     throw new ProviderAccessRouteCOwnerError("invalid_method");
@@ -174,7 +172,13 @@ const captureProviderAccessOwner = (value: unknown): CapturedOwner => {
 const opaqueEvidenceDigest = (evidence: OuterEvidence): string => digestContainedTurnCanonicalValue(evidence as never);
 const proofId = (evidence: OuterEvidence, purpose: OuterEvidence["purpose"]) => containedTurnIdentity("proof", `proof:provider-access:${purpose}:${opaqueEvidenceDigest(evidence)}`);
 const evidenceId = (evidence: OuterEvidence, purpose: OuterEvidence["purpose"]) => containedTurnIdentity("evidence", `evidence:provider-access:${purpose}:${opaqueEvidenceDigest(evidence)}`);
-const snapshot = (binding: OuterBinding, evidence: OuterEvidence): ContainedTurnProviderAccessSnapshot => Object.freeze({
+const snapshot = (binding: OuterBinding, evidence: OuterEvidence): ContainedTurnProviderAccessSnapshot => {
+  exactFrozenDataRecord(binding, ["accessRef", "credentialBindingDigest", "credentialBindingRef", "credentialGeneration", "projectId", "provider", "providerAccountRef", "providerRouteRef", "revision", "tenantId"]);
+  exactFrozenDataRecord(evidence, ["authorityDigest", "bindingAuthorityDigest", "proofRef", "purpose"]);
+  if (binding.credentialBindingDigest !== evidence.bindingAuthorityDigest ||
+      ![binding.accessRef, binding.credentialBindingDigest, binding.credentialBindingRef, binding.projectId, binding.provider, binding.providerAccountRef, binding.providerRouteRef, binding.tenantId, evidence.authorityDigest, evidence.proofRef].every(exactBoundedToken) ||
+      !Number.isSafeInteger(binding.credentialGeneration) || binding.credentialGeneration < 1 || !Number.isSafeInteger(binding.revision) || binding.revision < 1) {throw new TypeError("PA owner binding mismatch");}
+  return Object.freeze({
   accessRef: binding.accessRef,
   credentialBindingDigest: digestContainedTurnCanonicalValue({ ownerDigest: binding.credentialBindingDigest }),
   credentialBindingRef: binding.credentialBindingRef, credentialGeneration: binding.credentialGeneration,
@@ -182,6 +186,7 @@ const snapshot = (binding: OuterBinding, evidence: OuterEvidence): ContainedTurn
   providerAccountRef: binding.providerAccountRef, providerRouteRef: binding.providerRouteRef,
   revision: binding.revision, tenantId: binding.tenantId,
 });
+};
 const resolutionDigest = (binding: ContainedTurnProviderAccessSnapshot, evidence: OuterEvidence, phase: "acceptance" | "dispatch") => digestContainedTurnCanonicalValue({
   bindingDigest: containedTurnProviderAccessSnapshotDigest(binding), ownerAuthorityDigest: evidence.authorityDigest,
   phase, proofPurpose: evidence.purpose, proofRef: evidence.proofRef,
@@ -202,7 +207,7 @@ const dispatchBindingKeys = [
 ] as const;
 const dispatchScopeKeys = ["projectId", "scopeDigest", "tenantId"] as const;
 
-const exactBoundedToken = (value: unknown): value is string => {
+export const exactBoundedToken = (value: unknown): value is string => {
   if (typeof value !== "string" || value.length === 0 || value.length > 512) {return false;}
   for (let index = 0; index < value.length; index += 1) {
     const code = value.charCodeAt(index);
@@ -285,6 +290,10 @@ const settlementMatches = (
 /** Real ACL from both Provider Access V1 owner contracts into the single Agent Execution port. */
 export const createContainedTurnProviderAccessPort = (outer: OuterContainedTurnProviderAccess): ContainedTurnProviderAccessPort => {
   const owner = captureProviderAccessOwner(outer);
+  return providerAccessPort(owner);
+};
+
+const providerAccessPort = (owner: CapturedOwner, publish?: (input: Parameters<ContainedTurnProviderAccessPort["consumeForDispatch"]>[0], request: Parameters<CapturedOwner["consumeForDispatch"]>[0]) => ReturnType<CapturedOwner["consumeForDispatch"]>): ContainedTurnProviderAccessPort => {
   const port: ContainedTurnProviderAccessPort = {
   async consumeForDispatch(input) {
     const subject = input.subject;
@@ -296,15 +305,18 @@ export const createContainedTurnProviderAccessPort = (outer: OuterContainedTurnP
       purpose: CONTAINED_TURN_OWNER_DISPATCH_PURPOSE, requestDigest: subject.providerAccessRequest.requestDigest, scope,
     });
     try {
-      let outcome = await owner.consumeForDispatch(request);
+      let outcome = await ownerOutputValue(publish === undefined ? owner.consumeForDispatch(request) : publish(input, request));
       if (outcome.kind === "indeterminate") {
-        outcome = await owner.observeDispatchConsumption({
+        outcome = await ownerOutputValue(owner.observeDispatchConsumption({
           grantRequestId: request.grantRequestId, provider: request.provider,
           requestDigest: request.requestDigest, scope,
-        });
+        }));
       }
       if (outcome.kind === "consumed") {
+        exactFrozenDataRecord(outcome, ["kind", "receipt"]);
         const receipt = outcome.receipt;
+        exactFrozenDataRecord(receipt, ["acceptedAuthorityDigest", "accessRef", "authorityHeadDigestAtConsumption", "bindingDigest", "bindingRevision", "claimBeforeControlTime", "claimBindingDigest", "consumedAtControlTime", "consumptionDigest", "credentialBindingDigest", "credentialBindingRef", "credentialGeneration", "grantRequestId", "opaqueOwnerEvidenceRef", "operationId", "provider", "providerAccountRef", "providerRouteRef", "purpose", "requestDigest", "scope", ...(publish === undefined && Object.hasOwn(receipt, "authorityHeadDigest") ? ["authorityHeadDigest"] : [])]);
+        if (!scopeMatches(receipt.scope, scope)) {throw new TypeError("PA consumed scope mismatch");}
         return { kind: "consumed", receipt: normalizeContainedTurnConsumedGrantReceipt("provider_access", subject, {
           authorityFacts: Object.freeze({
             acceptedAuthorityDigest: receipt.acceptedAuthorityDigest, accessRef: receipt.accessRef,
@@ -321,6 +333,7 @@ export const createContainedTurnProviderAccessPort = (outer: OuterContainedTurnP
         }) };
       }
       if (outcome.kind === "prevented") {
+        exactFrozenDataRecord(outcome, ["kind", "prevention"]);
         const prevention = snapshotBoundPrevention(outcome.prevention, request);
         return { kind: "prevented", preventionProofId: containedTurnIdentity("proof", `proof:provider-access:dispatch:${digestContainedTurnCanonicalValue(prevention as never)}`) };
       }
@@ -337,7 +350,7 @@ export const createContainedTurnProviderAccessPort = (outer: OuterContainedTurnP
         expectedBinding: receipt.authorityFacts, operationId: receipt.operationId, provider: receipt.provider,
         scope: receipt.scope, settlementRequestId: input.settlementRequestId,
       });
-      const outcome = await owner.settleDispatchConsumption(request);
+      const outcome = await ownerOutputValue(owner.settleDispatchConsumption(request));
       return settlementMatches(outcome, request) ? { kind: "settled" } :
         { evidenceId: grantEvidenceId("settle", { input, outcome }), kind: "indeterminate" };
     } catch {return { evidenceId: boundaryFailureEvidenceId("settle", input), kind: "indeterminate" };}
@@ -345,9 +358,12 @@ export const createContainedTurnProviderAccessPort = (outer: OuterContainedTurnP
   async resolveForAcceptance(input: Readonly<{ intent: ContainedTurnIntent; provider: ContainedTurnProvider; scope: ContainedTurnScope }>) {
     const request = Object.freeze({ provider: input.provider, scope: input.scope });
     try {
-      const outcome = await owner.resolve(request);
+      const outcome = await ownerOutputValue(owner.resolve(request));
       if (outcome.evidence.purpose !== "acceptance") {return { evidenceId: evidenceId(outcome.evidence, "acceptance"), kind: "indeterminate", reason: "authority_unknown" };}
-      if (outcome.kind === "resolved") {const binding = snapshot(outcome.binding, outcome.evidence); return { acceptanceProofId: proofId(outcome.evidence, "acceptance"), acceptanceResolutionDigest: resolutionDigest(binding, outcome.evidence, "acceptance"), kind: "resolved", snapshot: binding };}
+      if (outcome.kind === "resolved") {exactFrozenDataRecord(outcome, ["kind", "binding", "evidence"]); const binding = snapshot(outcome.binding, outcome.evidence); if (binding.provider !== input.provider || binding.tenantId !== input.scope.tenantId || binding.projectId !== input.scope.projectId) {throw new TypeError("PA current selector mismatch");} return { acceptanceProofId: proofId(outcome.evidence, "acceptance"), acceptanceResolutionDigest: resolutionDigest(binding, outcome.evidence, "acceptance"), kind: "resolved", snapshot: binding };}
+      if (outcome.kind !== "unavailable") {throw new TypeError("PA invalid resolution kind");}
+      exactFrozenDataRecord(outcome, ["kind", "reason", "evidence"]);
+      exactFrozenDataRecord(outcome.evidence, ["authorityDigest", "bindingAuthorityDigest", "proofRef", "purpose"]);
       if (outcome.reason === "revoked" || outcome.reason === "not_found") {return { kind: "prevented", preventionProofId: proofId(outcome.evidence, "acceptance"), reason: "access_denied" };}
       return { evidenceId: boundaryFailureEvidenceId("resolve", request), kind: "indeterminate", reason: "authority_unknown" };
     } catch {
@@ -355,12 +371,15 @@ export const createContainedTurnProviderAccessPort = (outer: OuterContainedTurnP
     }
   },
   async revalidateForDispatch(input) {
-    const outerBinding: OuterBinding = Object.freeze({ ...input.acceptedSnapshot, credentialBindingDigest: input.acceptedSnapshot.ownerAuthorityDigest });
+    const outerBinding: OuterBinding = reverseProviderBinding(input.acceptedSnapshot);
     const request = Object.freeze({ binding: outerBinding, provider: input.acceptedSnapshot.provider, scope: input.scope });
     try {
-      const outcome = await owner.revalidate(request);
+      const outcome = await ownerOutputValue(owner.revalidate(request));
       if (outcome.evidence.purpose !== "dispatch") {return { evidenceId: evidenceId(outcome.evidence, "dispatch"), kind: "indeterminate", reason: "authority_unknown" };}
-      if (outcome.kind === "valid") {const binding = snapshot(outcome.binding, outcome.evidence); return { dispatchProofId: proofId(outcome.evidence, "dispatch"), dispatchResolutionDigest: resolutionDigest(binding, outcome.evidence, "dispatch"), kind: "current", snapshot: binding };}
+      if (outcome.kind === "valid") {exactFrozenDataRecord(outcome, ["kind", "binding", "evidence"]); const binding = snapshot(outcome.binding, outcome.evidence); if (containedTurnProviderAccessSnapshotDigest(binding) !== containedTurnProviderAccessSnapshotDigest(input.acceptedSnapshot)) {throw new TypeError("PA current binding changed");} return { dispatchProofId: proofId(outcome.evidence, "dispatch"), dispatchResolutionDigest: resolutionDigest(binding, outcome.evidence, "dispatch"), kind: "current", snapshot: binding };}
+      if (outcome.kind !== "rejected") {throw new TypeError("PA invalid revalidation kind");}
+      exactFrozenDataRecord(outcome, ["kind", "reason", "evidence"]);
+      exactFrozenDataRecord(outcome.evidence, ["authorityDigest", "bindingAuthorityDigest", "proofRef", "purpose"]);
       if (outcome.reason === "revoked" || outcome.reason.endsWith("_changed") || outcome.reason === "credential_rotated" || outcome.reason === "revision_changed") {return { kind: "prevented", preventionProofId: proofId(outcome.evidence, "dispatch"), reason: "access_revoked" };}
       return { evidenceId: boundaryFailureEvidenceId("revalidate", request), kind: "indeterminate", reason: "authority_unknown" };
     } catch {
@@ -369,4 +388,22 @@ export const createContainedTurnProviderAccessPort = (outer: OuterContainedTurnP
   },
   };
   return Object.freeze(port);
+};
+
+/** Operation-scoped PA v2 publisher plus independently current materialization resolver. */
+export interface OuterContainedTurnProviderAccessOperation {
+  readonly resolve: OuterContainedTurnProviderAccess["resolve"];
+  readonly revalidate: OuterContainedTurnProviderAccess["revalidate"];
+  readonly dispatchConsumption: OuterContainedTurnProviderAccess["dispatchConsumptionV1"] & {
+    publishAndConsumeForDispatch(prepared: ReturnType<typeof acceptedProviderPreparation>, request: Parameters<CapturedOwner["consumeForDispatch"]>[0]): ReturnType<CapturedOwner["consumeForDispatch"]>;
+  };
+}
+export const createContainedTurnOperationProviderAccessPort = (outer: OuterContainedTurnProviderAccessOperation): ContainedTurnProviderAccessPort => {
+  const fields = exactStableDataRecord(outer, ["resolve", "revalidate", "dispatchConsumption"]);
+  const dispatch = exactStableDataRecord(fields.dispatchConsumption, ["consumeForDispatch", "publishAndConsumeForDispatch", "observeDispatchConsumption", "settleDispatchConsumption"]);
+  const captured = Object.freeze(Object.fromEntries(["consumeForDispatch", "observeDispatchConsumption", "settleDispatchConsumption"].map(key =>
+    [key, capturedMethod(fields.dispatchConsumption as object, dispatch[key])])));
+  const legacy = Object.freeze({resolve: fields.resolve, revalidate: fields.revalidate, dispatchConsumptionV1: captured}) as unknown as OuterContainedTurnProviderAccess;
+  const publisher = capturedMethod<OuterContainedTurnProviderAccessOperation["dispatchConsumption"]["publishAndConsumeForDispatch"]>(fields.dispatchConsumption as object, dispatch.publishAndConsumeForDispatch);
+  return providerAccessPort(captureProviderAccessOwner(legacy), (input, request) => publisher(acceptedProviderPreparation(input), request));
 };

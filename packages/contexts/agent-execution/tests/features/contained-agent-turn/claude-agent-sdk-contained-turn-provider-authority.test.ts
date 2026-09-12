@@ -295,3 +295,18 @@ test("current-kernel adapter bounds a stuck iterator, cancellation lookup, inter
   assert.equal(interruptCalled, false);
   assert.equal(closeCalled, false);
 });
+
+test("Claude clean root exit and exhausted SDK iterator cannot replace a missing terminal result", async () => {
+  let starts = 0;
+  const adapter = kernelProvider(spawnedQuery([]), {
+    processes: {
+      get: () => inertRegistryProcess(),
+      start: () => {
+        starts += 1;
+        return { ...inertProcess(), exitCode: 0, signalCode: null };
+      },
+    },
+  });
+  assert.equal((await adapter.execute(kernelInput() as never)).kind, "indeterminate");
+  assert.equal(starts, 1);
+});

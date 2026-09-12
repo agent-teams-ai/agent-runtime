@@ -20,7 +20,10 @@ export interface CodexEffectCustodyRequest extends CodexEffectCustodyExecution {
  * Codex-owned anti-corruption seam for Host/workspace custody evidence.
  *
  * The implementation is an authority, not a caller assertion: it must consume
- * already-proven opened-object and workspace-descriptor evidence. The returned
+ * Host-proven workspace identity and filesystem confinement prepared before
+ * execution. ADR-0010 contained_unmediated_effect covers the whole turn; this
+ * does not attest which inode a provider-internal syscall opened. Endpoint
+ * observations remain diagnostic and cannot establish custody. The returned
  * object is opaque to Codex and must remain identity-stable for every later
  * phase of the same effect. Returning undefined keeps the provider boundary
  * fail-closed.

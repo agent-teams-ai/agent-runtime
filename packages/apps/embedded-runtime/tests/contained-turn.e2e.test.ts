@@ -1,17 +1,22 @@
+import { createAgentRuntimeHost } from "./helpers/create-contained-turn-host.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+
 import { createContainedTurnFeature } from "@agent-teams/agent-execution/composition";
-import {
-  createDependencies,
-  operationId as fixtureOperationId,
-} from "../../../contexts/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
+import { findRepoRoot } from "./helpers/repo-root.ts";
+
+const { createDependencies, operationId: fixtureOperationId } = await import(pathToFileURL(join(
+  findRepoRoot(),
+  "packages/contexts/agent-execution/tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts",
+)).href);
 
 import {
   AgentRuntimeHostDisposalIncompleteError,
   AgentRuntimeHostLifecycleError,
   ContainedTurnOwnerContractError,
-  createAgentRuntimeHost,
   createClaudeCodeSetupInspectionPlanner,
   createCodexSetupInspectionPlanner,
 } from "../dist/composition.js";
@@ -402,7 +407,7 @@ test("rejects malformed, non-string, and oversized provider input before composi
     expectedProvider: expectedProvider as string,
     intent: { mode: "analysis", prompt: "synthetic" },
   });
-  const rejected = { code: "provider_unsupported", status: "unsupported" };
+  const rejected = { code: "caller_invalid", status: "unsupported" };
 
   assert.deepEqual(await submit(""), rejected);
   assert.deepEqual(await submit(42), rejected);
@@ -425,7 +430,7 @@ test("rejects unbounded command and prompt input before composition", async t =>
   const host = createAgentRuntimeHost({ ...setupDependencies, containedTurn: feature });
   t.after(() => host.dispose());
   const access = host.bindAccess({ containedTurn: trustedScope });
-  const rejected = { code: "provider_unsupported", status: "unsupported" };
+  const rejected = { code: "caller_invalid", status: "unsupported" };
   const base = {
     commandId: "command:bounded-input",
     expectedProvider: "codex",
@@ -441,6 +446,8 @@ test("rejects unbounded command and prompt input before composition", async t =>
   assert.deepEqual(await access.containedTurn.submit({
     ...base, intent: { mode: "invalid" as never, prompt: "synthetic" },
   }), rejected);
+  // Public submit API: a bad commandId reports caller_invalid, not provider_unsupported.
+  assert.deepEqual(await access.containedTurn.submit({ ...base, commandId: "" }), rejected);
   assert.equal(submitCalls, 0);
 });
 

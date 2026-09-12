@@ -33,6 +33,7 @@ interface MutableStreamEvidence {
   pendingCursor: number; status: DockerCustodyStreamEvidence["status"];
 }
 interface ProviderGeneration {
+  readonly pid: number;
   readonly rootHandle: DockerCustodyProviderRootHandle; readonly stderr: DockerCustodyProviderOutputHandle; readonly stdout: DockerCustodyProviderOutputHandle;
 }
 const EMPTY_SHA256 = createHash("sha256").digest("hex");
@@ -52,6 +53,7 @@ export class DockerCustodyInitRuntime {
   readonly #executablePath: string;
   readonly #executableSha256: string;
   #generation: ProviderGeneration | undefined;
+  #instanceQueued = false;
   #handshake?: {readonly fingerprint: string; readonly nonce: string}; #handshakePending = false;
   #integrityFailed = false;
   #failureKillDeadlineMonotonicMs: number | undefined; #failureCleanupComplete = false; #failureTerminalDeadlineMonotonicMs: number | undefined;
@@ -163,7 +165,7 @@ export class DockerCustodyInitRuntime {
         !opaqueHandle(child.stdout) || rootHandle === stderrHandle || rootHandle === stdoutHandle || stderrHandle === stdoutHandle) {
         throw new Error("spawn returned invalid or aliased provider generation capabilities");
       }
-      this.#generation = Object.freeze({rootHandle: child.handle, stderr: child.stderr, stdout: child.stdout});
+      this.#generation = Object.freeze({pid: child.pid, rootHandle: child.handle, stderr: child.stderr, stdout: child.stdout});
       this.#providerRootTracked = true; this.#phase = "provider-running"; this.#acknowledge("started", this.#generation);
     } catch {
       this.#acknowledge("acceptance-unknown", null);
@@ -351,10 +353,23 @@ export class DockerCustodyInitRuntime {
     this.#retryContainment(); this.#flushControl();
     if (this.#phase === "failed" && this.#failureCleanupComplete) {return;}
     try {
-      this.#observeRootExit();
+      this.#observeInstance(); this.#observeRootExit();
       if (this.#integrityFailed) {this.#enforceFailureDeadlines(); this.#maybeFinishFailure();}
       else {this.#enforceDeadlines();}
     } catch {this.#poison();}
+  }
+  #observeInstance(): void {
+    const generation = this.#generation; const request = this.#request;
+    if (this.#integrityFailed || this.#instanceQueued || !this.#providerRootTracked || this.#acknowledgement !== "delivered" ||
+      generation === undefined || request?.observationBinding === undefined) {return;}
+    const facts = this.#syscalls.observeProviderInstance?.(generation.rootHandle);
+    if (facts === undefined || facts === null) {return;}
+    if (facts.pid !== generation.pid || facts.executableSha256 !== request.executableSha256) {this.#poison(); return;}
+    const message = parseDockerCustodyProtocolMessage({...facts, binding: request.observationBinding,
+      handshakeNonce: request.handshakeNonce, kind: "provider-instance", launchFingerprintSha256: request.launchFingerprintSha256,
+      requestId: request.requestId});
+    if (message.kind !== "provider-instance") {throw new Error("invalid provider instance observation");}
+    this.#instanceQueued = true; this.#enqueueControl(message, generation);
   }
   #observeRootExit(): void {
     const generation = this.#generation;

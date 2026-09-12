@@ -22,6 +22,6 @@ export type OwnerObservationOutcome =
 
 export type OwnerSubmitOutcome =
   | { readonly code: "command_fingerprint_conflict"; readonly status: "conflict" }
-  | { readonly code: "mode_unsupported" | "provider_mismatch" | "provider_unsupported"; readonly status: "unsupported" }
+  | { readonly code: "caller_invalid" | "mode_unsupported" | "provider_mismatch" | "provider_unsupported"; readonly status: "unsupported" }
   | { readonly status: "denied" }
   | { readonly status: "observed"; readonly turn: OwnerSubmitObservation };

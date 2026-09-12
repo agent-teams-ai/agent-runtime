@@ -7,6 +7,7 @@ export const HTTP_EGRESS_ANOMALY_CODES = [
   "inbound_malformed",
   "inbound_smuggling",
   "inbound_route_mismatch",
+  "inbound_authentication_denied",
   "provider_access_denied",
   "provisional_denied",
   "provisional_timeout",
@@ -60,6 +61,8 @@ export type HttpEgressExpectedRequest = Readonly<{
   method: string;
   path: string;
   host: string;
+  /** Explicit HEAD framing only; no PA/RS or route authority. */
+  bodyMode?: "forbidden";
 }>;
 
 export type HttpEgressConnection = Readonly<{

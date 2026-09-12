@@ -1,0 +1,41 @@
+from pathlib import Path
+import datetime,hashlib,json,os,resource,shutil,signal,subprocess,time
+root=Path('/var/data/worker-jobs/ar69-r117');assert Path('/etc/machine-id').read_text().strip()=='be0aad971ea647fab370acd110b469b7'
+assert not(root/'native-attempt-started.json').exists()
+subprocess.run(['python3',str(root/'check-health.py')],check=True)
+(root/'native-attempt-started.json').write_text(datetime.datetime.now(datetime.timezone.utc).isoformat())
+def memory():return {l.split(':')[0]:int(l.split()[1])*1024 for l in Path('/proc/meminfo').read_text().splitlines() if l.split(':')[0] in ['MemAvailable','SwapFree']}
+def allocated():return sum(p.lstat().st_blocks*512 for p in root.rglob('*'))
+results=[];peak=0;disk_peak=0
+for recipe,intent in [('permission','analysis'),('broker','analysis'),('broker','workspace-write')]:
+ assert shutil.disk_usage(root).free>=5*1024**3 and allocated()<512*1024**2
+ label=recipe+'-'+intent; started=datetime.datetime.now(datetime.timezone.utc).isoformat()
+ with (root/(label+'.stdout')).open('xb') as out,(root/(label+'.stderr')).open('xb') as err:
+  child=subprocess.Popen(['/var/data/toolchains/node-v24.18.0/bin/node',str(root/'capture-linux.mjs'),intent,recipe],cwd=root,stdout=out,stderr=err,start_new_session=True)
+  try:
+   deadline=time.monotonic()+30
+   while child.poll() is None:
+    rss=0
+    for line in subprocess.check_output(['ps','-eo','pgid=,rss='],text=True).splitlines():
+     group,kib=map(int,line.split())
+     if group==child.pid:rss+=kib*1024
+    own=int(next(l.split()[1] for l in Path('/proc/self/status').read_text().splitlines() if l.startswith('VmRSS:')))*1024
+    peak=max(peak,rss+own);disk_peak=max(disk_peak,allocated());mem=memory();psi=float(Path('/proc/pressure/memory').read_text().splitlines()[1].split()[1].split('=')[1])
+    assert rss+own<=512*1024**2 and disk_peak<=512*1024**2,'own resource envelope'
+    assert mem['MemAvailable']>=1024**3 and not(mem['MemAvailable']<3*1024**3 and psi>=10),'dangerous memory'
+    assert shutil.disk_usage(root).free>=5*1024**3 and shutil.disk_usage('/mnt/volume_ams3_1784742570542').free>=5*1024**3,'actual disk floor'
+    assert time.monotonic()<deadline,'native capture deadline'
+    time.sleep(.05)
+   code=child.wait(timeout=5);assert code==0,(label,code)
+  except BaseException:
+   try:os.killpg(child.pid,signal.SIGKILL)
+   except ProcessLookupError:pass
+   child.wait(timeout=5);raise
+ result_path=root/('codex-native-linux-'+label)/'result.json';result=json.loads(result_path.read_text())
+ assert result['stage']=='complete' and result['sawConfig'] and result['providerTurnRequested']==False and result['authFilesSupplied']==False
+ messages={m.get('id'):m for m in result['messages'] if 'id' in m}
+ for key in ['init','config','permission-list']:assert 'result' in messages[key] and 'error' not in messages[key],key
+ config=messages['config']['result'];assert len(config['config'])==99 and len(config['layers'])==3
+ results.append({'recipe':recipe,'intent':intent,'startedAt':started,'resultPath':str(result_path.relative_to(root)),'resultSha256':hashlib.sha256(result_path.read_bytes()).hexdigest(),'configFields':len(config['config']),'layers':len(config['layers']),'origins':len(config['origins']),'outerReturnCode':code,'childClose':result['closeResult'],'temporarySandboxRemoved':not Path(result['project']).exists()})
+receipt={'observedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),'head':'f7f39d572203af14c60ed29fec26a205bad89df6','platform':'linux-x64','version':'0.153.4','binarySha256':'56ef98ab4032d317ab26e9b5e5a175650717351edb16ed9cde0cb6d1734d62da','executionBinding':'isolated-verified-path-before-and-after','isolatedNetwork':'unshare --net','authFilesSupplied':False,'providerTurnRequested':False,'peakAggregateRssBytes':peak,'peakAllocatedDiskBytes':disk_peak,'profiles':results,'scope':'offline config/read and permissionProfile/list only; no live qualification or retained-descriptor proof'}
+(root/'native-config-receipt.json').write_text(json.dumps(receipt,indent=2)+'\n');print(json.dumps(receipt))

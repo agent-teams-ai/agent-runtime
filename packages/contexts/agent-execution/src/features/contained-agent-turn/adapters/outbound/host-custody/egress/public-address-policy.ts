@@ -79,25 +79,11 @@ const isPublicIpv6 = (words: readonly number[]): boolean => {
   return true;
 };
 
-const canonicalIpv6 = (words: readonly number[]): string => {
-  let bestStart = -1;
-  let bestLength = 0;
-  for (let start = 0; start < words.length;) {
-    if (words[start] !== 0) {start += 1; continue;}
-    let end = start;
-    while (end < words.length && words[end] === 0) {end += 1;}
-    if (end - start > bestLength && end - start >= 2) {
-      bestStart = start;
-      bestLength = end - start;
-    }
-    start = end;
-  }
-  const formatted = words.map(word => word.toString(16));
-  if (bestStart < 0) {return formatted.join(":");}
-  return `${formatted.slice(0, bestStart).join(":")}::${formatted.slice(bestStart + bestLength).join(":")}`;
-};
+// Runtime Security signs eight padded lowercase groups; sort only after this projection.
+const canonicalIpv6 = (words: readonly number[]): string =>
+  words.map(word => word.toString(16).padStart(4, "0")).join(":");
 
-const normalizePublicAddress = (address: unknown): string | undefined => {
+export const normalizePublicAddress = (address: unknown): string | undefined => {
   if (typeof address !== "string" || address.length === 0 || address.length > 64 || !address.isWellFormed()) {
     return undefined;
   }

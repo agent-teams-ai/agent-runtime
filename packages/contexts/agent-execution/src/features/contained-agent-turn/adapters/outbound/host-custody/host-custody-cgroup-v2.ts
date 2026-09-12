@@ -7,6 +7,10 @@ export interface OperationResidueAuthority {
   proveEmpty(deadline: number, monotonicNow: () => number): Promise<"empty" | "residue" | "unproven">;
 }
 
+/** Internal factory evidence: thrown only when no allocation occurred.
+ * Every other rejection leaves allocation uncertain and owned for reconciliation. */
+export class OperationResidueNotAllocatedError extends HostCustodyUnsupportedError {}
+
 export interface OperationResidueAuthorityFactory {
   create(custodyRef: string): Promise<OperationResidueAuthority>;
 }
@@ -19,6 +23,6 @@ export interface OperationResidueAuthorityFactory {
 // explicitly unsupported.
 export const unsupportedOperationResidueAuthorityFactory: OperationResidueAuthorityFactory = Object.freeze({
   async create() {
-    throw new HostCustodyUnsupportedError("linux-cgroup-v2-unavailable");
+    throw new OperationResidueNotAllocatedError("linux-cgroup-v2-unavailable");
   },
 });

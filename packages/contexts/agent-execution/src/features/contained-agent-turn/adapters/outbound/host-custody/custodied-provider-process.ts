@@ -1,4 +1,11 @@
+import type { NativeHostCustodyWorkspaceAuthority } from "./native-host-custody-workspace-authority.js";
 import type { ContainedTurnProviderBinding } from "../../../contracts/contained-agent-turn.js";
+
+export { createImmutableHostCustodyLaunchPlan } from "./host-custody-launch-plan-snapshot.js";
+
+export { createFinalizableHostCustodyLaunchPlan } from "./host-custody-finalizable-plan.js";
+export { startHostCustodyLaunch } from "./host-custody-start-projection.js";
+export type { FinalHostLaunch, ReservedHostLaunchView } from "./host-launch-finalization.js";
 
 export interface CustodiedProviderProcessExit {
   readonly code: number | null;
@@ -113,9 +120,16 @@ export interface HostCustodyCooperativeClosureEvidence {
   readonly status: "closed" | "not-started" | "unproven";
 }
 
+export interface HostCustodyNativeDarwinClosureEvidence {
+  readonly limitations: readonly [];
+  readonly profile: "native-darwin-attempt-owner";
+  readonly status: "closed" | "unproven";
+}
+
 export type HostCustodyClosureEvidence =
   | HostCustodyStrictClosureEvidence
-  | HostCustodyCooperativeClosureEvidence;
+  | HostCustodyCooperativeClosureEvidence
+  | HostCustodyNativeDarwinClosureEvidence;
 
 export interface HostCustodyPrivateRootClosureEvidence {
   readonly identitySha256: string;
@@ -145,6 +159,7 @@ export interface HostCustodyEvidence {
 
 export interface HostCustodyEvidenceRegistry {
   evidence(custodyRef: string): HostCustodyEvidence | undefined;
+  evidenceForAttempt?(input: Readonly<{operationId: string; attemptId: string}>): HostCustodyEvidence | undefined;
 }
 
 export interface HostCustodyProcessIdentityProof {
@@ -240,7 +255,7 @@ export interface HostCustodyWorkspaceAuthority {
 export type HostCustodyReservationInput = Readonly<
   Parameters<ProviderProcessCustodyPort["open"]>[0] & {
     readonly launchPlan: HostCustodyLaunchPlan;
-    readonly workspaceAuthority: HostCustodyWorkspaceAuthority;
+    readonly workspaceAuthority: HostCustodyWorkspaceAuthority | NativeHostCustodyWorkspaceAuthority;
   }
 >;
 

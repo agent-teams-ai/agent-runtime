@@ -1,0 +1,184 @@
+import {types as utilTypes} from "node:util";
+import type {
+  HostHttpGrant, HostHttpMaterializationReceipt, HostHttpProvisionalDecision, HostHttpRequestProjection,
+  HostHttpSigningKey, HostHttpTlsObservation, HostHttpVerifierV2, HttpEgressBrokerPorts, HttpEgressClock,
+} from "./http-egress-ports.js";
+import {validHostHttpGrant, validHostHttpProvisionalDecision} from "./http-egress-signed-proof-validation.js";
+import {normalizePublicAddress} from "./public-address-policy.js";
+
+const validTime = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && !Object.is(value, -0);
+
+// One execution owns this high-water mark, including final verification and both
+// sides of synchronous journal consumption. No caller wrapper identity or global
+// registry carries clock authority. Uncertainty is sticky until execution closes.
+export const retainHttpEgressClock = (clock: HttpEgressClock): HttpEgressClock => {
+  let latest = -1;
+  let uncertain = false;
+  return Object.freeze({
+    now: () => {
+      const now = clock.now();
+      uncertain ||= !validTime(now) || now < latest;
+      if (uncertain) {return Number.NaN;}
+      latest = now;
+      return now;
+    },
+    // Closure acknowledgements retain their separate deadline even if authority
+    // time becomes uncertain; a failed authority check must still initiate cleanup.
+    within: <T>(deadline: number, action: () => Promise<T>, signal?: AbortSignal) =>
+      clock.within(deadline, action, signal),
+  });
+};
+
+export const signedHttpDispatchDeadline = (grant: HostHttpGrant, operationDeadline: number): number | undefined => {
+  const {authorizedAtControlTime} = grant.payload.time;
+  const {requestBytes, responseBytes, totalMilliseconds} = grant.payload.limits;
+  if (![authorizedAtControlTime, operationDeadline, requestBytes, responseBytes, totalMilliseconds]
+    .every(Number.isSafeInteger) || authorizedAtControlTime < 0 || operationDeadline < 0
+    || requestBytes < 0 || responseBytes < 0 || totalMilliseconds < 1
+    || totalMilliseconds > Number.MAX_SAFE_INTEGER - authorizedAtControlTime) {return;}
+  // V2 signs the stream-specific authorizedAtControlTime in the final grant.
+  // expiresAtControlTime is inherited provisional decision freshness, checked at
+  // emission separately. Neither receipt time nor consumption restarts duration.
+  return Math.min(operationDeadline, authorizedAtControlTime + totalMilliseconds);
+};
+
+const readCut = (ports: HttpEgressBrokerPorts) => {
+  const value = ports.localAuthorityCut.read();
+  if (typeof value !== "object" || value === null || utilTypes.isProxy(value)
+    || Object.getPrototypeOf(value) !== Object.prototype) {return null;}
+  const descriptors = Object.getOwnPropertyDescriptors(value); const keys = Reflect.ownKeys(descriptors);
+  if (keys.length !== 4 || keys.some(key => typeof key !== "string"
+    || !["status", "authorityId", "epoch", "controlTime"].includes(key))) {return null;}
+  if (["status", "authorityId", "epoch", "controlTime"].some(key => descriptors[key] === undefined
+    || !("value" in descriptors[key]!))) {return null;}
+  const status = descriptors.status?.value; const authorityId = descriptors.authorityId?.value;
+  const epoch = descriptors.epoch?.value; const controlTime = descriptors.controlTime?.value;
+  if ((status !== "current" && status !== "revoked" && status !== "unknown")
+    || typeof authorityId !== "string" || typeof epoch !== "string" || !validTime(controlTime)) {return null;}
+  return Object.freeze({status, authorityId, epoch, controlTime});
+};
+
+// Time observation does not grant execution permission. Re-read local authority
+// after the closing clock sample, which may synchronously revoke execution.
+// All four fresh observations must be ordered in the same clock domain; the
+// final cut supplies the latest time for signed freshness and dispatch deadlines.
+const readBracketedCut = (ports: HttpEgressBrokerPorts) => {
+  const before = ports.clock.now(); const cut = readCut(ports); const now = ports.clock.now();
+  const final = readCut(ports);
+  return {cut: cut !== null && final !== null && validTime(before) && validTime(now)
+    && cut.status === "current" && final.status === "current"
+    && cut.authorityId === final.authorityId && cut.epoch === final.epoch
+    && before <= cut.controlTime && cut.controlTime <= now && now <= final.controlTime ? final : null,
+  now: final?.controlTime ?? Number.NaN};
+};
+
+const sameKey = (left: HostHttpSigningKey, right: HostHttpSigningKey): boolean =>
+  left.algorithm === "ed25519" && left.signatureEncoding === "hex-lower"
+  && left.keyRef === right.keyRef && left.publicKeyDigest === right.publicKeyDigest
+  && left.keyGeneration === right.keyGeneration && left.signerRevision === right.signerRevision
+  && left.hostReservationId === right.hostReservationId;
+
+const sameProjection = (left: HostHttpRequestProjection, right: HostHttpRequestProjection): boolean =>
+  JSON.stringify(left) === JSON.stringify(right);
+
+const providerAccessMatches = (
+  value: HostHttpProvisionalDecision["providerAccess"],
+  receipt: HostHttpMaterializationReceipt,
+): boolean => value.accessRef === receipt.accessRef && value.providerRef === receipt.provider
+  && value.accountRef === receipt.providerAccountRef && value.routeRef === receipt.providerRouteRef
+  && value.credentialBindingDigest === receipt.credentialBindingDigest
+  && value.routeGeneration === String(receipt.bindingRevision)
+  && value.credentialGeneration === String(receipt.credentialGeneration);
+
+// oxlint-disable-next-line complexity -- exact signed proof binding is intentionally one closed conjunction
+export const verifiedProvisional = (input: Readonly<{
+  decision: HostHttpProvisionalDecision; verifier: HostHttpVerifierV2; expectedKey: HostHttpSigningKey;
+  ports: HttpEgressBrokerPorts; authorizationRequestId: string; request: HostHttpRequestProjection;
+  receipt: HostHttpMaterializationReceipt;
+}>): boolean => {
+  const {decision, ports} = input;
+  const {cut, now} = readBracketedCut(ports);
+  return validHostHttpProvisionalDecision(decision)
+    && decision.contractVersion === "provider-process-egress-provisional-decision/v2"
+    && input.verifier.verifyProvisionalDecision(decision)
+    && sameKey(input.verifier.signingKey, input.expectedKey) && sameKey(decision.signingKey, input.expectedKey)
+    && sameKey(decision.signature, input.expectedKey)
+    && decision.authorizationRequestId === input.authorizationRequestId
+    && decision.scope.operationId === ports.identity.operationId
+    && decision.scope.tenantId === ports.providerAccessSnapshot.tenantId
+    && decision.scope.projectId === ports.providerAccessSnapshot.projectId
+    && decision.scope.scopeDigest === ports.providerAccessSnapshot.scopeDigest
+    && decision.signingKey.hostReservationId === ports.identity.custodyId
+    && sameProjection(decision.request, input.request)
+    && providerAccessMatches(decision.providerAccess, input.receipt)
+    && decision.policy.authorizedRequestDigest === decision.requestDigest
+    && decision.policy.origin.scheme === "https" && decision.policy.origin.hostname === ports.route.originHost
+    && decision.policy.origin.port === ports.route.originPort && decision.policy.dnsIdentity === ports.route.originHost
+    && cut !== null && cut.status === "current" && cut.authorityId === decision.time.authorityId && cut.epoch === decision.time.epoch
+    && now >= decision.time.controlTime
+    && now < decision.time.expiresAtControlTime
+    && !decision.policy.revoked && ports.guard.snapshot().state === "active";
+};
+
+// oxlint-disable-next-line complexity -- exact signed proof binding is intentionally one closed conjunction
+export const verifiedGrant = (input: Readonly<{
+  grant: HostHttpGrant; provisional: HostHttpProvisionalDecision; verifier: HostHttpVerifierV2;
+  expectedKey: HostHttpSigningKey; ports: HttpEgressBrokerPorts; request: HostHttpRequestProjection;
+  receipt: HostHttpMaterializationReceipt; tls: HostHttpTlsObservation; boundaryUseId: string;
+  connectionAttemptId: string; streamId: string; resolver: Readonly<{resolverIdentity: string; resolverEpoch: string;
+    resolutionCount: 1; addresses: readonly Readonly<{family: "ipv4" | "ipv6"; address: string;
+      classification: "public"}>[]}>; selectedAddress: string;
+}>): boolean => {
+  const {grant, ports} = input;
+  if (!validHostHttpGrant(grant)) {return false;}
+  const payload = grant.payload;
+  const now = ports.clock.now();
+  return payload.contractVersion === "provider-process-first-application-byte-grant/v2"
+    && grant.evidence.contractVersion === "provider-process-egress-grant-evidence/v2"
+    && input.verifier.verifyGrant(grant) && sameKey(input.verifier.signingKey, input.expectedKey)
+    && sameKey(grant.signature, input.expectedKey) && sameKey(grant.evidence.signingKey, input.expectedKey)
+    && payload.scope.operationId === ports.identity.operationId
+    && payload.scope.tenantId === ports.providerAccessSnapshot.tenantId
+    && payload.scope.projectId === ports.providerAccessSnapshot.projectId
+    && payload.scope.scopeDigest === ports.providerAccessSnapshot.scopeDigest
+    && payload.provisionalDecisionDigest === input.provisional.decisionDigest
+    && payload.authorizationRequestId === input.provisional.authorizationRequestId
+    && payload.authorityRef === input.provisional.authorityRef
+    && payload.requestDigest === input.provisional.requestDigest
+    && payload.boundaryUseId === input.boundaryUseId && payload.connectionAttemptId === input.connectionAttemptId
+    && payload.streamId === input.streamId && payload.redirectHop === 0
+    && payload.automaticRetryAuthorized === false && payload.poolingAuthorized === false
+    && payload.consumption.owner === "host-custody"
+    && payload.consumption.journalKey.namespace === "provider-process-egress/v2"
+    && payload.consumption.journalKey.tenantId === ports.providerAccessSnapshot.tenantId
+    && payload.consumption.journalKey.projectId === ports.providerAccessSnapshot.projectId
+    && payload.consumption.journalKey.operationId === ports.identity.operationId
+    && payload.consumption.journalKey.boundaryUseId === input.boundaryUseId
+    && payload.resolver.resolverIdentity === input.resolver.resolverIdentity
+    && payload.resolver.resolverEpoch === input.resolver.resolverEpoch
+    && payload.resolver.resolutionCount === input.resolver.resolutionCount
+    && JSON.stringify(payload.resolver.normalizedAddresses) === JSON.stringify(input.resolver.addresses)
+    && payload.selectedPeer.address === input.selectedAddress
+    && payload.selectedPeer.address === normalizePublicAddress(input.tls.peerAddress) && payload.selectedPeer.port === input.tls.peerPort
+    && payload.tls.sniHostname === input.tls.requestedSni && payload.tls.certificateValidated === true
+    && payload.tls.dnsIdentity === input.tls.dnsIdentity
+    && payload.tls.certificateDigest === input.tls.certificateDigest
+    && payload.tls.tlsPolicyDigest === input.tls.tlsPolicyDigest && payload.tls.alpn === input.tls.alpn
+    && validTime(now) && now >= payload.time.authorizedAtControlTime
+    && now < payload.time.expiresAtControlTime
+    && grant.evidence.boundaryUseRef === input.boundaryUseId
+    && grant.evidence.decisionDigest === input.provisional.decisionDigest
+    && grant.evidence.finalAuthorizationDigest === grant.finalAuthorizationDigest
+    && JSON.stringify(payload.policy) === JSON.stringify(input.provisional.policy)
+    && JSON.stringify(payload.limits) === JSON.stringify(input.provisional.policy.limits)
+    && sameProjection(payload.request, input.request) && providerAccessMatches(payload.providerAccess, input.receipt);
+};
+
+export const dispatchGrantIsCurrent = (ports: HttpEgressBrokerPorts, grant: HostHttpGrant,
+  deadline = grant.payload.time.expiresAtControlTime): boolean => {
+  const {cut, now} = readBracketedCut(ports);
+  return cut !== null && cut.status === "current" && cut.authorityId === grant.payload.time.authorityId
+    && cut.epoch === grant.payload.time.epoch && now >= grant.payload.time.authorizedAtControlTime
+    && now < grant.payload.time.expiresAtControlTime && now < deadline
+    && ports.guard.snapshot().state === "active";
+};

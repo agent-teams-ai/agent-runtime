@@ -1,26 +1,31 @@
-import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
-
-import type {
+import { types } from "node:util";
+import { isNativeHostCustodyWorkspaceAuthority } from "./native-host-custody-workspace-authority.js";
+import type { HostCustodyWorkspaceAuthority,
   HostCustodyLaunchPlan,
   HostCustodyLaunchPlanResolver,
-  HostCustodyReservationInput,
-} from "./custodied-provider-process.js";
+  HostCustodyReservationInput } from "./custodied-provider-process.js";
+
+/** Raw Node custody has no native owner. Reject before descriptor/allocation work. */
+export const descriptorWorkspaceAuthority = (
+  value: HostCustodyReservationInput["workspaceAuthority"],
+): HostCustodyWorkspaceAuthority => {
+  if (isNativeHostCustodyWorkspaceAuthority(value) || types.isProxy(value)) {
+    throw new TypeError("Raw Node custody rejects native workspace authority");
+  }
+  assertInertHostLaunchData(value);
+  if (!("descriptorPath" in value)) {throw new TypeError("Raw Node custody requires descriptor authority");}
+  return value;
+};
+import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
+
 import type { LiveCustody } from "./node-provider-process-custody-state.js";
 import type { ProcessCustodyRuntimeProfile } from "./host-custody-runtime-profile.js";
-
-const snapshotPlan = (plan: HostCustodyLaunchPlan): HostCustodyLaunchPlan => Object.freeze({
-  ...plan,
-  arguments: Object.freeze([...plan.arguments]),
-  environment: Object.freeze({ ...plan.environment }),
-  ...(plan.privatePathEnvironmentKeys === undefined ? {} : {
-    privatePathEnvironmentKeys: Object.freeze([...plan.privatePathEnvironmentKeys]),
-  }),
-});
+import { assertInertHostLaunchData, snapshotHostCustodyLaunchPlan } from "./host-custody-launch-plan-snapshot.js";
 
 export interface RetainedHostCustodyWorkspaceAuthority {
   readonly descriptor: number;
   readonly descriptorPath: string;
-  readonly identity: HostCustodyReservationInput["workspaceAuthority"]["identity"];
+  readonly identity: HostCustodyWorkspaceAuthority["identity"];
   assertLaunchDescriptor(descriptor: number): void;
   close(): void;
 }
@@ -90,7 +95,9 @@ export const bindPrivateHostCustodyReservation = async (
   readonly plan: HostCustodyLaunchPlan;
   readonly retainedWorkspaceAuthority: RetainedHostCustodyWorkspaceAuthority;
 }>> => {
-  const authority = input.workspaceAuthority;
+  const authority = descriptorWorkspaceAuthority(input.workspaceAuthority);
+  assertInertHostLaunchData(input);
+  const plan = snapshotHostCustodyLaunchPlan(input.launchPlan);
   if (authority.canonicalPath !== input.workspaceRef || authority.identity.mountId.length === 0) {
     throw new TypeError("Host Custody workspace authority path mismatch");
   }
@@ -115,7 +122,6 @@ export const bindPrivateHostCustodyReservation = async (
         mountIdentity(owner, "reservation", descriptor) !== authority.identity.mountId) {
       throw new TypeError("Host Custody workspace descriptor identity mismatch");
     }
-    const plan = snapshotPlan(input.launchPlan);
     let consumed = false;
     const launchPlans: HostCustodyLaunchPlanResolver = Object.freeze({
       resolve: (candidate: Parameters<HostCustodyLaunchPlanResolver["resolve"]>[0]) => {

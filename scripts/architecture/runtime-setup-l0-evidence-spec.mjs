@@ -128,10 +128,6 @@ export const changes = Object.freeze([
     revision: "ae88bb2498963cd5eb90c7b62917419910cd42fa",
   }),
   Object.freeze({
-    id: "contained-turn-domain-line-limit-follow-up",
-    revision: "ff7496a89f75794a5bfbec5a425a70adb57d8868",
-  }),
-  Object.freeze({
     id: "contained-turn-output-validation-follow-up",
     revision: "11bfa8ba29a5c828903ab1fba8caeb8d2c226af1",
   }),
@@ -152,98 +148,6 @@ export const changes = Object.freeze([
     revision: "5f01a0a7da79f82cdace15cbec4650d3b42b7a60",
   }),
   Object.freeze({
-    id: "codex-permission-fixture-intent-binding",
-    revision: "f0c3ed55f91257f1860561e2f6dbf5e2d1f4521b",
-  }),
-  Object.freeze({
-    id: "codex-launch-plan-fixture-intent-alignment",
-    revision: "497c84280169c06e3ad4df8d5864c365780e248c",
-  }),
-  Object.freeze({
-    id: "codex-native-permission-contract-versioning",
-    revision: "0e2ef08a5d31a01bb1ee81028bad2f72f8dd320d",
-  }),
-  Object.freeze({
-    id: "codex-pre-turn-buffer-bounds",
-    revision: "3d3d4e5b3155ac3e5e160675b691e93c0cbd5711",
-  }),
-  Object.freeze({
-    id: "codex-exact-config-evidence-validation",
-    revision: "6e929d2be072358de547b6cef2083c32052b813f",
-  }),
-  Object.freeze({
-    id: "codex-experimental-wire-evidence-binding",
-    revision: "f24c5c42cf8fd6ba3b97eb054c706cd2e8904239",
-  }),
-  Object.freeze({
-    id: "codex-config-evidence-srp-refactor",
-    revision: "e708cdafb2dcbab1f5e18c1a5663f6f50c4ca77c",
-  }),
-  Object.freeze({
-    id: "codex-empty-thread-identity-rejection",
-    revision: "c61af8515031793c64ccbb3616011cf62eaca7d0",
-  }),
-  Object.freeze({
-    id: "codex-deterministic-contract-evidence",
-    revision: "d7650584ffe76b07c5bc0355fe8fef0c4f1a88dc",
-  }),
-  Object.freeze({
-    id: "codex-contract-fixture-test-srp",
-    revision: "f5c62275018835f1a0990e2be75874b5e2b4cc1e",
-  }),
-  Object.freeze({
-    id: "codex-credential-canary-claim-boundary",
-    revision: "374404ee9a105844ef41a5272bd07d7239e54176",
-  }),
-  Object.freeze({
-    id: "codex-protocol-adversarial-test-srp",
-    revision: "f13d4173c6a92835a42d60e776073f23c66b1a76",
-  }),
-  Object.freeze({
-    id: "codex-regeneration-claim-binding",
-    revision: "159e2faf0871b353c45ed4d0365dffbf18af679c",
-  }),
-  Object.freeze({
-    id: "codex-aggregate-pre-turn-budget",
-    revision: "85bc7ba3226a3d5211aab9fe1c6c23ba70001a2d",
-  }),
-  Object.freeze({
-    id: "codex-regeneration-verifier-test-srp",
-    revision: "9df8b3b54a9b9e2fce39a933f41e3ca35203425b",
-  }),
-  Object.freeze({
-    id: "codex-regeneration-verifier-lint-hardening",
-    revision: "7135a4a054d48e40eb81ba77e4cad4cd158ad495",
-  }),
-  Object.freeze({
-    id: "codex-native-package-provenance",
-    revision: "739cc9bfdea7dc0527989b42cb8dd89a11387ea8",
-  }),
-  Object.freeze({
-    id: "contained-turn-committed-dispatch-handoff",
-    revision: "ef5d93d3ecb0ac070d19669516a28f02c0d82130",
-  }),
-  Object.freeze({
-    id: "filesystem-lineage-deterministic-qualification",
-    revision: "5a712935c976ed7e2cdac2b98072c749913bb04b",
-  }),
-  Object.freeze({
-    id: "provider-process-egress-authenticated-fields",
-    revision: "9f910fc7dcb28813bcbb21ddde4d4bbe252e09ce",
-  }),
-  Object.freeze({
-    id: "provider-process-egress-current-main-integration",
-    revision: "9dc4a4253f4bd1a35888052935c7d95c5face585",
-  }),
-  Object.freeze({
-    id: "host-egress-journal-configured-retirement-limits",
-    revision: "a95c8d10ed643547d18582f0038e991bf1aa2eb1",
-  }),
-  Object.freeze({
-    id: "host-egress-journal-security-integration",
-    revision: "2d4e960b276559b39c4714fa0b7b59a44f164867",
-  }),
-  Object.freeze({
     id: "strict-http-egress-reviewed-byte-custody",
     revision: "d7b99516a781cc1ce24d81922da5d1c674910ad2",
   }),
@@ -255,22 +159,74 @@ export const changes = Object.freeze([
     id: "runtime-security-ed25519-v2-candidate",
     revision: "d7c875a60ac8e59eb1d097bdb0f0926991a1ed99",
   }),
+  Object.freeze({
+    id: "route-enforcement-v1-current-history-anchor",
+    revision: "51aa81a9185d80db11e765e6ceb6190359ca1a9c",
+  }),
+  Object.freeze({
+    id: "runtime-setup-current-product-anchor",
+    revision: "e615369d50ed73cac6e00909fcc8f6705b0d6973",
+  }),
+  Object.freeze({
+    id: "custody-test-seam-relocation",
+    revision: "c75940cccc7f0d03ffd776dbe2efee9446a90fa8",
+  }),
+  Object.freeze({
+    id: "production-module-role-classification",
+    revision: "01dc2418c963586d43e92221a01ebcdb11e756f4",
+  }),
+  Object.freeze({
+    id: "custody-composition-surface",
+    revision: "3adac9884ae86d6acbe7fd92c5a5fdadd0119dbd",
+  }),
+  Object.freeze({
+    id: "custody-feature-activation",
+    revision: "09cbb717578a39e5788a4f43ca950bcf91e2ef67",
+  }),
+  Object.freeze({
+    id: "configuration-digest-port",
+    revision: "b7c5817d93c0d0dd6553739ebb67154dd42251b0",
+  }),
+  Object.freeze({
+    id: "reviewed-scope-guard",
+    revision: "2184584a8f3fcebfe7721024bcb2e81ce76127bf",
+  }),
+  Object.freeze({
+    id: "codex-application-models",
+    revision: "6dfffbff6abbe28ffbb8fb528d13647b3e09e013",
+  }),
+  Object.freeze({
+    id: "claude-code-vocabulary-parity",
+    revision: "24755bd012239973ef043459c2dd2960406baa33",
+  }),
+  Object.freeze({
+    id: "codex-boundary-test-hardening",
+    revision: "65fb9b836862f82ab8bc905cb6e244168505c868",
+  }),
+  Object.freeze({
+    id: "source-dependencies-schema-v3",
+    revision: "b42a1130ea1b2a02a5cd240a33d3cb4e7c4cf32f",
+  }),
+  Object.freeze({
+    id: "source-dependencies-v3-repo-root-test-loads",
+    revision: "01d6cc76cab4817bedbe44635d8b2b31473349c6",
+  }),
 ]);
 
 export const benchmarkSourceRevision = "d490a2308be1b777931d2de0df7196d6b5f128a4";
 
 export const sourceRevisionArtifactDigests = Object.freeze({
   fixtures: Object.freeze({
-    fileCount: 16,
-    sha256: "6708bfd7c55aa9747295893a924b44946c4edb2d528c57cff5dd4d0c3afa0bd0",
+    fileCount: 56,
+    sha256: "2f185db9f8cd0bd29ed28b08d862dbf23846ce19e14c657d8e6afad9c3e769fc",
   }),
   sources: Object.freeze({
-    fileCount: 337,
-    sha256: "98950b1e761789cde2329fd75605a74824e7cc30ad3472768400431934fdc7df",
+    fileCount: 661,
+    sha256: "ce31be82d931ca2de943fc16e2b6a6be9f822902ee9dd8352332cd866cf6dad0",
   }),
   tests: Object.freeze({
-    fileCount: 164,
-    sha256: "4590a859fd7605adce57e317bf100022b387f26ab6cd6e58944b86e3b85042c5",
+    fileCount: 610,
+    sha256: "a81f56010117ed0e89d9bfb5b68ab3239ff00930bbaa9b46f2a35b3221668282",
   }),
 });
 
@@ -469,24 +425,48 @@ export const traces = Object.freeze({
   }),
 });
 
+// The embedded-runtime check consumes these packages and their build inputs.
+// Add a package here when that bounded build/test closure changes.
+export const evidencePackages = Object.freeze([
+  "packages/apps/embedded-runtime",
+  "packages/contexts/agent-execution",
+  "packages/contexts/provider-access",
+  "packages/contexts/runtime-configuration",
+  "packages/contexts/runtime-security",
+  "packages/platform/filesystem-custody",
+]);
+
+// Directory roots also feed the architecture walk; keep file inputs separate.
 export const evidenceRoots = Object.freeze({
   fixtures: Object.freeze([
     "packages/contexts/agent-execution/tests/fixtures",
     "packages/contexts/runtime-configuration/tests/fixtures",
     "packages/contexts/runtime-security/tests/fixtures",
   ]),
+  sources: Object.freeze(evidencePackages.map(path => `${path}/src`)),
+  tests: Object.freeze(evidencePackages.map(path => `${path}/tests`)),
+});
+
+// Retain the existing digest categories and path/mode/content encoding.
+// These are exact tracked inputs, never installed packages or generated output.
+export const evidenceFiles = Object.freeze({
+  fixtures: Object.freeze([
+    // Read directly by the embedded-runtime route qualification tests.
+    "docs/architecture/qualification-registry.json",
+    "docs/architecture/readiness.md",
+  ]),
   sources: Object.freeze([
-    "packages/apps/embedded-runtime/src",
-    "packages/contexts/agent-execution/src",
-    "packages/contexts/runtime-configuration/src",
-    "packages/contexts/runtime-security/src",
-    "packages/platform/filesystem-custody/src",
+    "package.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    ".npmrc",
+    "architecture/foundation/scaffold-tsconfig.json",
+    ...evidencePackages.flatMap(path => [`${path}/package.json`, `${path}/tsconfig.json`]),
+    "packages/platform/filesystem-custody/scripts/build-native-helper.mjs",
+    "packages/platform/filesystem-custody/native/rename-no-replace.c",
   ]),
   tests: Object.freeze([
-    "packages/apps/embedded-runtime/tests",
-    "packages/contexts/agent-execution/tests",
-    "packages/contexts/runtime-configuration/tests",
-    "packages/contexts/runtime-security/tests",
-    "packages/platform/filesystem-custody/tests",
+    // Imported by claude-code-setup.e2e.test.ts.
+    "scripts/architecture/ar2-evidence-custody.mjs",
   ]),
 });

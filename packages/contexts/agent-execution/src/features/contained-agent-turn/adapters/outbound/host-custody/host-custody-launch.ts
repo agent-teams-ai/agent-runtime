@@ -14,7 +14,7 @@ import {
   resolve as resolvePath,
 } from "node:path";
 
-import { openStablePath } from "@agent-teams/filesystem-custody";
+import { openStablePath } from "@agent-teams/filesystem-custody/composition";
 
 import {
   HostCustodyFingerprintConflictError,
@@ -24,6 +24,11 @@ import {
   type HostCustodyLaunchPlanResolver,
   type ProviderProcessCustodyPort,
 } from "./custodied-provider-process.js";
+import { snapshotHostCustodyLaunchPlan } from "./host-custody-launch-plan-snapshot.js";
+
+const darwinNativeRootPlans = new WeakSet<HostCustodyLaunchPlan>();
+export const markDarwinNativeRootLaunchPlan = (plan: HostCustodyLaunchPlan): void => {darwinNativeRootPlans.add(plan);};
+export const isDarwinNativeRootLaunchPlan = (plan: HostCustodyLaunchPlan): boolean => darwinNativeRootPlans.has(plan);
 
 export interface ExecutableObservation {
   readonly ctimeNs: bigint;
@@ -59,7 +64,7 @@ interface FilesystemObjectIdentity {
   readonly ino: bigint;
 }
 
-interface LaunchCandidate {
+export interface LaunchCandidate {
   readonly canonicalWorkspace: string;
   readonly fingerprint: HostCustodyLaunchFingerprintEvidence;
   readonly plan: HostCustodyLaunchPlan;
@@ -262,8 +267,10 @@ const allowedEnvironmentKeys = Object.freeze({
     "PATH",
     "TMPDIR",
   ]),
-  codex: new Set(["CODEX_HOME", "HOME", "LANG", "PATH", "TMPDIR"]),
+  codex: new Set(["AR_PRIVATE_BROKER_CAPABILITY", "CODEX_HOME", "HOME", "LANG", "PATH", "TMPDIR"]),
 } as const);
+
+const privateDirectoryEnvironmentKeys = new Set(["CLAUDE_CONFIG_DIR", "CODEX_HOME", "HOME", "TMPDIR"]);
 
 const environmentKeysForProvider = (provider: string): ReadonlySet<string> | undefined => {
   if (provider === "claude") {return allowedEnvironmentKeys.claude;}
@@ -279,6 +286,9 @@ const declaredPrivateEnvironmentKeys = (plan: HostCustodyLaunchPlan): readonly s
   const allowed = environmentKeysForProvider(plan.provider);
   if (allowed === undefined || declared.some(key => !allowed.has(key))) {
     throw new Error("Host Custody private environment key is not allowlisted");
+  }
+  if (declared.some(key => !privateDirectoryEnvironmentKeys.has(key))) {
+    throw new Error("Host Custody private environment key is not a path");
   }
   return Object.freeze([...declared].toSorted());
 };
@@ -303,6 +313,14 @@ const assertAllowlistedEnvironment = (plan: HostCustodyLaunchPlan): void => {
   for (const [key, value] of Object.entries(plan.environment)) {
     if (value.length === 0 || value.includes("\0") || !value.isWellFormed()) {
       throw new Error("Host Custody environment contains malformed bytes");
+    }
+    // The Host will issue 32 random bytes as lower-case hex for native env_key.
+    // This validates local capability syntax only, never route ownership or PA/RS
+    // authority. Upstream credentials stay in the broker; this value is hashed
+    // into the private launch fingerprint and never treated as a directory.
+    if (key === "AR_PRIVATE_BROKER_CAPABILITY" &&
+        (value.length !== 64 || !/^[a-f0-9]{64}$/u.test(value))) {
+      throw new Error("Host Custody local broker capability is malformed");
     }
     if (key === "LANG" && value !== "C.UTF-8") {
       throw new Error("Host Custody environment locale is not qualified");
@@ -338,6 +356,17 @@ export const isIntentionalCodexHomeAlias = (
   [leftKey, rightKey].every(key => key === "CODEX_HOME" || key === "HOME") &&
   leftPath === rightPath;
 
+const isDarwinNativePrivateRootContainment = (
+  plan: HostCustodyLaunchPlan,
+  leftKey: string,
+  leftPath: string,
+  rightKey: string,
+  rightPath: string,
+): boolean => isDarwinNativeRootLaunchPlan(plan) && (
+  leftKey === "HOME" && leftPath === plan.privateRootPath && isWithin(rightPath, leftPath) ||
+  rightKey === "HOME" && rightPath === plan.privateRootPath && isWithin(leftPath, rightPath)
+);
+
 const assertDistinctPrivateFilesystemObjects = (
   workspace: FilesystemObjectIdentity,
   root: FilesystemObjectIdentity,
@@ -358,7 +387,9 @@ const assertQualifiedPrivateFilesystemObjects = (
 ): void => {
   assertDistinctPrivateFilesystemObjects(workspace, root, {});
   for (const [key, observation] of Object.entries(environmentPaths)) {
-    if (sameFilesystemObject(workspace, observation) || sameFilesystemObject(root, observation)) {
+    const nativeRootHome = key === "HOME" && isDarwinNativeRootLaunchPlan(plan) &&
+      observation.path === plan.privateRootPath && sameFilesystemObject(root, observation);
+    if (sameFilesystemObject(workspace, observation) || sameFilesystemObject(root, observation) && !nativeRootHome) {
       throw new Error("Host Custody private launch paths must identify distinct filesystem objects");
     }
     for (const [otherKey, other] of Object.entries(environmentPaths)) {
@@ -409,7 +440,7 @@ export const verifyPrivateLaunchPaths = async (
       value === undefined ||
       !isAbsolute(value) ||
       resolvePath(value) !== value ||
-      value === plan.privateRootPath ||
+      (value === plan.privateRootPath && !(key === "HOME" && isDarwinNativeRootLaunchPlan(plan))) ||
       !isWithin(value, plan.privateRootPath)
     ) {
       throw new Error("Host Custody private environment path is absent or escapes private custody");
@@ -429,7 +460,8 @@ export const verifyPrivateLaunchPaths = async (
       if (
         key < otherKey &&
         (isWithin(observation.path, other.path) || isWithin(other.path, observation.path)) &&
-        !isIntentionalCodexHomeAlias(plan, key, observation.path, otherKey, other.path)
+        !isIntentionalCodexHomeAlias(plan, key, observation.path, otherKey, other.path) &&
+        !isDarwinNativePrivateRootContainment(plan, key, observation.path, otherKey, other.path)
       ) {
         throw new Error("Host Custody private environment paths must be pairwise disjoint");
       }
@@ -452,7 +484,8 @@ export const createFingerprint = (
   input: Parameters<ProviderProcessCustodyPort["open"]>[0],
   plan: HostCustodyLaunchPlan,
   canonicalWorkspace: string,
-  arguments_: readonly string[],
+  launchArguments: readonly string[],
+  materialSha256?: string,
 ): HostCustodyLaunchFingerprintEvidence => {
   const environmentKeys = Object.keys(plan.environment).toSorted();
   const effectivePrivateEnvironmentKeys = privateEnvironmentKeys(plan);
@@ -464,7 +497,7 @@ export const createFingerprint = (
       ? `private-root-relative:${relative(plan.privateRootPath, plan.environment[key] ?? "")}`
       : plan.environment[key],
   ]);
-  const argumentsSha256 = sha256(canonicalJson(arguments_));
+  const argumentsSha256 = sha256(canonicalJson(launchArguments));
   const planIdentity = [
     input.providerBinding,
     input.intentMode,
@@ -481,7 +514,8 @@ export const createFingerprint = (
     plan.spawnMode ?? "eager",
     plan.containmentProfile,
   ] as const;
-  const planSha256 = sha256(canonicalJson(planIdentity));
+  const planSha256 = sha256(canonicalJson(materialSha256 === undefined
+    ? planIdentity : [...planIdentity, materialSha256]));
   return Object.freeze({
     argumentsSha256,
     binaryRevision: plan.binaryRevision,
@@ -508,12 +542,23 @@ export const resolveLaunchCandidate = async (
   if (!isAbsolute(input.workspaceRef) || resolvePath(input.workspaceRef) !== input.workspaceRef) {
     throw new Error("Host Custody workspace must be a normalized absolute path");
   }
-  const plan = await launchPlans.resolve({
+  const resolvedPlan = await launchPlans.resolve({
     intentMode,
     providerBinding: input.providerBinding,
     workspaceRef: input.workspaceRef,
   });
-  if (plan === undefined) {throw new HostCustodyUnsupportedError("launch-plan-unavailable");}
+  if (resolvedPlan === undefined) {throw new HostCustodyUnsupportedError("launch-plan-unavailable");}
+  return validateSelectedLaunchCandidate(resolvedPlan, input);
+};
+
+/** Validate the already retained selection without consulting a resolver. */
+export const validateSelectedLaunchCandidate = async (
+  selected: HostCustodyLaunchPlan,
+  input: Parameters<ProviderProcessCustodyPort["open"]>[0],
+  materialSha256?: string,
+): Promise<LaunchCandidate> => {
+  const intentMode = input.intentMode;
+  const plan = snapshotHostCustodyLaunchPlan(selected);
   if (
     plan.provider !== input.providerBinding.provider ||
     plan.binaryRevision !== input.providerBinding.binaryRevision ||
@@ -532,16 +577,8 @@ export const resolveLaunchCandidate = async (
   const privatePaths = await verifyPrivateLaunchPaths(plan, input.workspaceRef, workspaceStats);
   return Object.freeze({
     canonicalWorkspace,
-    fingerprint: createFingerprint({ ...input, intentMode }, plan, canonicalWorkspace, plan.arguments),
-    plan: Object.freeze({
-      ...plan,
-      arguments: Object.freeze([...plan.arguments]),
-      environment: Object.freeze({ ...plan.environment }),
-      privateRootPath: plan.privateRootPath,
-      ...(plan.privatePathEnvironmentKeys === undefined ? {} : {
-        privatePathEnvironmentKeys: Object.freeze([...plan.privatePathEnvironmentKeys]),
-      }),
-    }),
+    fingerprint: createFingerprint({ ...input, intentMode }, plan, canonicalWorkspace, plan.arguments, materialSha256),
+    plan,
     privatePaths,
     workspace: Object.freeze({
       ctimeNs: workspaceStats.ctimeNs,

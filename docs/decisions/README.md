@@ -17,6 +17,11 @@ related:
   - ADR-0012
   - ADR-0013
   - ADR-0014
+  - ADR-0015
+  - ADR-0016
+  - ADR-0017
+  - ADR-0018
+  - ADR-0019
 blocked_by: []
 code_anchors:
   - enforcement: required
@@ -30,6 +35,9 @@ immutable evidence; a later change uses an explicit superseding decision.
 
 ## Proposed
 
+- [ADR-0016: Contained-turn Consumer Module Standard pending adoption](0016-contained-turn-consumer-module-standard-adoption.md)
+  classifies the existing seven-port Pure DI boundary as explicitly not adopted
+  until a separate contained-turn Assembly migration is accepted.
 - [ADR-0006: Orthogonal runtime-operation state and effect continuity](0006-orthogonal-runtime-operation-state-and-effect-continuity.md)
   remains the broader design proposal. ADR-0010 accepts only its narrow V1
   subset without mutating this document.
@@ -68,6 +76,19 @@ immutable evidence; a later change uses an explicit superseding decision.
   accepts exact Codex and Claude Darwin arm64 revisions as unqualified
   candidates without changing Linux authority or ADR-0010 operation semantics.
 
+- [ADR-0015: Passive setup static Assembly adoption](0015-passive-setup-static-assembly-adoption.md)
+  accepts only the static passive construction contract, narrowly amending
+  ADR-0008 while preserving historical HOLD evidence and all other invariants.
+- [ADR-0017: Feature Module Standard production scope roles](0017-feature-module-production-scope-roles.md)
+  classifies every production module by its real role, keeps the four
+  unmigrated modules explicitly pending, names the Filesystem Custody platform
+  identity, and rejects unclassified production packages.
+- [ADR-0018: Declared production module edges](0018-declared-production-module-edges.md)
+  requires a declared acyclic module edge, a curated assembly entry, and an
+  outward-integration layer for every dependency between governed modules.
+- [ADR-0019: Stable filesystem custody feature activation](0019-stable-filesystem-custody-feature-activation.md)
+  activates the Filesystem Custody platform module as one cohesive feature with
+  a contracts-only public entry and its runtime behind the composition entry.
 ## Superseded
 
 No superseded decisions.

@@ -1,6 +1,6 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { createHash, timingSafeEqual } from "node:crypto";
-import { closeSync, constants, fstatSync, openSync, readFileSync, readSync, realpathSync } from "node:fs";
+import { ChildProcess, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { closeSync, constants, fstatSync, openSync, readFileSync, readSync, realpathSync, statfsSync, type BigIntStats } from "node:fs";
 import { basename, dirname, resolve as resolvePath } from "node:path";
 import type { Readable, Writable } from "node:stream";
 
@@ -12,7 +12,9 @@ import {
   type DockerCustodyChildSignal,
   type DockerCustodyHostSignal,
   type DockerCustodyIdentity,
+  type DockerCustodyExecutableMapping,
   type DockerCustodyInitMessage,
+  type DockerCustodyProviderInstanceFacts,
 } from "./docker-custody-init-protocol.js";
 import {
   DockerCustodyInitRuntime,
@@ -30,6 +32,7 @@ interface ProviderGeneration {
   readonly child: ChildProcessWithoutNullStreams;
   exit: DockerCustodyProviderRootExit | null;
   exitReported: boolean;
+  instance: DockerCustodyProviderInstanceFacts | null;
   readonly root: DockerCustodyProviderRootHandle;
   readonly stderr: DockerCustodyProviderOutputHandle;
   readonly stdout: DockerCustodyProviderOutputHandle;
@@ -42,7 +45,63 @@ const PROVIDER_EXECUTABLE_SLOT = "provider-entrypoint";
 export interface HeldDockerCustodyProviderExecutable {
   readonly descriptorPath: string;
   close(): void;
+  observeMapping(child: ChildProcessWithoutNullStreams): DockerCustodyExecutableMapping | undefined;
 }
+
+const sameExecutable = (left: BigIntStats, right: BigIntStats): boolean =>
+  left.dev === right.dev && left.ino === right.ino && left.mode === right.mode && left.nlink === right.nlink &&
+  left.size === right.size && left.uid === right.uid && left.gid === right.gid &&
+  left.ctimeNs === right.ctimeNs && left.mtimeNs === right.mtimeNs;
+
+const liveChild = (child: ChildProcessWithoutNullStreams, pid: number): boolean =>
+  child instanceof ChildProcess && child.pid === pid && child.exitCode === null && child.signalCode === null;
+
+const childStartTime = (directory: string, pid: number): string => {
+  const stat = readFileSync(`${directory}/stat`, "utf8");
+  const fields = stat.slice(stat.lastIndexOf(")") + 2).trim().split(/\s+/u);
+  if (!stat.startsWith(`${pid} (`) || !["R", "S", "D", "T", "t", "I"].includes(fields[0] ?? "") ||
+      fields[1] !== String(process.pid) || !/^[1-9][0-9]*$/u.test(fields[19] ?? "")) {
+    throw new Error("procfs does not identify a live direct child");
+  }
+  return fields[19]!;
+};
+
+const mappedExecutable = (directory: string): BigIntStats => {
+  const descriptor = openSync(`${directory}/exe`, constants.O_RDONLY);
+  try {return fstatSync(descriptor, {bigint: true});} finally {closeSync(descriptor);}
+};
+
+/** A synchronous observation in the native spawn callback, before this loop can reap the child.
+ * Linux proc directory FDs retain the proc task identity across PID reuse; they are NOT pidfds.
+ * There is no await/user callback in this interval. libuv owns waitpid on this same loop, and
+ * exitCode/signalCode fence an already delivered native exit. An exited/zombie task is rejected.
+ * Two exe opens compare actual kernel file objects, never readlink text or provider assertions.
+ * This proves the sampled mapping only, not absence of later exec or whole-lifetime containment.
+ */
+const observeExecutableMapping = (child: ChildProcessWithoutNullStreams, descriptor: number,
+  expected: BigIntStats): DockerCustodyExecutableMapping | undefined => {
+  const pid = child.pid;
+  if (process.platform !== "linux" || pid === undefined || !Number.isSafeInteger(pid) || pid < 2 || !liveChild(child, pid)) {return undefined;}
+  let procDirectory: number | undefined;
+  let observation: DockerCustodyExecutableMapping | undefined;
+  try {
+    if (statfsSync("/proc").type !== 0x9fa0) {return undefined;}
+    procDirectory = openSync(`/proc/${pid}`, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+    const directory = `/proc/self/fd/${procDirectory}`;
+    if (statfsSync(directory).type !== 0x9fa0) {return undefined;}
+    const startTimeTicks = childStartTime(directory, pid);
+    if (!sameExecutable(expected, fstatSync(descriptor, {bigint: true})) ||
+        !sameExecutable(expected, mappedExecutable(directory)) ||
+        !sameExecutable(expected, mappedExecutable(directory)) ||
+        !sameExecutable(expected, fstatSync(descriptor, {bigint: true})) ||
+        childStartTime(directory, pid) !== startTimeTicks || !liveChild(child, pid)) {return undefined;}
+    observation = Object.freeze({device: expected.dev.toString(), inode: expected.ino.toString(),
+      kind: "linux-procfs-exe-v1", scope: "spawn-observation", startTimeTicks});
+  } catch {observation = undefined;} finally {
+    if (procDirectory !== undefined) {try {closeSync(procDirectory);} catch {observation = undefined;}}
+  }
+  return observation;
+};
 
 const equalDigest = (left: string, right: string): boolean => {
   const leftBytes = Buffer.from(left, "ascii");
@@ -72,18 +131,18 @@ export const holdDockerCustodyProviderExecutable = (
     const digest = createHash("sha256");
     const buffer = Buffer.allocUnsafe(64 * 1_024);
     let position = 0;
-    for (;;) {
-      const bytesRead = readSync(descriptor, buffer, 0, buffer.byteLength, position);
-      if (bytesRead === 0) {break;}
+    while (position < Number(before.size)) {
+      const bytesRead = readSync(descriptor, buffer, 0, Math.min(buffer.byteLength, Number(before.size) - position), position);
+      if (bytesRead === 0) {throw new Error("provider executable descriptor was truncated while hashing");}
       digest.update(buffer.subarray(0, bytesRead));
       position += bytesRead;
     }
     const after = fstatSync(descriptor, {bigint: true});
-    if (before.dev !== after.dev || before.ino !== after.ino || before.mode !== after.mode ||
-        before.nlink !== after.nlink || before.size !== after.size || !equalDigest(digest.digest("hex"), expectedSha256)) {
+    if (!sameExecutable(before, after) || !equalDigest(digest.digest("hex"), expectedSha256)) {
       throw new Error("provider executable descriptor identity does not match authority");
     }
-    return {close, descriptorPath: `/proc/self/fd/${descriptor}`};
+    return Object.freeze({close, descriptorPath: `/proc/self/fd/${descriptor}`,
+      observeMapping: (child: ChildProcessWithoutNullStreams) => closed ? undefined : observeExecutableMapping(child, descriptor, after)});
   } catch (error) {close(); throw error;}
 };
 
@@ -149,7 +208,10 @@ const childSignal = (signal: NodeJS.Signals | null): DockerCustodyChildSignal | 
 };
 
 class NodeInitSyscalls implements DockerCustodyInitSyscalls {
+  #executable: HeldDockerCustodyProviderExecutable | undefined;
+  #observationClosed = false;
   #generation: ProviderGeneration | undefined;
+  readonly #initInstanceId = randomBytes(32).toString("hex");
   readonly #identity: DockerCustodyIdentity;
   readonly #observeTopology: () => DockerCustodyTopologyFacts;
   readonly #observeRestrictedIdentity: () => {readonly gid: number; readonly uid: number};
@@ -183,26 +245,42 @@ class NodeInitSyscalls implements DockerCustodyInitSyscalls {
     let executable: HeldDockerCustodyProviderExecutable;
     try {executable = holdDockerCustodyProviderExecutable(specification.executablePath, specification.executableSha256);}
     catch {return {kind: "not-started"};}
+    this.#executable = executable;
     let child: ChildProcessWithoutNullStreams;
     try {child = this.#spawnProcess({...specification, executablePath: executable.descriptorPath});}
     catch {executable.close(); return {kind: "not-started"};}
     let notStarted = false;
-    const spawned = (): void => {executable.close();};
-    const spawnError = (): void => {
-      child.removeListener("spawn", spawned); executable.close(); if (!notStarted) {this.runtime?.failInit();}
+    const spawned = (): void => {
+      const retained = this.#generation;
+      // Only this retained ChildProcess's native spawn event issues an identity. Late/error events cannot.
+      if (this.#observationClosed || retained === undefined || retained.child !== child || retained.exit !== null || notStarted ||
+        child.pid === undefined || retained.instance !== null) {executable.close(); return;}
+      try {
+        const executableMapping = executable.observeMapping(child);
+        executable.close();
+        retained.instance = Object.freeze({childInstanceId: randomBytes(32).toString("hex"),
+          ...(executableMapping === undefined ? {} : {executableMapping}),
+          executableSha256: specification.executableSha256, initInstanceId: this.#initInstanceId, pid: child.pid});
+      } catch {this.runtime?.failInit();} finally {executable.close();}
+      this.runtime?.tick();
     };
-    child.once("error", spawnError);
+    const spawnError = (): void => {
+      child.removeListener("spawn", spawned); executable.close();
+      if (!notStarted && !this.#observationClosed && this.#generation?.exit === null) {this.runtime?.failInit();}
+    };
+    // Retain a bounded error sink with this child; late errors must not escape or rewrite sealed evidence.
+    child.on("error", spawnError);
     child.once("spawn", spawned);
     if (child.pid === undefined) {notStarted = true; executable.close(); return {kind: "not-started"};}
     const generation: ProviderGeneration = {
-      child, exit: null, exitReported: false,
+      child, exit: null, exitReported: false, instance: null,
       root: Object.freeze({}) as DockerCustodyProviderRootHandle,
       stderr: Object.freeze({}) as DockerCustodyProviderOutputHandle,
       stdout: Object.freeze({}) as DockerCustodyProviderOutputHandle,
     };
     this.#generation = generation;
     child.once("exit", (exitCode, signal) => {
-      child.removeListener("error", spawnError);
+      child.removeListener("spawn", spawned); executable.close();
       try {generation.exit = Object.freeze({exitCode, signal: childSignal(signal)});} catch {this.runtime?.failInit();}
     });
     this.#bindOutput(generation, "stdout", generation.stdout, child.stdout);
@@ -250,7 +328,12 @@ class NodeInitSyscalls implements DockerCustodyInitSyscalls {
     return writeDockerCustodyProviderInput(child.stdin, bytes);
   }
   public closeProviderInput(): void {this.#generation?.child.stdin.end();}
+  public closeExecutableObservation(): void {this.#observationClosed = true; this.#executable?.close();}
 
+  public observeProviderInstance(handle: DockerCustodyProviderRootHandle): DockerCustodyProviderInstanceFacts | null {
+    const generation = this.#generation;
+    return generation !== undefined && handle === generation.root ? generation.instance : null;
+  }
   public observeProviderRootExit(handle: DockerCustodyProviderRootHandle): DockerCustodyProviderRootExit | null {
     const generation = this.#generation;
     if (generation === undefined || handle !== generation.root || generation.exit === null || generation.exitReported) {return null;}
@@ -311,11 +394,13 @@ export class NodeDockerCustodyInitDriver {
       return "accepted";
     };
     const identityObserver = internals.observeRestrictedIdentity ?? (() => ({gid: process.getgid?.() ?? 0, uid: process.getuid?.() ?? 0}));
+    // Inherit the restricted identity validated before spawn; redundant setuid/setgid
+    // requests can fail under the production seccomp policy even for the current IDs.
     const spawnProcess = internals.spawnProcess ?? (specification => spawn(
       specification.executablePath,
       specification.argv.slice(1),
-      {argv0: specification.argv[0], detached: false, env: {...specification.environment}, gid: specification.gid,
-        shell: false, stdio: ["pipe", "pipe", "pipe"], uid: specification.uid},
+      {argv0: specification.argv[0], detached: false, env: {...specification.environment},
+        shell: false, stdio: ["pipe", "pipe", "pipe"]},
     ));
     const syscalls = new NodeInitSyscalls(
       options.observedIdentity, writeOutput, internals.observeTopology ?? observeTopology, identityObserver, spawnProcess,
@@ -331,6 +416,7 @@ export class NodeDockerCustodyInitDriver {
       const settle = (code: 0 | 1): void => {resolve(code);};
       const finish = (code: 0 | 1): void => {
         if (settled) {return;}
+        this.#syscalls.closeExecutableObservation();
         settled = true; clearInterval(timer); this.#input.removeAllListeners(); this.#output.removeAllListeners("drain");
         this.#input.destroy();
         for (const signal of DOCKER_CUSTODY_HOST_SIGNALS) {process.removeListener(signal, handlers[signal]);}

@@ -18,3 +18,5 @@ export class NodeProviderProcessCustody extends NodeProviderProcessCustodyCore {
     }));
   }
 }
+
+export type { NodeCustodyHttpListenerLifecycle } from "./node-custody-http-resources.js";

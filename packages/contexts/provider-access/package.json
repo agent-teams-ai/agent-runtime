@@ -8,13 +8,18 @@
     "check": "pnpm run clean && pnpm run typecheck && pnpm run build && pnpm run test",
     "clean": "node -e \"const fs=require('node:fs'); for (const path of ['dist','.cache']) fs.rmSync(path, { recursive: true, force: true })\"",
     "test": "node --test --test-concurrency=1 tests/features/contained-turn-access/*.test.ts",
-    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false"
+    "test:postgres": "node --import ./scripts/require-postgres-qualification.mjs --test --test-concurrency=1 tests/features/contained-turn-access/postgres-materialization-durability.test.ts",
+    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false",
+    "test:postgres:dispatch": "node --import ./scripts/require-postgres-qualification.mjs --test --test-concurrency=1 tests/features/contained-turn-access/postgres-dispatch-durability.test.ts",
+    "test:postgres:operation-dispatch": "node --import ./scripts/require-postgres-qualification.mjs --test --test-concurrency=1 tests/features/contained-turn-access/postgres-operation-dispatch-durability.test.ts"
   },
   "agentTeamsArchitecture": {
     "role": "bounded-context",
     "ownerDocument": "ADR-0005"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -24,5 +29,9 @@
       "types": "./dist/composition.d.ts",
       "import": "./dist/composition.js"
     }
+  },
+  "devDependencies": {
+    "@types/pg": "catalog:",
+    "pg": "catalog:"
   }
 }

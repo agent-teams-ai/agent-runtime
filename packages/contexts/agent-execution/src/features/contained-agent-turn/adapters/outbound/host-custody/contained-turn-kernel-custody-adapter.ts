@@ -1,3 +1,6 @@
+import { types } from "node:util";
+import { isNativeHostCustodyWorkspaceAuthority, inspectNativeHostCustodyWorkspaceAuthority } from "./native-host-custody-workspace-authority.js";
+import { KernelOpenAttempts, type KernelOpenAttempt } from "./contained-turn-kernel-custody-open-attempts.js";
 import { containedTurnIdentity } from "../../../domain/contained-turn-identities.js";
 import type { ContainedTurnProof } from "../../../domain/contained-turn-proofs.js";
 import type {
@@ -18,9 +21,9 @@ import {
   type KernelOpenInput,
 } from "./contained-turn-kernel-custody-contracts.js";
 import { openKernelCompletionBoundary } from "./contained-turn-kernel-custody-deadline.js";
+import { createExecutionAttestation } from "./contained-turn-kernel-custody-execution-attestation.js";
 import {
   canonicalDigest,
-  completionProjection,
   createPhysicalProof,
   createProcessNoStartProof,
   createProcessStartProof,
@@ -32,6 +35,7 @@ import {
   openIdentity,
   physicalEvidenceIsClosed,
   positiveInteger,
+  projectProviderBinding,
   projectProviderObservation,
   proofId,
   reservationIdentity,
@@ -62,16 +66,15 @@ type StartObservation =
   };
 type PhysicalInput = Parameters<ContainedTurnKernelCustodyPort["ensurePhysicalContainment"]>[0];
 type ContainmentInput = Parameters<ContainedTurnKernelCustodyPort["attestContainment"]>[0];
-type ExecutionAttestation = Extract<
-  Awaited<ReturnType<ContainedTurnKernelCustodyPort["attestExecutionClosure"]>>,
-  { readonly kind: "proved" }
->;
 /**
  * Outer anti-corruption adapter from raw Host facts to the kernel proof port.
  * Provider protocol completion is sealed from the exact one-use execute promise;
  * operating-system exit status is never interpreted as a logical outcome.
  */
 export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCustodyPort {
+  #admissionClosed = false;
+  readonly #preparation: ContainedTurnKernelCustodyAdapterOptions["postClaimPreparation"];
+  readonly #preparing = new Map<string, AbortController>();
   readonly #completionAfterMs: number;
   readonly #hostBootId: Awaited<ReturnType<ContainedTurnKernelCustodyPort["open"]>>["hostBootId"];
   readonly #hostCustody: ContainedTurnHostCustodyPort;
@@ -79,12 +82,19 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
   readonly #attemptOwner: ContainedTurnKernelCustodyAttemptOwner;
   readonly #workspaceOwner: ContainedTurnKernelWorkspaceOwner;
   readonly #monotonicNow: () => number;
+  readonly #openAttempts = new KernelOpenAttempts();
   readonly #reservations = new Map<string, KernelReservation>();
   readonly #startObservationAfterMs: number;
   public constructor(
     hostCustody: ContainedTurnHostCustodyPort,
     options: ContainedTurnKernelCustodyAdapterOptions,
   ) {
+    const preparation = options.postClaimPreparation;
+    if (preparation !== "current-owner" && typeof preparation?.prepareClaimed !== "function") {
+      throw new TypeError("Host post-claim preparation owner is unavailable");
+    }
+    this.#preparation = preparation === "current-owner" ? preparation
+      : Object.freeze({prepareClaimed: preparation.prepareClaimed.bind(preparation)});
     this.#hostCustody = hostCustody;
     this.#completionAfterMs = positiveInteger("completionAfterMs", options.completionAfterMs, 30_000);
     this.#startObservationAfterMs = positiveInteger(
@@ -96,7 +106,15 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     this.#hostBootId = containedTurnIdentity("host_boot", options.hostBootId);
     this.#hostInstanceId = containedTurnIdentity("host_instance", options.hostInstanceId);
   }
+  /** Host-private lifecycle fence; it neither releases custody nor proves closure. */
+  public sealAdmission(): void {
+    this.#admissionClosed = true;
+    this.#openAttempts.sealAdmission();
+    for (const reservation of this.#reservations.values()) {reservation.startBoundaryCutoff = true;}
+    for (const preparation of this.#preparing.values()) {preparation.abort();}
+  }
   public async open(input: KernelOpenInput): ReturnType<ContainedTurnKernelCustodyPort["open"]> {
+    if (this.#admissionClosed) {throw new TypeError("Host Custody admission is unavailable");}
     const existing = this.#reservations.get(input.custodyId);
     if (existing !== undefined) {
       const identity = openIdentity(input, {
@@ -108,34 +126,33 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
       }
       return this.#openOutcome(existing);
     }
-    return this.#workspaceOwner.withLaunchAuthority({
-      attemptId: input.attemptId,
-      operationId: input.operationId,
-      workspaceId: input.workspaceId,
-    }, authority => this.#openScoped(input, authority));
+    return this.#openAttempts.open(input, this.#workspaceOwner, this.#attemptOwner,
+      (snapshot, authority, attempt) => this.#openScoped(snapshot, authority, attempt));
   }
   async #openScoped(
     input: KernelOpenInput,
     workspaceAuthority: HostCustodyReservationInput["workspaceAuthority"],
+    attempt: KernelOpenAttempt,
   ): ReturnType<ContainedTurnKernelCustodyPort["open"]> {
-    if (workspaceAuthority.canonicalPath.length === 0 || workspaceAuthority.descriptorPath.length === 0 ||
-        workspaceAuthority.identity.mountId.length === 0 || input.intentMode !== "analysis" && input.intentMode !== "workspace-write") {
+    if (isNativeHostCustodyWorkspaceAuthority(workspaceAuthority)) {
+      inspectNativeHostCustodyWorkspaceAuthority(workspaceAuthority, input);
+    } else if (types.isProxy(workspaceAuthority) || !("descriptorPath" in workspaceAuthority) || workspaceAuthority.canonicalPath.length === 0 ||
+        workspaceAuthority.descriptorPath.length === 0 || workspaceAuthority.identity.mountId.length === 0) {
       throw new TypeError("Host Custody scoped workspace authority is unavailable");
     }
-    const providerBinding = this.#providerBinding(input);
+    if (input.intentMode !== "analysis" && input.intentMode !== "workspace-write") {
+      throw new TypeError("Host Custody scoped workspace authority is unavailable");
+    }
+    const providerBinding = projectProviderBinding(input);
     const plan = await this.#attemptOwner.prepare({ kernel: input, providerBinding, workspaceAuthority });
     const authority = Object.freeze({ intentMode: input.intentMode, workspaceRef: workspaceAuthority.canonicalPath });
+    if (attempt.closed) {throw new TypeError("Host Custody open was cut off before acquisition");}
+    if (isNativeHostCustodyWorkspaceAuthority(workspaceAuthority)) {
+      inspectNativeHostCustodyWorkspaceAuthority(workspaceAuthority, input);
+    }
+    // From this point even a rejected or malformed raw response may own resources.
+    attempt.acquisitionPossible = true;
     return this.#reserve(input, authority, providerBinding, plan, workspaceAuthority);
-  }
-  #providerBinding(input: KernelOpenInput): HostCustodyReservationInput["providerBinding"] {
-    return Object.freeze({
-      adapterRevision: input.adapterSnapshot.adapterRevision,
-      binaryRevision: input.adapterSnapshot.binaryRevision,
-      capabilityManifestRevision: input.adapterSnapshot.capabilityManifestRevision,
-      credentialBindingDigest: input.providerAccessSnapshot.credentialBindingDigest,
-      provider: input.adapterSnapshot.provider,
-      providerRouteRef: input.providerAccessSnapshot.providerRouteRef,
-    });
   }
   async #reserve(
     input: KernelOpenInput,
@@ -235,9 +252,12 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
   public completionBoundary(
     input: Parameters<ContainedTurnKernelCustodyPort["completionBoundary"]>[0],
   ): ReturnType<ContainedTurnKernelCustodyPort["completionBoundary"]> {
-    return openKernelCompletionBoundary(input, this.#reservation(input), this.#completionAfterMs);
+    const boundary = openKernelCompletionBoundary(input, this.#reservation(input), this.#completionAfterMs);
+    if (input.phase === "start") {void boundary.expiration.then(() => {this.#preparing.get(input.custodyId)?.abort(); return null;});}
+    return boundary;
   }
   public async start(input: StartInput): ReturnType<ContainedTurnKernelCustodyPort["start"]> {
+    if (this.#admissionClosed) {throw new TypeError("Host Custody admission is unavailable");}
     const reservation = this.#reservation(input);
     const hostCustodyProof = this.#openOutcome(reservation).hostCustodyProof;
     admitCommittedDispatchStart(input, reservation, {
@@ -245,11 +265,27 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
       hostCustodyProofId: hostCustodyProof.proofId,
       hostInstanceId: this.#hostInstanceId,
     });
+    const preparation = new AbortController();
+    this.#preparing.set(reservation.custodyId, preparation);
+    try {
+      if (reservation.startBoundaryCutoff) {throw new TypeError("Host start was cut off");}
+      if (this.#preparation !== "current-owner") {
+        const result = await this.#preparation.prepareClaimed({committedDispatchProof: input.committedDispatchProof,
+          signal: preparation.signal, underlyingCustodyRef: reservation.underlyingCustodyRef});
+        if (result.kind !== "prepared") {throw new TypeError("Host post-claim preparation is unavailable");}
+      }
+      if (preparation.signal.aborted || reservation.startBoundaryCutoff) {throw new TypeError("Host preparation was cut off");}
+    } catch {
+      await this.#contain(reservation, true);
+      return this.#indeterminate("post-claim-preparation", reservation);
+    }
     let creatorCalled = false;
     let executionSettled = false;
     let observation!: Promise<StartObservation>;
     const execution: Promise<ContainedTurnKernelProviderObservation> = Promise.resolve().then(
-      () => input.execute(Object.freeze({
+      () => {
+        if (reservation.startBoundaryCutoff) {throw new TypeError("Host execute arrived after cutoff");}
+        return input.execute(Object.freeze({
         createProcess: <Process>(createProcess: () => Process): Process => {
           if (creatorCalled) {throw new TypeError("Host Custody delegated process creator is one-use");}
           if (reservation.startBoundaryCutoff) {
@@ -259,7 +295,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
           return createProcess();
         },
         observation,
-      })),
+      }));},
     );
     void execution.then(
       value => {
@@ -287,12 +323,16 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     observation = hostObservation.then(observed => {
       if (observed.kind === "execution_started") {
         return Object.freeze({
-          kind: observed.kind, proof: this.#processStartProof(reservation, observed.evidence),
+          kind: observed.kind, proof: createProcessStartProof(reservation, observed.evidence, {
+            hostBootId: this.#hostBootId, hostInstanceId: this.#hostInstanceId,
+          }),
         });
       }
       if (observed.kind === "proved_no_start") {
         return Object.freeze({
-          kind: observed.kind, proof: this.#processNoStartProof(reservation, observed.evidence),
+          kind: observed.kind, proof: createProcessNoStartProof(reservation, observed.evidence, {
+            hostBootId: this.#hostBootId, hostInstanceId: this.#hostInstanceId,
+          }),
         });
       }
       return Object.freeze({
@@ -326,16 +366,6 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     reservation.providerCompletion = completion;
     reservation.providerCompletionState = "sealed";
   }
-  #processStartProof(reservation: KernelReservation, evidence: HostCustodyEvidence): StartProof {
-    return createProcessStartProof(reservation, evidence, {
-      hostBootId: this.#hostBootId, hostInstanceId: this.#hostInstanceId,
-    });
-  }
-  #processNoStartProof(reservation: KernelReservation, evidence: HostCustodyEvidence): NoStartProof {
-    return createProcessNoStartProof(reservation, evidence, {
-      hostBootId: this.#hostBootId, hostInstanceId: this.#hostInstanceId,
-    });
-  }
   public async attestExecutionClosure(
     input: Parameters<ContainedTurnKernelCustodyPort["attestExecutionClosure"]>[0],
   ): ReturnType<ContainedTurnKernelCustodyPort["attestExecutionClosure"]> {
@@ -349,45 +379,13 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     const contained = await this.#contain(reservation, true);
     const observed = this.#hostCustody.evidence(reservation.underlyingCustodyRef);
     const completion = reservation.providerCompletion;
-    if (contained === undefined || observed === undefined || completion === undefined ||
+    if (observed === undefined || completion === undefined ||
+        (contained === undefined && observed.closure.profile !== "cooperative-darwin-posix-process-group") ||
         reservation.providerCompletionState !== "sealed" || !reservation.processStartProved ||
         !executionEvidenceIsClosed(observed)) {
       return this.#indeterminate("execution-closure", reservation, observed);
     }
-    const binding = Object.freeze({
-      attemptId: reservation.attemptId,
-      authorityVectorDigest: reservation.authorityVectorDigest,
-      effectId: reservation.effectId,
-      operationId: reservation.operationId,
-    });
-    const closureProjection = Object.freeze({
-      completion: completionProjection(completion),
-      evidence: hostEvidenceProjection(observed),
-      proofDigest: reservation.proofDigest ?? null,
-      receiptRef: contained,
-      reservation: reservationIdentity(reservation),
-    });
-    const result: ExecutionAttestation = Object.freeze({
-      executionClosureProof: Object.freeze({
-        binding: Object.freeze({ ...binding, outcome: completion.outcome }),
-        kind: "execution_closure",
-        proofId: proofId("execution-closure", closureProjection),
-      }),
-      kind: "proved",
-      outputDrainProof: Object.freeze({
-        binding: Object.freeze({ ...binding, finalCursor: input.finalCursor }),
-        kind: "output_drain",
-        proofId: proofId("output-drain", Object.freeze({
-          closure: closureProjection,
-          finalCursor: input.finalCursor,
-        })),
-      }),
-      terminalObservationProof: Object.freeze({
-        binding: Object.freeze({ ...binding, outcome: completion.outcome }),
-        kind: "provider_terminal_observation",
-        proofId: proofId("terminal-observation", closureProjection),
-      }),
-    });
+    const result = createExecutionAttestation(reservation, observed, completion, contained, input.finalCursor);
     reservation.executionAttestation = Object.freeze({ finalCursor: input.finalCursor, result });
     return result;
   }
@@ -471,6 +469,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     });
   }
   async #contain(reservation: KernelReservation, initiate: boolean): Promise<string | undefined> {
+    if (initiate) {reservation.startBoundaryCutoff = true; this.#preparing.get(reservation.custodyId)?.abort();}
     if (reservation.containmentReceiptRef !== undefined) {return reservation.containmentReceiptRef;}
     if (!initiate) {return undefined;}
     let outcome: Awaited<ReturnType<ProviderProcessCustodyPort["requestContainment"]>>;
@@ -490,6 +489,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
   public async releaseReservation(
     input: Parameters<ContainedTurnKernelCustodyPort["releaseReservation"]>[0],
   ): Promise<void> {
+    if (this.#openAttempts.failedBeforeAcquisition(input) !== undefined) {return;}
     const reservation = this.#reservation(input);
     if (reservation.workspaceId !== input.workspaceId) {
       throw new TypeError("Host Custody reservation workspace identity conflict");
@@ -509,11 +509,18 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
       throw new TypeError("Host Custody reservation release is unproven");
     }
     reservation.released = true;
+    this.#preparing.delete(reservation.custodyId);
     this.#attemptOwner.retire(reservation);
   }
   public async releaseRetiredReservation(
     input: Parameters<ContainedTurnKernelCustodyPort["releaseRetiredReservation"]>[0],
   ): ReturnType<ContainedTurnKernelCustodyPort["releaseRetiredReservation"]> {
+    const failed = this.#openAttempts.failedBeforeAcquisition(input.cleanupPermit);
+    if (failed !== undefined && failed.input.preparationToken === input.cleanupPermit.preparationToken &&
+        failed.input.operationRevision === input.cleanupPermit.preparedOperationRevision &&
+        failed.input.operationCutoffRevision === input.cleanupPermit.operationCutoffRevision) {
+      return Object.freeze({ kind: "already_released" });
+    }
     const reservation = this.#reservations.get(input.cleanupPermit.custodyId);
     if (reservation === undefined || !sameReservation(reservation, input.cleanupPermit) ||
         reservation.workspaceId !== input.cleanupPermit.workspaceId) {
@@ -597,8 +604,3 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     return reservation;
   }
 }
-export const createContainedTurnKernelCustodyPort = (
-  hostCustody: ContainedTurnHostCustodyPort,
-  options: ContainedTurnKernelCustodyAdapterOptions,
-): ContainedTurnKernelCustodyPort =>
-  new ContainedTurnKernelCustodyAdapter(hostCustody, options);

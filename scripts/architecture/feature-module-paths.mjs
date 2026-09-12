@@ -213,6 +213,31 @@ const scanDirectory = async (context, absoluteDirectory, directoryPath, depth = 
   }
 };
 
+// Shallow, bounded listing of the immediate child directories of one container.
+// Module discovery must see every sibling package without walking their trees,
+// so it cannot reuse the recursive source inventory.
+export const inventoryChildDirectories = async ({ root, startPath, issue, budget = { entries: 0 }, maxEntries = Number.POSITIVE_INFINITY }) => {
+  const inspected = await inspectRepositoryPath(root, startPath, { kind: "directory" });
+  if (!inspected.ok) {return { directories: [], issues: [filesystemIdentityIssue(issue, inspected.path)] };}
+  const context = { budget, maxEntries, overflow: false, issue, issues: [], maxIssues: Number.POSITIVE_INFINITY };
+  let entries;
+  try {entries = await readDirectoryEntries(context, inspected.absolutePath);}
+  catch {return { directories: [], issues: [filesystemIdentityIssue(issue, inspected.path)] };}
+  entries.sort((left, right) => compareText(left.name, right.name));
+  recordCollisionIssues(entries, inspected.path, context);
+  const directories = [];
+  for (const entry of entries) {
+    const path = posix.join(inspected.path, entry.name);
+    if (unsafeSegment(entry.name)) {context.issues.push(filesystemIdentityIssue(issue, path)); continue;}
+    let metadata;
+    try {metadata = await lstat(join(inspected.absolutePath, entry.name));}
+    catch {context.issues.push(filesystemIdentityIssue(issue, path)); continue;}
+    if (metadata.isSymbolicLink()) {context.issues.push(filesystemIdentityIssue(issue, path)); continue;}
+    if (metadata.isDirectory()) {directories.push(path);}
+  }
+  return { directories, issues: context.issues, overflow: context.overflow };
+};
+
 export const inventoryRepositoryFiles = async ({ root, startPath, extensions, issue, optional = false, excludedDirectories = new Set(), identities = new Map(), budget = { entries: 0, files: 0, sourceBytes: 0 }, maxEntries = Number.POSITIVE_INFINITY, maxDepth = Number.POSITIVE_INFINITY, maxFiles = Number.POSITIVE_INFINITY, maxFileBytes = Number.POSITIVE_INFINITY, maxSourceBytes = Number.POSITIVE_INFINITY, maxIssues = Number.POSITIVE_INFINITY }) => {
   const inspected = startPath === ""
     ? { ok: true, absolutePath: root.canonicalPath, path: "" }

@@ -162,8 +162,8 @@ const SOURCE = Object.freeze({
   }),
   projection: Object.freeze({
     path: "experiments/runtime-profile-behavior/fixtures/acp-compatibility/opencode-contained-turn-port-conformance.json",
-    sha256: "076f8830c29f10ebf9d40e0fb344f9f1a44a6b7291f3f29066080785beccf9fb",
-    role: "synthetic_provider_neutral_kernel_projection_with_declared_identity_gap",
+    sha256: "a8973162fbdea09eef6abf18b13cab562d49a6628ea1021b0f69702f13e8b20f",
+    role: "synthetic_provider_neutral_projection_with_opencode_identity",
   }),
 });
 
@@ -434,7 +434,7 @@ export const parseOpenCodeExactContractFixture = async (
 
 export interface OpenCodeExactContractCharacterization {
   readonly claim: "contract_only_no_production_adapter";
-  readonly kernelReplayClaimed: false;
+  readonly manifestRevision: typeof OPENCODE_EXACT_MANIFEST_REVISION;
   readonly provider: "opencode";
   readonly providerRevision: typeof OPENCODE_EXACT_PROVIDER_REVISION;
   readonly supportedModes: readonly ["analysis"];
@@ -442,12 +442,12 @@ export interface OpenCodeExactContractCharacterization {
   readonly unknownCapabilityPolicy: "fail_closed";
 }
 
-/** A detached summary only. The separate synthetic kernel test retains its declared OpenCode identity gap. */
+/** Detached characterization consumed by the offline synthetic kernel replay; no production adapter. */
 export const characterizeOpenCodeExactContract = (
   fixture: OpenCodeExactContractFixture,
 ): OpenCodeExactContractCharacterization => Object.freeze({
   claim: fixture.claim,
-  kernelReplayClaimed: false,
+  manifestRevision: fixture.neutralContract.manifestRevision,
   provider: "opencode",
   providerRevision: fixture.pin.providerRevision,
   supportedModes: Object.freeze(["analysis"] as const),

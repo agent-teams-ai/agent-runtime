@@ -31,7 +31,7 @@
       }
     },
     {
-      "files": ["experiments/**", "**/*.test.ts", "**/fixtures/**"],
+      "files": ["experiments/**", "**/*.test.ts", "**/*.test.mjs", "**/fixtures/**"],
       "rules": {
         "complexity": ["error", 30],
         "max-depth": ["error", 5],

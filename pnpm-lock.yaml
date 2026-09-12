@@ -12,6 +12,12 @@ catalogs:
     '@anthropic-ai/claude-agent-sdk':
       specifier: 0.3.251
       version: 0.3.251
+    '@get-modular/assembly':
+      specifier: 0.1.0
+      version: 0.1.0
+    '@get-modular/core':
+      specifier: 0.1.0
+      version: 0.1.0
     '@opencode-ai/plugin':
       specifier: 1.18.5
       version: 1.18.5
@@ -84,6 +90,9 @@ importers:
       '@agent-teams/docs-protocol-agent-teams':
         specifier: 0.2.7
         version: 0.2.7
+      '@agent-teams/embedded-runtime':
+        specifier: workspace:*
+        version: link:packages/apps/embedded-runtime
       '@agent-teams/engineering-foundation':
         specifier: 1.2.0
         version: 1.2.0(@types/node@24.13.3)
@@ -138,16 +147,28 @@ importers:
       '@agent-teams/agent-execution':
         specifier: workspace:*
         version: link:../../contexts/agent-execution
+      '@agent-teams/filesystem-custody':
+        specifier: workspace:*
+        version: link:../../platform/filesystem-custody
+      '@agent-teams/provider-access':
+        specifier: workspace:*
+        version: link:../../contexts/provider-access
       '@agent-teams/runtime-configuration':
         specifier: workspace:*
         version: link:../../contexts/runtime-configuration
       '@agent-teams/runtime-security':
         specifier: workspace:*
         version: link:../../contexts/runtime-security
+      '@get-modular/assembly':
+        specifier: 'catalog:'
+        version: 0.1.0
+      '@get-modular/core':
+        specifier: 'catalog:'
+        version: 0.1.0
     devDependencies:
-      '@agent-teams/provider-access':
-        specifier: workspace:*
-        version: link:../../contexts/provider-access
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.0
 
   packages/contexts/agent-execution:
     dependencies:
@@ -167,8 +188,18 @@ importers:
       '@types/pg':
         specifier: 'catalog:'
         version: 8.23.1
+      oxc-parser:
+        specifier: 'catalog:'
+        version: 0.147.0
 
-  packages/contexts/provider-access: {}
+  packages/contexts/provider-access:
+    devDependencies:
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.23.1
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.0
 
   packages/contexts/runtime-configuration:
     dependencies:
@@ -187,6 +218,13 @@ importers:
       '@agent-teams/filesystem-custody':
         specifier: workspace:*
         version: link:../../platform/filesystem-custody
+    devDependencies:
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.23.1
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.0
 
   packages/platform/filesystem-custody: {}
 
@@ -301,6 +339,14 @@ packages:
 
   '@emnapi/wasi-threads@1.2.2':
     resolution: {integrity: sha512-c95qOXkHdydNKhscBTebqEC1CVAZpyqOfVfBzQ1qgzyl3gfeldUjIggDbIZgDKsHLgnsM+igH7TJ/eAasaVuMA==}
+
+  '@get-modular/assembly@0.1.0':
+    resolution: {integrity: sha512-wxK49abnnAWLkCuI8EwL8cJENP2IfDmEm29UHi0w5t0/BL/c2IdTNbOTvQDo/8+hl0ZCJZtwqIqPZ3AnxJ7WNQ==}
+    engines: {node: '>=24.18.0 <25'}
+
+  '@get-modular/core@0.1.0':
+    resolution: {integrity: sha512-0aqzW7sbh7O8aAPBGJIPZBbhgeYnk+HuZdVf27dimkQ3d/zb9zpsYIMdLGt3EXi1B8MaBjw09ApzLaiIRiAgIQ==}
+    engines: {node: '>=24.18.0 <25'}
 
   '@hono/node-server@2.1.1':
     resolution: {integrity: sha512-ELuehkj5VCBdgEw9zs+ivkKwyzzUCSQuE96YmiPvn1ECBoZCczbFXJLeEGMTYjphP6gydh4pHMqEYPVMYUVgQg==}
@@ -1881,6 +1927,12 @@ snapshots:
     dependencies:
       tslib: 2.8.1
     optional: true
+
+  '@get-modular/assembly@0.1.0':
+    dependencies:
+      '@get-modular/core': 0.1.0
+
+  '@get-modular/core@0.1.0': {}
 
   '@hono/node-server@2.1.1(hono@4.13.5)':
     dependencies:

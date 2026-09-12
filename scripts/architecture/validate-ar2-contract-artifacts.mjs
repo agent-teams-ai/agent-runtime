@@ -4,6 +4,8 @@ import { isAbsolute, resolve, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 
+import { ar2InventoryExecutes, readAr2TestExecutionInventory } from "./ar2-test-execution-inventory.mjs";
+
 import { readCustodiedRepositoryFile } from "./ar2-evidence-custody.mjs";
 
 export { validateOfficialSemantics } from "./validate-claude-official-semantics.mjs";
@@ -76,18 +78,11 @@ export const readAr2CoverageTestSource = async (testFile, options = {}) => {
   return { packageRoot, relativeTestFile, source };
 };
 
-const testScriptExecutes = (script, relativeTestFile) => script
-  .split(/\s+/u)
-  .some(token => {
-    const pattern = escapeRegExp(token).replaceAll("\\*", "[^/]+");
-    return new RegExp(`^${pattern}$`, "u").test(relativeTestFile);
-  });
-
 export const validateContractCoverage = ({
   contractCoverage,
   fixtureMatrix,
   negativeGroups,
-  packageTestScripts,
+  packageTestInventories,
   testSources,
 }) => {
   exactKeys(contractCoverage, ["schemaVersion", "contractId", "cases"], "contract coverage");
@@ -122,10 +117,10 @@ export const validateContractCoverage = ({
       `${entry.id} must name exactly one declared Node test in ${entry.testFile}`,
     );
     const { packageRoot, relativeTestFile } = packageTestCoordinates(entry.testFile);
-    const packageTestScript = packageTestScripts.get(packageRoot);
-    assert.equal(typeof packageTestScript, "string", `${packageRoot} must declare a test script`);
+    const inventory = packageTestInventories.get(packageRoot);
+    assert.ok(Array.isArray(inventory), `${packageRoot} must retain a test inventory`);
     assert.equal(
-      testScriptExecutes(packageTestScript, relativeTestFile),
+      ar2InventoryExecutes(inventory, relativeTestFile),
       true,
       `${entry.id} test file must be executed by ${packageRoot}/package.json`,
     );
@@ -178,13 +173,10 @@ const loadContractCoverageEvidence = async contractCoverage => {
   const retainedSources = await Promise.all(testFiles.map(testFile => readAr2CoverageTestSource(testFile)));
   const testSources = new Map(retainedSources.map(({ source }, index) => [testFiles[index], source]));
   const packageRoots = [...new Set(retainedSources.map(({ packageRoot }) => packageRoot))];
-  const packageTestScripts = new Map(await Promise.all(packageRoots.map(async packageRoot => {
-    const packageManifest = await readJson(`${packageRoot}/package.json`, {
-      allowedRoot: packageRoot,
-    });
-    return [packageRoot, packageManifest.scripts?.test];
+  const packageTestInventories = new Map(await Promise.all(packageRoots.map(async packageRoot => {
+    return [packageRoot, await readAr2TestExecutionInventory(packageRoot)];
   })));
-  return { packageTestScripts, testSources };
+  return { packageTestInventories, testSources };
 };
 
 const LEGACY_COMMIT = "f6afac73cced62d943a0e891ad08d7b8f88f802f";

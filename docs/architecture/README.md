@@ -21,6 +21,12 @@ independent competing source of truth.
 
 Documents:
 
+- [Get Modular adoption](get-modular-adoption.md): planned passive setup scope,
+  ADR-0015 authority, unresolved artifact/pin gates, and L0 transition contract.
+
+- [Contained-turn Consumer Module Standard pending adoption](contained-turn-consumer-module-standard-adoption.md):
+  current seven-port legacy classification and rejecting gate without extending
+  the active passive setup Assembly scope.
 - [Feature Module Standard v1 scoped active adoption](feature-module-standard-v1-candidate.md):
   exact immutable authority binding, narrow Agent Execution and Provider Access
   active scope, deterministic gates, and zero-diagnostic evidence. This is not
@@ -37,6 +43,12 @@ Documents:
 - [Contained Agent Turn V1 delivery plan](contained-agent-turn-v1-delivery-plan.md):
   staged implementation, provider, module, custody, qualification, and hosted
   worker plan for the first contained execution turn.
+- [Host Custody optional default](host-custody-optional-default.md):
+  ordinary user-session runtime is the product default; contained-turn Host
+  Custody stays an optional profile defaulted off, with the Darwin isolate /
+  privileged-helper work deferred outside current PR #69 merge.
+- [Rust custody migration follow-up](rust-custody-migration-follow-up.md):
+  deferred discussion, research boundary and migration TODO outside PR #69.
 - [Provider setup delivery roadmap](provider-setup-delivery-roadmap.md): legacy
   capability disposition and delivery order for Codex, Claude Code, and
   OpenCode setup.

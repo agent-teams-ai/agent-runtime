@@ -1,4 +1,4 @@
-import type { FileHandle } from "node:fs/promises";
+import type { StableFilesystemHandle } from "@agent-teams/filesystem-custody/composition";
 
 import { openDirectoryEntry } from "./contained-turn-filesystem-custody.js";
 
@@ -9,8 +9,8 @@ const relativeDirectoryCleanupFailure = (
 ): AggregateError => new AggregateError([error, cleanupError], message, { cause: error });
 
 const closeDirectoryHandoff = async (
-  previous: FileHandle,
-  next: FileHandle,
+  previous: StableFilesystemHandle,
+  next: StableFilesystemHandle,
   operation: "materialization" | "rehydration",
 ): Promise<void> => {
   try {
@@ -30,12 +30,12 @@ const closeDirectoryHandoff = async (
 };
 
 export const openContainedTurnRelativeDirectory = async (
-  root: FileHandle,
+  root: StableFilesystemHandle,
   relativePath: string,
   operation: "materialization" | "rehydration",
-): Promise<FileHandle | undefined> => {
+): Promise<StableFilesystemHandle | undefined> => {
   if (relativePath.length === 0) {return undefined;}
-  let current: FileHandle | undefined;
+  let current: StableFilesystemHandle | undefined;
   try {
     for (const component of relativePath.split("/")) {
       const next = await openDirectoryEntry(current ?? root, component);

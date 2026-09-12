@@ -55,6 +55,19 @@ export const readCodexCanaryCredentialInventory = async (path, credentialGenerat
     || sensitiveOutputTokens.reduce((total, value) => total + Buffer.byteLength(value), 0) > 65_536) {
     throw invalid();
   }
-  return Object.freeze({credentialBindingDigest: `sha256:${fileDigest}`, credentialGeneration,
+  // Content identity is never the Provider Access owner's opaque binding digest.
+  return Object.freeze({inventoryDigest: `sha256:${fileDigest}`, credentialGeneration,
     sensitiveOutputTokens: Object.freeze(sensitiveOutputTokens)});
+};
+
+/** Redaction projection only; neither inventory is credential or route authority. */
+export const bindCodexCanaryOutputInventory = (observed, expectedInventory, binding) => {
+  if (observed.inventoryDigest !== expectedInventory.inventoryDigest
+    || observed.credentialGeneration !== expectedInventory.credentialGeneration
+    || observed.credentialGeneration !== binding.credentialGeneration
+    || typeof binding.credentialBindingDigest !== "string" || !binding.credentialBindingDigest) {
+    throw invalid();
+  }
+  return Object.freeze({credentialBindingDigest: binding.credentialBindingDigest,
+    credentialGeneration: binding.credentialGeneration, sensitiveOutputTokens: observed.sensitiveOutputTokens});
 };

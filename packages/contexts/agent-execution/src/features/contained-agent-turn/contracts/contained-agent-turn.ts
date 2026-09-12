@@ -132,6 +132,13 @@ export interface ContainedTurnViewMapping {
 
 export type SubmitContainedTurnOutcome =
   | {
+      /** Acceptance is unresolved; these references are evidence, not a persisted operation or retry permission. */
+      readonly candidateOperationId: string;
+      readonly commandId: string;
+      readonly evidenceId: string;
+      readonly status: "potential_acceptance";
+    }
+  | {
       readonly code: "command_fingerprint_conflict";
       readonly status: "conflict";
     }

@@ -115,7 +115,7 @@ test("raw Host reservation rejects exact path, device and inode on a substituted
   } finally {await rm(root, {recursive: true, force: true});}
 });
 
-test("throwing reserved-plan getters and reservation validation close retained authority exactly once", {
+test("a non-inert reserved plan retains no descriptor and reservation validation closes it exactly once", {
   skip: process.platform === "linux" ? false : "descriptor-bound production Host Custody is Linux-only",
 }, async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), "current-owner-reservation-exception-")));
@@ -128,19 +128,29 @@ test("throwing reserved-plan getters and reservation validation close retained a
       const fdinfo = await readFile(`/proc/self/fdinfo/${authorityHandle.fd}`, "utf8");
       const mountId = /^mnt_id:\s*(\d+)$/mu.exec(fdinfo)?.[1];
       assert.ok(mountId);
+      // The inert plan is the one the snapshot accepts, so its reservation reaches
+      // the retained descriptor and refuses on the observed mount identity instead.
+      const inertPlan = Object.freeze({
+        arguments: Object.freeze([]), binaryRevision: "binary:test",
+        containmentProfile: "strict-linux-cgroup-v2", environment: Object.freeze({}),
+        executablePath: "/invalid", executableSha256: "0".repeat(64), intentMode: "analysis",
+        privateRootPath: "/invalid-private", provider: "codex", spawnMode: "sdk-delegated",
+      });
       for (const failureKind of ["plan-getter", "mount-validation"] as const) {
-        const closes: string[] = [];
+        const lifecycle: string[] = [];
+        let planReads = 0;
         const host = new NodeProviderProcessCustody({launchPlans: {resolve: async () => {}}});
         privateHostCustodyReservationTestSupport.install(host, {
-          descriptorLifecycle: event => {if (event === "closed") {closes.push(event);}},
+          descriptorLifecycle: event => {lifecycle.push(event);},
           ...(failureKind === "mount-validation" ? {
             mountIdentity: ({actualMountId}: {actualMountId: string}) => `${actualMountId}:invalid`,
           } : {}),
         });
-        const planFailure = new Error("synthetic throwing plan getter");
         const launchPlan = failureKind === "plan-getter"
-          ? Object.defineProperty({}, "arguments", {enumerable: true, get() {throw planFailure;}})
-          : Object.freeze({arguments: Object.freeze([]), environment: Object.freeze({})});
+          ? Object.defineProperty({}, "arguments", {enumerable: true, get() {
+            planReads += 1; throw new Error("synthetic throwing plan getter");
+          }})
+          : inertPlan;
         await assert.rejects(host.reserve({
           attemptId: `attempt:${failureKind}`, intentMode: "analysis", launchPlan: launchPlan as never,
           operationId: `operation:${failureKind}`,
@@ -153,8 +163,13 @@ test("throwing reserved-plan getters and reservation validation close retained a
             canonicalPath: workspaceRef, descriptorPath: `/proc/self/fd/${authorityHandle.fd}`,
             identity: Object.freeze({dev: identity.dev, ino: identity.ino, mountId}),
           }), workspaceRef,
-        }), error => failureKind === "plan-getter" ? error === planFailure : error instanceof TypeError);
-        assert.deepEqual(closes, ["closed"]);
+        }), error => error instanceof TypeError && (failureKind === "plan-getter"
+          ? /launch snapshot requires inert data/u.test(error.message)
+          : /workspace descriptor identity mismatch/u.test(error.message)));
+        // A plan the snapshot refuses is never given a retained descriptor, and its
+        // caller-owned accessor is never executed. A retained one closes exactly once.
+        assert.deepEqual(lifecycle, failureKind === "plan-getter" ? [] : ["opened", "closed"]);
+        assert.equal(planReads, 0);
       }
     } finally {await authorityHandle.close();}
   } finally {await rm(root, {recursive: true, force: true});}

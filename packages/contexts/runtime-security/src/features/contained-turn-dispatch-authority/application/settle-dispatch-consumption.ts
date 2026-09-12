@@ -17,7 +17,7 @@ import {
   snapshotExactDispatchRecord, snapshotExactDispatchVariant,
 } from "../domain/dispatch-exact-record.js";
 import { mapConsumeResultToV1, mapSettlementResultToV1 } from
-  "./contained-turn-dispatch-authority-v1-mappers.js";
+  "./contained-turn-dispatch-authority-v1-result-mappers.js";
 
 const closeSettlementSnapshot = (
   value: unknown,

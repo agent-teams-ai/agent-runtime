@@ -1,6 +1,6 @@
 import type { HttpEgressConnection, HttpEgressLimits } from "./http-egress-contracts.js";
 import type { HttpEgressClock } from "./http-egress-ports.js";
-import { zeroHttpBytes } from "./http-byte-intrinsics.js";
+import { intrinsicUint8ArrayLength, zeroHttpBytes } from "./http-byte-intrinsics.js";
 
 const decoder = new TextDecoder("ascii", { fatal: true });
 const encoder = new TextEncoder();
@@ -46,12 +46,13 @@ class DeadlineByteReader {
     this.iterator = source[Symbol.asyncIterator]();
   }
 
-  private async pull(): Promise<void> {
+  private async pull(deadline = this.limits.deadline): Promise<void> {
     if (this.signal?.aborted) {throw new StrictHttpResponseError("cancelled", this.bytesRead, 0);}
-    if (this.clock.now() >= this.limits.deadline) {throw new StrictHttpResponseError("stalled", this.bytesRead, 0);}
+    const now = this.clock.now();
+    if (!Number.isSafeInteger(now) || now >= deadline) {throw new StrictHttpResponseError("stalled", this.bytesRead, 0);}
     let next: IteratorResult<Uint8Array>;
     try {
-      next = await this.clock.within(this.limits.deadline, () => this.iterator.next(), this.signal);
+      next = await this.clock.within(deadline, () => this.iterator.next(), this.signal);
     } catch {
       throw new StrictHttpResponseError(this.signal?.aborted ? "cancelled" : "stalled", this.bytesRead, 0);
     }
@@ -62,7 +63,9 @@ class DeadlineByteReader {
     if (!(next.value instanceof Uint8Array)) {throw new StrictHttpResponseError("malformed", this.bytesRead, 0);}
     if (next.value.byteLength === 0) {return;}
     this.bytesRead = addObservedBytes(this.bytesRead, next.value.byteLength);
-    if (next.value.byteLength > this.limits.maxBufferedBytes
+    // Check the combined retained size before allocating, including the final
+    // delimiter chunk. Each fragment fitting independently is insufficient.
+    if (next.value.byteLength > this.limits.maxBufferedBytes - this.buffered.byteLength
       || this.bytesRead > this.limits.maxUpstreamWireBytes) {
       throw new StrictHttpResponseError("oversized", this.bytesRead, 0);
     }
@@ -103,9 +106,50 @@ class DeadlineByteReader {
     return value;
   }
 
-  public async requireEnd(): Promise<void> {
-    while (!this.ended) {await this.pull();}
+  public requireFramedEnd(): void {
+    if (this.signal?.aborted) {throw new StrictHttpResponseError("cancelled", this.bytesRead, 0);}
+    const now = this.clock.now();
+    if (!Number.isSafeInteger(now) || now >= this.limits.deadline) {throw new StrictHttpResponseError("stalled", this.bytesRead, 0);}
+    // Framing permits Host Custody to close the persistent transport. Surplus
+    // in later source chunks must still be checked after that closure barrier.
     if (this.buffered.byteLength !== 0) {throw new StrictHttpResponseError("malformed", this.bytesRead, 0);}
+  }
+
+  private assertSourceObservation(deadline: number, signal: AbortSignal | undefined): void {
+    if (signal?.aborted) {throw new StrictHttpResponseError("cancelled", this.bytesRead, 0);}
+    const now = this.clock.now();
+    if (!Number.isSafeInteger(now) || now >= deadline) {throw new StrictHttpResponseError("stalled", this.bytesRead, 0);}
+  }
+
+  public async requireSourceEnd(hostClosed: boolean): Promise<void> {
+    const deadline = hostClosed ? this.limits.closureDeadline : this.limits.deadline;
+    const signal = hostClosed ? undefined : this.signal;
+    while (!this.ended) {
+      this.assertSourceObservation(deadline, signal);
+      let observed: Readonly<{done: boolean; size: number | undefined}>;
+      try {
+        observed = await this.clock.within(deadline, async () => {
+          const next = await this.iterator.next();
+          const size = intrinsicUint8ArrayLength(next.value);
+          // Retain only metadata. Even a source that resolves after the bounded
+          // wait has failed must erase its bytes without refilling this reader.
+          zeroHttpBytes(next.value);
+          return {done: next.done === true, size};
+        }, signal);
+      } catch {
+        throw new StrictHttpResponseError(signal?.aborted ? "cancelled" : "stalled", this.bytesRead, 0);
+      }
+      if (!observed.done && observed.size !== undefined) {
+        this.bytesRead = addObservedBytes(this.bytesRead, observed.size);
+      }
+      this.assertSourceObservation(deadline, signal);
+      if (observed.done) {this.ended = true; return;}
+      if (observed.size === undefined) {throw new StrictHttpResponseError("malformed", this.bytesRead, 0);}
+      if (observed.size > this.limits.maxBufferedBytes || this.bytesRead > this.limits.maxUpstreamWireBytes) {
+        throw new StrictHttpResponseError("oversized", this.bytesRead, 0);
+      }
+      if (observed.size !== 0) {throw new StrictHttpResponseError("malformed", this.bytesRead, 0);}
+    }
   }
 
   public dispose(): void {zeroHttpBytes(this.buffered); this.buffered = new Uint8Array();}
@@ -258,11 +302,11 @@ const forwardFramedBody = async (
 ): Promise<void> => {
   if (head.contentLength !== undefined) {
     await forwardSizedBody(reader, head.contentLength, limits.maxBufferedBytes, emit);
-    await reader.requireEnd();
+    reader.requireFramedEnd();
     return;
   }
   if (!head.chunked) {
-    await reader.requireEnd();
+    reader.requireFramedEnd();
     return;
   }
   let bodyBytes = 0;
@@ -286,7 +330,7 @@ const forwardFramedBody = async (
       } finally {
         zeroHttpBytes(trailers);
       }
-      await reader.requireEnd();
+      reader.requireFramedEnd();
       return;
     }
     await forwardSizedBody(reader, size, limits.maxBufferedBytes, emit);
@@ -305,7 +349,8 @@ export const forwardStrictHttpResponse = async (
   connection: HttpEgressConnection,
   limits: HttpEgressLimits,
   clock: HttpEgressClock,
-  signal?: AbortSignal,
+  ...[signal, onHeadAccepted, onFramedEnd]: [signal?: AbortSignal,
+    onHeadAccepted?: (status: number) => boolean, onFramedEnd?: () => Promise<boolean>]
 ): Promise<StrictHttpResponseResult> => {
   const writeContext = Object.freeze({ connection, clock, limits, signal });
   const reader = new DeadlineByteReader(source, clock, limits, signal);
@@ -324,6 +369,11 @@ export const forwardStrictHttpResponse = async (
       zeroHttpBytes(headBytes);
     }
     if (head.status >= 300 && head.status <= 399) {throw new StrictHttpResponseError("redirect", reader.bytesRead, 0);}
+    // This hook is deliberately synchronous. Retry-triggering status authority
+    // closes before any response byte can become observable by the provider.
+    if (onHeadAccepted !== undefined && !onHeadAccepted(head.status)) {
+      throw new StrictHttpResponseError("redirect", reader.bytesRead, 0);
+    }
     if ((head.contentLength ?? 0) > limits.maxOutputBytes) {
       throw new StrictHttpResponseError("oversized", reader.bytesRead, 0);
     }
@@ -351,6 +401,15 @@ export const forwardStrictHttpResponse = async (
     };
     try {
       await forwardFramedBody(reader, head, limits, emit);
+      // The Host owns closure; the parser owns the final bounded source check.
+      // Unknown closure is reconciled by the Host without waiting for peer EOF.
+      if (onFramedEnd === undefined) {
+        await reader.requireSourceEnd(false);
+      } else if (await onFramedEnd() === true) {
+        // Only positively acknowledged Host closure releases this observation
+        // from execution cancellation. Framing and every write stay fenced.
+        await reader.requireSourceEnd(true);
+      }
     } catch (error) {
       if (!(error instanceof StrictHttpResponseError)) {
         throw new StrictHttpResponseError("malformed", reader.bytesRead, outboundBytes);

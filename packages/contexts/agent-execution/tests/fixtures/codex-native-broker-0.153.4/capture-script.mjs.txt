@@ -1,0 +1,76 @@
+import {mkdtemp, mkdir, writeFile, copyFile, readFile, rm, access} from 'node:fs/promises';
+import {spawn} from 'node:child_process';
+import {createHash} from 'node:crypto';
+import {join} from 'node:path';
+const intent=process.argv[2]; if(!['analysis','workspace-write'].includes(intent))throw Error('intent');
+const recipe=process.argv[3]; if(!['broker','permission'].includes(recipe))throw Error('recipe');
+const root='/private/tmp/ar69-r99/codex-native-darwin-'+recipe+'-'+intent;
+const binary='/tmp/ar69-r99/verified-darwin/codex';
+const expected='b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3';
+if(createHash('sha256').update(await readFile(binary)).digest('hex')!==expected) throw Error('wrong binary');
+for(const p of ['/etc/codex/config.toml','/etc/codex/requirements.toml']) {
+ try {await access(p); throw Error('ambient system configuration exists; diagnostic refused');} catch(e) {if(e.code!=='ENOENT') throw e;}
+}
+await mkdir(root,{recursive:true,mode:0o700});
+const project=await mkdtemp(join(root,'disposable-'));
+const home=join(project,'private-home'), workspace=join(project,'test-project'), tmp=join(project,'tmp');
+for(const p of [home,workspace,tmp]) await mkdir(p,{mode:0o700});
+let config=`model_provider = "ar_broker"
+model = "gpt-5.4"
+model_catalog_json = ${JSON.stringify(join(home,'models.json'))}
+cli_auth_credentials_store = "file"
+allow_login_shell = false
+shell_environment_policy = { exclude = ["AR_PRIVATE_BROKER_CAPABILITY"] }
+[model_providers.ar_broker]
+name = "OpenAI"
+base_url = "http://10.203.0.1:43129/backend-api/codex"
+wire_api = "responses"
+requires_openai_auth = false
+env_key = "AR_PRIVATE_BROKER_CAPABILITY"
+supports_websockets = false
+supports_standalone_web_search = false
+request_max_retries = 0
+stream_max_retries = 0
+http_headers = { version = "0.153.4" }
+[analytics]
+enabled = false
+[otel]
+exporter = "none"
+trace_exporter = "none"
+metrics_exporter = "none"
+[permissions.agent-runtime-contained-v1]
+extends = ${JSON.stringify(intent==='analysis'?':read-only':':workspace')}
+[permissions.agent-runtime-contained-v1.filesystem]
+${JSON.stringify(home)} = "deny"
+":tmpdir" = "read"
+":slash_tmp" = "read"
+[permissions.agent-runtime-contained-v1.network]
+enabled = false
+`;
+if(recipe==='permission')config=config.slice(config.indexOf('[permissions.agent-runtime-contained-v1]'));
+await writeFile(join(home,'config.toml'),config,{mode:0o600});
+await copyFile('/tmp/ar69-r99/upstream/codex-rs/models-manager/models.json',join(home,'models.json'));
+const messages=[], stderr=[]; let pending=''; let stage='initialize'; let sawConfig=false; let closeResult;
+const child=spawn('/usr/bin/sandbox-exec',['-p','(version 1)(allow default)(deny network*)',binary,'app-server','--stdio','--strict-config','-c','default_permissions="agent-runtime-contained-v1"',...['apps','browser_use','computer_use','image_generation','multi_agent','multi_agent_v2','plugins','remote_plugin',...(recipe==='broker'?['unbounded_connection_retries','enable_request_compression']:[])].flatMap(f=>['--disable',f])],{cwd:workspace,env:{HOME:home,CODEX_HOME:home,TMPDIR:tmp,PATH:'/usr/bin:/bin',LANG:'C.UTF-8',AR_PRIVATE_BROKER_CAPABILITY:'fixture-local'},stdio:['pipe','pipe','pipe']});
+const closed=new Promise(resolve=>child.once('close',(code,signal)=>resolve({code,signal})));
+const send=message=>child.stdin.write(JSON.stringify(message)+'\n');
+child.stderr.on('data',chunk=>{if(stderr.join('').length<64000)stderr.push(chunk.toString())});
+child.stdout.on('data',chunk=>{pending+=chunk.toString();if(pending.length>4*1024*1024){child.kill('SIGKILL');return;}
+ while(pending.includes('\n')){const i=pending.indexOf('\n');const line=pending.slice(0,i);pending=pending.slice(i+1);if(!line)continue;
+ let message;try{message=JSON.parse(line)}catch{messages.push({invalidJson:true});child.kill('SIGKILL');return;}
+ messages.push(message);
+ if(message.id==='init'&&message.result){stage='config';send({method:'initialized'});send({id:'config',method:'config/read',params:{cwd:workspace,includeLayers:true}})}
+ if(message.id==='config'){sawConfig=!!message.result;stage='permission-list';send({id:'permission-list',method:'permissionProfile/list',params:{cwd:workspace}})}
+ if(message.id==='permission-list'){stage='complete';child.stdin.end();child.kill('SIGTERM');}
+ }});
+child.stdin.on('error',()=>{});
+child.once('spawn',()=>send({id:'init',method:'initialize',params:{clientInfo:{name:'agent-runtime',title:'Disposable config characterization',version:'codex-app-server-contained-turn:0.153.4+native-permission-config-v2'},capabilities:{experimentalApi:true,requestAttestation:false}}}));
+const timer=setTimeout(()=>child.kill('SIGKILL'),20000);
+closeResult=await closed;clearTimeout(timer);
+const result={schemaVersion:1,intent,recipe,platform:'darwin-arm64',kind:"offline-native-custom-broker-config-only",binarySha256:expected,project,isolatedNetwork:"sandbox-exec deny network*",authFilesSupplied:false,providerTurnRequested:false,stage,sawConfig,closeResult,messages,stderr:stderr.join('')};
+if(JSON.stringify(messages).includes('fixture-local'))throw Error('local capability unexpectedly in config output');
+await writeFile(join(root,'result.json'),JSON.stringify(result,null,2)+'\n',{mode:0o600});
+await writeFile(join(root,'input-config.toml'),config,{mode:0o600});
+await rm(project,{recursive:true,force:true});
+console.log(JSON.stringify({stage,sawConfig,closeResult,messageCount:messages.length,artifact:join(root,'result.json'),sandboxRemoved:true}));
+if(!sawConfig)process.exitCode=1;

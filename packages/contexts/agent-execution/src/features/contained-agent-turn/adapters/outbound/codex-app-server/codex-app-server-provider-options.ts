@@ -1,3 +1,4 @@
+import {codexDockerProjectionSource, type CodexDockerPathProjection} from "./codex-docker-path-projection.js";
 import { createHash } from "node:crypto";
 
 import type { ContainedTurnAdapterCapabilityManifest } from "../legacy/legacy-contained-turn-ports.js";
@@ -11,11 +12,16 @@ import {
 } from "./codex-app-server-permission-boundary.js";
 import { detachCodexManifest } from "./codex-app-server-receipt-identity.js";
 
+import { codexNativeBrokerBoundary } from "./codex-native-broker-recipe.js";
+import { codexNativeBrokerLaunchInput, type CodexAppServerLaunchPlan } from "./codex-app-server-launch-plan.js";
+
 interface CodexProviderOptionsInput {
   readonly boundary: CodexAppServerPermissionBoundary;
   readonly cancellationPollMs?: number;
+  readonly dockerProjection?: CodexDockerPathProjection;
   readonly effectCustody?: CodexEffectCustodyAuthority;
   readonly manifest: ContainedTurnAdapterCapabilityManifest;
+  readonly nativeBrokerLaunchPlan?: CodexAppServerLaunchPlan;
   readonly maxActiveNotificationBytes?: number;
   readonly maxActiveNotifications?: number;
   readonly maxLineBytes?: number;
@@ -190,20 +196,49 @@ const callableAuthority = <T extends object>(
   return Object.freeze(wrap(record, callable as (...arguments_: unknown[]) => unknown));
 };
 
-export const detachCodexProviderOptions = (input: CodexProviderOptionsInput): CodexProviderOptionsInput => {
-  const options = snapshotRecord(input, "Codex provider constructor options", ["boundary", "manifest", "privateRootPath", "processes", "tmpDir"], [
-    "cancellationPollMs", "effectCustody", "maxActiveNotificationBytes", "maxActiveNotifications",
-    "maxLineBytes", "requestTimeoutMs", "sensitiveOutputTokens", "turnTimeoutMs",
-  ]);
-  const tokens = options.sensitiveOutputTokens === undefined
-    ? [] : snapshotArray(options.sensitiveOutputTokens, "Codex sensitive output tokens", 256);
+const snapshotSensitiveOutputTokens = (input: unknown, localCapability: string | undefined): readonly string[] => {
+  const tokens = input === undefined
+    ? [] : snapshotArray(input, "Codex sensitive output tokens", 256);
+  const allTokens = localCapability === undefined || tokens.includes(localCapability) ? tokens : [...tokens, localCapability];
+  if (allTokens.length > 256) {throw new TypeError("Codex sensitive output tokens exceed their bounded length");}
   let tokenBytes = 0;
-  const sensitiveOutputTokens = tokens.map((token, index) => {
+  const sensitiveOutputTokens = allTokens.map((token, index) => {
     const detached = boundedString(token, `Codex sensitive output token ${index}`);
     tokenBytes += Buffer.byteLength(detached, "utf8");
     return detached;
   });
   if (tokenBytes > 65_536) {throw new TypeError("Codex sensitive output tokens exceed their aggregate byte bound");}
+  return Object.freeze(sensitiveOutputTokens);
+};
+
+const detachProtocolBinding = (options: DataSnapshot) => {
+  const nativePlan = options.nativeBrokerLaunchPlan as CodexAppServerLaunchPlan | undefined;
+  const native = nativePlan === undefined ? undefined : codexNativeBrokerLaunchInput(nativePlan);
+  const projection = options.dockerProjection as CodexDockerPathProjection | undefined;
+  if (projection !== undefined && codexDockerProjectionSource(projection).boundary !== options.boundary) {
+    throw new TypeError("Codex Docker provider boundary does not match projection");
+  }
+  const boundary = native === undefined && projection === undefined ? snapshotBoundary(options.boundary)
+    : options.boundary as CodexAppServerPermissionBoundary;
+  if (native !== undefined && codexNativeBrokerBoundary(native.recipe) !== boundary) {
+    throw new TypeError("Codex native broker boundary does not match the launch");
+  }
+  return {nativePlan, native, projection, boundary};
+};
+
+export const detachCodexProviderOptions = (input: CodexProviderOptionsInput): CodexProviderOptionsInput => {
+  const options = snapshotRecord(input, "Codex provider constructor options", ["boundary", "manifest", "privateRootPath", "processes", "tmpDir"], [
+    "cancellationPollMs", "effectCustody", "maxActiveNotificationBytes", "maxActiveNotifications",
+    "maxLineBytes", "requestTimeoutMs", "sensitiveOutputTokens", "turnTimeoutMs", "nativeBrokerLaunchPlan", "dockerProjection",
+  ]);
+  const {nativePlan, native, projection, boundary} = detachProtocolBinding(options);
+  const manifest = detachCodexManifest(options.manifest as ContainedTurnAdapterCapabilityManifest);
+  if (nativePlan !== undefined && (options.boundary !== boundary
+    || nativePlan.privateRootPath !== options.privateRootPath || nativePlan.tmpDir !== options.tmpDir
+    || nativePlan.binaryRevision !== manifest.providerBinding.binaryRevision)) {
+    throw new TypeError("Codex native broker provider options do not match the launch");
+  }
+  const sensitiveOutputTokens = snapshotSensitiveOutputTokens(options.sensitiveOutputTokens, native?.localCapability);
   const processes = callableAuthority(options.processes, "Codex process registry", "get", (owner, get) => ({
     get: custodyRef => get.call(owner, custodyRef),
   })) as CustodiedProviderProcessRegistry;
@@ -212,10 +247,12 @@ export const detachCodexProviderOptions = (input: CodexProviderOptionsInput): Co
       admit: request => admit.call(owner, request),
     })) as CodexEffectCustodyAuthority;
   return Object.freeze({
-    boundary: snapshotBoundary(options.boundary),
+    boundary,
+    ...(projection === undefined ? {} : {dockerProjection: projection}),
+    ...(nativePlan === undefined ? {} : { nativeBrokerLaunchPlan: nativePlan }),
     ...(options.cancellationPollMs === undefined ? {} : { cancellationPollMs: options.cancellationPollMs as number }),
     ...(effectCustody === undefined ? {} : { effectCustody }),
-    manifest: detachCodexManifest(options.manifest as ContainedTurnAdapterCapabilityManifest),
+    manifest,
     ...(options.maxActiveNotificationBytes === undefined ? {} : { maxActiveNotificationBytes: options.maxActiveNotificationBytes as number }),
     ...(options.maxActiveNotifications === undefined ? {} : { maxActiveNotifications: options.maxActiveNotifications as number }),
     ...(options.maxLineBytes === undefined ? {} : { maxLineBytes: options.maxLineBytes as number }),

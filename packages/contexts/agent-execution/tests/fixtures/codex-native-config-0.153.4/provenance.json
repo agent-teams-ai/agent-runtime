@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "status": "offline Darwin config/read only; Linux native capture and provider qualification pending",
+  "capture": {
+    "dateUtc": "2026-09-05",
+    "platform": "darwin-arm64",
+    "package": "@openai/codex@0.153.4-darwin-arm64",
+    "binarySha256": "b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3",
+    "rawArtifact": "capture.darwin-analysis.json",
+    "rawArtifactSha256": "778b394b1ebd80645e1a543da28e5580c703ef230ce8cc3d8b107fcf39d0919a",
+    "script": "../codex-native-broker-0.153.4/capture-script.mjs.txt",
+    "scriptSha256": "3072f65b5ebba819c20ea44592253bf10a310c43a077476f3586905a0e277e9e",
+    "inputConfigSha256": "c4617d7df8a83060bb30ff8c5c430791ef92a6904f2dd5bad5924616cfe4fa93",
+    "isolation": "new disposable HOME/CODEX_HOME/workspace; sandbox-exec deny network*; no auth or turn; SIGTERM; disposable project removed"
+  },
+  "source": {
+    "commit": "3d2ee51ca2d5db578f328aa75e20aa22c0197c9a",
+    "retrieval": "gh api contents at exact commit"
+  },
+  "normalization": {
+    "artifact": "config-read.darwin-analysis.json",
+    "sha256": "76f652e8e126cf5409d8696cc8ec946501fc2c11a3f83e9015c9e5df7635d491",
+    "originalRoot": "/private/tmp/ar69-r99/codex-native-darwin-permission-analysis/disposable-GMFiuN",
+    "syntheticRoot": "/synthetic/agent-runtime-native-config",
+    "transform": "Rebase only root strings/keys, then recompute canonical JSON layer and matching origin hashes."
+  },
+  "validationBasis": {
+    "platform": "Native Darwin capture; Linux replay is synthetic until separate native evidence.",
+    "workspace-write": "Permission-only alternative inheritance is synthetic; broker modes below have separate native captures."
+  },
+  "priorEvidence": {
+    "version": "0.150.1",
+    "commit": "7a9e44200873f899a90ca8f5e0aa286c856e1168"
+  }
+}

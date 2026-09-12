@@ -4,11 +4,11 @@ import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
-import { readCustodiedRepositoryFile } from "../../../../scripts/architecture/ar2-evidence-custody.mjs";
 import { semanticCorrectionProofsRegistered } from "./claude-code-semantic-correction.e2e.test.ts";
+import { findRepoRoot } from "./helpers/repo-root.ts";
 import { createSyntheticClaudeOwners } from "./helpers/synthetic-claude-owners.ts";
 
 import {
@@ -16,6 +16,11 @@ import {
   createCodexSetupInspectionPlanner,
 } from "../dist/composition.js";
 import { createAgentRuntimeHost } from "./helpers/create-agent-runtime-host.ts";
+
+const { readCustodiedRepositoryFile } = await import(pathToFileURL(join(
+  findRepoRoot(),
+  "scripts/architecture/ar2-evidence-custody.mjs",
+)).href);
 
 const unavailable = (): never => {
   throw new Error("dependency must not be reached");

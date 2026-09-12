@@ -5,6 +5,9 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { createBuildClaudeCodeSetupView } from "../dist/application/build-claude-code-setup-view.js";
+import { createNodeOpaqueReferenceDigest } from "../dist/composition/opaque-reference-digest.js";
+
+const referenceDigest = createNodeOpaqueReferenceDigest();
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -58,7 +61,10 @@ test("the real host composition owns the complete Claude dependency contract", a
     /interface AgentRuntimeHostDependencies[\s\S]*?\n\}/u,
   )?.[0] ?? "";
   assert.doesNotMatch(hostDependencies, /readonly (?:claudeCodeSetup|codexSetup)\?:/u);
-  assert.match(hostDependencies, /readonly containedTurn\?: ContainedTurnCapabilityBundle/u);
+  assert.match(
+    hostDependencies,
+    /readonly containedTurn\?: AuthorityBoundContainedTurnCapability/u,
+  );
   assert.match(source, /snapshotAgentRuntimeHostDependencies\(dependencies\)/u);
   assert.match(source, /createBuildClaudeCodeSetupView\([\s\S]*?capabilityDependencies\.claudeCodeSetup/u);
   const runtimeScope = scopeDeclaration.match(
@@ -170,7 +176,7 @@ test("deduplicates owner diagnostics on their public source reference", async ()
         };
       },
     },
-  }, new Uint8Array(32).fill(3));
+  }, new Uint8Array(32).fill(3), referenceDigest);
 
   const first = await inspect(trustedScope);
   const second = await inspect(trustedScope);
@@ -271,7 +277,7 @@ test("projects only declared public fields from hostile configuration owner resu
         };
       },
     },
-  }, new Uint8Array(32).fill(7));
+  }, new Uint8Array(32).fill(7), referenceDigest);
 
   const result = await inspect(trustedScope);
   assert.equal(result.status, "observed");
@@ -322,7 +328,7 @@ test("applies the public diagnostic budget after deterministic normalization", a
         };
       },
     },
-  }, new Uint8Array(32).fill(5));
+  }, new Uint8Array(32).fill(5), referenceDigest);
 
   const first = await inspect(trustedScope);
   const second = await inspect(trustedScope);

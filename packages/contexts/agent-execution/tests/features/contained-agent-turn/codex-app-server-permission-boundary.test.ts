@@ -1,3 +1,4 @@
+import { nativeConfigResult } from "../../fixtures/codex-native-config-0.153.4/fixture.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { chmodSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync,
@@ -8,7 +9,6 @@ import { test } from "node:test";
 import { codexEffectivePermissionProfile, codexUserPermissionProfile } from "./codex-permission-profile-fixture.ts";
 import {
   CODEX_APP_SERVER_BINDINGS_SHA256,
-  CODEX_APP_SERVER_BINARY_SHA256,
   CODEX_APP_SERVER_SCHEMA_SHA256,
   canonicalCodexJson,
   createCodexAppServerPermissionBoundary,
@@ -339,7 +339,7 @@ test("canonical Codex JSON rejects undefined and other non-JSON values", () => {
   assert.throws(() => canonicalCodexJson(1n), /bigint/u);
 });
 
-test("decodes initialize as exact own enumerable plain 0.150.1 data", () => {
+test("decodes initialize as exact own enumerable plain 0.153.4 data", () => {
   const caseRoot = realpathSync(mkdtempSync(join(tmpdir(), "agent-runtime-codex-initialize-shape-")));
   try {
     const workspace = join(caseRoot, "workspace");
@@ -348,14 +348,14 @@ test("decodes initialize as exact own enumerable plain 0.150.1 data", () => {
     mkdirSync(home, { mode: 0o700 });
     const boundary = createCodexAppServerPermissionBoundary({ codexHome: home, intentMode: "analysis", workspaceRef: workspace });
     const exact = { codexHome: boundary.codexHome, platformFamily: "unix", platformOs: "linux",
-      userAgent: "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)" };
+      userAgent: "agent-runtime/0.153.4 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.153.4+native-permission-config-v2)" };
     validateCodexInitializeEvidence(exact, boundary, CODEX_APP_SERVER_LINUX_X64_TUPLE);
     const inherited = Object.assign(Object.create({ substituted: true }) as Record<string, unknown>, exact);
     const hidden = { ...exact };
     Object.defineProperty(hidden, "substituted", { enumerable: false, value: true });
     const symbol = { ...exact, [Symbol("substituted")]: true };
     const accessor = { ...exact };
-    Object.defineProperty(accessor, "userAgent", { enumerable: true, get: () => "agent-runtime/0.150.1 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.150.1+native-permission-config-v2)" });
+    Object.defineProperty(accessor, "userAgent", { enumerable: true, get: () => "agent-runtime/0.153.4 (Ubuntu 24.4.0; x86_64) unknown (agent-runtime; codex-app-server-contained-turn:0.153.4+native-permission-config-v2)" });
     for (const malformed of [{ ...exact, substituted: true }, inherited, hidden, symbol, accessor]) {
       assert.throws(() => validateCodexInitializeEvidence(
         malformed, boundary, CODEX_APP_SERVER_LINUX_X64_TUPLE,
@@ -374,27 +374,7 @@ test("rejects unknown keys throughout config and profile evidence shapes", () =>
     mkdirSync(workspace, { mode: 0o755 });
     mkdirSync(home, { mode: 0o700 });
     const boundary = createCodexAppServerPermissionBoundary({ codexHome: home, intentMode: "analysis", workspaceRef: workspace });
-    const layerNames = {
-      system: { file: "/etc/codex/config.toml", type: "system" },
-      session: { type: "sessionFlags" },
-      user: { file: `${home}/config.toml`, profile: null, type: "user" },
-    };
-    const exactConfig = {
-      config: { default_permissions: boundary.permissionProfileId, permissions: {
-        [boundary.permissionProfileId]: codexEffectivePermissionProfile(home),
-      } },
-      layers: [
-        { config: {}, disabledReason: null, name: layerNames.system, version: "1" },
-        { config: { permissions: { [boundary.permissionProfileId]: codexUserPermissionProfile(home) } },
-          disabledReason: null, name: layerNames.user, version: "2" },
-        { config: { default_permissions: boundary.permissionProfileId }, disabledReason: null,
-          name: layerNames.session, version: "3" },
-      ],
-      origins: {
-        default_permissions: { name: layerNames.session, version: "3" },
-        permissions: { name: layerNames.user, version: "2" },
-      },
-    };
+    const exactConfig = nativeConfigResult(home);
     validateCodexConfigEvidence(exactConfig, boundary);
     const effective = codexEffectivePermissionProfile(home);
     const user = codexUserPermissionProfile(home);
@@ -456,55 +436,40 @@ test("requires the exact empty system baseline and rejects packaged or mixed lay
     const workspace = join(caseRoot, "workspace"); const home = join(caseRoot, "home");
     mkdirSync(workspace); mkdirSync(home, { mode: 0o700 });
     const boundary = createCodexAppServerPermissionBoundary({ codexHome: home, intentMode: "analysis", workspaceRef: workspace });
-    const exact = {
-      config: { default_permissions: boundary.permissionProfileId, permissions: {
-        [boundary.permissionProfileId]: codexEffectivePermissionProfile(home),
-      }},
-      layers: [
-        { config: {}, name: { file: "/etc/codex/config.toml", type: "system" }, version: "1" },
-        { config: { permissions: { [boundary.permissionProfileId]: codexUserPermissionProfile(home) } }, disabledReason: null,
-          name: { file: `${home}/config.toml`, profile: null, type: "user" }, version: "2" },
-        { config: { default_permissions: boundary.permissionProfileId }, disabledReason: null,
-          name: { type: "sessionFlags" }, version: "3" },
-      ],
-      origins: {
-        default_permissions: { name: { type: "sessionFlags" }, version: "3" },
-        permissions: { name: { file: `${home}/config.toml`, profile: null, type: "user" }, version: "2" },
-      },
-    };
+    const exact = nativeConfigResult(home);
     validateCodexConfigEvidence(exact, boundary);
     for (const layers of [
-      exact.layers.map((layer, index) => index === 0 ? { config: {}, name: { file: "/opt/defaults.toml", type: "packagedDefaults" }, version: "1" } : layer),
+      exact.layers.map(layer => layer.name.type === "system" ? { config: {}, name: { file: "/opt/defaults.toml", type: "packagedDefaults" }, version: "1" } : layer),
       [...exact.layers, { config: {}, name: { file: "/opt/defaults.toml", type: "packagedDefaults" }, version: "4" }],
-      exact.layers.map((layer, index) => index === 0 ? { config: { unsafe: true }, name: { file: "/etc/codex/config.toml", type: "system" }, version: "1" } : layer),
+      exact.layers.map(layer => layer.name.type === "system" ? { config: { unsafe: true }, name: { file: "/etc/codex/config.toml", type: "system" }, version: "1" } : layer),
     ]) {
       assert.throws(() => validateCodexConfigEvidence({ ...exact, layers }, boundary), /rejected/u);
     }
   } finally { rmSync(caseRoot, { force: true, recursive: true }); }
 });
 
-test("binds exact response assumptions to the generated Codex 0.150.1 contract", () => {
+test("binds exact response assumptions to the generated Codex 0.153.4 contract", () => {
   const fixtureUrl = new URL(
-    "../../fixtures/linux-codex-app-server-0.150.1-permission-contract.json",
+    "../../fixtures/codex-app-server-0.153.4-permission-contract.json",
     import.meta.url,
   );
   const fixtureBytes = readFileSync(fixtureUrl);
   const fixture = JSON.parse(fixtureBytes.toString("utf8")) as PermissionContractFixture;
   assert.equal(createHash("sha256").update(fixtureBytes).digest("hex"),
-    "e692b97c71ce58c3ef2bb3ea109bc33bcd624768ac3cac1de520971da66aa7fb");
+    "fca19484cd7a10622cbc5b444a6055d855be1b4badd6e79eca3f660ed08baab7");
   assert.equal(fixture.schemaVersion, 4);
-  assert.equal(fixture.provenance.dependencyAlias, "@openai/codex-linux-x64");
-  assert.equal(fixture.provenance.dependencyAliasRevision, "@openai/codex-linux-x64@0.150.1");
-  assert.equal(fixture.provenance.installedPackage, "@openai/codex@0.150.1-linux-x64");
-  assert.equal(fixture.provenance.nativeTarget, "x86_64-unknown-linux-musl");
-  assert.equal(fixture.provenance.binarySha256, CODEX_APP_SERVER_BINARY_SHA256);
+  assert.equal(fixture.provenance.dependencyAlias, "@openai/codex-darwin-arm64");
+  assert.equal(fixture.provenance.dependencyAliasRevision, "@openai/codex-darwin-arm64@0.153.4");
+  assert.equal(fixture.provenance.installedPackage, "@openai/codex@0.153.4-darwin-arm64");
+  assert.equal(fixture.provenance.nativeTarget, "aarch64-apple-darwin");
+  assert.equal(fixture.provenance.binarySha256, "b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3");
   assert.equal(fixture.provenance.experimentalFlagUsed, true);
   assert.equal(fixture.provenance.schemaCommand,
     "codex app-server generate-json-schema --out <disposable-root>/schema-experimental --experimental");
   assert.equal(fixture.provenance.typesCommand,
     "codex app-server generate-ts --out <disposable-root>/generated-experimental --experimental");
-  assert.equal(fixture.provenance.schemaTreeFileCount, 411);
-  assert.equal(fixture.provenance.typesTreeFileCount, 812);
+  assert.equal(fixture.provenance.schemaTreeFileCount, 416);
+  assert.equal(fixture.provenance.typesTreeFileCount, 827);
   assert.equal(fixture.provenance.schemaTreeManifestSha256, CODEX_APP_SERVER_SCHEMA_SHA256);
   assert.equal(fixture.provenance.typesTreeManifestSha256, CODEX_APP_SERVER_BINDINGS_SHA256);
   assert.equal(fixture.provenance.treeManifestAlgorithm,
@@ -516,7 +481,7 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
     disabledReason: { required: false, types: ["string", "null"] },
     required: ["config", "name", "version"],
     source: "v2/ConfigReadResponse.json",
-    sourceSha256: "2de702bfaedcf8f4362b0122299ae412bdc0c244564a376a30fc9624c7df2514",
+    sourceSha256: "96a04a3f7fff2dc7fafc9f831e8bcd422e021d697dd2c14c801f098a9f21396d",
   });
   assert.deepEqual(fixture.configLayerEvidence.typeScript, {
     disabledReasonRequired: true,
@@ -525,7 +490,7 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
     sourceSha256: "24d1d2c7e0c774e0df55d767bb6d1874f92776daa96f2856f184a296de203161",
   });
   assert.match(fixture.configLayerEvidence.wireValidationBasis, /follows the generated JSON Schema/u);
-  assert.match(fixture.configLayerEvidence.wireValidationBasis, /observed Codex 0\.150\.1 wire/u);
+  assert.match(fixture.configLayerEvidence.wireValidationBasis, /observed Codex 0\.153\.4 wire/u);
   assert.match(fixture.configLayerEvidence.wireValidationBasis, /TypeScript rendering is retained as contradictory/u);
   assert.deepEqual(fixture.generatedTypeFragments.map(({ fragment, source, sourceSha256 }) =>
     ({ fragment, source, sourceSha256 })), [
@@ -548,7 +513,7 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
       sourceSha256: "7a3fddbb0cf0585c52edbf19e3a1f6e691681f18ab509f7abfa416da7f0ac824",
       fragment: "permissions?: string | null," },
     { source: "v2/TurnStartParams.ts",
-      sourceSha256: "b876212f33e15754db8242ce9367318c6ee3a96686216663a37869c40a8b3d7f",
+      sourceSha256: "85713b9158fa110ac20b63e0ec6f76faff8872402d62531f14172cfc5b1eacf7",
       fragment: "permissions?: string | null," },
     { source: "InitializeResponse.ts",
       sourceSha256: "4feabcb66d4bf01869d2780beaec1838d41b30213cdf57de175298aed01f5379",
@@ -580,14 +545,14 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
   for (const fragment of fixture.generatedTypeFragments) {
     assert.match(fragment.sourceSha256, /^[a-f0-9]{64}$/u);
   }
-  const authorityUrl = new URL("../../fixtures/protocol/codex-app-server-0.150.1/ItemCompletedNotification.json",
+  const authorityUrl = new URL("../../fixtures/protocol/codex-app-server-0.153.4/ItemCompletedNotification.json",
     import.meta.url);
   const authorityBytes = readFileSync(authorityUrl);
-  assert.equal(authorityBytes.length, 41_664);
+  assert.equal(authorityBytes.length, 45_968);
   assert.equal(createHash("sha256").update(authorityBytes).digest("hex"),
-    "0f1d661f014aac04c3fc9c04b8ebe818494a6d22fc16fe564390d0969a900370");
+    "69aba3fe5f72f38bf5c541e7e2c09de40778abe65ff969d9fc73372037812091");
   const authorityManifest = JSON.parse(readFileSync(new URL(
-    "../../fixtures/protocol/codex-app-server-0.150.1/manifest.json", import.meta.url), "utf8")) as {
+    "../../fixtures/protocol/codex-app-server-0.153.4/manifest.json", import.meta.url), "utf8")) as {
     readonly artifactBytes: number; readonly artifactSha256: string; readonly binarySha256: string;
     readonly experimentalFlagUsed: boolean;
     readonly generatorCommands: readonly string[]; readonly npmSri: Readonly<Record<string, string>>;
@@ -596,29 +561,33 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
       readonly externalProof: boolean; readonly runsInStaticTests: boolean };
     readonly generatedRuntimeBinding: { readonly artifact: string; readonly generator: string;
       readonly sha256: string; readonly sourceExecutionBinding: string };
+    readonly schemaGeneration: { readonly platform: string; readonly binarySha256: string; readonly linuxRegeneration: string };
     readonly schemaTreeFileCount: number; readonly schemaTreeManifestSha256: string;
     readonly schemaVersion: number; readonly sourceSha256: string; readonly tarballSha256: string;
     readonly treeManifestAlgorithm: string; readonly typesTreeFileCount: number;
     readonly typesTreeManifestSha256: string;
   };
   assert.deepEqual(authorityManifest, { ...authorityManifest,
-    artifactBytes: 41_664,
-    artifactSha256: "0f1d661f014aac04c3fc9c04b8ebe818494a6d22fc16fe564390d0969a900370",
-    binarySha256: "abf1bb1643a79f73aa78ee627e111e02d4f8c98f25813a0cf6ce277709664386",
-    sourceSha256: "0f1d661f014aac04c3fc9c04b8ebe818494a6d22fc16fe564390d0969a900370",
-    tarballSha256: "35a87cf024345cf2d9350e5220401c8d3967ff6feee04055a89c73524927c0a6",
+    artifactBytes: 45_968,
+    artifactSha256: "69aba3fe5f72f38bf5c541e7e2c09de40778abe65ff969d9fc73372037812091",
+    binarySha256: "56ef98ab4032d317ab26e9b5e5a175650717351edb16ed9cde0cb6d1734d62da",
+    sourceSha256: "69aba3fe5f72f38bf5c541e7e2c09de40778abe65ff969d9fc73372037812091",
+    tarballSha256: "54818cb9fce3360cc6e44cfc5a96952cd5c1243efb43cbe488e11dda84663e08",
   });
   assert.equal(authorityManifest.schemaVersion, 5);
-  assert.equal(authorityManifest.dependencyAlias, fixture.provenance.dependencyAlias);
-  assert.equal(authorityManifest.package, fixture.provenance.dependencyAliasRevision);
+  assert.equal(authorityManifest.schemaGeneration.platform, "darwin-arm64");
+  assert.equal(authorityManifest.schemaGeneration.binarySha256, fixture.provenance.binarySha256);
+  assert.equal(authorityManifest.schemaGeneration.linuxRegeneration, "offline-tree-parity-observed");
+  assert.equal(authorityManifest.dependencyAlias, "@openai/codex-linux-x64");
+  assert.equal(authorityManifest.package, "@openai/codex-linux-x64@0.153.4");
   assert.equal(authorityManifest.package,
     CODEX_APP_SERVER_LINUX_X64_TUPLE.nativeDependencyAliasRevision);
-  assert.equal(authorityManifest.resolvedPackageTarget, fixture.provenance.installedPackage);
+  assert.equal(authorityManifest.resolvedPackageTarget, "@openai/codex@0.153.4-linux-x64");
   assert.equal(authorityManifest.resolvedPackageTarget,
     CODEX_APP_SERVER_LINUX_X64_TUPLE.resolvedNativePackageRevision);
   assert.equal(authorityManifest.experimentalFlagUsed, true);
-  assert.equal(authorityManifest.schemaTreeFileCount, 411);
-  assert.equal(authorityManifest.typesTreeFileCount, 812);
+  assert.equal(authorityManifest.schemaTreeFileCount, 416);
+  assert.equal(authorityManifest.typesTreeFileCount, 827);
   assert.equal(authorityManifest.schemaTreeManifestSha256, CODEX_APP_SERVER_SCHEMA_SHA256);
   assert.equal(authorityManifest.typesTreeManifestSha256, CODEX_APP_SERVER_BINDINGS_SHA256);
   assert.equal(authorityManifest.treeManifestAlgorithm, fixture.provenance.treeManifestAlgorithm);
@@ -637,17 +606,17 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
   });
   assert.deepEqual(authorityManifest.generatedRuntimeBinding, {
     artifact: "src/features/contained-agent-turn/adapters/outbound/codex-app-server/generated-codex-item-schema.ts",
-    generator: "protocol/codex-app-server-0.150.1/generate-runtime-item-schema.mjs",
-    sha256: "b9bdb38db25eb5d49368bd6b7850d4d23b51f908de6fb8cfb5e2f7cfb218f8ef",
+    generator: "protocol/codex-app-server-0.153.4/generate-runtime-item-schema.mjs",
+    sha256: "7c07337a5391416e4b09a5e4267bad72fad677e8766520f60a3ebd3828395a7f",
     sourceExecutionBinding: "retained-open-descriptor",
   });
   const packageManifest = JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf8")) as {
     readonly scripts: Readonly<Record<string, string>>;
   };
   assert.equal(packageManifest.scripts["verify:codex-schema-regeneration"],
-    "node tests/fixtures/protocol/codex-app-server-0.150.1/verify-regeneration.mjs");
+    "node tests/fixtures/protocol/codex-app-server-0.153.4/verify-regeneration.mjs");
   assert.equal(packageManifest.scripts["verify:codex-schema-runtime"],
-    "node tests/fixtures/protocol/codex-app-server-0.150.1/generate-runtime-item-schema.mjs --check");
+    "node tests/fixtures/protocol/codex-app-server-0.153.4/generate-runtime-item-schema.mjs --check");
   const generatedRuntimeBinding = readFileSync(new URL(`../../../${authorityManifest.generatedRuntimeBinding.artifact}`,
     import.meta.url));
   assert.equal(createHash("sha256").update(generatedRuntimeBinding).digest("hex"),
@@ -658,7 +627,7 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
   assert.match(runtimeGeneratorSource, /--check/u);
   assert.match(runtimeGeneratorSource, /handle\.readFile/u);
   const verifierSource = readFileSync(new URL(
-    "../../fixtures/protocol/codex-app-server-0.150.1/verify-regeneration.mjs", import.meta.url), "utf8");
+    "../../fixtures/protocol/codex-app-server-0.153.4/verify-regeneration.mjs", import.meta.url), "utf8");
   assert.match(verifierSource, /skipped-not-external-proof/u);
   assert.match(verifierSource, /assert\.deepEqual\(regenerated, committed/u);
   assert.match(verifierSource, /spawnSync\("\/proc\/self\/fd\/3"/u);
@@ -671,7 +640,7 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
   assert.match(verifierSource, /assert\.equal\(observation\.fileCount, expected\.fileCount/u);
   assert.match(verifierSource, /assert\.equal\(observation\.manifestSha256, expected\.manifestSha256/u);
   assert.match(verifierSource, /EXPECTED_PERMISSION_CONTRACT_SHA256/u);
-  assert.match(verifierSource, /e692b97c71ce58c3ef2bb3ea109bc33bcd624768ac3cac1de520971da66aa7fb/u);
+  assert.match(verifierSource, /fca19484cd7a10622cbc5b444a6055d855be1b4badd6e79eca3f660ed08baab7/u);
   assert.match(verifierSource, /verifyPermissionContractClaims/u);
   assert.match(verifierSource, /fixture\.generatedTypeFragments\.entries\(\)/u);
   assert.match(verifierSource, /readClaimedFile\(generatedTypes, claim/u);
@@ -682,8 +651,8 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
   assert.match(verifierSource, /definitions\.ConfigLayer/u);
   assert.match(verifierSource, /configLayer\.required, jsonSchemaEvidence\.required/u);
   assert.match(verifierSource, /disabledReason\.type, jsonSchemaEvidence\.disabledReason\.types/u);
-  assert.match(verifierSource, /fileCount: 411/u);
-  assert.match(verifierSource, /fileCount: 812/u);
+  assert.match(verifierSource, /fileCount: 416/u);
+  assert.match(verifierSource, /fileCount: 827/u);
   assert.match(verifierSource, new RegExp(CODEX_APP_SERVER_SCHEMA_SHA256, "u"));
   assert.match(verifierSource, new RegExp(CODEX_APP_SERVER_BINDINGS_SHA256, "u"));
   assert.match(verifierSource, /\["app-server", generator, "--out", output, "--experimental"\]/u);
@@ -710,10 +679,51 @@ test("binds exact response assumptions to the generated Codex 0.150.1 contract",
       search: { ...search, nullableKeys: search.nullableKeys.slice(0, 1) } } },
   ]) {assert.throws(() => assertGeneratedCommandEquivalence(generated, mutant));}
   const generatedThreadItems = deriveThreadItemAuthority(completeSchema);
-  assert.equal(Object.keys(generatedThreadItems).length, 18);
+  assert.equal(Object.keys(generatedThreadItems).length, 19);
   assert.deepEqual(Object.keys(generatedThreadItems).toSorted(), [...CODEX_THREAD_ITEM_UNION_TYPES].toSorted());
   assert.deepEqual(CODEX_THREAD_ITEM_DECODER_AUTHORITY, generatedThreadItems);
   const agentMessageAuthority = CODEX_THREAD_ITEM_DECODER_AUTHORITY.agentMessage;
-  assert.deepEqual(agentMessageAuthority.optionalKeys, ["delivery", "memoryCitation", "phase"]);
-  assert.deepEqual(agentMessageAuthority.defaults, { delivery: null, memoryCitation: null, phase: null });
+  assert.deepEqual(agentMessageAuthority.optionalKeys, ["delivery", "memoryCitation", "phase", "questions"]);
+  assert.deepEqual(agentMessageAuthority.defaults, { delivery: null, memoryCitation: null, phase: null, questions: null });
+});
+
+
+test("Linux 0.153.4 offline schema evidence preserves the separate qualification gate", () => {
+  const root = new URL("../../fixtures/protocol/codex-app-server-0.153.4/", import.meta.url);
+  const manifest = JSON.parse(readFileSync(new URL("manifest.json", root), "utf8"));
+  const observation = manifest.schemaGeneration.linuxObservation;
+  assert.equal(observation.qualification, "offline-generation-only");
+  assert.equal(manifest.regenerationVerifier.executionBinding, "retained-verified-descriptor");
+  assert.equal(manifest.regenerationVerifier.externalProof, true);
+  assert.equal(manifest.regenerationVerifier.runsInStaticTests, false);
+  const receiptBytes = readFileSync(new URL(observation.receipt, root));
+  assert.equal(createHash("sha256").update(receiptBytes).digest("hex"), observation.receiptSha256);
+  const receipt = JSON.parse(receiptBytes.toString("utf8"));
+  assert.equal(receipt.version, "0.153.4"); assert.equal(receipt.platform, "linux-x64");
+  assert.equal(receipt.binarySha256, manifest.binarySha256);
+  assert.equal(receipt.isolatedNetwork, "unshare --net");
+  assert.equal(receipt.authFilesSupplied, false); assert.equal(receipt.providerTurnRequested, false);
+  assert.equal(receipt.configurationCapture, "pending");
+  assert.deepEqual(receipt.commands.map((command: {name: string; returnCode: number}) =>
+    [command.name, command.returnCode]), [["version", 0], ["schema", 0], ["types", 0]]);
+  const script = readFileSync(new URL(observation.script, root));
+  assert.equal(createHash("sha256").update(script).digest("hex"), observation.scriptSha256);
+  for (const [name, count, digest] of [
+    [observation.schemaManifest, manifest.schemaTreeFileCount, manifest.schemaTreeManifestSha256],
+    [observation.typesManifest, manifest.typesTreeFileCount, manifest.typesTreeManifestSha256],
+  ] as const) {
+    const bytes = readFileSync(new URL(name, root));
+    assert.equal(createHash("sha256").update(bytes).digest("hex"), digest);
+    const text = bytes.toString("utf8"); assert.ok(text.endsWith("\n"));
+    const records = text.slice(0, -1).split("\n"); assert.equal(records.length, count);
+    for (const record of records) {assert.match(record, /^[a-f0-9]{64}  [A-Za-z0-9_./-]+$/u);}
+    const paths = records.map(record => record.slice(66));
+    assert.equal(new Set(paths).size, paths.length);
+    assert.ok(paths.every(path => !path.startsWith("/") && !path.split("/").includes("..")));
+    assert.deepEqual(paths, paths.toSorted((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right))));
+  }
+  assert.deepEqual(receipt.schema, {fileCount: manifest.schemaTreeFileCount,
+    manifestSha256: manifest.schemaTreeManifestSha256});
+  assert.deepEqual(receipt.types, {fileCount: manifest.typesTreeFileCount,
+    manifestSha256: manifest.typesTreeManifestSha256});
 });

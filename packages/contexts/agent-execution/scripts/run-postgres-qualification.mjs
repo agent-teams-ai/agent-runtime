@@ -18,6 +18,9 @@ const CHILD_ENVIRONMENT_KEYS = [
 
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const testFiles = [
+  fileURLToPath(new URL("../tests/features/contained-agent-turn/postgres-contained-turn-intent.test.ts", import.meta.url)),
+  fileURLToPath(new URL("../tests/features/contained-agent-turn/postgres-fresh-process-recovery.test.ts", import.meta.url)),
+  fileURLToPath(new URL("../tests/features/contained-agent-turn/postgres-http-egress-evidence.test.ts", import.meta.url)),
   fileURLToPath(
     new URL(
       "../tests/features/contained-agent-turn/postgres-committed-dispatch.test.ts",
@@ -50,7 +53,19 @@ const testFiles = [
   ),
   fileURLToPath(
     new URL(
+      "../tests/features/contained-agent-turn/postgres-contained-turn-output.test.ts",
+      import.meta.url,
+    ),
+  ),
+  fileURLToPath(
+    new URL(
       "../tests/features/contained-agent-turn/postgres-contained-turn-bounds.test.ts",
+      import.meta.url,
+    ),
+  ),
+  fileURLToPath(
+    new URL(
+      "../tests/features/contained-agent-turn/postgres-preparation-cancellation-retirement.test.ts",
       import.meta.url,
     ),
   ),
