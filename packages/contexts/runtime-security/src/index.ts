@@ -8,7 +8,7 @@ export type {
   TrustedConfigurationSource,
   TrustedInstallationCandidate,
   TrustedSetupPathRoot,
-} from "./features/setup-source-inspection-authorization/contracts/setup-inspection-authorization.js";
+} from "./features/setup-source-inspection-authorization/index.js";
 export {
   CONTAINED_TURN_PROVIDER_DISPATCH_PURPOSE,
   type ConsumeForDispatchInput,
@@ -25,7 +25,7 @@ export {
   type ObserveDispatchConsumptionOutcome,
   type SettleDispatchConsumptionInput,
   type SettleDispatchConsumptionOutcome,
-} from "./features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.js";
+} from "./features/contained-turn-dispatch-authority/index.js";
 export type {
   AuthorizeClaudeCodeSetupInspection,
   AuthorizeClaudeCodeSetupInspectionResult,
@@ -35,7 +35,7 @@ export type {
   ClaudeCodePortableSourceKind,
   ClaudeCodeSetupAuthorizationDiagnostic,
   TrustedClaudeCodeSetupInspectionScope,
-} from "./features/setup-source-inspection-authorization/contracts/claude-code-setup-inspection-authorization.js";
+} from "./features/setup-source-inspection-authorization/index.js";
 export type {
   EgressAuthorityReadOutcomeV2,
   EgressCurrentAuthorityV2,
@@ -51,4 +51,4 @@ export type {
   SignedFirstApplicationByteGrantV2,
   TrustedEgressCompositionScopeV2,
   TrustedHostRequestProjectionV2,
-} from "./features/provider-process-egress-authorization/contracts/provider-process-egress-authorization-v2.js";
+} from "./features/provider-process-egress-authorization/index.js";

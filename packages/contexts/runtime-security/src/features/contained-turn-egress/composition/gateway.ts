@@ -12,6 +12,9 @@ import { createFirstWriteBoundary } from "../application/first-write.js";
 import { completeExchange } from "../application/complete-exchange.js";
 import { captureClose } from "../adapters/outbound/node-session-transport-boundary.js";
 import type { MonotonicClock } from "../application/ports/outbound/monotonic-clock.js";
+import { createNodeMonotonicClock } from "../adapters/outbound/node-monotonic-clock.js";
+import { createNodeEgressSecurityPrimitives } from "../adapters/outbound/node-security-primitives.js";
+import type { ProviderRouteAuthoritySnapshotV1 } from "../domain/provider-route-authority.js";
 const freeze = Object.freeze;
 const guardedCaptureTransport = guarded(captureTransport);
 
@@ -61,4 +64,27 @@ export const createContainedTurnEgressGatewayCore = (trustedIdentity: TrustedEgr
       const closed = await lifecycle.closeTransport(); settle(uncertain(closed ? "first_write_indeterminate" : "close_failed"));});
     return flight;
   }, dispose: () => lifecycle.dispose()});
+};
+
+const primitives = createNodeEgressSecurityPrimitives();
+
+export const createContainedTurnEgressGateway = (
+  identity: TrustedEgressHostIdentityV1,
+  dependencies: ContainedTurnEgressDependencies,
+) => createContainedTurnEgressGatewayCore(
+  identity,
+  dependencies,
+  primitives,
+  createNodeMonotonicClock(),
+);
+
+/** Pure private-composition projection for the dormant route candidate's dispatch grant.
+ * The existing dispatch owner must commit this digest before egress; legacy/unbound digests fail closed.
+ * Provider Access still owns resolution/revalidation of every fact in the projection. */
+export const containedTurnEgressProviderBindingDigest = (
+  route: ProviderRouteAuthoritySnapshotV1,
+): string | undefined => {
+  const validation = createEgressValidation(primitives);
+  const captured = validation.snapshotRoute(route);
+  return captured === undefined ? undefined : validation.routeBindingDigest(captured);
 };

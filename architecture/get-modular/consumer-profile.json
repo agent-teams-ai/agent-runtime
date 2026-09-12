@@ -4287,233 +4287,43 @@
       "relationships": [
         {
           "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/in-memory-dispatch-consumption-repository.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/internal.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/in-memory-dispatch-consumption-repository.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/internal.ts",
           "mode": "type-only"
         },
         {
           "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/node-sha256-dispatch-digest.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/internal.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-acceptance-store.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/internal.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/composition.ts",
+          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/internal.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.ts",
+          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/internal.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/composition.ts",
+          "to": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/internal.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.ts",
+          "to": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/internal.ts",
           "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/outbound/control-clock.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/outbound/dispatch-acceptance-owner.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/outbound/dispatch-consumption-repository.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/outbound/dispatch-digest.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/dispatch-acceptance-factory.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/feature-module-factory.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-authority-head.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-authority-head.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/adapters/outbound/node-ed25519.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/adapters/outbound/node-ed25519.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/adapters/outbound/node-monotonic-clock.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/adapters/outbound/node-security-primitives.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/contained-turn-egress-dependencies.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/contained-turn-egress.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/egress-authorization-signer.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/egress-exchange.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/egress-policy-time-authority.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/provider-route-authority.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/composition/gateway.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/egress-authorization.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/egress-policy.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/egress-request.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/host-identity.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/network-address.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/provider-route-authority.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/validation.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/adapters/outbound/node-egress-cryptography.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/application/ports/outbound/egress-authority-owner.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/application/ports/outbound/egress-control-clock.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/application/ports/outbound/egress-cryptography.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/composition/current-egress-inputs.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/composition/current-egress-owner.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/composition/ed25519-v2-candidate-factory.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/composition/feature-module-factory.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/contracts/provider-process-egress-authorization-v1.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/contracts/provider-process-egress-authorization-v2.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/domain/provider-process-egress-model.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/adapters/outbound/node-path-canonicalizer.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/ports/outbound/path-canonicalizer.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/composition/feature-module-factory.ts",
-          "mode": "runtime"
         },
         {
           "from": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/contained-turn-egress-dependencies.ts",
@@ -4547,22 +4357,17 @@
         },
         {
           "from": "packages/contexts/runtime-security/src/index.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/index.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/contexts/runtime-security/src/index.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/contracts/provider-process-egress-authorization-v2.ts",
+          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/index.ts",
           "mode": "type-only"
         },
         {
           "from": "packages/contexts/runtime-security/src/index.ts",
-          "to": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/contracts/claude-code-setup-inspection-authorization.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/index.ts",
-          "to": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/contracts/setup-inspection-authorization.ts",
+          "to": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/index.ts",
           "mode": "type-only"
         }
       ]
