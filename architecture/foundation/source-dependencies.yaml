@@ -1002,6 +1002,9 @@ boundaries:
   roots:
   - packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-provider-selection.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-provider-selection/contained-turn-provider-selection.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-provider-selection/index.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-provider-selection/internal.ts
   entrypoints:
   - packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts
   allow:
@@ -1019,12 +1022,33 @@ boundaries:
   - packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal-diagnostics.ts
   - packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-access-authority.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-access-authority/contained-turn-access-authority.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-access-authority/index.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-access-authority/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/contained-turn-authority-capability.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/index.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-cancellation-proof.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof/contained-turn-cancellation-proof.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof/index.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-composition-types.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-composition-types/contained-turn-composition-types.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-composition-types/index.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-composition-types/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-construction-failure.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-construction-failure/contained-turn-construction-failure.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-construction-failure/index.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-construction-failure/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-operation-ref.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-operation-ref/contained-turn-operation-ref.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-operation-ref/index.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-operation-ref/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-owner-contract-error.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-owner-contract-error/contained-turn-owner-contract-error.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-owner-contract-error/index.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-owner-contract-error/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/contained-turn-runtime-validation.ts
