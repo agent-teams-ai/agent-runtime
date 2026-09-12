@@ -6,4 +6,4 @@ export {
   type ContainedTurnCompositionScope,
   type TrustedRuntimeAccessScope,
   type TrustedCodexSetupScope,
-} from "../features/trusted-runtime-access-scope/internal.js";
+} from "./trusted-runtime-access-scope.js";
