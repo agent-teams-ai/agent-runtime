@@ -1793,8 +1793,17 @@
         "packages/apps/embedded-runtime/src/features/contained-turn-current-authority/index.ts",
         "packages/apps/embedded-runtime/src/features/contained-turn-current-authority/internal.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-current-egress-owners/contained-turn-current-egress-owners.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-current-egress-owners/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-current-egress-owners/internal.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-authorities/contained-turn-http-egress-authorities.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-authorities/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-authorities/internal.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-upstream/contained-turn-http-egress-upstream.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-upstream/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-upstream/internal.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-http-provider-access.ts",
         "packages/apps/embedded-runtime/src/features/contained-turn-http-provider-access/contained-turn-http-provider-access.ts",
         "packages/apps/embedded-runtime/src/features/contained-turn-http-provider-access/index.ts",
@@ -1846,41 +1855,56 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-current-egress-owners/internal.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-current-egress-owners/contained-turn-current-egress-owners.ts",
           "to": "@agent-teams/agent-execution/composition",
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-current-egress-owners/contained-turn-current-egress-owners.ts",
           "to": "@agent-teams/provider-access/composition",
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-current-egress-owners/contained-turn-current-egress-owners.ts",
           "to": "@agent-teams/runtime-security/composition",
           "mode": "runtime"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-authorities/internal.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-authorities/contained-turn-http-egress-authorities.ts",
           "to": "@agent-teams/agent-execution/composition",
           "mode": "type-only"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts",
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-authorities/contained-turn-http-egress-authorities.ts",
           "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-provider-access.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts",
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-authorities/contained-turn-http-egress-authorities.ts",
           "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-runtime-security.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-upstream/internal.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-upstream/contained-turn-http-egress-upstream.ts",
           "to": "@agent-teams/agent-execution/composition",
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-upstream/contained-turn-http-egress-upstream.ts",
           "to": "@agent-teams/provider-access/composition",
           "mode": "runtime"
         },
@@ -4542,6 +4566,9 @@
     ],
     "featureRoots": [
       "packages/apps/embedded-runtime/src/features/contained-turn-current-authority",
+      "packages/apps/embedded-runtime/src/features/contained-turn-current-egress-owners",
+      "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-authorities",
+      "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-upstream",
       "packages/apps/embedded-runtime/src/features/contained-turn-http-provider-access",
       "packages/apps/embedded-runtime/src/features/contained-turn-http-runtime-security",
       "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access",
