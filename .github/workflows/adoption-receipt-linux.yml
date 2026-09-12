@@ -32,6 +32,9 @@ on:
       - cursor/fms-host-trusted-scope-7d17
       - cursor/fms-host-remainder-7d17
       - refactor/fms-host-pa-rs
+      - cursor/fms-host-validation-7d17
+      - refactor/fms-host-validation
+      - refactor/fms-host-runtime-validation
 
 permissions:
   contents: read
