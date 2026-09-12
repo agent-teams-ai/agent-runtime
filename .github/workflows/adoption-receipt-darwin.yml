@@ -1,7 +1,7 @@
 name: adoption-receipt-darwin
 
 # Temporary workflow: Darwin arm64 adoption receipt for leftover Host FMS
-# identity 8a85b7ad. The job always checks out that SHA so this workflow-only
+# identity 415cfd70. The job always checks out that SHA so this workflow-only
 # commit does not enter the receipt identity. Safe to delete after merge.
 
 on:
@@ -23,11 +23,11 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: 8a85b7ad2ddee14ecf08805418e8025fcd5ced9b
+          ref: 415cfd709e4fd4aa9d6edaebcc1575c0d3d25d3f
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "8a85b7ad2ddee14ecf08805418e8025fcd5ced9b"
+        run: test "$(git rev-parse HEAD)" = "415cfd709e4fd4aa9d6edaebcc1575c0d3d25d3f"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
