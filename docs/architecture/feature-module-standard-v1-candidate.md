@@ -256,11 +256,16 @@ code. Runtime-access coordination now lives under
 `src/composition/contained-turn-runtime-access.ts`, so existing composition
 imports keep working. The implementation is not yet an inward `application/`
 layer: it still imports Host composition helpers, so it stays at the feature
-root rather than under `application/`. Process lifecycle, readiness and
-rollback stay in composition. HTTP Provider Access
-(`contained-turn-http-provider-access.ts`) and the Provider Access and
-Runtime Security anti-corruption adapters remain unmoved. The module stays
-pending.
+root rather than under `application/`. HTTP Provider Access now lives under
+`src/features/contained-turn-http-provider-access/` with curated `index.ts` /
+`internal.ts` entrypoints. Host composition re-exports that feature entry from
+`src/composition/contained-turn-http-provider-access.ts`, so existing
+composition and test imports keep working. The implementation stays at the
+feature root rather than under `application/`: it still imports Agent
+Execution composition types, which L0 treats as an inward leak from
+`application/`. Process lifecycle, readiness and rollback stay in
+composition. Provider Access and Runtime Security anti-corruption adapters
+and external input/output validation remain. The module stays pending.
 
 The deterministic syntax-aware checker is
 `scripts/architecture/check-feature-modules.mjs`. Run
