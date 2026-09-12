@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import type {Pool} from "pg";
-import {createNodeContainedTurnArtifacts, createNodeContainedTurnWorkspace, type ContainedTurnFeatureDependencies} from "@agent-teams/agent-execution/composition";
-import {PostgresContainedTurnOperationStore} from "@agent-teams/agent-execution/composition";
-import {containedTurnIdentity as identity} from "@agent-teams/agent-execution/composition";
+import {createNodeContainedTurnArtifacts, createNodeContainedTurnWorkspace, type ContainedTurnFeatureDependencies,PostgresContainedTurnOperationStore,containedTurnIdentity as identity} from "@agent-teams/agent-execution/composition";
 import {intentAuthority} from "./external/agent-execution/features/contained-agent-turn/support/intent-guard-fixture.ts";
 import {createDependencies} from "./external/agent-execution/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 import {createSyntheticFilesystemLayout} from "./external/agent-execution/filesystem-contained-turn/fixture.ts";

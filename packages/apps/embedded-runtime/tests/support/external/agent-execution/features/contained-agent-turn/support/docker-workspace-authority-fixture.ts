@@ -1,10 +1,8 @@
 import {open} from "node:fs/promises";
 import {basename, dirname} from "node:path";
 import type {TestContext} from "node:test";
-import {createWorkspaceCapabilityRetention, type ResolvedWorkspaceLaunchAuthority}
+import {createWorkspaceCapabilityRetention, type ResolvedWorkspaceLaunchAuthority,type DockerKernelHostCustody,type HostCustodyReservationInput}
   from "@agent-teams/agent-execution/composition";
-import type {DockerKernelHostCustody} from "@agent-teams/agent-execution/composition";
-import type {HostCustodyReservationInput} from "@agent-teams/agent-execution/composition";
 
 /** Positive reservation tests use the production callback capability and real
  * disposable directory descriptors; no private proof issuer is substituted. */

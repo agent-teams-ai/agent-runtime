@@ -6,10 +6,8 @@ import {isIPv4, type AddressInfo} from "node:net";
 import {
   assertNetworkEngine, assertNetworkContainer, decodeOperationNetwork, networkBinding,
   networkDigest, operationNetworkLabels, operationNetworkName,
-  type DockerOperationNetworkBinding,
+  type DockerOperationNetworkBinding,type DockerEngineIdentity,type DockerContainerAuthority
 } from "@agent-teams/agent-execution/composition";
-import type {DockerEngineIdentity, DockerContainerAuthority} from
-  "@agent-teams/agent-execution/composition";
 
 export type FirewallCommand = (tool: "iptables" | "ip" | "docker", argv: readonly string[]) => Promise<string>;
 /** Installed absolute executable paths only. No shell, installation, inherited Docker

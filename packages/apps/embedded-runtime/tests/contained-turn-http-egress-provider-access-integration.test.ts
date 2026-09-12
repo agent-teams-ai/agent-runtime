@@ -8,8 +8,7 @@ import {createContainedTurnHttpProviderAccessAuthorization} from "../dist/compos
 import {bindContainedTurnHttpRuntimeSecurity} from "../dist/composition/contained-turn-http-runtime-security.js";
 import {canonical} from "./support/external/runtime-security/provider-process-egress-authorization.fixtures.ts";
 import {createHostHttpEgressSession} from "@agent-teams/agent-execution/composition";
-import type {HttpEgressOperation, HttpEgressReceipt} from "@agent-teams/agent-execution/composition";
-import type {HostHttpGrant, HostHttpProvisionalDecision,
+import type {HttpEgressOperation, HttpEgressReceipt,HostHttpGrant,HostHttpProvisionalDecision,
   HttpEgressBrokerPorts} from "@agent-teams/agent-execution/composition";
 
 const enc = new TextEncoder(); const SECRET = "fixture-secret-do-not-observe";

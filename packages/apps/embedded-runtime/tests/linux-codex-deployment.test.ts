@@ -1,17 +1,14 @@
 import {policy as dockerPolicy} from "./support/external/agent-execution/fixtures/docker-engine-test-fixture.ts";
 import assert from "node:assert/strict";
-import {createNodeDockerDeploymentRecipe, createContainedTurnRouteEnforcement, readContainedTurnSelectedRouteAdmission} from "@agent-teams/agent-execution/composition";
+import {createNodeDockerDeploymentRecipe, createContainedTurnRouteEnforcement, readContainedTurnSelectedRouteAdmission,initialHttpEgressState,HTTP_EVIDENCE_FENCE} from "@agent-teams/agent-execution/composition";
 import {createContainedTurnLinuxRouteBinding} from "../dist/composition/contained-turn-linux-route-binding.js";
 import {createHash} from "node:crypto";
 import {test} from "node:test";
 import {createLinuxCodexDeploymentResources, type LinuxCodexDeploymentInfrastructure} from "../dist/composition/linux-codex-deployment.js";
 import {createContainedTurnCurrentEgressOwners} from "../dist/composition/contained-turn-current-egress-owners.js";
-import {createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate} from "@agent-teams/runtime-security/composition";
+import { createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate, canonicalEgressValue } from "@agent-teams/runtime-security/composition";
 import {bindContainedTurnHttpRuntimeSecurity} from "../dist/composition/contained-turn-http-runtime-security.js";
 import {fixture, digest, changed} from "./contained-turn-current-egress-owners.fixture.ts";
-import {canonicalEgressValue} from "@agent-teams/runtime-security/composition";
-import {initialHttpEgressState} from "@agent-teams/agent-execution/composition";
-import {HTTP_EVIDENCE_FENCE} from "@agent-teams/agent-execution/composition";
 import {SYNTHETIC_LOOPBACK_CA} from "./support/external/agent-execution/fixtures/http-egress-tls/synthetic-loopback-certificates.ts";
 
 /** Simulation: acknowledged feature receipts and PG query replies are fixtures.

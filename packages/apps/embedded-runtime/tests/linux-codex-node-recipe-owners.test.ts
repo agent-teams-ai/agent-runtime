@@ -1,17 +1,10 @@
-import {NodeDockerCustodyJournalStorage, HostHttpEgressV4Journal, HostHttpEgressV4NodeStorage}
+import {NodeDockerCustodyJournalStorage, HostHttpEgressV4Journal, HostHttpEgressV4NodeStorage,createNodeDockerDeploymentRecipe,type NodeDockerDeploymentRecipeInput,createNodeDockerDeploymentRecipe as curatedFactory,NodeUnixSocketDockerEngine,isConcreteLinuxDockerLifecycle}
   from "@agent-teams/agent-execution/composition";
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {mkdir, mkdtemp, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {createNodeDockerDeploymentRecipe, type NodeDockerDeploymentRecipeInput}
-  from "@agent-teams/agent-execution/composition";
-import {createNodeDockerDeploymentRecipe as curatedFactory} from "@agent-teams/agent-execution/composition";
-import {NodeUnixSocketDockerEngine}
-  from "@agent-teams/agent-execution/composition";
-import {isConcreteLinuxDockerLifecycle}
-  from "@agent-teams/agent-execution/composition";
 import {policy, call, HOST, HOST_BOOT, DAEMON_BOOT}
   from "./support/external/agent-execution/fixtures/docker-engine-test-fixture.ts";
 import {subject, MemoryV4Storage} from "./support/external/agent-execution/fixtures/host-http-egress-v4-fixture.ts";

@@ -1,11 +1,8 @@
 // Private, test-only administrative entrypoint. Importing performs no I/O.
 import {createHash} from "node:crypto";
-import {digestContainedTurnCanonicalValue} from
+import {digestContainedTurnCanonicalValue,NodeProviderProcessCustody,containedTurnAcceptanceIntentDigestV1} from
   "@agent-teams/agent-execution/composition";
 import {isDeepStrictEqual} from "node:util";
-import {NodeProviderProcessCustody} from "@agent-teams/agent-execution/composition";
-import {containedTurnAcceptanceIntentDigestV1} from
-  "@agent-teams/agent-execution/composition";
 import type {DispatchAcceptancePolicy} from "@agent-teams/runtime-security/composition";
 import {currentEgressDigest} from
   "@agent-teams/runtime-security/composition";

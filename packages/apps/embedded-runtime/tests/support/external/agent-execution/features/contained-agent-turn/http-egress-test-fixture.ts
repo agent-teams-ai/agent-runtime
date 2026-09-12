@@ -2,9 +2,7 @@ import { createHash } from "node:crypto";
 import { createHostHttpAdmissionGuard } from "@agent-teams/agent-execution/composition";
 import type {
   HostHttpGrant, HostHttpMaterializationReceipt, HostHttpProvisionalDecision,
-  HttpEgressBrokerPorts, HttpEgressDispatch, HttpEgressRoute, HttpEgressTransportBinding,
-} from "@agent-teams/agent-execution/composition";
-import type { HttpEgressConnection, HttpEgressLimits, HttpEgressOperation, HttpEgressReceipt,
+  HttpEgressBrokerPorts, HttpEgressDispatch, HttpEgressRoute, HttpEgressTransportBinding,HttpEgressConnection,HttpEgressLimits,HttpEgressOperation,HttpEgressReceipt
 } from "@agent-teams/agent-execution/composition";
 
 const encoder = new TextEncoder();

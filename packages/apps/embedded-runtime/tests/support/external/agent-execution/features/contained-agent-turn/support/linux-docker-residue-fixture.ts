@@ -1,13 +1,6 @@
-import {linuxExclusiveRouteSeccomp} from "@agent-teams/agent-execution/composition";
+import { linuxExclusiveRouteSeccomp, FakeDockerEngine, composeLinuxDockerResidueCustody, CGROUP2_SUPER_MAGIC, PROC_SUPER_MAGIC, type DockerResidueIo, type ResidueFile, type ResidueStat, residueParent, residueLeaf, type DockerContainerAuthority, type DockerContainerObservation, type DockerEngineCall, type DockerEngineIdentity, type DockerEnginePort } from "@agent-teams/agent-execution/composition";
 import {rm} from "node:fs/promises";
 import type {TestContext} from "node:test";
-import {FakeDockerEngine} from "@agent-teams/agent-execution/composition";
-import type {DockerContainerAuthority, DockerContainerObservation, DockerEngineCall, DockerEngineIdentity,
-  DockerEnginePort} from "@agent-teams/agent-execution/composition";
-import {composeLinuxDockerResidueCustody} from "@agent-teams/agent-execution/composition";
-import {CGROUP2_SUPER_MAGIC, PROC_SUPER_MAGIC, type DockerResidueIo, type ResidueFile,
-  type ResidueStat} from "@agent-teams/agent-execution/composition";
-import {residueParent, residueLeaf} from "@agent-teams/agent-execution/composition";
 import {createInput, digest, disposable, engineCall, MemoryStorage, owner, policy} from "./docker-host-custody-lifecycle-fixture.ts";
 
 export const BOOT = "01234567-89ab-cdef-0123-456789abcdef";

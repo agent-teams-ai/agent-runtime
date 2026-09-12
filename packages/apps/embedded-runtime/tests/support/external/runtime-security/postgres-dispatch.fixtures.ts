@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import { createContainedTurnDispatchAuthorityFeature, createNodeSha256DispatchDigest } from "@agent-teams/runtime-security/composition";
-import { createPostgresDispatchConsumptionRepository } from
-  "@agent-teams/runtime-security/composition";
+import { createContainedTurnDispatchAuthorityFeature, createNodeSha256DispatchDigest,createPostgresDispatchConsumptionRepository } from "@agent-teams/runtime-security/composition";
 import type { DispatchPgClient, DispatchPgDeadlines, DispatchPgPool } from
   "@agent-teams/runtime-security/composition";
 import { authority, input, scope } from "./contained-turn-dispatch-authority.fixtures.ts";

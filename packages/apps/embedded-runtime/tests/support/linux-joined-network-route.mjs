@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import {createServer} from "node:http";
 import {once} from "node:events";
 import {openJoinedNetwork} from "./linux-joined-network.mjs";
-import {createDockerLinuxExclusiveRouteAdmission} from
-  "@agent-teams/agent-execution/composition";
-import {linuxExclusiveRouteSeccomp} from
+import {createDockerLinuxExclusiveRouteAdmission,linuxExclusiveRouteSeccomp} from
   "@agent-teams/agent-execution/composition";
 import {container, subject} from "./external/agent-execution/fixtures/host-http-egress-v4-fixture.ts";
 

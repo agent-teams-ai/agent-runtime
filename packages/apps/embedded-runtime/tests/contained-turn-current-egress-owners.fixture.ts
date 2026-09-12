@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { nativeHttpRequestProfile, type NativeHttpRequestProfileId } from "@agent-teams/agent-execution/composition";
 import { createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate,
-  type CurrentEgressOwnerInput, type PostgresDispatchConsumptionRepository } from
+  type CurrentEgressOwnerInput, type PostgresDispatchConsumptionRepository,canonicalEgressValue } from
   "@agent-teams/runtime-security/composition";
 import type { RouteSelectionCurrent, RouteSelectionInput } from "@agent-teams/provider-access/composition";
 import { createContainedTurnCurrentEgressOwners,
@@ -10,8 +10,6 @@ import { createContainedTurnCurrentEgressOwners,
 import { bindContainedTurnHttpRuntimeSecurity } from "../dist/composition/contained-turn-http-runtime-security.js";
 import { harness, selection } from "./support/external/provider-access/features/contained-turn-access/route-selection-fixture.ts";
 import { authority } from "./support/external/runtime-security/contained-turn-dispatch-authority.fixtures.ts";
-import { canonicalEgressValue } from
-  "@agent-teams/runtime-security/composition";
 import { routeSelectionDigest } from
   "@agent-teams/provider-access/composition";
 

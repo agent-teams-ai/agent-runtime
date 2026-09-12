@@ -1,10 +1,4 @@
-import type { ConsumeForDispatchInput, DispatchConsumptionReceipt, SettleDispatchConsumptionInput } from "@agent-teams/provider-access/composition";
-import { createDispatchConsumptionRequestDigests, type InMemoryDispatchBindingSeed } from "@agent-teams/provider-access/composition";
-import { createInMemoryDispatchConsumptionRepository } from "@agent-teams/provider-access/composition";
-import type {
-  DispatchConsumptionRepository, DispatchConsumptionTransaction,
-} from "@agent-teams/provider-access/composition";
-
+import { type ConsumeForDispatchInput, type DispatchConsumptionReceipt, type SettleDispatchConsumptionInput, createDispatchConsumptionRequestDigests, type InMemoryDispatchBindingSeed, type DispatchConsumptionRepository, type DispatchConsumptionTransaction, createInMemoryDispatchConsumptionRepository } from "@agent-teams/provider-access/composition";
 export const seed = (overrides: Partial<InMemoryDispatchBindingSeed> = {}): InMemoryDispatchBindingSeed => ({
   acceptedAuthorityDigest: "authority:accepted:1", accessRef: "access:1", authorityHeadDigest: "authority:head:1",
   bindingDigest: "binding:digest:1", bindingRevision: 1, claimBeforeControlTime: 200,

@@ -1,11 +1,5 @@
-import { DockerOperationNetwork } from "@agent-teams/agent-execution/composition";
-import { decodeEngineIdentity } from "@agent-teams/agent-execution/composition";
-import { encodeCreateRequest } from "@agent-teams/agent-execution/composition";
-import { createSpecificationSha256 } from "@agent-teams/agent-execution/composition";
-import { DockerHttpNetworkResources, dockerHttpOperationNetworkRecipe } from "@agent-teams/agent-execution/composition";
+import { DockerOperationNetwork,decodeEngineIdentity,encodeCreateRequest,createSpecificationSha256,DockerHttpNetworkResources,dockerHttpOperationNetworkRecipe,dockerCustodyOwnerIdentitySha256,v4Hash } from "@agent-teams/agent-execution/composition";
 import type { DockerEngineCall } from "@agent-teams/agent-execution/composition";
-import { dockerCustodyOwnerIdentitySha256 } from "@agent-teams/agent-execution/composition";
-import { v4Hash } from "@agent-teams/agent-execution/composition";
 import { subject as template } from "./host-http-egress-v4-fixture.ts";
 import { policy as basePolicy, createInput, HOST_BOOT, DAEMON_BOOT } from "./docker-engine-test-fixture.ts";
 

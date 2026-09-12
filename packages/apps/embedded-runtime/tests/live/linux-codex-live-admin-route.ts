@@ -1,8 +1,6 @@
 // Private test administration support. No provider, Engine or network I/O.
 import {readFile} from "node:fs/promises";
-import {createContainedTurnRouteEnforcement} from
-  "@agent-teams/agent-execution/composition";
-import {snapshotDockerEnginePolicy} from
+import {createContainedTurnRouteEnforcement,snapshotDockerEnginePolicy} from
   "@agent-teams/agent-execution/composition";
 import {routeSelectionDigest, snapshotRouteSelectionFacts} from
   "@agent-teams/provider-access/composition";

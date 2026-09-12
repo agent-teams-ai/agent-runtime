@@ -155,13 +155,10 @@ test("admin preserves every bootstrap stage and its retained cleanup without cau
 
 // Synthetic caller regression: actual ACL, admin producer, bootstrap resolver and
 // current owner; fake custody/process only, with no provider or runtime launch.
-import {createContainedTurnProviderAccessPort} from
-  "@agent-teams/agent-execution/composition";
+import { createContainedTurnProviderAccessPort, createCodexCurrentKernelOwner, CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT } from "@agent-teams/agent-execution/composition";
 import { createHash } from "node:crypto";
 import {statSync} from "node:fs";
 import {getuid} from "node:process";
-import { createCodexCurrentKernelOwner } from "@agent-teams/agent-execution/composition";
-import { CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT } from "@agent-teams/agent-execution/composition";
 import {
   access, executeInput, FakeHost, ids, openInput,
   syntheticCodexEffectCustody, workspaceOwner,
