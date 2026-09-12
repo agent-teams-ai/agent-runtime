@@ -1,5 +1,4 @@
-import type { DispatchConsumptionReceipt, ObserveDispatchConsumptionInput } from
-  "../../contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.js";
+import type { EgressDispatchConsumptionReceipt, EgressDispatchObservation } from "./dispatch-consumption.js";
 import type { BufferedEgressRequestV1, EgressAuthorizationBodyV1 } from "./egress-authorization.js";
 import type { EgressPolicyTimeSnapshotV1 } from "./egress-policy.js";
 import type { NetworkAddressV1 } from "./network-address.js";
@@ -118,7 +117,7 @@ const validRequestFields = (candidate: Readonly<Record<string, unknown>>, scope:
 
 const createRequestValidation = (tools: ValidationTools) => {
   const {exact, dense, primitives, hash} = tools;
-  const snapshotDispatch = (value: unknown): ObserveDispatchConsumptionInput | undefined => {
+  const snapshotDispatch = (value: unknown): EgressDispatchObservation | undefined => {
     const names = ["purpose", "operationId", "scope", "grantRequestId", "requestDigest", "providerId", "authorityGeneration",
       "providerBindingDigest", "claimBindingDigest", "acceptedAuthorityDigest", "expectedAuthorityHeadDigest",
       "expectedAuthorityRevision", "expectedConstraintsDigest", "expectedContainmentPolicyDigest"] as const;
@@ -129,7 +128,7 @@ const createRequestValidation = (tools: ValidationTools) => {
         ![scope.scopeDigest, dispatch.requestDigest, dispatch.providerBindingDigest, dispatch.claimBindingDigest,
           dispatch.acceptedAuthorityDigest, dispatch.expectedAuthorityHeadDigest, dispatch.expectedConstraintsDigest,
           dispatch.expectedContainmentPolicyDigest].every(isDigest)) {return;}
-    return Object.freeze({...dispatch, scope: Object.freeze({...scope})}) as ObserveDispatchConsumptionInput;
+    return Object.freeze({...dispatch, scope: Object.freeze({...scope})}) as EgressDispatchObservation;
   };
   const snapshotHeaders = (value: unknown) => {
     const candidates = dense(value, 64); if (candidates === undefined) {return;}
@@ -145,7 +144,7 @@ const createRequestValidation = (tools: ValidationTools) => {
   };
   const canonicalHeaders = (headers: readonly Readonly<{name: string; value: string}>[]) =>
     frame("contained-turn-egress-headers/v1", headers.flatMap(header => [header.name, header.value]));
-  const canonicalDispatch = (value: ObserveDispatchConsumptionInput) => frame("contained-turn-egress-dispatch/v1", [
+  const canonicalDispatch = (value: EgressDispatchObservation) => frame("contained-turn-egress-dispatch/v1", [
     value.purpose, value.operationId, value.scope.tenantId, value.scope.projectId, value.scope.scopeDigest,
     value.grantRequestId, value.requestDigest, value.providerId, value.authorityGeneration, value.providerBindingDigest,
     value.claimBindingDigest, value.acceptedAuthorityDigest, value.expectedAuthorityHeadDigest,
@@ -273,7 +272,7 @@ const createTransportValidation = (tools: ValidationTools) => {
         !keys.includes(addressKey(peer)) || observation.answerSetDigest !== answerDigest(safe)) {return;}
     return Object.freeze({...observation, canonicalAddresses: Object.freeze(safe), peerAddress: peer}) as TransportObservation;
   };
-  const committedReceipt = (value: unknown, expected: ObserveDispatchConsumptionInput): DispatchConsumptionReceipt | undefined => {
+  const committedReceipt = (value: unknown, expected: EgressDispatchObservation): EgressDispatchConsumptionReceipt | undefined => {
     const names = ["contractVersion", "purpose", "operationId", "scope", "grantRequestId", "requestDigest", "providerId",
       "authorityGeneration", "providerBindingDigest", "claimBindingDigest", "acceptedAuthorityDigest",
       "authorityHeadDigestAtConsumption", "authorityRevision", "constraintsDigest", "containmentPolicyDigest",
@@ -297,9 +296,9 @@ const createTransportValidation = (tools: ValidationTools) => {
       receipt.constraintsDigest, receipt.containmentPolicyDigest, receipt.consumptionDigest].every(isDigest) ||
       !count(receipt.claimBeforeControlTime) || !count(receipt.consumedAtControlTime) ||
       (receipt.claimBeforeControlTime as number) <= (receipt.consumedAtControlTime as number) || !isEgressIdentifier(receipt.ownerEvidenceRef)) {return;}
-    return Object.freeze({...receipt, scope: Object.freeze({...scope})}) as DispatchConsumptionReceipt;
+    return Object.freeze({...receipt, scope: Object.freeze({...scope})}) as EgressDispatchConsumptionReceipt;
   };
-  const canonicalReceipt = (value: DispatchConsumptionReceipt) => frame("contained-turn-egress-dispatch-receipt/v1", [
+  const canonicalReceipt = (value: EgressDispatchConsumptionReceipt) => frame("contained-turn-egress-dispatch-receipt/v1", [
     value.contractVersion, value.purpose, value.operationId, value.scope.tenantId, value.scope.projectId, value.scope.scopeDigest,
     value.grantRequestId, value.requestDigest, value.providerId, value.authorityGeneration, value.providerBindingDigest,
     value.claimBindingDigest, value.acceptedAuthorityDigest, value.authorityHeadDigestAtConsumption, value.authorityRevision,

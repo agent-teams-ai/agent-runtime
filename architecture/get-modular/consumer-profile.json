@@ -4326,31 +4326,6 @@
           "mode": "type-only"
         },
         {
-          "from": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/contained-turn-egress-dependencies.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/authorization-evidence.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/egress-authorization.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/egress-request.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/validation.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.ts",
-          "mode": "type-only"
-        },
-        {
           "from": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/adapters/outbound/node-path-canonicalizer.ts",
           "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
