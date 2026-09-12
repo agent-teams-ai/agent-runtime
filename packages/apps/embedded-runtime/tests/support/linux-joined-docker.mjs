@@ -7,17 +7,7 @@ import {CONTAINER, DAEMON_BOOT} from "./external/agent-execution/fixtures/docker
 import {archive, chunks, imageLock, IMAGE_CONFIG, NODE_BYTES, BOOTSTRAP_BYTES} from "./external/agent-execution/fixtures/docker-image-init-fixture.ts";
 import {FixtureResidueIo, statText, privilegeText} from "./external/agent-execution/features/contained-agent-turn/support/linux-docker-residue-fixture.ts";
 import {MemoryStorage} from "./external/agent-execution/features/contained-agent-turn/support/docker-host-custody-lifecycle-fixture.ts";
-import {NodeUnixSocketDockerEngine} from
-  "@agent-teams/agent-execution/composition";
-import {composeLinuxDockerResidueCustody} from
-  "@agent-teams/agent-execution/composition";
-import {PROC_SUPER_MAGIC} from
-  "@agent-teams/agent-execution/composition";
-import {residueParent, residueLeaf} from
-  "@agent-teams/agent-execution/composition";
-import {DOCKER_CUSTODY_NODE_PATH, DOCKER_CUSTODY_BOOTSTRAP_PATH, DOCKER_CUSTODY_INIT_ARGUMENTS} from
-  "@agent-teams/agent-execution/composition";
-import {DockerCustodyFrameDecoder, encodeDockerCustodyFrame, DOCKER_CUSTODY_INIT_PROTOCOL} from
+import {NodeUnixSocketDockerEngine,composeLinuxDockerResidueCustody,PROC_SUPER_MAGIC,residueParent,residueLeaf,DOCKER_CUSTODY_NODE_PATH,DOCKER_CUSTODY_BOOTSTRAP_PATH,DOCKER_CUSTODY_INIT_ARGUMENTS,DockerCustodyFrameDecoder,encodeDockerCustodyFrame,DOCKER_CUSTODY_INIT_PROTOCOL} from
   "@agent-teams/agent-execution/composition";
 
 const json = value => ({statusCode: 200, contentType: "application/json", body: Buffer.from(JSON.stringify(value))});

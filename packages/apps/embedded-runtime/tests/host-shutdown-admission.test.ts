@@ -1,16 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  ContainedTurnKernelCustodyAdapter,
-  type ContainedTurnHostCustodyPort,
-} from "@agent-teams/agent-execution/composition";
-import type {
-  ContainedTurnKernelCustodyPort,
-} from "@agent-teams/agent-execution/composition";
-import {
-  containedTurnOperationCutoffRevision,
-} from "@agent-teams/agent-execution/composition";
+import { ContainedTurnKernelCustodyAdapter, type ContainedTurnHostCustodyPort, type ContainedTurnKernelCustodyPort, containedTurnOperationCutoffRevision, containedTurnIdentity } from "@agent-teams/agent-execution/composition";
 import {
   adapterSnapshot,
   attemptId,
@@ -25,7 +16,6 @@ import {
   providerAccessSnapshot,
   workspaceId,
 } from "./support/external/agent-execution/contained-turn-kernel-fixtures.ts";
-import {containedTurnIdentity} from "@agent-teams/agent-execution/composition";
 import { committedDispatchProofFixture } from "./support/external/agent-execution/features/contained-agent-turn/support/committed-dispatch-proof-fixture.ts";
 
 const EMPTY_SHA256 = "0".repeat(64);

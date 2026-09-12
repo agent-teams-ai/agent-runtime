@@ -1,12 +1,6 @@
 import assert from "node:assert/strict";
 import type { Pool } from "pg";
-import { PostgresContainedTurnOperationStore } from "@agent-teams/agent-execution/composition";
-import { createContainedTurnFeature } from "@agent-teams/agent-execution/composition";
-import { containedTurnCommandFingerprint } from "@agent-teams/agent-execution/composition";
-import { digestContainedTurnCanonicalValue } from "@agent-teams/agent-execution/composition";
-import { containedTurnIdentity } from "@agent-teams/agent-execution/composition";
-import { containedTurnPreventionDigest, type ContainedTurnIntentAuthority, type ContainedTurnPreventionCommand } from "@agent-teams/agent-execution/composition";
-import type { ContainedTurnKernelDependencies } from "@agent-teams/agent-execution/composition";
+import { PostgresContainedTurnOperationStore, createContainedTurnFeature, containedTurnCommandFingerprint, digestContainedTurnCanonicalValue, containedTurnIdentity, containedTurnPreventionDigest, type ContainedTurnIntentAuthority, type ContainedTurnPreventionCommand, type ContainedTurnKernelDependencies } from "@agent-teams/agent-execution/composition";
 export { awaitFixtureGate } from "./contained-agent-turn-fixture.ts";
 import { createDependencies } from "./contained-agent-turn-fixture.ts";
 

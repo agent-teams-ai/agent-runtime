@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { createDispatchConsumptionRequestDigests } from "@agent-teams/provider-access/composition";
-import { createOperationDispatchConsumption } from "@agent-teams/provider-access/composition";
-import { createContainedTurnProviderAccessFeature } from "@agent-teams/provider-access/composition";
-import { createMaterializationBindingRepository } from "@agent-teams/provider-access/composition";
-import type { PaDispatchIssuanceSelection, PaOperationStore, PaOperationRecordKind } from "@agent-teams/provider-access/composition";
-import type { ContainedTurnProviderAccessBinding } from "@agent-teams/provider-access/composition";
+import { createDispatchConsumptionRequestDigests,createOperationDispatchConsumption,createContainedTurnProviderAccessFeature,createMaterializationBindingRepository } from "@agent-teams/provider-access/composition";
+import type { PaDispatchIssuanceSelection, PaOperationStore, PaOperationRecordKind,ContainedTurnProviderAccessBinding } from "@agent-teams/provider-access/composition";
 
 // Independent mapping fixture: no AE import or request-derived policy issuance.
 const canonical = (value: unknown): unknown => {

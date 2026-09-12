@@ -1,30 +1,6 @@
 import assert from "node:assert/strict";
 
-import {
-  containedTurnAuthorityVectorDigest,
-  containedTurnCommandFingerprint,
-  containedTurnProviderAccessSnapshotDigest,
-  containedTurnScopeDigest,
-  CONTAINED_TURN_REQUIRED_PROOF_KINDS,
-  type ContainedTurnAuthorityVector,
-  type ContainedTurnCapabilityManifest,
-  type ContainedTurnProviderAccessSnapshot,
-  type ContainedTurnProviderAdapterSnapshot,
-} from "@agent-teams/agent-execution/composition";
-import { digestContainedTurnCanonicalValue } from "@agent-teams/agent-execution/composition";
-import {
-  createContainedTurnOperation,
-  mutateContainedTurnOperation,
-  validateContainedTurnOperation,
-  type ContainedTurnKernelOperation,
-} from "@agent-teams/agent-execution/composition";
-import { containedTurnIdentity } from "@agent-teams/agent-execution/composition";
-import { type ContainedTurnProof } from "@agent-teams/agent-execution/composition";
-import {
-  CONTAINED_TURN_DEPENDENCY_NAMES,
-  type ContainedTurnKernelDependencies,
-} from "@agent-teams/agent-execution/composition";
-
+import { containedTurnAuthorityVectorDigest, containedTurnCommandFingerprint, containedTurnProviderAccessSnapshotDigest, containedTurnScopeDigest, CONTAINED_TURN_REQUIRED_PROOF_KINDS, type ContainedTurnAuthorityVector, type ContainedTurnCapabilityManifest, type ContainedTurnProviderAccessSnapshot, type ContainedTurnProviderAdapterSnapshot, digestContainedTurnCanonicalValue, createContainedTurnOperation, mutateContainedTurnOperation, validateContainedTurnOperation, type ContainedTurnKernelOperation, containedTurnIdentity, CONTAINED_TURN_DEPENDENCY_NAMES, type ContainedTurnKernelDependencies, type ContainedTurnProof } from "@agent-teams/agent-execution/composition";
 type SameUnion<Left, Right> =
   [Exclude<Left, Right>, Exclude<Right, Left>] extends [never, never] ? true : false;
 

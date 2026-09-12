@@ -123,7 +123,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
     };
     // Packed composition must match the built curated entry, not a stale key census.
     const localComposition = await import("../../dist/composition.js");
-    assert.deepEqual(resolved.compositionKeys, Object.keys(localComposition).sort());
+    assert.deepEqual(resolved.compositionKeys, Object.keys(localComposition).toSorted());
     assert.deepEqual(resolved.contractKeys, []);
     assert.deepEqual(resolved.rejected, ["ERR_PACKAGE_PATH_NOT_EXPORTED", "ERR_PACKAGE_PATH_NOT_EXPORTED"]);
   } finally {

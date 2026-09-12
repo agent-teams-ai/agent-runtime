@@ -1,5 +1,4 @@
-import { digestContainedTurnCanonicalValue } from "@agent-teams/agent-execution/composition";
-import { CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "@agent-teams/agent-execution/composition";
+import { digestContainedTurnCanonicalValue,CONTAINED_TURN_REQUIRED_PROOF_KINDS } from "@agent-teams/agent-execution/composition";
 
 export const adapterSnapshot = Object.freeze({
   adapterRevision: "adapter:one",

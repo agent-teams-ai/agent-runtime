@@ -1,9 +1,8 @@
 import { createHash } from "node:crypto";
 import {
   DOCKER_CUSTODY_BOOTSTRAP_PATH, DOCKER_CUSTODY_INIT_ARGUMENTS, DOCKER_CUSTODY_NODE_PATH,
-  createDockerImageInitOwner, type DockerImageInitLock,
+  createDockerImageInitOwner, type DockerImageInitLock,NodeUnixSocketDockerEngine
 } from "@agent-teams/agent-execution/composition";
-import { NodeUnixSocketDockerEngine } from "@agent-teams/agent-execution/composition";
 import { HOST, HOST_BOOT, IMAGE, call, createInput, policy } from "./docker-engine-test-fixture.ts";
 import { syntheticDaemon } from "./docker-engine-synthetic-daemon.ts";
 import { jsonResponse } from "../features/contained-agent-turn/docker-engine-transport-test-fixture.ts";

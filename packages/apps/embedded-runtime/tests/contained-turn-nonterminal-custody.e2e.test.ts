@@ -1,9 +1,7 @@
 import { createAgentRuntimeHost } from "./helpers/create-contained-turn-host.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createContainedTurnFeature } from "@agent-teams/agent-execution/composition";
-import { recoverContainedTurnDispatchPreparations } from "@agent-teams/agent-execution/composition";
-import { containedTurnIdentity } from "@agent-teams/agent-execution/composition";
+import { createContainedTurnFeature,recoverContainedTurnDispatchPreparations,containedTurnIdentity } from "@agent-teams/agent-execution/composition";
 import { createDependencies, proofId } from "./support/external/agent-execution/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 
 import {

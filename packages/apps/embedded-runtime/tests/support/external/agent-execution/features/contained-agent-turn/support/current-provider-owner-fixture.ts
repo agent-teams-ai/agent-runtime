@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import { stat } from "node:fs/promises";
-import { digestContainedTurnCanonicalValue } from "@agent-teams/agent-execution/composition";
-import { containedTurnIdentity } from "@agent-teams/agent-execution/composition";
-import { containedTurnOperationCutoffRevision } from "@agent-teams/agent-execution/composition";
+import { digestContainedTurnCanonicalValue,containedTurnIdentity,containedTurnOperationCutoffRevision } from "@agent-teams/agent-execution/composition";
 
 export const ids = (provider: "claude" | "codex", suffix: string) => Object.freeze({
   attemptId: containedTurnIdentity("attempt", `attempt:${provider}:${suffix}`),

@@ -1,4 +1,4 @@
-import {DockerConsumptionObservations} from "@agent-teams/agent-execution/composition";
+import { DockerConsumptionObservations, DockerHostCustodyLifecycle, DockerCustodyJournal, decodeInspection, dockerCustodyOwnerIdentitySha256, HostHttpEgressV4Journal, v4Hash, DOCKER_CUSTODY_INIT_PROTOCOL, DockerCustodyFrameDecoder, encodeDockerCustodyFrame, type DockerCustodyProtocolMessage, type DockerEngineIdentity, type DockerEnginePort, type createDockerLinuxPostClaimPreparation } from "@agent-teams/agent-execution/composition";
 import assert from "node:assert/strict";
 import type {TestContext} from "node:test";
 import {networkFixture} from "../../../fixtures/docker-operation-network-fixture.ts";
@@ -7,17 +7,6 @@ import {MemoryStorage, engineCall, createInput} from "./docker-host-custody-life
 import {committedDispatchProofFixture} from "./committed-dispatch-proof-fixture.ts";
 import {initOptions} from "./docker-claim-init-fixture.ts";
 import {ids, openInput} from "./current-provider-owner-fixture.ts";
-import {DockerHostCustodyLifecycle} from "@agent-teams/agent-execution/composition";
-import {DockerCustodyJournal} from "@agent-teams/agent-execution/composition";
-import {decodeInspection} from "@agent-teams/agent-execution/composition";
-import {dockerCustodyOwnerIdentitySha256} from "@agent-teams/agent-execution/composition";
-import {HostHttpEgressV4Journal} from "@agent-teams/agent-execution/composition";
-import {v4Hash} from "@agent-teams/agent-execution/composition";
-import {DOCKER_CUSTODY_INIT_PROTOCOL, DockerCustodyFrameDecoder, encodeDockerCustodyFrame,
-  type DockerCustodyProtocolMessage} from "@agent-teams/agent-execution/composition";
-import type {DockerEngineIdentity, DockerEnginePort} from "@agent-teams/agent-execution/composition";
-import type {createDockerLinuxPostClaimPreparation} from "@agent-teams/agent-execution/composition";
-
 type Dependencies = Parameters<typeof createDockerLinuxPostClaimPreparation>[0];
 export const ROOT = "/tmp/ar69-r276-synthetic-network";
 export const GENERATION = "a".repeat(64);

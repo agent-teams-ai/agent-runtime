@@ -1,14 +1,9 @@
 import assert from "node:assert/strict";
-import { createCredentialMaterializationRequestDigest } from "@agent-teams/provider-access/composition";
-import { createContainedTurnCredentialRenderingOwner } from "@agent-teams/provider-access/composition";
-import { createContainedTurnCredentialMaterializationAuthorizationV1 } from "@agent-teams/provider-access/composition";
-import { createInMemoryDispatchConsumptionRepository } from "@agent-teams/provider-access/composition";
-import { createSha256DispatchConsumptionDigest } from "@agent-teams/provider-access/composition";
+import { createCredentialMaterializationRequestDigest,createContainedTurnCredentialRenderingOwner,createContainedTurnCredentialMaterializationAuthorizationV1,createInMemoryDispatchConsumptionRepository,createSha256DispatchConsumptionDigest } from "@agent-teams/provider-access/composition";
 import type {
   CredentialGenerationAcquisition, CredentialGenerationOutcome, CredentialGenerationRequest, CredentialRecipe,
-  CredentialRenderingOutcome, CredentialRenderingSelection,
+  CredentialRenderingOutcome, CredentialRenderingSelection,AuthorizeCredentialMaterializationInput
 } from "@agent-teams/provider-access/composition";
-import type { AuthorizeCredentialMaterializationInput } from "@agent-teams/provider-access/composition";
 import { seed } from "./dispatch-consumption-test-fixture.ts";
 
 export const syntheticBytes = (text = "fixture-pa"): Uint8Array => new TextEncoder().encode(text);

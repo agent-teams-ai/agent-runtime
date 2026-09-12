@@ -5,25 +5,11 @@ import {isDeepStrictEqual} from "node:util";
 import {
   NodeProviderProcessCustody, NodeTlsHttpEgressTransport, nativeHttpRequestProfile,
   createNodeExecutableFileObserver, createRuntimeInstallationDiscoveryFeature,
-} from "@agent-teams/agent-execution/composition";
-import {
   CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT as adapterSnapshot,
-  CODEX_APP_SERVER_CURRENT_KERNEL_MANIFEST as capabilityManifest,
+  CODEX_APP_SERVER_CURRENT_KERNEL_MANIFEST as capabilityManifest,CODEX_LOCAL_BROKER_CAPABILITY_ENV,containedTurnAcceptanceConstraintsDigestV1,containedTurnAcceptanceIntentDigestV1,digestContainedTurnCanonicalValue,containedTurnScopeDigest,snapshotDockerImageInitLock
 } from "@agent-teams/agent-execution/composition";
-import {CODEX_LOCAL_BROKER_CAPABILITY_ENV} from
-  "@agent-teams/agent-execution/composition";
-import {containedTurnAcceptanceConstraintsDigestV1, containedTurnAcceptanceIntentDigestV1} from
-  "@agent-teams/agent-execution/composition";
-import {digestContainedTurnCanonicalValue} from
-  "@agent-teams/agent-execution/composition";
-import {containedTurnScopeDigest} from
-  "@agent-teams/agent-execution/composition";
-import {snapshotDockerImageInitLock} from
-  "@agent-teams/agent-execution/composition";
 import {createCredentialMaterializationRequestDigest} from "@agent-teams/provider-access/composition";
-import {createNodePathCanonicalizer, createSetupInspectionAuthorizationFeature} from
-  "@agent-teams/runtime-security/composition";
-import {currentEgressDigest} from
+import {createNodePathCanonicalizer, createSetupInspectionAuthorizationFeature,currentEgressDigest} from
   "@agent-teams/runtime-security/composition";
 import {
   createClaudeCodeConfigurationInspectionFeature, createClaudeCodeConfigurationSemanticClassifierV2,

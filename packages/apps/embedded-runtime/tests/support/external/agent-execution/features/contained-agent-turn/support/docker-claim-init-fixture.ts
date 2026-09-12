@@ -1,6 +1,4 @@
-import type {FakeDockerEngine} from "@agent-teams/agent-execution/composition";
-import type {DockerCustodyInitHostOptions} from "@agent-teams/agent-execution/composition";
-import {DOCKER_CUSTODY_INIT_PROTOCOL, DockerCustodyFrameDecoder, encodeDockerCustodyFrame,
+import {type FakeDockerEngine,type DockerCustodyInitHostOptions,DOCKER_CUSTODY_INIT_PROTOCOL,DockerCustodyFrameDecoder,encodeDockerCustodyFrame,
   type DockerCustodyProtocolMessage} from "@agent-teams/agent-execution/composition";
 import {digest} from "./docker-host-custody-lifecycle-fixture.ts";
 

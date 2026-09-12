@@ -1,20 +1,7 @@
 /* oxlint-disable max-lines -- The test-only factory keeps its exact owner-port composition in one fixture. */
 import { adapterSnapshot, manifest, providerAccessSnapshot } from "./contained-turn-fixture-snapshots.ts";
 import assert from "node:assert/strict";
-import { digestContainedTurnCanonicalValue } from "@agent-teams/agent-execution/composition";
-import { containedTurnIdentity } from "@agent-teams/agent-execution/composition";
-import { containedTurnSatisfactionDigest } from "@agent-teams/agent-execution/composition";
-import { appendContainedTurnOutputForOwnerStore } from "@agent-teams/agent-execution/composition";
-import { mutateContainedTurnOperation } from "@agent-teams/agent-execution/composition";
-import type { ContainedTurnKernelOperation } from "@agent-teams/agent-execution/composition";
-import type { ContainedTurnProof } from "@agent-teams/agent-execution/composition";
-import type { ContainedTurnKernelDependencies } from "@agent-teams/agent-execution/composition";
-import { containedTurnProviderAccessSnapshotDigest } from "@agent-teams/agent-execution/composition";
-import { containedTurnDispatchClaimBindingDigest, validateContainedTurnConsumedGrantReceipts } from "@agent-teams/agent-execution/composition";
-import { containedTurnPreparationClosureBinding, CONTAINED_TURN_PREPARATION_CLOSURE_LIMIT, bindContainedTurnPreparationGrantRequests, claimContainedTurnDispatchPreparation, recordContainedTurnPreparationCleanup, retireContainedTurnDispatchPreparation, type ContainedTurnDispatchPreparation } from "@agent-teams/agent-execution/composition";
-import { containedTurnPreparationToken } from "@agent-teams/agent-execution/composition";
-import { committedDispatchProofV1 } from "@agent-teams/agent-execution/composition";
-
+import { digestContainedTurnCanonicalValue, containedTurnIdentity, containedTurnSatisfactionDigest, appendContainedTurnOutputForOwnerStore, mutateContainedTurnOperation, containedTurnProviderAccessSnapshotDigest, containedTurnDispatchClaimBindingDigest, validateContainedTurnConsumedGrantReceipts, containedTurnPreparationClosureBinding, CONTAINED_TURN_PREPARATION_CLOSURE_LIMIT, bindContainedTurnPreparationGrantRequests, claimContainedTurnDispatchPreparation, recordContainedTurnPreparationCleanup, retireContainedTurnDispatchPreparation, type ContainedTurnDispatchPreparation, containedTurnPreparationToken, committedDispatchProofV1, type ContainedTurnKernelOperation, type ContainedTurnProof, type ContainedTurnKernelDependencies } from "@agent-teams/agent-execution/composition";
 const identity = <Namespace extends Parameters<typeof containedTurnIdentity>[0]>(namespace: Namespace, suffix: string) =>
   containedTurnIdentity(namespace, `${String(namespace).replaceAll("_", "-")}:${suffix}`);
 const proofId = (suffix: string) => identity("proof", suffix);

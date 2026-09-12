@@ -4,19 +4,13 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {test} from "node:test";
 import {decodeBytes} from "./run-linux-codex-live-canary.mjs";
-import {createContainedTurnSecurityAcceptancePort, NodeTlsHttpEgressTransport} from "@agent-teams/agent-execution/composition";
+import {createContainedTurnSecurityAcceptancePort, NodeTlsHttpEgressTransport,NodeUnixSocketDockerEngine,DockerEngineError,containedTurnScopeDigest} from "@agent-teams/agent-execution/composition";
 import {captureLinuxCodexDeploymentData} from "../../dist/composition/linux-codex-deployment-authority.js";
 import {bindContainedTurnCapabilityAuthority} from "../../dist/composition/contained-turn-authority-capability.js";
-import {NodeUnixSocketDockerEngine} from
-  "@agent-teams/agent-execution/composition";
-import {DockerEngineError} from
-  "@agent-teams/agent-execution/composition";
 import {policy} from "../support/external/agent-execution/fixtures/docker-engine-test-fixture.ts";
 import {SYNTHETIC_LOOPBACK_CA} from "../support/external/agent-execution/fixtures/http-egress-tls/synthetic-loopback-certificates.ts";
 import {allocateLinuxCodexLiveAdminDirectories} from "./linux-codex-live-admin-directories.ts";
 import {createLinuxCodexLiveCanaryConfiguration} from "./linux-codex-live-canary-config.ts";
-import {containedTurnScopeDigest} from
-  "@agent-teams/agent-execution/composition";
 
 // Constructor-only regression. Synthetic pins are not measured deployment facts;
 // no setup, credentials, daemon observation, provider or network operations.

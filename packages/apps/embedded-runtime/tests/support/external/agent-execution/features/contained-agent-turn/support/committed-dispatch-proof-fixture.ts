@@ -1,11 +1,4 @@
-import { committedDispatchProofV1, type CommittedDispatchProofV1Seed } from "@agent-teams/agent-execution/composition";
-import { asContainedTurnCommandFingerprint, digestContainedTurnCanonicalValue } from "@agent-teams/agent-execution/composition";
-import { containedTurnIdentity } from "@agent-teams/agent-execution/composition";
-import type { ContainedTurnKernelCustodyPort } from "@agent-teams/agent-execution/composition";
-import type { ContainedTurnKernelOperation } from "@agent-teams/agent-execution/composition";
-import type { ContainedTurnDispatchGrantSubject, ContainedTurnConsumedGrantReceipts } from "@agent-teams/agent-execution/composition";
-import type { ContainedTurnProof } from "@agent-teams/agent-execution/composition";
-
+import { committedDispatchProofV1, type CommittedDispatchProofV1Seed, asContainedTurnCommandFingerprint, digestContainedTurnCanonicalValue, containedTurnIdentity, type ContainedTurnKernelCustodyPort, type ContainedTurnKernelOperation, type ContainedTurnDispatchGrantSubject, type ContainedTurnConsumedGrantReceipts, type ContainedTurnProof } from "@agent-teams/agent-execution/composition";
 const digest = (owner: string) => digestContainedTurnCanonicalValue({ owner, synthetic: true });
 
 export const committedDispatchProofFixture = (

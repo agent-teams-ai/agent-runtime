@@ -8,16 +8,12 @@ import {
 } from "@agent-teams/agent-execution/composition";
 import {
   createPostgresOperationDispatchConsumption, createPostgresCurrentProviderAccess,
-  createPostgresRouteSelectionOwner,
+  createPostgresRouteSelectionOwner,createPostgresMaterializationRepository
 } from "@agent-teams/provider-access/composition";
-import {createPostgresMaterializationRepository} from
-  "@agent-teams/provider-access/composition";
 import {
   createDispatchAcceptanceFeature, createNodeSha256DispatchDigest,
-  createPostgresDispatchAcceptanceStore,
+  createPostgresDispatchAcceptanceStore,createPostgresDispatchConsumptionRepository
 } from "@agent-teams/runtime-security/composition";
-import {createPostgresDispatchConsumptionRepository} from
-  "@agent-teams/runtime-security/composition";
 import {
   createHostCustodiedAgentRuntimeHost, type HostCustodiedAgentRuntimeHostDependencies,
 } from "../../dist/composition/host-custodied-agent-runtime-host.js";

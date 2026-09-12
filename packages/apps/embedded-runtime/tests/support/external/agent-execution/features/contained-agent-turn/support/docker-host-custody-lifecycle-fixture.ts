@@ -2,9 +2,7 @@ import {createHash} from "node:crypto";
 import {mkdir, mkdtemp, realpath} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import type {DockerHostCustodyContainerCreate} from "@agent-teams/agent-execution/composition";
-import type {DockerEngineCall, DockerEnginePolicy} from "@agent-teams/agent-execution/composition";
-import {DockerCustodyJournalConflictError, type DockerCustodyJournalFile, type DockerCustodyJournalStorage,
+import {type DockerHostCustodyContainerCreate,type DockerEngineCall,type DockerEnginePolicy,DockerCustodyJournalConflictError,type DockerCustodyJournalFile,type DockerCustodyJournalStorage,
   type DockerCustodyOwnerIdentity} from "@agent-teams/agent-execution/composition";
 
 export const digest = (value: string): string => createHash("sha256").update(value).digest("hex");

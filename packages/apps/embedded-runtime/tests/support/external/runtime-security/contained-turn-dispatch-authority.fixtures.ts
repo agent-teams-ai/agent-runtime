@@ -5,11 +5,9 @@ import {
   createInMemoryDispatchConsumptionRepository,
   createNodeSha256DispatchDigest,
 } from "@agent-teams/runtime-security/composition";
-import type { DispatchAuthorityHead } from "@agent-teams/runtime-security/composition";
-import type {
+import type { DispatchAuthorityHead,
   ConsumeForDispatchInput,
-  DispatchAuthorityScope,
-} from "@agent-teams/runtime-security/composition";
+  DispatchAuthorityScope } from "@agent-teams/runtime-security/composition";
 
 export const scope: DispatchAuthorityScope = Object.freeze({
   tenantId: "tenant-a",

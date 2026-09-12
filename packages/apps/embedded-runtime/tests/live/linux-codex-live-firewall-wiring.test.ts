@@ -3,13 +3,9 @@ import {test} from "node:test";
 import {createLinuxCodexLiveFirewallWiring} from "./linux-codex-live-firewall-wiring.ts";
 import type {FirewallCommand} from "./linux-codex-live-admin-firewall.ts";
 import {networkFixture, call} from "../support/external/agent-execution/fixtures/docker-operation-network-fixture.ts";
-import {dockerHttpOperationNetworkRecipe} from
+import {dockerHttpOperationNetworkRecipe,createDockerOperationNetworkOwner,HostHttpEgressV4Journal} from
   "@agent-teams/agent-execution/composition";
 
-import {createDockerOperationNetworkOwner} from
-  "@agent-teams/agent-execution/composition";
-import {HostHttpEgressV4Journal} from
-  "@agent-teams/agent-execution/composition";
 import {MemoryV4Storage} from "../support/external/agent-execution/fixtures/host-http-egress-v4-fixture.ts";
 
 // Synthetic command/listener boundaries only; no socket, daemon or firewall IO.
