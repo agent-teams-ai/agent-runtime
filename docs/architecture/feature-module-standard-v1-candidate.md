@@ -324,15 +324,46 @@ re-exports those feature entries from
 imports keep working. The implementations stay at the feature root rather
 than under `application/`: they still import Host composition helpers or
 Agent Execution / Provider Access / Runtime Security composition types, which
-L0 treats as an inward leak from `application/`. Process lifecycle,
+L0 treats as an inward leak from `application/`. Linux route binding, product
+route qualification, provider selection, access authority, and cancellation
+proof now live under matching `src/features/` directories with curated
+`index.ts` / `internal.ts` entrypoints. Host composition re-exports those
+feature entries from the matching `src/composition/` files, so existing
+composition and test imports keep working. The implementations stay at the
+feature root rather than under `application/`: they still import Host
+composition helpers or Agent Execution / Provider Access composition types,
+which L0 treats as an inward leak from `application/`. Authority binding,
+construction-failure cleanup, composition observation types, operation refs,
+and owner-contract errors now live under matching `src/features/` directories
+with curated `index.ts` / `internal.ts` entrypoints. Host composition
+re-exports those feature entries from the matching `src/composition/` files,
+so existing composition and test imports keep working. The implementations
+stay at the feature root rather than under `application/`: they still import
+Host composition helpers, which L0 treats as an inward leak from
+`application/`. Trusted runtime-access scope copying now lives under
+`src/features/trusted-runtime-access-scope/` with curated `index.ts` /
+`internal.ts` entrypoints. Host composition re-exports that feature from
+`src/composition/trusted-runtime-access-scope.ts`, so existing composition
+and test imports keep working. The implementation stays at the feature root
+rather than under `application/`: it still imports Host composition helpers
+and application scope types, which L0 treats as an inward leak from
+`application/`. Claude Code and Codex setup-inspection planners plus the
+opaque-reference digest now live under
+`src/features/setup-inspection-planning/` with curated `index.ts` /
+`internal.ts` entrypoints. Host composition re-exports those feature entries
+from the matching `src/composition/` files, so existing composition and test
+imports keep working. The implementations stay at the feature root rather
+than under `application/`: they still import application ports, which L0
+treats as an inward leak from `application/`. Process lifecycle,
 readiness and rollback stay in composition. Host tests that
 previously imported unpublished Agent Execution, Provider Access, and Runtime
 Security `dist/` and `tests/` package subpaths now use the curated
 `./composition` export when the symbol is public, or Host-local
 `tests/support/external/` copies of unpublished fixtures. Foundation
 `packageExports` claims for those three packages now match the curated `.` and
-`./composition` maps. Packed-consumer Provider Access `pg` anti-corruption
-remains. The module stays pending.
+`./composition` maps. Packed-consumer Agent Execution and Provider Access
+public composition types no longer mention `pg`; callers pass a structurally
+compatible pool. The module stays pending.
 
 The deterministic syntax-aware checker is
 `scripts/architecture/check-feature-modules.mjs`. Run
