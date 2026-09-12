@@ -4,7 +4,7 @@ import { dirname, isAbsolute, normalize, resolve } from "node:path";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
 
-const source = readFileSync(new URL("../packages/platform/filesystem-custody/scripts/build-native-helper.mjs", import.meta.url), "utf8");
+const source = readFileSync(new URL("../../packages/platform/filesystem-custody/scripts/build-native-helper.mjs", import.meta.url), "utf8");
 // Evaluate only argument composition with disposable in-memory filesystem/process doubles.
 const body = source.replace(/^import .*;\n/gmu, "");
 const capture = (platform, args = []) => {
@@ -60,7 +60,7 @@ for (const recipe of ["linux-x64-clang-shared/v1", "linux-x64-gcc-shared/v1", "d
 }
 
 test("durable file restores the existing custody module import", () => {
-  const durable = readFileSync(new URL("../packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-durable-file.ts", import.meta.url), "utf8");
+  const durable = readFileSync(new URL("../../packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-durable-file.ts", import.meta.url), "utf8");
   assert.match(durable, /isNativeHostDescriptor, openNativeHostEntry, quarantineNativeHostEntry,/u);
-  assert.match(durable, /openNativeHostEntry\(input\.stagingDirectory, temporaryName, "create"\)/u);
+  assert.match(durable, /openNativeHostEntry\(stagingDirectory, temporaryName, "create"\)/u);
 });
