@@ -1,8 +1,8 @@
-import type { ClaudeCodeConfigurationDiagnosticCode } from "../../../contracts/claude-code-configuration-inspection.js";
+import type { ClaudeCodeInspectionDiagnosticCode } from "../../models/claude-code-inspection-models.js";
 
 export type ParseClaudeCodeJsonResult =
   | { readonly data: Readonly<Record<string, unknown>>; readonly status: "parsed" }
-  | { readonly diagnostic: ClaudeCodeConfigurationDiagnosticCode; readonly status: "rejected" };
+  | { readonly diagnostic: ClaudeCodeInspectionDiagnosticCode; readonly status: "rejected" };
 
 export interface ClaudeCodeJsonParser {
   parse(
