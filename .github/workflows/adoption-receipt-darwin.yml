@@ -3,7 +3,7 @@ name: adoption-receipt-darwin
 # Temporary workflow: Darwin arm64 adoption receipt for Runtime Configuration
 # activation identity 3193051f stacked on architecture-load D 48971606.
 # The job always checks out that SHA so this workflow-only commit does not
-# enter the receipt identity. Safe to delete after merge.
+# enter the receipt identity. Safe to delete after the paired receipt is merged.
 
 on:
   push:
