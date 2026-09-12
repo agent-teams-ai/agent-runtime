@@ -7,6 +7,8 @@ Start here:
 
 - Repository overview: [README.md](README.md)
 - Canonical architecture reading order: [docs/README.md](docs/README.md)
+- Contained-turn vs subscription-runtime (named anti-patterns `SR-AP-1` … `SR-AP-11`):
+  [docs/architecture/subscription-runtime-port-candidates.md](docs/architecture/subscription-runtime-port-candidates.md#named-subscription-runtime-anti-patterns)
 - Current readiness gates: [docs/architecture/readiness.md](docs/architecture/readiness.md)
 - Exact qualified runtime targets:
   [docs/architecture/qualification-registry.json](docs/architecture/qualification-registry.json)
@@ -32,6 +34,10 @@ Guardrails:
   explicitly disposable test environments for runtime experiments.
 - Keep provider-specific behavior behind runtime adapters and do not import
   orchestrator domain models.
+- Do not copy subscription-runtime spawn, fallback, resume, pools, or
+  worker-codex into contained-turn. Cite
+  [`SR-AP-1` … `SR-AP-11`](docs/architecture/subscription-runtime-port-candidates.md#named-subscription-runtime-anti-patterns)
+  when rejecting those shapes.
 - `pnpm check` runs only synthetic, disposable tests. Provider spike commands
   are separate and require explicit scope and safety review.
 
