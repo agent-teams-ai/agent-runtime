@@ -1,14 +1,32 @@
-import { workspacePackageSourceHref } from "./support/workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 
-type ContainedTurnHostCustodyPort = any;
-const { ContainedTurnKernelCustodyAdapter } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.js"));
-type ContainedTurnKernelCustodyPort = any;
-const { containedTurnOperationCutoffRevision } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/domain/contained-turn-output-authority.js"));
-const { adapterSnapshot, attemptId, authorityDigest, commandId, custodyId, effectId, hostBootId, hostInstanceId, operationId, preparationToken, providerAccessSnapshot, workspaceId } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/contained-turn-kernel-fixtures.ts"));
-const { containedTurnIdentity } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/domain/contained-turn-identities.js"));
-const { committedDispatchProofFixture } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/features/contained-agent-turn/support/committed-dispatch-proof-fixture.ts"));
+import {
+  ContainedTurnKernelCustodyAdapter,
+  type ContainedTurnHostCustodyPort,
+} from "@agent-teams/agent-execution/composition";
+import type {
+  ContainedTurnKernelCustodyPort,
+} from "@agent-teams/agent-execution/composition";
+import {
+  containedTurnOperationCutoffRevision,
+} from "@agent-teams/agent-execution/composition";
+import {
+  adapterSnapshot,
+  attemptId,
+  authorityDigest,
+  commandId,
+  custodyId,
+  effectId,
+  hostBootId,
+  hostInstanceId,
+  operationId,
+  preparationToken,
+  providerAccessSnapshot,
+  workspaceId,
+} from "./support/external/agent-execution/contained-turn-kernel-fixtures.ts";
+import {containedTurnIdentity} from "@agent-teams/agent-execution/composition";
+import { committedDispatchProofFixture } from "./support/external/agent-execution/features/contained-agent-turn/support/committed-dispatch-proof-fixture.ts";
 
 const EMPTY_SHA256 = "0".repeat(64);
 const drain = Object.freeze({ bytes: 0, sha256: EMPTY_SHA256, status: "complete" as const });

@@ -1,4 +1,3 @@
-import { workspacePackageSourceHref } from "../support/workspace-package-source.mjs";
 import assert from 'node:assert/strict';
 import {test, beforeEach} from 'node:test';
 import childProcess from 'node:child_process';
@@ -325,10 +324,11 @@ test('failed observation cannot release on a stale succeeded submit value', asyn
   assert.equal((await driver.cancel()).turn.status, 'succeeded');
   assert.equal(await driver.cleanup(), 'released');
 });
+
 test('public driver collects real admin layout before tree release (synthetic artifact bytes)', {skip: process.platform !== 'linux' && 'descriptor-relative collector requires Linux'}, async t => {
   // Keep compiled-only dependencies scoped so CLI regressions run without a build.
   const {allocateLinuxCodexLiveAdminDirectories} = await import('./linux-codex-live-admin-directories.ts');
-  const {encodeContainedTurnArtifactManifest, computeContainedTurnArtifactTreeDigest} = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-manifest.js"));
+  const {encodeContainedTurnArtifactManifest, computeContainedTurnArtifactTreeDigest} = await import('@agent-teams/agent-execution/composition');
   const {collectLinuxCodexLiveEvidence} = await import('./linux-codex-live-evidence.mjs');
   const {writeFileSync, existsSync} = await import('node:fs');
   const {driver, root, live, events} = await publicFixture(t, 'succeeded');

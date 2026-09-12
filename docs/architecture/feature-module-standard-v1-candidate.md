@@ -266,10 +266,10 @@ Execution composition types, which L0 treats as an inward leak from
 `application/`. Process lifecycle, readiness and rollback stay in
 composition. Host tests that previously imported unpublished Agent Execution,
 Provider Access, and Runtime Security `dist/` and `tests/` package subpaths now
-load those files through a development-boundary package-root resolver, or
-through the curated `./composition` export when the symbol is already public.
-Foundation `packageExports` claims for those three packages now match the
-curated `.` and `./composition` maps. Provider Access and Runtime Security
+use the curated `./composition` export when the symbol is public, or Host-local
+`tests/support/external/` copies of unpublished fixtures. Foundation
+`packageExports` claims for those three packages now match the curated `.` and
+`./composition` maps. Provider Access and Runtime Security
 anti-corruption adapters and external input/output validation remain. The
 module stays pending.
 

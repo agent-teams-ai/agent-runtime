@@ -1,4 +1,3 @@
-import { workspacePackageSourceHref } from "./support/workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -6,7 +5,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
-const { darwinRouteFixture } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/features/contained-agent-turn/support/darwin-route-capability-fixture.ts"));
+import { darwinRouteFixture } from "./support/external/agent-execution/features/contained-agent-turn/support/darwin-route-capability-fixture.ts";
 
 import { createContainedTurnRouteEnforcement } from "@agent-teams/agent-execution/composition";
 import {

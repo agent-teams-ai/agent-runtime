@@ -1,11 +1,10 @@
-import { workspacePackageSourceHref } from "./workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {rm} from "node:fs/promises";
-const { disposable, policy: testPolicy, createInput, engineCall } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/features/contained-agent-turn/support/docker-host-custody-lifecycle-fixture.ts"));
+import {disposable, policy as testPolicy, createInput, engineCall} from "./external/agent-execution/features/contained-agent-turn/support/docker-host-custody-lifecycle-fixture.ts";
 import {joinedDocker} from "./linux-joined-docker.mjs";
-const { postClaimFixture } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/features/contained-agent-turn/support/docker-linux-post-claim-fixture.ts"));
-const { BOOT } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/features/contained-agent-turn/support/linux-docker-residue-fixture.ts"));
+import {postClaimFixture} from "./external/agent-execution/features/contained-agent-turn/support/docker-linux-post-claim-fixture.ts";
+import {BOOT} from "./external/agent-execution/features/contained-agent-turn/support/linux-docker-residue-fixture.ts";
 import {createDockerLinuxPostClaimPreparation} from "@agent-teams/agent-execution/composition";
 
 // Synthetic Engine/kernel metadata only. This exercises the test IO through

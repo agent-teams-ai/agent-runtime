@@ -1,19 +1,24 @@
-import { workspacePackageSourceHref } from "./workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {PassThrough} from "node:stream";
-const { networkFixture } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/fixtures/docker-operation-network-fixture.ts"));
-const { syntheticDaemon } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/fixtures/docker-engine-synthetic-daemon.ts"));
-const { CONTAINER, DAEMON_BOOT } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/fixtures/docker-engine-test-fixture.ts"));
-const { archive, chunks, imageLock, IMAGE_CONFIG, NODE_BYTES, BOOTSTRAP_BYTES } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/fixtures/docker-image-init-fixture.ts"));
-const { FixtureResidueIo, statText, privilegeText } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/features/contained-agent-turn/support/linux-docker-residue-fixture.ts"));
-const { MemoryStorage } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/features/contained-agent-turn/support/docker-host-custody-lifecycle-fixture.ts"));
-const { NodeUnixSocketDockerEngine } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-composition.js"));
-const { composeLinuxDockerResidueCustody } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/node-linux-docker-residue-custody.js"));
-const { PROC_SUPER_MAGIC } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-docker-residue-io.js"));
-const { residueParent, residueLeaf } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-docker-residue-parsers.js"));
-const { DOCKER_CUSTODY_NODE_PATH, DOCKER_CUSTODY_BOOTSTRAP_PATH, DOCKER_CUSTODY_INIT_ARGUMENTS } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js"));
-const { DockerCustodyFrameDecoder, encodeDockerCustodyFrame, DOCKER_CUSTODY_INIT_PROTOCOL } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/init/docker-custody-init-protocol.js"));
+import {networkFixture} from "./external/agent-execution/fixtures/docker-operation-network-fixture.ts";
+import {syntheticDaemon} from "./external/agent-execution/fixtures/docker-engine-synthetic-daemon.ts";
+import {CONTAINER, DAEMON_BOOT} from "./external/agent-execution/fixtures/docker-engine-test-fixture.ts";
+import {archive, chunks, imageLock, IMAGE_CONFIG, NODE_BYTES, BOOTSTRAP_BYTES} from "./external/agent-execution/fixtures/docker-image-init-fixture.ts";
+import {FixtureResidueIo, statText, privilegeText} from "./external/agent-execution/features/contained-agent-turn/support/linux-docker-residue-fixture.ts";
+import {MemoryStorage} from "./external/agent-execution/features/contained-agent-turn/support/docker-host-custody-lifecycle-fixture.ts";
+import {NodeUnixSocketDockerEngine} from
+  "@agent-teams/agent-execution/composition";
+import {composeLinuxDockerResidueCustody} from
+  "@agent-teams/agent-execution/composition";
+import {PROC_SUPER_MAGIC} from
+  "@agent-teams/agent-execution/composition";
+import {residueParent, residueLeaf} from
+  "@agent-teams/agent-execution/composition";
+import {DOCKER_CUSTODY_NODE_PATH, DOCKER_CUSTODY_BOOTSTRAP_PATH, DOCKER_CUSTODY_INIT_ARGUMENTS} from
+  "@agent-teams/agent-execution/composition";
+import {DockerCustodyFrameDecoder, encodeDockerCustodyFrame, DOCKER_CUSTODY_INIT_PROTOCOL} from
+  "@agent-teams/agent-execution/composition";
 
 const json = value => ({statusCode: 200, contentType: "application/json", body: Buffer.from(JSON.stringify(value))});
 const hash = value => createHash("sha256").update(value).digest("hex");

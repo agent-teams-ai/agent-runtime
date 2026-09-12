@@ -1,5 +1,5 @@
 export { createNodePathCanonicalizer } from "./features/setup-source-inspection-authorization/adapters/outbound/node-path-canonicalizer.js";
-export { createCurrentEgressOwner } from "./features/provider-process-egress-authorization/composition/current-egress-owner.js";
+export { createCurrentEgressOwner, canonicalEgressValue, captureCurrentEgressResolve, currentEgressDigest } from "./features/provider-process-egress-authorization/composition/current-egress-owner.js";
 export type { CurrentEgressOwnerInput, CurrentEgressDispatchHead, CurrentEgressEndorsement,
   CurrentEgressOperation, CurrentEgressRoute } from "./features/provider-process-egress-authorization/composition/current-egress-inputs.js";
 export { snapshotDispatchAuthorityHead } from "./features/contained-turn-dispatch-authority/domain/dispatch-authority-head.js";

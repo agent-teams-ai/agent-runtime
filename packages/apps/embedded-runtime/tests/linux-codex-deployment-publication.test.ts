@@ -1,16 +1,15 @@
-import { workspacePackageSourceHref } from "./support/workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {createHostCustodiedContainedTurn, ProviderRouteEnforcementUnsupportedError} from "../dist/composition/contained-turn-feature-composition.js";
 import {createLinuxCodexDeploymentAuthority} from "../dist/composition/linux-codex-deployment-authority.js";
 import {createContainedTurnOperationProviderAccessPort, createContainedTurnSecurityAcceptancePort, nativeHttpRequestProfile, createContainedTurnFeature, type ContainedTurnFeatureDependencies} from "@agent-teams/agent-execution/composition";
-const { operationHarness, fixtureHash } = await import(workspacePackageSourceHref("@agent-teams/provider-access", "tests/features/contained-turn-access/operation-dispatch-test-fixture.ts"));
-const { harness, selection } = await import(workspacePackageSourceHref("@agent-teams/provider-access", "tests/features/contained-turn-access/route-selection-fixture.ts"));
-const { createHarness } = await import(workspacePackageSourceHref("@agent-teams/runtime-security", "tests/postgres-dispatch.fixtures.ts"));
+import {operationHarness, fixtureHash} from "./support/external/provider-access/features/contained-turn-access/operation-dispatch-test-fixture.ts";
+import {harness, selection} from "./support/external/provider-access/features/contained-turn-access/route-selection-fixture.ts";
+import {createHarness} from "./support/external/runtime-security/postgres-dispatch.fixtures.ts";
 import {createDispatchAcceptanceFeature, createNodeSha256DispatchDigest, createPostgresDispatchAcceptanceStore} from "@agent-teams/runtime-security/composition";
-const { containedTurnIdentity } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/domain/contained-turn-identities.js"));
-const { createDependencies } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts"));
-const { adapterSnapshot, manifest } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/features/contained-agent-turn/support/contained-turn-fixture-snapshots.ts"));
+import {containedTurnIdentity} from "@agent-teams/agent-execution/composition";
+import {createDependencies} from "./support/external/agent-execution/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
+import {adapterSnapshot, manifest} from "./support/external/agent-execution/features/contained-agent-turn/support/contained-turn-fixture-snapshots.ts";
 
 // Local assembly retains the existing synthetic AE store and observes its real
 // one-shot claim through the deployment lifecycle. No shared fixture is edited.

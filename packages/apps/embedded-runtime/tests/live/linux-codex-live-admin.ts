@@ -1,12 +1,14 @@
-import { workspacePackageSourceHref } from "../support/workspace-package-source.mjs";
 // Private, test-only administrative entrypoint. Importing performs no I/O.
 import {createHash} from "node:crypto";
-const { digestContainedTurnCanonicalValue } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/domain/contained-turn-codecs.js"));
+import {digestContainedTurnCanonicalValue} from
+  "@agent-teams/agent-execution/composition";
 import {isDeepStrictEqual} from "node:util";
 import {NodeProviderProcessCustody} from "@agent-teams/agent-execution/composition";
-const { containedTurnAcceptanceIntentDigestV1 } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/application/contained-turn-acceptance-digests.js"));
+import {containedTurnAcceptanceIntentDigestV1} from
+  "@agent-teams/agent-execution/composition";
 import type {DispatchAcceptancePolicy} from "@agent-teams/runtime-security/composition";
-const { currentEgressDigest } = await import(workspacePackageSourceHref("@agent-teams/runtime-security", "dist/features/provider-process-egress-authorization/composition/current-egress-validation.js"));
+import {currentEgressDigest} from
+  "@agent-teams/runtime-security/composition";
 import {allocateLinuxCodexLiveAdminDirectories} from "./linux-codex-live-admin-directories.ts";
 import {createLinuxCodexLiveAdminRoute} from "./linux-codex-live-admin-route.ts";
 import {LinuxCodexLiveSetupError, setupLinuxCodexLiveBootstrap,

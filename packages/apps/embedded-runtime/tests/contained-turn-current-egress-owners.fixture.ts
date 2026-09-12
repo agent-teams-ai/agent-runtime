@@ -1,4 +1,3 @@
-import { workspacePackageSourceHref } from "./support/workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { nativeHttpRequestProfile, type NativeHttpRequestProfileId } from "@agent-teams/agent-execution/composition";
@@ -9,10 +8,12 @@ import type { RouteSelectionCurrent, RouteSelectionInput } from "@agent-teams/pr
 import { createContainedTurnCurrentEgressOwners,
   type ContainedTurnCurrentEgressOwnersInput } from "../dist/composition/contained-turn-current-egress-owners.js";
 import { bindContainedTurnHttpRuntimeSecurity } from "../dist/composition/contained-turn-http-runtime-security.js";
-const { harness, selection } = await import(workspacePackageSourceHref("@agent-teams/provider-access", "tests/features/contained-turn-access/route-selection-fixture.ts"));
-const { authority } = await import(workspacePackageSourceHref("@agent-teams/runtime-security", "tests/contained-turn-dispatch-authority.fixtures.ts"));
-const { canonicalEgressValue } = await import(workspacePackageSourceHref("@agent-teams/runtime-security", "dist/features/provider-process-egress-authorization/application/egress-canonical.js"));
-const { routeSelectionDigest } = await import(workspacePackageSourceHref("@agent-teams/provider-access", "dist/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.js"));
+import { harness, selection } from "./support/external/provider-access/features/contained-turn-access/route-selection-fixture.ts";
+import { authority } from "./support/external/runtime-security/contained-turn-dispatch-authority.fixtures.ts";
+import { canonicalEgressValue } from
+  "@agent-teams/runtime-security/composition";
+import { routeSelectionDigest } from
+  "@agent-teams/provider-access/composition";
 
 export const digest = (value: string) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
 export const choices = [

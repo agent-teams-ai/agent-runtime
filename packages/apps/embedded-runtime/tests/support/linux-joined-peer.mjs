@@ -1,10 +1,9 @@
-import { workspacePackageSourceHref } from "./workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import {StringDecoder} from "node:string_decoder";
-const { nativeBrokerConfig, fixtureEndpoint } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/fixtures/codex-native-broker-0.153.4/fixture.ts"));
-const { rehashNativeLayers } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/fixtures/codex-native-config-0.153.4/fixture.ts"));
-const { agentMessage, emitAgentStarted, emitAgentCompleted, generatedTurn } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/codex-app-server-test-messages.mjs"));
-const { codexTurnSandboxPolicy } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js"));
+import {nativeBrokerConfig, fixtureEndpoint} from "./external/agent-execution/fixtures/codex-native-broker-0.153.4/fixture.ts";
+import {rehashNativeLayers} from "./external/agent-execution/fixtures/codex-native-config-0.153.4/fixture.ts";
+import {agentMessage, emitAgentStarted, emitAgentCompleted, generatedTurn} from "./external/agent-execution/codex-app-server-test-messages.mjs";
+import {codexTurnSandboxPolicy} from "@agent-teams/agent-execution/composition";
 
 // Synthetic external protocol peer. Completion requires a real request through
 // the operation listener. This does not characterize or qualify a provider binary.

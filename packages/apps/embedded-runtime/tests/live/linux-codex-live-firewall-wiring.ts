@@ -1,8 +1,8 @@
-import { workspacePackageSourceHref } from "../support/workspace-package-source.mjs";
 // TEST ONLY. Explicit disposable-host opt-in; importing this module runs no commands.
 import {createLinuxCodexLiveAdminFirewall, type ExpectedOwnedNetwork, type FirewallCommand}
   from "./linux-codex-live-admin-firewall.ts";
-const { dockerHttpOperationNetworkRecipe } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-network-resources.js"));
+import {dockerHttpOperationNetworkRecipe} from
+  "@agent-teams/agent-execution/composition";
 import type {LinuxCodexNodeRecipeSelection} from "../../dist/composition/linux-codex-node-recipe.js";
 
 export type LinuxCodexLiveFirewallPins = Readonly<{

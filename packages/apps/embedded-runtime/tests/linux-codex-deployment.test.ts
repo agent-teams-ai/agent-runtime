@@ -1,5 +1,4 @@
-import { workspacePackageSourceHref } from "./support/workspace-package-source.mjs";
-const { policy: dockerPolicy } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/fixtures/docker-engine-test-fixture.ts"));
+import {policy as dockerPolicy} from "./support/external/agent-execution/fixtures/docker-engine-test-fixture.ts";
 import assert from "node:assert/strict";
 import {createNodeDockerDeploymentRecipe, createContainedTurnRouteEnforcement, readContainedTurnSelectedRouteAdmission} from "@agent-teams/agent-execution/composition";
 import {createContainedTurnLinuxRouteBinding} from "../dist/composition/contained-turn-linux-route-binding.js";
@@ -10,10 +9,10 @@ import {createContainedTurnCurrentEgressOwners} from "../dist/composition/contai
 import {createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate} from "@agent-teams/runtime-security/composition";
 import {bindContainedTurnHttpRuntimeSecurity} from "../dist/composition/contained-turn-http-runtime-security.js";
 import {fixture, digest, changed} from "./contained-turn-current-egress-owners.fixture.ts";
-const { canonicalEgressValue } = await import(workspacePackageSourceHref("@agent-teams/runtime-security", "dist/features/provider-process-egress-authorization/application/egress-canonical.js"));
-const { initialHttpEgressState } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-settlement.js"));
-const { HTTP_EVIDENCE_FENCE } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/postgres-http-egress-evidence-transactions.js"));
-const { SYNTHETIC_LOOPBACK_CA } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/fixtures/http-egress-tls/synthetic-loopback-certificates.ts"));
+import {canonicalEgressValue} from "@agent-teams/runtime-security/composition";
+import {initialHttpEgressState} from "@agent-teams/agent-execution/composition";
+import {HTTP_EVIDENCE_FENCE} from "@agent-teams/agent-execution/composition";
+import {SYNTHETIC_LOOPBACK_CA} from "./support/external/agent-execution/fixtures/http-egress-tls/synthetic-loopback-certificates.ts";
 
 /** Simulation: acknowledged feature receipts and PG query replies are fixtures.
  * PA route validation, RS current owner/signer, and HTTP adapters are real source.

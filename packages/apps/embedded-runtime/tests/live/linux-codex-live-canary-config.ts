@@ -1,4 +1,3 @@
-import { workspacePackageSourceHref } from "../support/workspace-package-source.mjs";
 // Private one-shot test administration. Importing does no I/O. No live test runs here.
 import {createHash, randomBytes} from "node:crypto";
 import {isAbsolute, normalize} from "node:path";
@@ -7,16 +6,25 @@ import {
   NodeProviderProcessCustody, NodeTlsHttpEgressTransport, nativeHttpRequestProfile,
   createNodeExecutableFileObserver, createRuntimeInstallationDiscoveryFeature,
 } from "@agent-teams/agent-execution/composition";
-const { CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT: adapterSnapshot, CODEX_APP_SERVER_CURRENT_KERNEL_MANIFEST: capabilityManifest } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js"));
-const { CODEX_LOCAL_BROKER_CAPABILITY_ENV } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.js"));
-const { containedTurnAcceptanceConstraintsDigestV1, containedTurnAcceptanceIntentDigestV1 } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/application/contained-turn-acceptance-digests.js"));
-const { digestContainedTurnCanonicalValue } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/domain/contained-turn-codecs.js"));
-const { containedTurnScopeDigest } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/domain/contained-turn-authority.js"));
-const { snapshotDockerImageInitLock } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-image-init-lock.js"));
+import {
+  CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT as adapterSnapshot,
+  CODEX_APP_SERVER_CURRENT_KERNEL_MANIFEST as capabilityManifest,
+} from "@agent-teams/agent-execution/composition";
+import {CODEX_LOCAL_BROKER_CAPABILITY_ENV} from
+  "@agent-teams/agent-execution/composition";
+import {containedTurnAcceptanceConstraintsDigestV1, containedTurnAcceptanceIntentDigestV1} from
+  "@agent-teams/agent-execution/composition";
+import {digestContainedTurnCanonicalValue} from
+  "@agent-teams/agent-execution/composition";
+import {containedTurnScopeDigest} from
+  "@agent-teams/agent-execution/composition";
+import {snapshotDockerImageInitLock} from
+  "@agent-teams/agent-execution/composition";
 import {createCredentialMaterializationRequestDigest} from "@agent-teams/provider-access/composition";
 import {createNodePathCanonicalizer, createSetupInspectionAuthorizationFeature} from
   "@agent-teams/runtime-security/composition";
-const { currentEgressDigest } = await import(workspacePackageSourceHref("@agent-teams/runtime-security", "dist/features/provider-process-egress-authorization/composition/current-egress-validation.js"));
+import {currentEgressDigest} from
+  "@agent-teams/runtime-security/composition";
 import {
   createClaudeCodeConfigurationInspectionFeature, createClaudeCodeConfigurationSemanticClassifierV2,
   createClaudeCodeConfigurationSourceReaderAdapter, createCodexConfigurationInspectionFeature,

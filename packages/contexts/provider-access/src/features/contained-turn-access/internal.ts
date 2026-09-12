@@ -2,7 +2,7 @@ export { createContainedTurnDispatchConsumptionV1 } from "./composition/dispatch
 export { createContainedTurnCredentialMaterializationAuthorizationV1 } from "./composition/materialization-authorization-v1-factory.js";
 export { createContainedTurnProviderAccessFeature } from "./composition/feature-module-factory.js";
 export { createPostgresRouteSelectionOwner, type RouteSelectionInput } from "./composition/route-selection-owner.js";
-export { snapshotRouteSelectionCurrent, type RouteSelectionCurrent } from "./adapters/outbound/postgres/route-selection-data.js";
+export { snapshotRouteSelectionCurrent, routeSelectionDigest, snapshotRouteSelectionFacts, type RouteSelectionCurrent } from "./adapters/outbound/postgres/route-selection-data.js";
 export {
   createDispatchConsumptionRequestDigests,
   createCredentialMaterializationRequestDigest,
@@ -19,6 +19,9 @@ export type { DispatchHeadPublication, DispatchHeadPublicationResult } from "./a
 export type { DispatchPostgresOwner } from "./adapters/outbound/postgres/dispatch-postgres-data.js";
 export { createPostgresCredentialRenderingOwner } from "./composition/postgres-credential-rendering-owner.js";
 export { createPostgresMaterializationRepository } from "./adapters/outbound/postgres/materialization-postgres-repository.js";
+export { materializationPostgresSchemaDigest } from "./adapters/outbound/postgres/materialization-postgres-schema.js";
+export { routeSelectionSchemaDigest } from "./adapters/outbound/postgres/route-selection-schema.js";
+export { dispatchOperationSchemaDigest } from "./adapters/outbound/postgres/dispatch-operation-schema.js";
 export type { MaterializationPostgresPool, MaterializationPostgresTimeouts } from "./adapters/outbound/postgres/materialization-postgres-transactions.js";
 export type {
   CredentialRenderingSelection,
@@ -29,3 +32,8 @@ export type {
 export { createPostgresOperationDispatchConsumption } from "./composition/postgres-operation-dispatch-consumption.js";
 export { createPostgresCurrentProviderAccess } from "./composition/postgres-current-provider-access.js";
 export type { PaAcceptedPreparation, PaDispatchIssuanceSelection } from "./adapters/outbound/dispatch-operation-contracts.js";
+export { createContainedTurnCredentialRenderingOwner } from "./composition/credential-rendering-owner-factory.js";
+export { createInMemoryDispatchConsumptionRepository } from "./adapters/outbound/in-memory-dispatch-consumption-repository.js";
+export { createMaterializationBindingRepository } from "./adapters/outbound/postgres/materialization-binding-repository.js";
+export { createOperationDispatchConsumption } from "./composition/operation-dispatch-consumption.js";
+export { createSha256DispatchConsumptionDigest } from "./adapters/outbound/sha256-dispatch-consumption-digest.js";

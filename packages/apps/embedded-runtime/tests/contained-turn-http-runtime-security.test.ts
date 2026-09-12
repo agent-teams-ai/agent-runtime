@@ -1,11 +1,10 @@
-import { workspacePackageSourceHref } from "./support/workspace-package-source.mjs";
 import {joinLinuxCodexSignerConsumption, bindLinuxCodexNodeConsumption} from "../dist/composition/linux-codex-node-recipe-consumption.js";
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate,
   type EgressCurrentAuthorityV2} from "@agent-teams/runtime-security/composition";
 import {bindContainedTurnHttpRuntimeSecurity} from "../dist/composition/contained-turn-http-runtime-security.js";
-const { authorityFor, digest, scope } = await import(workspacePackageSourceHref("@agent-teams/runtime-security", "tests/provider-process-egress-authorization.fixtures.ts"));
+import {authorityFor, digest, scope} from "./support/external/runtime-security/provider-process-egress-authorization.fixtures.ts";
 
 const request = () => ({
   method: "POST" as const, scheme: "https" as const, authority: {hostname: "api.example.com", port: 443},

@@ -122,5 +122,45 @@ export {containedTurnPreparationToken,
   type DarwinAttemptRetainedOwnerFactory}
   from "./features/contained-agent-turn/internal.js";
 
-export {readNodeContainedTurnNativeWorkspaceReceipts, decodeCodexResponseEnvelope} from
+export {readNodeContainedTurnNativeWorkspaceReceipts, decodeCodexResponseEnvelope,
+  ContainedTurnKernelCustodyAdapter, containedTurnOperationCutoffRevision,
+  type ContainedTurnHostCustodyPort, type ContainedTurnKernelCustodyPort} from
   "./features/contained-agent-turn/internal.js";
+
+export {
+  CGROUP2_SUPER_MAGIC, CODEX_APP_SERVER_ADAPTER_REVISION, CODEX_APP_SERVER_BINARY_REVISION,
+  CODEX_APP_SERVER_BINARY_SHA256, CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT,
+  CODEX_APP_SERVER_CURRENT_KERNEL_MANIFEST, CODEX_APP_SERVER_DARWIN_ARM64_TUPLE,
+  CODEX_CAPABILITY_MANIFEST_REVISION, CODEX_LOCAL_BROKER_CAPABILITY_ENV,
+  CONTAINED_TURN_DEPENDENCY_NAMES, CONTAINED_TURN_PREPARATION_CLOSURE_LIMIT,
+  CONTAINED_TURN_REQUIRED_PROOF_KINDS, CodexAppServerContainedTurnProvider,
+  DOCKER_CUSTODY_BOOTSTRAP_PATH, DOCKER_CUSTODY_INIT_ARGUMENTS, DOCKER_CUSTODY_INIT_PROTOCOL,
+  DOCKER_CUSTODY_NODE_PATH, DockerConsumptionObservations, DockerCustodyFrameDecoder,
+  DockerCustodyJournal, DockerCustodyJournalConflictError, DockerEngineError,
+  DockerHostCustodyLifecycle, DockerHttpNetworkResources, DockerOperationNetwork, FakeDockerEngine,
+  HTTP_EVIDENCE_FENCE, HostHttpEgressV4Journal, HostHttpEgressV4NodeStorage,
+  NodeDockerCustodyJournalStorage, NodeProviderProcessCustodyCore, NodeUnixSocketDockerEngine,
+  PROC_SUPER_MAGIC, acceptedProviderPreparation, appendContainedTurnOutputForOwnerStore,
+  asContainedTurnCommandFingerprint, assertNetworkContainer, assertNetworkEngine,
+  bindContainedTurnPreparationGrantRequests, claimContainedTurnDispatchPreparation,
+  codexTurnSandboxPolicy, committedDispatchProofV1, composeLinuxDockerResidueCustody,
+  computeContainedTurnArtifactTreeDigest, containedTurnAcceptanceConstraintsDigestV1,
+  containedTurnAcceptanceIntentDigestV1, containedTurnAuthorityVectorDigest,
+  containedTurnCommandFingerprint, containedTurnDispatchClaimBindingDigest, containedTurnIdentity,
+  containedTurnPreparationClosureBinding, containedTurnProviderAccessSnapshotDigest,
+  containedTurnSatisfactionDigest, containedTurnScopeDigest, createCodexNativeBrokerRecipe,
+  createContainedTurnEngine, createContainedTurnOperation, createDockerImageInitOwner,
+  createDockerOperationNetworkOwner, createHostHttpAdmissionGuard, createPreparedHttpRequestV1,
+  createSpecificationSha256, createStrictHttpEgressBroker, createWorkspaceCapabilityRetention,
+  decodeContainedTurnArtifactManifest, decodeEngineIdentity, decodeInspection, decodeOperationNetwork,
+  digestContainedTurnCanonicalValue, dockerCustodyOwnerIdentitySha256,
+  dockerHttpOperationNetworkRecipe, encodeContainedTurnArtifactManifest, encodeCreateRequest,
+  encodeDockerCustodyFrame, initialHttpEgressState, installLinuxExclusiveRoute,
+  isConcreteLinuxDockerLifecycle, linuxExclusiveRouteSeccomp, materializationAuthorizationRequest,
+  mutateContainedTurnOperation, networkBinding, networkDigest, operationNetworkLabels,
+  operationNetworkName, parseResultPublicationRecord, parseWorkspaceSealRecord,
+  prepareCodexNativeBrokerFiles, projectPreparedRequest, recordContainedTurnPreparationCleanup,
+  renderCodexNativeBrokerConfig, residueLeaf, residueParent, retireContainedTurnDispatchPreparation,
+  snapshotDockerEnginePolicy, snapshotDockerImageInitLock, v4Decode, v4Hash, v4Replay,
+  validateContainedTurnConsumedGrantReceipts, validateContainedTurnOperation,
+} from "./features/contained-agent-turn/internal.js";

@@ -1,7 +1,8 @@
 // Test-only trusted bootstrap wiring. Import and construction perform no I/O.
 import {createPostgresCredentialRenderingOwner} from
   "@agent-teams/provider-access/composition";
-type OperationCredentialMaterial = any;
+import type {OperationCredentialMaterial} from
+  "@agent-teams/provider-access/composition";
 import type {LinuxCodexDeploymentInfrastructure} from "../../dist/composition/linux-codex-deployment.js";
 
 type Factory = LinuxCodexDeploymentInfrastructure["createProviderAccess"];

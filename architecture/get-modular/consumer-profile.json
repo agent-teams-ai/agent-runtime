@@ -2440,7 +2440,7 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/node-kernel-workspace-authority.ts"
       ],
       "status": "not-adopted",
-      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules. Reviewed at 291684ed9: native broker installation and deferred binding, route enforcement, Docker kernel/effect custody and Node deployment recipe remain not-adopted contained-turn owners. The private route provenance composition shares one issuance/selection registry; consumption observations are an owner-local projection helper. Their exact Codex adapter and Host/Docker custody relationships are retained without transferring resource cleanup or containment authority to Assembly. Retained launch workspace is a private descriptor resource owner under existing workspace custody; Docker native-start diagnostics are local readback helpers, never admission or cleanup authority. At 81b2833af, Darwin post-claim preparation and route enforcement remain direct contained-turn owners outside passive scope; the fixed feature-local route helper and its exact adapter, custody and proof imports are not separate graph nodes. At 981c11314, eleven existing same-feature imports enter the newly explicit contained-turn anti-corruption composition boundary; these are retained static relationships outside passive Assembly adoption. Accepted base 981c11314 exposes the existing Darwin native authority binder and preparation token, and types the kernel custody port. Accepted base 0d7a02451 exports the existing workspace owner and adds an owner-local Darwin effect-custody composition over established ports; these are retained contained-turn relationships, not passive Assembly nodes. These retained contained-turn relationships remain outside passive Assembly construction and transfer no authority or cleanup ownership to Assembly.",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules. Reviewed at 291684ed9: native broker installation and deferred binding, route enforcement, Docker kernel/effect custody and Node deployment recipe remain not-adopted contained-turn owners. The private route provenance composition shares one issuance/selection registry; consumption observations are an owner-local projection helper. Their exact Codex adapter and Host/Docker custody relationships are retained without transferring resource cleanup or containment authority to Assembly. Retained launch workspace is a private descriptor resource owner under existing workspace custody; Docker native-start diagnostics are local readback helpers, never admission or cleanup authority. At 81b2833af, Darwin post-claim preparation and route enforcement remain direct contained-turn owners outside passive scope; the fixed feature-local route helper and its exact adapter, custody and proof imports are not separate graph nodes. At 981c11314, eleven existing same-feature imports enter the newly explicit contained-turn anti-corruption composition boundary; these are retained static relationships outside passive Assembly adoption. Accepted base 981c11314 exposes the existing Darwin native authority binder and preparation token, and types the kernel custody port. Accepted base 0d7a02451 exports the existing workspace owner and adds an owner-local Darwin effect-custody composition over established ports; these are retained contained-turn relationships, not passive Assembly nodes. The curated composition surface re-exports the existing Codex JSONL envelope decoder, kernel custody adapter, and operation-cutoff revision through the same internal barrel; these remain retained contained-turn relationships, not passive Assembly nodes. Additional retained re-exports for the curated composition surface are not new passive Assembly nodes. These retained contained-turn relationships remain outside passive Assembly construction and transfer no authority or cleanup ownership to Assembly.",
       "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
       "relationships": [
         {
@@ -3540,6 +3540,16 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
           "mode": "runtime"
         },
@@ -3551,7 +3561,22 @@
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-platform-tuple.ts",
-          "mode": "type-only"
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-files.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.ts",
+          "mode": "runtime"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
@@ -3575,7 +3600,17 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-engine.ts",
           "mode": "runtime"
         },
         {
@@ -3591,7 +3626,17 @@
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
           "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
+          "mode": "runtime"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
@@ -3600,6 +3645,36 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/committed-dispatch-proof-v1.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-authority.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-codecs.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-dispatch-authority.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-dispatch-preparation.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-identities.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-intent-guard.ts",
           "mode": "runtime"
         },
@@ -3607,6 +3682,31 @@
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-intent-guard.ts",
           "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-output-authority.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-output-transitions.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-satisfaction.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-transitions.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-validation.ts",
+          "mode": "runtime"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/adapters/outbound/node-executable-file-observer.ts",
@@ -3844,7 +3944,7 @@
         "packages/contexts/provider-access/src/composition.ts"
       ],
       "status": "not-adopted",
-      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules. These are retained re-exports for the curated composition surface, not new passive Assembly nodes.",
       "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
       "relationships": [
         {
@@ -4052,7 +4152,7 @@
         "packages/contexts/runtime-security/src/composition.ts"
       ],
       "status": "not-adopted",
-      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
+      "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules. These are retained re-exports for the curated composition surface, not new passive Assembly nodes.",
       "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
       "relationships": [
         {

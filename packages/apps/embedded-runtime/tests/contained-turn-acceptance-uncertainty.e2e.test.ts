@@ -1,10 +1,12 @@
-import { workspacePackageSourceHref } from "./support/workspace-package-source.mjs";
 import { createAgentRuntimeHost } from "./helpers/create-contained-turn-host.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createContainedTurnFeature } from "@agent-teams/agent-execution/composition";
-const { createDependencies, operationId: fixtureOperationId } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/features/contained-agent-turn/support/contained-agent-turn-fixture.ts"));
+import {
+  createDependencies,
+  operationId as fixtureOperationId,
+} from "./support/external/agent-execution/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 
 import {
   AgentRuntimeHostLifecycleError,

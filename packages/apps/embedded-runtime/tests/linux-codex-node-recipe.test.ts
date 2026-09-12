@@ -1,4 +1,3 @@
-import { workspacePackageSourceHref } from "./support/workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {createLinuxCodexNodeRecipe, type LinuxCodexNodeRecipeSelection} from "../dist/composition/linux-codex-node-recipe.js";
@@ -6,7 +5,7 @@ import {bindLinuxCodexNodeConsumption} from "../dist/composition/linux-codex-nod
 import type {LinuxCodexDeploymentInfrastructure} from "../dist/composition/linux-codex-deployment.js";
 import {createContainedTurnRouteEnforcement, bindContainedTurnRouteEnforcement,
   readContainedTurnSelectedRouteAdmission} from "@agent-teams/agent-execution/composition";
-const { policy, createInput, call } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/fixtures/docker-engine-test-fixture.ts"));
+import {policy, createInput, call} from "./support/external/agent-execution/fixtures/docker-engine-test-fixture.ts";
 
 type Input = Parameters<LinuxCodexDeploymentInfrastructure["recipe"]>[0];
 const input = {kernel: {operationId: "operation-1", attemptId: "attempt-1", custodyId: "custody-1",

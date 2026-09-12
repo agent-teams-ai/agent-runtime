@@ -1,12 +1,10 @@
-import { workspacePackageSourceHref } from "./support/workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import type {AuthorizeCredentialMaterializationOutcome, CredentialMaterializationAuthorizationReceipt} from "@agent-teams/provider-access";
 import {createCredentialMaterializationRequestDigest} from "@agent-teams/provider-access/composition";
 import {createContainedTurnHttpCredentialMaterialization} from "../dist/composition/contained-turn-http-provider-access.js";
-const { renderingFixture } = await import(workspacePackageSourceHref("@agent-teams/provider-access", "tests/features/contained-turn-access/credential-rendering-test-fixture.ts"));
-import type { CredentialGenerationAcquisition } from "@agent-teams/provider-access/composition";
-type CredentialRecipe = any;
-type CredentialRenderingOutcome = any;
+import {renderingFixture} from "./support/external/provider-access/features/contained-turn-access/credential-rendering-test-fixture.ts";
+import type {CredentialGenerationAcquisition, CredentialRecipe, CredentialRenderingOutcome} from
+  "@agent-teams/provider-access/composition";
 
 type Pair = ReturnType<typeof createContainedTurnHttpCredentialMaterialization>;
 type Owner = Parameters<typeof createContainedTurnHttpCredentialMaterialization>[0];

@@ -1,9 +1,8 @@
-import { workspacePackageSourceHref } from "./support/workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const { requireContainedTurnLiveCanaryAuthorities } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/features/contained-agent-turn/support/contained-turn-live-canary-lifecycle.mjs"));
+import { requireContainedTurnLiveCanaryAuthorities } from "./support/external/agent-execution/features/contained-agent-turn/support/contained-turn-live-canary-lifecycle.mjs";
 import {
   createHostCustodiedContainedTurn, ProviderRouteEnforcementUnsupportedError,
 } from "../dist/composition/contained-turn-feature-composition.js";

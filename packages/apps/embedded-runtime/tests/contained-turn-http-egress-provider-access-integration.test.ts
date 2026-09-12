@@ -1,4 +1,3 @@
-import { workspacePackageSourceHref } from "./support/workspace-package-source.mjs";
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {describe, test} from "node:test";
@@ -7,13 +6,11 @@ import {createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate, createNo
   type EgressCurrentAuthorityV2} from "@agent-teams/runtime-security/composition";
 import {createContainedTurnHttpProviderAccessAuthorization} from "../dist/composition/contained-turn-http-provider-access.js";
 import {bindContainedTurnHttpRuntimeSecurity} from "../dist/composition/contained-turn-http-runtime-security.js";
-const { canonical } = await import(workspacePackageSourceHref("@agent-teams/runtime-security", "tests/provider-process-egress-authorization.fixtures.ts"));
+import {canonical} from "./support/external/runtime-security/provider-process-egress-authorization.fixtures.ts";
 import {createHostHttpEgressSession} from "@agent-teams/agent-execution/composition";
-type HttpEgressOperation = any;
-type HttpEgressReceipt = any;
-type HostHttpGrant = any;
-type HostHttpProvisionalDecision = any;
-type HttpEgressBrokerPorts = any;
+import type {HttpEgressOperation, HttpEgressReceipt} from "@agent-teams/agent-execution/composition";
+import type {HostHttpGrant, HostHttpProvisionalDecision,
+  HttpEgressBrokerPorts} from "@agent-teams/agent-execution/composition";
 
 const enc = new TextEncoder(); const SECRET = "fixture-secret-do-not-observe";
 const bytes = (value: string) => enc.encode(value);

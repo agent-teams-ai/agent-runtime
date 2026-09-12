@@ -1,4 +1,3 @@
-import { workspacePackageSourceHref } from "../support/workspace-package-source.mjs";
 const unused = async () => Object.freeze({kind: "not_found" as const});
 import {strict as assert} from "node:assert";
 import {test} from "node:test";
@@ -113,6 +112,7 @@ test("root Host rejects before configuration I/O or allocation and erases materi
 
 // Synthetic failures only: no database, filesystem owner or provider is started.
 import {createLinuxCodexLiveLaunchRecords, LinuxCodexLiveSetupError, setupLinuxCodexLiveBootstrap} from "./linux-codex-live-bootstrap.ts";
+
 test("bootstrap schema failure retains cleanup and excludes the original error", {skip: process.platform !== "linux"}, async () => {
   const secret = "malicious-password-/private/path";
   const pool = {async query() {throw new Error(secret);}};
@@ -161,10 +161,19 @@ import { createHash } from "node:crypto";
 import {statSync} from "node:fs";
 import {getuid} from "node:process";
 import { createCodexCurrentKernelOwner } from "@agent-teams/agent-execution/composition";
-const { CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "dist/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js"));
-const { access, executeInput, FakeHost, ids, openInput, syntheticCodexEffectCustody, workspaceOwner } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/features/contained-agent-turn/support/current-provider-owner-fixture.ts"));
-const { boundary: codexFixtureBoundary, FakeCodexProcess, standardHandshake, syntheticPrivateRoot: codexFixturePrivateRoot, syntheticTmp: codexFixtureTmp } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/codex-app-server-contained-turn-provider-fixture.ts"));
-const { emitAgentCompleted, emitAgentStarted, emitTurnStarted, generatedTurn } = await import(workspacePackageSourceHref("@agent-teams/agent-execution", "tests/codex-app-server-test-messages.mjs"));
+import { CODEX_APP_SERVER_CURRENT_KERNEL_ADAPTER_SNAPSHOT } from "@agent-teams/agent-execution/composition";
+import {
+  access, executeInput, FakeHost, ids, openInput,
+  syntheticCodexEffectCustody, workspaceOwner,
+} from "../support/external/agent-execution/features/contained-agent-turn/support/current-provider-owner-fixture.ts";
+import {
+  boundary as codexFixtureBoundary,
+  FakeCodexProcess,
+  standardHandshake,
+  syntheticPrivateRoot as codexFixturePrivateRoot,
+  syntheticTmp as codexFixtureTmp,
+} from "../support/external/agent-execution/codex-app-server-contained-turn-provider-fixture.ts";
+import { emitAgentCompleted, emitAgentStarted, emitTurnStarted, generatedTurn } from "../support/external/agent-execution/codex-app-server-test-messages.mjs";
 
 test("admin inventory and real bootstrap resolver carry accepted ACL identity into the owner plan and redact output", async () => {
   const workspaceRef = codexFixtureBoundary.workspaceRef;

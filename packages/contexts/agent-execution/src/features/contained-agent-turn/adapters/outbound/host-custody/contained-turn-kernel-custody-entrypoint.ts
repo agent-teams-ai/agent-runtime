@@ -85,3 +85,9 @@ export type {
 } from "./darwin-attempt-owner-bridge.js";
 
 export {markDarwinNativeRootLaunchPlan} from "./host-custody-launch.js";
+export {HTTP_EVIDENCE_FENCE} from "./egress/postgres-http-egress-evidence-transactions.js";
+export {createHostHttpAdmissionGuard} from "./egress/host-http-admission-guard.js";
+export {createPreparedHttpRequestV1} from "./egress/prepared-http-request-v1.js";
+export {createStrictHttpEgressBroker} from "./egress/strict-http-egress-broker.js";
+export {initialHttpEgressState} from "./egress/http-egress-settlement.js";
+export {materializationAuthorizationRequest, projectPreparedRequest} from "./egress/http-egress-session-authority.js";
