@@ -1,7 +1,7 @@
 name: adoption-receipt-darwin
 
 # Temporary workflow: Darwin arm64 adoption receipt for leftover RS barrels
-# oxlint extract identity 1f7c1627 stacked on RC D c7180045.
+# oxlint extract identity b8c928e0 stacked on RC D c7180045.
 # The job always checks out that SHA so this workflow-only commit does not
 # enter the receipt identity. Safe to delete after merge.
 
@@ -24,11 +24,11 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: 1f7c1627872589afc58d89053043fd9d894ba97d
+          ref: b8c928e0596f55d832d496ca0d59fa7c00ff4586
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "1f7c1627872589afc58d89053043fd9d894ba97d"
+        run: test "$(git rev-parse HEAD)" = "b8c928e0596f55d832d496ca0d59fa7c00ff4586"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
