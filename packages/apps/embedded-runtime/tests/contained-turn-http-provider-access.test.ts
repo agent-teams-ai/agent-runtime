@@ -1,10 +1,13 @@
-import {createContainedTurnHttpCredentialMaterialization} from "../src/composition/contained-turn-http-provider-access.ts";
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import type {AuthorizeCredentialMaterializationInput, CredentialMaterializationAuthorizationV1} from "@agent-teams/provider-access";
 import {createCredentialMaterializationRequestDigest, createInMemoryContainedTurnDispatchConsumptionV1,
   type InMemoryDispatchBindingSeed} from "@agent-teams/provider-access/composition";
-import {createContainedTurnHttpProviderAccessAuthorization, type ContainedTurnHttpProviderAccessOwner} from "../dist/composition/contained-turn-http-provider-access.js";
+import {
+  createContainedTurnHttpCredentialMaterialization,
+  createContainedTurnHttpProviderAccessAuthorization,
+  type ContainedTurnHttpProviderAccessOwner,
+} from "../dist/composition/contained-turn-http-provider-access.js";
 
 const seed: InMemoryDispatchBindingSeed = Object.freeze({acceptedAuthorityDigest: "accepted:1", accessRef: "access:1",
   authorityHeadDigest: "authority:1", bindingDigest: "binding:1", bindingRevision: 2, claimBeforeControlTime: 1000,
