@@ -397,7 +397,17 @@ checks layer direction, curated public/internal entrypoints, cross-feature deep
 imports, declared runtime and type edges, cycles, nonempty declared layers, and
 undeclared shared/common/utils/module ownership. It also verifies feature
 README ownership, feature-test colocation, and the two curated package export
-map entries. Public feature entrypoints may expose only their own contracts.
+map entries. Package-owned tests under `tests/package/` may load repository
+architecture tooling at `scripts/architecture/*.mjs` in two forms: a
+string-literal relative specifier whose canonical path is that directory, or a
+dynamic `import()` whose only string literal is that repo-relative path. The
+checker classifies both as external tooling. The dynamic form is the
+Foundation-compatible load: a relative specifier into the root package is a
+cross-package edge and a runtime cycle, while a computed `import()` stays a
+declared dynamic runtime reference. Feature tests, production sources,
+nonliteral loaders without that exact literal, helpers outside `tests/package/`,
+and relative paths that canonicalize outside that directory still fail closed.
+Public feature entrypoints may expose only their own contracts.
 Public, internal, and package assembly entrypoints reject wildcard re-exports.
 Declared feature edges must connect declared features and must correspond to
 observed imports; unused edge declarations are rejected as future-state
