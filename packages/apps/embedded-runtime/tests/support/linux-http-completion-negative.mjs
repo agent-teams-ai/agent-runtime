@@ -63,6 +63,30 @@ mock.module("@agent-teams/agent-execution/composition", {exports: {
       signal.removeEventListener("abort", callback);
     },
   },
+  // Feature barrels re-export internal.ts, so this worker also evaluates the
+  // Linux recipe/deployment modules that import these AE composition names.
+  createDeferredCodexNativeBrokerFiles() {
+    return {
+      install() {},
+      bindRoot() {},
+      cutoff() {},
+      async quiesce() {},
+      snapshot() {return {binding: "unbound", closed: false};},
+    };
+  },
+  createNodeDockerDeploymentRecipe() {
+    throw Error("unexpected Node Docker deployment recipe");
+  },
+  bindContainedTurnRouteEnforcement() {
+    throw Error("unexpected contained-turn route enforcement bind");
+  },
+  readContainedTurnRouteEnforcementTarget() {},
+  NodeHttpEgressBoundaryIds: class {fresh = () => {throw Error("unexpected HTTP egress id");};},
+  NodeHttpEgressTrustedResolver: class {resolve = () => {throw Error("unexpected HTTP egress resolve");};},
+  PostgresHttpEgressEvidence: class {
+    digest = () => {throw Error("unexpected HTTP egress digest");};
+    record = () => {throw Error("unexpected HTTP egress record");};
+  },
 }});
 
 mock.module("@agent-teams/runtime-security/composition", {exports: {
