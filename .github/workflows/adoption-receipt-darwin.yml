@@ -1,7 +1,7 @@
 name: adoption-receipt-darwin
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host remainder
-# identity 5038c445 after absorbing #115. The job always checks out that SHA so this workflow-only
+# identity e2b00ea0 after absorbing #120. The job always checks out that SHA so this workflow-only
 # commit does not enter the receipt identity. Safe to delete after merge.
 
 on:
@@ -23,11 +23,11 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: 5038c445dbcb70f3c97ab8a5c486f83593308254
+          ref: e2b00ea0a327f68bda2611f2c03bf1f5aab31274
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "5038c445dbcb70f3c97ab8a5c486f83593308254"
+        run: test "$(git rev-parse HEAD)" = "e2b00ea0a327f68bda2611f2c03bf1f5aab31274"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
