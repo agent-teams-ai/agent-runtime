@@ -1517,7 +1517,7 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/internal.ts",
           "mode": "type-only"
         },
         {
@@ -1668,7 +1668,7 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/internal.ts",
           "mode": "runtime"
         },
         {
@@ -1764,7 +1764,7 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/internal.ts",
           "mode": "type-only"
         },
         {
@@ -2075,7 +2075,9 @@
         "packages/apps/embedded-runtime/src/composition/contained-turn-construction-failure.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-operation-ref.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-owner-contract-error.ts",
-        "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/application/contained-turn-runtime-access.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/internal.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts",
         "packages/apps/embedded-runtime/src/composition/runtime-access-lifecycle.ts",
         "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts"
@@ -2085,7 +2087,8 @@
         "packages/apps/embedded-runtime/src/composition/contained-turn-access-authority.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-construction-failure.ts",
-        "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/internal.ts",
         "packages/apps/embedded-runtime/src/composition/runtime-access-lifecycle.ts",
         "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-composition-types.ts"
@@ -2141,7 +2144,7 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/internal.ts",
           "mode": "type-only"
         },
         {
@@ -2155,47 +2158,47 @@
           "mode": "type-only"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/application/contained-turn-runtime-access.ts",
           "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/application/contained-turn-runtime-access.ts",
           "to": "packages/apps/embedded-runtime/src/composition/contained-turn-access-authority.ts",
           "mode": "type-only"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/application/contained-turn-runtime-access.ts",
           "to": "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/application/contained-turn-runtime-access.ts",
           "to": "packages/apps/embedded-runtime/src/composition/contained-turn-composition-types.ts",
           "mode": "type-only"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/application/contained-turn-runtime-access.ts",
           "to": "packages/apps/embedded-runtime/src/composition/contained-turn-operation-ref.ts",
           "mode": "type-only"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/application/contained-turn-runtime-access.ts",
           "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/application/contained-turn-runtime-access.ts",
           "to": "packages/apps/embedded-runtime/src/composition/runtime-access-lifecycle.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/application/contained-turn-runtime-access.ts",
           "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
           "mode": "type-only"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/application/contained-turn-runtime-access.ts",
           "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
           "mode": "type-only"
         },
@@ -4386,6 +4389,7 @@
       }
     ],
     "featureRoots": [
+      "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access",
       "packages/contexts/agent-execution/src/features/contained-agent-turn",
       "packages/contexts/agent-execution/src/features/runtime-installation-discovery",
       "packages/contexts/provider-access/src/features/contained-turn-access",

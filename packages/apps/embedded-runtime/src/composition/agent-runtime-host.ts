@@ -27,7 +27,7 @@ import {
 import {
   createContainedTurnSubmissionCoordinator,
   createContainedTurnRuntimeAccess,
-} from "./contained-turn-runtime-access.js";
+} from "../features/contained-turn-runtime-access/internal.js";
 import { createAgentRuntimeHostDisposalLifecycle } from "./agent-runtime-host-disposal.js";
 import { raceWithAbort } from "./runtime-access-lifecycle.js";
 

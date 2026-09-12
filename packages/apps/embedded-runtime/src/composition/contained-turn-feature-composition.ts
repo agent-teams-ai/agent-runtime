@@ -21,7 +21,7 @@ import {
   PRODUCT_QUALIFICATION_REGISTRY,
   registryQualifiesRouteTarget,
 } from "./contained-turn-route-qualification.js";
-import type { ContainedTurnCapabilityBundle } from "./contained-turn-runtime-access.js";
+import type { ContainedTurnCapabilityBundle } from "../features/contained-turn-runtime-access/internal.js";
 import {
   ContainedTurnOwnerDisposalError,
   disposeAfterContainedTurnConstructionFailure,

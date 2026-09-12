@@ -147,10 +147,13 @@ test("domain, application, sibling adapters and sibling composition never inheri
     `${embedded}application/trusted-claude-code-setup-scope.ts`,
     `${agent}adapters/outbound/codex-app-server/codex-app-server-jsonl.ts`,
     `${agent}composition/dispatch-grant-anti-corruption.ts`,
-    // contained-turn-runtime-access.ts is not listed here: PR69 gave it a real
-    // runtime edge to/from contained-turn-authority-capability.ts (disposal.ts
-    // re-exports authority-capability's util-consuming exports, and
-    // authority-capability imports runtime-access at runtime too), a genuine
+    // Host contained-turn-runtime-access application is not listed here: the
+    // first Host checkpoint still coordinates through composition-owned
+    // validation, authority unwrapping, and lifecycle helpers in
+    // composition.embedded-runtime.contained-turn-support. PR69 gave that
+    // pairing a real runtime edge to/from contained-turn-authority-capability.ts
+    // (disposal.ts re-exports authority-capability's util-consuming exports, and
+    // authority-capability imports the capability bundle type), a genuine
     // reciprocal pair that cannot be split into a util-free and a util-bearing
     // role without recreating the cycle. See composition.embedded-runtime
     // .contained-turn-support in source-dependencies.yaml.
