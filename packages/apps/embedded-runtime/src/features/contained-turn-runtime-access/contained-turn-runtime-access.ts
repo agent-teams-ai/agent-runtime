@@ -1,16 +1,16 @@
-import { unwrapContainedTurnAuthorityOutcome, type AuthorityBoundContainedTurnCapability } from "../../../composition/contained-turn-authority-capability.js";
-import type { ContainedTurnAccessAuthority } from "../../../composition/contained-turn-access-authority.js";
+import { unwrapContainedTurnAuthorityOutcome, type AuthorityBoundContainedTurnCapability } from "../../composition/contained-turn-authority-capability.js";
+import type { ContainedTurnAccessAuthority } from "../../composition/contained-turn-access-authority.js";
 import type {
   ObserveRuntimeContainedTurnOutcome,
   RuntimeContainedTurnAccess,
   SubmitRuntimeContainedTurnInput,
   SubmitRuntimeContainedTurnOutcome,
-} from "../../../contracts/runtime-access.js";
-import { raceWithAbort } from "../../../composition/runtime-access-lifecycle.js";
+} from "../../contracts/runtime-access.js";
+import { raceWithAbort } from "../../composition/runtime-access-lifecycle.js";
 import {
   containedTurnOwnerInvocationFailed,
   ContainedTurnOwnerContractError,
-} from "../../../composition/agent-runtime-host-disposal.js";
+} from "../../composition/agent-runtime-host-disposal.js";
 import {
   callerInvalidOutcome,
   contractViolation,
@@ -22,12 +22,12 @@ import {
   isTerminalTurnStatus,
   unavailableOutcome,
   type CopiedSubmitOutcome,
-} from "../../../composition/contained-turn-runtime-validation.js";
-import type { ContainedTurnCompositionOperationRef } from "../../../composition/contained-turn-operation-ref.js";
+} from "../../composition/contained-turn-runtime-validation.js";
+import type { ContainedTurnCompositionOperationRef } from "../../composition/contained-turn-operation-ref.js";
 import type {
   OwnerTurnObservation,
-} from "../../../composition/contained-turn-composition-types.js";
-import type { ContainedTurnCompositionScope } from "../../../composition/trusted-runtime-access-scope.js";
+} from "../../composition/contained-turn-composition-types.js";
+import type { ContainedTurnCompositionScope } from "../../composition/trusted-runtime-access-scope.js";
 
 type ContainedTurnOwnerStatus =
   | "accepted"

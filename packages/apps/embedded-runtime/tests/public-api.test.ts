@@ -170,16 +170,11 @@ test("application and contracts stay independent from adapters and runtime frame
     const source = await readFile(file, "utf8");
     const imports = [...source.matchAll(/(?:from\s+|import\s*)["']([^"']+)["']/gu)]
       .map(match => match[1]);
-    const hostRuntimeAccessCoordination = file.includes(
-      `${join("features", "contained-turn-runtime-access", "application")}`,
-    );
     assert.equal(
       imports.some(specifier =>
         specifier !== undefined &&
         (/node:(?:child_process|dgram|dns|fs|http|https|module|net|tls)/u.test(specifier) ||
-          (hostRuntimeAccessCoordination
-            ? /(?:^|\/)adapters(?:\/|$)|container|module-graph|registry|transport/u.test(specifier)
-            : /(?:^|\/)(?:adapters|composition)(?:\/|$)|container|module-graph|registry|transport/u.test(specifier))),
+          /(?:^|\/)(?:adapters|composition)(?:\/|$)|container|module-graph|registry|transport/u.test(specifier)),
       ),
       false,
       `forbidden inward dependency in ${file}`,

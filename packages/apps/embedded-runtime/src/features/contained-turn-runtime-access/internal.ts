@@ -4,4 +4,4 @@ export {
   type ContainedTurnCapabilityBundle,
   type ContainedTurnRuntimeAccessDependencies,
   type ContainedTurnSubmissionCoordinator,
-} from "./application/contained-turn-runtime-access.js";
+} from "./contained-turn-runtime-access.js";

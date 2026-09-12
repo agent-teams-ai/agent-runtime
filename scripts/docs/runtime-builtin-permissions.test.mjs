@@ -147,7 +147,7 @@ test("domain, application, sibling adapters and sibling composition never inheri
     `${embedded}application/trusted-claude-code-setup-scope.ts`,
     `${agent}adapters/outbound/codex-app-server/codex-app-server-jsonl.ts`,
     `${agent}composition/dispatch-grant-anti-corruption.ts`,
-    // Host contained-turn-runtime-access application is not listed here: the
+    // Host contained-turn-runtime-access is not listed here: the
     // first Host checkpoint still coordinates through composition-owned
     // validation, authority unwrapping, and lifecycle helpers in
     // composition.embedded-runtime.contained-turn-support. PR69 gave that
