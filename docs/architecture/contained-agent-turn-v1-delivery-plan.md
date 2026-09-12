@@ -501,6 +501,13 @@ Runtime, and module composition.
 
 ### Phase 3: production Host Custody
 
+Owner ruling 2026-09-12: Host Custody is an **optional contained-turn
+profile**, product default **off**. Ordinary user-session runtime does not
+require it. Current delivery leaves that profile unfinished; see
+[Host Custody optional default](host-custody-optional-default.md). The
+checklist below remains the Host Custody contract when the profile is selected
+later. It is not a PR #69 merge gate.
+
 Build a product-owned custody adapter rather than promoting the existing Rust
 Guardian evidence spike to production by assumption. It must prove:
 
