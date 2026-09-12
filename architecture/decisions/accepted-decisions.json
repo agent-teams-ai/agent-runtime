@@ -91,6 +91,11 @@
       "id": "ADR-0021",
       "path": "docs/decisions/0021-runtime-security-feature-activation.md",
       "immutableDigest": "sha256:d069d8bc82019c7efb582ba28f8006e53469be6ee873cc2b5bd5e55dc79962b0"
+    },
+    {
+      "id": "ADR-0022",
+      "path": "docs/decisions/0022-host-app-composition-directory-assembly-grammar.md",
+      "immutableDigest": "sha256:13def70c8554d01fbf254ef3afce598f0a18edc44d7d3af4eaf634b0635fddd8"
     }
   ]
 }

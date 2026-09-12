@@ -105,7 +105,8 @@ async function addRequiredAnchorFixtures(root) {
     "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/README.md",
     "packages/platform/filesystem-custody/src/features/stable-filesystem-custody/README.md",
     "scripts/architecture/check-consumer-module-standard.mjs",
-    "scripts/architecture/feature-module-edges.mjs"
+    "scripts/architecture/feature-module-edges.mjs",
+    "scripts/architecture/feature-module-profile.mjs"
   ]) {
     const destination = join(root, path);
     await mkdir(dirname(destination), { recursive: true });

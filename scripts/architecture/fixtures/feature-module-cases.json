@@ -2035,6 +2035,88 @@
       "expected": []
     },
     {
+      "name": "bounded-context-rejects-extra-composition-assembly",
+      "profileExtra": {
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "src/composition/host.ts"]
+      },
+      "files": { "src/composition/host.ts": "export const compose = () => true;\n" },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "host-app-rejects-assembly-outside-composition-directory",
+      "productionModules": [{ "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "profileExtra": {
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "src/legacy.ts"]
+      },
+      "files": {
+        "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"host-app\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+        "src/legacy.ts": "export const legacy = true;\n"
+      },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "host-app-rejects-nested-composition-assembly",
+      "productionModules": [{ "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "profileExtra": {
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "src/composition/nested/host.ts"]
+      },
+      "files": {
+        "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"host-app\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+        "src/composition/nested/host.ts": "export const compose = () => true;\n"
+      },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "host-app-composition-assembly-may-contain-inline-behavior",
+      "productionModules": [{ "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "profileExtra": {
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "src/composition/host.ts"]
+      },
+      "files": {
+        "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"host-app\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+        "src/composition/host.ts": "export const compose = () => true;\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "host-app-composition-assembly-may-import-siblings-entrypoints-and-node",
+      "productionModules": [{ "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "profileExtra": {
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "src/composition/host.ts", "src/composition/support.ts"]
+      },
+      "files": {
+        "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"host-app\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+        "src/composition/support.ts": "export const support = true;\n",
+        "src/composition/host.ts": "import { value } from '../features/alpha/internal.js';\nimport { support } from './support.js';\nimport fs from 'node:fs';\nexport const compose = () => value && support && fs.constants.F_OK;\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "host-app-composition-assembly-rejects-feature-deep-import",
+      "productionModules": [{ "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "profileExtra": {
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "src/composition/host.ts"]
+      },
+      "files": {
+        "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"host-app\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+        "src/composition/host.ts": "import { value } from '../features/alpha/domain/value.js';\nexport const compose = () => value;\n"
+      },
+      "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/composition/host.ts", "line": 1 }]
+    },
+    {
+      "name": "host-app-unowned-source-still-fails-with-composition-assembly",
+      "productionModules": [{ "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "profileExtra": {
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "src/composition/host.ts"]
+      },
+      "files": {
+        "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"host-app\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+        "src/composition/host.ts": "export const compose = () => true;\n",
+        "src/legacy.ts": "export const legacy = true;\n"
+      },
+      "expected": [{ "code": "FM_BEHAVIOR_OUTSIDE_FEATURE", "path": "src/legacy.ts", "line": 1 }]
+    },
+    {
       "name": "platform-module-exports-only-its-public-assembly-file",
       "productionModules": [{ "id": "fixture-runtime", "role": "platform", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": ["."], "adoption": "active", "activationAuthority": "ADR-0005" }],
       "files": { "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"platform\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}}}\n" },
