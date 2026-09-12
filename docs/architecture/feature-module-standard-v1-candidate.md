@@ -328,7 +328,14 @@ Host composition re-exports those feature entries from the matching
 `src/composition/` files, so existing composition and test imports keep working.
 The implementations stay at the feature root rather than under `application/`:
 they still import Host composition helpers, which L0 treats as an inward leak
-from `application/`. Process lifecycle,
+from `application/`. Trusted runtime-access scope copying now lives under
+`src/features/trusted-runtime-access-scope/` with curated `index.ts` /
+`internal.ts` entrypoints. Host composition re-exports that feature from
+`src/composition/trusted-runtime-access-scope.ts`, so existing composition and
+test imports keep working. The implementation stays at the feature root rather
+than under `application/`: it still imports Host composition helpers and
+application scope types, which L0 treats as an inward leak from `application/`.
+Process lifecycle,
 readiness and rollback stay in composition. Host tests that
 previously imported unpublished Agent Execution, Provider Access, and Runtime
 Security `dist/` and `tests/` package subpaths now use the curated
