@@ -81,6 +81,11 @@
       "id": "ADR-0019",
       "path": "docs/decisions/0019-stable-filesystem-custody-feature-activation.md",
       "immutableDigest": "sha256:0d14957269756e25a91fa3598b42034d335b1f27eddedd18c267d8069d7612b4"
+    },
+    {
+      "id": "ADR-0020",
+      "path": "docs/decisions/0020-runtime-configuration-feature-activation.md",
+      "immutableDigest": "sha256:bb333c3543ebb96fe273a516cc5727fe2a2ff7388a51028a60327d6160376068"
     }
   ]
 }

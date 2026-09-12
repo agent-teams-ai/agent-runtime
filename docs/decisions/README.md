@@ -22,6 +22,7 @@ related:
   - ADR-0017
   - ADR-0018
   - ADR-0019
+  - ADR-0020
 blocked_by: []
 code_anchors:
   - enforcement: required
@@ -89,6 +90,10 @@ immutable evidence; a later change uses an explicit superseding decision.
 - [ADR-0019: Stable filesystem custody feature activation](0019-stable-filesystem-custody-feature-activation.md)
   activates the Filesystem Custody platform module as one cohesive feature with
   a contracts-only public entry and its runtime behind the composition entry.
+- [ADR-0020: Runtime Configuration feature activation](0020-runtime-configuration-feature-activation.md)
+  activates the Runtime Configuration bounded context as two Feature Module
+  Standard v1 features with a runtime edge onto Filesystem Custody.
+
 ## Superseded
 
 No superseded decisions.

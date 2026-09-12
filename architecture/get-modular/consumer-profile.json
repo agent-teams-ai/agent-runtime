@@ -20,12 +20,14 @@
   },
   "fms": {
     "profile": "architecture/feature-module-standard/candidate-profile.json",
-    "sha256": "f31d4ac720d7b2d2e96647d924c3dee12d050a905520e942e15c1ec74110f060",
+    "sha256": "9f59e4051df2cb29e628b4fde2db598f3f139934b93a998bc420dadb1cf913e2",
     "features": [
       "runtime-installation-discovery",
       "contained-agent-turn",
       "contained-turn-access",
-      "stable-filesystem-custody"
+      "stable-filesystem-custody",
+      "codex-configuration-inspection",
+      "claude-code-configuration-inspection"
     ]
   },
   "productionRoots": [
