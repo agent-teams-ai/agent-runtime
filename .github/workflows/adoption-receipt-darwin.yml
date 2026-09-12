@@ -1,14 +1,14 @@
 name: adoption-receipt-darwin
 
-# Temporary workflow: Darwin arm64 adoption receipt for package-test
-# architecture-load identity 76b62a56 stacked on leftover RS D 79b32ce8.
+# Temporary workflow: Darwin arm64 adoption receipt for leftover RS barrels
+# oxlint extract identity 1f7c1627 stacked on RC D c7180045.
 # The job always checks out that SHA so this workflow-only commit does not
 # enter the receipt identity. Safe to delete after merge.
 
 on:
   push:
     branches:
-      - cursor/fms-darwin-gha-capture-arch-load-7d17
+      - cursor/fms-darwin-gha-capture-rs-oxlint-7d17
 
 permissions:
   contents: read
@@ -19,16 +19,16 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     steps:
-      - name: Checkout frozen package-test architecture-load SHA
+      - name: Checkout frozen leftover RS oxlint extract SHA
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: 76b62a56d01b80da418735dc429fc99c4c8987c6
+          ref: 1f7c1627872589afc58d89053043fd9d894ba97d
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "76b62a56d01b80da418735dc429fc99c4c8987c6"
+        run: test "$(git rev-parse HEAD)" = "1f7c1627872589afc58d89053043fd9d894ba97d"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
