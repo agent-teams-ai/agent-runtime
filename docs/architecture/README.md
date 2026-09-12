@@ -43,6 +43,10 @@ Documents:
 - [Contained Agent Turn V1 delivery plan](contained-agent-turn-v1-delivery-plan.md):
   staged implementation, provider, module, custody, qualification, and hosted
   worker plan for the first contained execution turn.
+- [Subscription-runtime port candidates](subscription-runtime-port-candidates.md):
+  sibling product as a protocol encyclopedia, not a spawn template. Named
+  anti-patterns [`SR-AP-1`](subscription-runtime-port-candidates.md#sr-ap-1-provider-owns-the-process)
+  … [`SR-AP-11`](subscription-runtime-port-candidates.md#sr-ap-11-orchestrator-intents-in-the-runtime-enum).
 - [Host Custody optional default](host-custody-optional-default.md):
   ordinary user-session runtime is the product default; contained-turn Host
   Custody stays an optional profile defaulted off, with the Darwin isolate /

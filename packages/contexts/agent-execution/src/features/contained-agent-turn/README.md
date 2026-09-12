@@ -45,3 +45,24 @@ kernel mapper discards legacy SDK receipt strings; Host Custody requires sealed
 provider completion, proved process start, and closed execution evidence before
 issuing execution, output-drain, and provider-terminal proofs. SDK iterator drain
 alone is not a Host output-drain proof.
+
+## Canonical launch vs subscription-runtime
+
+This feature's adapters are the canonical contained-turn launch model.
+subscription-runtime is a protocol encyclopedia, not a spawn template.
+
+- Codex: App Server JSONL over stdio. No CLI fallback
+  ([SR-AP-2](../../../../../../docs/architecture/subscription-runtime-port-candidates.md#sr-ap-2-silent-second-attempt)).
+- Claude: official Agent SDK `query()` with `spawnClaudeCodeProcess` bound to
+  Host Custody when that profile is selected. `persistSession` is false.
+  Resume/fork are V1-forbidden
+  ([SR-AP-1](../../../../../../docs/architecture/subscription-runtime-port-candidates.md#sr-ap-1-provider-owns-the-process),
+  [SR-AP-3](../../../../../../docs/architecture/subscription-runtime-port-candidates.md#sr-ap-3-provider-session-as-continuation)).
+- Host Custody is an optional profile, default off
+  ([host-custody-optional-default.md](../../../../../../docs/architecture/host-custody-optional-default.md)).
+  Optionality does not authorize SR default SDK spawn.
+
+Named anti-patterns to refuse when porting from the sibling product:
+[`SR-AP-1` … `SR-AP-11`](../../../../../../docs/architecture/subscription-runtime-port-candidates.md#named-subscription-runtime-anti-patterns).
+Authority and take/leave rules:
+[subscription-runtime-port-candidates.md](../../../../../../docs/architecture/subscription-runtime-port-candidates.md).

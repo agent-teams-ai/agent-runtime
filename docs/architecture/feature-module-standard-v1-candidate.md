@@ -288,7 +288,25 @@ feature entries from the matching `src/composition/` files, so existing
 composition and test imports keep working. The implementations stay at the
 feature root rather than under `application/`: they still import Agent
 Execution, Provider Access and Runtime Security composition types, which L0
-treats as an inward leak from `application/`. The Linux Codex Node recipe now
+treats as an inward leak from `application/`. Access authority, cancellation
+proof and construction-failure cleanup now live under
+`src/features/contained-turn-access-authority/`,
+`src/features/contained-turn-cancellation-proof/` and
+`src/features/contained-turn-construction-failure/`, each with curated
+`index.ts` / `internal.ts` entrypoints. Host composition re-exports those
+feature entries from the matching `src/composition/` files, so existing
+composition and test imports keep working. The implementations stay at the
+feature root rather than under `application/`: cancellation proof still
+imports Host composition helpers, which L0 treats as an inward leak from
+`application/`. Darwin contained-turn authority and deployment now live under
+`src/features/darwin-contained-turn-authority/` and
+`src/features/darwin-contained-turn-deployment/`, each with curated
+`index.ts` / `internal.ts` entrypoints. Host composition re-exports those
+feature entries from the matching `src/composition/` files, so existing
+composition and test imports keep working. The implementations stay at the
+feature root rather than under `application/`: they still import Host
+composition helpers, which L0 treats as an inward leak from
+`application/`. The Linux Codex Node recipe now
 lives under `src/features/linux-codex-node-recipe/` with curated `index.ts` /
 `internal.ts` entrypoints. Host composition re-exports that feature entry from
 `src/composition/linux-codex-node-recipe.ts` and

@@ -7,6 +7,8 @@ Start here:
 
 - Repository overview: [README.md](README.md)
 - Canonical architecture reading order: [docs/README.md](docs/README.md)
+- Contained-turn vs subscription-runtime (named anti-patterns `SR-AP-1` … `SR-AP-11`):
+  [docs/architecture/subscription-runtime-port-candidates.md](docs/architecture/subscription-runtime-port-candidates.md#named-subscription-runtime-anti-patterns)
 - Current readiness gates: [docs/architecture/readiness.md](docs/architecture/readiness.md)
 - Exact qualified runtime targets:
   [docs/architecture/qualification-registry.json](docs/architecture/qualification-registry.json)
@@ -32,6 +34,10 @@ Guardrails:
   explicitly disposable test environments for runtime experiments.
 - Keep provider-specific behavior behind runtime adapters and do not import
   orchestrator domain models.
+- Do not copy subscription-runtime spawn, fallback, resume, pools, or
+  worker-codex into contained-turn. Cite
+  [`SR-AP-1` … `SR-AP-11`](docs/architecture/subscription-runtime-port-candidates.md#named-subscription-runtime-anti-patterns)
+  when rejecting those shapes.
 - `pnpm check` runs only synthetic, disposable tests. Provider spike commands
   are separate and require explicit scope and safety review.
 
@@ -66,3 +72,11 @@ Verification workflow:
 Mandatory for every change to module boundaries, capability contracts, composition, lifecycle ownership, adoption profiles or their gates: read the canonical Get Modular Consumer Module Standard (`docs/architecture/common-assembly.md#consumer-module-standard` in agent-teams-ai/get-modular). Update its current guidance/examples when shared behavior changes, and update affected consumer profiles, documentation and rejecting tests in the same delivery. Do not duplicate the standard or silently replace accepted ADR bytes.
 
 Before implementation, compare the consumer's pinned revision with the current upstream standard; review the delta and migrate the pin with its retained evidence and checks. Never silently follow a moving main revision. If migration is not yet complete, record the exact outstanding work and keep adoption pending. A task is not done with stale guidance, an unreviewed pin, or a no-op/missing enforcement command. New meaningful composition boundaries must be adopted or explicitly classified; feature-local helpers are not separate graph nodes.
+
+<!-- agent-teams:quality-standard:start -->
+Before planning, implementing, or reviewing changes, read and follow the
+[organization Engineering Quality Standard](https://github.com/agent-teams-ai/.github/blob/main/docs/engineering-quality-standard.md).
+Apply it with this repository's instructions, accepted decisions and local
+adoption profiles. This reference does not change pinned architecture contracts
+or certify existing code as conformant.
+<!-- agent-teams:quality-standard:end -->
