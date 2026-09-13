@@ -38,6 +38,7 @@ on:
       - cursor/fms-rc-activation-linux-7d17
       - cursor/fms-rs-activation-linux-7d17
       - cursor/fms-host-assembly-grammar-7d17
+      - cursor/fms-host-assembly-grammar-edges-7d17
       - docs/sr-contained-turn-anti-patterns
       - refactor/fms-host-access-invariants
       - refactor/fms-host-darwin-deployment
