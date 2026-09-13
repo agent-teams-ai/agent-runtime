@@ -1,11 +1,11 @@
-import { createAgentRuntimeHost } from "../dist/composition/agent-runtime-host.js";
+import { createAgentRuntimeHost } from "../../dist/composition/agent-runtime-host.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
   createClaudeCodeSetupInspectionPlanner,
   createCodexSetupInspectionPlanner,
-} from "../dist/composition.js";
+} from "../../dist/composition.js";
 
 const unavailable = (): never => {
   throw new Error("unsupported capability must not be invoked");
