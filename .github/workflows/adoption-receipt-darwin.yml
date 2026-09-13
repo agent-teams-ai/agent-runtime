@@ -1,15 +1,15 @@
 name: adoption-receipt-darwin
-# retrigger 9e9be707 (second push)
+# identity bd59da9e
 
-# Temporary workflow: Darwin arm64 adoption receipt for Host live darwin-infra
-# identity 9e9be707 stacked on Host live-canary D 4f4fb9ca.
+# Temporary workflow: Darwin arm64 adoption receipt for Host live darwin-activation
+# identity bd59da9e stacked on Host live darwin-infra D fb6b8461.
 # The job always checks out that SHA so this workflow-only commit does not
 # enter the receipt identity. Safe to delete after the paired receipt is merged.
 
 on:
   push:
     branches:
-      - cursor/fms-darwin-gha-capture-host-live-darwin-infra-7d17
+      - cursor/fms-darwin-gha-capture-host-live-darwin-activation-7d17
 
 permissions:
   contents: read
@@ -20,16 +20,16 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     steps:
-      - name: Checkout frozen Host live darwin-infra SHA
+      - name: Checkout frozen Host live darwin-activation SHA
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: 9e9be7077e302e9134fe58b81e0a63848ee4a5b5
+          ref: bd59da9e1e8b2486ff6308b31b0a17644db2c1e2
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "9e9be7077e302e9134fe58b81e0a63848ee4a5b5"
+        run: test "$(git rev-parse HEAD)" = "bd59da9e1e8b2486ff6308b31b0a17644db2c1e2"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
