@@ -1,9 +1,9 @@
-import { createAgentRuntimeHost as createBoundHost } from "../../dist/composition/agent-runtime-host.js";
+import { createAgentRuntimeHost as createBoundHost } from "../../../dist/composition/agent-runtime-host.js";
 import {
   bindContainedTurnCapabilityAuthority,
   type AgentRuntimeHostDependencies,
   type ContainedTurnCapabilityBundle,
-} from "../../dist/composition.js";
+} from "../../../dist/composition.js";
 
 /** Synthetic fixtures explicitly select their owner revision at composition. */
 export const createAgentRuntimeHost = (

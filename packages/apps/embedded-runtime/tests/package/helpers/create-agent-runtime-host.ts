@@ -1,8 +1,8 @@
-import { createAgentRuntimeHost as createClosedAgentRuntimeHost } from "../../dist/composition/agent-runtime-host.js";
+import { createAgentRuntimeHost as createClosedAgentRuntimeHost } from "../../../dist/composition/agent-runtime-host.js";
 import {
   type BuildClaudeCodeSetupViewDependencies,
   type BuildCodexSetupViewDependencies,
-} from "../../dist/composition.js";
+} from "../../../dist/composition.js";
 
 export const createAgentRuntimeHost = (
   dependencies: BuildCodexSetupViewDependencies & BuildClaudeCodeSetupViewDependencies,

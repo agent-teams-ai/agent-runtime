@@ -79,7 +79,7 @@ try {
       import("@agent-teams/agent-execution/composition"),
       import("@agent-teams/runtime-configuration/composition"),
       import("@agent-teams/runtime-security/composition"),
-      import("../../dist/composition.js"),
+      import("../../../dist/composition.js"),
     ]);
 
   const nodeCanonicalizer = securityComposition.createNodePathCanonicalizer();
@@ -132,7 +132,7 @@ try {
     sourceReader: configurationComposition.createClaudeCodeConfigurationSourceReaderAdapter(sourceReader),
   });
 
-  const host = (await import("../../dist/composition/agent-runtime-host.js")).createAgentRuntimeHost({
+  const host = (await import("../../../dist/composition/agent-runtime-host.js")).createAgentRuntimeHost({
     claudeCodeSetup: {
       authorizeClaudeCodeSetupInspection: security.authorizeClaudeCodeSetupInspection,
       discoverClaudeCodeInstallations: execution.discoverClaudeCodeInstallations,

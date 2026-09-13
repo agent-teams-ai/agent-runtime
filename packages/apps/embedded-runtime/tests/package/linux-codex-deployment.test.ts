@@ -8,7 +8,7 @@ import {createLinuxCodexDeploymentResources, type LinuxCodexDeploymentInfrastruc
 import {createContainedTurnCurrentEgressOwners} from "../../dist/composition/contained-turn-current-egress-owners.js";
 import { createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate, canonicalEgressValue } from "@agent-teams/runtime-security/composition";
 import {bindContainedTurnHttpRuntimeSecurity} from "../../dist/composition/contained-turn-http-runtime-security.js";
-import {fixture, digest, changed} from "../contained-turn-current-egress-owners.fixture.ts";
+import {fixture, digest, changed} from "./contained-turn-current-egress-owners.fixture.ts";
 import {SYNTHETIC_LOOPBACK_CA} from "../support/external/agent-execution/fixtures/http-egress-tls/synthetic-loopback-certificates.ts";
 
 /** Simulation: acknowledged feature receipts and PG query replies are fixtures.
