@@ -1,5 +1,5 @@
 name: adoption-receipt-darwin
-# capture packed-consumer identity cd09f02a
+# retrigger cd09f02a (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host packed-consumer identity
 # c20983e6 stacked on Host multi-package D 29e49c0b.
