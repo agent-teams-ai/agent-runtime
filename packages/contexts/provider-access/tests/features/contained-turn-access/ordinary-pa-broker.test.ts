@@ -106,3 +106,10 @@ test('credential fragments in interleaved output items remain fenced', async t =
   assert.equal((await post(f.broker.endpoint, payload())).status, 502);
   assert.deepEqual(f.ended, [{sequence: 1, success: false}]);
 });
+
+test('credential fragments in interleaved reasoning summary parts remain fenced', async t => {
+  const frames = [{type: 'response.reasoning_summary_text.delta', item_id: 'A', summary_index: 0, delta: 'fixture-'}, {type: 'response.reasoning_summary_text.delta', item_id: 'A', summary_index: 1, delta: 'other'}, {type: 'response.reasoning_summary_text.delta', item_id: 'A', summary_index: 0, delta: 'pa'}];
+  const f = await fixture({async request() {return {status: 200, body: bytes(frames.map(frame => 'data: ' + JSON.stringify(frame) + '\n\n').join('')), close() {}};}}); t.after(() => f.close());
+  assert.equal((await post(f.broker.endpoint, payload())).status, 502);
+  assert.deepEqual(f.ended, [{sequence: 1, success: false}]);
+});

@@ -75,8 +75,10 @@ function responseSafe(bytes: Buffer, guard: OrdinaryPaSecretGuard, semantic: Map
     if (value !== null && typeof value === 'object' && 'delta' in value && typeof value.delta === 'string') {
       const item = 'item_id' in value ? value.item_id : 'output_index' in value ? value.output_index : null;
       const content = 'content_index' in value ? value.content_index : null;
-      if ((item !== null && typeof item !== 'string' && typeof item !== 'number') || (content !== null && typeof content !== 'number')) {return false;}
-      const key = JSON.stringify([item, content]);
+      const summary = 'summary_index' in value ? value.summary_index : null;
+      const type = 'type' in value ? value.type : null;
+      if ((item !== null && typeof item !== 'string' && typeof item !== 'number') || (content !== null && typeof content !== 'number') || (summary !== null && typeof summary !== 'number') || typeof type !== 'string') {return false;}
+      const key = JSON.stringify([type, item, content, summary]);
       const accumulated = (semantic.get(key) ?? '') + value.delta;
       semantic.set(key, accumulated);
       if (!guard.check(accumulated)) { return false; }
