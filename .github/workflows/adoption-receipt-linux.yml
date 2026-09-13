@@ -49,6 +49,7 @@ on:
       - cursor/fms-host-packed-consumer-7d17
       - cursor/fms-host-recipe-owners-7d17
       - cursor/fms-host-live-selection-7d17
+      - cursor/fms-host-live-admin-7d17
       - docs/sr-contained-turn-anti-patterns
       - refactor/fms-host-access-invariants
       - refactor/fms-host-darwin-deployment

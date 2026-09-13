@@ -115,6 +115,10 @@ test("original argv lists and accepted native authority test are preserved exact
     ["tests/linux-codex-node-recipe-owners.test.ts", "tests/package/linux-codex-node-recipe-owners.test.ts"],
     ["tests/live/linux-codex-pa-rendering.test.ts", "tests/package/live/linux-codex-pa-rendering.test.ts"],
     ["tests/live/linux-codex-node-selection.test.ts", "tests/package/live/linux-codex-node-selection.test.ts"],
+    ["tests/live/linux-codex-live-admin-directories.test.ts", "tests/package/live/linux-codex-live-admin-directories.test.ts"],
+    ["tests/live/linux-codex-live-admin-route.test.ts", "tests/package/live/linux-codex-live-admin-route.test.ts"],
+    ["tests/live/linux-codex-live-admin-firewall.test.ts", "tests/package/live/linux-codex-live-admin-firewall.test.ts"],
+    ["tests/live/linux-codex-live-firewall-wiring.test.ts", "tests/package/live/linux-codex-live-firewall-wiring.test.ts"],
   ]);
   expected[0] = expected[0].map((arg) => relocated.get(arg) ?? arg);
   assert.deepEqual(testProcesses, expected);
