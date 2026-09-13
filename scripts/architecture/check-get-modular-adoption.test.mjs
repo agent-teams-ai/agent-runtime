@@ -376,3 +376,10 @@ test('current lifecycle clarification pin rejects prior commit and prior documen
 
 // Additive ADR-0090 scope and graph rejecting evidence remains in the canonical gate.
 import {profile as ordinaryScopeProfile} from './check-ordinary-feature-scope.test.mjs';
+
+test('renumbered ordinary decisions retain both immutable pre-merge byte sets', async () => {
+  for (const [path, expected] of [
+    ['architecture/decisions/evidence/ordinary-session-adr0020-premerge.md', '1cd51ba204d7de2dd085913afde8e9349104895e1ad607c10cfe769eaeb0a35e'],
+    ['architecture/decisions/evidence/ordinary-session-adr0021-premerge.md', '421a30eab66bd177a8a68e603d9a005e4ec946c3dc2beb8a0e9b48ad02f867fa'],
+  ]) {assert.equal(digest(await readFile(new URL('../../' + path, import.meta.url))), expected, path);}
+});
