@@ -1,7 +1,7 @@
 name: adoption-receipt-darwin
 
 # Temporary workflow: Darwin arm64 adoption receipt for Runtime Security
-# activation identity ab9a942a stacked on RC activation D d2c28df4.
+# activation absorb identity 793db25b after RC activation merge-commit 4902cf56.
 # The job always checks out that SHA so this workflow-only commit does not
 # enter the receipt identity. Safe to delete after the paired Runtime Security receipt is merged.
 
@@ -24,11 +24,11 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: ab9a942afd9810cf41b4e7e837f4f90a5a0c180e
+          ref: 793db25b9389052c55664f38a3192289c2016d67
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "ab9a942afd9810cf41b4e7e837f4f90a5a0c180e"
+        run: test "$(git rev-parse HEAD)" = "793db25b9389052c55664f38a3192289c2016d67"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
