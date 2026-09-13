@@ -21,7 +21,7 @@ import {
   repositoryPath,
   sameFilesystemIdentity,
 } from "./feature-module-paths.mjs";
-import { ACCEPTED_DECISIONS, CANDIDATE_MIGRATION_CODES, acceptedDecisionsFromRegistry, applyGovernedRecords, validateProfile } from "./feature-module-profile.mjs";
+import { ACCEPTED_DECISIONS, CANDIDATE_MIGRATION_CODES, LOCAL_MODULE_FILES, acceptedDecisionsFromRegistry, applyGovernedRecords, validateProfile } from "./feature-module-profile.mjs";
 import { curatedModuleImportIssues, detectCycles, recordObservedEdge, unusedEdgeIssues } from "./feature-module-edges.mjs";
 import { packagePolicyIssues } from "./feature-module-tests.mjs";
 import { activeGateIssues } from "./feature-module-root-gates.mjs";
@@ -242,8 +242,12 @@ const parseFileImports = async (absoluteFile, path, resources) => {
   };
 };
 
+const isCuratedModuleFile = (path) => LOCAL_MODULE_FILES.includes(posix.basename(path));
+const isHostCompositionAssembly = (path, isAssembly) => Boolean(isAssembly) && !isCuratedModuleFile(path);
+
 const assemblyGrammarIssues = ({ isAssembly, path, sourceFeature, program, source }) => {
-  if (!program || !(isAssembly || Object.values(sourceFeature?.entrypoints ?? {}).includes(path))) {return [];}
+  const curatedAssembly = isAssembly && isCuratedModuleFile(path);
+  if (!program || !(curatedAssembly || Object.values(sourceFeature?.entrypoints ?? {}).includes(path))) {return [];}
   const invalid = (program.body ?? []).filter((node) => !(
     node.type === "ImportDeclaration"
     || node.type === "ExportAllDeclaration"
@@ -307,13 +311,15 @@ const nonLocalImportIssues = ({ imported, isAssembly, path, sourceFeature }) => 
   if (sourceFeature && Object.hasOwn(EXTERNAL_IMPORT_ALLOWED, sourceLayer) && !EXTERNAL_IMPORT_ALLOWED[sourceLayer]) {
     return [issue("FM_EXTERNAL_IMPORT", path, imported.line, `${sourceLayer} cannot import external module ${imported.specifier}`)];
   }
+  if (isHostCompositionAssembly(path, isAssembly)) {return [];}
   if (isAssembly || Object.values(sourceFeature?.entrypoints ?? {}).includes(path)) {
     return [issue("FM_ASSEMBLY_IMPORT_TARGET", path, imported.line, "assembly and entrypoint imports must target declared feature entrypoints or owned feature layers")];
   }
   return [];
 };
 
-const outsideFeatureImportIssues = ({ imported, isAssembly, path, sourceFeature, targetPath, productionRoots }) => {
+const outsideFeatureImportIssues = ({ imported, isAssembly, path, sourceFeature, targetPath, productionRoots, assemblyFiles }) => {
+  if (isHostCompositionAssembly(path, isAssembly) && assemblyFiles?.has(targetPath)) {return [];}
   if (!sourceFeature && !isAssembly) {return [];}
   const isRepositoryLocal = !targetPath.startsWith("../");
   const isGovernedLocal = productionRoots.some((root) => targetPath === root || targetPath.startsWith(`${root}/`));
@@ -330,7 +336,7 @@ const identityCoversPath = (identityPaths, path) => identityPaths.some((candidat
 );
 
 const inspectImport = (context) => {
-  const { features, isAssembly, sourceFeature, path, imported, localPackageImports, productionRoots, identityPaths } = context;
+  const { features, isAssembly, sourceFeature, path, imported, localPackageImports, productionRoots, identityPaths, assemblyFiles } = context;
   if (imported.nonliteral) {return [issue("FM_NONLITERAL_LOADING", path, imported.line, `${imported.syntax} requires a string literal`)];}
   const resolved = localPackageImports.resolve(path, imported.specifier);
   if (resolved.alias || resolved.kind === "external" && isPathAlias(imported.specifier)) {
@@ -339,7 +345,7 @@ const inspectImport = (context) => {
   if (resolved.kind === "invalid") {
     if (resolved.missing) {
       const targetFeature = featureForPath(features, resolved.path);
-      if (!targetFeature) {return outsideFeatureImportIssues({ ...context, targetPath: resolved.path, productionRoots });}
+      if (!targetFeature) {return outsideFeatureImportIssues({ ...context, targetPath: resolved.path, productionRoots, assemblyFiles });}
       const declaredEntrypoint = Object.values(targetFeature.entrypoints).includes(resolved.path);
       if (declaredEntrypoint || identityCoversPath(identityPaths, resolved.path)) {return [];}
     }
@@ -350,8 +356,12 @@ const inspectImport = (context) => {
   const crossModule = curatedModuleImportIssues({ ...context, targetPath, issue, layerForPath });
   if (crossModule) {return crossModule;}
   const targetFeature = featureForPath(features, targetPath);
-  if (!targetFeature) {return outsideFeatureImportIssues({ ...context, targetPath, productionRoots });}
+  if (!targetFeature) {return outsideFeatureImportIssues({ ...context, targetPath, productionRoots, assemblyFiles });}
   const importContext = { ...context, targetPath, targetFeature };
+  if (isHostCompositionAssembly(path, isAssembly)) {
+    if (Object.values(targetFeature.entrypoints).includes(targetPath)) {return [];}
+    return [issue("FM_FEATURE_DEEP_IMPORT", path, imported.line, `assembly ${posix.basename(path)} must use a curated ${targetFeature.id} entrypoint, not ${targetPath}`)];
+  }
   if (isAssembly) {return assemblyImportIssues(importContext);}
   if (!sourceFeature) {return [];}
   const entrypointIssues = [...publicEntrypointIssues(importContext), ...internalEntrypointIssues(importContext)];
@@ -451,7 +461,7 @@ export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath 
       source: parsed.source,
     }));
     findings.add(assemblyGrammarIssues({ isAssembly, path, sourceFeature, program: parsed.program, source: parsed.source }));
-    for (const imported of parsed.imports) {findings.add(inspectImport({ features, isAssembly, sourceFeature, path, imported, declaredEdges, observedEdges, edgeLocations, localPackageImports, productionRoots, identityPaths, declaredModules, declaredModuleEdges, observedModuleEdges, moduleEdgeLocations }));}
+    for (const imported of parsed.imports) {findings.add(inspectImport({ features, isAssembly, sourceFeature, path, imported, declaredEdges, observedEdges, edgeLocations, localPackageImports, productionRoots, identityPaths, declaredModules, declaredModuleEdges, observedModuleEdges, moduleEdgeLocations, assemblyFiles }));}
     if (parsed.overflow) {findings.overflow("import"); break;}
   }
   const observed = [...observedEdges].map(([key, kinds]) => { const [from, to] = key.split("->"); return { from, to, kinds: [...kinds] }; });

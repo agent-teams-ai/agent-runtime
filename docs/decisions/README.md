@@ -24,6 +24,7 @@ related:
   - ADR-0019
   - ADR-0020
   - ADR-0021
+  - ADR-0022
 blocked_by: []
 code_anchors:
   - enforcement: required
@@ -97,6 +98,10 @@ immutable evidence; a later change uses an explicit superseding decision.
 - [ADR-0021: Runtime Security feature activation](0021-runtime-security-feature-activation.md)
   activates the Runtime Security bounded context as four Feature Module
   Standard v1 features with a runtime edge onto Filesystem Custody.
+- [ADR-0022: Host-app composition directory assembly grammar](0022-host-app-composition-directory-assembly-grammar.md)
+  lets an active host-app list extra `src/composition/*.ts` assembly files that
+  may contain process-lifecycle behavior without rewriting ADR-0013 or
+  activating Embedded Runtime.
 
 ## Superseded
 
