@@ -106,6 +106,11 @@ test("original argv lists and accepted native authority test are preserved exact
     ["tests/linux-codex-deployment.test.ts", "tests/package/linux-codex-deployment.test.ts"],
     ["tests/linux-codex-node-recipe.test.ts", "tests/package/linux-codex-node-recipe.test.ts"],
     ["tests/contained-turn-runtime-validation.unit.test.ts", "tests/package/contained-turn-runtime-validation.unit.test.ts"],
+    ["tests/linux-joined-peer.test.mjs", "tests/package/linux-joined-peer.test.mjs"],
+    ["tests/public-api.test.ts", "tests/package/public-api.test.ts"],
+    ["tests/claude-code-contract.test.ts", "tests/package/claude-code-contract.test.ts"],
+    ["tests/contained-turn-http-digest-alignment.test.ts", "tests/package/contained-turn-http-digest-alignment.test.ts"],
+    ["tests/node-docker-route-provenance-integration.test.ts", "tests/package/node-docker-route-provenance-integration.test.ts"],
   ]);
   expected[0] = expected[0].map((arg) => relocated.get(arg) ?? arg);
   assert.deepEqual(testProcesses, expected);

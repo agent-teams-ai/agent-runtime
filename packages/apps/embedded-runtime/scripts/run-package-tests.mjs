@@ -37,7 +37,7 @@ export const testProcesses = [
     "tests/package/linux-codex-deployment-publication.test.ts",
     "tests/package/linux-codex-node-recipe.test.ts",
     "tests/linux-codex-node-recipe-owners.test.ts",
-    "tests/linux-joined-peer.test.mjs",
+    "tests/package/linux-joined-peer.test.mjs",
     "tests/package/contained-turn-provider-selection-construction.test.ts",
     "tests/package/provider-candidate-route-gate.test.ts",
     "tests/package/claude-route-enforcement-unsupported.test.ts",
@@ -52,8 +52,8 @@ export const testProcesses = [
     "tests/package/contained-turn-runtime-validation.unit.test.ts",
     "tests/features/contained-turn-construction-failure/contained-turn-construction-failure.unit.test.ts",
     "tests/features/trusted-runtime-access-scope/trusted-runtime-access-scope.unit.test.ts",
-    "tests/public-api.test.ts",
-    "tests/claude-code-contract.test.ts",
+    "tests/package/public-api.test.ts",
+    "tests/package/claude-code-contract.test.ts",
     "tests/features/setup-inspection-planning/opaque-reference-digest.test.ts",
     "tests/live/linux-codex-pa-rendering.test.ts",
     "tests/live/linux-codex-node-selection.test.ts",
@@ -63,10 +63,10 @@ export const testProcesses = [
     "tests/live/linux-codex-live-canary-config.test.ts",
     "tests/live/linux-codex-live-admin-firewall.test.ts",
     "tests/live/linux-codex-live-firewall-wiring.test.ts",
-    "tests/contained-turn-http-digest-alignment.test.ts",
+    "tests/package/contained-turn-http-digest-alignment.test.ts",
     "tests/live/run-linux-codex-live-canary.test.mjs",
     "tests/live/run-linux-codex-live-canary-cli.test.mjs",
-    "tests/node-docker-route-provenance-integration.test.ts"
+    "tests/package/node-docker-route-provenance-integration.test.ts"
   ],
   [
     "--experimental-test-module-mocks",
