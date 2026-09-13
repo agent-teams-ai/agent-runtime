@@ -2092,6 +2092,52 @@
       "expected": []
     },
     {
+      "name": "host-app-curated-composition-may-reexport-extra-assembly",
+      "productionModules": [{ "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "profileExtra": {
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "src/composition/host.ts"]
+      },
+      "files": {
+        "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"host-app\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+        "src/composition/host.ts": "export const compose = () => true;\n",
+        "src/composition.ts": "export { value } from './features/alpha/internal.js';\nexport { compose } from './composition/host.js';\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "host-app-composition-assembly-may-import-curated-module-composition",
+      "secondModule": true,
+      "productionModules": [
+        { "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" },
+        { "id": "fixture-other", "role": "platform", "moduleRoot": "other", "sourceRoot": "other/src", "packageName": "@fixture/other", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }
+      ],
+      "moduleEdges": [{ "from": "fixture-runtime", "to": "fixture-other", "kinds": ["runtime"] }],
+      "profileExtra": {
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "src/composition/host.ts", "other/src/index.ts", "other/src/composition.ts"]
+      },
+      "files": {
+        "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"host-app\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+        "src/composition/host.ts": "import { gamma } from '@fixture/other/composition';\nexport const compose = () => gamma;\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "host-app-composition-assembly-rejects-undeclared-module-edge",
+      "secondModule": true,
+      "productionModules": [
+        { "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" },
+        { "id": "fixture-other", "role": "platform", "moduleRoot": "other", "sourceRoot": "other/src", "packageName": "@fixture/other", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }
+      ],
+      "profileExtra": {
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "src/composition/host.ts", "other/src/index.ts", "other/src/composition.ts"]
+      },
+      "files": {
+        "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"host-app\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+        "src/composition/host.ts": "import { gamma } from '@fixture/other/composition';\nexport const compose = () => gamma;\n"
+      },
+      "expected": [{ "code": "FM_UNDECLARED_MODULE_EDGE", "path": "src/composition/host.ts", "line": 1 }]
+    },
+    {
       "name": "host-app-composition-assembly-rejects-feature-deep-import",
       "productionModules": [{ "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
       "profileExtra": {
