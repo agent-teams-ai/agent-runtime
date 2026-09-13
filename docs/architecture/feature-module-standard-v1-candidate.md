@@ -10,6 +10,8 @@ related:
   - ADR-0013
   - ADR-0017
   - ADR-0018
+  - ADR-0019
+  - ADR-0020
 code_anchors:
   - enforcement: required
     pattern: architecture/feature-module-standard/**
@@ -28,7 +30,7 @@ owned by `agent-teams-ai/.github` at
 `d0bfff2033faf544fe65268c1dcdfd524d093015`, with SHA-256
 `851653f96643cf0466b67ab22963661976b00de44840fa3144a48a8c054f95fa`.
 
-This is scoped active conformance for exactly the four named features listed
+This is scoped active conformance for exactly the six named features listed
 below. It is not a claim of repository-wide conformance, and no unlisted package,
 application, feature, experiment, or bounded context is included.
 
@@ -126,13 +128,15 @@ beside it. The active production scope contains only:
 
 - `packages/contexts/agent-execution/src/**`;
 - `packages/contexts/provider-access/src/**`;
+- `packages/contexts/runtime-configuration/src/**`;
 - `packages/platform/filesystem-custody/src/**`;
 - the package assembly files `src/index.ts` and `src/composition.ts` in those
-  three packages;
+  four packages;
 - the features `runtime-installation-discovery`, `contained-agent-turn`,
-  `contained-turn-access`, and `stable-filesystem-custody`.
+  `contained-turn-access`, `stable-filesystem-custody`,
+  `codex-configuration-inspection`, and `claude-code-configuration-inspection`.
 
-Embedded Runtime, Runtime Configuration, Runtime Security, Module Kit,
+Embedded Runtime, Runtime Security, Module Kit,
 experiments, and tooling other than this checker are explicitly out of scope. Foundation supplies package-level dependency evidence only; it
 does not implement or prove this feature policy.
 
@@ -145,7 +149,7 @@ and `packages/platform` with exactly one role and one adoption state:
 | --- | --- | --- | --- |
 | Agent Execution | `bounded-context` | ADR-0005 | active under ADR-0013 |
 | Provider Access | `bounded-context` | ADR-0005 | active under ADR-0013 |
-| Runtime Configuration | `bounded-context` | ADR-0005 | pending |
+| Runtime Configuration | `bounded-context` | ADR-0005 | active under ADR-0020 |
 | Runtime Security | `bounded-context` | ADR-0005 | pending |
 | Embedded Runtime | `host-app` | ADR-0008 | pending |
 | Filesystem Custody | `platform` | ADR-0017 | active under ADR-0019 |
@@ -179,8 +183,7 @@ between features of different modules is rejected.
 
 Declared module edges follow the same discipline as feature edges: an unobserved
 declaration is rejected as future-state permission, and observed edges are
-checked for runtime and type cycles. `moduleEdges` stays empty until a delivery
-needs an edge.
+checked for runtime and type cycles.
 
 A production package that exists inside one of those containers and is not
 classified fails the gate with `FM_UNCLASSIFIED_MODULE`. Activating a pending
@@ -193,16 +196,9 @@ accepted authority; a profile edit alone cannot widen the checked tree.
 Recorded here so a partially migrated module reads as transit rather than as a
 contradiction. None of this is a conformance claim, and no gate asserts any of it.
 
-Runtime Configuration has two features. `codex-configuration-inspection`
-already owns its application models and translates through one inbound
-adapter. `claude-code-configuration-inspection` now owns its vocabulary the
-same way: the constants it needs live in its own `models/claude-code-vocabulary.ts`
-application model, and its remaining import from `../contracts` is type-only.
-Both features now route their package assembly through curated feature
-entrypoints (`index.ts` for `.`, `internal.ts` for `./composition`) rather
-than deep imports into `adapters` and `application/ports`. Their tests now
-live under feature ownership (`tests/features/...`) with the package assembly
-surface check in `tests/package/`; the module itself remains pending.
+Runtime Configuration is active under ADR-0020. Its two features,
+`codex-configuration-inspection` and `claude-code-configuration-inspection`,
+are continuously checked. The remaining pending modules are:
 
 Runtime Security has four features. Setup-source authorization now owns its
 Node path and source-identity digest behind explicit outbound ports
@@ -435,7 +431,7 @@ remove or reorder the active root gate. The exact candidate command reports
 zero production diagnostics without exceptions, deviations, extensions,
 wildcards, automatic widening, or scope changes.
 
-ADR-0013, ADR-0017, ADR-0018 and ADR-0019 are accepted at their exact governed
+ADR-0013, ADR-0017, ADR-0018, ADR-0019 and ADR-0020 are accepted at their exact governed
 paths and are pinned in the immutable accepted-decision registry by the digest
 Foundation computes over their accepted bytes and metadata. The profile is
 `active`, has no blockers, binds its profile-wide activation authority to
@@ -448,7 +444,8 @@ these commands as evidence:
 - blocking active gate: `pnpm architecture:feature-modules:active`.
 
 This evidence proves conformance only for `runtime-installation-discovery`,
-`contained-agent-turn`, `contained-turn-access`, and `stable-filesystem-custody`
-within the three declared production roots and assembly files. It does not prove
-repository-wide Feature Module Standard conformance: Runtime Configuration,
-Runtime Security and Embedded Runtime remain pending.
+`contained-agent-turn`, `contained-turn-access`, `stable-filesystem-custody`,
+`codex-configuration-inspection`, and `claude-code-configuration-inspection`
+within the four declared production roots and assembly files. It does not prove
+repository-wide Feature Module Standard conformance: Runtime Security and
+Embedded Runtime remain pending.
