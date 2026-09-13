@@ -19,7 +19,7 @@ import {setupCapabilities, createCompositionInput, submit} from "./contained-tur
 import {createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate,
   type EgressCurrentAuthorityV2, type RequestFinalEgressAuthorizationV2,
   type SignedFirstApplicationByteGrantV2} from "@agent-teams/runtime-security/composition";
-import {authorityFor, digest} from "../support/external/runtime-security/provider-process-egress-authorization.fixtures.ts";
+import {authorityFor, digest} from "./support/external/runtime-security/provider-process-egress-authorization.fixtures.ts";
 import {createEgressFixture, SECRET_MARKER} from "../support/external/agent-execution/features/contained-agent-turn/http-egress-test-fixture.ts";
 import {
   createCredentialMaterializationRequestDigest,

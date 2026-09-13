@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import type {AuthorizeCredentialMaterializationOutcome, CredentialMaterializationAuthorizationReceipt} from "@agent-teams/provider-access";
 import {createCredentialMaterializationRequestDigest} from "@agent-teams/provider-access/composition";
 import {createContainedTurnHttpCredentialMaterialization} from "../../dist/composition/contained-turn-http-provider-access.js";
-import {renderingFixture} from "../support/external/provider-access/features/contained-turn-access/credential-rendering-test-fixture.ts";
+import {renderingFixture} from "./support/external/provider-access/features/contained-turn-access/credential-rendering-test-fixture.ts";
 import type {CredentialGenerationAcquisition, CredentialRecipe, CredentialRenderingOutcome} from
   "@agent-teams/provider-access/composition";
 
