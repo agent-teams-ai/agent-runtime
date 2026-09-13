@@ -19,7 +19,7 @@ if (!databaseUrl || process.env.AR69_POSTGRES_HTTP_JOINED !== "1") {
     "Must enter a fresh disposable outer network namespace before running");
   assert.ok(["/usr/lib/systemd/systemd", "/lib/systemd/systemd"].includes(await realpath("/proc/1/exe")),
     "Requires the same systemd reaper as the existing Linux joined runner");
-  const {registerLinuxJoinedProduct} = await import("../support/linux-joined-product.mjs");
+  const {registerLinuxJoinedProduct} = await import("./support/linux-joined-product.mjs");
   const {openPostgresHttpClosureStore} = await import("../support/postgres-http-closure.mjs");
   registerLinuxJoinedProduct({outcomes: ["unknown"], openStore: () => openPostgresHttpClosureStore(databaseUrl)});
 }

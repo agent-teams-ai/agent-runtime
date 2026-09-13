@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import {StringDecoder} from "node:string_decoder";
-import {nativeBrokerConfig, fixtureEndpoint} from "./external/agent-execution/fixtures/codex-native-broker-0.153.4/fixture.ts";
-import {rehashNativeLayers} from "./external/agent-execution/fixtures/codex-native-config-0.153.4/fixture.ts";
-import {agentMessage, emitAgentStarted, emitAgentCompleted, generatedTurn} from "./external/agent-execution/codex-app-server-test-messages.mjs";
+import {nativeBrokerConfig, fixtureEndpoint} from "../../support/external/agent-execution/fixtures/codex-native-broker-0.153.4/fixture.ts";
+import {rehashNativeLayers} from "../../support/external/agent-execution/fixtures/codex-native-config-0.153.4/fixture.ts";
+import {agentMessage, emitAgentStarted, emitAgentCompleted, generatedTurn} from "../../support/external/agent-execution/codex-app-server-test-messages.mjs";
 import {codexTurnSandboxPolicy} from "@agent-teams/agent-execution/composition";
 
 // Synthetic external protocol peer. Completion requires a real request through

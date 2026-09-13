@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {rm} from "node:fs/promises";
-import {disposable, policy as testPolicy, createInput, engineCall} from "./external/agent-execution/features/contained-agent-turn/support/docker-host-custody-lifecycle-fixture.ts";
+import {disposable, policy as testPolicy, createInput, engineCall} from "../../support/external/agent-execution/features/contained-agent-turn/support/docker-host-custody-lifecycle-fixture.ts";
 import {joinedDocker} from "./linux-joined-docker.mjs";
-import {postClaimFixture} from "./external/agent-execution/features/contained-agent-turn/support/docker-linux-post-claim-fixture.ts";
-import {BOOT} from "./external/agent-execution/features/contained-agent-turn/support/linux-docker-residue-fixture.ts";
+import {postClaimFixture} from "../../support/external/agent-execution/features/contained-agent-turn/support/docker-linux-post-claim-fixture.ts";
+import {BOOT} from "../../support/external/agent-execution/features/contained-agent-turn/support/linux-docker-residue-fixture.ts";
 import {createDockerLinuxPostClaimPreparation} from "@agent-teams/agent-execution/composition";
 
 // Synthetic Engine/kernel metadata only. This exercises the test IO through

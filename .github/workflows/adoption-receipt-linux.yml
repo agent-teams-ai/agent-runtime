@@ -59,6 +59,7 @@ on:
       - cursor/fms-host-live-darwin-launcher-7d17
       - cursor/fms-host-live-mac-pa-auth-7d17
       - cursor/fms-host-package-helpers-7d17
+      - cursor/fms-host-package-support-7d17
       - docs/sr-contained-turn-anti-patterns
       - refactor/fms-host-access-invariants
       - refactor/fms-host-darwin-deployment
