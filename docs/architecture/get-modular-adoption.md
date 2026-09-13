@@ -67,7 +67,7 @@ configurable cross-module relationships require standard mapping or an exact
 accepted exception. Ordinary fixed feature-local helpers keep static typed
 imports. No feature-per-class rule, wildcard legacy allowance, implicit
 inventory growth, string service locator, or universal manager is authorized.
-The scoped FMS gate remains independent. The live Foundation inventory records six workspace package roots, twenty-one feature
+The scoped FMS gate remains independent. The live Foundation inventory records six workspace package roots, twenty-five feature
 roots, sixteen policy boundaries and exact source/target/runtime-or-type
 relationships. Unknown or stale roots and relationships fail, including new
 cross-feature edges inside an existing policy boundary. Fixed helpers within
