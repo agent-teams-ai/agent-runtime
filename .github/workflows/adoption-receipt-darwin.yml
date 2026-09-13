@@ -1,6 +1,6 @@
 name: adoption-receipt-darwin
 # Temporary workflow: Darwin arm64 adoption receipt for Host unpublished AE
-# top-level copies identity 452e6b507dc8c1c84fa49d6c5628b19e2daefea2 stacked
+# top-level copies identity 5c6ee9f5cb119d16576f4972039093a480a7c0a9 stacked
 # on Host PA/RS unpublished copies absorb 910cd622. The job always checks
 # out that SHA so this workflow-only commit does not enter the receipt
 # identity. Safe to delete after the paired receipt is merged.
@@ -24,11 +24,11 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: 452e6b507dc8c1c84fa49d6c5628b19e2daefea2
+          ref: 5c6ee9f5cb119d16576f4972039093a480a7c0a9
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "452e6b507dc8c1c84fa49d6c5628b19e2daefea2"
+        run: test "$(git rev-parse HEAD)" = "5c6ee9f5cb119d16576f4972039093a480a7c0a9"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
