@@ -304,7 +304,7 @@ test("valid root fulfillment after abort awaits factory and cleanup without hand
     },
     observeOutcome: (outcome) => { outcomes.push(outcome); },
   });
-  void result.then(() => { settled = true; handoffs += 1; }, () => { settled = true; });
+  void result.then(() => { settled = true; handoffs += 1; return; }, () => { settled = true; });
   await entered.promise;
   controller.abort("secret late cancellation");
   // Yield a turn so a premature cancellation race could settle; no timed sleep.
@@ -376,7 +376,7 @@ test("malformed root after abort preserves primary failure through rejecting cle
     },
     observeOutcome: (outcome) => { outcomes.push(outcome); },
   });
-  void result.then(() => { settled = true; }, () => { settled = true; });
+  void result.then(() => { settled = true; return; }, () => { settled = true; });
   await entered.promise;
   controller.abort("secret malformed cancellation");
   await new Promise<void>((resolve) => { setImmediate(resolve); });
