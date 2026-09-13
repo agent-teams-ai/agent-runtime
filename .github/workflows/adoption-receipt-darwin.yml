@@ -1,4 +1,5 @@
 name: adoption-receipt-darwin
+# retrigger e01d113a (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for RC layer absorb identity
 # e01d113a after #129 merge-committed to main.
