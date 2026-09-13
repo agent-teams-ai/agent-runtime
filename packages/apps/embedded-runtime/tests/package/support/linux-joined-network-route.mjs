@@ -4,7 +4,7 @@ import {once} from "node:events";
 import {openJoinedNetwork} from "./linux-joined-network.mjs";
 import {createDockerLinuxExclusiveRouteAdmission,linuxExclusiveRouteSeccomp} from
   "@agent-teams/agent-execution/composition";
-import {container, subject} from "../../support/external/agent-execution/fixtures/host-http-egress-v4-fixture.ts";
+import {container, subject} from "./external/agent-execution/fixtures/host-http-egress-v4-fixture.ts";
 
 // Explicit Linux integration entrypoint, invoked in its own outer namespace.
 // The Docker inspection boundary is synthetic. Namespace, tools, rules, sockets,

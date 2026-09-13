@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {PassThrough} from "node:stream";
-import {networkFixture} from "../../support/external/agent-execution/fixtures/docker-operation-network-fixture.ts";
-import {syntheticDaemon} from "../../support/external/agent-execution/fixtures/docker-engine-synthetic-daemon.ts";
-import {CONTAINER, DAEMON_BOOT} from "../../support/external/agent-execution/fixtures/docker-engine-test-fixture.ts";
-import {archive, chunks, imageLock, IMAGE_CONFIG, NODE_BYTES, BOOTSTRAP_BYTES} from "../../support/external/agent-execution/fixtures/docker-image-init-fixture.ts";
+import {networkFixture} from "./external/agent-execution/fixtures/docker-operation-network-fixture.ts";
+import {syntheticDaemon} from "./external/agent-execution/fixtures/docker-engine-synthetic-daemon.ts";
+import {CONTAINER, DAEMON_BOOT} from "./external/agent-execution/fixtures/docker-engine-test-fixture.ts";
+import {archive, chunks, imageLock, IMAGE_CONFIG, NODE_BYTES, BOOTSTRAP_BYTES} from "./external/agent-execution/fixtures/docker-image-init-fixture.ts";
 import {FixtureResidueIo, statText, privilegeText} from "../../support/external/agent-execution/features/contained-agent-turn/support/linux-docker-residue-fixture.ts";
 import {MemoryStorage} from "../../support/external/agent-execution/features/contained-agent-turn/support/docker-host-custody-lifecycle-fixture.ts";
 import {NodeUnixSocketDockerEngine,composeLinuxDockerResidueCustody,PROC_SUPER_MAGIC,residueParent,residueLeaf,DOCKER_CUSTODY_NODE_PATH,DOCKER_CUSTODY_BOOTSTRAP_PATH,DOCKER_CUSTODY_INIT_ARGUMENTS,DockerCustodyFrameDecoder,encodeDockerCustodyFrame,DOCKER_CUSTODY_INIT_PROTOCOL} from

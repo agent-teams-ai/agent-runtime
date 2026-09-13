@@ -1,4 +1,4 @@
-import { nativeConfigResult } from "../../../../support/external/agent-execution/fixtures/codex-native-config-0.153.4/fixture.ts";
+import { nativeConfigResult } from "./fixtures/codex-native-config-0.153.4/fixture.ts";
 
 type Message = Record<string, any>;
 
