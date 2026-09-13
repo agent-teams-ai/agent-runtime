@@ -31,6 +31,7 @@ test("ordinary 0.153.4 ephemeral terminal closes observed items even when termin
 test("ordinary terminal rejects missing item closure, terminal mismatch and assistant text substitution", () => {
   const events = started(); events.admit(itemNotice("started", agent("")));
   assert.throws(() => events.admit(notify("turn/completed", {threadId: "01a09662-a230-7960-b2b1-b27e62a503fd", turn: turn("completed")})), /EVIDENCE_REJECTED/u);
+  events.admit(notify("item/agentMessage/delta", {threadId: "01a09662-a230-7960-b2b1-b27e62a503fd", turnId: "01a09662-a294-74f2-8672-91eef1cde972", itemId: "message-1", delta: "observed prefix"}));
   assert.throws(() => events.admit(itemNotice("completed", agent("unobserved text"))), /EVIDENCE_REJECTED/u);
   const other = started();
   assert.throws(() => other.admit(notify("turn/completed", {threadId: "01a09662-a230-7960-b2b1-b27e62a503fd", turn: {...turn("completed"), itemsView: "full", items: [agent("unobserved")]}})), /EVIDENCE_REJECTED/u);
@@ -148,10 +149,44 @@ test("refusal diagnostics classify untrusted events without exposing their value
 
 test("completion diagnostics distinguish text substitution from field drift and reset on the next event", () => {
   const events = started(); events.admit(itemNotice("started", agent("")));
+  events.admit(notify("item/agentMessage/delta", {threadId: "01a09662-a230-7960-b2b1-b27e62a503fd", turnId: "01a09662-a294-74f2-8672-91eef1cde972", itemId: "message-1", delta: "observed"}));
   assert.throws(() => events.admit(itemNotice("completed", agent("unobserved-private-text"))), /EVIDENCE_REJECTED/u);
   assert.equal(events.validationRule, "complete_text");
-  assert.throws(() => events.admit(itemNotice("completed", {...agent(""), phase: "final_answer"})), /EVIDENCE_REJECTED/u);
+  assert.throws(() => events.admit(itemNotice("completed", {...agent("observed"), phase: "final_answer"})), /EVIDENCE_REJECTED/u);
   assert.equal(events.validationRule, "complete_phase");
   assert.throws(() => events.admit({id: "private-id", method: "private-method", params: {}}), /EVIDENCE_REJECTED/u);
   assert.equal(events.validationRule, "envelope");
+});
+
+
+test("agent completion snapshots may extend empty or partially streamed text without replacing observed prefixes", () => {
+  for (const prefix of ["", "Final ", "Final answer."]) {
+    const events = started(); events.admit(itemNotice("started", agent("")));
+    if (prefix) {events.admit(notify("item/agentMessage/delta", {threadId: "01a09662-a230-7960-b2b1-b27e62a503fd", turnId: "01a09662-a294-74f2-8672-91eef1cde972", itemId: "message-1", delta: prefix}));}
+    if (prefix) {
+      for (const text of ["conflicting answer", prefix.slice(0, -1)]) {
+        assert.throws(() => events.admit(itemNotice("completed", agent(text))), /EVIDENCE_REJECTED/u);
+        assert.equal(events.validationRule, "complete_text");
+      }
+    }
+    assert.throws(() => events.admit(itemNotice("completed", {...agent("Final answer."), text: 42})), /EVIDENCE_REJECTED/u);
+    assert.throws(() => events.admit(itemNotice("completed", {type: "plan", id: "message-1", text: "Final answer."})), /EVIDENCE_REJECTED/u);
+    events.admit(itemNotice("completed", agent("Final answer.")));
+    events.admit(notify("turn/completed", {threadId: "01a09662-a230-7960-b2b1-b27e62a503fd", turn: turn("completed")}));
+    assert.equal(events.assistant, "Final answer.");
+    assert.equal(events.terminal?.status, "completed");
+  }
+});
+
+
+test("plan completion requires exact streamed text including when no delta was observed", () => {
+  const items = new OrdinaryCodexItems(cwd);
+  const plan = {type: "plan", id: "plan-1", text: ""};
+  items.start(plan);
+  assert.throws(() => items.complete({...plan, text: "Final-only plan"}), /EVIDENCE_REJECTED/u);
+  items.delta("item/plan/delta", {itemId: "plan-1", delta: "Step 1"});
+  assert.throws(() => items.complete({...plan, text: "Replacement"}), /EVIDENCE_REJECTED/u);
+  assert.throws(() => items.complete({...plan, text: "Step 1: verify."}), /EVIDENCE_REJECTED/u);
+  items.complete({...plan, text: "Step 1"});
+  assert.equal(items.terminal(turn("completed")), "");
 });

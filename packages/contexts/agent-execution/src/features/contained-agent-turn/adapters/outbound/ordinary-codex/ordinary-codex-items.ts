@@ -21,6 +21,7 @@ const itemKeys: Readonly<Record<string, readonly string[]>> = Object.freeze({
   commandExecution: ["id", "type", "command", "commandActions", "cwd", "status", "aggregatedOutput", "durationMs", "exitCode", "pluginId", "processId", "scriptPath", "source"],
   fileChange: ["id", "type", "changes", "status"],
 });
+const extendsText = (prefix: unknown, full: unknown): boolean => typeof prefix === "string" && typeof full === "string" && full.startsWith(prefix);
 const present = (value: unknown): boolean => value !== null && value !== undefined;
 const equal = (left: unknown, right: unknown): boolean => ordinaryJson(left) === ordinaryJson(right);
 const inside = (cwd: string, value: unknown): boolean => {
@@ -131,6 +132,11 @@ export class OrdinaryCodexItems {
       if (mutable.includes(key)) {continue;}
       // Quick unified-exec commands may publish their entire output only in item/completed.
       if (key === "aggregatedOutput" && item.type === "commandExecution") {this.#mark("item_complete_output"); if (!String(item[key] ?? "").startsWith(String(active[key] ?? ""))) {refuse();}}
+      // Completion carries the full agent message snapshot; streamed text may be only a prefix.
+      else if (key === "text" && item.type === "agentMessage") {
+        this.#mark("complete_text");
+        if (!extendsText(active.text, item.text)) {refuse();}
+      }
       else {
         this.#mark(Object.hasOwn(completionRules, key) ? completionRules[key as keyof typeof completionRules] : "item_complete_fields");
         if (!equal(active[key], item[key])) {refuse();}
