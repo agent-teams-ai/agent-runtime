@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   ContainedTurnConstructionCleanupError,
   disposeAfterContainedTurnConstructionFailure,
-} from "../dist/composition/contained-turn-construction-failure.js";
+} from "../../dist/composition/contained-turn-construction-failure.js";
 
 test("construction cleanup preserves the primary failure when cleanup succeeds", () => {
   const primary = new Error("synthetic primary");

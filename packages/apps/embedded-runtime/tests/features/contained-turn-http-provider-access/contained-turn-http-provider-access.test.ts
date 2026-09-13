@@ -7,7 +7,7 @@ import {
   createContainedTurnHttpCredentialMaterialization,
   createContainedTurnHttpProviderAccessAuthorization,
   type ContainedTurnHttpProviderAccessOwner,
-} from "../dist/composition/contained-turn-http-provider-access.js";
+} from "../../dist/composition/contained-turn-http-provider-access.js";
 
 const seed: InMemoryDispatchBindingSeed = Object.freeze({acceptedAuthorityDigest: "accepted:1", accessRef: "access:1",
   authorityHeadDigest: "authority:1", bindingDigest: "binding:1", bindingRevision: 2, claimBeforeControlTime: 1000,

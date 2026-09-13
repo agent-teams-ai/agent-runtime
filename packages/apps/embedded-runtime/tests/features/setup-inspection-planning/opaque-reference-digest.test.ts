@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { test } from "node:test";
 
-import { createNodeOpaqueReferenceDigest } from "../dist/composition/opaque-reference-digest.js";
+import { createNodeOpaqueReferenceDigest } from "../../dist/composition/opaque-reference-digest.js";
 
 test("matches the direct HMAC-SHA256 hex digest for the same key and material", () => {
   const digest = createNodeOpaqueReferenceDigest();
