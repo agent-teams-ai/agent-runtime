@@ -53,6 +53,7 @@ on:
       - cursor/fms-host-live-admin-setup-7d17
       - cursor/fms-host-live-bootstrap-7d17
       - cursor/fms-host-live-canary-7d17
+      - cursor/fms-host-live-darwin-infra-7d17
       - docs/sr-contained-turn-anti-patterns
       - refactor/fms-host-access-invariants
       - refactor/fms-host-darwin-deployment

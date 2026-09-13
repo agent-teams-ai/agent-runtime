@@ -418,7 +418,7 @@ function filesystemConfigurations(config) {
 async function loadInfrastructureDependencies() {
   const [agentExecution, runtimeSecurity, postgres, verification] = await Promise.all([
     import("@agent-teams/agent-execution/composition"), import("@agent-teams/runtime-security/composition"),
-    import("pg"), import("./darwin-live-verification.mjs"),
+    import("pg"), import("../../live/darwin-live-verification.mjs"),
   ]);
   return {agentExecution, runtimeSecurity, Pool: postgres.Pool, verification};
 }
