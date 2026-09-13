@@ -15,7 +15,7 @@ import {
   preparationToken,
   providerAccessSnapshot,
   workspaceId,
-} from "../support/external/agent-execution/contained-turn-kernel-fixtures.ts";
+} from "./support/external/agent-execution/contained-turn-kernel-fixtures.ts";
 import { committedDispatchProofFixture } from "../support/external/agent-execution/features/contained-agent-turn/support/committed-dispatch-proof-fixture.ts";
 
 const EMPTY_SHA256 = "0".repeat(64);

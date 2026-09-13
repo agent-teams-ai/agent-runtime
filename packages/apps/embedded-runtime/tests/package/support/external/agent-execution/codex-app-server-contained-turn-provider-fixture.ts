@@ -14,7 +14,7 @@ import {
 } from "@agent-teams/agent-execution/composition";
 import type { CustodiedProviderProcess } from "@agent-teams/agent-execution/composition";
 import { emitTurnStarted, generatedTurn } from "./codex-app-server-test-messages.mjs";
-import { nativeConfigResult } from "./fixtures/codex-native-config-0.153.4/fixture.ts";
+import { nativeConfigResult } from "../../../../support/external/agent-execution/fixtures/codex-native-config-0.153.4/fixture.ts";
 
 export type Message = Record<string, unknown>;
 interface FakeCodexProcessBehavior {
