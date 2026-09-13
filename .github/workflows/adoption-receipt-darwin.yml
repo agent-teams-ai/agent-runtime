@@ -1,5 +1,5 @@
 name: adoption-receipt-darwin
-# identity bd59da9e
+# retrigger bd59da9e (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host live darwin-activation
 # identity bd59da9e stacked on Host live darwin-infra D fb6b8461.
