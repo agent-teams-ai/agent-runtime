@@ -1,5 +1,5 @@
 name: adoption-receipt-darwin
-# first push for 5fc47f07
+# retrigger 5fc47f07 (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for RS barrels identity
 # 5fc47f07 after absorbing merged #130. The job always checks out that SHA
