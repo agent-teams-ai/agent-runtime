@@ -441,7 +441,6 @@ export const evidenceRoots = Object.freeze({
   fixtures: Object.freeze([
     "packages/contexts/agent-execution/tests/fixtures",
     "packages/contexts/runtime-configuration/tests/fixtures",
-    "packages/contexts/runtime-security/tests/fixtures",
   ]),
   sources: Object.freeze(evidencePackages.map(path => `${path}/src`)),
   tests: Object.freeze(evidencePackages.map(path => `${path}/tests`)),

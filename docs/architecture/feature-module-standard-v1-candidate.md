@@ -366,7 +366,10 @@ Security `dist/` and `tests/` package subpaths now use the curated
 `packageExports` claims for those three packages now match the curated `.` and
 `./composition` maps. Packed-consumer Agent Execution and Provider Access
 public composition types no longer mention `pg`; callers pass a structurally
-compatible pool. The module stays pending.
+compatible pool. Runtime Security package assembly now reaches its four
+features through curated `index.ts` / `internal.ts` entrypoints; the contained-turn
+egress gateway factory lives in the feature composition root so package
+`composition.ts` is import/re-export only. The module stays pending.
 
 The deterministic syntax-aware checker is
 `scripts/architecture/check-feature-modules.mjs`. Run

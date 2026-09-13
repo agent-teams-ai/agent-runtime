@@ -1,3 +1,7 @@
+import { createAuthorizeClaudeCodeSetupInspectionV1 } from
+  "../adapters/inbound/claude-code-setup-inspection-authorization-v1.js";
+import { createAuthorizeSetupInspectionV1 } from
+  "../adapters/inbound/setup-inspection-authorization-v1.js";
 import { createNodePathAlgebra } from "../adapters/outbound/node-path-algebra.js";
 import { createNodeSourceIdentityDigest } from "../adapters/outbound/node-source-identity-digest.js";
 import { createAuthorizeClaudeCodeSetupInspection } from "../application/authorize-claude-code-setup-inspection.js";
@@ -16,14 +20,18 @@ export const createSetupInspectionAuthorizationFeature = (
   // surface: they are deterministic Node wrappers with nothing to fake.
   const pathAlgebra = createNodePathAlgebra();
   return Object.freeze({
-    authorizeClaudeCodeSetupInspection: createAuthorizeClaudeCodeSetupInspection(
-      dependencies.pathCanonicalizer,
-      pathAlgebra,
-      createNodeSourceIdentityDigest(),
+    authorizeClaudeCodeSetupInspection: createAuthorizeClaudeCodeSetupInspectionV1(
+      createAuthorizeClaudeCodeSetupInspection(
+        dependencies.pathCanonicalizer,
+        pathAlgebra,
+        createNodeSourceIdentityDigest(),
+      ),
     ),
-    authorizeSetupInspection: createAuthorizeSetupInspection(
-      dependencies.pathCanonicalizer,
-      pathAlgebra,
+    authorizeSetupInspection: createAuthorizeSetupInspectionV1(
+      createAuthorizeSetupInspection(
+        dependencies.pathCanonicalizer,
+        pathAlgebra,
+      ),
     ),
   });
 };

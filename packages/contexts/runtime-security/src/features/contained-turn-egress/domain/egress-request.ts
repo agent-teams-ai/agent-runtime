@@ -1,5 +1,4 @@
-import type { ObserveDispatchConsumptionInput } from
-  "../../contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.js";
+import type { EgressDispatchObservation } from "./dispatch-consumption.js";
 
 export interface ContainedTurnEgressRequest {
   readonly scope: Readonly<{tenantId: string; projectId: string; scopeDigest: string}>;
@@ -7,7 +6,7 @@ export interface ContainedTurnEgressRequest {
   readonly credentialBindingRef: string; readonly credentialBindingDigest: string;
   readonly credentialGeneration: string; readonly credentialRevision: string;
   readonly resolutionAuthorityId: string; readonly resolutionGeneration: string;
-  readonly operationId: string; readonly dispatch: ObserveDispatchConsumptionInput;
+  readonly operationId: string; readonly dispatch: EgressDispatchObservation;
   readonly requestId: string; readonly requestNonce: string; readonly method: "GET" | "POST";
   /** Ephemeral transport target only. It is represented by pathDigest in authorization evidence. */
   readonly path: string; readonly headers: readonly Readonly<{name: string; value: string}>[];
