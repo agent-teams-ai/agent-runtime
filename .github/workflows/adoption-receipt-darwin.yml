@@ -1,5 +1,5 @@
 name: adoption-receipt-darwin
-# first push for da4adf85
+# retrigger da4adf85 (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host live darwin-infra
 # identity da4adf85 stacked on Host live-canary D 4f4fb9ca.
