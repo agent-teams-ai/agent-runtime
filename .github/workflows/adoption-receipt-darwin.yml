@@ -1,5 +1,5 @@
 name: adoption-receipt-darwin
-# retrigger c20983e6
+# retrigger c20983e6 (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host multi-package identity
 # c20983e6 stacked on Host assembly-ref D bc15f148.
