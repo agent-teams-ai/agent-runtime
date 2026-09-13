@@ -346,15 +346,32 @@ for (const direction of ['export-new-host', 'wrap-existing-entrypoint']) {
 
 test('reviewed documentation pin preserves the normative standard and rejects stale bytes', async () => {
   const review = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/ordinary-session-pin-review.json', import.meta.url)));
-  const retained = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard.md', import.meta.url), 'utf8');
-  assert.equal(pending.standard.commit, review.upstream);
-  assert.equal(pending.standard.sha256, review.upstreamSha256);
+  const retained = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard-714d6194.md', import.meta.url), 'utf8');
   assert.equal(digest(retained), review.upstreamSha256);
   const prior = retained.replaceAll('../../tests/assembly/', '../../packages/assembly/tests/');
   assert.equal(digest(prior), review.pinnedSha256);
-  assert.notEqual(digest(prior), pending.standard.sha256);
+  assert.notEqual(digest(prior), review.upstreamSha256);
   assert.equal((retained.match(/\.\.\/\.\.\/tests\/assembly\//g) ?? []).length, 5);
   assert.equal(review.migrationStatus, 'reviewed-documentation-migrated');
+});
+
+test('current lifecycle clarification pin rejects prior commit and prior document bytes', async () => {
+  const review = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/ordinary-auth-pin-review.json', import.meta.url)));
+  const bytes = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard.md', import.meta.url), 'utf8');
+  const prior = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard-714d6194.md', import.meta.url), 'utf8');
+  assert.equal(pending.standard.commit, review.upstream);
+  assert.equal(pending.standard.sha256, review.upstreamSha256);
+  assert.equal(digest(bytes), review.upstreamSha256);
+  assert.equal(digest(prior), review.pinnedSha256);
+  assert.notEqual(digest(prior), digest(bytes));
+  const {profile, evidence} = fixture();
+  profile.standard.commit = review.upstream; profile.standard.sha256 = review.upstreamSha256;
+  evidence.standard = {commit: review.upstream, bytes};
+  assert.equal(verifyAdoption(profile, evidence).status, 'verified-metadata');
+  profile.standard.commit = review.pinned;
+  assert.throws(() => verifyAdoption(profile, evidence), /commit drift/);
+  profile.standard.commit = review.upstream; evidence.standard.bytes = prior;
+  assert.throws(() => verifyAdoption(profile, evidence), /bytes drift/);
 });
 
 // Additive ADR-0020 scope and graph rejecting evidence remains in the canonical gate.

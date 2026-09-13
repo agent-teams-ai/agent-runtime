@@ -2,6 +2,13 @@ import type { CredentialRenderingSelection, OperationCredentialMaterialAdmission
 
 export const ORDINARY_CODEX_AUTH_BINARY_SHA256 = 'b973d440acac501fd2594a43e7ca9ce41e0a65b9dfb28d0d7a7837c99e1261e3';
 export const ORDINARY_CODEX_AUTH_MODEL = 'gpt-5.3-codex-spark';
+export type OrdinaryCodexAuthStage = 'startup' | 'initialize' | 'initialized' | 'config/read' | 'account/read' |
+  'getAuthStatus' | 'account/rateLimits/read' | 'model/list' | 'closure';
+export const ORDINARY_AUTH_REFUSAL_REASONS = Object.freeze(['validation', 'config_policy', 'config_features',
+  'config_endpoint', 'config_origin', 'config_layers', 'identity_drift', 'model_unavailable', 'model_pagination',
+  'rpc_envelope', 'rpc_unsolicited', 'rpc_error', 'frame_invalid', 'output_limit', 'process_exit',
+  'stream_closed', 'io_error', 'aborted', 'timeout', 'journal_failure', 'cleanup_uncertain'] as const);
+export type OrdinaryCodexAuthReason = typeof ORDINARY_AUTH_REFUSAL_REASONS[number];
 export interface OrdinaryCodexAuthObservation {
   readonly captureRef: string;
   readonly outcome: 'started' | 'closed' | 'refused' | 'cleanup-indeterminate';
@@ -9,6 +16,8 @@ export interface OrdinaryCodexAuthObservation {
   readonly closeObserved: boolean;
   readonly processGroupGone: boolean;
   readonly retainedDirectory?: string;
+  readonly stage?: OrdinaryCodexAuthStage;
+  readonly reason?: OrdinaryCodexAuthReason;
 }
 export interface OrdinaryCodexAuthCaptureOptions {
   readonly operationRef: string;
@@ -43,12 +52,12 @@ export interface OrdinaryCodexAuthCapture {
 }
 export class OrdinaryCodexAuthRefused extends Error {
   readonly code = 'ORDINARY_CODEX_AUTH_REFUSED';
-  constructor() { super('ORDINARY_CODEX_AUTH_REFUSED'); }
+  constructor(readonly reason: OrdinaryCodexAuthReason = 'validation') { super('ORDINARY_CODEX_AUTH_REFUSED'); }
 }
 export class OrdinaryCodexAuthCleanupIndeterminate extends Error {
   readonly code = 'ORDINARY_CODEX_AUTH_CLEANUP_INDETERMINATE';
   constructor(readonly observation: OrdinaryCodexAuthObservation) { super('ORDINARY_CODEX_AUTH_CLEANUP_INDETERMINATE'); }
 }
 
-export const AUTH_DISABLED_FEATURES = Object.freeze(['apps', 'hooks', 'plugins', 'remote_plugin', 'multi_agent', 'multi_agent_v2',
+export const AUTH_DISABLED_FEATURES = Object.freeze(['remote_control', 'apps', 'hooks', 'plugins', 'remote_plugin', 'multi_agent', 'multi_agent_v2',
   'browser_use', 'computer_use', 'image_generation', 'unbounded_connection_retries']);

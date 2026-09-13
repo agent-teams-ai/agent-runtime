@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import { authRecord } from './ordinary-codex-auth-json.js';
-import { AUTH_DISABLED_FEATURES, ORDINARY_CODEX_AUTH_MODEL, OrdinaryCodexAuthRefused } from './ordinary-codex-auth-contracts.js';
+import { AUTH_DISABLED_FEATURES, ORDINARY_CODEX_AUTH_MODEL, OrdinaryCodexAuthRefused, type OrdinaryCodexAuthReason } from './ordinary-codex-auth-contracts.js';
 
 export type AuthMethod = 'initialize' | 'config/read' | 'account/read' | 'getAuthStatus' | 'account/rateLimits/read' | 'model/list';
 export interface AuthRpc {
@@ -8,7 +8,7 @@ export interface AuthRpc {
   initialized(): void;
 }
 export interface CapturedAuthBytes { readonly token: Buffer; readonly accountId: Buffer; }
-function refuse(): never { throw new OrdinaryCodexAuthRefused(); }
+function refuse(reason: OrdinaryCodexAuthReason = 'validation'): never { throw new OrdinaryCodexAuthRefused(reason); }
 const absent = (value: unknown) => value === null || value === undefined;
 const canonical = (value: unknown): string => {
   if (Array.isArray(value)) { return '[' + value.map(canonical).join(',') + ']'; }
@@ -40,29 +40,29 @@ export function verifyAuthConfig(result: Record<string, unknown>, home: string, 
   if (text.includes(source) || config.model !== ORDINARY_CODEX_AUTH_MODEL ||
       config.cli_auth_credentials_store !== 'file' || config.project_doc_max_bytes !== 0 ||
       config.allow_login_shell !== false || config.web_search !== 'disabled' ||
-      !absent(config.model_catalog_json) || config.mcp_servers && Object.keys(authRecord(config.mcp_servers)).length > 0) { refuse(); }
+      !absent(config.model_catalog_json) || config.mcp_servers && Object.keys(authRecord(config.mcp_servers)).length > 0) { refuse('config_policy'); }
   const features = authRecord(config.features);
-  if (AUTH_DISABLED_FEATURES.some(feature => features[feature] !== false)) { refuse(); }
-  if (config.chatgpt_base_url !== 'https://chatgpt.com/backend-api/') { refuse(); }
+  if (AUTH_DISABLED_FEATURES.some(feature => features[feature] !== false)) { refuse('config_features'); }
+  if (config.chatgpt_base_url !== 'https://chatgpt.com/backend-api/') { refuse('config_endpoint'); }
   const origins = authRecord(result.origins);
   const origin = authRecord(authRecord(origins.model).name);
-  if (origin.type !== 'user' || origin.file !== home + '/config.toml') { refuse(); }
+  if (origin.type !== 'user' || origin.file !== home + '/config.toml') { refuse('config_origin'); }
   verifyLayers(result.layers, home);
 }
 
 function verifyLayers(layers: unknown, home: string): void {
-  if (!Array.isArray(layers) || layers.length > 16) { refuse(); }
+  if (!Array.isArray(layers) || layers.length > 16) { refuse('config_layers'); }
   let user = false;
   for (const raw of layers) {
     const layer = authRecord(raw), name = authRecord(layer.name);
     if (name.type === 'user') {
-      if (user || name.file !== home + '/config.toml' || !absent(layer.disabledReason)) { refuse(); }
+      if (user || name.file !== home + '/config.toml' || !absent(layer.disabledReason)) { refuse('config_layers'); }
       user = true;
-    } else if (name.type !== 'sessionFlags' && name.type !== 'system' && name.type !== 'mdm') { refuse(); }
+    } else if (name.type !== 'sessionFlags' && name.type !== 'system' && name.type !== 'mdm') { refuse('config_layers'); }
     // Global/managed config must not contribute an active file; defaults have no config keys.
-    if ((name.type === 'system' || name.type === 'mdm') && absent(layer.disabledReason) && Object.keys(authRecord(layer.config)).length > 0) { refuse(); }
+    if ((name.type === 'system' || name.type === 'mdm') && absent(layer.disabledReason) && Object.keys(authRecord(layer.config)).length > 0) { refuse('config_layers'); }
   }
-  if (!user) { refuse(); }
+  if (!user) { refuse('config_layers'); }
 }
 
 export async function readOfficialAuth(rpc: AuthRpc, home: string, source: string): Promise<CapturedAuthBytes> {
@@ -80,7 +80,7 @@ export async function readOfficialAuth(rpc: AuthRpc, home: string, source: strin
     await verifyModelAvailability(rpc);
     const second = token(await rpc.request('getAuthStatus', { includeToken: true, refreshToken: false })); buffers.push(second);
     const after = account(await rpc.request('account/read', { refreshToken: false })); buffers.push(after);
-    if (first.length !== second.length || !timingSafeEqual(first, second) || before.length !== after.length || !timingSafeEqual(before, after)) { refuse(); }
+    if (first.length !== second.length || !timingSafeEqual(first, second) || before.length !== after.length || !timingSafeEqual(before, after)) { refuse('identity_drift'); }
     result = { token: first, accountId }; return result;
   } finally {
     for (const bytes of buffers) { if (bytes !== result?.token && bytes !== result?.accountId) { bytes.fill(0); } }
@@ -97,8 +97,9 @@ async function verifyModelAvailability(rpc: AuthRpc): Promise<void> {
         if (model.id === ORDINARY_CODEX_AUTH_MODEL || model.model === ORDINARY_CODEX_AUTH_MODEL) { observed = true; }
       }
       if (models.nextCursor === null) { complete = true; break; }
-      if (typeof models.nextCursor !== 'string' || models.nextCursor.length < 1 || models.nextCursor.length > 512 || cursors.has(models.nextCursor)) { refuse(); }
+      if (typeof models.nextCursor !== 'string' || models.nextCursor.length < 1 || models.nextCursor.length > 512 || cursors.has(models.nextCursor)) { refuse('model_pagination'); }
       cursor = models.nextCursor; cursors.add(cursor);
     }
-    if (!complete || !observed) { refuse(); }
+    if (!complete) { refuse('model_pagination'); }
+    if (!observed) { refuse('model_unavailable'); }
 }

@@ -82,7 +82,7 @@ test('synthetic helper returns material only after actual exit, stdio closure an
   const material = await captureAuthHelper({ child, signal: new AbortController().signal, deadline: performance.now() + 5000,
     home, source, captureRef: 'synthetic', record: value => { observations.push(value); } });
   assert.equal(material.accountId.toString(), 'synthetic-account');
-  assert.deepEqual(observations.at(-1), { captureRef: 'synthetic', outcome: 'closed', exitObserved: true, closeObserved: true, processGroupGone: true });
+  assert.deepEqual(observations.at(-1), { captureRef: 'synthetic', outcome: 'closed', stage: 'closure', exitObserved: true, closeObserved: true, processGroupGone: true });
   assert.equal(child.listenerCount('exit'), 0); assert.equal(child.stdout.listenerCount('data'), 0);
   material.token.fill(0); material.accountId.fill(0);
 });
@@ -140,4 +140,80 @@ test('dedicated official capture buffers transfer to existing PA admission witho
   assert.equal(outcome.kind, 'admitted');
   assert.equal(captured.token.byteLength, 0);
   assert.equal(captured.accountId.byteLength, 0);
+});
+
+for (const [label, payload, expected] of [
+  ['null result', '{"id":1,"result":null}', 'validation'],
+  ['RPC error', '{"id":1,"error":{"message":"invented-secret","data":"invented-secret"}}', 'rpc_error'],
+  ['notification', '{"method":"invented-secret","params":{"value":"invented-secret"}}', 'rpc_envelope'],
+  ['invalid frame', '{"id":1,"id":1,"result":{}}', 'frame_invalid'],
+] as const) {
+  test(`safe diagnostic preserves initial ${label} refusal through process closure`, {timeout: 4000}, async t => {
+    const script = `process.stdin.once('data',()=>process.stdout.write(${JSON.stringify(payload + '\n')}));setInterval(()=>{},1000)`;
+    const child = spawn(process.execPath, ['-e', script], {detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: {}});
+    t.after(() => { if (child.pid && child.exitCode === null && child.signalCode === null) { child.kill('SIGTERM'); } });
+    const observations: unknown[] = [];
+    await assert.rejects(captureAuthHelper({child, signal: new AbortController().signal, deadline: performance.now() + 2500,
+      home, source, captureRef: 'synthetic-diagnostic', record: value => { observations.push(value); }}), error => error instanceof OrdinaryCodexAuthRefused && error.reason === expected);
+    assert.deepEqual(observations.at(-1), {captureRef: 'synthetic-diagnostic', outcome: 'refused', stage: 'initialize', reason: expected,
+      exitObserved: true, closeObserved: true, processGroupGone: true});
+    assert.ok(!JSON.stringify(observations).includes('invented-secret'));
+    assert.equal(child.listenerCount('exit'), 0);
+  });
+}
+test('config endpoint refusal is distinguishable from unavailable model without payloads', async () => {
+  for (const [method, reason] of [['config/read','config_endpoint'], ['model/list','model_unavailable']] as const) {
+    const rpc = fixture((m, r) => m !== method ? r : m === 'config/read' ? {...r, config: {...config().config, chatgpt_base_url: 'https://synthetic.invalid'}} : {data: [], nextCursor: null});
+    await assert.rejects(readOfficialAuth(rpc.rpc, home, source), error => error instanceof OrdinaryCodexAuthRefused && error.reason === reason);
+  }
+});
+
+test('RPC timeout stays timeout after TERM closes the helper', {timeout: 4000}, async t => {
+  const child = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], {detached: true, stdio: ['pipe','pipe','pipe'], env: {}});
+  t.after(() => { if (child.pid && child.exitCode === null && child.signalCode === null) { child.kill('SIGTERM'); } });
+  const observations: unknown[] = [];
+  await assert.rejects(captureAuthHelper({child, signal: new AbortController().signal, deadline: performance.now() + 2000,
+    home, source, captureRef: 'synthetic-timeout', record: value => { observations.push(value); }}),
+    error => error instanceof OrdinaryCodexAuthRefused && error.reason === 'timeout');
+  assert.deepEqual(observations.at(-1), {captureRef: 'synthetic-timeout', outcome: 'refused', stage: 'initialize', reason: 'timeout',
+    exitObserved: true, closeObserved: true, processGroupGone: true});
+});
+
+const disabledRemote = {method: 'remoteControl/status/changed', params: {status: 'disabled', environmentId: null, installationId: 'synthetic-installation', serverName: 'synthetic-server'}};
+for (const [label, notification, repeat, accepted] of [
+  ['disabled startup', disabledRemote, false, true],
+  ['observed emission timestamp', {...disabledRemote, emittedAtMs: 1789250000000}, false, true],
+  ['invalid emission metadata', {...disabledRemote, emittedAtMs: 'synthetic-payload'}, false, false],
+  ['unknown emission metadata', {...disabledRemote, extra: true}, false, false],
+  ['enabled remote', {...disabledRemote, params: {...disabledRemote.params, status: 'connected'}}, false, false],
+  ['remote environment', {...disabledRemote, params: {...disabledRemote.params, environmentId: 'synthetic-environment'}}, false, false],
+  ['extra authority', {...disabledRemote, params: {...disabledRemote.params, result: 'synthetic'}}, false, false],
+  ['response disguise', {...disabledRemote, id: 1}, false, false],
+  ['repeated notification', disabledRemote, true, false],
+] as const) {
+  test(`pinned passive remote-control notification: ${label}`, {timeout: 4000}, async t => {
+    const message = JSON.stringify(notification) + '\n';
+    const script = helperScript.replace("if(q.method==='initialized') return;", `if(q.method==='initialized') {process.stdout.write(${JSON.stringify(message + (repeat ? message : ''))});return;}`);
+    const child = spawn(process.execPath, ['-e', script], {detached: true, stdio: ['pipe','pipe','pipe'], env: {}});
+    t.after(() => { if (child.pid && child.exitCode === null && child.signalCode === null) { child.kill('SIGTERM'); } });
+    const observations: unknown[] = [];
+    const capture = captureAuthHelper({child, signal: new AbortController().signal, deadline: performance.now() + 2500,
+      home, source, captureRef: 'synthetic-remote', record: value => {observations.push(value);}});
+    if (accepted) {const material = await capture; material.token.fill(0); material.accountId.fill(0);}
+    else {await assert.rejects(capture, OrdinaryCodexAuthRefused);}
+    assert.ok(!JSON.stringify(observations).includes('synthetic-installation'));
+    assert.ok(!JSON.stringify(observations).includes('synthetic-server'));
+    assert.equal(child.listenerCount('exit'), 0);
+  });
+}
+test('disabled startup status may share the initialize response chunk before initialized', {timeout: 4000}, async t => {
+  const notice = JSON.stringify({...disabledRemote, emittedAtMs: 1789250000000}) + '\n';
+  const script = helperScript.replace("process.stdout.write(JSON.stringify({id:q.id,result})+'\\n');",
+    `process.stdout.write(JSON.stringify({id:q.id,result})+'\\n'+(q.method==='initialize'?${JSON.stringify(notice)}:''));`);
+  assert.notEqual(script, helperScript);
+  const child = spawn(process.execPath, ['-e', script], {detached: true, stdio: ['pipe','pipe','pipe'], env: {}});
+  t.after(() => { if (child.pid && child.exitCode === null && child.signalCode === null) { child.kill('SIGTERM'); } });
+  const material = await captureAuthHelper({child, signal: new AbortController().signal, deadline: performance.now() + 2500,
+    home, source, captureRef: 'synthetic-early-remote', record: () => {}});
+  material.token.fill(0); material.accountId.fill(0);
 });

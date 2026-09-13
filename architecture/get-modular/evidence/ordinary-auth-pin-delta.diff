@@ -1,0 +1,18 @@
+--- 714d6194afd24e0bb4375f4d38e2422c892ad021
++++ 669a750d8db451e04f075cdeb36576c6606fba6e
+@@ -270,6 +270,15 @@
+ Host-owned resource owner. Host defines cleanup policy. A journal entry is not a
+ claim of independent resource ownership: do not dispose the same shared resource
+ through provider, consumers and multiple capability references.
++The resource owner is known before construction handoff and registers cleanup
++at acquisition; receiving a capability gives no cleanup authority. An async
++provider remains responsible for allocations it fails to hand back. A one-shot
++Host uses roots within their protected lifetime and returns an inert summary
++after cleanup, not graph references to the closed scope. Opaque failure causes
++remain opaque; a summary does not certify that those causes contain no references.
++
++A new profile does not update previously delivered references. Construction
++success remains distinct from Host readiness and lifecycle publication.
+ 
+ An already aborted signal yields cancelled with no calls. Check before each
+ factory and before success commit. Await an already running factory after abort;

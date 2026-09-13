@@ -118,7 +118,7 @@ with honest ownership and scope evidence. They do not require migrating every
 legacy capability, and cannot exempt the new capability from conformance.
 
 For meaningful composition boundaries, also read the canonical Get Modular
-[Consumer Module Standard](https://github.com/agent-teams-ai/get-modular/blob/714d6194afd24e0bb4375f4d38e2422c892ad021/docs/architecture/common-assembly.md#consumer-module-standard).
+[Consumer Module Standard](https://github.com/agent-teams-ai/get-modular/blob/669a750d8db451e04f075cdeb36576c6606fba6e/docs/architecture/common-assembly.md#consumer-module-standard).
 Its composition requirements apply inside an explicitly accepted Host scope;
 this authoring rule does not mandate installing Assembly everywhere. Review
 current upstream against the consumer pin before adoption or boundary changes,
