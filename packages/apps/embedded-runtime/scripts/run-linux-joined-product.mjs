@@ -38,6 +38,6 @@ for (const path of ["packages/apps/embedded-runtime/dist/composition.js",
 const binding = {exports: {}};
 process.dlopen(binding, join(root, "packages/platform/filesystem-custody/dist/rename-no-replace.node"));
 assert.equal(typeof binding.exports.publishNoReplace, "function", "build filesystem-custody native helper first");
-const entry = join(root, "packages/apps/embedded-runtime/tests/support/linux-joined-product.mjs");
+const entry = join(root, "packages/apps/embedded-runtime/tests/package/support/linux-joined-product.mjs");
 process.exitCode = await runOwnedTestProcess({command: unshare,
   args: ["--net", "--", process.execPath, "--test", "--test-concurrency=1", entry], cwd: root});
