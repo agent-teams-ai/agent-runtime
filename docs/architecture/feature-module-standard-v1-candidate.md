@@ -13,6 +13,7 @@ related:
   - ADR-0019
   - ADR-0020
   - ADR-0021
+  - ADR-0090
 code_anchors:
   - enforcement: required
     pattern: architecture/feature-module-standard/**
@@ -24,7 +25,7 @@ code_anchors:
 
 ## Additive ordinary session scope
 
-[ADR-0020](../decisions/0020-ordinary-user-session-codex-execution-profile.md)
+[ADR-0090](../decisions/0090-ordinary-user-session-codex-execution-profile.md)
 authorizes the [ordinary scoped profile](../../architecture/feature-module-standard/ordinary-scope.json).
 It actively checks the complete Embedded Runtime `ordinary-session-runtime`
 feature and the enumerated ordinary source files inside existing Agent
