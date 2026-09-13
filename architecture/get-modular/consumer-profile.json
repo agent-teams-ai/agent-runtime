@@ -4369,8 +4369,8 @@
       "profile": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
       "factories": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
       "tests": [
-        "packages/apps/embedded-runtime/tests/runtime-setup-assembly.test.ts",
-        "packages/apps/embedded-runtime/tests/runtime-setup-assembly.types.ts",
+        "packages/apps/embedded-runtime/tests/package/runtime-setup-assembly.test.ts",
+        "packages/apps/embedded-runtime/tests/package/runtime-setup-assembly.types.ts",
         "packages/apps/embedded-runtime/tests/assembly-reference.test.ts"
       ]
     }
