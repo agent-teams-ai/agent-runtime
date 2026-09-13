@@ -1,14 +1,14 @@
 name: adoption-receipt-darwin
 # Temporary workflow: Darwin arm64 adoption receipt for Host unpublished AE
-# feature-support identity f2340571f8514525c7af22dcca6e0645168fa04d stacked
-# on Host unpublished AE fixtures D 2d942d8c. The job always checks
+# feature-remainder identity bea095d1e64157b0f068b5bcefeaa8deeeccb5c0 stacked
+# on Host unpublished AE feature-support D 2c899d1c. The job always checks
 # out that SHA so this workflow-only commit does not enter the receipt
 # identity. Safe to delete after the paired receipt is merged.
 
 on:
   push:
     branches:
-      - cursor/fms-darwin-gha-capture-host-package-external-ae-features-support-7d17
+      - cursor/fms-darwin-gha-capture-host-package-external-ae-features-remainder-7d17
 
 permissions:
   contents: read
@@ -19,16 +19,16 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     steps:
-      - name: Checkout frozen Host unpublished AE feature-support SHA
+      - name: Checkout frozen Host unpublished AE feature-remainder SHA
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: f2340571f8514525c7af22dcca6e0645168fa04d
+          ref: bea095d1e64157b0f068b5bcefeaa8deeeccb5c0
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "f2340571f8514525c7af22dcca6e0645168fa04d"
+        run: test "$(git rev-parse HEAD)" = "bea095d1e64157b0f068b5bcefeaa8deeeccb5c0"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
