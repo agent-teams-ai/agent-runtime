@@ -43,7 +43,7 @@ export const createLinuxCodexLiveAdminRoute = async (input: Readonly<{
     throw new TypeError("Linux Codex administrative route configuration unavailable");
   }
   const registry: unknown = JSON.parse(await readFile(new URL(
-    "../../../../../docs/architecture/qualification-registry.json", import.meta.url), "utf8"));
+    "../../../../../../docs/architecture/qualification-registry.json", import.meta.url), "utf8"));
   // Read the repository registry; never substitute a fixture or caller registry.
   const rows = (registry as {entries?: unknown[]}).entries;
   if (!Array.isArray(rows) || !rows.some(value => {
