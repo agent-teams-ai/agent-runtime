@@ -1,7 +1,7 @@
 name: adoption-receipt-darwin
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host feature-test identity
-# 24e20d51 stacked on Host README D 1661ea7c.
+# ea842993 stacked on Host README D 1661ea7c. Discard 24e20d51 receipts.
 # The job always checks out that SHA so this workflow-only commit does not
 # enter the receipt identity. Safe to delete after the paired Host feature-test receipt is merged.
 
@@ -24,11 +24,11 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: 24e20d516628fbf09c4e2e6b92c6a84c672b8d85
+          ref: ea8429935400dd9bd1e63ac5da20452b8f2c9e99
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "24e20d516628fbf09c4e2e6b92c6a84c672b8d85"
+        run: test "$(git rev-parse HEAD)" = "ea8429935400dd9bd1e63ac5da20452b8f2c9e99"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
