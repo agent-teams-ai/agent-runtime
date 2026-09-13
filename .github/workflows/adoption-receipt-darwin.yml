@@ -1,5 +1,5 @@
 name: adoption-receipt-darwin
-# retrigger 5c57273a
+# retrigger 5c57273a (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host rsa-package identity
 # 5c57273a stacked on Host mixed-package D a10a56dd.
