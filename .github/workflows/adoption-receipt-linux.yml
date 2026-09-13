@@ -27,8 +27,10 @@ on:
       - refactor/fms-host-runtime-validation
       - refactor/fms-host-http-egress
       - chore/classify-native-helper-test
+      - cursor/fms-linux-deploy-7d17
       - docs/sr-contained-turn-anti-patterns
       - refactor/fms-host-access-invariants
+      - refactor/fms-host-darwin-deployment
       - test/get-modular-abort-cleanup
 
 permissions:
