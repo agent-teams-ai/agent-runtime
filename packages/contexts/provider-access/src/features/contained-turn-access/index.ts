@@ -42,3 +42,6 @@ export {
   type ObserveCredentialMaterializationAuthorizationInput,
   type ObserveCredentialMaterializationAuthorizationOutcome,
 } from "./contracts/materialization-authorization-v1.js";
+
+export { OrdinaryPaUnavailable, type OrdinaryPaBinding, type OrdinaryPaAuthority, type OrdinaryPaSnapshot,
+  type OrdinaryPaMaterial, type OrdinaryPaRetirement, type OrdinaryPaSettlement, type OrdinaryPaGrant } from './contracts/ordinary-provider-access.js';

@@ -3,10 +3,44 @@ id: runtime.architecture.get-modular-adoption
 type: architecture
 status: active
 owner: architecture
-summary: Tracks the passive setup adoption contract and outstanding evidence without extending runtime qualification.
+summary: Records scoped passive setup and ordinary session Assembly adoption without extending contained-turn qualification.
 ---
 
 # Get Modular adoption
+
+## Ordinary session scoped adoption
+
+[ADR-0090](../decisions/0090-ordinary-user-session-codex-execution-profile.md)
+authorizes the additive `user-session-v1` composition. The
+[consumer profile](../../architecture/get-modular/consumer-profile.json)
+retains ADR-0015 as its passive authority and records ADR-0090 on the ordinary
+composition itself. Accepted ADR-0016 custody adoption remains pending; ordinary
+execution does not establish contained-turn security or qualification.
+
+The existing Runtime Setup Assembly remains the single construction root.
+The ordinary extension declares eight owned nodes: operation store, Runtime
+Security, Provider Access, workspace, artifacts, process, provider and turn.
+The turn requires exactly seven dependencies; Provider Access additionally
+consumes Security's operation-bound secret-registration capability. The Host
+receives the closed ordinary turn root. The compatibility token is
+`agent-runtime/ordinary-v1`; it is distinct from the execution profile,
+manifest and persistence codec identities.
+
+The ordinary feature's full source and exact new files in existing features
+have [scoped active FMS adoption](../../architecture/feature-module-standard/ordinary-scope.json).
+The checker reuses existing FMS inventory, imports, layers, ownership and
+maintainability rules. A finite source/target/import-kind list covers existing
+Host composition seams only; application/domain imports cannot use that list.
+New source, unknown seams, stale seams and behavioral facade code are rejected.
+The existing full FMS profile and pending legacy modules remain unchanged.
+
+`pnpm architecture:get-modular-adoption` executes blocking source diagnostics,
+the live census, exact ordinary graph checks and scoped FMS checks.
+`pnpm test:get-modular-adoption` includes ordinary authority, source census,
+Node/SDK/layer, slot, capability, cardinality, token and binding mutants.
+Both commands remain in fast and full gates; runtime preparation, cleanup and
+public construction tests are mapped in the same profile. These architecture
+gates do not substitute for the ordinary end-to-end execution evidence.
 
 ## Status and authority
 
@@ -67,8 +101,8 @@ configurable cross-module relationships require standard mapping or an exact
 accepted exception. Ordinary fixed feature-local helpers keep static typed
 imports. No feature-per-class rule, wildcard legacy allowance, implicit
 inventory growth, string service locator, or universal manager is authorized.
-The scoped FMS gate remains independent. The live Foundation inventory records six workspace package roots, thirty-four feature
-roots, sixteen policy boundaries and exact source/target/runtime-or-type
+The scoped FMS gate remains independent. The live Foundation inventory records six workspace package roots, thirty-five feature
+roots, forty-one policy boundaries and exact source/target/runtime-or-type
 relationships. Unknown or stale roots and relationships fail, including new
 cross-feature edges inside an existing policy boundary. Fixed helpers within
 one feature remain ordinary imports. The two retained Host-custodied
@@ -410,3 +444,42 @@ unverified adoption is unfinished work.
 ## Retained direct capture from the qualification branch
 
 The [direct-composition capture retained from e411638](../spikes/runtime-setup-l0-direct-e411638-evidence.json) records source e615369 and remains byte-identical to the qualification branch (SHA-256 `879b333361889b250fb834c3bfb41a1006c4d0d2adcc5fd56df126de4c3eaf10`). It is a separate ADR-0008 experiment, not an Assembly capture. The original historical L0 report remains at its ADR-0015-authenticated path and digest. Neither capture establishes current Assembly acceptance or measured benefit.
+
+## Reviewed ordinary-session documentation pin migration
+
+On 2026-09-12, current upstream `714d6194afd24e0bb4375f4d38e2422c892ad021`
+was compared with retained `a05f2cb51553e1efc5ba89be352e4aba04675088`.
+The complete document SHA-256 is
+`63bbf8f6e0c92a74116bce40ac96e4fc5f1c4ed3d28325be79b5c75448a23bc3`.
+The only delta relocates five executable-example links from
+`packages/assembly/tests` to `tests/assembly`; no normative rule changes.
+At that checkpoint the active profile, pending contained-turn profile, checker
+expectation and retained document used this reviewed pin. Historical ADRs and evidence remain
+unchanged. The retained review is
+`architecture/get-modular/evidence/ordinary-session-pin-review.json`.
+
+[ADR-0090](../decisions/0090-ordinary-user-session-codex-execution-profile.md)
+accepts a separate ordinary contract. It does not activate ADR-0016 or extend the
+passive adoption claim. Ordinary activation requires concrete composition paths,
+FMS ownership, typed rejecting fixtures and the actual fast/full gates before
+activation; this documentation migration alone supplies none of that evidence.
+
+## Reviewed auth-compatibility documentation pin migration
+
+On 2026-09-13, the reviewed upstream revision is
+`669a750d8db451e04f075cdeb36576c6606fba6e`, complete-document SHA-256
+`e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`.
+The nine added lines clarify acquisition-time cleanup registration, responsibility
+for failed async construction, inert one-shot summaries, and the distinction
+between construction and readiness. The ordinary auth adapter remains the owner
+of its helper and cleanup; no new capability, graph node or dependency slot is
+introduced. This delivery corrects failed RPC settlement within that owner.
+
+The mutable profiles, rejecting checker expectation and retained current document
+use this revision. The prior bytes remain in
+`architecture/get-modular/evidence/consumer-module-standard-714d6194.md`;
+`ordinary-auth-pin-review.json` and `ordinary-auth-pin-delta.diff` in the same
+evidence directory record the reviewed transition. The earlier pin review and
+the ordinary execution contract remains unchanged. Its pre-merge ADR-0020 bytes
+are retained by ADR-0090 following the identifier collision with main. Pin migration does not qualify a live
+ordinary turn or activate the legacy pending ADR-0016 scope.
