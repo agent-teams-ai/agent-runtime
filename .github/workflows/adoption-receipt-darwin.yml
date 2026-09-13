@@ -1,5 +1,5 @@
 name: adoption-receipt-darwin
-# capture dc4fd560
+# retrigger dc4fd560
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host mixed-package identity
 # dc4fd560 stacked on Host package-tests D 9da4ae6e.
