@@ -4,9 +4,9 @@ import {describe, test} from "node:test";
 import {createCredentialMaterializationRequestDigest, createInMemoryContainedTurnDispatchConsumptionV1} from "@agent-teams/provider-access/composition";
 import {createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate, createNodeSha256EgressDigest,
   type EgressCurrentAuthorityV2} from "@agent-teams/runtime-security/composition";
-import {createContainedTurnHttpProviderAccessAuthorization} from "../dist/composition/contained-turn-http-provider-access.js";
-import {bindContainedTurnHttpRuntimeSecurity} from "../dist/composition/contained-turn-http-runtime-security.js";
-import {canonical} from "./support/external/runtime-security/provider-process-egress-authorization.fixtures.ts";
+import {createContainedTurnHttpProviderAccessAuthorization} from "../../dist/composition/contained-turn-http-provider-access.js";
+import {bindContainedTurnHttpRuntimeSecurity} from "../../dist/composition/contained-turn-http-runtime-security.js";
+import {canonical} from "../support/external/runtime-security/provider-process-egress-authorization.fixtures.ts";
 import {createHostHttpEgressSession} from "@agent-teams/agent-execution/composition";
 import type {HttpEgressOperation, HttpEgressReceipt,HostHttpGrant,HostHttpProvisionalDecision,
   HttpEgressBrokerPorts} from "@agent-teams/agent-execution/composition";

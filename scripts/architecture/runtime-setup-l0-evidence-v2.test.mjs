@@ -102,6 +102,10 @@ test("original argv lists and accepted native authority test are preserved exact
     ["tests/provider-candidate-route-gate.test.ts", "tests/package/provider-candidate-route-gate.test.ts"],
     ["tests/runtime-setup-assembly.test.ts", "tests/package/runtime-setup-assembly.test.ts"],
     ["tests/assembly-reference.test.ts", "tests/package/assembly-reference.test.ts"],
+    ["tests/contained-turn-http-egress-provider-access-integration.test.ts", "tests/package/contained-turn-http-egress-provider-access-integration.test.ts"],
+    ["tests/linux-codex-deployment.test.ts", "tests/package/linux-codex-deployment.test.ts"],
+    ["tests/linux-codex-node-recipe.test.ts", "tests/package/linux-codex-node-recipe.test.ts"],
+    ["tests/contained-turn-runtime-validation.unit.test.ts", "tests/package/contained-turn-runtime-validation.unit.test.ts"],
   ]);
   expected[0] = expected[0].map((arg) => relocated.get(arg) ?? arg);
   assert.deepEqual(testProcesses, expected);
