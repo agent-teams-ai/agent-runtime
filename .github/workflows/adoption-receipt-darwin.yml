@@ -1,15 +1,15 @@
 name: adoption-receipt-darwin
-# retrigger f08f92c1
+# retrigger 5c57273a
 
-# Temporary workflow: Darwin arm64 adoption receipt for Host mixed-package identity
-# f08f92c1 stacked on Host package-tests D 9da4ae6e.
+# Temporary workflow: Darwin arm64 adoption receipt for Host rsa-package identity
+# 5c57273a stacked on Host mixed-package D a10a56dd.
 # The job always checks out that SHA so this workflow-only commit does not
-# enter the receipt identity. Safe to delete after the paired Host mixed-package receipt is merged.
+# enter the receipt identity. Safe to delete after the paired Host rsa-package receipt is merged.
 
 on:
   push:
     branches:
-      - cursor/fms-darwin-gha-capture-host-mixed-package-7d17
+      - cursor/fms-darwin-gha-capture-host-rsa-package-7d17
 
 permissions:
   contents: read
@@ -20,16 +20,16 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     steps:
-      - name: Checkout frozen Host mixed-package SHA
+      - name: Checkout frozen Host rsa-package SHA
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: f08f92c1984984900eab959bb8122ef30cf46681
+          ref: 5c57273ab9488c530725f3453ef0d25b292427ac
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "f08f92c1984984900eab959bb8122ef30cf46681"
+        run: test "$(git rev-parse HEAD)" = "5c57273ab9488c530725f3453ef0d25b292427ac"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
