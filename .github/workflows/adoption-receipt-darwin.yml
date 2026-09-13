@@ -1,5 +1,5 @@
 name: adoption-receipt-darwin
-# identity 11192ce4
+# retrigger 11192ce4 (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for package-test
 # architecture-load identity 11192ce4 stacked on main 67ca1ceb.
