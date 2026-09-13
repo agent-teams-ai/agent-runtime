@@ -1,5 +1,5 @@
 import { NodeProviderProcessCustodyCore,CODEX_APP_SERVER_DARWIN_ARM64_TUPLE as tuple,createDarwinCodexRouteEnforcement,type DarwinCodexRouteEnforcementInput } from "@agent-teams/agent-execution/composition";
-import { createEgressFixture } from "../../../../../../../support/external/agent-execution/features/contained-agent-turn/http-egress-test-fixture.ts";
+import { createEgressFixture } from "../http-egress-test-fixture.ts";
 
 /** Explicitly synthetic owners; minting performs no filesystem/native/provider work. */
 export const darwinRouteFixture = () => {

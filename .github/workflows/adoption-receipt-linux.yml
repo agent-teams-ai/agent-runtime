@@ -65,6 +65,7 @@ on:
       - cursor/fms-host-package-external-ae-top-7d17
       - cursor/fms-host-package-external-ae-fixtures-7d17
       - cursor/fms-host-package-external-ae-features-support-7d17
+      - cursor/fms-host-package-external-ae-features-remainder-7d17
       - docs/sr-contained-turn-anti-patterns
       - refactor/fms-host-access-invariants
       - refactor/fms-host-darwin-deployment

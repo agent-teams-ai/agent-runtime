@@ -5,7 +5,7 @@ import {
 } from "@agent-teams/agent-execution/composition";
 import { HOST, HOST_BOOT, IMAGE, call, createInput, policy } from "./docker-engine-test-fixture.ts";
 import { syntheticDaemon } from "./docker-engine-synthetic-daemon.ts";
-import { jsonResponse } from "../../../../../support/external/agent-execution/features/contained-agent-turn/docker-engine-transport-test-fixture.ts";
+import { jsonResponse } from "../features/contained-agent-turn/docker-engine-transport-test-fixture.ts";
 
 export const IMAGE_CONFIG = `sha256:${"7".repeat(64)}`;
 export const NODE_BYTES = Buffer.from("synthetic independent interpreter bytes");
