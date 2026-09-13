@@ -221,6 +221,7 @@ test("cleanup deadline bounds a stuck preparation while retaining the late alloc
   assert.ok(f.io.network);
   assert.equal(f.owner.signal.aborted, true);
   release.resolve(); await rejection;
+  assert.equal(await f.owner.cleanupNetwork(), "unknown");
   await f.releasePrerequisites();
   assert.equal(await f.owner.cleanupNetwork(), "absent");
   assert.equal(f.io.writes.filter(value => value.method === "POST").length, 1);
