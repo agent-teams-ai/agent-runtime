@@ -1,8 +1,8 @@
 name: adoption-receipt-darwin
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host multi-package absorb
-# identity 8661f80807538310b6428b2b1945d0f2c2973770 after #141
-# merge-commit c44695e2. The job always checks out that SHA so this
+# identity b1ea9c71bae2e07185340637b19925b1488b0205 after #156
+# merge-commit 1c2651e2. The job always checks out that SHA so this
 # workflow-only commit does not enter the receipt identity. Safe to delete
 # after the paired Host multi-package receipt is merged.
 
@@ -25,7 +25,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: 8661f80807538310b6428b2b1945d0f2c2973770
+          ref: b1ea9c71bae2e07185340637b19925b1488b0205
 
       - name: Verify checkout revision
         shell: bash
@@ -124,4 +124,3 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-# retrigger 8661f80807538310b6428b2b1945d0f2c2973770
