@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {PostgresHttpEgressEvidence,createPreparedHttpRequestV1,materializationAuthorizationRequest,projectPreparedRequest} from "@agent-teams/agent-execution/composition";
-import {createEgressFixture} from "../support/external/agent-execution/features/contained-agent-turn/http-egress-test-fixture.ts";
+import {createEgressFixture} from "./support/external/agent-execution/features/contained-agent-turn/http-egress-test-fixture.ts";
 import {captureCurrentEgressResolve} from "@agent-teams/runtime-security/composition";
 
 const bytes = (value: string) => new TextEncoder().encode(value);
