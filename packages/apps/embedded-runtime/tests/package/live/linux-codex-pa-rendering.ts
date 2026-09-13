@@ -3,7 +3,7 @@ import {createPostgresCredentialRenderingOwner} from
   "@agent-teams/provider-access/composition";
 import type {OperationCredentialMaterial} from
   "@agent-teams/provider-access/composition";
-import type {LinuxCodexDeploymentInfrastructure} from "../../dist/composition/linux-codex-deployment.js";
+import type {LinuxCodexDeploymentInfrastructure} from "../../../dist/composition/linux-codex-deployment.js";
 
 type Factory = LinuxCodexDeploymentInfrastructure["createProviderAccess"];
 type Pool = Parameters<typeof createPostgresCredentialRenderingOwner>[0];

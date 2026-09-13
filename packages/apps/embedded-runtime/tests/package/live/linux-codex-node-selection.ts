@@ -1,8 +1,8 @@
 // Test-only administrative glue. Import/selection performs no discovery or launch.
 import {createHash, randomBytes, randomUUID} from "node:crypto";
 import {isAbsolute, normalize, relative} from "node:path";
-import type {LinuxCodexNodeRecipeSelection} from "../../dist/composition/linux-codex-node-recipe.js";
-import type {LinuxCodexDeploymentInfrastructure} from "../../dist/composition/linux-codex-deployment.js";
+import type {LinuxCodexNodeRecipeSelection} from "../../../dist/composition/linux-codex-node-recipe.js";
+import type {LinuxCodexDeploymentInfrastructure} from "../../../dist/composition/linux-codex-deployment.js";
 import type {ContainedTurnDispatchGrantSubject,DockerCustodyInitConfiguration} from "@agent-teams/agent-execution/composition";
 
 type Selection = LinuxCodexNodeRecipeSelection;
