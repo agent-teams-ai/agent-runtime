@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { snapshotCancellationProof } from "../dist/composition/contained-turn-cancellation-proof.js";
+import { snapshotCancellationProof } from "../../../dist/composition/contained-turn-cancellation-proof.js";
 
 const terminal = () => ({
   artifactManifestRef: "artifact", commandId: "command", effectId: "effect",

@@ -6,7 +6,7 @@ import {
   copyTrustedCodexSetupScope,
   copyTrustedContainedTurnScope,
   TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS,
-} from "../dist/composition/trusted-runtime-access-scope.js";
+} from "../../../dist/composition/trusted-runtime-access-scope.js";
 
 const values = (length: number, prefix: string): string[] =>
   Array.from({ length }, (_, index) => `/${prefix}-${index}`);

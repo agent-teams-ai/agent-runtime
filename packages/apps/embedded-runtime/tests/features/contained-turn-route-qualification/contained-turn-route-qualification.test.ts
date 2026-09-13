@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 import {
   PRODUCT_QUALIFICATION_REGISTRY, registryQualifiesRouteTarget,
-} from "../dist/composition/contained-turn-route-qualification.js";
+} from "../../../dist/composition/contained-turn-route-qualification.js";
 
 const target = Object.freeze({
   provider: "fixture-provider", providerAdapter: "fixture-adapter", binaryClosure: "fixture-closure",
