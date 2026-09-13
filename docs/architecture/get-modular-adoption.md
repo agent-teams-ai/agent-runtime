@@ -49,7 +49,7 @@ Its `dist/composition/generated/stage1.js` entry has SHA-256
 `93438ec6c300bad642dde280070cabe1f4df2ea07d30176b368f2cee311acf54`;
 this entry digest is not the digest of the complete subject. The consumer
 profile retains both archives and exact lockfile integrity.
-The [packed consumer test](../../packages/apps/embedded-runtime/tests/assembly-packed-consumer.test.ts)
+The [packed consumer test](../../packages/apps/embedded-runtime/tests/package/assembly-packed-consumer.test.ts)
 installs declared production roots and checks passive behavior and typings.
 These identities do not assert whole-runtime conformance.
 
