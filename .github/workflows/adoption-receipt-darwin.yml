@@ -1,4 +1,5 @@
 name: adoption-receipt-darwin
+# retrigger 0e35de99 (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host runtime-access identity
 # 0e35de99 after absorbing main (#128 merge-commit). The job always checks out
