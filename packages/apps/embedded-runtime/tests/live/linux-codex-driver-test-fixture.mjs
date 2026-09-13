@@ -39,7 +39,7 @@ export async function publicFixture(t, status = 'unknown') {
   }};
   const sources = {
     pg: 'export class Pool {on() {} async end() {globalThis.ar69DriverFixture.events.push("pool-end");}}',
-    './linux-codex-live-canary-config.ts': 'export function createLinuxCodexLiveCanaryConfiguration(a, p) {globalThis.ar69DriverFixture.validate?.(a, p);} export async function setupLinuxCodexLiveCanary() {globalThis.ar69DriverFixture.events.push("setup"); await globalThis.ar69DriverFixture.setup?.(); return globalThis.ar69DriverFixture.live;}',
+    '../package/live/linux-codex-live-canary-config.ts': 'export function createLinuxCodexLiveCanaryConfiguration(a, p) {globalThis.ar69DriverFixture.validate?.(a, p);} export async function setupLinuxCodexLiveCanary() {globalThis.ar69DriverFixture.events.push("setup"); await globalThis.ar69DriverFixture.setup?.(); return globalThis.ar69DriverFixture.live;}',
     './linux-codex-live-evidence.mjs': 'export function collectLinuxCodexLiveEvidence(input) {return globalThis.ar69DriverFixture.collect(input);}',
   };
   const hooks = registerHooks({resolve(specifier, context, next) {
