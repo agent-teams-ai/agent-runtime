@@ -18,8 +18,8 @@ import {
   createNodeCodexConfigurationDigest, createNodeConfigurationSourceReader,
   createSmolTomlParser, createStrictClaudeCodeJsonParser,
 } from "@agent-teams/runtime-configuration/composition";
-import {createClaudeCodeSetupInspectionPlanner} from "../../dist/composition/claude-code-setup-inspection-planner.js";
-import {createCodexSetupInspectionPlanner} from "../../dist/composition/codex-setup-inspection-planner.js";
+import {createClaudeCodeSetupInspectionPlanner} from "../../../dist/composition/claude-code-setup-inspection-planner.js";
+import {createCodexSetupInspectionPlanner} from "../../../dist/composition/codex-setup-inspection-planner.js";
 import {setupLinuxCodexLiveAdmin, type LinuxCodexLiveAdminApproval,
   type LinuxCodexLiveAdminConfiguration, type LinuxCodexLiveAdminCredentials} from "./linux-codex-live-admin.ts";
 

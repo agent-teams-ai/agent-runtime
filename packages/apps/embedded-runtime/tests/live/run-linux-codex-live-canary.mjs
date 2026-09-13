@@ -241,7 +241,7 @@ export function createLinuxCodexLiveCanaryDriver(configuration, credentialFd) {
     try {
       const actualSourceSHA = preflightHost(config);
       const {createLinuxCodexLiveCanaryConfiguration, setupLinuxCodexLiveCanary} =
-        await import('./linux-codex-live-canary-config.ts');
+        await import('../package/live/linux-codex-live-canary-config.ts');
       try {
         if (config.hostPins.firewall) {
           const {createFirewallCommand} = await import('../package/live/linux-codex-live-admin-firewall.ts');
