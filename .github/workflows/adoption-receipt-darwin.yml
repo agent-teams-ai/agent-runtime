@@ -1,4 +1,5 @@
 name: adoption-receipt-darwin
+# retrigger
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host package-test identity
 # 580ed23f stacked on Host feature-tests D 89b8f8aa.
