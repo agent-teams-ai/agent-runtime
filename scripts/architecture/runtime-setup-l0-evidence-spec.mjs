@@ -371,12 +371,12 @@ export const traces = Object.freeze({
     claudeCode: Object.freeze([
       Object.freeze({
         owner: "embedded-runtime",
-        path: "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+        path: "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts",
         symbols: Object.freeze(["RuntimeAccessHandle", "ClaudeCodeRuntimeSetupQueries"]),
       }),
       Object.freeze({
         owner: "embedded-runtime",
-        path: "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
+        path: "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-claude-code-setup-view.ts",
         symbols: Object.freeze(["createBuildClaudeCodeSetupView"]),
       }),
       Object.freeze({
@@ -398,12 +398,12 @@ export const traces = Object.freeze({
     codex: Object.freeze([
       Object.freeze({
         owner: "embedded-runtime",
-        path: "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+        path: "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts",
         symbols: Object.freeze(["RuntimeAccessHandle", "CodexRuntimeSetupQueries"]),
       }),
       Object.freeze({
         owner: "embedded-runtime",
-        path: "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
+        path: "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-codex-setup-view.ts",
         symbols: Object.freeze(["createBuildCodexSetupView"]),
       }),
       Object.freeze({
@@ -441,7 +441,6 @@ export const evidenceRoots = Object.freeze({
   fixtures: Object.freeze([
     "packages/contexts/agent-execution/tests/fixtures",
     "packages/contexts/runtime-configuration/tests/fixtures",
-    "packages/contexts/runtime-security/tests/fixtures",
   ]),
   sources: Object.freeze(evidencePackages.map(path => `${path}/src`)),
   tests: Object.freeze(evidencePackages.map(path => `${path}/tests`)),

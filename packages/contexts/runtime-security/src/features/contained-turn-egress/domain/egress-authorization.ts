@@ -1,5 +1,4 @@
-import type { DispatchConsumptionReceipt } from
-  "../../contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.js";
+import type { EgressDispatchConsumptionReceipt } from "./dispatch-consumption.js";
 import type { NetworkAddressV1 } from "./network-address.js";
 
 export interface EgressAuthorizationEnvelopeV1 {
@@ -14,7 +13,7 @@ export interface EgressAuthorizationBodyV1 {
   readonly credentialGeneration: string; readonly credentialRevision: string;
   readonly accessRef: string; readonly accessRevision: string;
   readonly routeRevision: string; readonly routeAuthorityDigest: string; readonly operationId: string;
-  readonly attemptId: string; readonly dispatchReceipt: DispatchConsumptionReceipt;
+  readonly attemptId: string; readonly dispatchReceipt: EgressDispatchConsumptionReceipt;
   readonly requestId: string; readonly requestNonce: string; readonly environmentId: string;
   readonly gatewayId: string; readonly hostInstanceId: string; readonly hostBootId: string;
   readonly transportMode: "one_shot_https"; readonly policyId: string; readonly policyRevision: string;

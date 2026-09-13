@@ -143,8 +143,8 @@ test("domain, application, sibling adapters and sibling composition never inheri
     `${agent}domain/builtin-counterexample.ts`, `${agent}application/builtin-counterexample.ts`,
     `${provider}domain/provider-access-binding.ts`,
     `${provider}application/ports/outbound/provider-access-binding-repository.ts`,
-    `${embedded}application/build-claude-code-setup-view.ts`,
-    `${embedded}application/trusted-claude-code-setup-scope.ts`,
+    `${embedded}index.ts`,
+    `${embedded}features/contained-turn-runtime-access/runtime-access.ts`,
     `${agent}adapters/outbound/codex-app-server/codex-app-server-jsonl.ts`,
     `${agent}composition/dispatch-grant-anti-corruption.ts`,
     // Host contained-turn-runtime-access is not listed here: the

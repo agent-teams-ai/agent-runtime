@@ -20,11 +20,16 @@ const packagePaths = [
 
 const run = (command: string, args: string[], cwd: string): string => {
   const result = spawnSync(command, args, {
-    cwd, encoding: "utf8", timeout: 180_000, maxBuffer: 8 * 1024 * 1024,
+    cwd, encoding: "utf8", timeout: 300_000, maxBuffer: 8 * 1024 * 1024,
     env: { ...process.env, NODE_PATH: "", NODE_OPTIONS: "" },
   });
+  const detail = `${command} ${args.join(" ")}\n${result.stdout}\n${result.stderr}`;
+  if (result.error !== undefined || result.status !== 0) {
+    console.error(detail);
+    if (result.error !== undefined) {console.error(result.error);}
+  }
   assert.equal(result.error, undefined, `${command}: ${result.error?.message}`);
-  assert.equal(result.status, 0, `${command} ${args.join(" ")}\n${result.stdout}\n${result.stderr}`);
+  assert.equal(result.status, 0, detail);
   return result.stdout.trim();
 };
 
@@ -90,6 +95,33 @@ const consumePackedArchives = async (root: string, dependencies: Record<string, 
   // Only remaining declared dependencies require registry retrieval.
   run("pnpm", ["install", "--ignore-scripts", "--config.node-linker=hoisted"], consumer);
   const installedConsumer = await realpath(consumer);
+  const packedDeclarationMentionsPg = async (packageName) => {
+    const installed = await realpath(join(consumer, "node_modules", packageName));
+    const queue = [join(installed, "dist")];
+    while (queue.length > 0) {
+      const directory = queue.pop();
+      let entries;
+      try {
+        entries = await readdir(directory, { withFileTypes: true });
+      } catch (error) {
+        assert.ok(false, `${packageName} packed dist is not readable at ${directory}: ${error}`);
+      }
+      for (const entry of entries) {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) {
+          queue.push(path);
+          continue;
+        }
+        if (!entry.name.endsWith(".d.ts")) {
+          continue;
+        }
+        assert.doesNotMatch(await readFile(path, "utf8"), /from ["']pg["']/u, path);
+      }
+    }
+  };
+  await packedDeclarationMentionsPg("@agent-teams/agent-execution");
+  await packedDeclarationMentionsPg("@agent-teams/provider-access");
+  await packedDeclarationMentionsPg("@agent-teams/embedded-runtime");
   for (const name of Object.keys(dependencies)) {
     const installed = await realpath(join(consumer, "node_modules", name));
     assert.ok(installed.startsWith(`${installedConsumer}${sep}`), `${name} escaped disposable install`);
@@ -161,7 +193,7 @@ await host[Symbol.asyncDispose]();
   run(process.execPath, ["verify.mjs"], consumer);
 };
 
-test("installed archives expose async composition and preserve passive sibling access", { timeout: 360_000 }, async t => {
+test("installed archives expose async composition and preserve passive sibling access", { timeout: 600_000 }, async t => {
   const root = await mkdtemp(join(tmpdir(), "ar-packed-consumer-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   await withVerifiedArchives(root, pin => readFile(join(repositoryRoot, pin.archivePath)), consumePackedArchives);

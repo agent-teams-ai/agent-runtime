@@ -28,4 +28,4 @@ export type {
   RuntimeContainedTurnView,
   SubmitRuntimeContainedTurnInput,
   SubmitRuntimeContainedTurnOutcome,
-} from "./contracts/runtime-access.js";
+} from "./features/contained-turn-runtime-access/runtime-access.js";

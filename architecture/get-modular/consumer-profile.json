@@ -44,8 +44,8 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/claude-agent-sdk"
       ],
       "entrypoints": [
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-current-kernel-entrypoint.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.ts"
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-current-kernel-entrypoint.ts"
       ],
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
@@ -425,21 +425,21 @@
       "roots": [
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-config-defaults.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-config-wire.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-docker-path-projection.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-boundary.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-files.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-observations.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/darwin-codex-native-files.ts"
       ],
       "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-permission-boundary.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-docker-path-projection.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-files.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-native-broker-recipe.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/darwin-codex-native-files.ts"
       ],
       "status": "not-adopted",
@@ -822,8 +822,8 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine"
       ],
       "entrypoints": [
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-composition.ts"
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-composition.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.ts"
       ],
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
@@ -969,24 +969,24 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/static-host-custody-launch-plan-resolver.ts"
       ],
       "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-open-attempts.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-bridge.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-selection.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-workspace-entrypoint.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-cooperative-process-custody.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-route-durable-storage.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/native-host-custody-workspace-entrypoint.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-open-attempts.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-bridge.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-selection.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-singleton-custody-owner.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-admission-guard.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/prepared-http-request-v1.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-finalizable-plan.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-launch.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/native-host-custody-workspace-authority.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/native-host-custody-workspace-entrypoint.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-core.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/private-host-custody-reservation.ts"
       ],
       "status": "not-adopted",
@@ -2147,26 +2147,6 @@
       "relationships": [
         {
           "from": "packages/apps/embedded-runtime/src/composition.ts",
-          "to": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition.ts",
-          "to": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition.ts",
-          "to": "packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition.ts",
-          "to": "packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition.ts",
           "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-creation-error.ts",
           "mode": "runtime"
         },
@@ -2182,8 +2162,18 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/claude-code-setup-inspection-planner.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition.ts",
           "to": "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts",
           "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts",
+          "mode": "type-only"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition.ts",
@@ -2434,7 +2424,14 @@
         "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
         "packages/apps/embedded-runtime/src/composition/claude-code-setup-inspection-planner.ts",
         "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts",
-        "packages/apps/embedded-runtime/src/composition/opaque-reference-digest.ts"
+        "packages/apps/embedded-runtime/src/composition/opaque-reference-digest.ts",
+        "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-claude-code-setup-view.ts",
+        "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-codex-setup-view.ts",
+        "packages/apps/embedded-runtime/src/features/setup-inspection-planning/claude-code-setup-inspection-planner.ts",
+        "packages/apps/embedded-runtime/src/features/setup-inspection-planning/codex-setup-inspection-planner.ts",
+        "packages/apps/embedded-runtime/src/features/setup-inspection-planning/index.ts",
+        "packages/apps/embedded-runtime/src/features/setup-inspection-planning/internal.ts",
+        "packages/apps/embedded-runtime/src/features/setup-inspection-planning/opaque-reference-digest.ts"
       ],
       "entrypoints": [
         "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
@@ -2448,16 +2445,6 @@
       "relationships": [
         {
           "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
-          "to": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
-          "to": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
           "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
           "mode": "runtime"
         },
@@ -2465,6 +2452,16 @@
           "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
           "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
           "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/claude-code-setup-inspection-planner.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts",
+          "mode": "runtime"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
@@ -2483,6 +2480,11 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
           "to": "packages/apps/embedded-runtime/src/composition/opaque-reference-digest.ts",
           "mode": "runtime"
         },
@@ -2497,38 +2499,88 @@
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
-          "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
-          "mode": "type-only"
-        },
-        {
           "from": "packages/apps/embedded-runtime/src/composition/claude-code-setup-inspection-planner.ts",
-          "to": "packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/claude-code-setup-inspection-planner.ts",
-          "to": "packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts",
-          "mode": "type-only"
+          "to": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/internal.ts",
+          "mode": "runtime"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts",
+          "to": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/internal.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/opaque-reference-digest.ts",
+          "to": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/internal.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-claude-code-setup-view.ts",
+          "to": "@agent-teams/agent-execution",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-claude-code-setup-view.ts",
+          "to": "@agent-teams/runtime-configuration",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-claude-code-setup-view.ts",
           "to": "@agent-teams/runtime-security",
           "mode": "type-only"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts",
-          "to": "packages/apps/embedded-runtime/src/application/ports/outbound/codex-setup-inspection-planner.ts",
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-claude-code-setup-view.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
           "mode": "type-only"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts",
-          "to": "packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts",
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-claude-code-setup-view.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
           "mode": "type-only"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/opaque-reference-digest.ts",
-          "to": "packages/apps/embedded-runtime/src/application/ports/outbound/opaque-reference-digest.ts",
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-codex-setup-view.ts",
+          "to": "@agent-teams/agent-execution",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-codex-setup-view.ts",
+          "to": "@agent-teams/runtime-configuration",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-codex-setup-view.ts",
+          "to": "@agent-teams/runtime-security",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-codex-setup-view.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-codex-setup-view.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/claude-code-setup-inspection-planner.ts",
+          "to": "@agent-teams/runtime-configuration",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/claude-code-setup-inspection-planner.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/codex-setup-inspection-planner.ts",
+          "to": "@agent-teams/runtime-security",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/codex-setup-inspection-planner.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
           "mode": "type-only"
         }
       ]
@@ -2538,7 +2590,10 @@
       "owner": "embedded-runtime",
       "roots": [
         "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts",
-        "packages/apps/embedded-runtime/src/composition/contained-turn-provider-selection.ts"
+        "packages/apps/embedded-runtime/src/composition/contained-turn-provider-selection.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-provider-selection/contained-turn-provider-selection.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-provider-selection/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-provider-selection/internal.ts"
       ],
       "entrypoints": [
         "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts"
@@ -2589,6 +2644,11 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/contained-turn-provider-selection.ts",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-provider-selection/internal.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-provider-selection/contained-turn-provider-selection.ts",
           "to": "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts",
           "mode": "type-only"
         }
@@ -2599,44 +2659,59 @@
       "owner": "embedded-runtime",
       "roots": [
         "packages/apps/embedded-runtime/src/composition/contained-turn-current-authority.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-current-authority/contained-turn-current-authority.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-current-authority/index.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-current-authority/internal.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-current-egress-owners/contained-turn-current-egress-owners.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-current-egress-owners/index.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-current-egress-owners/internal.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-authorities/contained-turn-http-egress-authorities.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-authorities/index.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-authorities/internal.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-upstream/contained-turn-http-egress-upstream.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-upstream/index.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-upstream/internal.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-http-provider-access.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-http-provider-access/contained-turn-http-provider-access.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-http-provider-access/index.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-http-provider-access/internal.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-http-runtime-security.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-http-runtime-security/contained-turn-http-runtime-security.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-http-runtime-security/index.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-http-runtime-security/internal.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-linux-route-binding.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-route-qualification.ts",
         "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-authority.ts",
-        "packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/darwin-contained-turn-authority.ts",
-        "packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/index.ts",
-        "packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/internal.ts",
         "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-deployment.ts",
-        "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
-        "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/index.ts",
-        "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/internal.ts",
         "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
         "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
         "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
         "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts",
-        "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts"
+        "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-current-authority/contained-turn-current-authority.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-current-authority/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-current-authority/internal.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-current-egress-owners/contained-turn-current-egress-owners.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-current-egress-owners/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-current-egress-owners/internal.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-authorities/contained-turn-http-egress-authorities.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-authorities/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-authorities/internal.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-upstream/contained-turn-http-egress-upstream.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-upstream/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-upstream/internal.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-http-provider-access/contained-turn-http-provider-access.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-http-provider-access/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-http-provider-access/internal.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-http-runtime-security/contained-turn-http-runtime-security.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-http-runtime-security/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-http-runtime-security/internal.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-linux-route-binding/contained-turn-linux-route-binding.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-linux-route-binding/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-linux-route-binding/internal.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/contained-turn-route-qualification.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/internal.ts",
+        "packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/darwin-contained-turn-authority.ts",
+        "packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/index.ts",
+        "packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/internal.ts",
+        "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
+        "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/index.ts",
+        "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/internal.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-deployment/index.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-deployment/internal.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-contained-turn-owner.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment-authority.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/index.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/internal.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/linux-codex-node-recipe-consumption.ts",
+        "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/linux-codex-node-recipe.ts"
       ],
       "entrypoints": [
         "packages/apps/embedded-runtime/src/composition/contained-turn-current-authority.ts",
@@ -2691,17 +2766,12 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/contained-turn-linux-route-binding.ts",
-          "to": "@agent-teams/agent-execution/composition",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-linux-route-binding.ts",
-          "to": "@agent-teams/provider-access/composition",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-linux-route-binding/internal.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/contained-turn-route-qualification.ts",
-          "to": "@agent-teams/agent-execution/composition",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/internal.ts",
           "mode": "runtime"
         },
         {
@@ -2710,168 +2780,33 @@
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/darwin-contained-turn-authority.ts",
-          "to": "@agent-teams/agent-execution/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/darwin-contained-turn-authority.ts",
-          "to": "@agent-teams/provider-access/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/darwin-contained-turn-authority.ts",
-          "to": "@agent-teams/runtime-security/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/darwin-contained-turn-authority.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/darwin-contained-turn-authority.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
-          "mode": "runtime"
-        },
-        {
           "from": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-deployment.ts",
           "to": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/internal.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
-          "to": "@agent-teams/agent-execution/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
-          "to": "@agent-teams/provider-access/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
-          "to": "@agent-teams/runtime-security/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-authority.ts",
-          "mode": "runtime"
-        },
-        {
           "from": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
-          "to": "@agent-teams/agent-execution/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
-          "to": "@agent-teams/runtime-security/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts",
+          "to": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/internal.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
-          "to": "@agent-teams/agent-execution/composition",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
-          "to": "@agent-teams/provider-access/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
-          "to": "@agent-teams/runtime-security/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-linux-route-binding.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
-          "to": "@agent-teams/agent-execution/composition",
+          "to": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/internal.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
+          "to": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/internal.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts",
-          "to": "@agent-teams/agent-execution/composition",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts",
-          "to": "@agent-teams/agent-execution/composition",
+          "to": "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/internal.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts",
+          "to": "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/internal.ts",
           "mode": "runtime"
         },
         {
@@ -2933,6 +2868,161 @@
           "from": "packages/apps/embedded-runtime/src/features/contained-turn-http-runtime-security/contained-turn-http-runtime-security.ts",
           "to": "@agent-teams/runtime-security/composition",
           "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-linux-route-binding/contained-turn-linux-route-binding.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-linux-route-binding/contained-turn-linux-route-binding.ts",
+          "to": "@agent-teams/provider-access/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/contained-turn-route-qualification.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/darwin-contained-turn-authority.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/darwin-contained-turn-authority.ts",
+          "to": "@agent-teams/provider-access/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/darwin-contained-turn-authority.ts",
+          "to": "@agent-teams/runtime-security/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/darwin-contained-turn-authority.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/darwin-contained-turn-authority.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
+          "to": "@agent-teams/provider-access/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
+          "to": "@agent-teams/runtime-security/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-authority.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-contained-turn-owner.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-contained-turn-owner.ts",
+          "to": "@agent-teams/runtime-security/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-contained-turn-owner.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-contained-turn-owner.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-contained-turn-owner.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment-authority.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment-authority.ts",
+          "to": "@agent-teams/provider-access/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment-authority.ts",
+          "to": "@agent-teams/runtime-security/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment-authority.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment-authority.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment-authority.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-linux-route-binding.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/linux-codex-node-recipe-consumption.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/linux-codex-node-recipe.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/linux-codex-node-recipe.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
+          "mode": "type-only"
         }
       ]
     },
@@ -2943,41 +3033,56 @@
         "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal-diagnostics.ts",
         "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-access-authority.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-access-authority/contained-turn-access-authority.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-access-authority/index.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-access-authority/internal.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-cancellation-proof.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof/contained-turn-cancellation-proof.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof/index.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof/internal.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-composition-types.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-construction-failure.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-construction-failure/contained-turn-construction-failure.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-construction-failure/index.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-construction-failure/internal.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-operation-ref.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-owner-contract-error.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/contained-turn-runtime-validation.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/index.ts",
-        "packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/internal.ts",
+        "packages/apps/embedded-runtime/src/composition/runtime-access-lifecycle.ts",
+        "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-access-authority/contained-turn-access-authority.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-access-authority/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-access-authority/internal.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/contained-turn-authority-capability.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/internal.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof/contained-turn-cancellation-proof.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof/internal.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-composition-types/contained-turn-composition-types.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-composition-types/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-composition-types/internal.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-construction-failure/contained-turn-construction-failure.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-construction-failure/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-construction-failure/internal.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-operation-ref/contained-turn-operation-ref.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-operation-ref/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-operation-ref/internal.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-owner-contract-error/contained-turn-owner-contract-error.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-owner-contract-error/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-owner-contract-error/internal.ts",
         "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/contained-turn-runtime-access.ts",
         "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/index.ts",
         "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/internal.ts",
-        "packages/apps/embedded-runtime/src/composition/runtime-access-lifecycle.ts",
-        "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts"
+        "packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/contained-turn-runtime-validation.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/index.ts",
+        "packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/internal.ts",
+        "packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope/index.ts",
+        "packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope/internal.ts",
+        "packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope/trusted-runtime-access-scope.ts"
       ],
       "entrypoints": [
         "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-access-authority.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
+        "packages/apps/embedded-runtime/src/composition/contained-turn-composition-types.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-construction-failure.ts",
         "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
         "packages/apps/embedded-runtime/src/composition/runtime-access-lifecycle.ts",
-        "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
-        "packages/apps/embedded-runtime/src/composition/contained-turn-composition-types.ts"
+        "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts"
       ],
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
@@ -3024,14 +3129,19 @@
           "mode": "runtime"
         },
         {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/internal.ts",
+          "mode": "runtime"
+        },
+        {
           "from": "packages/apps/embedded-runtime/src/composition/contained-turn-cancellation-proof.ts",
           "to": "packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof/internal.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof/contained-turn-cancellation-proof.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts",
-          "mode": "runtime"
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-composition-types.ts",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-composition-types/internal.ts",
+          "mode": "type-only"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/contained-turn-construction-failure.ts",
@@ -3039,34 +3149,24 @@
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-access-authority.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-operation-ref.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts",
-          "mode": "runtime"
-        },
-        {
           "from": "packages/apps/embedded-runtime/src/composition/contained-turn-operation-ref.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-operation-ref/internal.ts",
           "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-owner-contract-error.ts",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-owner-contract-error/internal.ts",
+          "mode": "runtime"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
           "to": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/internal.ts",
           "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts",
+          "mode": "type-only"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts",
@@ -3075,18 +3175,38 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
-          "to": "packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts",
-          "mode": "type-only"
+          "to": "packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope/internal.ts",
+          "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
-          "to": "packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/contained-turn-authority-capability.ts",
           "to": "packages/apps/embedded-runtime/src/composition/contained-turn-access-authority.ts",
           "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/contained-turn-authority-capability.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-operation-ref.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/contained-turn-authority-capability.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/contained-turn-authority-capability.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof/contained-turn-cancellation-proof.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-operation-ref/contained-turn-operation-ref.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
+          "mode": "type-only"
         },
         {
           "from": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/contained-turn-runtime-access.ts",
@@ -3130,7 +3250,12 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/contained-turn-runtime-access.ts",
-          "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/index.ts",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts",
           "mode": "type-only"
         },
         {
@@ -3155,13 +3280,18 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/contained-turn-runtime-validation.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
           "mode": "type-only"
         },
         {
           "from": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/contained-turn-runtime-validation.ts",
-          "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
           "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope/trusted-runtime-access-scope.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-access-authority.ts",
+          "mode": "runtime"
         }
       ]
     },
@@ -3643,8 +3773,8 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-preparation-cleanup.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-preparation-recovery.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-preparation-scope.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-operation-store.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/committed-dispatch-proof-v1.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-authority.ts",
@@ -3676,14 +3806,10 @@
       "id": "core.embedded-runtime.access-contracts",
       "owner": "embedded-runtime",
       "roots": [
-        "packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts",
-        "packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts",
-        "packages/apps/embedded-runtime/src/contracts/runtime-access.ts"
+        "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts"
       ],
       "entrypoints": [
-        "packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts",
-        "packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts",
-        "packages/apps/embedded-runtime/src/contracts/runtime-access.ts"
+        "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts"
       ],
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
@@ -3694,8 +3820,8 @@
       "id": "core.provider-access.binding",
       "owner": "provider-access",
       "roots": [
-        "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts"
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts"
       ],
       "entrypoints": [
         "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
@@ -3853,6 +3979,7 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-operation-authority.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-operation-evidence.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-operation-repository.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-pool.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-preparation-recovery.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-preparation-store.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-schema-migrator.ts",
@@ -3912,12 +4039,12 @@
         "packages/contexts/agent-execution/src/index.ts"
       ],
       "entrypoints": [
-        "packages/contexts/agent-execution/src/index.ts",
         "packages/contexts/agent-execution/src/composition.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/darwin-attempt-workspace-backend.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/docker-kernel-host-custody.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/node-kernel-workspace-authority.ts"
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/node-kernel-workspace-authority.ts",
+        "packages/contexts/agent-execution/src/index.ts"
       ],
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules. Reviewed at 291684ed9: native broker installation and deferred binding, route enforcement, Docker kernel/effect custody and Node deployment recipe remain not-adopted contained-turn owners. The private route provenance composition shares one issuance/selection registry; consumption observations are an owner-local projection helper. Their exact Codex adapter and Host/Docker custody relationships are retained without transferring resource cleanup or containment authority to Assembly. Retained launch workspace is a private descriptor resource owner under existing workspace custody; Docker native-start diagnostics are local readback helpers, never admission or cleanup authority. At 81b2833af, Darwin post-claim preparation and route enforcement remain direct contained-turn owners outside passive scope; the fixed feature-local route helper and its exact adapter, custody and proof imports are not separate graph nodes. At 981c11314, eleven existing same-feature imports enter the newly explicit contained-turn anti-corruption composition boundary; these are retained static relationships outside passive Assembly adoption. Accepted base 981c11314 exposes the existing Darwin native authority binder and preparation token, and types the kernel custody port. Accepted base 0d7a02451 exports the existing workspace owner and adds an owner-local Darwin effect-custody composition over established ports; these are retained contained-turn relationships, not passive Assembly nodes. The curated composition surface re-exports the existing Codex JSONL envelope decoder, kernel custody adapter, and operation-cutoff revision through the same internal barrel; these remain retained contained-turn relationships, not passive Assembly nodes. Additional retained re-exports for the curated composition surface are not new passive Assembly nodes. These retained contained-turn relationships remain outside passive Assembly construction and transfer no authority or cleanup ownership to Assembly.",
@@ -5259,19 +5386,9 @@
       "id": "production.embedded-runtime",
       "owner": "embedded-runtime",
       "roots": [
-        "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-        "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-        "packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts",
-        "packages/apps/embedded-runtime/src/application/ports/outbound/codex-setup-inspection-planner.ts",
-        "packages/apps/embedded-runtime/src/application/ports/outbound/opaque-reference-digest.ts",
         "packages/apps/embedded-runtime/src/index.ts"
       ],
       "entrypoints": [
-        "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-        "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-        "packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts",
-        "packages/apps/embedded-runtime/src/application/ports/outbound/codex-setup-inspection-planner.ts",
-        "packages/apps/embedded-runtime/src/application/ports/outbound/opaque-reference-digest.ts",
         "packages/apps/embedded-runtime/src/index.ts"
       ],
       "status": "not-adopted",
@@ -5279,98 +5396,8 @@
       "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
       "relationships": [
         {
-          "from": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-          "to": "@agent-teams/agent-execution",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-          "to": "@agent-teams/runtime-configuration",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-          "to": "@agent-teams/runtime-security",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-          "to": "packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-          "to": "packages/apps/embedded-runtime/src/application/ports/outbound/opaque-reference-digest.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-          "to": "packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-          "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-          "to": "@agent-teams/agent-execution",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-          "to": "@agent-teams/runtime-configuration",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-          "to": "@agent-teams/runtime-security",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-          "to": "packages/apps/embedded-runtime/src/application/ports/outbound/codex-setup-inspection-planner.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-          "to": "packages/apps/embedded-runtime/src/application/ports/outbound/opaque-reference-digest.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-          "to": "packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-          "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts",
-          "to": "@agent-teams/runtime-configuration",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts",
-          "to": "packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/ports/outbound/codex-setup-inspection-planner.ts",
-          "to": "@agent-teams/runtime-security",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/ports/outbound/codex-setup-inspection-planner.ts",
-          "to": "packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts",
-          "mode": "type-only"
-        },
-        {
           "from": "packages/apps/embedded-runtime/src/index.ts",
-          "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+          "to": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts",
           "mode": "type-only"
         }
       ]
@@ -5382,8 +5409,8 @@
         "packages/platform/filesystem-custody/src"
       ],
       "entrypoints": [
-        "packages/platform/filesystem-custody/src/index.ts",
-        "packages/platform/filesystem-custody/src/composition.ts"
+        "packages/platform/filesystem-custody/src/composition.ts",
+        "packages/platform/filesystem-custody/src/index.ts"
       ],
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
@@ -5411,8 +5438,8 @@
         "packages/contexts/provider-access/src/index.ts"
       ],
       "entrypoints": [
-        "packages/contexts/provider-access/src/index.ts",
-        "packages/contexts/provider-access/src/composition.ts"
+        "packages/contexts/provider-access/src/composition.ts",
+        "packages/contexts/provider-access/src/index.ts"
       ],
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules. These are retained re-exports for the curated composition surface, not new passive Assembly nodes.",
@@ -5602,9 +5629,9 @@
         "packages/contexts/runtime-configuration/src"
       ],
       "entrypoints": [
-        "packages/contexts/runtime-configuration/src/index.ts",
         "packages/contexts/runtime-configuration/src/composition.ts",
-        "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/contracts/claude-code-configuration-inspection.ts"
+        "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/contracts/claude-code-configuration-inspection.ts",
+        "packages/contexts/runtime-configuration/src/index.ts"
       ],
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
@@ -5651,6 +5678,21 @@
       "id": "production.runtime-security",
       "owner": "runtime-security",
       "roots": [
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/index.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/internal.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/adapters/inbound/contained-turn-egress-v1.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/contracts/contained-turn-egress-v1.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/dispatch-consumption.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/index.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/internal.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/index.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/internal.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/adapters/inbound/claude-code-setup-inspection-authorization-v1.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/adapters/inbound/setup-inspection-authorization-v1.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/models/claude-code-setup-inspection-models.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/models/setup-inspection-models.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/index.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/internal.ts",
         "packages/contexts/runtime-security/src/composition.ts",
         "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/dispatch-boundary-value.ts",
         "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/inbound/contained-turn-dispatch-authority-v1-request-mappers.ts",
@@ -5748,8 +5790,8 @@
         "packages/contexts/runtime-security/src/index.ts"
       ],
       "entrypoints": [
-        "packages/contexts/runtime-security/src/index.ts",
-        "packages/contexts/runtime-security/src/composition.ts"
+        "packages/contexts/runtime-security/src/composition.ts",
+        "packages/contexts/runtime-security/src/index.ts"
       ],
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules. These are retained re-exports for the curated composition surface, not new passive Assembly nodes.",
@@ -5757,238 +5799,43 @@
       "relationships": [
         {
           "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/in-memory-dispatch-consumption-repository.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/internal.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/in-memory-dispatch-consumption-repository.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/internal.ts",
           "mode": "type-only"
         },
         {
           "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/node-sha256-dispatch-digest.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/internal.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-acceptance-store.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/internal.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/composition.ts",
+          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/internal.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.ts",
+          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/internal.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/composition.ts",
+          "to": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/internal.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.ts",
+          "to": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/internal.ts",
           "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/outbound/control-clock.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/outbound/dispatch-acceptance-owner.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/outbound/dispatch-consumption-repository.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/outbound/dispatch-digest.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/dispatch-acceptance-factory.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/feature-module-factory.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/ordinary-security-factory.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-authority-head.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-authority-head.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/adapters/outbound/node-ed25519.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/adapters/outbound/node-ed25519.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/adapters/outbound/node-monotonic-clock.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/adapters/outbound/node-security-primitives.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/contained-turn-egress-dependencies.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/contained-turn-egress.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/egress-authorization-signer.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/egress-exchange.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/egress-policy-time-authority.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/provider-route-authority.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/composition/gateway.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/egress-authorization.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/egress-policy.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/egress-request.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/host-identity.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/network-address.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/provider-route-authority.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/validation.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/adapters/outbound/node-egress-cryptography.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/application/ports/outbound/egress-authority-owner.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/application/ports/outbound/egress-control-clock.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/application/ports/outbound/egress-cryptography.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/composition/current-egress-inputs.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/composition/current-egress-owner.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/composition/ed25519-v2-candidate-factory.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/composition/feature-module-factory.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/contracts/provider-process-egress-authorization-v1.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/contracts/provider-process-egress-authorization-v2.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/domain/provider-process-egress-model.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/adapters/outbound/node-path-canonicalizer.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/ports/outbound/path-canonicalizer.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/composition.ts",
-          "to": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/composition/feature-module-factory.ts",
-          "mode": "runtime"
         },
         {
           "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/inbound/contained-turn-dispatch-authority-v1-request-mappers.ts",
@@ -6076,29 +5923,9 @@
           "mode": "runtime"
         },
         {
-          "from": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/contained-turn-egress-dependencies.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/authorization-evidence.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/egress-authorization.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/egress-request.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/validation.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.ts",
-          "mode": "type-only"
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/internal.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/ordinary-security-factory.ts",
+          "mode": "runtime"
         },
         {
           "from": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/adapters/outbound/node-path-canonicalizer.ts",
@@ -6107,22 +5934,22 @@
         },
         {
           "from": "packages/contexts/runtime-security/src/index.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/index.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/contexts/runtime-security/src/index.ts",
-          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/contracts/provider-process-egress-authorization-v2.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-egress/index.ts",
           "mode": "type-only"
         },
         {
           "from": "packages/contexts/runtime-security/src/index.ts",
-          "to": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/contracts/claude-code-setup-inspection-authorization.ts",
+          "to": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/index.ts",
           "mode": "type-only"
         },
         {
           "from": "packages/contexts/runtime-security/src/index.ts",
-          "to": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/contracts/setup-inspection-authorization.ts",
+          "to": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/index.ts",
           "mode": "type-only"
         }
       ]
@@ -6212,7 +6039,9 @@
     ],
     "featureRoots": [
       "packages/apps/embedded-runtime/src/features/contained-turn-access-authority",
+      "packages/apps/embedded-runtime/src/features/contained-turn-authority-capability",
       "packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof",
+      "packages/apps/embedded-runtime/src/features/contained-turn-composition-types",
       "packages/apps/embedded-runtime/src/features/contained-turn-construction-failure",
       "packages/apps/embedded-runtime/src/features/contained-turn-current-authority",
       "packages/apps/embedded-runtime/src/features/contained-turn-current-egress-owners",
@@ -6220,11 +6049,20 @@
       "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-upstream",
       "packages/apps/embedded-runtime/src/features/contained-turn-http-provider-access",
       "packages/apps/embedded-runtime/src/features/contained-turn-http-runtime-security",
+      "packages/apps/embedded-runtime/src/features/contained-turn-linux-route-binding",
+      "packages/apps/embedded-runtime/src/features/contained-turn-operation-ref",
+      "packages/apps/embedded-runtime/src/features/contained-turn-owner-contract-error",
+      "packages/apps/embedded-runtime/src/features/contained-turn-provider-selection",
+      "packages/apps/embedded-runtime/src/features/contained-turn-route-qualification",
       "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access",
       "packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation",
       "packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority",
       "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment",
+      "packages/apps/embedded-runtime/src/features/linux-codex-deployment",
+      "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe",
       "packages/apps/embedded-runtime/src/features/ordinary-session-runtime",
+      "packages/apps/embedded-runtime/src/features/setup-inspection-planning",
+      "packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope",
       "packages/contexts/agent-execution/src/features/contained-agent-turn",
       "packages/contexts/agent-execution/src/features/runtime-installation-discovery",
       "packages/contexts/provider-access/src/features/contained-turn-access",

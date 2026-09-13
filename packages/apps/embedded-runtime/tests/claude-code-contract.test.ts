@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { createBuildClaudeCodeSetupView } from "../dist/application/build-claude-code-setup-view.js";
+import { createBuildClaudeCodeSetupView } from "../dist/features/setup-inspection-planning/build-claude-code-setup-view.js";
 import { createNodeOpaqueReferenceDigest } from "../dist/composition/opaque-reference-digest.js";
 
 const referenceDigest = createNodeOpaqueReferenceDigest();
@@ -13,7 +13,13 @@ const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 test("freezes the prospective provider-specific no-product-input Claude contract", async () => {
   const declaration = await readFile(
-    join(packageRoot, "dist", "contracts", "runtime-access.d.ts"),
+    join(
+      packageRoot,
+      "dist",
+      "features",
+      "contained-turn-runtime-access",
+      "runtime-access.d.ts",
+    ),
     "utf8",
   );
   assert.match(
@@ -42,11 +48,21 @@ test("freezes the prospective provider-specific no-product-input Claude contract
 });
 
 test("the real host composition owns the complete Claude dependency contract", async () => {
-  const [source, declaration, scopeDeclaration] = await Promise.all([
+  const [source, declaration, scopeReexport, scopeDeclaration] = await Promise.all([
     readFile(join(packageRoot, "src", "composition", "agent-runtime-host.ts"), "utf8"),
     readFile(join(packageRoot, "dist", "composition", "agent-runtime-host.d.ts"), "utf8"),
     readFile(
       join(packageRoot, "dist", "composition", "trusted-runtime-access-scope.d.ts"),
+      "utf8",
+    ),
+    readFile(
+      join(
+        packageRoot,
+        "dist",
+        "features",
+        "trusted-runtime-access-scope",
+        "trusted-runtime-access-scope.d.ts",
+      ),
       "utf8",
     ),
   ]);
@@ -67,6 +83,11 @@ test("the real host composition owns the complete Claude dependency contract", a
   );
   assert.match(source, /snapshotAgentRuntimeHostDependencies\(dependencies\)/u);
   assert.match(source, /createBuildClaudeCodeSetupView\([\s\S]*?capabilityDependencies\.claudeCodeSetup/u);
+  assert.match(scopeReexport, /type TrustedRuntimeAccessScope/u);
+  assert.match(
+    scopeReexport,
+    /from "\.\.\/features\/trusted-runtime-access-scope\/internal\.js"/u,
+  );
   const runtimeScope = scopeDeclaration.match(
     /interface TrustedRuntimeAccessScope[\s\S]*?\n\}/u,
   )?.[0] ?? "";

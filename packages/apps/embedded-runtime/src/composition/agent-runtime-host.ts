@@ -6,17 +6,18 @@ import { createNodeOpaqueReferenceDigest } from "./opaque-reference-digest.js";
 import {
   createBuildClaudeCodeSetupView,
   type BuildClaudeCodeSetupViewDependencies,
-} from "../application/build-claude-code-setup-view.js";
+} from "./claude-code-setup-inspection-planner.js";
 import {
   createBuildCodexSetupView,
   type BuildCodexSetupViewDependencies,
-} from "../application/build-codex-setup-view.js";
+} from "./codex-setup-inspection-planner.js";
 import type {
   InspectCodexRuntimeSetup,
   InspectCodexRuntimeSetupOutcome,
   InspectClaudeCodeRuntimeSetupOutcome,
   RuntimeAccessHandle,
-} from "../contracts/runtime-access.js";
+} from "./contained-turn-runtime-access.js";
+
 import {
   copyTrustedCodexSetupScope,
   copyTrustedClaudeCodeSetupScope,

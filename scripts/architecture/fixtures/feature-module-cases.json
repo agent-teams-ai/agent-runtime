@@ -1597,6 +1597,73 @@
       "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/package/deep.test.ts", "line": 1 }]
     },
     {
+      "name": "package-test-literal-architecture-tooling-load-is-allowed",
+      "files": { "tests/package/custody.test.ts": "import { read } from '../../scripts/architecture/ar2-evidence-custody.mjs';\nvoid read;\n" },
+      "expected": []
+    },
+    {
+      "name": "package-test-literal-dynamic-architecture-tooling-load-is-allowed",
+      "files": { "tests/package/custody.test.ts": "const { read } = await import('../../scripts/architecture/ar2-evidence-custody.mjs');\nvoid read;\n" },
+      "expected": []
+    },
+    {
+      "name": "nested-package-test-literal-architecture-tooling-load-is-allowed",
+      "nestedModules": true,
+      "files": { "packages/a/tests/package/custody.test.ts": "import { read } from '../../../../scripts/architecture/ar2-evidence-custody.mjs';\nvoid read;\n" },
+      "expected": []
+    },
+    {
+      "name": "package-test-helper-under-package-dir-may-load-architecture-tooling",
+      "files": {
+        "tests/package/custody.test.ts": "import { read } from './helper.js';\nvoid read;\n",
+        "tests/package/helper.ts": "export { read } from '../../scripts/architecture/ar2-evidence-custody.mjs';\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "feature-test-rejects-repo-architecture-script-load",
+      "files": { "tests/features/alpha/value.test.ts": "import { read } from '../../../scripts/architecture/ar2-evidence-custody.mjs';\nvoid read;\n" },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "tests/features/alpha/value.test.ts", "line": 1 }]
+    },
+    {
+      "name": "package-test-nonliteral-architecture-load-fails-closed",
+      "files": { "tests/package/custody.test.ts": "const target = '../../scripts/architecture/ar2-evidence-custody.mjs';\nconst { read } = await import(target);\nvoid read;\n" },
+      "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "tests/package/custody.test.ts", "line": 2 }]
+    },
+    {
+      "name": "package-test-dynamic-architecture-tooling-join-is-allowed",
+      "files": { "tests/package/custody.test.ts": "const { read } = await import(join(root, 'scripts/architecture/ar2-evidence-custody.mjs'));\nvoid read;\n" },
+      "expected": []
+    },
+    {
+      "name": "feature-test-dynamic-architecture-tooling-join-fails-closed",
+      "files": { "tests/features/alpha/value.test.ts": "const { read } = await import(join(root, 'scripts/architecture/ar2-evidence-custody.mjs'));\nvoid read;\n" },
+      "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "tests/features/alpha/value.test.ts", "line": 1 }]
+    },
+    {
+      "name": "package-test-dynamic-architecture-join-rejects-extra-literals",
+      "files": { "tests/package/custody.test.ts": "const { read } = await import(join('root', 'scripts/architecture/ar2-evidence-custody.mjs'));\nvoid read;\n" },
+      "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "tests/package/custody.test.ts", "line": 1 }]
+    },
+    {
+      "name": "package-test-rejects-non-architecture-repo-script-load",
+      "files": { "tests/package/docs.test.ts": "import { load } from '../../scripts/docs/foo.mjs';\nvoid load;\n" },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "tests/package/docs.test.ts", "line": 1 }]
+    },
+    {
+      "name": "package-test-rejects-nested-architecture-script-load",
+      "files": { "tests/package/nested.test.ts": "import { load } from '../../scripts/architecture/nested/foo.mjs';\nvoid load;\n" },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "tests/package/nested.test.ts", "line": 1 }]
+    },
+    {
+      "name": "package-test-helper-outside-package-dir-rejects-architecture-load",
+      "files": {
+        "tests/package/custody.test.ts": "import { read } from '../helpers/load.js';\nvoid read;\n",
+        "tests/helpers/load.ts": "export { read } from '../../scripts/architecture/ar2-evidence-custody.mjs';\n"
+      },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "tests/helpers/load.ts", "line": 1 }]
+    },
+    {
       "name": "symlinked-test-file-fails-closed",
       "files": { "tests/features/alpha/value.test.ts": "import { value } from '../../../src/features/alpha/domain/value.js';\nvoid value;\n" },
       "symlinks": [{ "path": "tests/features/alpha/value.test.ts", "target": "symlink-targets/value.fixture", "kind": "file" }],

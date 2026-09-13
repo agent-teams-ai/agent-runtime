@@ -27,6 +27,14 @@ on:
       - refactor/fms-host-runtime-validation
       - refactor/fms-host-http-egress
       - chore/classify-native-helper-test
+      - chore/classify-native-helper-test
+      - cursor/fms-linux-deploy-7d17
+      - cursor/fms-host-leftover-7d17
+      - cursor/fms-setup-views-linux-7d17
+      - cursor/fms-runtime-access-linux-7d17
+      - cursor/fms-rc-layer-linux-7d17
+      - cursor/fms-rs-barrels-linux-7d17
+      - cursor/fms-rc-package-arch-load-7d17
       - docs/sr-contained-turn-anti-patterns
       - refactor/fms-host-access-invariants
       - refactor/fms-host-darwin-deployment

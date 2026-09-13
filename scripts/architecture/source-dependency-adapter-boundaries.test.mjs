@@ -183,9 +183,9 @@ test("the real parser observes every retained Node import in composition and TLS
   for (const [path, builtins] of [
     [`${composition}/agent-runtime-host.ts`, ["node:crypto", "node:util"]],
     ["packages/apps/embedded-runtime/src/features/contained-turn-access-authority/contained-turn-access-authority.ts", ["node:util"]],
-    [`${composition}/contained-turn-authority-capability.ts`, ["node:util"]],
-    [`${composition}/contained-turn-route-qualification.ts`, ["node:fs"]],
-    [`${composition}/trusted-runtime-access-scope.ts`, ["node:util"]],
+    ["packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/contained-turn-authority-capability.ts", ["node:util"]],
+    ["packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/contained-turn-route-qualification.ts", ["node:fs"]],
+    ["packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope/trusted-runtime-access-scope.ts", ["node:util"]],
     [`${host}/egress/node-tls-http-egress-transport-support.ts`,
       ["node:buffer", "node:crypto", "node:net", "node:tls"]],
     [`${host}/docker/node-linux-exclusive-route.ts`,
@@ -270,17 +270,14 @@ test("Embedded Runtime Node utility permission belongs to exact Host composition
   assert.deepEqual(composition.allowedBuiltins, ["node:crypto", "node:fs", "node:path", "node:util"]);
   assert.deepEqual(composition.allowedRuntimeReferences, []);
   const production = boundariesById.get("production.embedded-runtime");
-  // build-claude-code-setup-view.ts/build-codex-setup-view.ts reach the
-  // contained-turn, contained-turn-support and access-contracts entrypoints.
+  // Host public surface is the contracts barrel. Setup-view builders now live
+  // in composition.embedded-runtime.agent-runtime-host with the planners.
   assert.deepEqual(production.allowedBoundaries, [
-    "composition.embedded-runtime.contained-turn",
-    "composition.embedded-runtime.contained-turn-support",
     "core.embedded-runtime.access-contracts",
   ]);
-  // The two setup-view builders derive opaque reference digests through an
-  // injected port now; node:crypto moved to the composition-owned adapter
-  // (agent-runtime-host role), so application no longer needs it directly.
-  assert.deepEqual(production.allowedBuiltins, ["node:timers/promises"]);
+  // Digest computation stays behind OpaqueReferenceDigest in the
+  // agent-runtime-host role; the package barrel does not import Node builtins.
+  assert.deepEqual(production.allowedBuiltins, []);
 });
 
 test("transitional boundaries and adapter permissions remain exact", () => {

@@ -5,7 +5,7 @@ import type {
   AuthorizedInstallationCandidate,
   SetupAuthorizationDiagnostic,
   TrustedSetupPathRoot,
-} from "../contracts/setup-inspection-authorization.js";
+} from "./models/setup-inspection-models.js";
 import type { PathAlgebra } from "./ports/outbound/path-algebra.js";
 import type { PathCanonicalizer } from "./ports/outbound/path-canonicalizer.js";
 

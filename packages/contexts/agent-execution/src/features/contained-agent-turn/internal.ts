@@ -51,6 +51,9 @@ export {
 export {
   CONTAINED_TURN_POSTGRES_TIMEOUT_DEFAULTS,
   PostgresContainedTurnOperationStore,
+  type ContainedTurnPostgresClient,
+  type ContainedTurnPostgresPool,
+  type ContainedTurnPostgresQueryResult,
   type ContainedTurnPostgresTimeouts,
   type PostgresContainedTurnOperationStoreOptions,
 } from "./adapters/outbound/postgres/postgres-contained-turn-operation-store.js";

@@ -266,12 +266,15 @@ Embedded Runtime is the host application. Its activation waited on the
 accepted asynchronous setup assembly work, which has since landed. The setup
 view's Claude Code and Codex reference-digest computation is now behind an
 outbound `OpaqueReferenceDigest` port with a Host adapter, so
-`application/build-claude-code-setup-view.ts` and
-`application/build-codex-setup-view.ts` no longer import `node:crypto`
-directly, and the package boundary now rejects that import from application
-code. Runtime-access coordination now lives under
+`features/setup-inspection-planning/build-claude-code-setup-view.ts` and
+`features/setup-inspection-planning/build-codex-setup-view.ts` no longer import
+`node:crypto` directly, and the package boundary now rejects that import from
+unowned application files. Runtime-access coordination now lives under
 `src/features/contained-turn-runtime-access/` with curated `index.ts` /
-`internal.ts` entrypoints. Host composition re-exports that feature entry from
+`internal.ts` entrypoints. Public runtime-access DTOs live in that feature as
+`runtime-access.ts`; the package root and Host composition re-export them, so
+callers do not import a leftover `src/contracts/` tree. Host composition still
+re-exports the feature runtime entry from
 `src/composition/contained-turn-runtime-access.ts`, so existing composition
 imports keep working. The implementation is not yet an inward `application/`
 layer: it still imports Host composition helpers, so it stays at the feature
@@ -325,15 +328,67 @@ feature entries from the matching `src/composition/` files, so existing
 composition and test imports keep working. The implementations stay at the
 feature root rather than under `application/`: they still import Host
 composition helpers, which L0 treats as an inward leak from
-`application/`. Process lifecycle,
+`application/`. The Linux Codex Node recipe now
+lives under `src/features/linux-codex-node-recipe/` with curated `index.ts` /
+`internal.ts` entrypoints. Host composition re-exports that feature entry from
+`src/composition/linux-codex-node-recipe.ts` and
+`src/composition/linux-codex-node-recipe-consumption.ts`, so existing
+composition and test imports keep working. The implementation stays at the
+feature root rather than under `application/`: it still imports Host
+composition deployment types, which L0 treats as an inward leak from
+`application/`. Linux Codex contained-turn owner, deployment authority, and
+deployment resources now live under `src/features/linux-codex-deployment/`
+with curated `index.ts` / `internal.ts` entrypoints. Host composition
+re-exports those feature entries from
+`src/composition/linux-codex-contained-turn-owner.ts`,
+`src/composition/linux-codex-deployment-authority.ts`, and
+`src/composition/linux-codex-deployment.ts`, so existing composition and test
+imports keep working. The implementations stay at the feature root rather
+than under `application/`: they still import Host composition helpers or
+Agent Execution / Provider Access / Runtime Security composition types, which
+L0 treats as an inward leak from `application/`. Linux route binding, product
+route qualification, provider selection, access authority, and cancellation
+proof now live under matching `src/features/` directories with curated
+`index.ts` / `internal.ts` entrypoints. Host composition re-exports those
+feature entries from the matching `src/composition/` files, so existing
+composition and test imports keep working. The implementations stay at the
+feature root rather than under `application/`: they still import Host
+composition helpers or Agent Execution / Provider Access composition types,
+which L0 treats as an inward leak from `application/`. Authority binding,
+construction-failure cleanup, composition observation types, operation refs,
+and owner-contract errors now live under matching `src/features/` directories
+with curated `index.ts` / `internal.ts` entrypoints. Host composition
+re-exports those feature entries from the matching `src/composition/` files,
+so existing composition and test imports keep working. The implementations
+stay at the feature root rather than under `application/`: they still import
+Host composition helpers, which L0 treats as an inward leak from
+`application/`. Trusted runtime-access scope copying now lives under
+`src/features/trusted-runtime-access-scope/` with curated `index.ts` /
+`internal.ts` entrypoints. Host composition re-exports that feature from
+`src/composition/trusted-runtime-access-scope.ts`, so existing composition
+and test imports keep working. The implementation stays at the feature root
+rather than under `application/`: it still imports Host composition helpers
+and application scope types, which L0 treats as an inward leak from
+`application/`. Claude Code and Codex setup-inspection planners plus the
+opaque-reference digest now live under
+`src/features/setup-inspection-planning/` with curated `index.ts` /
+`internal.ts` entrypoints. Host composition re-exports those feature entries
+from the matching `src/composition/` files, so existing composition and test
+imports keep working. The implementations stay at the feature root rather
+than under `application/`: they still import application ports, which L0
+treats as an inward leak from `application/`. Process lifecycle,
 readiness and rollback stay in composition. Host tests that
 previously imported unpublished Agent Execution, Provider Access, and Runtime
 Security `dist/` and `tests/` package subpaths now use the curated
 `./composition` export when the symbol is public, or Host-local
 `tests/support/external/` copies of unpublished fixtures. Foundation
 `packageExports` claims for those three packages now match the curated `.` and
-`./composition` maps. Packed-consumer Provider Access `pg` anti-corruption
-remains. The module stays pending.
+`./composition` maps. Packed-consumer Agent Execution and Provider Access
+public composition types no longer mention `pg`; callers pass a structurally
+compatible pool. Runtime Security package assembly now reaches its four
+features through curated `index.ts` / `internal.ts` entrypoints; the contained-turn
+egress gateway factory lives in the feature composition root so package
+`composition.ts` is import/re-export only. The module stays pending.
 
 The deterministic syntax-aware checker is
 `scripts/architecture/check-feature-modules.mjs`. Run
@@ -361,7 +416,17 @@ checks layer direction, curated public/internal entrypoints, cross-feature deep
 imports, declared runtime and type edges, cycles, nonempty declared layers, and
 undeclared shared/common/utils/module ownership. It also verifies feature
 README ownership, feature-test colocation, and the two curated package export
-map entries. Public feature entrypoints may expose only their own contracts.
+map entries. Package-owned tests under `tests/package/` may load repository
+architecture tooling at `scripts/architecture/*.mjs` in two forms: a
+string-literal relative specifier whose canonical path is that directory, or a
+dynamic `import()` whose only string literal is that repo-relative path. The
+checker classifies both as external tooling. The dynamic form is the
+Foundation-compatible load: a relative specifier into the root package is a
+cross-package edge and a runtime cycle, while a computed `import()` stays a
+declared dynamic runtime reference. Feature tests, production sources,
+nonliteral loaders without that exact literal, helpers outside `tests/package/`,
+and relative paths that canonicalize outside that directory still fail closed.
+Public feature entrypoints may expose only their own contracts.
 Public, internal, and package assembly entrypoints reject wildcard re-exports.
 Declared feature edges must connect declared features and must correspond to
 observed imports; unused edge declarations are rejected as future-state

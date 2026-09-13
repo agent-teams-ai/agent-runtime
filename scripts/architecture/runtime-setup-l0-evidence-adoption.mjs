@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { createEvidenceInputs } from "./runtime-setup-l0-evidence-inputs.mjs";
 import { validateProductCapture } from "./runtime-setup-l0-evidence-validation.mjs";
 
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -39,6 +40,9 @@ export const retainedHistoricalEvidenceRoots = Object.freeze({
   sources: retainedPackages.map(path => `${path}/src`),
   tests: retainedPackages.map(path => `${path}/tests`),
 });
+export const retainedAdoptionEvidenceRoots = (evidenceRoots) => ({
+  ...evidenceRoots, fixtures: retainedHistoricalEvidenceRoots.fixtures,
+});
 export const adoptionConstruction = Object.freeze([
   { owner: "embedded-runtime", path: adoptionPaths.default, symbols: ["createDefaultAgentRuntimeHost"] },
   { owner: "embedded-runtime", path: adoptionPaths.graph, symbols: [] },
@@ -61,6 +65,17 @@ export const adoptionEvidenceFiles = Object.freeze([
   "architecture/foundation/source-dependencies.yaml",
   "architecture/feature-module-standard/candidate-profile.json",
 ]);
+export const createAdoptionEvidenceInputs = ({
+  repositoryRoot, git, readRevisionFile, evidenceRoots, evidenceFiles, profile,
+}) => {
+  const files = { ...evidenceFiles, sources: [...evidenceFiles.sources, ...adoptionEvidenceFiles,
+    profile.standard.evidencePath, ...profile.packages.map(pkg => pkg.archivePath)] };
+  return {
+    current: createEvidenceInputs({ repositoryRoot, git, readRevisionFile, files }),
+    retained: createEvidenceInputs({ repositoryRoot, git, readRevisionFile,
+      roots: retainedAdoptionEvidenceRoots(evidenceRoots), files }),
+  };
+};
 
 export function assertAdoptionAuthority({ authorityBytes, registry, historicalBytes, profile, gate }) {
   assert.equal(sha256(authorityBytes), adoptionAuthority.sha256, "accepted ADR-0015 bytes drifted");

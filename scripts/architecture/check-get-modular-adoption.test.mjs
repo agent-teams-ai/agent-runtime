@@ -306,7 +306,7 @@ test('PR71 reviewed owners and helpers retain exact live relationships without e
     }
   }
   const helper = pending.boundaries.find(b => b.id === 'composition.embedded-runtime.contained-turn-routing').relationships
-    .filter(edge => edge.from.endsWith('/linux-codex-node-recipe-consumption.ts'));
+    .filter(edge => edge.from.endsWith('/features/linux-codex-node-recipe/linux-codex-node-recipe-consumption.ts'));
   assert.deepEqual(helper.map(edge => [edge.to, edge.mode]), [['@agent-teams/agent-execution/composition', 'type-only']]);
   const darwinAuthority = pending.boundaries.find(b => b.id === 'composition.embedded-runtime.contained-turn-routing').relationships
     .filter(edge => edge.from.endsWith('/features/darwin-contained-turn-authority/darwin-contained-turn-authority.ts'));

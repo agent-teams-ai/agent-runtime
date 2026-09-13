@@ -484,6 +484,7 @@ boundaries:
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-operation-authority.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-operation-evidence.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-operation-repository.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-pool.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-preparation-recovery.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-preparation-store.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-postgres-schema-migrator.ts
@@ -632,6 +633,21 @@ boundaries:
 - id: production.runtime-security
   dependencyMode: runtime
   roots:
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/index.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/internal.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/adapters/inbound/contained-turn-egress-v1.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/contracts/contained-turn-egress-v1.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/domain/dispatch-consumption.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/index.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-egress/internal.ts
+  - packages/contexts/runtime-security/src/features/provider-process-egress-authorization/index.ts
+  - packages/contexts/runtime-security/src/features/provider-process-egress-authorization/internal.ts
+  - packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/adapters/inbound/claude-code-setup-inspection-authorization-v1.ts
+  - packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/adapters/inbound/setup-inspection-authorization-v1.ts
+  - packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/models/claude-code-setup-inspection-models.ts
+  - packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/models/setup-inspection-models.ts
+  - packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/index.ts
+  - packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/internal.ts
   - packages/contexts/runtime-security/src/composition.ts
   - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/dispatch-boundary-value.ts
   - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/inbound/contained-turn-dispatch-authority-v1-request-mappers.ts
@@ -819,8 +835,15 @@ boundaries:
   roots:
   - packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts
   - packages/apps/embedded-runtime/src/composition/claude-code-setup-inspection-planner.ts
+  - packages/apps/embedded-runtime/src/features/setup-inspection-planning/claude-code-setup-inspection-planner.ts
   - packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts
+  - packages/apps/embedded-runtime/src/features/setup-inspection-planning/codex-setup-inspection-planner.ts
   - packages/apps/embedded-runtime/src/composition/opaque-reference-digest.ts
+  - packages/apps/embedded-runtime/src/features/setup-inspection-planning/opaque-reference-digest.ts
+  - packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-claude-code-setup-view.ts
+  - packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-codex-setup-view.ts
+  - packages/apps/embedded-runtime/src/features/setup-inspection-planning/index.ts
+  - packages/apps/embedded-runtime/src/features/setup-inspection-planning/internal.ts
   entrypoints:
   - packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts
   - packages/apps/embedded-runtime/src/composition/claude-code-setup-inspection-planner.ts
@@ -830,7 +853,6 @@ boundaries:
     boundaries:
     - composition.embedded-runtime.contained-turn-support
     - core.embedded-runtime.access-contracts
-    - production.embedded-runtime
     packages:
     - '@agent-teams/agent-execution'
     - '@agent-teams/runtime-configuration'
@@ -842,30 +864,14 @@ boundaries:
 - id: production.embedded-runtime
   dependencyMode: runtime
   roots:
-  - packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts
-  - packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts
-  - packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts
-  - packages/apps/embedded-runtime/src/application/ports/outbound/codex-setup-inspection-planner.ts
-  - packages/apps/embedded-runtime/src/application/ports/outbound/opaque-reference-digest.ts
   - packages/apps/embedded-runtime/src/index.ts
   entrypoints:
-  - packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts
-  - packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts
-  - packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts
-  - packages/apps/embedded-runtime/src/application/ports/outbound/codex-setup-inspection-planner.ts
-  - packages/apps/embedded-runtime/src/application/ports/outbound/opaque-reference-digest.ts
   - packages/apps/embedded-runtime/src/index.ts
   allow:
     boundaries:
-    - composition.embedded-runtime.contained-turn
-    - composition.embedded-runtime.contained-turn-support
     - core.embedded-runtime.access-contracts
-    packages:
-    - '@agent-teams/agent-execution'
-    - '@agent-teams/runtime-configuration'
-    - '@agent-teams/runtime-security'
-    builtins:
-    - node:timers/promises
+    packages: []
+    builtins: []
     runtimeReferences: []
   packageExports:
   - .
@@ -1075,6 +1081,9 @@ boundaries:
   roots:
   - packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-provider-selection.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-provider-selection/contained-turn-provider-selection.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-provider-selection/index.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-provider-selection/internal.ts
   entrypoints:
   - packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts
   allow:
@@ -1096,17 +1105,29 @@ boundaries:
   - packages/apps/embedded-runtime/src/features/contained-turn-access-authority/index.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-access-authority/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/contained-turn-authority-capability.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/index.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-cancellation-proof.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof/contained-turn-cancellation-proof.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof/index.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-composition-types.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-composition-types/contained-turn-composition-types.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-composition-types/index.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-composition-types/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-construction-failure.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-construction-failure/contained-turn-construction-failure.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-construction-failure/index.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-construction-failure/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-operation-ref.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-operation-ref/contained-turn-operation-ref.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-operation-ref/index.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-operation-ref/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-owner-contract-error.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-owner-contract-error/contained-turn-owner-contract-error.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-owner-contract-error/index.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-owner-contract-error/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/contained-turn-runtime-validation.ts
@@ -1117,6 +1138,9 @@ boundaries:
   - packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/internal.ts
   - packages/apps/embedded-runtime/src/composition/runtime-access-lifecycle.ts
   - packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts
+  - packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope/trusted-runtime-access-scope.ts
+  - packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope/index.ts
+  - packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope/internal.ts
   entrypoints:
   - packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-access-authority.ts
@@ -1163,7 +1187,13 @@ boundaries:
   - packages/apps/embedded-runtime/src/features/contained-turn-http-runtime-security/index.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-http-runtime-security/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-linux-route-binding.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-linux-route-binding/contained-turn-linux-route-binding.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-linux-route-binding/index.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-linux-route-binding/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-route-qualification.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/contained-turn-route-qualification.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/index.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/internal.ts
   - packages/apps/embedded-runtime/src/composition/darwin-contained-turn-authority.ts
   - packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/darwin-contained-turn-authority.ts
   - packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/index.ts
@@ -1173,9 +1203,18 @@ boundaries:
   - packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/index.ts
   - packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/internal.ts
   - packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts
+  - packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-contained-turn-owner.ts
+  - packages/apps/embedded-runtime/src/features/linux-codex-deployment/index.ts
+  - packages/apps/embedded-runtime/src/features/linux-codex-deployment/internal.ts
+  - packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment-authority.ts
+  - packages/apps/embedded-runtime/src/features/linux-codex-deployment/linux-codex-deployment.ts
   - packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts
   - packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts
   - packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts
+  - packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/index.ts
+  - packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/internal.ts
+  - packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/linux-codex-node-recipe-consumption.ts
+  - packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/linux-codex-node-recipe.ts
   - packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts
   entrypoints:
   - packages/apps/embedded-runtime/src/composition/contained-turn-current-authority.ts
@@ -1207,13 +1246,9 @@ boundaries:
 - id: core.embedded-runtime.access-contracts
   dependencyMode: runtime
   roots:
-  - packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts
-  - packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts
-  - packages/apps/embedded-runtime/src/contracts/runtime-access.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts
   entrypoints:
-  - packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts
-  - packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts
-  - packages/apps/embedded-runtime/src/contracts/runtime-access.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts
   allow:
     boundaries: []
     packages: []

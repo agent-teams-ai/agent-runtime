@@ -2,7 +2,7 @@ import type {
   AuthorizedClaudeCodeExecutableCandidate,
   ClaudeCodeSetupAuthorizationDiagnostic,
   TrustedClaudeCodeSetupInspectionScope,
-} from "../contracts/claude-code-setup-inspection-authorization.js";
+} from "./models/claude-code-setup-inspection-models.js";
 import type { PathAlgebra } from "./ports/outbound/path-algebra.js";
 
 export interface ClaudeCodeCandidateRequest {
