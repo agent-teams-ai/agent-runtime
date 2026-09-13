@@ -1,5 +1,5 @@
 name: adoption-receipt-darwin
-# first push
+# retrigger e6ce04d8 (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host live mac-pa-auth
 # identity e6ce04d8 stacked on Host live darwin-launcher D 5281091f.
