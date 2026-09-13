@@ -71,7 +71,7 @@ export const testProcesses = [
   [
     "--experimental-test-module-mocks",
     "--test",
-    "tests/support/linux-http-completion-negative.mjs"
+    "tests/package/linux-http-completion-negative.mjs"
   ]
 ];
 export const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");

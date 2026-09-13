@@ -3,11 +3,11 @@ import {mock, test} from 'node:test';
 import fs, {readFileSync} from 'node:fs';
 
 // Built artifacts, exactly as other APP tests. No production source rewriting.
-const auditRoot = new URL('../../../../../', import.meta.url);
+const auditRoot = new URL('../../../../../../', import.meta.url);
 const feature = new URL('packages/contexts/agent-execution/dist/features/contained-agent-turn/', auditRoot);
 const docker = new URL('adapters/outbound/host-custody/docker/', feature);
-const app = new URL('../../dist/composition/', import.meta.url);
-const linuxDeployment = new URL('../../dist/features/linux-codex-deployment/', import.meta.url);
+const app = new URL('../../../dist/composition/', import.meta.url);
+const linuxDeployment = new URL('../../../dist/features/linux-codex-deployment/', import.meta.url);
 const unused = () => {throw Error('unexpected unrelated owner call');};
 let system;
 let acknowledge;

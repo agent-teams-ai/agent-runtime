@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createContainedTurnFeature, type ContainedTurnFeatureDependencies,containedTurnIdentity } from "@agent-teams/agent-execution/composition";
-import { createDependencies } from "./external/agent-execution/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
+import { createDependencies } from "../../support/external/agent-execution/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 
 export const joinedAeSubmit = (providerAccess: ContainedTurnFeatureDependencies["providerAccess"], security: ContainedTurnFeatureDependencies["security"], scope: {projectId: string; tenantId: string}, intent: {mode: "analysis"; prompt: string}) => {
   return async (id: string, beforeConsume?: (input: Parameters<ContainedTurnFeatureDependencies["providerAccess"]["consumeForDispatch"]>[0]) => Promise<void>, potentialAcceptance = false) => {
