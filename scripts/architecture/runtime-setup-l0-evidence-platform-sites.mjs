@@ -5,7 +5,7 @@ const darwin = 'process.platform !== "darwin"';
 const linux = 'process.platform !== "linux"';
 const x64 = 'process.platform !== "linux" || process.arch !== "x64"';
 const sites = [
-  ["postgres-authority-join.test.ts", 21, 21, linux, "linux-x64", "descriptor-relative custody requires Linux"],
+  ["package/postgres-authority-join.test.ts", 21, 21, linux, "linux-x64", "descriptor-relative custody requires Linux"],
   ["package/codex-setup.e2e.test.ts", 44, 46, darwin, "darwin-arm64"],
   ["package/codex-setup.e2e.test.ts", 124, 126, darwin, "darwin-arm64"],
   ["package/codex-setup.e2e.test.ts", 174, 176, darwin, "darwin-arm64"],

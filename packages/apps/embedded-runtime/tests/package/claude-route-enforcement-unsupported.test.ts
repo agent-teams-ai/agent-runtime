@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
-import { darwinRouteFixture } from "./support/external/agent-execution/features/contained-agent-turn/support/darwin-route-capability-fixture.ts";
+import { darwinRouteFixture } from "../support/external/agent-execution/features/contained-agent-turn/support/darwin-route-capability-fixture.ts";
 
 import { createContainedTurnRouteEnforcement } from "@agent-teams/agent-execution/composition";
 import {
@@ -13,10 +13,10 @@ import {
   composeQualifiedHostCustodiedContainedTurn,
   createHostCustodiedContainedTurn,
   ProviderRouteEnforcementUnsupportedError,
-} from "../dist/composition/contained-turn-feature-composition.js";
+} from "../../dist/composition/contained-turn-feature-composition.js";
 import {
   PRODUCT_QUALIFICATION_REGISTRY, registryQualifiesRouteTarget,
-} from "../dist/composition/contained-turn-route-qualification.js";
+} from "../../dist/composition/contained-turn-route-qualification.js";
 
 type Target = Readonly<Record<string, string>>;
 
