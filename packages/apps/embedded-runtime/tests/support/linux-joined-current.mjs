@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {fixture as currentOwnersFixture} from "../contained-turn-current-egress-owners.fixture.ts";
+import {fixture as currentOwnersFixture} from "../package/contained-turn-current-egress-owners.fixture.ts";
 import {createContainedTurnHttpEgressRoute} from "../../dist/composition/contained-turn-http-egress-upstream.js";
 
 /** Synthetic external authority repositories, actual PA route and RS current

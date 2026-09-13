@@ -8,7 +8,7 @@ import {createContainedTurnHttpCredentialMaterialization, createContainedTurnHtt
 import {erased, generation, renderingFixture, selectorFor} from "../../support/external/provider-access/features/contained-turn-access/credential-rendering-test-fixture.ts";
 import type {CredentialGenerationOutcome, CredentialGenerationRequest} from
   "@agent-teams/provider-access/composition";
-import {hostWipe, pairedFixture, type HostReceipt} from "../../contained-turn-http-credential-materialization-fixture.ts";
+import {hostWipe, pairedFixture, type HostReceipt} from "../../package/contained-turn-http-credential-materialization-fixture.ts";
 
 const indexOf = (id: string) => Number(id.split(":").at(-1));
 const unavailable = /^TypeError: HTTP Provider Access credential rendering unavailable$/u;

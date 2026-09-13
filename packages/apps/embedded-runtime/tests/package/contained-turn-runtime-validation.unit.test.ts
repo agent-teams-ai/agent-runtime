@@ -5,7 +5,7 @@ import { snapshotContainedTurnProviderSelection } from
 import { copyInput, copySubmitOutcome } from
   "../../dist/composition/contained-turn-runtime-validation.js";
 import type { OwnerSubmitOutcome } from
-  "../../src/composition/contained-turn-composition-types.js";
+  "../../dist/composition/contained-turn-composition-types.js";
 
 const invalidSelection = /Contained turn provider selection is invalid/u;
 
