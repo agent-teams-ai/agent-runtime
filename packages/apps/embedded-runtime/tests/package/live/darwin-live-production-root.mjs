@@ -28,7 +28,7 @@ const refused = () => new Error("DARWIN_LIVE_PRODUCTION_ROOT_REFUSED");
 export async function createDarwinLiveRuntime(activation) {
   assertDarwinProcess(activation);
   const [{bindDarwinNativeAttemptAuthority, createDarwinContainedTurnDeployment, createHostCustodiedAgentRuntimeHost}, agentExecution] = await Promise.all([
-    import("../../dist/composition.js"), import("@agent-teams/agent-execution/composition"),
+    import("../../../dist/composition.js"), import("@agent-teams/agent-execution/composition"),
   ]);
   const {captureRootDarwinAttemptWorkspace, createNodeContainedTurnArtifacts, createNodeContainedTurnWorkspaceOwner} = agentExecution;
   const factoryModule = await import(pathToFileURL(activation.runtimeRootModulePath).href);

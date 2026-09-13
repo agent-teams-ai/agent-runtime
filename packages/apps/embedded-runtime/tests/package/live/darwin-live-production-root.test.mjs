@@ -44,7 +44,7 @@ function fixture({failPreparation = false, disposeHost} = {}) {
   };
   const host = {dispose: async () => {events.push("host"); await disposeHost?.();}};
   const modules = {
-    "../../dist/composition.js": {
+    "../../../dist/composition.js": {
       bindDarwinNativeAttemptAuthority(store, authority) {
         assert.equal(store, owned.operationStore); assert.equal(authority, native.attemptAuthority); return operationStore;
       },
