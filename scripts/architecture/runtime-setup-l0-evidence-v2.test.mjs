@@ -64,6 +64,20 @@ test("original argv lists and accepted native authority test are preserved exact
   const expected = original.scripts.test.split(" && ").map(s => s.split(" ").slice(1));
   expected[0].splice(2, 0, "tests/darwin-native-attempt-authority-join.test.ts");
   expected[0].splice(47, 0, "tests/opaque-reference-digest.test.ts");
+  const relocated = new Map([
+    ["tests/contained-turn-cancellation-proof.unit.test.ts", "tests/features/contained-turn-cancellation-proof/contained-turn-cancellation-proof.unit.test.ts"],
+    ["tests/contained-turn-construction-failure.unit.test.ts", "tests/features/contained-turn-construction-failure/contained-turn-construction-failure.unit.test.ts"],
+    ["tests/contained-turn-current-egress-owners.test.ts", "tests/features/contained-turn-current-egress-owners/contained-turn-current-egress-owners.test.ts"],
+    ["tests/contained-turn-http-credential-materialization.test.ts", "tests/features/contained-turn-http-provider-access/contained-turn-http-credential-materialization.test.ts"],
+    ["tests/contained-turn-http-egress-authorities.test.ts", "tests/features/contained-turn-http-egress-authorities/contained-turn-http-egress-authorities.test.ts"],
+    ["tests/contained-turn-http-egress-upstream.test.ts", "tests/features/contained-turn-http-egress-upstream/contained-turn-http-egress-upstream.test.ts"],
+    ["tests/contained-turn-http-provider-access.test.ts", "tests/features/contained-turn-http-provider-access/contained-turn-http-provider-access.test.ts"],
+    ["tests/contained-turn-linux-route-binding.test.ts", "tests/features/contained-turn-linux-route-binding/contained-turn-linux-route-binding.test.ts"],
+    ["tests/contained-turn-route-qualification.test.ts", "tests/features/contained-turn-route-qualification/contained-turn-route-qualification.test.ts"],
+    ["tests/opaque-reference-digest.test.ts", "tests/features/setup-inspection-planning/opaque-reference-digest.test.ts"],
+    ["tests/trusted-runtime-access-scope.unit.test.ts", "tests/features/trusted-runtime-access-scope/trusted-runtime-access-scope.unit.test.ts"],
+  ]);
+  expected[0] = expected[0].map((arg) => relocated.get(arg) ?? arg);
   assert.deepEqual(testProcesses, expected);
 });
 test("complete receipts require both entire manifest processes", () => {
