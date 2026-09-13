@@ -14,7 +14,7 @@ import {SOURCE, bytes, config, publicFixture} from './linux-codex-driver-test-fi
 // Each test may inject a factory refusal without reproducing domain validation.
 beforeEach(t => {
   const hooks = registerHooks({resolve(specifier, context, next) {
-    if (specifier === '../package/live/linux-codex-live-canary-config.ts') {
+    if (specifier === './linux-codex-live-canary-config.ts') {
       return {url: 'ar69-admission:config', shortCircuit: true};
     }
     return next(specifier, context);
@@ -474,7 +474,7 @@ test('real scope validator refuses mismatched approval before driver effects', a
     return;
   }
   const {createLinuxCodexLiveCanaryConfiguration} = await import(
-    new URL('../package/live/linux-codex-live-canary-config.ts', import.meta.url).href);
+    new URL('./linux-codex-live-canary-config.ts', import.meta.url).href);
   const fs = (await import('node:fs')).default;
   const {root, credential, originalStat} = await publicFixture(t);
   const c = config(root);
