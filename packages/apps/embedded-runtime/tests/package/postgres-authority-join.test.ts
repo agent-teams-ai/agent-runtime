@@ -5,7 +5,7 @@ import { createPostgresRouteSelectionOwner, createPostgresCurrentProviderAccess,
 import { issuanceFixture, fixtureHash } from "./support/external/provider-access/features/contained-turn-access/operation-dispatch-test-fixture.ts";
 import { validateDisposablePostgresUrl } from "./support/external/provider-access/features/contained-turn-access/postgres-materialization-url.fixtures.ts";
 import { createDispatchAcceptanceFeature, createNodeSha256DispatchDigest, createPostgresDispatchAcceptanceStore, createPostgresDispatchConsumptionRepository } from "@agent-teams/runtime-security/composition";
-import { adapterSnapshot, manifest } from "../support/external/agent-execution/features/contained-agent-turn/support/contained-turn-fixture-snapshots.ts";
+import { adapterSnapshot, manifest } from "./support/external/agent-execution/features/contained-agent-turn/support/contained-turn-fixture-snapshots.ts";
 import { joinedAeSubmit } from "./support/joined-authority-fixture.ts";
 
 import {createContainedTurnFeatureFromProviderAccess} from "../../dist/composition/contained-turn-feature-composition.js";

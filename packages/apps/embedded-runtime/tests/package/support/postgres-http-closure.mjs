@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {PostgresContainedTurnOperationStore, applyContainedTurnPostgresSchema,createContainedTurnEngine} from "@agent-teams/agent-execution/composition";
-import {intentAuthority} from "../../support/external/agent-execution/features/contained-agent-turn/support/intent-guard-fixture.ts";
+import {intentAuthority} from "./external/agent-execution/features/contained-agent-turn/support/intent-guard-fixture.ts";
 import {createDependencies} from "../../support/external/agent-execution/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 import {validateDisposablePostgresUrl} from "./external/provider-access/features/contained-turn-access/postgres-materialization-url.fixtures.ts";
 

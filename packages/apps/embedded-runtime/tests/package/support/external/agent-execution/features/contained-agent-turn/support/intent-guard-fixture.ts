@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import type { Pool } from "pg";
 import { PostgresContainedTurnOperationStore, createContainedTurnFeature, containedTurnCommandFingerprint, digestContainedTurnCanonicalValue, containedTurnIdentity, containedTurnPreventionDigest, type ContainedTurnIntentAuthority, type ContainedTurnPreventionCommand, type ContainedTurnKernelDependencies } from "@agent-teams/agent-execution/composition";
-export { awaitFixtureGate } from "./contained-agent-turn-fixture.ts";
-import { createDependencies } from "./contained-agent-turn-fixture.ts";
+export { awaitFixtureGate } from "../../../../../../../support/external/agent-execution/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
+import { createDependencies } from "../../../../../../../support/external/agent-execution/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 
 export const intentAuthority: ContainedTurnIntentAuthority = Object.freeze({
   audience: "agent-runtime:contained-turn-v1", authorityRevision: "authority:one", deploymentId: "deployment:test",
