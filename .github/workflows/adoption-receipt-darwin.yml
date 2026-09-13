@@ -1,8 +1,8 @@
 name: adoption-receipt-darwin
-# retrigger dc4fd560
+# retrigger f08f92c1
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host mixed-package identity
-# dc4fd560 stacked on Host package-tests D 9da4ae6e.
+# f08f92c1 stacked on Host package-tests D 9da4ae6e.
 # The job always checks out that SHA so this workflow-only commit does not
 # enter the receipt identity. Safe to delete after the paired Host mixed-package receipt is merged.
 
@@ -25,11 +25,11 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: dc4fd5609d8393ee68a773d22c7fd033039cbea0
+          ref: f08f92c1984984900eab959bb8122ef30cf46681
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "dc4fd5609d8393ee68a773d22c7fd033039cbea0"
+        run: test "$(git rev-parse HEAD)" = "f08f92c1984984900eab959bb8122ef30cf46681"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
