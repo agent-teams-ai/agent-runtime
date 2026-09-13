@@ -4,9 +4,9 @@ import test from "node:test";
 import {
   AgentRuntimeHostDisposalIncompleteError,
   createAgentRuntimeHostDisposalLifecycle,
-} from "../dist/composition/agent-runtime-host-disposal.js";
-import type { ContainedTurnAccessAuthority } from "../dist/composition/contained-turn-access-authority.js";
-import type { AuthorityBoundContainedTurnCapability } from "../dist/composition/contained-turn-authority-capability.js";
+} from "../../dist/composition/agent-runtime-host-disposal.js";
+import type { ContainedTurnAccessAuthority } from "../../dist/composition/contained-turn-access-authority.js";
+import type { AuthorityBoundContainedTurnCapability } from "../../dist/composition/contained-turn-authority-capability.js";
 
 const authority = () => ({
   authorityRevision: "runtime-access-authority:disposal-test",

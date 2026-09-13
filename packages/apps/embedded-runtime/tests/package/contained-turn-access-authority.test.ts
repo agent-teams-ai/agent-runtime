@@ -1,4 +1,4 @@
-import { createAgentRuntimeHost } from "../dist/composition/agent-runtime-host.js";
+import { createAgentRuntimeHost } from "../../dist/composition/agent-runtime-host.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -6,7 +6,7 @@ import {
   copyContainedTurnAccessAuthority,
   isContainedTurnAccessAuthorityIdentity,
   matchesContainedTurnAccessAuthority,
-} from "../dist/composition/contained-turn-access-authority.js";
+} from "../../dist/composition/contained-turn-access-authority.js";
 
 const authority = () => ({
   authorityRevision: "runtime-access-authority:one",
@@ -95,7 +95,7 @@ import {
   ContainedTurnOwnerContractError,
   type AuthorityBoundContainedTurnCapability,
   type ContainedTurnCapabilityBundle,
-} from "../dist/composition.js";
+} from "../../dist/composition.js";
 
 const unavailable = (): never => { throw new Error("setup must not run"); };
 const setup = {

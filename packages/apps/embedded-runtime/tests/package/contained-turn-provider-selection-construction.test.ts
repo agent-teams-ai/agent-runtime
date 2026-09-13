@@ -5,7 +5,7 @@ import {
   composeHostCustodiedContainedTurn,
   createHostCustodiedContainedTurn,
   ProviderRouteEnforcementUnsupportedError,
-} from "../dist/composition/contained-turn-feature-composition.js";
+} from "../../dist/composition/contained-turn-feature-composition.js";
 import { composeHostCustodiedAgentRuntimeHost } from
   "../dist/composition/host-custodied-agent-runtime-host.js";
 import { ContainedTurnConstructionCleanupError, ContainedTurnOwnerDisposalError } from
