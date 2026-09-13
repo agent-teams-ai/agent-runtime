@@ -9,7 +9,7 @@ import {currentEgressDigest} from
 import {allocateLinuxCodexLiveAdminDirectories} from "./linux-codex-live-admin-directories.ts";
 import {createLinuxCodexLiveAdminRoute} from "./linux-codex-live-admin-route.ts";
 import {LinuxCodexLiveSetupError, setupLinuxCodexLiveBootstrap,
-  type LinuxCodexLivePins, type LinuxCodexLiveSetupStage} from "../../live/linux-codex-live-bootstrap.ts";
+  type LinuxCodexLivePins, type LinuxCodexLiveSetupStage} from "./linux-codex-live-bootstrap.ts";
 
 type Bootstrap = Awaited<ReturnType<typeof setupLinuxCodexLiveBootstrap>>;
 type CleanupCall = Parameters<Bootstrap["cleanup"]>[0];
