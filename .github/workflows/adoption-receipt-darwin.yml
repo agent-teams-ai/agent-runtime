@@ -1,5 +1,5 @@
 name: adoption-receipt-darwin
-# capture Host root-tests identity 46d4619b
+# retrigger 46d4619b (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host root-tests identity
 # c20983e6 stacked on Host multi-package D 29e49c0b.
