@@ -1,4 +1,5 @@
 name: adoption-receipt-darwin
+# retrigger bcc6c07c (second push)
 # Temporary workflow: Darwin arm64 adoption receipt for Host remaining top-level support
 # identity bcc6c07c stacked on Host linux-joined support D 8df0f071.
 # The job always checks out that SHA so this workflow-only commit does not
