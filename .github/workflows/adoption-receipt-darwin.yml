@@ -1,15 +1,14 @@
 name: adoption-receipt-darwin
-# retrigger e01d113a (second push)
 
-# Temporary workflow: Darwin arm64 adoption receipt for RC layer absorb identity
-# e01d113a after #129 merge-committed to main.
+# Temporary workflow: Darwin arm64 adoption receipt for Host live-bootstrap identity
+# b9676b2a stacked on Host live-admin-setup D 426d1444.
 # The job always checks out that SHA so this workflow-only commit does not
-# enter the receipt identity. Safe to delete after the paired RC layer receipt is merged.
+# enter the receipt identity. Safe to delete after the paired Host live-bootstrap receipt is merged.
 
 on:
   push:
     branches:
-      - cursor/fms-darwin-gha-capture-rc-layer-linux-7d17
+      - cursor/fms-darwin-gha-capture-host-live-bootstrap-7d17
 
 permissions:
   contents: read
@@ -20,16 +19,16 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     steps:
-      - name: Checkout frozen RC layer absorb SHA
+      - name: Checkout frozen Host live-bootstrap SHA
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: e01d113ab849b07b772b524a02c9230a4b0a786b
+          ref: b9676b2a60aafd4ee86d34ad00e3bdd66a2cc50c
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "e01d113ab849b07b772b524a02c9230a4b0a786b"
+        run: test "$(git rev-parse HEAD)" = "b9676b2a60aafd4ee86d34ad00e3bdd66a2cc50c"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
