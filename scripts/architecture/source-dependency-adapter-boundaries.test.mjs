@@ -261,17 +261,14 @@ test("Embedded Runtime Node utility permission belongs only to composition", () 
   assert.deepEqual(composition.allowedBuiltins, ["node:crypto"]);
   assert.deepEqual(composition.allowedRuntimeReferences, []);
   const production = boundariesById.get("production.embedded-runtime");
-  // build-claude-code-setup-view.ts/build-codex-setup-view.ts reach the
-  // contained-turn, contained-turn-support and access-contracts entrypoints.
+  // Host public surface is the contracts barrel. Setup-view builders now live
+  // in composition.embedded-runtime.agent-runtime-host with the planners.
   assert.deepEqual(production.allowedBoundaries, [
-    "composition.embedded-runtime.contained-turn",
-    "composition.embedded-runtime.contained-turn-support",
     "core.embedded-runtime.access-contracts",
   ]);
-  // The two setup-view builders derive opaque reference digests through an
-  // injected port now; node:crypto moved to the composition-owned adapter
-  // (agent-runtime-host role), so application no longer needs it directly.
-  assert.deepEqual(production.allowedBuiltins, ["node:timers/promises"]);
+  // Digest computation stays behind OpaqueReferenceDigest in the
+  // agent-runtime-host role; the package barrel does not import Node builtins.
+  assert.deepEqual(production.allowedBuiltins, []);
 });
 
 test("transitional boundaries and adapter permissions remain exact", () => {

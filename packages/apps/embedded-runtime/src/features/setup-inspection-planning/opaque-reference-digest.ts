@@ -1,8 +1,8 @@
 import { createHmac } from "node:crypto";
 
-import type { OpaqueReferenceDigest } from "../../application/ports/outbound/opaque-reference-digest.js";
-
-export type { OpaqueReferenceDigest } from "../../application/ports/outbound/opaque-reference-digest.js";
+export interface OpaqueReferenceDigest {
+  hex(key: Uint8Array, material: string): string;
+}
 
 export const createNodeOpaqueReferenceDigest = (): OpaqueReferenceDigest =>
   Object.freeze<OpaqueReferenceDigest>({

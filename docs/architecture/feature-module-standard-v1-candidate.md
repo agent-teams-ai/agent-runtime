@@ -247,10 +247,10 @@ Embedded Runtime is the host application. Its activation waited on the
 accepted asynchronous setup assembly work, which has since landed. The setup
 view's Claude Code and Codex reference-digest computation is now behind an
 outbound `OpaqueReferenceDigest` port with a Host adapter, so
-`application/build-claude-code-setup-view.ts` and
-`application/build-codex-setup-view.ts` no longer import `node:crypto`
-directly, and the package boundary now rejects that import from application
-code. Runtime-access coordination now lives under
+`features/setup-inspection-planning/build-claude-code-setup-view.ts` and
+`features/setup-inspection-planning/build-codex-setup-view.ts` no longer import
+`node:crypto` directly, and the package boundary now rejects that import from
+unowned application files. Runtime-access coordination now lives under
 `src/features/contained-turn-runtime-access/` with curated `index.ts` /
 `internal.ts` entrypoints. Host composition re-exports that feature entry from
 `src/composition/contained-turn-runtime-access.ts`, so existing composition

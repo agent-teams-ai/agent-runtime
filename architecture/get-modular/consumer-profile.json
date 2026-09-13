@@ -1432,26 +1432,6 @@
       "relationships": [
         {
           "from": "packages/apps/embedded-runtime/src/composition.ts",
-          "to": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition.ts",
-          "to": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition.ts",
-          "to": "packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition.ts",
-          "to": "packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition.ts",
           "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-creation-error.ts",
           "mode": "runtime"
         },
@@ -1467,8 +1447,18 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/claude-code-setup-inspection-planner.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition.ts",
           "to": "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts",
           "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts",
+          "mode": "type-only"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition.ts",
@@ -1625,6 +1615,8 @@
         "packages/apps/embedded-runtime/src/composition/claude-code-setup-inspection-planner.ts",
         "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts",
         "packages/apps/embedded-runtime/src/composition/opaque-reference-digest.ts",
+        "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-claude-code-setup-view.ts",
+        "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-codex-setup-view.ts",
         "packages/apps/embedded-runtime/src/features/setup-inspection-planning/claude-code-setup-inspection-planner.ts",
         "packages/apps/embedded-runtime/src/features/setup-inspection-planning/codex-setup-inspection-planner.ts",
         "packages/apps/embedded-runtime/src/features/setup-inspection-planning/index.ts",
@@ -1643,16 +1635,6 @@
       "relationships": [
         {
           "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
-          "to": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
-          "to": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
           "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
           "mode": "runtime"
         },
@@ -1660,6 +1642,16 @@
           "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
           "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
           "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/claude-code-setup-inspection-planner.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts",
+          "mode": "runtime"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
@@ -1712,13 +1704,63 @@
           "mode": "runtime"
         },
         {
-          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/claude-code-setup-inspection-planner.ts",
-          "to": "packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts",
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-claude-code-setup-view.ts",
+          "to": "@agent-teams/agent-execution",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-claude-code-setup-view.ts",
+          "to": "@agent-teams/runtime-configuration",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-claude-code-setup-view.ts",
+          "to": "@agent-teams/runtime-security",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-claude-code-setup-view.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-claude-code-setup-view.ts",
+          "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-codex-setup-view.ts",
+          "to": "@agent-teams/agent-execution",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-codex-setup-view.ts",
+          "to": "@agent-teams/runtime-configuration",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-codex-setup-view.ts",
+          "to": "@agent-teams/runtime-security",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-codex-setup-view.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-codex-setup-view.ts",
+          "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
           "mode": "type-only"
         },
         {
           "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/claude-code-setup-inspection-planner.ts",
-          "to": "packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts",
+          "to": "@agent-teams/runtime-configuration",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/claude-code-setup-inspection-planner.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
           "mode": "type-only"
         },
         {
@@ -1728,17 +1770,7 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/codex-setup-inspection-planner.ts",
-          "to": "packages/apps/embedded-runtime/src/application/ports/outbound/codex-setup-inspection-planner.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/codex-setup-inspection-planner.ts",
-          "to": "packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/opaque-reference-digest.ts",
-          "to": "packages/apps/embedded-runtime/src/application/ports/outbound/opaque-reference-digest.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
           "mode": "type-only"
         }
       ]
@@ -2438,16 +2470,6 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope/trusted-runtime-access-scope.ts",
-          "to": "packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope/trusted-runtime-access-scope.ts",
-          "to": "packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope/trusted-runtime-access-scope.ts",
           "to": "packages/apps/embedded-runtime/src/composition/contained-turn-access-authority.ts",
           "mode": "runtime"
         }
@@ -2496,13 +2518,9 @@
       "id": "core.embedded-runtime.access-contracts",
       "owner": "embedded-runtime",
       "roots": [
-        "packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts",
-        "packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts",
         "packages/apps/embedded-runtime/src/contracts/runtime-access.ts"
       ],
       "entrypoints": [
-        "packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts",
-        "packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts",
         "packages/apps/embedded-runtime/src/contracts/runtime-access.ts"
       ],
       "status": "not-adopted",
@@ -3931,115 +3949,15 @@
       "id": "production.embedded-runtime",
       "owner": "embedded-runtime",
       "roots": [
-        "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-        "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-        "packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts",
-        "packages/apps/embedded-runtime/src/application/ports/outbound/codex-setup-inspection-planner.ts",
-        "packages/apps/embedded-runtime/src/application/ports/outbound/opaque-reference-digest.ts",
         "packages/apps/embedded-runtime/src/index.ts"
       ],
       "entrypoints": [
-        "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-        "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-        "packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts",
-        "packages/apps/embedded-runtime/src/application/ports/outbound/codex-setup-inspection-planner.ts",
-        "packages/apps/embedded-runtime/src/application/ports/outbound/opaque-reference-digest.ts",
         "packages/apps/embedded-runtime/src/index.ts"
       ],
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
       "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
       "relationships": [
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-          "to": "@agent-teams/agent-execution",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-          "to": "@agent-teams/runtime-configuration",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-          "to": "@agent-teams/runtime-security",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-          "to": "packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-          "to": "packages/apps/embedded-runtime/src/application/ports/outbound/opaque-reference-digest.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-          "to": "packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
-          "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-          "to": "@agent-teams/agent-execution",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-          "to": "@agent-teams/runtime-configuration",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-          "to": "@agent-teams/runtime-security",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-          "to": "packages/apps/embedded-runtime/src/application/ports/outbound/codex-setup-inspection-planner.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-          "to": "packages/apps/embedded-runtime/src/application/ports/outbound/opaque-reference-digest.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-          "to": "packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
-          "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts",
-          "to": "@agent-teams/runtime-configuration",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/ports/outbound/claude-code-setup-inspection-planner.ts",
-          "to": "packages/apps/embedded-runtime/src/application/trusted-claude-code-setup-scope.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/ports/outbound/codex-setup-inspection-planner.ts",
-          "to": "@agent-teams/runtime-security",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/application/ports/outbound/codex-setup-inspection-planner.ts",
-          "to": "packages/apps/embedded-runtime/src/application/trusted-runtime-access-scope.ts",
-          "mode": "type-only"
-        },
         {
           "from": "packages/apps/embedded-runtime/src/index.ts",
           "to": "packages/apps/embedded-runtime/src/contracts/runtime-access.ts",

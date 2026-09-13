@@ -104,7 +104,8 @@ test("contained-turn declarations stay owned across root and composition closure
 test("passive setup slice has no process, network, ambient env or write adapter", async () => {
   const repositoryRoot = resolve(packageRoot, "../../..");
   const roots = [
-    join(repositoryRoot, "packages", "apps", "embedded-runtime", "src", "application"),
+    join(repositoryRoot, "packages", "apps", "embedded-runtime", "src", "features", "setup-inspection-planning"),
+    join(repositoryRoot, "packages", "apps", "embedded-runtime", "src", "features", "trusted-runtime-access-scope"),
     join(repositoryRoot, "packages", "contexts", "agent-execution", "src", "features", "runtime-installation-discovery"),
     join(repositoryRoot, "packages", "contexts", "runtime-configuration", "src"),
     join(repositoryRoot, "packages", "contexts", "runtime-security", "src"),

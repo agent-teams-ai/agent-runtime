@@ -14,14 +14,14 @@ import type {
   ClaudeCodeSetupAuthorizationDiagnostic,
 } from "@agent-teams/runtime-security";
 
-import type { ClaudeCodeSetupInspectionPlanner } from "./ports/outbound/claude-code-setup-inspection-planner.js";
-import type { OpaqueReferenceDigest } from "./ports/outbound/opaque-reference-digest.js";
-import type { TrustedClaudeCodeSetupScope } from "./trusted-claude-code-setup-scope.js";
+import type { ClaudeCodeSetupInspectionPlanner } from "./claude-code-setup-inspection-planner.js";
+import type { OpaqueReferenceDigest } from "./opaque-reference-digest.js";
+import type { TrustedClaudeCodeSetupScope } from "../../composition/trusted-runtime-access-scope.js";
 import type {
   ClaudeCodeSetupDiagnostic,
   ClaudeCodeSetupExpectedLimitations,
   InspectClaudeCodeRuntimeSetupOutcome,
-} from "../contracts/runtime-access.js";
+} from "../../contracts/runtime-access.js";
 
 export interface BuildClaudeCodeSetupViewDependencies {
   readonly authorizeClaudeCodeSetupInspection: AuthorizeClaudeCodeSetupInspection;

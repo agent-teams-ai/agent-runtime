@@ -376,7 +376,7 @@ export const traces = Object.freeze({
       }),
       Object.freeze({
         owner: "embedded-runtime",
-        path: "packages/apps/embedded-runtime/src/application/build-claude-code-setup-view.ts",
+        path: "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-claude-code-setup-view.ts",
         symbols: Object.freeze(["createBuildClaudeCodeSetupView"]),
       }),
       Object.freeze({
@@ -403,7 +403,7 @@ export const traces = Object.freeze({
       }),
       Object.freeze({
         owner: "embedded-runtime",
-        path: "packages/apps/embedded-runtime/src/application/build-codex-setup-view.ts",
+        path: "packages/apps/embedded-runtime/src/features/setup-inspection-planning/build-codex-setup-view.ts",
         symbols: Object.freeze(["createBuildCodexSetupView"]),
       }),
       Object.freeze({
