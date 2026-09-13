@@ -156,6 +156,8 @@ test("the named negative suite runs exactly once through every Foundation gate",
     1,
   );
   for (const script of ["check", "check:fast"]) {
+    assert.equal(manifest.scripts[script].split(" && ")[0], "pnpm lint", script);
+    assert.equal(manifest.scripts[script].split(" && ").filter(command => command === "pnpm lint").length, 1, script);
     assert.equal(manifest.scripts[script].split("pnpm foundation:check").length - 1, 1, script);
   }
   assert.ok(!manifest.scripts["foundation:check"].includes("|| true"));
@@ -569,27 +571,37 @@ test("Get Modular belongs only to Embedded Runtime composition, including type i
   }
   for (const pkg of packages) {
     for (const statement of [`import '${pkg}';`, `import type {} from '${pkg}';`]) {
-      assert.deepEqual(await analyzeFixture({
-        "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts": statement,
-      }), []);
+      // These imports have independent source paths and no edges between them.
+      // Batch the rejecting sources for each package/import form. Keep the
+      // positive CLI fixture separate so its successful exit is also checked.
+      const positivePath = "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts";
+      assert.deepEqual(await analyzeFixture({ [positivePath]: statement }), []);
+      const negativePaths = [];
       for (const root of [
         "packages/contexts/agent-execution/src/features/contained-agent-turn",
         "packages/contexts/runtime-configuration/src",
         "packages/contexts/runtime-security/src",
       ]) {
         for (const layer of ["application", "contracts", "domain"]) {
-          const path = `${root}/${layer}/negative-get-modular.ts`;
-          const diagnostics = await analyzeFixture({ [path]: statement });
-          assert.ok(
-            rules(diagnostics).includes("architecture.source-dependencies.forbidden-package-dependency"),
-            `${path}: ${JSON.stringify(rules(diagnostics))}`,
-          );
-          assert.equal(
-            diagnostics.find(d => d.ruleId === "architecture.source-dependencies.forbidden-package-dependency").location.path,
-            path,
-          );
+          negativePaths.push(`${root}/${layer}/negative-get-modular.ts`);
         }
       }
+      const diagnostics = await analyzeFixture(Object.fromEntries(
+        negativePaths.map(path => [path, statement]),
+      ));
+      for (const path of negativePaths) {
+        const sourceDiagnostics = diagnostics.filter(d => d.location.path === path);
+        assert.ok(
+          rules(sourceDiagnostics).includes("architecture.source-dependencies.forbidden-package-dependency"),
+          `${path}: ${JSON.stringify(rules(sourceDiagnostics))}`,
+        );
+        assert.equal(
+          sourceDiagnostics.find(d => d.ruleId === "architecture.source-dependencies.forbidden-package-dependency").location.path,
+          path,
+        );
+      }
+      assert.ok(diagnostics.every(d => negativePaths.includes(d.location.path)),
+        JSON.stringify(diagnostics));
     }
   }
 });
