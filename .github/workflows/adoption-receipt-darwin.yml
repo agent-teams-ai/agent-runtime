@@ -1,4 +1,5 @@
 name: adoption-receipt-darwin
+# retrigger aedc9305 (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host live-admin-setup identity
 # aedc9305 stacked on Host live-admin D 9e21767b.
