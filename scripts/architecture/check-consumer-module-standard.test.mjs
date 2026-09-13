@@ -15,6 +15,8 @@ const fresh = async () => {
     packageManifest: structuredClone(inputs.packageManifest),
     pathExistence: new Map(inputs.pathExistence),
     profile: structuredClone(inputs.profile),
+    passiveProfile: structuredClone(inputs.passiveProfile),
+    standardBytes: Buffer.from(inputs.standardBytes),
     sources: new Map(inputs.sources),
   };
 };
@@ -34,6 +36,34 @@ test("rejects central pin drift and an unsupported active claim", async () => {
   const active = await fresh();
   active.profile.status = "active";
   assert.throws(() => validateConsumerModuleStandard(active), /reviewed pending-adoption record/u);
+});
+
+test("rejects stale merged pins, split profile identities and retained byte drift", async () => {
+  for (const [field, value] of [
+    ["gitCommit", "f1ec0152c34715395685b349844a7d1c18a2f015"],
+    ["sha256", "ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d"],
+  ]) {
+    const stale = await fresh();
+    stale.profile.authority.consumerModuleStandard[field] = value;
+    assert.throws(() => validateConsumerModuleStandard(stale), /reviewed pending-adoption record/u);
+  }
+  for (const [field, value] of [
+    ["commit", "a05f2cb51553e1efc5ba89be352e4aba04675088"],
+    ["sha256", "ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d"],
+    ["path", "docs/another-standard.md"],
+    ["anchor", "another-standard"],
+    ["repository", "another/repository"],
+  ]) {
+    const split = await fresh();
+    split.passiveProfile.standard[field] = value;
+    assert.throws(() => validateConsumerModuleStandard(split), /standard pins must agree/u);
+  }
+  const relocated = await fresh();
+  relocated.passiveProfile.standard.evidencePath = "another-standard.md";
+  assert.throws(() => validateConsumerModuleStandard(relocated), /evidence path must remain shared/u);
+  const bytes = await fresh();
+  bytes.standardBytes = Buffer.concat([bytes.standardBytes, Buffer.from("drift")]);
+  assert.throws(() => validateConsumerModuleStandard(bytes), /retained standard bytes/u);
 });
 
 test("rejects missing governed paths and proposed decision lifecycle drift", async () => {

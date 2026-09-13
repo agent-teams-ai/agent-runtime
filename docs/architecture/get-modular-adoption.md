@@ -19,23 +19,22 @@ bounded contract. ADR-0008 and its historical evidence remain immutable;
 ADR-0013 continues to govern exactly its three active FMS features.
 
 The central authority is Get Modular's accepted ADR-0026 and
-[consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/a05f2cb51553e1efc5ba89be352e4aba04675088/docs/architecture/common-assembly.md#consumer-module-standard).
-The merged revision supersedes the earlier unmerged candidate reference:
+[consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/669a750d8db451e04f075cdeb36576c6606fba6e/docs/architecture/common-assembly.md#consumer-module-standard).
+The merged PR110 revision supersedes the previous reviewed standard pin:
 
 - Repository: `agent-teams-ai/get-modular`.
-- Commit: `a05f2cb51553e1efc5ba89be352e4aba04675088`.
+- Commit: `669a750d8db451e04f075cdeb36576c6606fba6e`.
 - Path: `docs/architecture/common-assembly.md`; anchor: `consumer-module-standard`.
-- Complete document SHA-256: `ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d`.
+- Complete document SHA-256: `e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`.
 - Retained bytes are recorded by the consumer profile; they are evidence, not a second authority.
 
 Document identity, package versions/archive integrity, Core compatibility token,
 and local adoption authority are distinct. The profile retains the approved published
 Core and Assembly 0.1.0 archives, verifies their SHA-256 and lock integrity,
 and requires exact catalog versions. It records actual blocking commands,
-without `conformant: true` for the repository. Upstream main was rechecked on
-2026-09-09 at `03a7df64bc5e9939f7b51694a80a7f3d61453f98`. The complete
-standard still has the SHA-256 recorded above, so the accepted pin remains
-content-current; no normative standard delta needs migration.
+without `conformant: true` for the repository. The exact merged PR110 document
+was reviewed on 2026-09-13 against the previously retained bytes. The migration
+and its remaining evidence work are recorded below; no moving main is consumed.
 
 The consumed release sources are distinct from the standard pin:
 
@@ -138,6 +137,55 @@ coverage preserves the mixed type-only/runtime Darwin authority classification
 and the explicit outside-passive-scope ownership decision. Passive Assembly
 remains the same seven-node composition. This reconciliation makes no native or
 provider readiness claim and changes no runtime behavior.
+
+## PR110 standard pin migration
+
+Both consumer profiles now pin merged Get Modular PR110 commit
+`669a750d8db451e04f075cdeb36576c6606fba6e`. Exact complete document bytes
+match SHA-256 `e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`.
+The previous passive pin was `a05f2cb51553e1efc5ba89be352e4aba04675088`;
+the contained-turn pin was `f1ec0152c34715395685b349844a7d1c18a2f015`.
+Their retained document identity was
+`ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d`.
+The earlier PR71 observations above describe their historical checkpoints.
+
+The complete byte delta relocates five executable example links from
+`packages/assembly/tests` to `tests/assembly`, and clarifies ownership before
+handoff, cleanup registration at acquisition, borrowed capability lifetimes,
+async provider responsibility for allocations not handed back, one-shot Host
+summaries, opaque causes, existing references and readiness/publication.
+The migration packet's premerge status is superseded by the exact merged
+identity; its scoped applicability remains relevant.
+
+In passive setup, `runtime-setup-assembly.ts` captures the Host before the
+completion seam. `default-agent-runtime-host.ts` retains this owner while
+awaiting Assembly, awaits cleanup on failed handoff, and clears attempt
+ownership only when transferring the usable Host to its caller. Passive
+factories construct objects and closures; the review found no external
+acquisition before Host capture requiring new cleanup machinery. Receiving a
+capability does not authorize its disposal. A rejected async provider owns any
+allocation it cannot return. This API transfers a live Host; the one-shot
+summary rule does not change that API or dispose the Host before return.
+Opaque causes remain private, and safe summaries do not certify their reference
+contents. A new profile affects new construction only, without replacing
+already delivered dependencies or conferring readiness or publication authority.
+
+The independently reviewed two-test checkpoint `dbfaafe9` retains the valid
+late-root-after-abort and malformed-root-plus-abort-plus-rejecting-cleanup
+regressions. This pin migration preserves those tests and the independent
+literal binding parity oracle. No production, API, lifecycle or boundary changes
+are introduced. ADR-0015 accepted bytes, package/archive pins, PR120 feature
+moves and source census, and historical evidence remain unchanged.
+Contained-turn remains pending with empty active wiring and adopted boundaries;
+the seven-port direct Pure DI boundary remains `not-adopted`.
+
+Current paired evidence remains outstanding: the retained v2 receipt predates
+these tracked inputs and cannot prove this migration. The controller must commit
+all final non-report inputs, capture new Linux x64 and Darwin arm64 receipts on
+that same commit, merge through the existing command below, and run the required
+gates. Do not edit receipt identities manually or claim full migration completion
+from focused checker results. Preserve the old generated report outside the
+checkout before removing only that output for the merger's exclusive creation.
 
 ## Evidence and executable references
 
