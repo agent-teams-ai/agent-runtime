@@ -1,4 +1,5 @@
 name: adoption-receipt-darwin
+# retrigger e85aca2a (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host live-canary identity
 # e85aca2a stacked on Host live-bootstrap D bf3a2dc6.
