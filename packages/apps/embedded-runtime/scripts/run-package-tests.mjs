@@ -11,7 +11,7 @@ export const testProcesses = [
     "--test-concurrency=1",
     "tests/package/darwin-native-attempt-authority-join.test.ts",
     "tests/package/assembly-reference.test.ts",
-    "tests/assembly-packed-consumer.test.ts",
+    "tests/package/assembly-packed-consumer.test.ts",
     "tests/package/runtime-setup-assembly.test.ts",
     "tests/package/capability-bundle-contract.test.ts",
     "tests/package/codex-setup.e2e.test.ts",
