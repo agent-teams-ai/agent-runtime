@@ -1,5 +1,5 @@
 name: adoption-receipt-darwin
-# capture setup-views identity daf6c7e5
+# retrigger daf6c7e5 (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host setup-views
 # identity daf6c7e5 after absorbing main (#127). The job always checks out
