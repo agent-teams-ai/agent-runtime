@@ -41,6 +41,7 @@ on:
       - cursor/fms-host-readmes-7d17
       - cursor/fms-host-feature-tests-7d17
       - cursor/fms-host-package-tests-7d17
+      - cursor/fms-host-mixed-package-7d17
       - docs/sr-contained-turn-anti-patterns
       - refactor/fms-host-access-invariants
       - refactor/fms-host-darwin-deployment

@@ -91,6 +91,16 @@ test("original argv lists and accepted native authority and ordinary assembly te
     ["tests/host-custodied-agent-runtime-host-disposal-quarantine.test.ts", "tests/package/host-custodied-agent-runtime-host-disposal-quarantine.test.ts"],
     ["tests/host-shutdown-admission.test.ts", "tests/package/host-shutdown-admission.test.ts"],
     ["tests/runtime-access-boundaries.e2e.test.ts", "tests/package/runtime-access-boundaries.e2e.test.ts"],
+    ["tests/agent-runtime-host-disposal.unit.test.ts", "tests/package/agent-runtime-host-disposal.unit.test.ts"],
+    ["tests/claude-route-enforcement-unsupported.test.ts", "tests/package/claude-route-enforcement-unsupported.test.ts"],
+    ["tests/contained-turn-acceptance-uncertainty.e2e.test.ts", "tests/package/contained-turn-acceptance-uncertainty.e2e.test.ts"],
+    ["tests/contained-turn-access-authority.test.ts", "tests/package/contained-turn-access-authority.test.ts"],
+    ["tests/contained-turn-authority-join.test.ts", "tests/package/contained-turn-authority-join.test.ts"],
+    ["tests/contained-turn-provider-selection-construction.test.ts", "tests/package/contained-turn-provider-selection-construction.test.ts"],
+    ["tests/contained-turn-route-enforcement-gate.test.ts", "tests/package/contained-turn-route-enforcement-gate.test.ts"],
+    ["tests/linux-codex-deployment-publication.test.ts", "tests/package/linux-codex-deployment-publication.test.ts"],
+    ["tests/postgres-authority-join.test.ts", "tests/package/postgres-authority-join.test.ts"],
+    ["tests/provider-candidate-route-gate.test.ts", "tests/package/provider-candidate-route-gate.test.ts"],
   ]);
   expected[0] = expected[0].map((arg) => relocated.get(arg) ?? arg);
   assert.deepEqual(testProcesses, expected);

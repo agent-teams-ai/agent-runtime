@@ -5,11 +5,11 @@ import {
   composeHostCustodiedContainedTurn,
   createHostCustodiedContainedTurn,
   ProviderRouteEnforcementUnsupportedError,
-} from "../dist/composition/contained-turn-feature-composition.js";
+} from "../../dist/composition/contained-turn-feature-composition.js";
 import { composeHostCustodiedAgentRuntimeHost } from
-  "../dist/composition/host-custodied-agent-runtime-host.js";
+  "../../dist/composition/host-custodied-agent-runtime-host.js";
 import { ContainedTurnConstructionCleanupError, ContainedTurnOwnerDisposalError } from
-  "../dist/composition/contained-turn-construction-failure.js";
+  "../../dist/composition/contained-turn-construction-failure.js";
 
 const capability = Object.freeze({
   cancel: Object.freeze({execute: async () => Object.freeze({status: "not_found" as const})}),
