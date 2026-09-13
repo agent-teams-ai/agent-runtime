@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { nativeHttpRequestProfile } from "@agent-teams/agent-execution/composition";
 import { snapshotRouteSelectionCurrent } from "@agent-teams/provider-access/composition";
-import { createContainedTurnCurrentEgressOwners } from "../../dist/composition/contained-turn-current-egress-owners.js";
+import { createContainedTurnCurrentEgressOwners } from "../../../dist/composition/contained-turn-current-egress-owners.js";
 import { changed, choices, digest, fixture, redigest } from "../../contained-turn-current-egress-owners.fixture.ts";
 
 for (const [recipe, profile] of choices) {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createContainedTurnLinuxRouteBinding, type ContainedTurnLinuxRouteCampaign }
-  from "../../dist/composition/contained-turn-linux-route-binding.js";
+  from "../../../dist/composition/contained-turn-linux-route-binding.js";
 import { installLinuxExclusiveRoute } from
   "@agent-teams/agent-execution/composition";
 import { harness, selection } from "../../support/external/provider-access/features/contained-turn-access/route-selection-fixture.ts";
