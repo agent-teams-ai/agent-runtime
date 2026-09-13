@@ -396,8 +396,12 @@ target feature's public entrypoint. Curated package assembly files (`index.ts`
 and `composition.ts`) and feature entrypoint files accept only import/re-export
 grammar. An active host-app may list additional explicit
 `src/composition/*.ts` assembly files; those files may contain behavior, import
-sibling host composition assembly files, import curated feature entrypoints, and
-import Node or external modules. Deep feature imports still fail closed.
+sibling host composition assembly files, import curated feature entrypoints,
+import other production modules through a curated assembly entry across a
+declared module edge, and import Node or external modules. The curated host-app
+`composition.ts` assembly may re-export those extra files. Deep feature imports
+still fail closed. The public `index.ts` assembly still cannot depend on another
+production module.
 Bounded-context and platform modules cannot list extra assembly files. The live
 profile does not list extra Host composition files while Embedded Runtime stays
 pending. Configured TypeScript and package
