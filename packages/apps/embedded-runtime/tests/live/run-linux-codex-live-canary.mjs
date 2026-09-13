@@ -244,7 +244,7 @@ export function createLinuxCodexLiveCanaryDriver(configuration, credentialFd) {
         await import('./linux-codex-live-canary-config.ts');
       try {
         if (config.hostPins.firewall) {
-          const {createFirewallCommand} = await import('./linux-codex-live-admin-firewall.ts');
+          const {createFirewallCommand} = await import('../package/live/linux-codex-live-admin-firewall.ts');
           const {toolPaths, ...pins} = config.hostPins.firewall;
           config.hostPins.firewall = {...pins, command: createFirewallCommand(toolPaths)};
         }

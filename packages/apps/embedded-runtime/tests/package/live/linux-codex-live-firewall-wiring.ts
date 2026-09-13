@@ -3,7 +3,7 @@ import {createLinuxCodexLiveAdminFirewall, type ExpectedOwnedNetwork, type Firew
   from "./linux-codex-live-admin-firewall.ts";
 import {dockerHttpOperationNetworkRecipe} from
   "@agent-teams/agent-execution/composition";
-import type {LinuxCodexNodeRecipeSelection} from "../../dist/composition/linux-codex-node-recipe.js";
+import type {LinuxCodexNodeRecipeSelection} from "../../../dist/composition/linux-codex-node-recipe.js";
 
 export type LinuxCodexLiveFirewallPins = Readonly<{
   command: FirewallCommand;
