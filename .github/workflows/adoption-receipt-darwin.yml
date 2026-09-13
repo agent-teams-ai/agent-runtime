@@ -1,14 +1,14 @@
 name: adoption-receipt-darwin
-# retrigger dc831ea4 (second push)
-# Temporary workflow: Darwin arm64 adoption receipt for Host PA/RS unpublished fixture copies
-# identity dc831ea4 stacked on Host remaining top-level support R bcc6c07c.
-# The job always checks out that SHA so this workflow-only commit does not
-# enter the receipt identity. Safe to delete after the paired receipt is merged.
+# Temporary workflow: Darwin arm64 adoption receipt for Host unpublished AE
+# top-level copies identity 452e6b507dc8c1c84fa49d6c5628b19e2daefea2 stacked
+# on Host PA/RS unpublished copies absorb 910cd622. The job always checks
+# out that SHA so this workflow-only commit does not enter the receipt
+# identity. Safe to delete after the paired receipt is merged.
 
 on:
   push:
     branches:
-      - cursor/fms-darwin-gha-capture-host-package-external-pa-rs-7d17
+      - cursor/fms-darwin-gha-capture-host-package-external-ae-top-7d17
 
 permissions:
   contents: read
@@ -19,16 +19,16 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     steps:
-      - name: Checkout frozen Host PA/RS unpublished fixture copies SHA
+      - name: Checkout frozen Host unpublished AE top-level copies SHA
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: dc831ea4dee190724b9167f4e4f7580e19b63978
+          ref: 452e6b507dc8c1c84fa49d6c5628b19e2daefea2
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "dc831ea4dee190724b9167f4e4f7580e19b63978"
+        run: test "$(git rev-parse HEAD)" = "452e6b507dc8c1c84fa49d6c5628b19e2daefea2"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
