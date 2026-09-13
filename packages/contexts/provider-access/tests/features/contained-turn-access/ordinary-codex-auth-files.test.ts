@@ -75,8 +75,8 @@ test('source directory rejects group-writable mode at acquisition', async t => {
   await assert.rejects(stableAuthPath(path, true, guard.identity.uid, false), OrdinaryCodexAuthRefused);
 });
 
+const unexpected = (): never => {throw new Error('must not inspect any auth path');};
 test('Linux ordinary auth refuses before observing any configured source', {skip: process.platform !== 'linux'}, async t => {
   t.mock.method(process, 'getuid', () => 501);
-  const unexpected = (): never => {throw new Error('must not inspect any auth path');};
   await assert.rejects(prepareAuthFiles({get source() {return unexpected();}, get executable() {return unexpected();}, get privateRoot() {return unexpected();}, check: unexpected}), error => error instanceof OrdinaryCodexAuthRefused);
 });

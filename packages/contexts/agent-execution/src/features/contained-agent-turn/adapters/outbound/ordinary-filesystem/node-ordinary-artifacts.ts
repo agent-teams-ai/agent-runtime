@@ -40,6 +40,16 @@ export function createNodeOrdinaryArtifacts(options: NodeOrdinaryArtifactsOption
       const acknowledged: unknown = options.record?.({operationId: operation.operationId, attemptId: operation.attemptId, stagingRoot: staging, kind});
       if (acknowledged !== undefined) {if (acknowledged instanceof Promise) {void acknowledged.catch(() => {});} throw new Error("ordinary_artifact_journal_not_synchronous");}
     };
+    const closeStaging = async (): Promise<void> => {
+      // The staging name is never canonical. After rename it is absent; before
+      // publication any partial files are still private and safe to remove.
+      try {await rm(staging, {recursive: true, force: true});}
+      catch (cause) {
+        try {record("artifact_staging_retained");} catch { /* Allocated identity remains in the prior durable observation. */ }
+        throw new Error(`ordinary_artifact_staging_retained:${staging}`, {cause});
+      }
+      record("artifact_staging_closed");
+    };
     try {
     record("artifact_staging_allocated");
     await writeSynced(join(staging, "result.txt"), bytes, 0o400);
@@ -62,14 +72,7 @@ export function createNodeOrdinaryArtifacts(options: NodeOrdinaryArtifactsOption
     await readNodeOrdinaryArtifact(options, published);
     return published;
     } finally {
-      // The staging name is never canonical. After rename it is absent; before
-      // publication any partial files are still private and safe to remove.
-      try {await rm(staging, {recursive: true, force: true});}
-      catch (cause) {
-        try {record("artifact_staging_retained");} catch { /* Allocated identity remains in the prior durable observation. */ }
-        throw new Error(`ordinary_artifact_staging_retained:${staging}`, {cause});
-      }
-      record("artifact_staging_closed");
+      await closeStaging();
     }
   }};
 }

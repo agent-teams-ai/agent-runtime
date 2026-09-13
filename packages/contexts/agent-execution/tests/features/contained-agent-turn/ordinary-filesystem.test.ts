@@ -1,9 +1,8 @@
-import fsPromises from "node:fs/promises";
 import {syncBuiltinESMExports} from "node:module";
 import {createHash} from "node:crypto";
 import assert from "node:assert/strict";
 import test from "node:test";
-import {mkdtemp, mkdir, writeFile, readFile, readdir, realpath, symlink, link, chmod, rm, stat} from "node:fs/promises";
+import fsPromises, {mkdtemp, mkdir, writeFile, readFile, readdir, realpath, symlink, link, chmod, rm, stat} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {createNodeOrdinaryWorkspace, OrdinaryWorkspacePreparationRetained} from "../../../dist/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-workspace.js";

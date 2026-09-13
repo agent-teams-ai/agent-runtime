@@ -65,13 +65,7 @@ function admitRequestBody(body: Buffer, guard: OrdinaryPaSecretGuard): void {
   if (payload.model !== 'gpt-5.3-codex-spark' || payload.stream !== true ||
       !guard.artifact(body) || !guard.check(JSON.stringify(payload))) { throw refused(); }
 }
-function responseSafe(bytes: Buffer, guard: OrdinaryPaSecretGuard, semantic: Map<string, string>): boolean {
-  if (!guard.artifact(bytes)) { return false; }
-  const source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-  for (const line of source.split('\n')) {
-    if (!line.startsWith('data:') || line.slice(5).trim() === '[DONE]') { continue; }
-    const value: unknown = JSON.parse(line.slice(5));
-    if (!guard.check(JSON.stringify(value))) { return false; }
+function deltaSafe(value: unknown, guard: OrdinaryPaSecretGuard, semantic: Map<string, string>): boolean {
     if (value !== null && typeof value === 'object' && 'delta' in value && typeof value.delta === 'string') {
       const item = 'item_id' in value ? value.item_id : 'output_index' in value ? value.output_index : null;
       const content = 'content_index' in value ? value.content_index : null;
@@ -83,6 +77,16 @@ function responseSafe(bytes: Buffer, guard: OrdinaryPaSecretGuard, semantic: Map
       semantic.set(key, accumulated);
       if (!guard.check(accumulated)) { return false; }
     }
+  return true;
+}
+function responseSafe(bytes: Buffer, guard: OrdinaryPaSecretGuard, semantic: Map<string, string>): boolean {
+  if (!guard.artifact(bytes)) { return false; }
+  const source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  for (const line of source.split('\n')) {
+    if (!line.startsWith('data:') || line.slice(5).trim() === '[DONE]') { continue; }
+    const value: unknown = JSON.parse(line.slice(5));
+    if (!guard.check(JSON.stringify(value))) { return false; }
+    if (!deltaSafe(value, guard, semantic)) { return false; }
   }
   return true;
 }
