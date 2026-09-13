@@ -151,3 +151,28 @@ test("failed manifest write removes only the unpublished staging directory", asy
   assert.deepEqual(await readdir(options.artifactRoot), []);
   await workspace.close(handle);
 });
+
+test("publication and staging removal failure retain an operation-bound observation", async t => {
+  const {options, workspace} = await fixture(t);
+  const handle = await workspace.prepare(operation, new AbortController().signal);
+  await writeFile(join(handle.cwd, "result.txt"), "result");
+  const snapshot = await workspace.snapshot(operation, handle);
+  const observations: import("../../../dist/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-artifacts.js").OrdinaryArtifactObservation[] = [];
+  const artifacts = createNodeOrdinaryArtifacts({...options, record: event => {observations.push(event);}});
+  const originalOpen = fsPromises.open, originalRm = fsPromises.rm;
+  const mockedOpen = t.mock.method(fsPromises, "open", (...args: Parameters<typeof originalOpen>) => {
+    if (String(args[0]).includes(".staging-") && String(args[0]).endsWith("manifest.json")) {return Promise.reject(new Error("synthetic write failure"));}
+    return originalOpen(...args);
+  });
+  const mockedRm = t.mock.method(fsPromises, "rm", (...args: Parameters<typeof originalRm>) => {
+    if (String(args[0]).includes(".staging-")) {return Promise.reject(new Error("synthetic removal failure"));}
+    return originalRm(...args);
+  });
+  syncBuiltinESMExports();
+  try {await assert.rejects(artifacts.publish(operation, snapshot), /ordinary_artifact_staging_retained/);}
+  finally {mockedOpen.mock.restore(); mockedRm.mock.restore(); syncBuiltinESMExports();}
+  assert.deepEqual(observations.map(event => event.kind), ["artifact_staging_allocated", "artifact_staging_retained"]);
+  assert.ok(observations.every(event => event.operationId === operation.operationId && event.attemptId === operation.attemptId && event.stagingRoot === observations[0]!.stagingRoot));
+  assert.equal((await readdir(options.artifactRoot)).length, 1);
+  await workspace.close(handle);
+});

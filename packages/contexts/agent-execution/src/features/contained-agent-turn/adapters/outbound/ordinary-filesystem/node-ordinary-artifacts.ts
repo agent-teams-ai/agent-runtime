@@ -4,7 +4,8 @@ import type {OrdinaryArtifactsPort} from "../../../application/ordinary-ports.js
 import {ORDINARY_PROFILE, type OrdinaryReceiptOf} from "../../../domain/ordinary-model.js";
 import {directory, digest, readStable, writeSynced, syncDirectory} from "./ordinary-files.js";
 
-export interface NodeOrdinaryArtifactsOptions {readonly artifactRoot: string; readonly sourceRevision: string}
+export interface OrdinaryArtifactObservation {readonly operationId: string; readonly attemptId: string; readonly stagingRoot: string; readonly kind: "artifact_staging_allocated" | "artifact_staging_closed" | "artifact_staging_retained"}
+export interface NodeOrdinaryArtifactsOptions {readonly artifactRoot: string; readonly sourceRevision: string; readonly record?: (observation: OrdinaryArtifactObservation) => void}
 /** Reopens canonical bytes and verifies both content addresses, including the persisted operation binding. */
 export async function readNodeOrdinaryArtifact(options: NodeOrdinaryArtifactsOptions, receipt: OrdinaryReceiptOf<"artifact_published">): Promise<Uint8Array> {
   if (!/^[a-f0-9]{64}$/.test(receipt.artifactDigest)) {throw new Error("ordinary_artifact_address");}
@@ -35,7 +36,12 @@ export function createNodeOrdinaryArtifacts(options: NodeOrdinaryArtifactsOption
     const manifest = JSON.stringify(manifestFor(options.sourceRevision, receipt, hash, bytes.length));
     const artifactDigest = digest(manifest), target = join(options.artifactRoot, artifactDigest);
     const staging = await mkdtemp(join(options.artifactRoot, ".staging-"));
+    const record = (kind: OrdinaryArtifactObservation["kind"]): void => {
+      const acknowledged: unknown = options.record?.({operationId: operation.operationId, attemptId: operation.attemptId, stagingRoot: staging, kind});
+      if (acknowledged !== undefined) {if (acknowledged instanceof Promise) {void acknowledged.catch(() => {});} throw new Error("ordinary_artifact_journal_not_synchronous");}
+    };
     try {
+    record("artifact_staging_allocated");
     await writeSynced(join(staging, "result.txt"), bytes, 0o400);
     await writeSynced(join(staging, "manifest.json"), manifest, 0o400);
     await syncDirectory(staging);
@@ -59,7 +65,11 @@ export function createNodeOrdinaryArtifacts(options: NodeOrdinaryArtifactsOption
       // The staging name is never canonical. After rename it is absent; before
       // publication any partial files are still private and safe to remove.
       try {await rm(staging, {recursive: true, force: true});}
-      catch (cause) {throw new Error(`ordinary_artifact_staging_retained:${staging}`, {cause});}
+      catch (cause) {
+        try {record("artifact_staging_retained");} catch { /* Allocated identity remains in the prior durable observation. */ }
+        throw new Error(`ordinary_artifact_staging_retained:${staging}`, {cause});
+      }
+      record("artifact_staging_closed");
     }
   }};
 }

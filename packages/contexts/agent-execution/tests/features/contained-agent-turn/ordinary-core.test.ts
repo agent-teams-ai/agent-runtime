@@ -211,3 +211,10 @@ test("cancellation during failed workspace preparation retains reconciliation", 
   await createOrdinaryTurnFeature({...f.dependencies, workspace}).submit.execute(input, {signal: controller.signal});
   assert.equal(f.counts().starts, 0); assert.equal(f.state().status, "reconcile_required");
 });
+
+test("cancelled provider grant acquisition cannot certify retained auth cleanup", async () => {
+  const f = fixture(); const controller = new AbortController();
+  const providerAccess = {...f.dependencies.providerAccess, resolveAndConsume: async () => {controller.abort(); throw new Error("ORDINARY_PA_UNAVAILABLE");}};
+  await createOrdinaryTurnFeature({...f.dependencies, providerAccess}).submit.execute(input, {signal: controller.signal});
+  assert.equal(f.counts().starts, 0); assert.equal(f.state().status, "reconcile_required");
+});

@@ -18,10 +18,28 @@ export const ORDINARY_POSTGRES_SCHEMA = `CREATE TABLE IF NOT EXISTS ordinary_tur
  operation_id text NOT NULL, revision bigint NOT NULL CHECK (revision >= 0), state text NOT NULL,
  PRIMARY KEY (tenant_id, project_id, operation_id), UNIQUE (tenant_id, project_id, command_id)
 )`;
+const boundedClient = (client: OrdinaryPostgresClient): OrdinaryPostgresClient => {
+  let released = false;
+  const release = (discard = false): void => {if (!released) {released = true; client.release(discard);}};
+  return {
+    async query<Row = Record<string, unknown>>(sql: string | OrdinaryQuery, values?: unknown[]) {
+      if (released) {throw new Error("ordinary database client closed");}
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {return await Promise.race([
+        client.query<Row>(typeof sql === "string" ? query(sql, values) : sql),
+        new Promise<never>((_resolve, reject) => {timer = setTimeout(() => {
+          try {release(true);} catch (error) {reject(error); return;}
+          reject(new Error("ordinary database query timed out"));
+        }, 5000);}),
+      ]);} finally {clearTimeout(timer);}
+    },
+    release,
+  };
+};
 const acquire = (pool: OrdinaryPostgresPool): Promise<OrdinaryPostgresClient> => new Promise((resolve, reject) => {
   let expired = false;
   const timer = setTimeout(() => {expired = true; reject(new Error("ordinary database acquisition timed out"));}, 5000);
-  void pool.connect().then(client => {clearTimeout(timer); if (expired) {client.release();} else {resolve(client);} return;}, error => {clearTimeout(timer); if (!expired) {reject(error);}});
+  void pool.connect().then(client => {clearTimeout(timer); if (expired) {client.release();} else {resolve(boundedClient(client));} return;}, error => {clearTimeout(timer); if (!expired) {reject(error);}});
 });
 const withClient = async <T>(pool: OrdinaryPostgresPool, body: (client: OrdinaryPostgresClient) => Promise<T>): Promise<T> => {
   const client = await acquire(pool); let broken = false;

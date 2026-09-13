@@ -46,9 +46,11 @@ const executeOrdinaryOperation = async (dependencies: OrdinaryTurnDependencies, 
   };
   try {
     await observeCancellation();
-    security = await dependencies.security.resolveAndConsume(operation, controller.signal);
+    try {security = await dependencies.security.resolveAndConsume(operation, controller.signal);}
+    catch (error) {uncertainty = true; throw error;}
     await observeCancellation();
-    provider = await dependencies.providerAccess.resolveAndConsume(operation, controller.signal);
+    try {provider = await dependencies.providerAccess.resolveAndConsume(operation, controller.signal);}
+    catch (error) {uncertainty = true; throw error;}
     const expiresAt = validateAuthorityDeadline(security, provider);
     timers.push(setTimeout(() => controller.abort(), Math.max(1, expiresAt - Date.now() - 10000)));
     await observeCancellation();

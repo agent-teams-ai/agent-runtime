@@ -45,3 +45,14 @@ test("ordinary reads and migrations bound exhausted-pool acquisition and release
   for (const resolve of waiting) {resolve({query: async () => {throw new Error("must not query a late client");}, release: () => {released++;}});}
   await Promise.resolve(); assert.equal(released, 2);
 });
+
+test("stalled acquired-client query is bounded and discarded exactly once", async t => {
+  t.mock.timers.enable({apis: ["setTimeout"]});
+  let entered!: () => void; const ready = new Promise<void>(resolve => {entered = resolve;});
+  const releases: (boolean | undefined)[] = [];
+  const pool = {async connect() {return {query: async () => {entered(); return new Promise<never>(() => {});}, release: (discard?: boolean) => {releases.push(discard);}};}};
+  const store = new PostgresOrdinaryOperationStore({pool});
+  const result = assert.rejects(store.cancel({operationId: "test", scope: {tenantId: "test", projectId: "test"}}), /query timed out/);
+  await ready; t.mock.timers.tick(5001); await result;
+  assert.deepEqual(releases, [true]);
+});

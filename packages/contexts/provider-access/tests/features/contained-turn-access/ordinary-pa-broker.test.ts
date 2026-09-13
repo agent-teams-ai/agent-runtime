@@ -99,3 +99,10 @@ test('credential split across SSE delta events is refused before forwarding', as
   assert.equal(response.status, 502); assert.ok(!response.text.includes('fixture-'));
   assert.deepEqual(f.ended, [{sequence: 1, success: false}]);
 });
+
+test('credential fragments in interleaved output items remain fenced', async t => {
+  const frames = [{type: 'response.output_text.delta', item_id: 'A', content_index: 0, delta: 'fixture-'}, {type: 'response.output_text.delta', item_id: 'B', content_index: 0, delta: 'other'}, {type: 'response.output_text.delta', item_id: 'A', content_index: 0, delta: 'pa'}];
+  const f = await fixture({async request() {return {status: 200, body: bytes(frames.map(frame => 'data: ' + JSON.stringify(frame) + '\n\n').join('')), close() {}};}}); t.after(() => f.close());
+  assert.equal((await post(f.broker.endpoint, payload())).status, 502);
+  assert.deepEqual(f.ended, [{sequence: 1, success: false}]);
+});

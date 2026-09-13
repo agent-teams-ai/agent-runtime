@@ -72,7 +72,7 @@ export async function createOrdinaryAgentRuntimeHost(input: OrdinaryAgentRuntime
           return bindOrdinaryProviderAccessOwner(owner, {executable: options.execution.executablePath, sourceDirectory: options.execution.authSourceDirectory, privateRoot: options.execution.privateRoot, record: observation => journal.record({kind: "auth_capture", ...observation})});
         },
         async workspace() {return createNodeOrdinaryWorkspace({sourceDirectory: options.execution.sourceDirectory, workspaceRoot: options.execution.workspaceRoot, sourceRevision: options.execution.sourceRevision, record: observation => journal.record({...observation})});},
-        async artifacts() {return createNodeOrdinaryArtifacts({artifactRoot: options.execution.artifactRoot, sourceRevision: options.execution.sourceRevision});},
+        async artifacts() {return createNodeOrdinaryArtifacts({artifactRoot: options.execution.artifactRoot, sourceRevision: options.execution.sourceRevision, record: event => journal.record({...event})});},
         async process() {return createNodeOrdinaryProcess({prepareLaunch: getCodex().prepareLaunch, record: event => journal.record({...event})});},
         async provider() {return getCodex().provider;},
       },

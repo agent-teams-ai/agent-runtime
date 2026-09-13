@@ -65,7 +65,7 @@ function admitRequestBody(body: Buffer, guard: OrdinaryPaSecretGuard): void {
   if (payload.model !== 'gpt-5.3-codex-spark' || payload.stream !== true ||
       !guard.artifact(body) || !guard.check(JSON.stringify(payload))) { throw refused(); }
 }
-function responseSafe(bytes: Buffer, guard: OrdinaryPaSecretGuard, semantic: {text: string}): boolean {
+function responseSafe(bytes: Buffer, guard: OrdinaryPaSecretGuard, semantic: Map<string, string>): boolean {
   if (!guard.artifact(bytes)) { return false; }
   const source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   for (const line of source.split('\n')) {
@@ -73,8 +73,13 @@ function responseSafe(bytes: Buffer, guard: OrdinaryPaSecretGuard, semantic: {te
     const value: unknown = JSON.parse(line.slice(5));
     if (!guard.check(JSON.stringify(value))) { return false; }
     if (value !== null && typeof value === 'object' && 'delta' in value && typeof value.delta === 'string') {
-      semantic.text += value.delta;
-      if (!guard.check(semantic.text)) { return false; }
+      const item = 'item_id' in value ? value.item_id : 'output_index' in value ? value.output_index : null;
+      const content = 'content_index' in value ? value.content_index : null;
+      if ((item !== null && typeof item !== 'string' && typeof item !== 'number') || (content !== null && typeof content !== 'number')) {return false;}
+      const key = JSON.stringify([item, content]);
+      const accumulated = (semantic.get(key) ?? '') + value.delta;
+      semantic.set(key, accumulated);
+      if (!guard.check(accumulated)) { return false; }
     }
   }
   return true;
@@ -83,7 +88,7 @@ function responseSafe(bytes: Buffer, guard: OrdinaryPaSecretGuard, semantic: {te
 /** Private loopback listener; one sequential request at a time, durable replay fence before upstream. */
 export async function createOrdinaryPaBroker(input: OrdinaryPaBrokerOptions) {
   let closed = false, failed = false, totalResponseBytes = 0;
-  const semantic = {text: ""};
+  const semantic = new Map<string, string>();
   let active: Promise<void> | undefined;
   const sockets = new Set<Socket>(), lifetime = new AbortController();
   const signal = AbortSignal.any([lifetime.signal, input.selection.operationAbortSignal]);
