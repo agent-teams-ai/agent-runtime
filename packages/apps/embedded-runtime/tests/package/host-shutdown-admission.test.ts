@@ -15,8 +15,8 @@ import {
   preparationToken,
   providerAccessSnapshot,
   workspaceId,
-} from "./support/external/agent-execution/contained-turn-kernel-fixtures.ts";
-import { committedDispatchProofFixture } from "./support/external/agent-execution/features/contained-agent-turn/support/committed-dispatch-proof-fixture.ts";
+} from "../support/external/agent-execution/contained-turn-kernel-fixtures.ts";
+import { committedDispatchProofFixture } from "../support/external/agent-execution/features/contained-agent-turn/support/committed-dispatch-proof-fixture.ts";
 
 const EMPTY_SHA256 = "0".repeat(64);
 const drain = Object.freeze({ bytes: 0, sha256: EMPTY_SHA256, status: "complete" as const });
@@ -163,9 +163,9 @@ const startInput = (
 });
 
 
-import { composeHostCustodiedAgentRuntimeHost } from "../dist/composition/host-custodied-agent-runtime-host.js";
-import {createAgentRuntimeHostDisposalLifecycle, AgentRuntimeHostDisposalIncompleteError} from "../dist/composition/agent-runtime-host-disposal.js";
-import {composeHostCustodiedContainedTurn} from "../dist/composition/contained-turn-feature-composition.js";
+import { composeHostCustodiedAgentRuntimeHost } from "../../dist/composition/host-custodied-agent-runtime-host.js";
+import {createAgentRuntimeHostDisposalLifecycle, AgentRuntimeHostDisposalIncompleteError} from "../../dist/composition/agent-runtime-host-disposal.js";
+import {composeHostCustodiedContainedTurn} from "../../dist/composition/contained-turn-feature-composition.js";
 const openedOutcomes = new WeakMap<ContainedTurnKernelCustodyAdapter, Awaited<ReturnType<ContainedTurnKernelCustodyPort["open"]>>>();
 const deferred = () => Promise.withResolvers<void>();
 const shutdown = (harness: ReturnType<typeof createHarness>) => {

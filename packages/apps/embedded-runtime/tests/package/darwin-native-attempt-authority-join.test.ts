@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {bindDarwinNativeAttemptAuthority} from "../dist/composition.js";
+import {bindDarwinNativeAttemptAuthority} from "../../dist/composition.js";
 import {containedTurnPreparationToken, type ContainedTurnFeatureDependencies, type NativePreparedAttemptBinding,
   type RetainedNativeAttemptAuthority} from "@agent-teams/agent-execution/composition";
 

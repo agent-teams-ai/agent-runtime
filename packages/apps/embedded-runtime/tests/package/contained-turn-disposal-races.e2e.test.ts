@@ -1,4 +1,4 @@
-import { createAgentRuntimeHost } from "./helpers/create-contained-turn-host.ts";
+import { createAgentRuntimeHost } from "../helpers/create-contained-turn-host.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -8,8 +8,8 @@ import {
   ContainedTurnOwnerContractError,
   createClaudeCodeSetupInspectionPlanner,
   createCodexSetupInspectionPlanner,
-} from "../dist/composition.js";
-import type { ContainedTurnCapabilityBundle } from "../dist/composition.js";
+} from "../../dist/composition.js";
+import type { ContainedTurnCapabilityBundle } from "../../dist/composition.js";
 
 type ContainedTurnScope = Readonly<{ projectId: string; tenantId: string }>;
 type ContainedTurnStatus = "cancelled" | "running" | "succeeded";

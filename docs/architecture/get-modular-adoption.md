@@ -142,9 +142,9 @@ provider readiness claim and changes no runtime behavior.
 ## Evidence and executable references
 
 Existing passive contract evidence starts with
-[capability bundle tests](../../packages/apps/embedded-runtime/tests/capability-bundle-contract.test.ts),
-[access boundary tests](../../packages/apps/embedded-runtime/tests/runtime-access-boundaries.e2e.test.ts),
-and [Codex setup tests](../../packages/apps/embedded-runtime/tests/codex-setup.e2e.test.ts).
+[capability bundle tests](../../packages/apps/embedded-runtime/tests/package/capability-bundle-contract.test.ts),
+[access boundary tests](../../packages/apps/embedded-runtime/tests/package/runtime-access-boundaries.e2e.test.ts),
+and [Codex setup tests](../../packages/apps/embedded-runtime/tests/package/codex-setup.e2e.test.ts).
 The profile maps `createDefaultAgentRuntimeHost`, its private
 `default-agent-runtime-host.ts` implementation, and declarations, profile and
 factories in `runtime-setup-assembly.ts`. It maps passive Assembly, type and

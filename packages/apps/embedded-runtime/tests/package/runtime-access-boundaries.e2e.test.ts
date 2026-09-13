@@ -1,11 +1,11 @@
-import { createAgentRuntimeHost } from "../dist/composition/agent-runtime-host.js";
+import { createAgentRuntimeHost } from "../../dist/composition/agent-runtime-host.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
   createDefaultAgentRuntimeHost,
   TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS,
-} from "../dist/composition.js";
+} from "../../dist/composition.js";
 
 const expectedLimitations = {
   executableCompatibility: "unqualified",
