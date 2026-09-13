@@ -1,9 +1,10 @@
 name: adoption-receipt-darwin
 
-# Temporary workflow: Darwin arm64 adoption receipt for Runtime Security
-# activation identity ab9a942a stacked on RC activation D d2c28df4.
-# The job always checks out that SHA so this workflow-only commit does not
-# enter the receipt identity. Safe to delete after the paired Host assembly-grammar receipt is merged.
+# Temporary workflow: Darwin arm64 adoption receipt for Host assembly-grammar
+# absorb identity af474b9fa43d43578a03bb6503f6cb988b70145d after #134
+# merge-commit 539f17ba. The job always checks out that SHA so this
+# workflow-only commit does not enter the receipt identity. Safe to delete
+# after the paired Host assembly-grammar receipt is merged.
 
 on:
   push:
@@ -24,11 +25,11 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: 3c6b425bde4cfeff33e719b35e82ef399f4cfb9c
+          ref: af474b9fa43d43578a03bb6503f6cb988b70145d
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "3c6b425bde4cfeff33e719b35e82ef399f4cfb9c"
+        run: test "$(git rev-parse HEAD)" = "af474b9fa43d43578a03bb6503f6cb988b70145d"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
