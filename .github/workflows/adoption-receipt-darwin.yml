@@ -1,5 +1,5 @@
 name: adoption-receipt-darwin
-# first push after identity hop
+# retrigger ae35cd8b (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host live darwin-launcher
 # identity ae35cd8b stacked on Host live darwin-verification D e030aa8a.
