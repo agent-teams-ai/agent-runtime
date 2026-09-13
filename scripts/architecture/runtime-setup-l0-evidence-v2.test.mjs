@@ -112,7 +112,7 @@ for (const [name, mutate] of [
   ["cancelled test", f => {f.artifacts["process-0.stdout"] = f.artifacts["process-0.stdout"].replace('"status":"passed"', '"status":"cancelled"');}],
   ["TODO test", f => {f.artifacts["process-0.stdout"] = f.artifacts["process-0.stdout"].replace('"status":"passed"', '"status":"todo"');}],
 ]) {test(`rejects ${name}`, () => {const f = fixture(); mutate(f); assert.throws(f.validate);});}
-const platformFile = `${packagePath}/tests/codex-setup.e2e.test.ts`;
+const platformFile = `${packagePath}/tests/package/codex-setup.e2e.test.ts`;
 function coveragePair() {
   const pass = event(platformFile, 44, "platform");
   return [{target: "darwin-arm64", events: [pass]}, {target: "linux-x64", events: [{...pass, status: "skipped", skip: true}]}];
