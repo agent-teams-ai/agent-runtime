@@ -112,6 +112,7 @@ test("original argv lists and accepted native authority test are preserved exact
     ["tests/contained-turn-http-digest-alignment.test.ts", "tests/package/contained-turn-http-digest-alignment.test.ts"],
     ["tests/node-docker-route-provenance-integration.test.ts", "tests/package/node-docker-route-provenance-integration.test.ts"],
     ["tests/assembly-packed-consumer.test.ts", "tests/package/assembly-packed-consumer.test.ts"],
+    ["tests/linux-codex-node-recipe-owners.test.ts", "tests/package/linux-codex-node-recipe-owners.test.ts"],
   ]);
   expected[0] = expected[0].map((arg) => relocated.get(arg) ?? arg);
   assert.deepEqual(testProcesses, expected);

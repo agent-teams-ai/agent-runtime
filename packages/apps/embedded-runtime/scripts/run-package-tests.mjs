@@ -36,7 +36,7 @@ export const testProcesses = [
     "tests/package/linux-codex-deployment.test.ts",
     "tests/package/linux-codex-deployment-publication.test.ts",
     "tests/package/linux-codex-node-recipe.test.ts",
-    "tests/linux-codex-node-recipe-owners.test.ts",
+    "tests/package/linux-codex-node-recipe-owners.test.ts",
     "tests/package/linux-joined-peer.test.mjs",
     "tests/package/contained-turn-provider-selection-construction.test.ts",
     "tests/package/provider-candidate-route-gate.test.ts",
