@@ -358,9 +358,11 @@ public composition types no longer mention `pg`; callers pass a structurally
 compatible pool. Runtime Security package assembly now reaches its four
 features through curated `index.ts` / `internal.ts` entrypoints; the contained-turn
 egress gateway factory lives in the feature composition root so package
-`composition.ts` is import/re-export only. The module stays pending. Activating
-it still requires accepted feature README metadata, `tests/features/` placement,
-and a separate accepted activation ADR. ADR-0022 records the host-app extra
+`composition.ts` is import/re-export only. The module stays pending. Each Host
+feature now declares accepted README metadata owned by `@agent-teams/embedded-runtime`
+and ADR-0008. Activating it still requires `tests/features/` placement, an
+explicit extra Host `src/composition/*.ts` `assemblyFiles` list, and a
+separate accepted activation ADR. ADR-0022 records the host-app extra
 composition assembly grammar so those remaining steps do not have to change the
 curated `index.ts` / `composition.ts` import/re-export rule.
 
