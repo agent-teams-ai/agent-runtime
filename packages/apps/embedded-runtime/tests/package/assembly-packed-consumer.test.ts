@@ -8,7 +8,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
 
-const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
+const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../..");
 const packagePaths = [
   "packages/platform/filesystem-custody",
   "packages/contexts/runtime-security",
