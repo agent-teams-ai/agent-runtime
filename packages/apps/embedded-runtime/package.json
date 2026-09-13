@@ -10,7 +10,7 @@
     "test": "node scripts/run-package-tests.mjs",
     "test:joined:linux": "node scripts/run-linux-joined-product.mjs",
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false",
-    "test:http-completion": "node --experimental-test-module-mocks --test tests/support/linux-http-completion-negative.mjs"
+    "test:http-completion": "node --experimental-test-module-mocks --test tests/package/linux-http-completion-negative.mjs"
   },
   "agentTeamsArchitecture": {
     "role": "host-app",

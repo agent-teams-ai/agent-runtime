@@ -498,7 +498,7 @@ test("AR-2 inventory binds the manifest to the canonical launcher", async t => {
   await save();
   const inventory = await readAr2TestExecutionInventory(owner, { evidenceRoot });
   assert.ok(ar2InventoryExecutes(inventory, "tests/package/claude-code-setup.e2e.test.ts"));
-  assert.ok(ar2InventoryExecutes(inventory, "tests/support/linux-http-completion-negative.mjs"));
+  assert.ok(ar2InventoryExecutes(inventory, "tests/package/linux-http-completion-negative.mjs"));
   for (const script of ["echo scripts/run-package-tests.mjs",
     "node scripts/run-package-tests.mjs --check", "node scripts/other.mjs",
     "node scripts/run-package-tests.mjs || true",
