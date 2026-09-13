@@ -126,3 +126,32 @@ test("pinned summary terminal is an ordered subset of observed completed items",
   events.admit(notify("turn/completed", {threadId: "01a09662-a230-7960-b2b1-b27e62a503fd", turn: terminal}));
   assert.equal(events.assistant, "Done.");
 });
+
+test("refusal diagnostics classify untrusted events without exposing their values", () => {
+  const secret = "synthetic-private-value";
+  const cases: [Record<string, unknown>, string][] = [
+    [{id: secret, method: secret, params: {}}, "envelope"],
+    [notify(secret, {threadId: secret}), "scope"],
+    [notify(secret, {threadId: "01a09662-a230-7960-b2b1-b27e62a503fd"}), "passive"],
+    [itemNotice("started", {type: "agentMessage", id: secret, text: 42}), "item_schema_agent_message"],
+    [itemNotice("started", {...agent(""), questions: []}), "agent_questions"],
+    [itemNotice("started", {...agent(secret)}), "item_start_state"],
+  ];
+  for (const [message, rule] of cases) {
+    const events = started();
+    assert.throws(() => events.admit(message), /EVIDENCE_REJECTED/u);
+    assert.equal(events.validationRule, rule);
+    assert.equal(events.validationRule.includes(secret), false);
+    assert.equal(events.terminal, undefined);
+  }
+});
+
+test("completion diagnostics distinguish text substitution from field drift and reset on the next event", () => {
+  const events = started(); events.admit(itemNotice("started", agent("")));
+  assert.throws(() => events.admit(itemNotice("completed", agent("unobserved-private-text"))), /EVIDENCE_REJECTED/u);
+  assert.equal(events.validationRule, "complete_text");
+  assert.throws(() => events.admit(itemNotice("completed", {...agent(""), phase: "final_answer"})), /EVIDENCE_REJECTED/u);
+  assert.equal(events.validationRule, "complete_phase");
+  assert.throws(() => events.admit({id: "private-id", method: "private-method", params: {}}), /EVIDENCE_REJECTED/u);
+  assert.equal(events.validationRule, "envelope");
+});

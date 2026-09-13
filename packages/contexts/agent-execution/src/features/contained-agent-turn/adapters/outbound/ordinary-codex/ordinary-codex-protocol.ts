@@ -1,7 +1,7 @@
 import {isCodexRecord as isRecord, type CodexJsonRecord, BoundedCodexJsonLineReader, CODEX_APP_SERVER_TIMEOUT, decodeCodexResponseEnvelope} from "../codex-app-server/codex-app-server-jsonl.js";
 import type {OrdinaryTransport} from "../../../application/ordinary-ports.js";
 import {ordinaryCodexRefusal as refuse, ordinaryJson} from "./ordinary-codex-config.js";
-import {OrdinaryCodexItems} from "./ordinary-codex-items.js";
+import {type OrdinaryCodexItemRule, OrdinaryCodexItems} from "./ordinary-codex-items.js";
 
 const exact = (value: CodexJsonRecord, keys: readonly string[]): boolean => Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
 export const isOrdinaryCodexId = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(value);
@@ -96,58 +96,78 @@ const deltaKeys: Readonly<Record<string, readonly string[]>> = Object.freeze({
   "item/reasoning/textDelta": ["contentIndex", "delta", "itemId", "threadId", "turnId"],
 });
 
+export type OrdinaryCodexEventRule = OrdinaryCodexItemRule | "envelope" | "rate_limits" | "startup" | "scope" | "post_terminal" | "before_start" |
+  "status" | "turn_start" | "delta_shape" | "item_delta" | "item_shape" | "item_start" | "item_complete" |
+  "turn_complete_shape" | "turn_complete_state" | "terminal_items" | "passive";
+
 /** No RPC request or unrecognized tool notification is treated as passive. */
 export class OrdinaryCodexTurnEvents {
   readonly #threadId: string; readonly #turnId: string; readonly #items: OrdinaryCodexItems;
   readonly #startup: Set<string>;
+  #validationRule: OrdinaryCodexEventRule = "envelope";
   #started = false;
   #systemError = false;
   #terminal: CodexJsonRecord | undefined;
   #assistant = "";
   public constructor(threadId: string, turnId: string, cwd: string, startup = new Set<string>()) {
-    this.#threadId = threadId; this.#turnId = turnId; this.#items = new OrdinaryCodexItems(cwd);
+    this.#threadId = threadId; this.#turnId = turnId; this.#items = new OrdinaryCodexItems(cwd, rule => {this.#validationRule = rule;});
     this.#startup = startup;
   }
+  public get validationRule(): OrdinaryCodexEventRule {return this.#validationRule;}
   public get terminal(): CodexJsonRecord | undefined {return this.#terminal;}
   public get assistant(): string {return this.#assistant;}
   public admit(message: CodexJsonRecord): void {
+    this.#validationRule = "envelope";
     const {method, params} = ordinaryCodexNotification(message);
     // This pinned account-scoped notification carries no turn authority or output.
-    if (method === "account/rateLimits/updated") {admitRateLimits(params); return;}
+    if (method === "account/rateLimits/updated") {this.#validationRule = "rate_limits"; admitRateLimits(params); return;}
     if (!this.#started && ["remoteControl/status/changed", "thread/started", "warning"].includes(method)) {
+      this.#validationRule = "startup";
       admitOrdinaryStartup(message, this.#threadId, this.#startup); return;
     }
+    this.#validationRule = "scope";
     if (params.threadId !== this.#threadId || "turnId" in params && params.turnId !== this.#turnId) {refuse();}
+    this.#validationRule = "post_terminal";
     if (this.#terminal !== undefined && method !== "thread/status/changed") {refuse();}
     if (method === "thread/status/changed") {this.#status(params); return;}
     if (method === "turn/started") {this.#start(params); return;}
+    this.#validationRule = "before_start";
     if (!this.#started) {refuse();}
     if (method === "item/started" || method === "item/completed") {
       this.#item(method, params);
       return;
     }
     if (Object.hasOwn(deltaKeys, method)) {
+      this.#validationRule = "delta_shape";
       if (!exact(params, deltaKeys[method]!)) {refuse();}
+      this.#validationRule = "item_delta";
       this.#items.delta(method, params); return;
     }
     if (method === "turn/completed") {
       this.#complete(params); return;
     }
+    this.#validationRule = "passive";
     admitPassive(method, params);
   }
   #complete(params: CodexJsonRecord): void {
+    this.#validationRule = "turn_complete_shape";
     if (!exact(params, ["threadId", "turn"])) {refuse();}
     const turn = ordinaryCodexTurn(params.turn);
+    this.#validationRule = "turn_complete_state";
     if (turn.id !== this.#turnId || !["completed", "failed"].includes(String(turn.status))) {refuse();}
     if (this.#systemError && turn.status !== "failed") {refuse();}
+    this.#validationRule = "terminal_items";
     this.#assistant = this.#items.terminal(turn); this.#terminal = turn;
   }
   #item(method: string, params: CodexJsonRecord): void {
+      this.#validationRule = "item_shape";
       const time = method === "item/started" ? "startedAtMs" : "completedAtMs";
       if (!exact(params, ["item", "threadId", "turnId", time]) || !Number.isSafeInteger(params[time])) {refuse();}
+      this.#validationRule = method === "item/started" ? "item_start" : "item_complete";
       if (method === "item/started") {this.#items.start(params.item);} else {this.#items.complete(params.item);}
   }
   #status(params: CodexJsonRecord): void {
+    this.#validationRule = "status";
     if (!exact(params, ["threadId", "status"]) || !isRecord(params.status)) {refuse();}
     if (equalStatus(params.status, "idle")) {return;}
     if (equalStatus(params.status, "systemError") && this.#terminal?.status !== "completed") {this.#systemError = true; return;}
@@ -155,6 +175,7 @@ export class OrdinaryCodexTurnEvents {
         !exact(params.status, ["type", "activeFlags"]) || !Array.isArray(params.status.activeFlags) || params.status.activeFlags.length !== 0) {refuse();}
   }
   #start(params: CodexJsonRecord): void {
+    this.#validationRule = "turn_start";
     if (this.#started || !exact(params, ["threadId", "turn"])) {refuse();}
     const turn = ordinaryCodexTurn(params.turn);
     if (turn.id !== this.#turnId || turn.status !== "inProgress") {refuse();}

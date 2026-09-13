@@ -4,11 +4,11 @@ import {ORDINARY_PROFILE} from "../../../domain/ordinary-model.js";
 import {isCodexRecord as isRecord} from "../codex-app-server/codex-app-server-jsonl.js";
 import {createOrdinaryCodexLaunchRecipe, ORDINARY_CODEX_MODEL, ORDINARY_CODEX_PROVIDER, ORDINARY_CODEX_PERMISSION,
   ordinaryCodexRefusal as refuse, ordinaryJson, validateOrdinaryCodexConfig} from "./ordinary-codex-config.js";
-import {OrdinaryCodexProtocol, OrdinaryCodexTurnEvents, ordinaryCodexTurn, admitOrdinaryStartup, isOrdinaryCodexId} from "./ordinary-codex-protocol.js";
+import {type OrdinaryCodexEventRule, OrdinaryCodexProtocol, OrdinaryCodexTurnEvents, ordinaryCodexTurn, admitOrdinaryStartup, isOrdinaryCodexId} from "./ordinary-codex-protocol.js";
 
 export interface OrdinaryCodexObservation extends OrdinaryBinding {
   readonly kind: "thread_start" | "turn_start" | "terminal" | "transport_drained" | "model_metadata_defaulted" | "provider_stage";
-  readonly stage?: "binding" | "initialize_request" | "initialize_validation" | "initialized" | "config_request" | "config_validation" | "thread_request" | "thread_validation" | "startup_validation" | "turn_request" | "turn_validation" | "event_read" | "event_validation" | "input_close" | "drain_read" | "drain_validation" | "output_emit";
+  readonly stage?: `event_validation_${OrdinaryCodexEventRule}` | `drain_validation_${OrdinaryCodexEventRule}` | "binding" | "initialize_request" | "initialize_validation" | "initialized" | "config_request" | "config_validation" | "thread_request" | "thread_validation" | "startup_validation" | "turn_request" | "turn_validation" | "event_read" | "event_validation" | "input_close" | "drain_read" | "drain_validation" | "output_emit";
   readonly threadId?: string;
   readonly turnId?: string;
 }
@@ -50,7 +50,14 @@ export function createOrdinaryCodexAdapter(options: OrdinaryCodexAdapterOptions)
       const expected = prepared.get(input.workspace.workspaceId);
       prepared.delete(input.workspace.workspaceId);
       let currentStage: NonNullable<OrdinaryCodexObservation["stage"]> = "binding";
+      let events: OrdinaryCodexTurnEvents | undefined;
       const recordStage = (): void => {options.record({...binding(input.operation), kind: "provider_stage", stage: currentStage});};
+      const recordFailure = (): void => {
+        if (events && (currentStage === "event_validation" || currentStage === "drain_validation")) {
+          currentStage = `${currentStage}_${events.validationRule}`;
+        }
+        recordStage();
+      };
       const stage = (value: typeof currentStage): void => {
         currentStage = value;
         // Per-frame stages are persisted only on failure, keeping evidence bounded.
@@ -96,7 +103,7 @@ export function createOrdinaryCodexAdapter(options: OrdinaryCodexAdapterOptions)
         });
         stage("turn_validation");
         const turnId = validateTurnResponse(turnResult);
-        const events = new OrdinaryCodexTurnEvents(threadId, turnId, input.workspace.cwd, startup);
+        events = new OrdinaryCodexTurnEvents(threadId, turnId, input.workspace.cwd, startup);
         for (const message of protocol.pending.splice(0)) {stage("event_validation"); events.admit(message);}
         while (events.terminal === undefined) {
           stage("event_read");
@@ -123,7 +130,7 @@ export function createOrdinaryCodexAdapter(options: OrdinaryCodexAdapterOptions)
         if (terminalStatus === "failed") {await input.emit({kind: "diagnostic", text: "ORDINARY_CODEX_PROVIDER_FAILED"});}
         return {...identity, kind: "provider_terminal", terminalStatus, threadId, turnId};
       } catch (error) {
-        try {recordStage();} catch { /* Journal failure must not restore consumed preparation or mask the original failure. */ }
+        try {recordFailure();} catch { /* Journal failure must not restore consumed preparation or mask the original failure. */ }
         throw error;
       }
     },
