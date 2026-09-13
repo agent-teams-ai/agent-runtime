@@ -1,10 +1,10 @@
 name: adoption-receipt-darwin
-# retrigger c7204227 (second push)
 
-# Temporary workflow: Darwin arm64 adoption receipt for Host assembly-ref identity
-# c7204227 stacked on Host rsa-package D 7337f3af.
-# The job always checks out that SHA so this workflow-only commit does not
-# enter the receipt identity. Safe to delete after the paired Host assembly-ref receipt is merged.
+# Temporary workflow: Darwin arm64 adoption receipt for Host assembly-ref absorb
+# identity 3573103094f58c5f6f81d9b4865b05d8eef105df after #140
+# merge-commit 46d96719. The job always checks out that SHA so this
+# workflow-only commit does not enter the receipt identity. Safe to delete
+# after the paired Host assembly-ref receipt is merged.
 
 on:
   push:
@@ -25,11 +25,11 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: c7204227a30739eb81b834f5ccd52ca48481fbce
+          ref: 3573103094f58c5f6f81d9b4865b05d8eef105df
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "c7204227a30739eb81b834f5ccd52ca48481fbce"
+        run: test "$(git rev-parse HEAD)" = "3573103094f58c5f6f81d9b4865b05d8eef105df"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
