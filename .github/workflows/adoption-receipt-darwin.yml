@@ -1,4 +1,5 @@
 name: adoption-receipt-darwin
+# retrigger bcc41815 (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host live-selection identity
 # bcc41815 stacked on Host recipe-owners D cc1ede46.
