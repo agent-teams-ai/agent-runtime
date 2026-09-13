@@ -6,7 +6,7 @@ import { captureAuthHelper } from './ordinary-codex-auth-ipc.js';
 import { conservativeTokenExpiry } from './ordinary-codex-auth-json.js';
 import type { CapturedAuthBytes } from './ordinary-codex-auth-protocol.js';
 import { OrdinaryCodexAuthRefused, OrdinaryCodexAuthCleanupIndeterminate,
-  type OrdinaryCodexAuthCapture, type OrdinaryCodexAuthCaptureOptions, type OrdinaryCodexAuthMetadata } from './ordinary-codex-auth-contracts.js';
+  ORDINARY_AUTH_REFUSAL_REASONS, type OrdinaryCodexAuthCapture, type OrdinaryCodexAuthCaptureOptions, type OrdinaryCodexAuthMetadata } from './ordinary-codex-auth-contracts.js';
 
 /** PA-owned one-shot official capture. No user credential file contents are read here. */
 export function createOrdinaryCodexAuthCapture(options: OrdinaryCodexAuthCaptureOptions): OrdinaryCodexAuthCapture {
@@ -36,7 +36,7 @@ export function createOrdinaryCodexAuthCapture(options: OrdinaryCodexAuthCapture
     if (attempted) { throw new OrdinaryCodexAuthRefused(); } attempted = true;
     let files: Awaited<ReturnType<typeof prepareAuthFiles>> | undefined;
     let captured: CapturedAuthBytes | undefined;
-    let retain = false;
+    let retain = false, helperSpawned = false;
     try {
       check(); files = await prepareAuthFiles({ source: input.sourceDirectory, privateRoot: input.privateRoot, executable: input.executable, check });
       await files.check(); check();
@@ -46,6 +46,7 @@ export function createOrdinaryCodexAuthCapture(options: OrdinaryCodexAuthCapture
         cwd: files.home, env: { HOME: files.home, CODEX_HOME: files.home, TMPDIR: files.home + '/tmp', PATH: '/usr/bin:/bin' },
         detached: true, stdio: ['pipe', 'pipe', 'pipe'],
       });
+      helperSpawned = true;
       captured = await captureAuthHelper({ child, signal, deadline, home: files.home, source: input.sourceDirectory, captureRef, record: input.record });
       await files.check(); check();
       metadata = createOrdinaryAuthMetadata(captured, { generation: input.generation, captureRef, sourceIdentity: files.sourceIdentity,
@@ -57,6 +58,13 @@ export function createOrdinaryCodexAuthCapture(options: OrdinaryCodexAuthCapture
       return metadata;
     } catch (error) {
       dispose();
+      if (!helperSpawned) {
+        const reason = error instanceof OrdinaryCodexAuthRefused && ORDINARY_AUTH_REFUSAL_REASONS.includes(error.reason)
+          ? error.reason : 'io_error';
+        // No child exists at this point. Preserve a bounded startup refusal without filesystem/error payloads.
+        try { input.record(Object.freeze({ captureRef, outcome: 'refused', stage: 'startup', reason,
+          exitObserved: false, closeObserved: false, processGroupGone: false })); } catch { /* original refusal remains terminal */ }
+      }
       if (error instanceof OrdinaryCodexAuthCleanupIndeterminate) {
         retain = true;
         const observation = Object.freeze({ ...error.observation, ...(files ? { retainedDirectory: files.home } : {}) });

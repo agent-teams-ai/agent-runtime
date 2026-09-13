@@ -217,3 +217,19 @@ test('disabled startup status may share the initialize response chunk before ini
     home, source, captureRef: 'synthetic-early-remote', record: () => {}});
   material.token.fill(0); material.accountId.fill(0);
 });
+
+
+test('pre-spawn refusal is bounded, payload-free and does not restore one-shot capture', async () => {
+  const observations: unknown[] = [];
+  const owner = createOrdinaryCodexAuthCapture({ operationRef: 'synthetic-startup', executable: '/never-open', sourceDirectory: '/never-read', privateRoot: '/never-write',
+    generation: 1, signal: new AbortController().signal, deadline: performance.now() + 1000, record: value => { observations.push(value); } });
+  owner.dispose();
+  await assert.rejects(owner.capture(), OrdinaryCodexAuthRefused);
+  await owner.settled;
+  assert.equal(observations.length, 1);
+  const {captureRef, ...observation} = observations[0] as Record<string, unknown>;
+  assert.equal(typeof captureRef, 'string');
+  assert.deepEqual(observation, {outcome: 'refused', stage: 'startup', reason: 'validation', exitObserved: false, closeObserved: false, processGroupGone: false});
+  await assert.rejects(owner.capture(), OrdinaryCodexAuthRefused);
+  assert.equal(observations.length, 1);
+});

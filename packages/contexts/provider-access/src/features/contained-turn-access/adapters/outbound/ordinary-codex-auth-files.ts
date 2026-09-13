@@ -6,10 +6,12 @@ import { AUTH_DISABLED_FEATURES, ORDINARY_CODEX_AUTH_BINARY_SHA256, ORDINARY_COD
 
 const refused = (): never => { throw new OrdinaryCodexAuthRefused(); };
 
-type Identity = { dev: number; ino: number; uid: number; mode: number; size: number; mtimeMs: number; ctimeMs: number };
-const same = (a: Identity, b: Identity) => a.dev === b.dev && a.ino === b.ino && a.uid === b.uid && a.mode === b.mode &&
-  a.size === b.size && a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs;
-async function stable(path: string, directory: boolean, uid: number, privateMode: boolean): Promise<{ handle: FileHandle; identity: Identity; check(): Promise<void> }> {
+type Identity = { dev: number; ino: number; uid: number; mode: number; nlink: number; size: number; mtimeMs: number; ctimeMs: number };
+// Directory child churn changes size/timestamps without replacing the owned directory.
+// Regular auth/executable files must retain their contents, metadata and single link.
+const same = (a: Identity, b: Identity, directory: boolean) => a.dev === b.dev && a.ino === b.ino && a.uid === b.uid && a.mode === b.mode &&
+  (directory || (b.nlink === 1 && a.size === b.size && a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs));
+export async function stableAuthPath(path: string, directory: boolean, uid: number, privateMode: boolean): Promise<{ handle: FileHandle; identity: Identity; check(): Promise<void> }> {
   if (!isAbsolute(path) || await realpath(path) !== path) { return refused(); }
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | (directory ? constants.O_DIRECTORY : 0));
   try {
@@ -17,7 +19,9 @@ async function stable(path: string, directory: boolean, uid: number, privateMode
     if (stat.uid !== uid || (directory ? !stat.isDirectory() : !stat.isFile() || stat.nlink !== 1) ||
         (stat.mode & (privateMode ? 0o077 : 0o022)) !== 0) { refused(); }
     const check = async () => {
-      if (!same(stat, await handle.stat()) || !same(stat, await lstat(path)) || await realpath(path) !== path) { refused(); }
+      if (!same(stat, await handle.stat(), directory) || !same(stat, await lstat(path), directory) || await realpath(path) !== path) {
+        throw new OrdinaryCodexAuthRefused('identity_drift');
+      }
     };
     await check(); return { handle, identity: stat, check };
   } catch (error) { await handle.close(); throw error; }
@@ -29,12 +33,12 @@ export async function prepareAuthFiles(input: { source: string; privateRoot: str
   const owned: FileHandle[] = [];
   let home: string | undefined;
   try {
-    const source = await stable(input.source, true, uid, false); owned.push(source.handle);
-    const auth = await stable(join(input.source, 'auth.json'), false, uid, true); owned.push(auth.handle);
+    const source = await stableAuthPath(input.source, true, uid, false); owned.push(source.handle);
+    const auth = await stableAuthPath(join(input.source, 'auth.json'), false, uid, true); owned.push(auth.handle);
     if (auth.identity.size > 65_536) { refused(); }
-    const root = await stable(input.privateRoot, true, uid, true); owned.push(root.handle);
+    const root = await stableAuthPath(input.privateRoot, true, uid, true); owned.push(root.handle);
     if (input.privateRoot === input.source || input.privateRoot.startsWith(input.source + '/') || input.source.startsWith(input.privateRoot + '/')) { refused(); }
-    const binary = await stable(input.executable, false, uid, false); owned.push(binary.handle);
+    const binary = await stableAuthPath(input.executable, false, uid, false); owned.push(binary.handle);
     if (binary.identity.size > 536_870_912 || !(binary.identity.mode & 0o111)) { refused(); }
     const hash = createHash('sha256');
     for await (const bytes of binary.handle.createReadStream({ autoClose: false })) { input.check(); hash.update(bytes); }
