@@ -1,4 +1,5 @@
 name: adoption-receipt-darwin
+# retrigger 4615d821 (second push)
 # Temporary workflow: Darwin arm64 adoption receipt for Host linux-joined support
 # identity 4615d821 stacked on Host package-helpers D 6de2fea1.
 # The job always checks out that SHA so this workflow-only commit does not
