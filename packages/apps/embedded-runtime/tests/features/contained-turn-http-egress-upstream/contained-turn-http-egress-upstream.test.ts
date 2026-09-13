@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createContainedTurnHttpEgressRoute, createContainedTurnHttpUpstreamTransport }
   from "../../../dist/composition/contained-turn-http-egress-upstream.js";
-import { SYNTHETIC_LOOPBACK_CA } from "../../support/external/agent-execution/fixtures/http-egress-tls/synthetic-loopback-certificates.ts";
+import { SYNTHETIC_LOOPBACK_CA } from "../../package/support/external/agent-execution/fixtures/http-egress-tls/synthetic-loopback-certificates.ts";
 import { harness, selection } from "../../package/support/external/provider-access/features/contained-turn-access/route-selection-fixture.ts";
 
 type Recipe = Parameters<typeof selection>[0];
