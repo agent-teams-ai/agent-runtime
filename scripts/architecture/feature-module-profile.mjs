@@ -82,7 +82,7 @@ const LOCAL_CLASSIFICATION_AUTHORITY = Object.freeze({
   acceptedAdr: "ADR-0017",
   decisionPath: "docs/decisions/0017-feature-module-production-scope-roles.md",
 });
-const LOCAL_MODULE_FILES = Object.freeze(["index.ts", "composition.ts"]);
+export const LOCAL_MODULE_FILES = Object.freeze(["index.ts", "composition.ts"]);
 const LOCAL_FEATURE_ENTRYPOINTS = Object.freeze(["index.ts", "internal.ts"]);
 const LOCAL_ARCHITECTURE_DOCUMENT = "docs/architecture/feature-module-standard-v1-candidate.md";
 const LOCAL_DECISIONS = Object.freeze([
@@ -288,11 +288,27 @@ const moduleEdgeDeclarationIssues = (edges, moduleIds, profilePath) => {
   return issues;
 };
 
+const hostAppCompositionAssemblyPath = (path, productionRoots, hostAppRoots) => {
+  const root = productionRoots.find((candidate) => path.startsWith(`${candidate}/composition/`) && path.endsWith(".ts"));
+  if (!root || !hostAppRoots.has(root)) {return false;}
+  const relative = path.slice(`${root}/composition/`.length);
+  return relative.length > 0 && !relative.includes("/") && LOCAL_MODULE_FILES.includes(posix.basename(path)) === false;
+};
+
 const profileTopologyIssues = (profile, profilePath) => {
   const issues = [], productionRoots = profile.scope.productionRoots, features = profile.features;
-  const expectedAssembly = productionRoots.flatMap((root) => [`${root}/index.ts`, `${root}/composition.ts`]);
+  const expectedCurated = productionRoots.flatMap((root) => [`${root}/index.ts`, `${root}/composition.ts`]);
+  const hostAppRoots = new Set(profile.scope.productionModules
+    .filter(({ role, adoption }) => role === "host-app" && adoption === "active")
+    .map(({ sourceRoot }) => sourceRoot));
   if (!sameValues(profile.moduleRoles, STANDARD_ROLES)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "moduleRoles must declare the five standard roles exactly"));}
-  if (!sameValues(profile.assemblyFiles, expectedAssembly)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "assemblyFiles must contain only index.ts and composition.ts for each production root"));}
+  if (!expectedCurated.every((path) => profile.assemblyFiles.includes(path))) {
+    issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "assemblyFiles must contain index.ts and composition.ts for each production root"));
+  }
+  const extras = profile.assemblyFiles.filter((path) => !expectedCurated.includes(path));
+  if (duplicateValues(profile.assemblyFiles).length || extras.some((path) => !hostAppCompositionAssemblyPath(path, productionRoots, hostAppRoots))) {
+    issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "additional assembly files must be host-app src/composition/*.ts entries"));
+  }
   issues.push(...featureIdentityIssues(features, productionRoots, profilePath));
   issues.push(...featureEdgeDeclarationIssues(profile.featureEdges, features, profilePath));
   issues.push(...moduleEdgeDeclarationIssues(profile.moduleEdges, new Set(profile.scope.productionModules.map(({ id }) => id)), profilePath));

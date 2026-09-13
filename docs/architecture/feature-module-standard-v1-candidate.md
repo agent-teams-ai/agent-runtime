@@ -13,6 +13,7 @@ related:
   - ADR-0019
   - ADR-0020
   - ADR-0021
+  - ADR-0022
   - ADR-0090
 code_anchors:
   - enforcement: required
@@ -357,7 +358,11 @@ public composition types no longer mention `pg`; callers pass a structurally
 compatible pool. Runtime Security package assembly now reaches its four
 features through curated `index.ts` / `internal.ts` entrypoints; the contained-turn
 egress gateway factory lives in the feature composition root so package
-`composition.ts` is import/re-export only. The module stays pending.
+`composition.ts` is import/re-export only. The module stays pending. Activating
+it still requires accepted feature README metadata, `tests/features/` placement,
+and a separate accepted activation ADR. ADR-0022 records the host-app extra
+composition assembly grammar so those remaining steps do not have to change the
+curated `index.ts` / `composition.ts` import/re-export rule.
 
 The deterministic syntax-aware checker is
 `scripts/architecture/check-feature-modules.mjs`. Run
@@ -403,8 +408,15 @@ permissions.
 
 All local feature dependencies are denied unless they follow an allowed
 same-feature layer direction or use a declared cross-feature edge through the
-target feature's public entrypoint. Package assembly and feature entrypoint
-files accept only import/re-export grammar. Configured TypeScript and package
+target feature's public entrypoint. Curated package assembly files (`index.ts`
+and `composition.ts`) and feature entrypoint files accept only import/re-export
+grammar. An active host-app may list additional explicit
+`src/composition/*.ts` assembly files; those files may contain behavior, import
+sibling host composition assembly files, import curated feature entrypoints, and
+import Node or external modules. Deep feature imports still fail closed.
+Bounded-context and platform modules cannot list extra assembly files. The live
+profile does not list extra Host composition files while Embedded Runtime stays
+pending. Configured TypeScript and package
 aliases, package self-imports, `module.require`, and aliases returned by
 `createRequire` cannot bypass these checks. Empty, comments-only, and
 `export {}`-only layer files do not make a declared layer substantive.
@@ -423,7 +435,7 @@ remove or reorder the active root gate. The exact candidate command reports
 zero production diagnostics without exceptions, deviations, extensions,
 wildcards, automatic widening, or scope changes.
 
-ADR-0013, ADR-0017, ADR-0018, ADR-0019, ADR-0020 and ADR-0021 are accepted at their exact governed
+ADR-0013, ADR-0017, ADR-0018, ADR-0019, ADR-0020, ADR-0021 and ADR-0022 are accepted at their exact governed
 paths and are pinned in the immutable accepted-decision registry by the digest
 Foundation computes over their accepted bytes and metadata. The profile is
 `active`, has no blockers, binds its profile-wide activation authority to

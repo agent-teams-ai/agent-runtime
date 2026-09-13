@@ -198,7 +198,7 @@ Document status vocabulary:
 
 Production code must not use an evidence document as its architecture source
 of truth. Accepted ADR-0001 through ADR-0010, ADR-0012 through ADR-0015, and
-ADR-0017 through ADR-0021 and ADR-0090, excluding proposed ADR-0006, proposed ADR-0016, and the unassigned ADR
+ADR-0017 through ADR-0022 and ADR-0090, excluding proposed ADR-0006, proposed ADR-0016, and the unassigned ADR
 identities, plus the promoted-rule column of the traceability matrix are normative for production
 architecture. ADR-0007 governs deterministic documentation changes.
 Supporting architecture documents are accepted only as amended by the ADRs.
