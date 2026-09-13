@@ -40,7 +40,7 @@ const scopeMutations = {
     module.sourceRoot = "packages/contexts/runtime-security-renamed/src";
   },
   "activates a pending module without the reviewed registry": (profile) => {
-    const module = profile.scope.productionModules.find(({ id }) => id === "runtime-security");
+    const module = profile.scope.productionModules.find(({ id }) => id === "embedded-runtime");
     module.adoption = "active";
     module.activationAuthority = "ADR-0013";
   },
@@ -52,7 +52,7 @@ const scopeMutations = {
       .filter((container) => container !== "packages/platform");
   },
   "widens the production roots": (profile) => {
-    profile.scope.productionRoots.push("packages/contexts/runtime-security/src");
+    profile.scope.productionRoots.push("packages/apps/embedded-runtime/src");
   },
   "moves a declared feature to another root": (profile) => {
     const feature = profile.features.find(({ id }) => id === "contained-turn-access");
@@ -67,7 +67,7 @@ const scopeMutations = {
   },
   "drops an excluded root": (profile) => {
     profile.adoption.excludedRoots = profile.adoption.excludedRoots
-      .filter((root) => root !== "packages/contexts/runtime-security");
+      .filter((root) => root !== "packages/apps/embedded-runtime");
   },
   "removes an out-of-scope entry": (profile) => {
     profile.scope.outOfScope = profile.scope.outOfScope.filter((entry) => entry !== "Module Kit");

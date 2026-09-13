@@ -1,0 +1,265 @@
+import type {
+  DiscoverCodexInstallations,
+  InstallationCandidate,
+} from "@agent-teams/agent-execution";
+import type {
+  CodexConfigurationSource,
+  InspectCodexConfiguration,
+} from "@agent-teams/runtime-configuration";
+import type {
+  AuthorizeSetupInspection,
+  AuthorizedConfigurationSource,
+  AuthorizedInstallationCandidate,
+  SetupAuthorizationDiagnostic,
+} from "@agent-teams/runtime-security";
+
+import type {
+  CodexSetupDiagnostic,
+  InspectCodexRuntimeSetup,
+  InspectCodexRuntimeSetupOutcome,
+} from "../../composition/contained-turn-runtime-access.js";
+
+import type { CodexSetupInspectionPlanner } from "./codex-setup-inspection-planner.js";
+import type { OpaqueReferenceDigest } from "./opaque-reference-digest.js";
+import type { TrustedCodexSetupScope } from "../../composition/trusted-runtime-access-scope.js";
+
+export interface BuildCodexSetupViewDependencies {
+  readonly authorizeSetupInspection: AuthorizeSetupInspection;
+  readonly discoverCodexInstallations: DiscoverCodexInstallations;
+  readonly inspectCodexConfiguration: InspectCodexConfiguration;
+  readonly planCodexSetupInspection: CodexSetupInspectionPlanner;
+}
+
+const nativeProfilePattern = /^[A-Za-z0-9_-]{1,64}$/u;
+
+const compareText = (left: string, right: string): number =>
+  left === right ? 0 : left < right ? -1 : 1;
+
+const invokeAsPromise = <T>(operation: () => Promise<T>): Promise<T> =>
+  Promise.resolve().then(operation);
+
+const deepFreeze = <T>(value: T): T => {
+  if (typeof value !== "object" || value === null || Object.isFrozen(value)) {
+    return value;
+  }
+  for (const child of Object.values(value)) {
+    deepFreeze(child);
+  }
+  return Object.freeze(value);
+};
+
+const observationRef = (
+  digest: OpaqueReferenceDigest,
+  opaqueReferenceKey: Uint8Array,
+  scope: TrustedCodexSetupScope,
+): string =>
+  `codex-setup-observation:${digest.hex(
+    opaqueReferenceKey,
+    JSON.stringify(["codex-setup-observation", scope.scopeId, scope.observationEpoch]),
+  )}`;
+
+const installationObservationRef = (
+  digest: OpaqueReferenceDigest,
+  opaqueReferenceKey: Uint8Array,
+  scope: TrustedCodexSetupScope,
+  internalInstallationRef: string,
+): string =>
+  `codex-installation:${digest.hex(
+    opaqueReferenceKey,
+    JSON.stringify([
+      "codex-installation-observation",
+      scope.scopeId,
+      scope.observationEpoch,
+      internalInstallationRef,
+    ]),
+  )}`;
+
+const mapInstallationCandidate = (
+  candidate: AuthorizedInstallationCandidate,
+): InstallationCandidate => ({
+  absolutePath: candidate.absolutePath,
+  ...(candidate.authorizedFileIdentity === undefined
+    ? {}
+    : { authorizedFileIdentity: candidate.authorizedFileIdentity }),
+  canonicalPath: candidate.canonicalPath,
+  custodyRoot: candidate.custodyRoot,
+  displayPath: candidate.displayPath,
+  required: candidate.required,
+  source: candidate.source,
+});
+
+const mapConfigurationSource = (
+  source: AuthorizedConfigurationSource,
+): CodexConfigurationSource => ({
+  absolutePath: source.absolutePath,
+  ...(source.authorizedFileIdentity === undefined
+    ? {}
+    : { authorizedFileIdentity: source.authorizedFileIdentity }),
+  canonicalPath: source.canonicalPath,
+  custodyRoot: source.custodyRoot,
+  displayPath: source.displayPath,
+  kind: source.kind,
+  observationEpoch: source.observationEpoch,
+  ...(source.profileName === undefined ? {} : { profileName: source.profileName }),
+  ...(source.workspaceLayer === undefined
+    ? {}
+    : { workspaceLayer: source.workspaceLayer }),
+});
+
+const mapAuthorizationDiagnostics = (
+  diagnostics: readonly SetupAuthorizationDiagnostic[],
+): readonly CodexSetupDiagnostic[] => diagnostics.map(diagnostic => ({
+  code: diagnostic.code,
+  ...(diagnostic.subject === undefined ? {} : { subject: diagnostic.subject }),
+}));
+
+export const createBuildCodexSetupView = (
+  dependencies: BuildCodexSetupViewDependencies,
+  opaqueReferenceKey: Uint8Array,
+  referenceDigest: OpaqueReferenceDigest,
+) => {
+  if (opaqueReferenceKey.byteLength < 32) {
+    throw new TypeError("opaqueReferenceKey must contain at least 32 bytes");
+  }
+  const referenceKey = Uint8Array.from(opaqueReferenceKey);
+  return async (
+    scope: TrustedCodexSetupScope,
+    input: InspectCodexRuntimeSetup,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<InspectCodexRuntimeSetupOutcome> => {
+    const requestedNativeProfile = input.nativeProfile;
+    const nativeProfile =
+      requestedNativeProfile === undefined ||
+      (typeof requestedNativeProfile === "string" &&
+        nativeProfilePattern.test(requestedNativeProfile))
+        ? requestedNativeProfile
+        : undefined;
+    options?.signal?.throwIfAborted();
+    const plan = dependencies.planCodexSetupInspection.plan(scope);
+    if (plan.status === "unsupported") {
+      return deepFreeze({
+        diagnostics: [],
+        status: "unsupported",
+      });
+    }
+    const authorization = await dependencies.authorizeSetupInspection.execute(
+      {
+        configurationSources: scope.configurationSources,
+        installationCandidates: plan.installationCandidates,
+        observationEpoch: scope.observationEpoch,
+        roots: scope.roots,
+      },
+      options,
+    );
+    options?.signal?.throwIfAborted();
+    if (authorization.status !== "authorized") {
+      return deepFreeze({
+        diagnostics: mapAuthorizationDiagnostics([
+          ...plan.diagnostics,
+          ...authorization.diagnostics,
+        ]),
+        status: authorization.status,
+      });
+    }
+
+    const installationCandidates = authorization.installationCandidates.map(
+      mapInstallationCandidate,
+    );
+    const configurationSources = authorization.configurationSources.map(
+      mapConfigurationSource,
+    );
+
+    const diagnostics: CodexSetupDiagnostic[] = [
+      ...mapAuthorizationDiagnostics(plan.diagnostics),
+      ...mapAuthorizationDiagnostics(authorization.diagnostics),
+    ];
+    if (requestedNativeProfile !== undefined && nativeProfile === undefined) {
+      diagnostics.push({ code: "native_profile_invalid" });
+    }
+
+    const [installationSettlement, configurationSettlement] = await Promise.allSettled([
+      invokeAsPromise(() => dependencies.discoverCodexInstallations.execute(
+        {
+          candidates: installationCandidates,
+          observationEpoch: authorization.observationEpoch,
+        },
+        options,
+      )),
+      invokeAsPromise(() => dependencies.inspectCodexConfiguration.execute(
+        {
+          dialect: scope.configurationDialect,
+          identityScope: scope.scopeId,
+          observationEpoch: authorization.observationEpoch,
+          sources: configurationSources,
+          ...(nativeProfile === undefined ? {} : { nativeProfile }),
+        },
+        options,
+      )),
+    ]);
+    if (installationSettlement.status === "rejected") {
+      throw installationSettlement.reason;
+    }
+    if (configurationSettlement.status === "rejected") {
+      throw configurationSettlement.reason;
+    }
+    const installations = installationSettlement.value;
+    const configuration = configurationSettlement.value;
+
+    diagnostics.push(
+      ...installations.diagnostics.map(diagnostic => ({
+        code: diagnostic.code,
+        subject: diagnostic.candidate,
+      })),
+      ...configuration.diagnostics.map(diagnostic => ({
+        code: diagnostic.code,
+        ...(diagnostic.setting === undefined && diagnostic.sourceRef === undefined
+          ? {}
+          : { subject: diagnostic.setting ?? diagnostic.sourceRef }),
+      })),
+    );
+    const sortedDiagnostics = diagnostics.toSorted((left, right) =>
+      compareText(
+        `${left.code}:${left.subject ?? ""}`,
+        `${right.code}:${right.subject ?? ""}`,
+      ),
+    );
+
+    const nextActions = new Set<
+      "install_codex" | "review_configuration" | "trust_workspace"
+    >();
+    if (installations.installations.length === 0) {
+      nextActions.add("install_codex");
+    }
+    if (
+      configuration.diagnostics.length > 0 ||
+      diagnostics.some(item => item.code === "native_profile_invalid")
+    ) {
+      nextActions.add("review_configuration");
+    }
+    if (authorization.diagnostics.some(item => item.code === "source_untrusted")) {
+      nextActions.add("trust_workspace");
+    }
+
+    return deepFreeze({
+      diagnostics: sortedDiagnostics,
+      installations: installations.installations.map(installation => ({
+        aliases: installation.aliases.map(alias => ({ ...alias })),
+        installationRef: installationObservationRef(
+          referenceDigest,
+          referenceKey,
+          scope,
+          installation.installationRef,
+        ),
+        status: installation.status,
+      })),
+      nextActions: [...nextActions].toSorted(),
+      observationRef: observationRef(referenceDigest, referenceKey, scope),
+      settings: configuration.settings.map(setting => ({ ...setting })),
+      sources: configuration.sources.map(source => ({ ...source })),
+      status:
+        installations.installations.length > 0 && sortedDiagnostics.length === 0
+          ? "observed"
+          : "partial",
+    });
+  };
+};

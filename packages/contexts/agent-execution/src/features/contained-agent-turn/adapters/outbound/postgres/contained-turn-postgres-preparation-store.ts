@@ -1,3 +1,6 @@
+import type {
+  ContainedTurnPostgresClient,
+} from "./contained-turn-postgres-pool.js";
 import type { ContainedTurnKernelOperationStore } from "../../../application/ports/outbound/contained-turn-ports.js";
 import { containedTurnPreparationToken } from "../../../application/contained-turn-preparation-cleanup.js";
 import {
@@ -98,12 +101,12 @@ export class ContainedTurnPostgresPreparationStore {
     private readonly intents: ContainedTurnPostgresIntentStore,
   ) {}
 
-  async #load(client: import("pg").PoolClient, operationId: string, scope: import("../../../domain/contained-turn-authority.js").ContainedTurnScope) {
+  async #load(client: ContainedTurnPostgresClient, operationId: string, scope: import("../../../domain/contained-turn-authority.js").ContainedTurnScope) {
     return this.operations.load(client, operationId, true, scope);
   }
 
   async #persist(
-    client: import("pg").PoolClient,
+    client: ContainedTurnPostgresClient,
     previous: ContainedTurnKernelOperation,
     next: ContainedTurnKernelOperation,
   ): Promise<void> {

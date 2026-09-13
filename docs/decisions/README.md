@@ -22,6 +22,9 @@ related:
   - ADR-0017
   - ADR-0018
   - ADR-0019
+  - ADR-0020
+  - ADR-0021
+  - ADR-0022
 blocked_by: []
 code_anchors:
   - enforcement: required
@@ -89,6 +92,17 @@ immutable evidence; a later change uses an explicit superseding decision.
 - [ADR-0019: Stable filesystem custody feature activation](0019-stable-filesystem-custody-feature-activation.md)
   activates the Filesystem Custody platform module as one cohesive feature with
   a contracts-only public entry and its runtime behind the composition entry.
+- [ADR-0020: Runtime Configuration feature activation](0020-runtime-configuration-feature-activation.md)
+  activates the Runtime Configuration bounded context as two Feature Module
+  Standard v1 features with a runtime edge onto Filesystem Custody.
+- [ADR-0021: Runtime Security feature activation](0021-runtime-security-feature-activation.md)
+  activates the Runtime Security bounded context as four Feature Module
+  Standard v1 features with a runtime edge onto Filesystem Custody.
+- [ADR-0022: Host-app composition directory assembly grammar](0022-host-app-composition-directory-assembly-grammar.md)
+  lets an active host-app list extra `src/composition/*.ts` assembly files that
+  may contain process-lifecycle behavior without rewriting ADR-0013 or
+  activating Embedded Runtime.
+
 ## Superseded
 
 No superseded decisions.

@@ -1,5 +1,7 @@
-import type { Pool } from "pg";
-
+import type {
+  ContainedTurnPostgresClient,
+  ContainedTurnPostgresPool,
+} from "./contained-turn-postgres-pool.js";
 import type {
   ContainedTurnKernelOperationStore,
   ContainedTurnOwnerStoreAuthority,
@@ -42,11 +44,16 @@ export {
 } from "./contained-turn-postgres-transactions.js";
 
 export type { ContainedTurnPostgresIdentitySource } from "./contained-turn-postgres-operation-authority.js";
+export type {
+  ContainedTurnPostgresClient,
+  ContainedTurnPostgresPool,
+  ContainedTurnPostgresQueryResult,
+} from "./contained-turn-postgres-pool.js";
 export interface PostgresContainedTurnOperationStoreOptions {
   /** Trusted composition only. Omission closes admission and claim; authority is never inferred from a request. */
   readonly intentAuthority?: ContainedTurnIntentAuthority;
   readonly identities?: ContainedTurnPostgresIdentitySource;
-  readonly pool: Pool;
+  readonly pool: ContainedTurnPostgresPool;
   /** Used only for deterministic mixed-version migration tests and staged drains. */
   readonly runtimeSchemaVersion?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   readonly timeouts?: Partial<ContainedTurnPostgresTimeouts>;
@@ -87,7 +94,7 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
   }
 
   async #load(
-    client: import("pg").PoolClient,
+    client: ContainedTurnPostgresClient,
     operationId: string,
     lock = false,
     scope?: import("../../../domain/contained-turn-authority.js").ContainedTurnScope,
@@ -96,7 +103,7 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
   }
 
   async #project(
-    client: import("pg").PoolClient,
+    client: ContainedTurnPostgresClient,
     previous: ContainedTurnKernelOperation | undefined,
     next: ContainedTurnKernelOperation,
   ): Promise<void> {
@@ -104,7 +111,7 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
   }
 
   async #persist(
-    client: import("pg").PoolClient,
+    client: ContainedTurnPostgresClient,
     previous: ContainedTurnKernelOperation,
     next: ContainedTurnKernelOperation,
   ): Promise<void> {

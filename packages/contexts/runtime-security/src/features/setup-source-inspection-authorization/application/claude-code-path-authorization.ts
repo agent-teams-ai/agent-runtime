@@ -1,4 +1,4 @@
-import type { TrustedClaudeCodeSetupInspectionScope } from "../contracts/claude-code-setup-inspection-authorization.js";
+import type { TrustedClaudeCodeSetupInspectionScope } from "./models/claude-code-setup-inspection-models.js";
 import type { PathAlgebra } from "./ports/outbound/path-algebra.js";
 import type {
   CanonicalPathObservation,

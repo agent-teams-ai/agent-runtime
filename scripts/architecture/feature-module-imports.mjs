@@ -407,8 +407,24 @@ const createCapabilityAnalysis = (program) => {
   };
 };
 
+const specifierLiterals = (node) => {
+  const values = [];
+  walkAst(node, (child) => {
+    if (child.type === "Literal" || child.type === "TemplateLiteral") {
+      const value = literalValue(child);
+      if (typeof value === "string") {values.push(value);}
+    }
+  });
+  return values;
+};
+
 const makeRecord = ({ node, specifierNode, kind, syntax, source, nonliteral = false }) => ({
-  specifier: literalValue(specifierNode), kind, syntax, nonliteral, line: lineAt(source, specifierNode?.start ?? node.start),
+  specifier: literalValue(specifierNode),
+  specifierLiterals: specifierLiterals(specifierNode),
+  kind,
+  syntax,
+  nonliteral,
+  line: lineAt(source, specifierNode?.start ?? node.start),
 });
 const typeOnly = (node, property) => node[property] === "type"
   || Boolean(node.specifiers?.length) && node.specifiers.every((specifier) => specifier[property] === "type");

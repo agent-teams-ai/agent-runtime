@@ -28,6 +28,20 @@ on:
       - refactor/fms-host-http-egress
       - chore/classify-native-helper-test
       - cursor/fms-linux-deploy-7d17
+      - cursor/fms-host-leftover-7d17
+      - cursor/fms-setup-views-linux-7d17
+      - cursor/fms-runtime-access-linux-7d17
+      - cursor/fms-rc-layer-linux-7d17
+      - cursor/fms-rs-barrels-linux-7d17
+      - cursor/fms-rc-package-arch-load-7d17
+      - cursor/fms-rc-activation-linux-7d17
+      - cursor/fms-rs-activation-linux-7d17
+      - cursor/fms-host-assembly-grammar-7d17
+      - cursor/fms-host-readmes-7d17
+      - cursor/fms-host-feature-tests-7d17
+      - cursor/fms-host-package-tests-7d17
+      - cursor/fms-host-mixed-package-7d17
+      - cursor/fms-host-rsa-package-7d17
       - docs/sr-contained-turn-anti-patterns
       - refactor/fms-host-access-invariants
       - refactor/fms-host-darwin-deployment

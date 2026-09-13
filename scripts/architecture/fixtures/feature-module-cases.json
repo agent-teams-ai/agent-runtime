@@ -1597,6 +1597,73 @@
       "expected": [{ "code": "FM_TEST_PLACEMENT", "path": "tests/package/deep.test.ts", "line": 1 }]
     },
     {
+      "name": "package-test-literal-architecture-tooling-load-is-allowed",
+      "files": { "tests/package/custody.test.ts": "import { read } from '../../scripts/architecture/ar2-evidence-custody.mjs';\nvoid read;\n" },
+      "expected": []
+    },
+    {
+      "name": "package-test-literal-dynamic-architecture-tooling-load-is-allowed",
+      "files": { "tests/package/custody.test.ts": "const { read } = await import('../../scripts/architecture/ar2-evidence-custody.mjs');\nvoid read;\n" },
+      "expected": []
+    },
+    {
+      "name": "nested-package-test-literal-architecture-tooling-load-is-allowed",
+      "nestedModules": true,
+      "files": { "packages/a/tests/package/custody.test.ts": "import { read } from '../../../../scripts/architecture/ar2-evidence-custody.mjs';\nvoid read;\n" },
+      "expected": []
+    },
+    {
+      "name": "package-test-helper-under-package-dir-may-load-architecture-tooling",
+      "files": {
+        "tests/package/custody.test.ts": "import { read } from './helper.js';\nvoid read;\n",
+        "tests/package/helper.ts": "export { read } from '../../scripts/architecture/ar2-evidence-custody.mjs';\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "feature-test-rejects-repo-architecture-script-load",
+      "files": { "tests/features/alpha/value.test.ts": "import { read } from '../../../scripts/architecture/ar2-evidence-custody.mjs';\nvoid read;\n" },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "tests/features/alpha/value.test.ts", "line": 1 }]
+    },
+    {
+      "name": "package-test-nonliteral-architecture-load-fails-closed",
+      "files": { "tests/package/custody.test.ts": "const target = '../../scripts/architecture/ar2-evidence-custody.mjs';\nconst { read } = await import(target);\nvoid read;\n" },
+      "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "tests/package/custody.test.ts", "line": 2 }]
+    },
+    {
+      "name": "package-test-dynamic-architecture-tooling-join-is-allowed",
+      "files": { "tests/package/custody.test.ts": "const { read } = await import(join(root, 'scripts/architecture/ar2-evidence-custody.mjs'));\nvoid read;\n" },
+      "expected": []
+    },
+    {
+      "name": "feature-test-dynamic-architecture-tooling-join-fails-closed",
+      "files": { "tests/features/alpha/value.test.ts": "const { read } = await import(join(root, 'scripts/architecture/ar2-evidence-custody.mjs'));\nvoid read;\n" },
+      "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "tests/features/alpha/value.test.ts", "line": 1 }]
+    },
+    {
+      "name": "package-test-dynamic-architecture-join-rejects-extra-literals",
+      "files": { "tests/package/custody.test.ts": "const { read } = await import(join('root', 'scripts/architecture/ar2-evidence-custody.mjs'));\nvoid read;\n" },
+      "expected": [{ "code": "FM_NONLITERAL_LOADING", "path": "tests/package/custody.test.ts", "line": 1 }]
+    },
+    {
+      "name": "package-test-rejects-non-architecture-repo-script-load",
+      "files": { "tests/package/docs.test.ts": "import { load } from '../../scripts/docs/foo.mjs';\nvoid load;\n" },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "tests/package/docs.test.ts", "line": 1 }]
+    },
+    {
+      "name": "package-test-rejects-nested-architecture-script-load",
+      "files": { "tests/package/nested.test.ts": "import { load } from '../../scripts/architecture/nested/foo.mjs';\nvoid load;\n" },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "tests/package/nested.test.ts", "line": 1 }]
+    },
+    {
+      "name": "package-test-helper-outside-package-dir-rejects-architecture-load",
+      "files": {
+        "tests/package/custody.test.ts": "import { read } from '../helpers/load.js';\nvoid read;\n",
+        "tests/helpers/load.ts": "export { read } from '../../scripts/architecture/ar2-evidence-custody.mjs';\n"
+      },
+      "expected": [{ "code": "FM_FILESYSTEM_IDENTITY", "path": "tests/helpers/load.ts", "line": 1 }]
+    },
+    {
       "name": "symlinked-test-file-fails-closed",
       "files": { "tests/features/alpha/value.test.ts": "import { value } from '../../../src/features/alpha/domain/value.js';\nvoid value;\n" },
       "symlinks": [{ "path": "tests/features/alpha/value.test.ts", "target": "symlink-targets/value.fixture", "kind": "file" }],
@@ -1966,6 +2033,88 @@
       "productionModules": [{ "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
       "files": { "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"host-app\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n" },
       "expected": []
+    },
+    {
+      "name": "bounded-context-rejects-extra-composition-assembly",
+      "profileExtra": {
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "src/composition/host.ts"]
+      },
+      "files": { "src/composition/host.ts": "export const compose = () => true;\n" },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "host-app-rejects-assembly-outside-composition-directory",
+      "productionModules": [{ "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "profileExtra": {
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "src/legacy.ts"]
+      },
+      "files": {
+        "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"host-app\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+        "src/legacy.ts": "export const legacy = true;\n"
+      },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "host-app-rejects-nested-composition-assembly",
+      "productionModules": [{ "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "profileExtra": {
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "src/composition/nested/host.ts"]
+      },
+      "files": {
+        "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"host-app\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+        "src/composition/nested/host.ts": "export const compose = () => true;\n"
+      },
+      "expected": [{ "code": "FM_PROFILE_INVALID", "path": "profile.json", "line": 1 }]
+    },
+    {
+      "name": "host-app-composition-assembly-may-contain-inline-behavior",
+      "productionModules": [{ "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "profileExtra": {
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "src/composition/host.ts"]
+      },
+      "files": {
+        "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"host-app\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+        "src/composition/host.ts": "export const compose = () => true;\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "host-app-composition-assembly-may-import-siblings-entrypoints-and-node",
+      "productionModules": [{ "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "profileExtra": {
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "src/composition/host.ts", "src/composition/support.ts"]
+      },
+      "files": {
+        "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"host-app\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+        "src/composition/support.ts": "export const support = true;\n",
+        "src/composition/host.ts": "import { value } from '../features/alpha/internal.js';\nimport { support } from './support.js';\nimport fs from 'node:fs';\nexport const compose = () => value && support && fs.constants.F_OK;\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "host-app-composition-assembly-rejects-feature-deep-import",
+      "productionModules": [{ "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "profileExtra": {
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "src/composition/host.ts"]
+      },
+      "files": {
+        "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"host-app\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+        "src/composition/host.ts": "import { value } from '../features/alpha/domain/value.js';\nexport const compose = () => value;\n"
+      },
+      "expected": [{ "code": "FM_FEATURE_DEEP_IMPORT", "path": "src/composition/host.ts", "line": 1 }]
+    },
+    {
+      "name": "host-app-unowned-source-still-fails-with-composition-assembly",
+      "productionModules": [{ "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "profileExtra": {
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "src/composition/host.ts"]
+      },
+      "files": {
+        "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"host-app\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+        "src/composition/host.ts": "export const compose = () => true;\n",
+        "src/legacy.ts": "export const legacy = true;\n"
+      },
+      "expected": [{ "code": "FM_BEHAVIOR_OUTSIDE_FEATURE", "path": "src/legacy.ts", "line": 1 }]
     },
     {
       "name": "platform-module-exports-only-its-public-assembly-file",

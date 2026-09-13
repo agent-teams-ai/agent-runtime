@@ -5,7 +5,8 @@ import type {
   RuntimeContainedTurnAccess,
   SubmitRuntimeContainedTurnInput,
   SubmitRuntimeContainedTurnOutcome,
-} from "../../contracts/runtime-access.js";
+} from "./runtime-access.js";
+
 import { raceWithAbort } from "../../composition/runtime-access-lifecycle.js";
 import {
   containedTurnOwnerInvocationFailed,

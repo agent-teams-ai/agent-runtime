@@ -1,7 +1,10 @@
+import type {
+  ContainedTurnPostgresClient,
+  ContainedTurnPostgresPool,
+  ContainedTurnPostgresQueryResult,
+} from "./contained-turn-postgres-pool.js";
 import { validateContainedTurnIntentCatalog } from "./contained-turn-postgres-intent-catalog.js";
 import { createHash } from "node:crypto";
-
-import type { Pool, PoolClient } from "pg";
 
 import {
   canonicalContainedTurnPostgresJson,
@@ -58,7 +61,7 @@ interface MigrationHistoryRow extends MigrationRow {
   readonly predecessor_digest: string | null;
 }
 
-const beginMigration = async (client: PoolClient): Promise<void> => {
+const beginMigration = async (client: ContainedTurnPostgresClient): Promise<void> => {
   await client.query("BEGIN");
   await client.query(
     `SELECT set_config('lock_timeout', $1, true),
@@ -73,11 +76,11 @@ const beginMigration = async (client: PoolClient): Promise<void> => {
   ]);
 };
 
-const rollbackQuietly = async (client: PoolClient): Promise<boolean> => {
+const rollbackQuietly = async (client: ContainedTurnPostgresClient): Promise<boolean> => {
   try {await client.query("ROLLBACK"); return true;} catch {return false;}
 };
 
-const connectForMigration = async (pool: Pool): Promise<PoolClient> => {
+const connectForMigration = async (pool: ContainedTurnPostgresPool): Promise<ContainedTurnPostgresClient> => {
   const pending = pool.connect();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
@@ -96,13 +99,13 @@ const connectForMigration = async (pool: Pool): Promise<PoolClient> => {
   }
 };
 
-const currentMigration = (client: PoolClient): Promise<import("pg").QueryResult<MigrationRow>> =>
-  client.query(
+const currentMigration = (client: ContainedTurnPostgresClient): Promise<ContainedTurnPostgresQueryResult<MigrationRow>> =>
+  client.query<MigrationRow>(
     "SELECT version, migration_digest FROM agent_execution.schema_migration WHERE component = $1 FOR UPDATE",
     [CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE.component],
   );
 
-const ensureBootstrap = async (client: PoolClient): Promise<void> => {
+const ensureBootstrap = async (client: ContainedTurnPostgresClient): Promise<void> => {
   const catalog = await client.query<{ history: string | null; migration: string | null }>(
     `SELECT to_regclass('agent_execution.schema_migration')::text AS migration,
             to_regclass('agent_execution.schema_migration_history')::text AS history`,
@@ -141,7 +144,7 @@ const ensureBootstrap = async (client: PoolClient): Promise<void> => {
   }
 };
 
-const verifyHistory = async (client: PoolClient, currentVersion: number): Promise<void> => {
+const verifyHistory = async (client: ContainedTurnPostgresClient, currentVersion: number): Promise<void> => {
   const rows = await client.query<MigrationHistoryRow>(
     `SELECT version, migration_digest, predecessor_digest
        FROM agent_execution.schema_migration_history
@@ -162,7 +165,7 @@ const verifyHistory = async (client: PoolClient, currentVersion: number): Promis
 };
 
 const validateV5RuntimeFenceCatalog = async (
-  client: PoolClient,
+  client: ContainedTurnPostgresClient,
   triggerDefinition: string | undefined,
 ): Promise<void> => {
   const quarantine = await client.query<{ relforcerowsecurity: boolean; relrowsecurity: boolean }>(
@@ -204,7 +207,7 @@ const validateV5RuntimeFenceCatalog = async (
   }
 };
 
-const validatePreparationCleanupCatalog = async (client: PoolClient, version: number): Promise<void> => {
+const validatePreparationCleanupCatalog = async (client: ContainedTurnPostgresClient, version: number): Promise<void> => {
   if (version >= 6) {
     const quarantineDebt = await client.query<{ is_nullable: "NO" | "YES" }>(
       `SELECT is_nullable FROM information_schema.columns
@@ -226,7 +229,7 @@ const validatePreparationCleanupCatalog = async (client: PoolClient, version: nu
   }
 };
 
-const validateCurrentCatalog = async (client: PoolClient, version: number): Promise<void> => {
+const validateCurrentCatalog = async (client: ContainedTurnPostgresClient, version: number): Promise<void> => {
   if (version >= 8) {await validateContainedTurnIntentCatalog(client);}
   if (version < 3) {return;}
   const columns = await client.query<{ column_name: string; is_nullable: "NO" | "YES" }>(
@@ -296,7 +299,7 @@ const addMigrationBytes = (total: number, candidate: number): number => {
   return next;
 };
 
-export const backfillContainedTurnPreparationDigests = async (client: PoolClient): Promise<void> => {
+export const backfillContainedTurnPreparationDigests = async (client: ContainedTurnPostgresClient): Promise<void> => {
   await client.query(
     "LOCK TABLE agent_execution.contained_turn_dispatch_preparation_v1 IN SHARE ROW EXCLUSIVE MODE",
   );
@@ -344,7 +347,7 @@ export const backfillContainedTurnPreparationDigests = async (client: PoolClient
   }
 };
 
-export const validateContainedTurnLegacyOperationDigests = async (client: PoolClient): Promise<void> => {
+export const validateContainedTurnLegacyOperationDigests = async (client: ContainedTurnPostgresClient): Promise<void> => {
   await client.query(
     "LOCK TABLE agent_execution.contained_turn_operation_v1 IN SHARE ROW EXCLUSIVE MODE",
   );
@@ -375,7 +378,7 @@ export const validateContainedTurnLegacyOperationDigests = async (client: PoolCl
   }
 };
 
-const rejectPopulatedV1WithoutExactConversion = async (client: PoolClient): Promise<void> => {
+const rejectPopulatedV1WithoutExactConversion = async (client: ContainedTurnPostgresClient): Promise<void> => {
   const result = await client.query<{
     has_operations: boolean;
     has_outputs: boolean;
@@ -399,7 +402,7 @@ const rejectPopulatedV1WithoutExactConversion = async (client: PoolClient): Prom
 };
 
 const applyMigration = async (
-  client: PoolClient,
+  client: ContainedTurnPostgresClient,
   migration: ReturnType<typeof migrationFor>,
 ): Promise<void> => {
   const current = await currentMigration(client);
@@ -449,7 +452,7 @@ export interface ApplyContainedTurnPostgresSchemaOptions {
 }
 
 export const applyContainedTurnPostgresSchema = async (
-  pool: Pool,
+  pool: ContainedTurnPostgresPool,
   options: ApplyContainedTurnPostgresSchemaOptions = {},
 ): Promise<void> => {
   const targetVersion = options.targetVersion ?? CONTAINED_TURN_POSTGRES_SCHEMA_VERSION;
@@ -492,7 +495,7 @@ export const applyContainedTurnPostgresSchema = async (
 };
 
 /** Rolls back v4 only before current-codec or cross-project writes make it unsafe. */
-export const rollbackContainedTurnPostgresSchemaV4 = async (pool: Pool): Promise<void> => {
+export const rollbackContainedTurnPostgresSchemaV4 = async (pool: ContainedTurnPostgresPool): Promise<void> => {
   const client = await connectForMigration(pool);
   let discardClient = false;
   try {

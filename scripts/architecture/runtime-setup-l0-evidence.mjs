@@ -22,8 +22,8 @@ import {
 import { createEvidenceInputs } from "./runtime-setup-l0-evidence-inputs.mjs";
 
 import {
-  adoptionPaths, adoptionConstruction, adoptionEvidenceFiles, assertAdoptionAuthority, retainedHistoricalEvidenceRoots,
-  validateAdoptionReport,
+  adoptionPaths, adoptionConstruction, assertAdoptionAuthority, retainedHistoricalEvidenceRoots,
+  createAdoptionEvidenceInputs, validateAdoptionReport,
 } from "./runtime-setup-l0-evidence-adoption.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -486,9 +486,8 @@ if (adoption) {
   for (const name of ["@get-modular/core", "@get-modular/assembly"]) {
     assert.ok(graphImports.has(name) || defaultImports.has(name), `current construction lacks public root ${name}`);
   }
-  const currentInputs = createEvidenceInputs({ repositoryRoot, git, readRevisionFile,
-    files: { ...evidenceFiles, sources: [...evidenceFiles.sources, ...adoptionEvidenceFiles,
-      profile.standard.evidencePath, ...profile.packages.map(pkg => pkg.archivePath)] },
+  const { current: currentInputs, retained: retainedAdoptionInputs } = createAdoptionEvidenceInputs({
+    repositoryRoot, git, readRevisionFile, evidenceRoots, evidenceFiles, profile,
   });
   currentInputs.assertEvidenceRootsClean();
   // Schema-v1 remains immutable and is validated against its own source closure.
@@ -498,7 +497,7 @@ if (adoption) {
   const retained = JSON.parse(retainedBytes);
   validateAdoptionReport(retained, {sourceRevision: retained.sourceRevision,
     historicalRevision: stored.sourceRevision,
-    artifactDigests: await currentInputs.artifactDigestsAtRevision(retained.sourceRevision)});
+    artifactDigests: await retainedAdoptionInputs.artifactDigestsAtRevision(retained.sourceRevision)});
   const output = resolve(option("--output") ?? join(repositoryRoot, v2ReportPath));
   if (mode === "--capture-adoption-receipt") {
     assert.ok(option("--output"), "receipt --output is required");

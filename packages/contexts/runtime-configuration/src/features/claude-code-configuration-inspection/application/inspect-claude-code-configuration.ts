@@ -2,12 +2,12 @@ import {
   CLAUDE_CODE_BUDGETS, CLAUDE_CODE_DIALECT, CLAUDE_CODE_SOURCE_PLAN_CONTRACT,
 } from "./models/claude-code-vocabulary.js";
 import type {
-  ClaudeCodeConfigurationDiagnostic,
   ClaudeCodeConfigurationSource, ClaudeCodeDeferredModelObservation,
-  ClaudeCodeSourceObservation, InspectClaudeCodeConfiguration,
-  InspectClaudeCodeConfigurationInput, InspectClaudeCodeConfigurationResult,
-  ObservedPortableClaudeCodeIntent, TrustedClaudeCodeObservedSourcePlan,
-} from "../contracts/claude-code-configuration-inspection.js";
+  ClaudeCodeInspectionDiagnostic, ClaudeCodeInspectionOutcome,
+  ClaudeCodeInspectionRequest, ClaudeCodeSourceObservation,
+  InspectClaudeCodeConfigurationUseCase, ObservedPortableClaudeCodeIntent,
+  ClaudeCodeObservedSourcePlan,
+} from "./models/claude-code-inspection-models.js";
 import type { ClaudeCodeJsonParser } from "./ports/outbound/claude-code-json-parser.js";
 import {
   claudeCodeConfigurationSemanticClassifierContract,
@@ -60,13 +60,13 @@ const exactObjectKeys = (value: unknown, allowed: readonly string[], required = 
 const hmac = (digest: ConfigurationDigest, key: Uint8Array, domain: string, value: unknown): string =>
   `${domain}:hmac-sha256:${digest.hmacSha256Hex(key, JSON.stringify(value))}`;
 
-const collectorPreimage = (plan: TrustedClaudeCodeObservedSourcePlan) => ({
+const collectorPreimage = (plan: ClaudeCodeObservedSourcePlan) => ({
   bundleId: plan.collector.bundleId, id: plan.collector.id,
   observationEpoch: plan.collector.observationEpoch,
   platform: plan.collector.platform, version: plan.collector.version,
 });
 
-const topologyPreimage = (plan: TrustedClaudeCodeObservedSourcePlan) => ({
+const topologyPreimage = (plan: ClaudeCodeObservedSourcePlan) => ({
   claim: plan.claim,
   collector: collectorPreimage(plan),
   contract: plan.contract,
@@ -95,9 +95,9 @@ const pathValid = (value: unknown): value is string =>
 const pathWithin = (root: string, candidate: string): boolean =>
   root === "/" ? candidate.startsWith("/") : candidate === root || candidate.startsWith(`${root}/`);
 
-type PlanDiagnostic = ClaudeCodeConfigurationDiagnostic["code"];
+type PlanDiagnostic = ClaudeCodeInspectionDiagnostic["code"];
 
-const validateCollector = (collector: TrustedClaudeCodeObservedSourcePlan["collector"]): PlanDiagnostic | undefined => {
+const validateCollector = (collector: ClaudeCodeObservedSourcePlan["collector"]): PlanDiagnostic | undefined => {
   if (!exactObjectKeys(collector, ["bundleId", "id", "observationEpoch", "platform", "version"])) {
     return "source_plan_invalid";
   }
@@ -107,7 +107,7 @@ const validateCollector = (collector: TrustedClaudeCodeObservedSourcePlan["colle
 };
 
 const collectRootIds = (
-  roots: TrustedClaudeCodeObservedSourcePlan["roots"],
+  roots: ClaudeCodeObservedSourcePlan["roots"],
 ): { readonly diagnostic?: PlanDiagnostic; readonly rootIds: ReadonlySet<string> } => {
   const rootIds = new Set<string>();
   for (const root of roots) {
@@ -170,7 +170,7 @@ const validateSourceSemantics = (source: ClaudeCodeConfigurationSource): PlanDia
 
 const validateAuthorizedSource = (
   source: Extract<ClaudeCodeConfigurationSource, { readonly access: "authorized" }>,
-  plan: TrustedClaudeCodeObservedSourcePlan,
+  plan: ClaudeCodeObservedSourcePlan,
   canonicalSources: Set<string>,
 ): PlanDiagnostic | undefined => {
   if (!exactObjectKeys(source.custodyRoot, ["absolutePath", "canonicalPath", "rootId"])) {
@@ -192,7 +192,7 @@ const validateAuthorizedSource = (
 };
 
 const validateSources = (
-  plan: TrustedClaudeCodeObservedSourcePlan,
+  plan: ClaudeCodeObservedSourcePlan,
   rootIds: ReadonlySet<string>,
 ): PlanDiagnostic | undefined => {
   const sourceIds = new Set<string>();
@@ -212,7 +212,7 @@ const validateSources = (
   return undefined;
 };
 
-const validatePlan = (plan: TrustedClaudeCodeObservedSourcePlan): PlanDiagnostic | undefined => {
+const validatePlan = (plan: ClaudeCodeObservedSourcePlan): PlanDiagnostic | undefined => {
   if (typeof plan !== "object" || plan === null || Array.isArray(plan)) {return "source_plan_unsupported";}
   if (plan.contract !== CLAUDE_CODE_SOURCE_PLAN_CONTRACT || plan.claim !== "observed-files-only") {
     return "source_plan_unsupported";
@@ -306,7 +306,7 @@ const parseSource = (
   bytes: Uint8Array,
   parser: ClaudeCodeJsonParser,
   signal?: AbortSignal,
-): { readonly data: Readonly<Record<string, unknown>> } | { readonly diagnostic: ClaudeCodeConfigurationDiagnostic["code"] } => {
+): { readonly data: Readonly<Record<string, unknown>> } | { readonly diagnostic: ClaudeCodeInspectionDiagnostic["code"] } => {
   let parsed;
   try { parsed = validateClaudeCodeJsonParseResult(parser.parse(bytes, signal ? { signal } : undefined)); }
   catch { signal?.throwIfAborted(); }
@@ -318,7 +318,7 @@ const parseSource = (
 
 const classifySource = (
   document: Readonly<Record<string, unknown>>,
-  input: InspectClaudeCodeConfigurationInput,
+  input: ClaudeCodeInspectionRequest,
   classifier: ClaudeCodeConfigurationSemanticClassifier,
   signal?: AbortSignal,
 ): ReturnType<typeof validateClaudeCodeSemanticClassification> | undefined => {
@@ -333,7 +333,7 @@ const classifySource = (
 };
 
 const appendClassificationDiagnostics = (
-  target: ClaudeCodeConfigurationDiagnostic[],
+  target: ClaudeCodeInspectionDiagnostic[],
   classification: ReturnType<typeof validateClaudeCodeSemanticClassification>,
   sourceRef: string,
 ): void => {
@@ -345,8 +345,8 @@ const appendClassificationDiagnostics = (
 };
 
 const evaluateSource = async (
-  source: BoundSource, input: InspectClaudeCodeConfigurationInput, dependencies: Dependencies,
-  diagnostics: ClaudeCodeConfigurationDiagnostic[], signal?: AbortSignal,
+  source: BoundSource, input: ClaudeCodeInspectionRequest, dependencies: Dependencies,
+  diagnostics: ClaudeCodeInspectionDiagnostic[], signal?: AbortSignal,
 ): Promise<EvaluatedSource> => {
   const empty = (status: ClaudeCodeSourceObservation["status"]): EvaluatedSource =>
     ({ bytesRead: 0, definitions: [], deferredObservations: [], observation: statusObservation(source, status) });
@@ -392,13 +392,13 @@ const evaluateSource = async (
 interface ResultParts {
   readonly classifierRevision: string;
   readonly collectorRef: string;
-  readonly diagnostics: readonly ClaudeCodeConfigurationDiagnostic[];
+  readonly diagnostics: readonly ClaudeCodeInspectionDiagnostic[];
   readonly evaluated: readonly EvaluatedSource[];
-  readonly input: InspectClaudeCodeConfigurationInput;
+  readonly input: ClaudeCodeInspectionRequest;
   readonly topologyRef: string;
 }
 
-const buildResult = (parts: ResultParts): InspectClaudeCodeConfigurationResult => {
+const buildResult = (parts: ResultParts): ClaudeCodeInspectionOutcome => {
   const { classifierRevision, collectorRef, diagnostics, evaluated, input, topologyRef } = parts;
   const deferredObservations: ClaudeCodeDeferredModelObservation[] = [];
   const observedPortableIntent: ObservedPortableClaudeCodeIntent[] = [];
@@ -451,9 +451,9 @@ const measureWithinBudget = async (
 
 const evaluateSources = async (
   sources: readonly BoundSource[],
-  input: InspectClaudeCodeConfigurationInput,
+  input: ClaudeCodeInspectionRequest,
   dependencies: Dependencies,
-  diagnostics: ClaudeCodeConfigurationDiagnostic[],
+  diagnostics: ClaudeCodeInspectionDiagnostic[],
   signal?: AbortSignal,
 ): Promise<readonly EvaluatedSource[] | undefined> => {
   const evaluated: EvaluatedSource[] = [];
@@ -467,14 +467,14 @@ const evaluateSources = async (
   return evaluated;
 };
 
-export const createInspectClaudeCodeConfiguration = (dependencies: Dependencies): InspectClaudeCodeConfiguration => {
+export const createInspectClaudeCodeConfiguration = (dependencies: Dependencies): InspectClaudeCodeConfigurationUseCase => {
   if (dependencies.semanticClassifier.contract !== claudeCodeConfigurationSemanticClassifierContract ||
       !identifier.test(dependencies.semanticClassifier.revision)) {
     throw new TypeError("semanticClassifier must implement the versioned contract");
   }
   if (dependencies.sourceIdentityKey.byteLength < 32) {throw new TypeError("sourceIdentityKey must contain at least 32 bytes");}
   const key = Uint8Array.from(dependencies.sourceIdentityKey);
-  const inspect: InspectClaudeCodeConfiguration = {
+  const inspect: InspectClaudeCodeConfigurationUseCase = {
     async execute(input, options) {
       options?.signal?.throwIfAborted();
       if (!identifier.test(input.identityScope)) {throw new TypeError("identityScope must be a stable identifier");}
@@ -509,7 +509,7 @@ export const createInspectClaudeCodeConfiguration = (dependencies: Dependencies)
           evaluated: rejectedEvaluations(bound), input, topologyRef,
         });
       }
-      const diagnostics: ClaudeCodeConfigurationDiagnostic[] = [];
+      const diagnostics: ClaudeCodeInspectionDiagnostic[] = [];
       const evaluated = await evaluateSources(bound, input, dependencies, diagnostics, options?.signal);
       if (evaluated === undefined) {
         return buildResult({

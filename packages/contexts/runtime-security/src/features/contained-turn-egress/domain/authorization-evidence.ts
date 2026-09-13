@@ -3,11 +3,10 @@ import type { EgressAuthorizationBodyV1 } from "./egress-authorization.js";
 import type { ProviderRouteAuthoritySnapshotV1 } from "./provider-route-authority.js";
 import type { TrustedEgressHostIdentityV1 } from "./host-identity.js";
 import type { BufferedRequest, PolicyAuthority, TransportObservation } from "./validation.js";
-import type { DispatchConsumptionReceipt } from
-  "../../contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.js";
+import type { EgressDispatchConsumptionReceipt } from "./dispatch-consumption.js";
 const freeze = Object.freeze;
 export const authorizationBody = (input: Readonly<{route: ProviderRouteAuthoritySnapshotV1; request: ContainedTurnEgressRequest;
-  receipt: DispatchConsumptionReceipt; identity: TrustedEgressHostIdentityV1; policy: PolicyAuthority; issuedAt: number;
+  receipt: EgressDispatchConsumptionReceipt; identity: TrustedEgressHostIdentityV1; policy: PolicyAuthority; issuedAt: number;
   capturedRequest: BufferedRequest; observation: TransportObservation}>): EgressAuthorizationBodyV1 => {
   const {route, request, receipt, identity, policy, issuedAt, capturedRequest, observation} = input;
   return freeze({contractVersion: "contained-turn-egress-authorization-body/v1",

@@ -67,7 +67,7 @@ configurable cross-module relationships require standard mapping or an exact
 accepted exception. Ordinary fixed feature-local helpers keep static typed
 imports. No feature-per-class rule, wildcard legacy allowance, implicit
 inventory growth, string service locator, or universal manager is authorized.
-The scoped FMS gate remains independent. The live Foundation inventory records six workspace package roots, twenty-five feature
+The scoped FMS gate remains independent. The live Foundation inventory records six workspace package roots, thirty-four feature
 roots, sixteen policy boundaries and exact source/target/runtime-or-type
 relationships. Unknown or stale roots and relationships fail, including new
 cross-feature edges inside an existing policy boundary. Fixed helpers within
@@ -190,9 +190,9 @@ checkout before removing only that output for the merger's exclusive creation.
 ## Evidence and executable references
 
 Existing passive contract evidence starts with
-[capability bundle tests](../../packages/apps/embedded-runtime/tests/capability-bundle-contract.test.ts),
-[access boundary tests](../../packages/apps/embedded-runtime/tests/runtime-access-boundaries.e2e.test.ts),
-and [Codex setup tests](../../packages/apps/embedded-runtime/tests/codex-setup.e2e.test.ts).
+[capability bundle tests](../../packages/apps/embedded-runtime/tests/package/capability-bundle-contract.test.ts),
+[access boundary tests](../../packages/apps/embedded-runtime/tests/package/runtime-access-boundaries.e2e.test.ts),
+and [Codex setup tests](../../packages/apps/embedded-runtime/tests/package/codex-setup.e2e.test.ts).
 The profile maps `createDefaultAgentRuntimeHost`, its private
 `default-agent-runtime-host.ts` implementation, and declarations, profile and
 factories in `runtime-setup-assembly.ts`. It maps passive Assembly, type and

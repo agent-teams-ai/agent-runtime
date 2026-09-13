@@ -1,4 +1,5 @@
 import { assertClaudeCodeVocabularyParity } from "../adapters/inbound/claude-code-vocabulary-parity.js";
+import { createClaudeCodeConfigurationInspectionV1 } from "../adapters/inbound/claude-code-configuration-inspection-v1.js";
 import type { ConfigurationDigest } from "../application/ports/outbound/configuration-digest.js";
 import type { InspectClaudeCodeConfiguration } from "../contracts/claude-code-configuration-inspection.js";
 import { createInspectClaudeCodeConfiguration } from "../application/inspect-claude-code-configuration.js";
@@ -21,5 +22,7 @@ export const createClaudeCodeConfigurationInspectionFeature = (
   // vocabulary disagree: the two declarations exist because no layer may hold
   // both, so the only honest moment to check them is before anything is built.
   assertClaudeCodeVocabularyParity();
-  return createInspectClaudeCodeConfiguration(dependencies);
+  return createClaudeCodeConfigurationInspectionV1(
+    createInspectClaudeCodeConfiguration(dependencies),
+  );
 };

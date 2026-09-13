@@ -1,5 +1,6 @@
-import type { PoolClient } from "pg";
-
+import type {
+  ContainedTurnPostgresClient,
+} from "./contained-turn-postgres-pool.js";
 import type { ContainedTurnScope } from "../../../domain/contained-turn-authority.js";
 import type {
   ContainedTurnEvidenceId,
@@ -94,7 +95,7 @@ const validateProjections = (
 
 export class ContainedTurnPostgresOperationRepository {
   public async attachPreparationQuarantineDebt(
-    client: PoolClient,
+    client: ContainedTurnPostgresClient,
     input: Readonly<{
       evidenceId: ContainedTurnEvidenceId;
       operationId: string;
@@ -119,7 +120,7 @@ export class ContainedTurnPostgresOperationRepository {
   }
 
   async #authoritativeRow(
-    client: PoolClient,
+    client: ContainedTurnPostgresClient,
     operationId: string,
     lock: boolean,
     scope?: ContainedTurnScope,
@@ -141,7 +142,7 @@ export class ContainedTurnPostgresOperationRepository {
   }
 
   public async load(
-    client: PoolClient,
+    client: ContainedTurnPostgresClient,
     operationId: string,
     lock = false,
     scope?: ContainedTurnScope,
@@ -195,7 +196,7 @@ export class ContainedTurnPostgresOperationRepository {
   }
 
   public async project(
-    client: PoolClient,
+    client: ContainedTurnPostgresClient,
     previous: ContainedTurnKernelOperation | undefined,
     next: ContainedTurnKernelOperation,
   ): Promise<void> {
@@ -218,7 +219,7 @@ export class ContainedTurnPostgresOperationRepository {
   }
 
   public async persist(
-    client: PoolClient,
+    client: ContainedTurnPostgresClient,
     previous: ContainedTurnKernelOperation,
     next: ContainedTurnKernelOperation,
   ): Promise<void> {
@@ -234,7 +235,7 @@ export class ContainedTurnPostgresOperationRepository {
   }
 
   public async rebuildProjections(
-    client: PoolClient,
+    client: ContainedTurnPostgresClient,
     input: Readonly<{ operationId: ContainedTurnOperationId; scope: ContainedTurnScope }>,
   ): Promise<ContainedTurnKernelOperation | undefined> {
     const row = await this.#authoritativeRow(client, input.operationId, true, input.scope);

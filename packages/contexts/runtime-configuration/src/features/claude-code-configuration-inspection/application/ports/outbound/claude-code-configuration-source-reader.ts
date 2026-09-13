@@ -1,4 +1,4 @@
-import type { ClaudeCodeConfigurationSource } from "../../../contracts/claude-code-configuration-inspection.js";
+import type { ClaudeCodeConfigurationSource } from "../../models/claude-code-inspection-models.js";
 
 export type ReadClaudeCodeConfigurationSourceResult =
   | { readonly bytes: Uint8Array; readonly status: "read" }

@@ -4,7 +4,8 @@ import type {
   RuntimeContainedTurnView,
   SubmitRuntimeContainedTurnInput,
   SubmitRuntimeContainedTurnOutcome,
-} from "../../contracts/runtime-access.js";
+} from "../../composition/contained-turn-runtime-access.js";
+
 import { ContainedTurnOwnerContractError } from "../../composition/contained-turn-owner-contract-error.js";
 import type { ContainedTurnCompositionOperationRef } from "../../composition/contained-turn-operation-ref.js";
 import type {

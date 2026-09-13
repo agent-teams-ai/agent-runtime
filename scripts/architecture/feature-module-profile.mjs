@@ -67,11 +67,11 @@ const REVIEWED_PRODUCTION_MODULES = Object.freeze([
   { id: "embedded-runtime", role: "host-app", moduleRoot: "packages/apps/embedded-runtime", packageName: "@agent-teams/embedded-runtime", ownerDocument: "ADR-0008", curatedExports: EMBEDDED_RUNTIME_EXPORT_SET, adoption: "pending" },
   { id: "filesystem-custody", role: "platform", moduleRoot: "packages/platform/filesystem-custody", packageName: "@agent-teams/filesystem-custody", ownerDocument: "ADR-0017", curatedExports: [".", "./composition"], adoption: "active", activationAuthority: "ADR-0019" },
   { id: "provider-access", role: "bounded-context", moduleRoot: "packages/contexts/provider-access", packageName: "@agent-teams/provider-access", ownerDocument: "ADR-0005", curatedExports: [".", "./composition"], adoption: "active", activationAuthority: "ADR-0013" },
-  { id: "runtime-configuration", role: "bounded-context", moduleRoot: "packages/contexts/runtime-configuration", packageName: "@agent-teams/runtime-configuration", ownerDocument: "ADR-0005", curatedExports: [".", "./composition"], adoption: "pending" },
-  { id: "runtime-security", role: "bounded-context", moduleRoot: "packages/contexts/runtime-security", packageName: "@agent-teams/runtime-security", ownerDocument: "ADR-0005", curatedExports: [".", "./composition"], adoption: "pending" },
+  { id: "runtime-configuration", role: "bounded-context", moduleRoot: "packages/contexts/runtime-configuration", packageName: "@agent-teams/runtime-configuration", ownerDocument: "ADR-0005", curatedExports: [".", "./composition"], adoption: "active", activationAuthority: "ADR-0020" },
+  { id: "runtime-security", role: "bounded-context", moduleRoot: "packages/contexts/runtime-security", packageName: "@agent-teams/runtime-security", ownerDocument: "ADR-0005", curatedExports: [".", "./composition"], adoption: "active", activationAuthority: "ADR-0021" },
 ]);
-const REVIEWED_OUT_OF_SCOPE = Object.freeze(["Embedded Runtime", "Runtime Configuration", "Runtime Security", "Module Kit", "experiments", "tooling other than scripts/architecture/check-feature-modules.mjs"]);
-const REVIEWED_FEATURES = Object.freeze({ "runtime-installation-discovery": { root: "packages/contexts/agent-execution/src/features/runtime-installation-discovery", roles: ["contracts", "application", "adapters", "composition"] }, "contained-agent-turn": { root: "packages/contexts/agent-execution/src/features/contained-agent-turn", roles: STANDARD_ROLES }, "contained-turn-access": { root: "packages/contexts/provider-access/src/features/contained-turn-access", roles: STANDARD_ROLES }, "stable-filesystem-custody": { root: "packages/platform/filesystem-custody/src/features/stable-filesystem-custody", roles: ["contracts", "adapters"] } });
+const REVIEWED_OUT_OF_SCOPE = Object.freeze(["Embedded Runtime", "Module Kit", "experiments", "tooling other than scripts/architecture/check-feature-modules.mjs"]);
+const REVIEWED_FEATURES = Object.freeze({ "runtime-installation-discovery": { root: "packages/contexts/agent-execution/src/features/runtime-installation-discovery", roles: ["contracts", "application", "adapters", "composition"] }, "contained-agent-turn": { root: "packages/contexts/agent-execution/src/features/contained-agent-turn", roles: STANDARD_ROLES }, "contained-turn-access": { root: "packages/contexts/provider-access/src/features/contained-turn-access", roles: STANDARD_ROLES }, "stable-filesystem-custody": { root: "packages/platform/filesystem-custody/src/features/stable-filesystem-custody", roles: ["contracts", "adapters"] }, "codex-configuration-inspection": { root: "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection", roles: ["contracts", "application", "adapters", "composition"] }, "claude-code-configuration-inspection": { root: "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection", roles: ["contracts", "application", "adapters", "composition"] }, "contained-turn-dispatch-authority": { root: "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority", roles: STANDARD_ROLES }, "contained-turn-egress": { root: "packages/contexts/runtime-security/src/features/contained-turn-egress", roles: STANDARD_ROLES }, "provider-process-egress-authorization": { root: "packages/contexts/runtime-security/src/features/provider-process-egress-authorization", roles: STANDARD_ROLES }, "setup-source-inspection-authorization": { root: "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization", roles: ["contracts", "application", "adapters", "composition"] } });
 const reviewedModules = (predicate) => REVIEWED_PRODUCTION_MODULES.filter(predicate);
 const REVIEWED_PRODUCTION_ROOTS = Object.freeze(reviewedModules(({ adoption }) => adoption === "active").map(({ moduleRoot }) => `${moduleRoot}/src`));
 const REVIEWED_MODULE_ROOTS = Object.freeze(reviewedModules(({ adoption, role }) => adoption === "active" && role !== "host-app").map(({ moduleRoot }) => moduleRoot));
@@ -82,7 +82,7 @@ const LOCAL_CLASSIFICATION_AUTHORITY = Object.freeze({
   acceptedAdr: "ADR-0017",
   decisionPath: "docs/decisions/0017-feature-module-production-scope-roles.md",
 });
-const LOCAL_MODULE_FILES = Object.freeze(["index.ts", "composition.ts"]);
+export const LOCAL_MODULE_FILES = Object.freeze(["index.ts", "composition.ts"]);
 const LOCAL_FEATURE_ENTRYPOINTS = Object.freeze(["index.ts", "internal.ts"]);
 const LOCAL_ARCHITECTURE_DOCUMENT = "docs/architecture/feature-module-standard-v1-candidate.md";
 const LOCAL_DECISIONS = Object.freeze([
@@ -288,11 +288,27 @@ const moduleEdgeDeclarationIssues = (edges, moduleIds, profilePath) => {
   return issues;
 };
 
+const hostAppCompositionAssemblyPath = (path, productionRoots, hostAppRoots) => {
+  const root = productionRoots.find((candidate) => path.startsWith(`${candidate}/composition/`) && path.endsWith(".ts"));
+  if (!root || !hostAppRoots.has(root)) {return false;}
+  const relative = path.slice(`${root}/composition/`.length);
+  return relative.length > 0 && !relative.includes("/") && LOCAL_MODULE_FILES.includes(posix.basename(path)) === false;
+};
+
 const profileTopologyIssues = (profile, profilePath) => {
   const issues = [], productionRoots = profile.scope.productionRoots, features = profile.features;
-  const expectedAssembly = productionRoots.flatMap((root) => [`${root}/index.ts`, `${root}/composition.ts`]);
+  const expectedCurated = productionRoots.flatMap((root) => [`${root}/index.ts`, `${root}/composition.ts`]);
+  const hostAppRoots = new Set(profile.scope.productionModules
+    .filter(({ role, adoption }) => role === "host-app" && adoption === "active")
+    .map(({ sourceRoot }) => sourceRoot));
   if (!sameValues(profile.moduleRoles, STANDARD_ROLES)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "moduleRoles must declare the five standard roles exactly"));}
-  if (!sameValues(profile.assemblyFiles, expectedAssembly)) {issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "assemblyFiles must contain only index.ts and composition.ts for each production root"));}
+  if (!expectedCurated.every((path) => profile.assemblyFiles.includes(path))) {
+    issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "assemblyFiles must contain index.ts and composition.ts for each production root"));
+  }
+  const extras = profile.assemblyFiles.filter((path) => !expectedCurated.includes(path));
+  if (duplicateValues(profile.assemblyFiles).length || extras.some((path) => !hostAppCompositionAssemblyPath(path, productionRoots, hostAppRoots))) {
+    issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "additional assembly files must be host-app src/composition/*.ts entries"));
+  }
   issues.push(...featureIdentityIssues(features, productionRoots, profilePath));
   issues.push(...featureEdgeDeclarationIssues(profile.featureEdges, features, profilePath));
   issues.push(...moduleEdgeDeclarationIssues(profile.moduleEdges, new Set(profile.scope.productionModules.map(({ id }) => id)), profilePath));

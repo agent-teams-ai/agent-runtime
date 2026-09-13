@@ -1,7 +1,8 @@
-import type { PoolClient } from "pg";
-
+import type {
+  ContainedTurnPostgresClient,
+} from "./contained-turn-postgres-pool.js";
 /** Re-running the migration must detect missing retention and stale-binary fences. */
-export const validateContainedTurnIntentCatalog = async (client: PoolClient): Promise<void> => {
+export const validateContainedTurnIntentCatalog = async (client: ContainedTurnPostgresClient): Promise<void> => {
   const tables = await client.query<{
     columns: number; constraints: number; name: string; policy: boolean; retention: boolean; rls: boolean; write_fence: boolean;
   }>(`SELECT c.relname AS name, c.relrowsecurity AND c.relforcerowsecurity AS rls,

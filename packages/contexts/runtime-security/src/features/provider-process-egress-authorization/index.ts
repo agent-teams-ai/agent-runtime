@@ -1,0 +1,16 @@
+export type {
+  EgressAuthorityReadOutcomeV2,
+  EgressCurrentAuthorityV2,
+  EgressDecisionSignatureV2,
+  EgressSignatureAlgorithmV2,
+  EgressSignatureEncodingV2,
+  EgressSigningKeyMetadataV2,
+  HostEgressVerifierV2,
+  ProvisionalEgressAuthorizationV2,
+  ProviderProcessEgressAuthorizationV2,
+  RequestFinalEgressAuthorizationV2,
+  RequestProvisionalEgressAuthorizationV2,
+  SignedFirstApplicationByteGrantV2,
+  TrustedEgressCompositionScopeV2,
+  TrustedHostRequestProjectionV2,
+} from "./contracts/provider-process-egress-authorization-v2.js";

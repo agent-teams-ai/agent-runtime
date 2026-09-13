@@ -1,9 +1,8 @@
 import type {
-  ConsumeForDispatchOutcome, DispatchConsumptionReceipt,
-  ObserveDispatchConsumptionOutcome, SettleDispatchConsumptionOutcome,
-} from "../contracts/contained-turn-dispatch-authority-v1.js";
-import type {
-  DispatchConsumeResult, DispatchConsumptionRecordReceipt, DispatchSettlementResult,
+  DispatchConsumeResult,
+  DispatchConsumptionRecordReceipt,
+  DispatchObserveResult,
+  DispatchSettlementResult,
 } from "./dispatch-consumption-models.js";
 import {
   isBoundedDispatchIdentifier, isDispatchLifecycle, isSettlementDisposition,
@@ -34,7 +33,7 @@ const receiptNames = ["contractVersion", "purpose", "operationId", "scope", "gra
   "authorityRevision", "constraintsDigest", "containmentPolicyDigest", "consumptionDigest",
   "claimBeforeControlTime", "consumedAtControlTime", "ownerEvidenceRef"] as const;
 
-const receiptToV1 = (value: unknown, digestCanonical: DigestCanonical): DispatchConsumptionReceipt => {
+const receiptToV1 = (value: unknown, digestCanonical: DigestCanonical): DispatchConsumptionRecordReceipt => {
   const fields = snapshotExactDispatchRecord(value, receiptNames);
   const scope = fields === undefined ? undefined : scopeFrom(fields.scope);
   if (fields === undefined || scope === undefined) {throw new TypeError("invalid consumption receipt");}
@@ -93,7 +92,7 @@ const preventionToV1 = (value: unknown) => {
 export const mapConsumeResultToV1 = (
   result: DispatchConsumeResult,
   digestCanonical: DigestCanonical,
-): ConsumeForDispatchOutcome => {
+): DispatchConsumeResult => {
   const variant = snapshotExactDispatchVariant(result, [["status"], ["status", "receipt"],
     ["status", "evidence"], ["status", "reason"]]);
   if (variant?.status === "not_found" && !("receipt" in variant) && !("reason" in variant) &&
@@ -115,7 +114,7 @@ export const mapConsumeResultToV1 = (
 
 export const mapObservedResultToV1 = (result: DispatchConsumeResult,
   lifecycleState: "consumed_pending" | "claim_committed" | "abandoned_without_claim",
-  digestCanonical: DigestCanonical): ObserveDispatchConsumptionOutcome => {
+  digestCanonical: DigestCanonical): DispatchObserveResult => {
   if (!isDispatchLifecycle(lifecycleState)) {throw new TypeError("invalid lifecycle");}
   const mapped = mapConsumeResultToV1(result, digestCanonical);
   return mapped.status === "consumed"
@@ -125,7 +124,7 @@ export const mapObservedResultToV1 = (result: DispatchConsumeResult,
 // oxlint-disable-next-line eslint/complexity -- exact result variants are intentionally closed here.
 export const mapSettlementResultToV1 = (
   result: DispatchSettlementResult,
-): SettleDispatchConsumptionOutcome => {
+): DispatchSettlementResult => {
   const variant = snapshotExactDispatchVariant(result,
     [["status"], ["status", "receipt"], ["status", "reason"]]);
   if (variant?.status === "invalid_request" || variant?.status === "not_found") {

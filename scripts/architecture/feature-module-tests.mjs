@@ -10,6 +10,7 @@ import {
   FILESYSTEM_IDENTITY_CODE,
   inspectRepositoryPath,
   inventoryRepositoryFiles,
+  portableRepositoryPath,
   repositoryPath,
 } from "./feature-module-paths.mjs";
 
@@ -109,6 +110,7 @@ const readTestImports = async (context, absoluteTest) => {
   context.testImportBudget.imports += retained.length;
   const issues = retained
     .filter(({ nonliteral }) => nonliteral)
+    .filter((imported) => !packageArchitectureToolingImport(context, testPath, imported))
     .map((imported) => context.issue("FM_NONLITERAL_LOADING", testPath, imported.line, `${imported.syntax} requires a string literal`));
   if (overflow) {issues.push(overflowIssue(context.issue, "test import"));}
   return { imports: retained.filter(({ nonliteral }) => !nonliteral), program: parsed.program, testPath, issues, overflow };
@@ -154,6 +156,7 @@ const detectedSourceFeatures = async (context, parsed, visited) => {
   for (const imported of parsed.imports ?? []) {
     const resolved = context.localPackageImports.resolve(parsed.testPath, imported.specifier, context.packagePathIndex);
     if (declaredModuleConsumption(context, resolved)) {continue;}
+    if (packageArchitectureToolingLoad(context, parsed.testPath, imported.specifier)) {continue;}
     if (resolved.kind === "invalid") {
       issues.push(invalidResolutionIssue(context, parsed.testPath, imported, resolved));
       continue;
@@ -183,6 +186,40 @@ const detectedSourceFeatures = async (context, parsed, visited) => {
     if (nested.overflow) {overflow = true; break;}
   }
   return { detected, direct, issues, overflow };
+};
+
+const ARCHITECTURE_TOOLING = /^scripts\/architecture\/[^/]+\.mjs$/u;
+const separators = (value) => String(value).replaceAll("\\", "/");
+
+// Package-owned tests may load repo architecture tooling as an external
+// helper. The specifier must be a string literal relative path whose
+// canonical repository identity is exactly `scripts/architecture/*.mjs`.
+// Feature tests, production sources, and any other repo-script path stay
+// on the ordinary filesystem-identity failure.
+const packageArchitectureToolingLoad = (context, sourcePath, specifier) => {
+  const owner = declaredTestOwner(sourcePath, context.packageRoot, context.packageFeatures);
+  if (owner?.kind !== "package") {return false;}
+  if (typeof specifier !== "string" || specifier !== specifier.normalize("NFC") || specifier.includes("\0")) {
+    return false;
+  }
+  const normalized = separators(specifier);
+  if (!(normalized.startsWith("./") || normalized.startsWith("../"))) {return false;}
+  const source = portableRepositoryPath(sourcePath);
+  if (!source) {return false;}
+  const target = posix.normalize(posix.join(posix.dirname(source), normalized));
+  if (target === ".." || target.startsWith("../")) {return false;}
+  const canonical = portableRepositoryPath(target);
+  return Boolean(canonical && canonical === target && ARCHITECTURE_TOOLING.test(canonical));
+};
+
+// Foundation classifies a computed `import()` as a dynamic runtime reference,
+// which is what keeps package tests from creating a root-package cycle. The
+// only string literal in that expression must still be the repo-relative
+// architecture tooling path, so a computed loader cannot hide a feature import.
+const packageArchitectureToolingImport = (context, sourcePath, imported) => {
+  const owner = declaredTestOwner(sourcePath, context.packageRoot, context.packageFeatures);
+  if (owner?.kind !== "package" || imported.syntax !== "dynamic-import") {return false;}
+  return imported.specifierLiterals?.length === 1 && ARCHITECTURE_TOOLING.test(imported.specifierLiterals[0]);
 };
 
 const declaredTestOwner = (testPath, packageRoot, packageFeatures) => {

@@ -55,6 +55,14 @@ export type DispatchConsumeResult =
   | { readonly status: "conflict"; readonly reason: "grant_request_digest_conflict" }
   | { readonly status: "indeterminate"; readonly reason: "owner_unavailable" };
 
+export type DispatchObserveResult =
+  | {
+      readonly status: "consumed";
+      readonly receipt: DispatchConsumptionRecordReceipt;
+      readonly lifecycleState: DispatchConsumptionLifecycle;
+    }
+  | Exclude<DispatchConsumeResult, { readonly status: "consumed" }>;
+
 export type PersistedDispatchConsumeResult = Exclude<
   DispatchConsumeResult,
   { readonly status: "conflict" | "indeterminate" }

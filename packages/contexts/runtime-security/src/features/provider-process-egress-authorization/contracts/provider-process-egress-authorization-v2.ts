@@ -1,7 +1,5 @@
 import type {
   EgressAuthorizationIssueCode,
-} from "../domain/provider-process-egress-model.js";
-import type {
   EgressBudgetsV1,
   EgressCandidateAddressV1,
   EgressTlsOriginV1,

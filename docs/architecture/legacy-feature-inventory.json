@@ -2053,7 +2053,7 @@
           "evidence": {
             "repository": "current",
             "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
-            "path": "packages/apps/embedded-runtime/tests/codex-setup.e2e.test.ts",
+            "path": "packages/apps/embedded-runtime/tests/package/codex-setup.e2e.test.ts",
             "locator": "test:inspects a synthetic Codex setup deterministically without leaking paths or secrets",
             "claim": "The detached Codex setup query is exercised end to end."
           }
@@ -2243,7 +2243,7 @@
           "evidence": {
             "repository": "current",
             "commit": "4f32b4e6e56aff206543c36f1d7ffcf7882d1ce0",
-            "path": "packages/apps/embedded-runtime/tests/claude-code-semantic-correction.e2e.test.ts",
+            "path": "packages/apps/embedded-runtime/tests/package/claude-code-semantic-correction.e2e.test.ts",
             "locator": "test:keeps rejected higher source slots and simultaneous system locations across all four owners",
             "claim": "All three declared portable source roles are observed, while untrusted project roles are rejected without selecting a cross-source winner."
           }

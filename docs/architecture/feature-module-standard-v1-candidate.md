@@ -10,6 +10,10 @@ related:
   - ADR-0013
   - ADR-0017
   - ADR-0018
+  - ADR-0019
+  - ADR-0020
+  - ADR-0021
+  - ADR-0022
 code_anchors:
   - enforcement: required
     pattern: architecture/feature-module-standard/**
@@ -28,7 +32,7 @@ owned by `agent-teams-ai/.github` at
 `d0bfff2033faf544fe65268c1dcdfd524d093015`, with SHA-256
 `851653f96643cf0466b67ab22963661976b00de44840fa3144a48a8c054f95fa`.
 
-This is scoped active conformance for exactly the four named features listed
+This is scoped active conformance for exactly the six named features listed
 below. It is not a claim of repository-wide conformance, and no unlisted package,
 application, feature, experiment, or bounded context is included.
 
@@ -126,13 +130,19 @@ beside it. The active production scope contains only:
 
 - `packages/contexts/agent-execution/src/**`;
 - `packages/contexts/provider-access/src/**`;
+- `packages/contexts/runtime-configuration/src/**`;
+- `packages/contexts/runtime-security/src/**`;
 - `packages/platform/filesystem-custody/src/**`;
 - the package assembly files `src/index.ts` and `src/composition.ts` in those
-  three packages;
+  five packages;
 - the features `runtime-installation-discovery`, `contained-agent-turn`,
-  `contained-turn-access`, and `stable-filesystem-custody`.
+  `contained-turn-access`, `stable-filesystem-custody`,
+  `codex-configuration-inspection`, `claude-code-configuration-inspection`,
+  `contained-turn-dispatch-authority`, `contained-turn-egress`,
+  `provider-process-egress-authorization`, and
+  `setup-source-inspection-authorization`.
 
-Embedded Runtime, Runtime Configuration, Runtime Security, Module Kit,
+Embedded Runtime, Module Kit,
 experiments, and tooling other than this checker are explicitly out of scope. Foundation supplies package-level dependency evidence only; it
 does not implement or prove this feature policy.
 
@@ -145,8 +155,8 @@ and `packages/platform` with exactly one role and one adoption state:
 | --- | --- | --- | --- |
 | Agent Execution | `bounded-context` | ADR-0005 | active under ADR-0013 |
 | Provider Access | `bounded-context` | ADR-0005 | active under ADR-0013 |
-| Runtime Configuration | `bounded-context` | ADR-0005 | pending |
-| Runtime Security | `bounded-context` | ADR-0005 | pending |
+| Runtime Configuration | `bounded-context` | ADR-0005 | active under ADR-0020 |
+| Runtime Security | `bounded-context` | ADR-0005 | active under ADR-0021 |
 | Embedded Runtime | `host-app` | ADR-0008 | pending |
 | Filesystem Custody | `platform` | ADR-0017 | active under ADR-0019 |
 
@@ -179,8 +189,7 @@ between features of different modules is rejected.
 
 Declared module edges follow the same discipline as feature edges: an unobserved
 declaration is rejected as future-state permission, and observed edges are
-checked for runtime and type cycles. `moduleEdges` stays empty until a delivery
-needs an edge.
+checked for runtime and type cycles.
 
 A production package that exists inside one of those containers and is not
 classified fails the gate with `FM_UNCLASSIFIED_MODULE`. Activating a pending
@@ -193,66 +202,29 @@ accepted authority; a profile edit alone cannot widen the checked tree.
 Recorded here so a partially migrated module reads as transit rather than as a
 contradiction. None of this is a conformance claim, and no gate asserts any of it.
 
-Runtime Configuration has two features. `codex-configuration-inspection`
-already owns its application models and translates through one inbound
-adapter. `claude-code-configuration-inspection` now owns its vocabulary the
-same way: the constants it needs live in its own `models/claude-code-vocabulary.ts`
-application model, and its remaining import from `../contracts` is type-only.
-Both features now route their package assembly through curated feature
-entrypoints (`index.ts` for `.`, `internal.ts` for `./composition`) rather
-than deep imports into `adapters` and `application/ports`. Their tests now
-live under feature ownership (`tests/features/...`) with the package assembly
-surface check in `tests/package/`; the module itself remains pending.
+Runtime Configuration is active under ADR-0020. Its two features,
+`codex-configuration-inspection` and `claude-code-configuration-inspection`,
+are continuously checked.
 
-Runtime Security has four features. Setup-source authorization now owns its
-Node path and source-identity digest behind explicit outbound ports
-(`PathAlgebra`, `SourceIdentityDigest`), with a Node adapter supplying both;
-its application layer no longer imports `node:path` or `node:crypto` directly.
-`contained-turn-egress` is no longer a flat directory: it has real
-domain/application/composition/adapters ownership, and its write-authorization
-lease window now reads a `MonotonicClock` the composition root injects, rather
-than an ambient `performance.now()` binding. The clock stays a
-composition-root detail — the public `ContainedTurnEgressDependencies` shape
-does not accept one — so revalidation timing remains under trusted-code
-control. Module composition's `containedTurnEgressProviderBindingDigest`
-delegates route-binding digest computation to the egress feature's own domain
-`validation` module instead of computing it inline, and the underlying
-`node:crypto` hashing and the `exactObject`/`snapshotUint8Array` validation
-primitives it needs have moved out of `composition.ts` into the feature's own
-`adapters/outbound/node-security-primitives.ts`, called by the same two egress
-call sites there. That closes the base document's complaint for this feature
-the same way the sibling features already closed it, each behind its own
-outbound Node adapter (`node-sha256-dispatch-digest.ts`,
-`node-egress-cryptography.ts`, `node-source-identity-digest.ts`). One gap
-remains narrower rather than fully closed: those three sibling ports are each
-declared under `application/ports/outbound/`, while `EgressSecurityPrimitives`
-is still declared in the feature's `domain/validation.ts`, so egress does not
-yet match the same port-location convention. Domain and application layers in
-this package do not import Node
-builtins directly today, but nothing in `architecture/foundation/source-dependencies.yaml`
-enforces that split within the single flat `production.runtime-security`
-boundary, unlike Embedded Runtime's narrower allowed-builtins list. Dispatch
-authority's external V1 wrapper now lives in `adapters/inbound/` and maps
-request DTOs onto the consume, settle, and observe use cases; digest and
-result projection stays in application
-(`contained-turn-dispatch-authority-v1-result-mappers.ts`) so outbound
-Postgres and those use cases never import inbound. Its
-composition-root clock design differs from egress's by choice, not as an
-outstanding gap: dispatch authority's own
-`ContainedTurnDispatchAuthorityFeatureDependencies` requires callers to
-supply `clock` explicitly, while egress keeps the clock a composition-root
-detail its public dependencies shape does not accept.
+Runtime Security is active under ADR-0021. Its four features,
+`contained-turn-dispatch-authority`, `contained-turn-egress`,
+`provider-process-egress-authorization`, and
+`setup-source-inspection-authorization`, are continuously checked. The remaining
+pending module is:
 
 Embedded Runtime is the host application. Its activation waited on the
 accepted asynchronous setup assembly work, which has since landed. The setup
 view's Claude Code and Codex reference-digest computation is now behind an
 outbound `OpaqueReferenceDigest` port with a Host adapter, so
-`application/build-claude-code-setup-view.ts` and
-`application/build-codex-setup-view.ts` no longer import `node:crypto`
-directly, and the package boundary now rejects that import from application
-code. Runtime-access coordination now lives under
+`features/setup-inspection-planning/build-claude-code-setup-view.ts` and
+`features/setup-inspection-planning/build-codex-setup-view.ts` no longer import
+`node:crypto` directly, and the package boundary now rejects that import from
+unowned application files. Runtime-access coordination now lives under
 `src/features/contained-turn-runtime-access/` with curated `index.ts` /
-`internal.ts` entrypoints. Host composition re-exports that feature entry from
+`internal.ts` entrypoints. Public runtime-access DTOs live in that feature as
+`runtime-access.ts`; the package root and Host composition re-export them, so
+callers do not import a leftover `src/contracts/` tree. Host composition still
+re-exports the feature runtime entry from
 `src/composition/contained-turn-runtime-access.ts`, so existing composition
 imports keep working. The implementation is not yet an inward `application/`
 layer: it still imports Host composition helpers, so it stays at the feature
@@ -324,15 +296,57 @@ re-exports those feature entries from
 imports keep working. The implementations stay at the feature root rather
 than under `application/`: they still import Host composition helpers or
 Agent Execution / Provider Access / Runtime Security composition types, which
-L0 treats as an inward leak from `application/`. Process lifecycle,
+L0 treats as an inward leak from `application/`. Linux route binding, product
+route qualification, provider selection, access authority, and cancellation
+proof now live under matching `src/features/` directories with curated
+`index.ts` / `internal.ts` entrypoints. Host composition re-exports those
+feature entries from the matching `src/composition/` files, so existing
+composition and test imports keep working. The implementations stay at the
+feature root rather than under `application/`: they still import Host
+composition helpers or Agent Execution / Provider Access composition types,
+which L0 treats as an inward leak from `application/`. Authority binding,
+construction-failure cleanup, composition observation types, operation refs,
+and owner-contract errors now live under matching `src/features/` directories
+with curated `index.ts` / `internal.ts` entrypoints. Host composition
+re-exports those feature entries from the matching `src/composition/` files,
+so existing composition and test imports keep working. The implementations
+stay at the feature root rather than under `application/`: they still import
+Host composition helpers, which L0 treats as an inward leak from
+`application/`. Trusted runtime-access scope copying now lives under
+`src/features/trusted-runtime-access-scope/` with curated `index.ts` /
+`internal.ts` entrypoints. Host composition re-exports that feature from
+`src/composition/trusted-runtime-access-scope.ts`, so existing composition
+and test imports keep working. The implementation stays at the feature root
+rather than under `application/`: it still imports Host composition helpers
+and application scope types, which L0 treats as an inward leak from
+`application/`. Claude Code and Codex setup-inspection planners plus the
+opaque-reference digest now live under
+`src/features/setup-inspection-planning/` with curated `index.ts` /
+`internal.ts` entrypoints. Host composition re-exports those feature entries
+from the matching `src/composition/` files, so existing composition and test
+imports keep working. The implementations stay at the feature root rather
+than under `application/`: they still import application ports, which L0
+treats as an inward leak from `application/`. Process lifecycle,
 readiness and rollback stay in composition. Host tests that
 previously imported unpublished Agent Execution, Provider Access, and Runtime
 Security `dist/` and `tests/` package subpaths now use the curated
 `./composition` export when the symbol is public, or Host-local
 `tests/support/external/` copies of unpublished fixtures. Foundation
 `packageExports` claims for those three packages now match the curated `.` and
-`./composition` maps. Packed-consumer Provider Access `pg` anti-corruption
-remains. The module stays pending.
+`./composition` maps. Packed-consumer Agent Execution and Provider Access
+public composition types no longer mention `pg`; callers pass a structurally
+compatible pool. Runtime Security package assembly now reaches its four
+features through curated `index.ts` / `internal.ts` entrypoints; the contained-turn
+egress gateway factory lives in the feature composition root so package
+`composition.ts` is import/re-export only. The module stays pending. Each Host
+feature now declares accepted README metadata owned by `@agent-teams/embedded-runtime`
+and ADR-0008. Eleven isolated Host unit tests now live under
+`tests/features/<id>/` without changing argv order. Activating it still
+requires the remaining Host tests under `tests/features/` or `tests/package/`,
+an explicit extra Host `src/composition/*.ts` `assemblyFiles` list, and a
+separate accepted activation ADR. ADR-0022 records the host-app extra
+composition assembly grammar so those remaining steps do not have to change the
+curated `index.ts` / `composition.ts` import/re-export rule.
 
 The deterministic syntax-aware checker is
 `scripts/architecture/check-feature-modules.mjs`. Run
@@ -360,7 +374,17 @@ checks layer direction, curated public/internal entrypoints, cross-feature deep
 imports, declared runtime and type edges, cycles, nonempty declared layers, and
 undeclared shared/common/utils/module ownership. It also verifies feature
 README ownership, feature-test colocation, and the two curated package export
-map entries. Public feature entrypoints may expose only their own contracts.
+map entries. Package-owned tests under `tests/package/` may load repository
+architecture tooling at `scripts/architecture/*.mjs` in two forms: a
+string-literal relative specifier whose canonical path is that directory, or a
+dynamic `import()` whose only string literal is that repo-relative path. The
+checker classifies both as external tooling. The dynamic form is the
+Foundation-compatible load: a relative specifier into the root package is a
+cross-package edge and a runtime cycle, while a computed `import()` stays a
+declared dynamic runtime reference. Feature tests, production sources,
+nonliteral loaders without that exact literal, helpers outside `tests/package/`,
+and relative paths that canonicalize outside that directory still fail closed.
+Public feature entrypoints may expose only their own contracts.
 Public, internal, and package assembly entrypoints reject wildcard re-exports.
 Declared feature edges must connect declared features and must correspond to
 observed imports; unused edge declarations are rejected as future-state
@@ -368,8 +392,15 @@ permissions.
 
 All local feature dependencies are denied unless they follow an allowed
 same-feature layer direction or use a declared cross-feature edge through the
-target feature's public entrypoint. Package assembly and feature entrypoint
-files accept only import/re-export grammar. Configured TypeScript and package
+target feature's public entrypoint. Curated package assembly files (`index.ts`
+and `composition.ts`) and feature entrypoint files accept only import/re-export
+grammar. An active host-app may list additional explicit
+`src/composition/*.ts` assembly files; those files may contain behavior, import
+sibling host composition assembly files, import curated feature entrypoints, and
+import Node or external modules. Deep feature imports still fail closed.
+Bounded-context and platform modules cannot list extra assembly files. The live
+profile does not list extra Host composition files while Embedded Runtime stays
+pending. Configured TypeScript and package
 aliases, package self-imports, `module.require`, and aliases returned by
 `createRequire` cannot bypass these checks. Empty, comments-only, and
 `export {}`-only layer files do not make a declared layer substantive.
@@ -388,7 +419,7 @@ remove or reorder the active root gate. The exact candidate command reports
 zero production diagnostics without exceptions, deviations, extensions,
 wildcards, automatic widening, or scope changes.
 
-ADR-0013, ADR-0017, ADR-0018 and ADR-0019 are accepted at their exact governed
+ADR-0013, ADR-0017, ADR-0018, ADR-0019, ADR-0020, ADR-0021 and ADR-0022 are accepted at their exact governed
 paths and are pinned in the immutable accepted-decision registry by the digest
 Foundation computes over their accepted bytes and metadata. The profile is
 `active`, has no blockers, binds its profile-wide activation authority to
@@ -401,7 +432,10 @@ these commands as evidence:
 - blocking active gate: `pnpm architecture:feature-modules:active`.
 
 This evidence proves conformance only for `runtime-installation-discovery`,
-`contained-agent-turn`, `contained-turn-access`, and `stable-filesystem-custody`
-within the three declared production roots and assembly files. It does not prove
-repository-wide Feature Module Standard conformance: Runtime Configuration,
-Runtime Security and Embedded Runtime remain pending.
+`contained-agent-turn`, `contained-turn-access`, `stable-filesystem-custody`,
+`codex-configuration-inspection`, `claude-code-configuration-inspection`,
+`contained-turn-dispatch-authority`, `contained-turn-egress`,
+`provider-process-egress-authorization`, and
+`setup-source-inspection-authorization` within the five declared production
+roots and assembly files. It does not prove repository-wide Feature Module
+Standard conformance: Embedded Runtime remains pending.

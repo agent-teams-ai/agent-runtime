@@ -1,18 +1,17 @@
 import {createHash} from "node:crypto";
-import type {Pool} from "pg";
 import type {HttpEgressReceipt} from "./http-egress-contracts.js";
 import type {HttpEgressEvidence} from "./http-egress-ports.js";
 import {canonicalHttpEvidenceReceipt, snapshotHttpEvidenceIdentity, snapshotHttpEvidenceScope,
   type PostgresHttpEgressReceiptIdentity,
   type PostgresHttpEgressEvidenceScope} from "./postgres-http-egress-evidence-codec.js";
-import {HTTP_EVIDENCE_FENCE, PostgresHttpEvidenceTransactions} from "./postgres-http-egress-evidence-transactions.js";
+import {HTTP_EVIDENCE_FENCE, PostgresHttpEvidenceTransactions, type ContainedTurnPostgresPool} from "./postgres-http-egress-evidence-transactions.js";
 export type {PostgresHttpEgressEvidenceScope} from "./postgres-http-egress-evidence-codec.js";
 
 /** Explicit administrative initialization of an empty private Host schema.
  * Existing schemas are verified, never repaired or automatically upgraded.
  * The caller owns the borrowed pool and its database/role selection.
  */
-export const initializePostgresHttpEgressEvidence = async (pool: Pick<Pool, "connect">): Promise<void> => {
+export const initializePostgresHttpEgressEvidence = async (pool: ContainedTurnPostgresPool): Promise<void> => {
   await new PostgresHttpEvidenceTransactions(pool).run(async (_client, query) => {
     await query("SELECT pg_advisory_xact_lock(721903522)");
     const existing = await query("SELECT 1 FROM pg_namespace WHERE nspname = 'host_http_egress'");
@@ -28,7 +27,8 @@ export const initializePostgresHttpEgressEvidence = async (pool: Pick<Pool, "con
         receipt_key text PRIMARY KEY CHECK (length(receipt_key) = 64))`);
     }
     const fence = await query("SELECT version, format FROM host_http_egress.version_fence WHERE singleton = true");
-    if (fence.rows.length !== 1 || fence.rows[0].version !== 1 || fence.rows[0].format !== HTTP_EVIDENCE_FENCE) {
+    const fenceRow = fence.rows[0];
+    if (fence.rows.length !== 1 || fenceRow === undefined || fenceRow.version !== 1 || fenceRow.format !== HTTP_EVIDENCE_FENCE) {
       throw new Error("HTTP evidence schema fence mismatch");
     }
     await query("SELECT canonical_receipt FROM host_http_egress.receipt LIMIT 0");
@@ -54,7 +54,7 @@ export const initializePostgresHttpEgressEvidence = async (pool: Pick<Pool, "con
 export class PostgresHttpEgressEvidence implements HttpEgressEvidence {
   readonly #scope: PostgresHttpEgressEvidenceScope;
   readonly #transactions: PostgresHttpEvidenceTransactions;
-  public constructor(pool: Pick<Pool, "connect">, scope: PostgresHttpEgressEvidenceScope) {
+  public constructor(pool: ContainedTurnPostgresPool, scope: PostgresHttpEgressEvidenceScope) {
     this.#scope = snapshotHttpEvidenceScope(scope);
     this.#transactions = new PostgresHttpEvidenceTransactions(pool);
   }
@@ -79,14 +79,15 @@ export class PostgresHttpEgressEvidence implements HttpEgressEvidence {
       return await this.#transactions.run(async (_client, query) => {
         const fence = await query(`SELECT version, format FROM host_http_egress.version_fence
           WHERE singleton = true FOR SHARE`);
-        if (fence.rows.length !== 1 || fence.rows[0].version !== 1 || fence.rows[0].format !== HTTP_EVIDENCE_FENCE) {
+        const fenceRow = fence.rows[0];
+        if (fence.rows.length !== 1 || fenceRow === undefined || fenceRow.version !== 1 || fenceRow.format !== HTTP_EVIDENCE_FENCE) {
           throw new Error("HTTP evidence schema fence mismatch");
         }
         const stored = await query(`SELECT canonical_receipt FROM host_http_egress.receipt WHERE
           tenant_id=$1 AND project_id=$2 AND deployment_id=$3 AND operation_id=$4 AND attempt_id=$5 AND request_id=$6 AND receipt_key=$7 LIMIT 2`, [...key, keyDigest]);
         if (stored.rows.length === 0) {return Object.freeze({kind: "missing" as const});}
         if (stored.rows.length !== 1) {throw new Error("HTTP evidence read uncertain");}
-        const retained: unknown = stored.rows[0].canonical_receipt;
+        const retained: unknown = stored.rows[0]?.canonical_receipt;
         if (typeof retained !== "string" || Buffer.byteLength(retained, "utf8") > 32_768) {
           throw new Error("HTTP evidence retained text invalid");
         }
@@ -110,7 +111,8 @@ export class PostgresHttpEgressEvidence implements HttpEgressEvidence {
       return await this.#transactions.run(async (_client, query) => {
         const fence = await query(`SELECT version, format FROM host_http_egress.version_fence
           WHERE singleton = true FOR SHARE`);
-        if (fence.rows.length !== 1 || fence.rows[0].version !== 1 || fence.rows[0].format !== HTTP_EVIDENCE_FENCE) {
+        const fenceRow = fence.rows[0];
+        if (fence.rows.length !== 1 || fenceRow === undefined || fenceRow.version !== 1 || fenceRow.format !== HTTP_EVIDENCE_FENCE) {
           throw new Error("HTTP evidence schema fence mismatch");
         }
         await query(`INSERT INTO host_http_egress.receipt
@@ -120,7 +122,7 @@ export class PostgresHttpEgressEvidence implements HttpEgressEvidence {
         const stored = await query(`SELECT canonical_receipt FROM host_http_egress.receipt WHERE
           tenant_id=$1 AND project_id=$2 AND deployment_id=$3 AND operation_id=$4 AND attempt_id=$5 AND request_id=$6 AND receipt_key=$7`, [...key, keyDigest]);
         if (stored.rows.length !== 1) {throw new Error("HTTP evidence read uncertain");}
-        const retained: unknown = stored.rows[0].canonical_receipt;
+        const retained: unknown = stored.rows[0]?.canonical_receipt;
         // Retained DB text is untrusted: bound bytes before parsing, then verify
         // the complete canonical receipt and its binding to the selected key.
         if (typeof retained !== "string" || Buffer.byteLength(retained, "utf8") > 32_768) {
