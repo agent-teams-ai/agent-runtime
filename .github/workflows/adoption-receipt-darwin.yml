@@ -1,9 +1,9 @@
 name: adoption-receipt-darwin
 
-# Temporary workflow: Darwin arm64 adoption receipt for leftover Host
-# runtime-access identity 48858aa9 stacked on setup-views. The job always
-# checks out that SHA so this workflow-only commit does not enter the receipt
-# identity. Safe to delete after merge.
+# Temporary workflow: Darwin arm64 adoption receipt for Host runtime-access identity
+# 0e35de99 after absorbing main (#128 merge-commit). The job always checks out
+# that SHA so this workflow-only commit does not enter the receipt identity.
+# Safe to delete after the paired Host runtime-access receipt is merged.
 
 on:
   push:
@@ -19,16 +19,16 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     steps:
-      - name: Checkout frozen leftover Host runtime-access SHA
+      - name: Checkout frozen Host runtime-access SHA
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: 48858aa93c03255c89659eeacf5105dcfde8bc5a
+          ref: 0e35de998d20d43cb7aca97a4bf581a83b1039ff
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "48858aa93c03255c89659eeacf5105dcfde8bc5a"
+        run: test "$(git rev-parse HEAD)" = "0e35de998d20d43cb7aca97a4bf581a83b1039ff"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
