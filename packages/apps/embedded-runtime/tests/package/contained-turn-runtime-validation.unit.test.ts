@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { snapshotContainedTurnProviderSelection } from
-  "../dist/composition/contained-turn-provider-selection.js";
+  "../../dist/composition/contained-turn-provider-selection.js";
 import { copyInput, copySubmitOutcome } from
-  "../dist/composition/contained-turn-runtime-validation.js";
+  "../../dist/composition/contained-turn-runtime-validation.js";
 import type { OwnerSubmitOutcome } from
-  "../src/composition/contained-turn-composition-types.js";
+  "../../src/composition/contained-turn-composition-types.js";
 
 const invalidSelection = /Contained turn provider selection is invalid/u;
 
