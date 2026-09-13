@@ -3,7 +3,7 @@ import {createHash} from "node:crypto";
 import {lstatSync, realpathSync, statSync} from "node:fs";
 import {mkdir, mkdtemp, realpath, rm, stat} from "node:fs/promises";
 import {isAbsolute, join, normalize, relative} from "node:path";
-import type {LinuxCodexLivePins} from "./linux-codex-live-bootstrap.ts";
+import type {LinuxCodexLivePins} from "../../live/linux-codex-live-bootstrap.ts";
 
 type ReadDirectories = LinuxCodexLivePins["node"]["readDirectories"];
 type Directory = NonNullable<ReturnType<ReadDirectories>>["privateRoot"];

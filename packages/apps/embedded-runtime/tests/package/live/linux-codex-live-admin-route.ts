@@ -4,7 +4,7 @@ import {createContainedTurnRouteEnforcement,snapshotDockerEnginePolicy} from
   "@agent-teams/agent-execution/composition";
 import {routeSelectionDigest, snapshotRouteSelectionFacts} from
   "@agent-teams/provider-access/composition";
-import type {LinuxCodexLivePins} from "./linux-codex-live-bootstrap.ts";
+import type {LinuxCodexLivePins} from "../../live/linux-codex-live-bootstrap.ts";
 
 const target = Object.freeze({
   provider: "codex",
@@ -43,7 +43,7 @@ export const createLinuxCodexLiveAdminRoute = async (input: Readonly<{
     throw new TypeError("Linux Codex administrative route configuration unavailable");
   }
   const registry: unknown = JSON.parse(await readFile(new URL(
-    "../../../../../docs/architecture/qualification-registry.json", import.meta.url), "utf8"));
+    "../../../../../../docs/architecture/qualification-registry.json", import.meta.url), "utf8"));
   // Read the repository registry; never substitute a fixture or caller registry.
   const rows = (registry as {entries?: unknown[]}).entries;
   if (!Array.isArray(rows) || !rows.some(value => {

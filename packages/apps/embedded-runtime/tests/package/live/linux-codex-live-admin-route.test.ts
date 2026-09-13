@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {createLinuxCodexLiveAdminRoute} from "./linux-codex-live-admin-route.ts";
-import {policy} from "../support/external/agent-execution/fixtures/docker-engine-test-fixture.ts";
+import {policy} from "../../support/external/agent-execution/fixtures/docker-engine-test-fixture.ts";
 import {readContainedTurnRouteEnforcementTarget} from
   "@agent-teams/agent-execution/composition";
 import {snapshotRouteSelectionFacts} from
   "@agent-teams/provider-access/composition";
-import type {LinuxCodexLivePins} from "./linux-codex-live-bootstrap.ts";
+import type {LinuxCodexLivePins} from "../../live/linux-codex-live-bootstrap.ts";
 
 // Synthetic administration only. No setup, migration, engine observation or admission.
 const fixture = () => {

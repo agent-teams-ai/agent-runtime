@@ -9,7 +9,7 @@ import {captureLinuxCodexDeploymentData} from "../../dist/composition/linux-code
 import {bindContainedTurnCapabilityAuthority} from "../../dist/composition/contained-turn-authority-capability.js";
 import {policy} from "../support/external/agent-execution/fixtures/docker-engine-test-fixture.ts";
 import {SYNTHETIC_LOOPBACK_CA} from "../support/external/agent-execution/fixtures/http-egress-tls/synthetic-loopback-certificates.ts";
-import {allocateLinuxCodexLiveAdminDirectories} from "./linux-codex-live-admin-directories.ts";
+import {allocateLinuxCodexLiveAdminDirectories} from "../package/live/linux-codex-live-admin-directories.ts";
 import {createLinuxCodexLiveCanaryConfiguration} from "./linux-codex-live-canary-config.ts";
 
 // Constructor-only regression. Synthetic pins are not measured deployment facts;

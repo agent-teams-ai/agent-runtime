@@ -24,7 +24,7 @@ import type {LinuxCodexDeploymentInfrastructure} from "../../dist/composition/li
 import {createLinuxCodexNodeSelection, type LinuxCodexNodeSelectionPins} from "../package/live/linux-codex-node-selection.ts";
 import {createLinuxCodexPaRenderingFactory, type LinuxCodexOwnedPaMaterial} from "../package/live/linux-codex-pa-rendering.ts";
 
-import {createLinuxCodexLiveFirewallWiring, type LinuxCodexLiveFirewallPins} from "./linux-codex-live-firewall-wiring.ts";
+import {createLinuxCodexLiveFirewallWiring, type LinuxCodexLiveFirewallPins} from "../package/live/linux-codex-live-firewall-wiring.ts";
 
 import {createLiveNativeStartCollector} from "./linux-codex-live-native-start.ts";
 
