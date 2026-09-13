@@ -271,6 +271,155 @@ test("shared providers and root are materialized exactly once", async () => {
   finally { await host.dispose(); }
 });
 
+test("valid root fulfillment after abort awaits factory and cleanup without handoff", async () => {
+  const controller = new AbortController();
+  const entered = deferred<void>();
+  const release = deferred<void>();
+  const cleaning = deferred<void>();
+  const cleanup = deferred<void>();
+  type Outcome = Parameters<NonNullable<NonNullable<Parameters<typeof createRuntimeSetupAttempt>[2]>["observeOutcome"]>>[0];
+  const outcomes: Outcome[] = [];
+  let owned: Awaited<ReturnType<typeof createDefaultAgentRuntimeHost>> | undefined;
+  let disposed = 0;
+  let settled = false;
+  let handoffs = 0;
+  const result = createRuntimeSetupAttempt({ signal: controller.signal }, (platform) => {
+    const factories = createRuntimeSetupFactories(platform);
+    return { ...factories, host: (dependencies) => {
+      const host = factories.host(dependencies);
+      owned = { ...host, dispose: async () => {
+        disposed += 1;
+        cleaning.resolve();
+        await cleanup.promise;
+        await host.dispose();
+      } };
+      return owned;
+    } };
+  }, {
+    completeRoot: async (product) => {
+      assert.equal(product.instance, owned);
+      entered.resolve();
+      await release.promise;
+      return product;
+    },
+    observeOutcome: (outcome) => { outcomes.push(outcome); },
+  });
+  void result.then(() => { settled = true; handoffs += 1; }, () => { settled = true; });
+  await entered.promise;
+  controller.abort("secret late cancellation");
+  // Yield a turn so a premature cancellation race could settle; no timed sleep.
+  await new Promise<void>((resolve) => { setImmediate(resolve); });
+  assert.equal(settled, false);
+  assert.equal(disposed, 0);
+  assert.equal(outcomes.length, 0);
+  release.resolve();
+  await cleaning.promise;
+  await new Promise<void>((resolve) => { setImmediate(resolve); });
+  assert.equal(settled, false, "bootstrap awaits cleanup settlement");
+  assert.equal(disposed, 1);
+  assert.equal(outcomes.length, 1);
+  const outcome = outcomes[0]!;
+  assert.equal(outcome.status, "cancelled");
+  assert.equal(outcome.created.length, 7);
+  assert.equal(outcome.created.filter((entry) => entry.instance === owned).length, 1);
+  assert.equal(outcome.created[6]!.instance, owned);
+  assert.equal(outcome.created[6]!.moduleId, "agent-runtime/runtime-host");
+  assert.equal(outcome.created[6]!.implementationId, "agent-runtime/runtime-host");
+  assert.equal(handoffs, 0);
+  cleanup.resolve();
+  await assert.rejects(result, (error: unknown) => {
+    assert.ok(error instanceof AgentRuntimeHostCreationError);
+    assert.equal(error.code, "cancelled");
+    assert.equal(error.phase, "run");
+    assert.equal(error.cancellationObserved, true);
+    assert.equal(error.cleanupFailed, false);
+    return true;
+  });
+  assert.equal(disposed, 1);
+  assert.equal(handoffs, 0);
+});
+
+test("malformed root after abort preserves primary failure through rejecting cleanup", async () => {
+  const controller = new AbortController();
+  const entered = deferred<void>();
+  const release = deferred<void>();
+  const cleaning = deferred<void>();
+  const cleanup = deferred<void>();
+  type Outcome = Parameters<NonNullable<NonNullable<Parameters<typeof createRuntimeSetupAttempt>[2]>["observeOutcome"]>>[0];
+  const outcomes: Outcome[] = [];
+  let owned: Awaited<ReturnType<typeof createDefaultAgentRuntimeHost>> | undefined;
+  let returned: unknown;
+  let disposed = 0;
+  let getters = 0;
+  let settled = false;
+  const result = createRuntimeSetupAttempt({ signal: controller.signal }, (platform) => {
+    const factories = createRuntimeSetupFactories(platform);
+    return { ...factories, host: (dependencies) => {
+      const host = factories.host(dependencies);
+      owned = { ...host, dispose: async () => {
+        disposed += 1;
+        cleaning.resolve();
+        try { await cleanup.promise; }
+        finally { await host.dispose(); }
+      } };
+      return owned;
+    } };
+  }, {
+    completeRoot: async (product) => {
+      entered.resolve();
+      await release.promise;
+      returned = { instance: product.instance, get capabilities() {
+        getters += 1;
+        throw new Error("secret envelope getter");
+      } };
+      return returned as typeof product;
+    },
+    observeOutcome: (outcome) => { outcomes.push(outcome); },
+  });
+  void result.then(() => { settled = true; }, () => { settled = true; });
+  await entered.promise;
+  controller.abort("secret malformed cancellation");
+  await new Promise<void>((resolve) => { setImmediate(resolve); });
+  assert.equal(settled, false);
+  assert.equal(disposed, 0);
+  assert.equal(outcomes.length, 0);
+  release.resolve();
+  await cleaning.promise;
+  await new Promise<void>((resolve) => { setImmediate(resolve); });
+  assert.equal(settled, false, "bootstrap awaits cleanup rejection");
+  assert.equal(disposed, 1);
+  assert.equal(outcomes.length, 1);
+  const outcome = outcomes[0]!;
+  assert.ok(outcome.status === "failed");
+  assert.equal(outcome.code, "assembly.run.invalid-product");
+  assert.equal(outcome.phase, "completion");
+  assert.equal(outcome.implementationId, "agent-runtime/runtime-host");
+  assert.equal(outcome.returned?.product, returned);
+  assert.equal(outcome.returned?.implementationId, "agent-runtime/runtime-host");
+  assert.equal(outcome.created.length, 6);
+  assert.deepEqual(outcome.created.map((entry) => entry.moduleId).toSorted(), [
+    "agent-runtime/claude-configuration", "agent-runtime/claude-planner",
+    "agent-runtime/codex-configuration", "agent-runtime/codex-planner",
+    "agent-runtime/installation-discovery", "agent-runtime/setup-security",
+  ]);
+  assert.ok(outcome.created.every((entry) => entry.instance !== owned));
+  assert.ok(outcome.cancellation !== undefined);
+  cleanup.reject(new Error("secret cleanup rejection"));
+  await assert.rejects(result, (error: unknown) => {
+    assert.ok(error instanceof AgentRuntimeHostCreationError);
+    assert.equal(error.code, "invalid_factory_product");
+    assert.equal(error.phase, "run");
+    assert.equal(error.moduleId, "agent-runtime/runtime-host");
+    assert.equal(error.cancellationObserved, true);
+    assert.equal(error.cleanupFailed, true);
+    assert.equal(Object.hasOwn(error, "cause"), false);
+    assert.doesNotMatch(JSON.stringify(error) + String(error), /secret/);
+    return true;
+  });
+  assert.equal(disposed, 1);
+  assert.equal(getters, 0);
+});
+
 for (const aborted of [false, true]) {
   test(`malformed root envelope before journal commit cleans captured Host (abort=${aborted})`, async () => {
     const controller = new AbortController();
