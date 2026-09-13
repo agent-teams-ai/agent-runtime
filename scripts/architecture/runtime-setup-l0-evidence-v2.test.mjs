@@ -76,6 +76,20 @@ test("original argv lists and accepted native authority test are preserved exact
     ["tests/contained-turn-route-qualification.test.ts", "tests/features/contained-turn-route-qualification/contained-turn-route-qualification.test.ts"],
     ["tests/opaque-reference-digest.test.ts", "tests/features/setup-inspection-planning/opaque-reference-digest.test.ts"],
     ["tests/trusted-runtime-access-scope.unit.test.ts", "tests/features/trusted-runtime-access-scope/trusted-runtime-access-scope.unit.test.ts"],
+    ["tests/capability-bundle-contract.test.ts", "tests/package/capability-bundle-contract.test.ts"],
+    ["tests/claude-code-semantic-correction.e2e.test.ts", "tests/package/claude-code-semantic-correction.e2e.test.ts"],
+    ["tests/claude-code-setup.e2e.test.ts", "tests/package/claude-code-setup.e2e.test.ts"],
+    ["tests/codex-setup.e2e.test.ts", "tests/package/codex-setup.e2e.test.ts"],
+    ["tests/contained-turn-disposal-races.e2e.test.ts", "tests/package/contained-turn-disposal-races.e2e.test.ts"],
+    ["tests/contained-turn-host-custody-integration.test.ts", "tests/package/contained-turn-host-custody-integration.test.ts"],
+    ["tests/contained-turn-malformed-custody.e2e.test.ts", "tests/package/contained-turn-malformed-custody.e2e.test.ts"],
+    ["tests/contained-turn-nonterminal-custody.e2e.test.ts", "tests/package/contained-turn-nonterminal-custody.e2e.test.ts"],
+    ["tests/contained-turn-provider-access-integration.test.ts", "tests/package/contained-turn-provider-access-integration.test.ts"],
+    ["tests/contained-turn.e2e.test.ts", "tests/package/contained-turn.e2e.test.ts"],
+    ["tests/darwin-native-attempt-authority-join.test.ts", "tests/package/darwin-native-attempt-authority-join.test.ts"],
+    ["tests/host-custodied-agent-runtime-host-disposal-quarantine.test.ts", "tests/package/host-custodied-agent-runtime-host-disposal-quarantine.test.ts"],
+    ["tests/host-shutdown-admission.test.ts", "tests/package/host-shutdown-admission.test.ts"],
+    ["tests/runtime-access-boundaries.e2e.test.ts", "tests/package/runtime-access-boundaries.e2e.test.ts"],
   ]);
   expected[0] = expected[0].map((arg) => relocated.get(arg) ?? arg);
   assert.deepEqual(testProcesses, expected);

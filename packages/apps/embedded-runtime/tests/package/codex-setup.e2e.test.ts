@@ -1,4 +1,4 @@
-import { createAgentRuntimeHost as createClosedAgentRuntimeHost } from "../dist/composition/agent-runtime-host.js";
+import { createAgentRuntimeHost as createClosedAgentRuntimeHost } from "../../dist/composition/agent-runtime-host.js";
 import assert from "node:assert/strict";
 import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -12,7 +12,7 @@ import {
   createCodexSetupInspectionPlanner,
   createDefaultAgentRuntimeHost,
   type BuildCodexSetupViewDependencies,
-} from "../dist/composition.js";
+} from "../../dist/composition.js";
 
 const isDeeplyFrozen = (value: unknown): boolean => {
   if (typeof value !== "object" || value === null) {

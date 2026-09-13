@@ -1,6 +1,6 @@
 import { type ContainedTurnKernelWorkspaceOwner, type HostHttpGrant, type HostHttpProvisionalDecision, type HttpEgressBrokerPorts, createContainedTurnRouteEnforcement, createStrictHttpEgressBroker } from "@agent-teams/agent-execution/composition";
-import {withWorkspaceAuthority} from "./support/external/agent-execution/features/contained-agent-turn/support/docker-workspace-authority-fixture.ts";
-import { imageLock } from "./support/external/agent-execution/fixtures/docker-image-init-fixture.ts";
+import {withWorkspaceAuthority} from "../support/external/agent-execution/features/contained-agent-turn/support/docker-workspace-authority-fixture.ts";
+import { imageLock } from "../support/external/agent-execution/fixtures/docker-image-init-fixture.ts";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -10,17 +10,17 @@ import test from "node:test";
 import {
   createHostCustodiedAgentRuntimeHost,
   ProviderRouteEnforcementUnsupportedError,
-} from "../dist/composition.js";
+} from "../../dist/composition.js";
 import { composeCandidateHostCustodiedContainedTurnForImplementationEvidence } from
-  "../dist/composition/contained-turn-feature-composition.js";
-import { DeterministicCurrentOwnerHost } from "./support/external/agent-execution/current-owner-success-fixture.ts";
-import {setupCapabilities, createCompositionInput, submit} from "./contained-turn-product.fixture.ts";
+  "../../dist/composition/contained-turn-feature-composition.js";
+import { DeterministicCurrentOwnerHost } from "../support/external/agent-execution/current-owner-success-fixture.ts";
+import {setupCapabilities, createCompositionInput, submit} from "../contained-turn-product.fixture.ts";
 
 import {createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate,
   type EgressCurrentAuthorityV2, type RequestFinalEgressAuthorizationV2,
   type SignedFirstApplicationByteGrantV2} from "@agent-teams/runtime-security/composition";
-import {authorityFor, digest} from "./support/external/runtime-security/provider-process-egress-authorization.fixtures.ts";
-import {createEgressFixture, SECRET_MARKER} from "./support/external/agent-execution/features/contained-agent-turn/http-egress-test-fixture.ts";
+import {authorityFor, digest} from "../support/external/runtime-security/provider-process-egress-authorization.fixtures.ts";
+import {createEgressFixture, SECRET_MARKER} from "../support/external/agent-execution/features/contained-agent-turn/http-egress-test-fixture.ts";
 import {
   createCredentialMaterializationRequestDigest,
   createInMemoryContainedTurnDispatchConsumptionV1,
@@ -225,7 +225,7 @@ test("rejects tampered IPv6 grants and peer drift before the first byte", async 
 // Compiled PRODUCT path: synthetic operation owners, actual production selector,
 // Docker kernel custody and private RuntimeAccessHandle. No daemon/provider IO.
 const dockerProductRoute = async () => {
-  const registry = JSON.parse(await readFile(new URL("../../../../docs/architecture/qualification-registry.json", import.meta.url), "utf8"));
+  const registry = JSON.parse(await readFile(new URL("../../../../../docs/architecture/qualification-registry.json", import.meta.url), "utf8"));
   const target = registry.entries.find((entry: {id: string}) => entry.id === "docker-linux-codex-enforced-network-route").targets[0];
   const pin = {path: "/synthetic/unavailable-route-tool", sha256: "a".repeat(64)};
   return createContainedTurnRouteEnforcement({qualificationTarget: target,

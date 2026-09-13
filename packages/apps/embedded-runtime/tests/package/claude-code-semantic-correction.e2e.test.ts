@@ -24,8 +24,8 @@ import {
 import {
   createClaudeCodeSetupInspectionPlanner,
   createCodexSetupInspectionPlanner,
-} from "../dist/composition.js";
-import { createAgentRuntimeHost } from "./helpers/create-agent-runtime-host.ts";
+} from "../../dist/composition.js";
+import { createAgentRuntimeHost } from "../helpers/create-agent-runtime-host.ts";
 
 export const semanticCorrectionProofsRegistered = true;
 
