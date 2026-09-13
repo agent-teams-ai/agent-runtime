@@ -1,5 +1,5 @@
 import {types} from "node:util";
-import type {LinuxCodexDeploymentInfrastructure} from "../../src/composition/linux-codex-deployment.ts";
+import type {LinuxCodexDeploymentInfrastructure} from "../../../src/composition/linux-codex-deployment.ts";
 
 type Recipe = LinuxCodexDeploymentInfrastructure["recipe"];
 const phases = ["preflight", "recipe-create", "ingress-open", "install", "after-install",

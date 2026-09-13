@@ -6,7 +6,7 @@ import {readContainedTurnRouteEnforcementTarget} from
   "@agent-teams/agent-execution/composition";
 import {snapshotRouteSelectionFacts} from
   "@agent-teams/provider-access/composition";
-import type {LinuxCodexLivePins} from "../../live/linux-codex-live-bootstrap.ts";
+import type {LinuxCodexLivePins} from "./linux-codex-live-bootstrap.ts";
 
 // Synthetic administration only. No setup, migration, engine observation or admission.
 const fixture = () => {
