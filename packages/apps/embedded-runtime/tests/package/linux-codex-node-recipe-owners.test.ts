@@ -6,8 +6,8 @@ import {mkdir, mkdtemp, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {policy, call, HOST, HOST_BOOT, DAEMON_BOOT}
-  from "./support/external/agent-execution/fixtures/docker-engine-test-fixture.ts";
-import {subject, MemoryV4Storage} from "./support/external/agent-execution/fixtures/host-http-egress-v4-fixture.ts";
+  from "../support/external/agent-execution/fixtures/docker-engine-test-fixture.ts";
+import {subject, MemoryV4Storage} from "../support/external/agent-execution/fixtures/host-http-egress-v4-fixture.ts";
 
 const options = (root: string): NodeDockerDeploymentRecipeInput => {
   const {allowedNetworkName: _network, ...enginePolicy} = policy(root);
