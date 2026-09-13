@@ -407,6 +407,6 @@ within the three declared production roots and assembly files. It does not prove
 repository-wide Feature Module Standard conformance: Runtime Configuration,
 Runtime Security and Embedded Runtime remain pending.
 
-Current Consumer Module Standard navigation uses the reviewed 2026-09-12 pin
-recorded in [Get Modular adoption](get-modular-adoption.md#reviewed-ordinary-session-documentation-pin-migration).
+Current Consumer Module Standard navigation uses the reviewed 2026-09-13 pin
+recorded in [Get Modular adoption](get-modular-adoption.md#reviewed-auth-compatibility-documentation-pin-migration).
 The 2026-09-09 review above remains historical evidence.
