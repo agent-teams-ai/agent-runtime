@@ -71,6 +71,7 @@ interface OwnerOutputChunkSnapshot {
 }
 
 interface OwnerTurnSnapshot {
+  readonly executionProfile: unknown; readonly effectClass: unknown; readonly capabilityManifestRevision: unknown;
   readonly artifactManifestRef: unknown;
   readonly commandId: unknown;
   readonly effectId: unknown;
@@ -126,6 +127,7 @@ const snapshotOwnerTurn = (
   const operationId = turn.operationId;
   onOperationId?.(operationId);
   return Object.freeze({
+    executionProfile: turn.executionProfile, effectClass: turn.effectClass, capabilityManifestRevision: turn.capabilityManifestRevision,
     artifactManifestRef: turn.artifactManifestRef,
     commandId: turn.commandId,
     effectId: turn.effectId,
@@ -195,7 +197,9 @@ const mapContainedTurnView = (
     (resultRef !== undefined && !isBoundedIdentity(resultRef))) {
     return;
   }
-  if (isTerminalTurnStatus(status) &&
+  const ordinary = turn.executionProfile !== undefined || turn.effectClass !== undefined || turn.capabilityManifestRevision !== undefined;
+  if (ordinary && (turn.executionProfile !== "user-session-v1" || turn.effectClass !== "ordinary_user_session_effect" || turn.capabilityManifestRevision !== "ordinary-codex-macos-arm64-0.153.4-v1")) {return;}
+  if ((ordinary ? status === "succeeded" : isTerminalTurnStatus(status)) &&
     (artifactManifestRef === undefined || resultRef === undefined)) {
     return;
   }
@@ -214,6 +218,7 @@ const mapContainedTurnView = (
     output.push(Object.freeze({ cursor, kind, text }));
   }
   return Object.freeze({
+    ...(ordinary ? {executionProfile: "user-session-v1" as const, effectClass: "ordinary_user_session_effect" as const, capabilityManifestRevision: "ordinary-codex-macos-arm64-0.153.4-v1" as const} : {}),
     ...(artifactManifestRef === undefined ? {} : { artifactManifestRef }),
     commandId,
     effectId,

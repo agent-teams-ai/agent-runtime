@@ -79,3 +79,4 @@ export {
   createContainedTurnLinuxRouteBinding,
   type ContainedTurnLinuxRouteCampaign,
 } from "./composition/contained-turn-linux-route-binding.js";
+export {createAgentRuntimeHost, type OrdinaryAgentRuntimeHostOptions} from "./composition/ordinary-agent-runtime-host.js";

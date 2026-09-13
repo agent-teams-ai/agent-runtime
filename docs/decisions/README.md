@@ -25,6 +25,7 @@ related:
   - ADR-0020
   - ADR-0021
   - ADR-0022
+  - ADR-0090
 blocked_by: []
 code_anchors:
   - enforcement: required
@@ -102,6 +103,7 @@ immutable evidence; a later change uses an explicit superseding decision.
   lets an active host-app list extra `src/composition/*.ts` assembly files that
   may contain process-lifecycle behavior without rewriting ADR-0013 or
   activating Embedded Runtime.
+- [ADR-0090: Ordinary user-session Codex execution profile](0090-ordinary-user-session-codex-execution-profile.md)
 
 ## Superseded
 

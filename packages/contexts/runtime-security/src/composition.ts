@@ -139,3 +139,7 @@ export { createPostgresDispatchAcceptanceStore } from
   "./features/contained-turn-dispatch-authority/internal.js";
 export { createPostgresDispatchConsumptionRepository } from
   "./features/contained-turn-dispatch-authority/internal.js";
+export {createOrdinarySecurityOwner, type OrdinarySecurityOwnerOptions, type OrdinarySecurityOwner,
+  type OrdinarySecurityGrant, type OrdinarySecurityObservation, type OrdinarySecurityScope,
+  type OrdinarySecurityInput, type OrdinarySecurityPolicy, type OrdinarySecurityAuthority,
+  type OrdinarySecuritySettlement} from "./features/contained-turn-dispatch-authority/internal.js";

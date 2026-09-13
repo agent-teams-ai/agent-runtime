@@ -106,6 +106,9 @@ export type ContainedTurnStatus =
   | "succeeded";
 
 export interface ContainedTurnView {
+  readonly executionProfile?: "user-session-v1";
+  readonly effectClass?: "ordinary_user_session_effect";
+  readonly capabilityManifestRevision?: "ordinary-codex-macos-arm64-0.153.4-v1";
   readonly artifactManifestRef?: string;
   readonly commandId: string;
   readonly effectId: string;

@@ -1,3 +1,7 @@
+import {bindContainedTurnCapabilityAuthority} from "./contained-turn-authority-capability.js";
+import {bindOrdinaryRuntime, ordinaryRuntimeDeclarations, ordinaryRuntimeBindings, ordinaryTurnHostSlot, type OrdinaryRuntimeCapabilities, type OrdinaryRuntimeFactories} from "./ordinary-runtime-assembly.js";
+import type {createOrdinaryTurnFeature} from "@agent-teams/agent-execution/composition";
+type OrdinaryFeature = ReturnType<typeof createOrdinaryTurnFeature>;
 import { defineModule } from "@get-modular/core";
 import { assemblyFor, type CapabilityContract } from "@get-modular/assembly";
 import { createAgentRuntimeHost, type AgentRuntimeHost, type AgentRuntimeHostDependencies, type CodexSetupCapabilityBundle, type ClaudeCodeSetupCapabilityBundle } from "./agent-runtime-host.js";
@@ -28,7 +32,7 @@ import { createCodexSetupInspectionPlanner } from "./codex-setup-inspection-plan
 import { createClaudeCodeSetupInspectionPlanner } from "./claude-code-setup-inspection-planner.js";
 
 const compatibility = { family: "exact", familyVersion: 1, token: "agent-runtime/setup-v1" } as const;
-export type RuntimeSetupCapabilities = {
+export type RuntimeSetupCapabilities = OrdinaryRuntimeCapabilities & {
   "agent-runtime/codex-authorization": CapabilityContract<CodexSetupCapabilityBundle["authorizeSetupInspection"], "agent-runtime/setup-v1">;
   "agent-runtime/claude-authorization": CapabilityContract<ClaudeCodeSetupCapabilityBundle["authorizeClaudeCodeSetupInspection"], "agent-runtime/setup-v1">;
   "agent-runtime/codex-installations": CapabilityContract<CodexSetupCapabilityBundle["discoverCodexInstallations"], "agent-runtime/setup-v1">;
@@ -127,6 +131,11 @@ export const runtimeSetupProfile = {
   ],
 } as const;
 
+const ordinaryHostDeclaration = defineModule({...runtimeHostDeclaration, slots: [...runtimeHostDeclaration.slots, ordinaryTurnHostSlot]});
+export const runtimeOrdinarySetupDeclarations = [...runtimeSetupDeclarations.filter(item => item !== runtimeHostDeclaration), ordinaryHostDeclaration, ...ordinaryRuntimeDeclarations];
+export const runtimeOrdinarySetupProfile = {...runtimeSetupProfile, profileId: "agent-runtime/ordinary-session", selections: runtimeOrdinarySetupDeclarations.map(({moduleId, implementationId}) => ({moduleId, implementationId})), bindings: [...runtimeSetupProfile.bindings, ...ordinaryRuntimeBindings]};
+export interface OrdinaryRuntimeAssemblyInput {readonly factories: OrdinaryRuntimeFactories; readonly decorateHost: (host: AgentRuntimeHost, feature: OrdinaryFeature) => AgentRuntimeHost;}
+
 export const createRuntimeSetupFactories = (platform: NodeJS.Platform) => ({
   security: async () => createSetupInspectionAuthorizationFeature({ pathCanonicalizer: createNodePathCanonicalizer() }),
   discovery: async () => createRuntimeInstallationDiscoveryFeature({ executableFileObserver: createNodeExecutableFileObserver() }),
@@ -143,7 +152,7 @@ export type RuntimeSetupRootProduct = { readonly instance: AgentRuntimeHost; rea
 export type RuntimeSetupRootCompletion = (product: RuntimeSetupRootProduct) => Promise<RuntimeSetupRootProduct>;
 
 export function bindRuntimeSetup(factories: RuntimeSetupFactories, captureHost: (host: AgentRuntimeHost) => void,
-  completeRoot?: RuntimeSetupRootCompletion) {
+  completeRoot?: RuntimeSetupRootCompletion, ordinary?: OrdinaryRuntimeAssemblyInput) {
   const assembly = assemblyFor<RuntimeSetupCapabilities>();
   const setupSecurity = assembly.bindFactory(setupSecurityDeclaration, async () => {
     const instance = await factories.security();
@@ -183,8 +192,19 @@ export function bindRuntimeSetup(factories: RuntimeSetupFactories, captureHost: 
       "agent-runtime/claude-planner": instance,
     } };
   });
-  const runtimeHost = assembly.bindFactory(runtimeHostDeclaration, async (dependencies) => {
-    const host = factories.host({
+  type HostInputs = {
+    "authorize-setup-inspection": CodexSetupCapabilityBundle["authorizeSetupInspection"];
+    "discover-codex-installations": CodexSetupCapabilityBundle["discoverCodexInstallations"];
+    "inspect-codex-configuration": CodexSetupCapabilityBundle["inspectCodexConfiguration"];
+    "plan-codex-setup-inspection": CodexSetupCapabilityBundle["planCodexSetupInspection"];
+    "authorize-claude-code-setup-inspection": ClaudeCodeSetupCapabilityBundle["authorizeClaudeCodeSetupInspection"];
+    "discover-claude-code-installations": ClaudeCodeSetupCapabilityBundle["discoverClaudeCodeInstallations"];
+    "inspect-claude-code-configuration": ClaudeCodeSetupCapabilityBundle["inspectClaudeCodeConfiguration"];
+    "plan-claude-code-setup-inspection": ClaudeCodeSetupCapabilityBundle["planClaudeCodeSetupInspection"];
+    "ordinary-turn"?: OrdinaryFeature;
+  };
+  const buildHost = async (dependencies: HostInputs) => {
+    const rawHost = factories.host({
       codexSetup: {
         authorizeSetupInspection: dependencies["authorize-setup-inspection"],
         discoverCodexInstallations: dependencies["discover-codex-installations"],
@@ -196,10 +216,14 @@ export function bindRuntimeSetup(factories: RuntimeSetupFactories, captureHost: 
         inspectClaudeCodeConfiguration: dependencies["inspect-claude-code-configuration"],
         planClaudeCodeSetupInspection: dependencies["plan-claude-code-setup-inspection"],
       },
+      ...(dependencies["ordinary-turn"] === undefined ? {} : {containedTurn: bindContainedTurnCapabilityAuthority(dependencies["ordinary-turn"], "runtime-access-authority:ordinary-user-session-v1")}),
     });
+    const host = ordinary !== undefined && dependencies["ordinary-turn"] !== undefined ? ordinary.decorateHost(rawHost, dependencies["ordinary-turn"]) : rawHost;
     captureHost(host);
     if (completeRoot !== undefined) {return await completeRoot({ instance: host, capabilities: {} });}
     return { instance: host, capabilities: {} };
-  });
-  return { assembly, factories: [setupSecurity, installationDiscovery, codexConfiguration, claudeConfiguration, codexPlanner, claudePlanner, runtimeHost], roots: { host: runtimeHost } };
+  };
+  const runtimeHost = ordinary === undefined ? assembly.bindFactory(runtimeHostDeclaration, buildHost) : assembly.bindFactory(ordinaryHostDeclaration, buildHost);
+  const activeFactories = ordinary === undefined ? [] : bindOrdinaryRuntime(assembly, ordinary.factories);
+  return { assembly, factories: [setupSecurity, installationDiscovery, codexConfiguration, claudeConfiguration, codexPlanner, claudePlanner, ...activeFactories, runtimeHost], roots: { host: runtimeHost } };
 }

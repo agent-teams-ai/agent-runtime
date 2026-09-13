@@ -8,8 +8,8 @@
     "path": "docs/architecture/common-assembly.md",
     "anchor": "consumer-module-standard",
     "decision": "ADR-0026",
-    "commit": "a05f2cb51553e1efc5ba89be352e4aba04675088",
-    "sha256": "ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d",
+    "commit": "669a750d8db451e04f075cdeb36576c6606fba6e",
+    "sha256": "e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553",
     "evidencePath": "architecture/get-modular/evidence/consumer-module-standard.md"
   },
   "authority": {
@@ -144,7 +144,8 @@
       ],
       "entrypoints": [
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.ts"
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-item-schema.ts"
       ],
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules. At 81b2833af, DarwinCodexNativeFiles remains an owner-local Codex adapter resource helper; its durable-journal dependency does not make it an independently composed capability or extend passive scope. Accepted base 0d7a02451 adds an owner-local native observation projection over the existing kernel custody entrypoint; it does not add a passive Assembly capability or transfer custody ownership.",
@@ -1196,6 +1197,203 @@
       ]
     },
     {
+      "id": "adapter.agent-execution.ordinary-filesystem",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-artifacts.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-workspace.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/ordinary-files.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-artifacts.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-workspace.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/ordinary-files.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "ADR-0090 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
+      "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
+      "relationships": [
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-artifacts.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-ports.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-artifacts.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-model.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-workspace.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-ports.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-workspace.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-model.ts",
+          "mode": "type-only"
+        }
+      ]
+    },
+    {
+      "id": "adapter.agent-execution.ordinary-postgres",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-postgres-store.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-state-codec.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-postgres-store.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-state-codec.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "ADR-0090 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
+      "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
+      "relationships": [
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-postgres-store.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-ports.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-postgres-store.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-authority.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-postgres-store.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-model.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-postgres-store.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-validation.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-state-codec.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-codecs.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-state-codec.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-record.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-state-codec.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-model.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-state-codec.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-validation.ts",
+          "mode": "runtime"
+        }
+      ]
+    },
+    {
+      "id": "adapter.agent-execution.ordinary-process",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-process/node-ordinary-process.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-process/node-ordinary-process.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "ADR-0090 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
+      "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
+      "relationships": [
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-process/node-ordinary-process.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-ports.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-process/node-ordinary-process.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-model.ts",
+          "mode": "type-only"
+        }
+      ]
+    },
+    {
+      "id": "adapter.agent-execution.ordinary-provider",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-items.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-items.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "ADR-0090 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
+      "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
+      "relationships": [
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-process/node-ordinary-process.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-ports.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-items.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-item-schema.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-items.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-ports.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-ports.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-model.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-model.ts",
+          "mode": "type-only"
+        }
+      ]
+    },
+    {
       "id": "adapter.agent-execution.provider-delegation-ports",
       "owner": "agent-execution",
       "roots": [
@@ -1247,6 +1445,465 @@
         {
           "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
           "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
+          "mode": "runtime"
+        }
+      ]
+    },
+    {
+      "id": "adapter.provider-access.ordinary",
+      "owner": "provider-access",
+      "roots": [
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-capture.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-contracts.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-files.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-ipc.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-json.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-protocol.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-broker.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-secret-guard.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-upstream.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-schema.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-store.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/dispatch-consumption-data.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/contained-turn-provider-access-mapper.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/dispatch-consumption-mapper.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/materialization-authorization-mapper.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-bytes.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-lifetime.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-owner.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-contracts.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-data.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-repository.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/in-memory-dispatch-consumption-repository.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-generation-acquisition.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-material-bytes.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-selection.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-operation-schema.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-operation-store.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-control.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-data.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-repository.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-schema.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-binding-repository.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-schema.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-transactions.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-postgres.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-schema.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/sha256-dispatch-consumption-digest.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/static-provider-access-binding-repository.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-capture.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-contracts.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-files.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-ipc.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-json.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-protocol.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-broker.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-secret-guard.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-upstream.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-schema.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-store.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/dispatch-consumption-data.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/contained-turn-provider-access-mapper.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/dispatch-consumption-mapper.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/materialization-authorization-mapper.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-bytes.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-lifetime.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-owner.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-contracts.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-data.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-repository.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/in-memory-dispatch-consumption-repository.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-generation-acquisition.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-material-bytes.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-selection.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-operation-schema.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-operation-store.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-control.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-data.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-repository.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-schema.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-binding-repository.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-schema.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-transactions.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-postgres.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-schema.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/sha256-dispatch-consumption-digest.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/static-provider-access-binding-repository.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "ADR-0090 ordinary implementation and explicitly reclassified existing Provider Access owner-local layer helpers. Core, adapters and composition retain separate dependency boundaries; the independently composed owner is selected at the Runtime Assembly root. Existing FMS activation remains unchanged.",
+      "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
+      "relationships": [
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/dispatch-consumption-data.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/dispatch-consumption-data.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/dispatch-consumption-data.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/dispatch-consumption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/contained-turn-provider-access-mapper.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/contained-turn-provider-access-mapper.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/resolve-contained-turn-provider-access.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/contained-turn-provider-access-mapper.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/revalidate-contained-turn-provider-access.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/contained-turn-provider-access-mapper.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/contained-turn-provider-access.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/contained-turn-provider-access-mapper.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/dispatch-consumption-mapper.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/dispatch-consumption-v1.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/dispatch-consumption-mapper.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/dispatch-consumption-v1.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/dispatch-consumption-mapper.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/dispatch-consumption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/materialization-authorization-mapper.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/materialization-authorization-v1.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/materialization-authorization-mapper.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/materialization-authorization-v1.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/materialization-authorization-mapper.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/materialization-authorization.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-bytes.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/materialization-authorization-v1.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-lifetime.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/materialization-authorization-v1.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/materialization-authorization.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-contracts.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-contracts.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/contained-turn-provider-access.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-contracts.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/dispatch-consumption.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-data.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/dispatch-consumption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-data.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/persistence-validation.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/dispatch-consumption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/in-memory-dispatch-consumption-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/in-memory-dispatch-consumption-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/in-memory-dispatch-consumption-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/dispatch-consumption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/in-memory-dispatch-consumption-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/materialization-authorization.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-generation-acquisition.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-generation-acquisition.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/materialization-authorization.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-material-bytes.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-selection.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-selection.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/materialization-authorization.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-broker.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/ordinary-provider-access.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-broker.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/materialization-authorization.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-secret-guard.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/ordinary-provider-access.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-upstream.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/ordinary-provider-access.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-operation-store.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/dispatch-consumption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-control.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/dispatch-consumption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-control.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/materialization-authorization.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-data.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-data.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/dispatch-consumption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/persistence-validation.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/dispatch-consumption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-binding-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-binding-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-binding-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/materialization-authorization.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-binding-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/materialization-authorization.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-schema.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/ordinary-provider-access.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-store.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/ordinary-provider-access.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-store.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/ordinary-provider-access.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/dispatch-consumption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/materialization-authorization.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-postgres.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-postgres.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/dispatch-consumption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/sha256-dispatch-consumption-digest.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-digest.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/static-provider-access-binding-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/static-provider-access-binding-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/static-provider-access-binding-repository.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
+          "mode": "runtime"
+        }
+      ]
+    },
+    {
+      "id": "adapter.runtime-security.ordinary",
+      "owner": "runtime-security",
+      "roots": [
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-owner.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-transactions.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/transaction.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-owner.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-transactions.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/transaction.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "ADR-0090 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
+      "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
+      "relationships": [
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-owner.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-owner.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-owner.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts",
           "mode": "runtime"
         }
       ]
@@ -1420,6 +2077,46 @@
       ]
     },
     {
+      "id": "composition.agent-execution.ordinary",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/ordinary-feature-factory.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/ordinary-feature-factory.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "ADR-0090 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
+      "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
+      "relationships": [
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/ordinary-feature-factory.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-engine.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/ordinary-feature-factory.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-ports.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/ordinary-feature-factory.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/contracts/contained-agent-turn.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/ordinary-feature-factory.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-record.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/ordinary-feature-factory.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-model.ts",
+          "mode": "runtime"
+        }
+      ]
+    },
+    {
       "id": "composition.embedded-runtime",
       "owner": "embedded-runtime",
       "roots": [
@@ -1427,10 +2124,28 @@
         "packages/apps/embedded-runtime/src/composition/agent-runtime-host-creation-error.ts",
         "packages/apps/embedded-runtime/src/composition/default-agent-runtime-host.ts",
         "packages/apps/embedded-runtime/src/composition/host-custodied-agent-runtime-host.ts",
-        "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts"
+        "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+        "packages/apps/embedded-runtime/src/composition/ordinary-agent-runtime-host.ts",
+        "packages/apps/embedded-runtime/src/composition/ordinary-runtime-assembly.ts",
+        "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/adapters/ordinary-observation-journal.ts",
+        "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/adapters/ordinary-owner-acl.ts",
+        "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
+        "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
+        "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/contracts/ordinary-session-observation.ts",
+        "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/index.ts",
+        "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/internal.ts"
       ],
       "entrypoints": [
-        "packages/apps/embedded-runtime/src/composition.ts"
+        "packages/apps/embedded-runtime/src/composition.ts",
+        "packages/apps/embedded-runtime/src/composition/ordinary-agent-runtime-host.ts",
+        "packages/apps/embedded-runtime/src/composition/ordinary-runtime-assembly.ts",
+        "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/adapters/ordinary-observation-journal.ts",
+        "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/adapters/ordinary-owner-acl.ts",
+        "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
+        "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
+        "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/contracts/ordinary-session-observation.ts",
+        "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/index.ts",
+        "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/internal.ts"
       ],
       "status": "adopted",
       "rationale": "Only createDefaultAgentRuntimeHost passive setup is adopted. Host-custodied contained-turn composition remains direct under its existing owner; exact retained relationships are censused, not exempted. Reviewed at 291684ed9: current-authority selection and Linux Codex contained-turn owner, deployment authority, deployment resources and Node recipe are explicit not-adopted Host composition seams. Node recipe consumption is a local subject/signer binding helper with a type-only Agent Execution relationship. Claim, resource custody and cleanup remain Host-owned; none of these seams extends passive Assembly scope. At 81b2833af, the independently composed Darwin authority and deployment roots remain explicitly outside the adopted passive setup scope. Their direct Agent Execution, Provider Access and Runtime Security composition dependencies are censused but not converted into passive Assembly nodes. Accepted base 981c11314 exposes the existing Darwin native authority binder and preparation token, and types the kernel custody port. Accepted base 0d7a02451 publicly wires the existing Darwin contained-turn deployment root; this remains a retained contained-turn composition export and does not extend passive Assembly adoption. These retained contained-turn relationships remain outside passive Assembly construction and transfer no authority or cleanup ownership to Assembly.",
@@ -1538,6 +2253,11 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/ordinary-agent-runtime-host.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition.ts",
           "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
           "mode": "runtime"
         },
@@ -1562,6 +2282,16 @@
           "mode": "runtime"
         },
         {
+          "from": "packages/apps/embedded-runtime/src/composition/default-agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/internal.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/default-agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/internal.ts",
+          "mode": "type-only"
+        },
+        {
           "from": "packages/apps/embedded-runtime/src/composition/host-custodied-agent-runtime-host.ts",
           "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
           "mode": "runtime"
@@ -1582,9 +2312,24 @@
           "mode": "runtime"
         },
         {
+          "from": "packages/apps/embedded-runtime/src/composition/ordinary-agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/default-agent-runtime-host.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/ordinary-runtime-assembly.ts",
+          "to": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/internal.ts",
+          "mode": "runtime"
+        },
+        {
           "from": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
           "to": "@agent-teams/agent-execution/composition",
           "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "type-only"
         },
         {
           "from": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
@@ -1610,6 +2355,71 @@
           "from": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
           "to": "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts",
           "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/ordinary-runtime-assembly.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/adapters/ordinary-owner-acl.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/adapters/ordinary-owner-acl.ts",
+          "to": "@agent-teams/provider-access/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/adapters/ordinary-owner-acl.ts",
+          "to": "@agent-teams/runtime-security/composition",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
+          "to": "@agent-teams/provider-access/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
+          "to": "@agent-teams/runtime-security/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+          "mode": "type-only"
         }
       ]
     },
@@ -2492,6 +3302,470 @@
       ]
     },
     {
+      "id": "composition.provider-access.ordinary",
+      "owner": "provider-access",
+      "roots": [
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/credential-rendering-owner-factory.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/dispatch-consumption-v1-factory.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/feature-module-factory.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/materialization-authorization-v1-factory.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/operation-dispatch-consumption.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/package-composition.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-credential-rendering-owner.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-current-provider-access.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-dispatch-consumption.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-materialization-authorization.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-operation-dispatch-consumption.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/route-selection-owner.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/credential-rendering-owner-factory.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/dispatch-consumption-v1-factory.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/feature-module-factory.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/materialization-authorization-v1-factory.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/operation-dispatch-consumption.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/package-composition.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-credential-rendering-owner.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-current-provider-access.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-dispatch-consumption.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-materialization-authorization.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-operation-dispatch-consumption.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/composition/route-selection-owner.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "ADR-0090 ordinary implementation and explicitly reclassified existing Provider Access owner-local layer helpers. Core, adapters and composition retain separate dependency boundaries; the independently composed owner is selected at the Runtime Assembly root. Existing FMS activation remains unchanged.",
+      "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
+      "relationships": [
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/credential-rendering-owner-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-bytes.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/credential-rendering-owner-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/credential-rendering-owner-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-owner.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/credential-rendering-owner-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-generation-acquisition.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/credential-rendering-owner-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-selection.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/credential-rendering-owner-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/dispatch-consumption-v1-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/dispatch-consumption-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/dispatch-consumption-v1-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/dispatch-consumption-mapper.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/dispatch-consumption-v1-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/dispatch-consumption-v1-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/dispatch-consumption-v1.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/dispatch-consumption-v1-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-digest.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/dispatch-consumption-v1-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/dispatch-consumption-v1-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/dispatch-consumption-v1.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/dispatch-consumption-v1-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/dispatch-consumption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/feature-module-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/contained-turn-provider-access-mapper.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/feature-module-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/feature-module-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/feature-module-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/resolve-contained-turn-provider-access.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/feature-module-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/revalidate-contained-turn-provider-access.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/feature-module-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/contained-turn-provider-access.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/materialization-authorization-v1-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/dispatch-consumption-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/materialization-authorization-v1-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/materialization-authorization-mapper.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/materialization-authorization-v1-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/materialization-authorization-v1-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/materialization-authorization-v1.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/materialization-authorization-v1-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-digest.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/materialization-authorization-v1-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/materialization-authorization-v1-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/materialization-authorization-v1.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/materialization-authorization-v1-factory.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/materialization-authorization.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/operation-dispatch-consumption.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/dispatch-consumption-mapper.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/operation-dispatch-consumption.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-contracts.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/operation-dispatch-consumption.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/operation-dispatch-consumption.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-repository.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/operation-dispatch-consumption.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/sha256-dispatch-consumption-digest.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/operation-dispatch-consumption.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/dispatch-consumption-v1.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/operation-dispatch-consumption.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/dispatch-consumption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-contracts.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-broker.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-secret-guard.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-upstream.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-transactions.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-store.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/ordinary-provider-access.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/ordinary-provider-access.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/package-composition.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/dispatch-consumption-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/package-composition.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/dispatch-consumption-mapper.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/package-composition.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/in-memory-dispatch-consumption-repository.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/package-composition.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/sha256-dispatch-consumption-digest.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/package-composition.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/static-provider-access-binding-repository.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/package-composition.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/contained-turn-provider-access.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/package-composition.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/dispatch-consumption-v1.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/package-composition.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/materialization-authorization-v1.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/package-composition.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/dispatch-consumption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/package-composition.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/materialization-authorization.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-credential-rendering-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-credential-rendering-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-selection.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-credential-rendering-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-binding-repository.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-credential-rendering-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-credential-rendering-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-transactions.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-credential-rendering-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/sha256-dispatch-consumption-digest.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-credential-rendering-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/contained-turn-provider-access.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-current-provider-access.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-binding-repository.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-current-provider-access.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-current-provider-access.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-transactions.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-dispatch-consumption.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-repository.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-dispatch-consumption.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-transactions.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-dispatch-consumption.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/sha256-dispatch-consumption-digest.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-materialization-authorization.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-materialization-authorization.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-transactions.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-materialization-authorization.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/sha256-dispatch-consumption-digest.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-operation-dispatch-consumption.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-contracts.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-operation-dispatch-consumption.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-operation-store.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-operation-dispatch-consumption.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-transactions.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/route-selection-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-bytes.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/route-selection-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-lifetime.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/route-selection-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/route-selection-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-transactions.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/route-selection-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.ts",
+          "mode": "runtime"
+        }
+      ]
+    },
+    {
+      "id": "composition.runtime-security.ordinary",
+      "owner": "runtime-security",
+      "roots": [
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/ordinary-security-factory.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/ordinary-security-factory.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "ADR-0090 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
+      "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
+      "relationships": [
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/ordinary-security-factory.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-owner.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/ordinary-security-factory.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/ordinary-security-factory.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts",
+          "mode": "type-only"
+        }
+      ]
+    },
+    {
       "id": "core.agent-execution.contained-turn",
       "owner": "agent-execution",
       "roots": [
@@ -2523,7 +3797,11 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-record.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-satisfaction.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-transitions.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-validation.ts"
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-validation.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-engine.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-ports.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-model.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-validation.ts"
       ],
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
@@ -2558,6 +3836,105 @@
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules.",
       "reviewTrigger": "Any new independently composed capability or changed cross-module relationship requires reviewed adoption or an exact accepted exception before merge.",
+      "relationships": []
+    },
+    {
+      "id": "core.provider-access.ordinary",
+      "owner": "provider-access",
+      "roots": [
+        "packages/contexts/provider-access/src/features/contained-turn-access/contracts/ordinary-provider-access.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/domain/ordinary-provider-access.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/dispatch-consumption-v1.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/materialization-authorization-v1.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/observe-provider-access-binding.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/persistence-validation.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-clock.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-digest.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.conformance.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-digest.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-repository.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/resolve-contained-turn-provider-access.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/revalidate-contained-turn-provider-access.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/contracts/contained-turn-provider-access.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/contracts/dispatch-consumption-v1.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/contracts/materialization-authorization-v1.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/domain/dispatch-consumption.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/domain/materialization-authorization.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/provider-access/src/features/contained-turn-access/contracts/ordinary-provider-access.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/domain/ordinary-provider-access.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/dispatch-consumption-v1.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/materialization-authorization-v1.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/observe-provider-access-binding.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/persistence-validation.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-clock.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-digest.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.conformance.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-digest.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-repository.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/resolve-contained-turn-provider-access.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/revalidate-contained-turn-provider-access.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/contracts/contained-turn-provider-access.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/contracts/dispatch-consumption-v1.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/contracts/materialization-authorization-v1.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/domain/dispatch-consumption.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/domain/materialization-authorization.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "ADR-0090 ordinary implementation and explicitly reclassified existing Provider Access owner-local layer helpers. Core, adapters and composition retain separate dependency boundaries; the independently composed owner is selected at the Runtime Assembly root. Existing FMS activation remains unchanged.",
+      "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
+      "relationships": [
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/application/observe-provider-access-binding.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/application/observe-provider-access-binding.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/application/resolve-contained-turn-provider-access.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/application/resolve-contained-turn-provider-access.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/application/revalidate-contained-turn-provider-access.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/application/revalidate-contained-turn-provider-access.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
+          "mode": "type-only"
+        }
+      ]
+    },
+    {
+      "id": "core.runtime-security.ordinary",
+      "owner": "runtime-security",
+      "roots": [
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "ADR-0090 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
+      "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
       "relationships": []
     },
     {
@@ -3846,6 +5223,31 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-artifacts.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-workspace.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-process/node-ordinary-process.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-postgres-store.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-engine.ts",
           "mode": "runtime"
         },
@@ -3861,6 +5263,11 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-ports.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
           "mode": "runtime"
         },
@@ -3873,6 +5280,16 @@
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/accepted-authority-anti-corruption.ts",
           "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/ordinary-feature-factory.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/ordinary-feature-factory.ts",
+          "mode": "type-only"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
@@ -3945,6 +5362,16 @@
           "mode": "runtime"
         },
         {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-model.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-model.ts",
+          "mode": "type-only"
+        },
+        {
           "from": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/adapters/outbound/node-executable-file-observer.ts",
           "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
@@ -4012,65 +5439,6 @@
       "owner": "provider-access",
       "roots": [
         "packages/contexts/provider-access/src/composition.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/dispatch-consumption-data.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/contained-turn-provider-access-mapper.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/dispatch-consumption-mapper.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/materialization-authorization-mapper.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-bytes.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-lifetime.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-owner.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-contracts.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-data.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-repository.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/in-memory-dispatch-consumption-repository.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-generation-acquisition.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-material-bytes.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-selection.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-operation-schema.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-operation-store.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-control.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-data.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-repository.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-schema.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-binding-repository.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-schema.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-transactions.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-postgres.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-schema.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/sha256-dispatch-consumption-digest.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/static-provider-access-binding-repository.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/application/dispatch-consumption-v1.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/application/materialization-authorization-v1.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/application/observe-provider-access-binding.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/application/persistence-validation.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-clock.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-digest.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.conformance.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-digest.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-repository.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/application/resolve-contained-turn-provider-access.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/application/revalidate-contained-turn-provider-access.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/composition/credential-rendering-owner-factory.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/composition/dispatch-consumption-v1-factory.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/composition/feature-module-factory.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/composition/materialization-authorization-v1-factory.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/composition/operation-dispatch-consumption.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/composition/package-composition.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-credential-rendering-owner.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-current-provider-access.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-dispatch-consumption.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-materialization-authorization.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-operation-dispatch-consumption.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/composition/route-selection-owner.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/contracts/contained-turn-provider-access.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/contracts/dispatch-consumption-v1.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/contracts/materialization-authorization-v1.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/domain/dispatch-consumption.ts",
-        "packages/contexts/provider-access/src/features/contained-turn-access/domain/materialization-authorization.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/index.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
         "packages/contexts/provider-access/src/index.ts"
@@ -4089,128 +5457,163 @@
           "mode": "runtime"
         },
         {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/dispatch-consumption-data.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/contained-turn-provider-access-mapper.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/inbound/contained-turn-provider-access-mapper.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-bytes.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-lifetime.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-data.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-generation-acquisition.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-material-bytes.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-selection.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-binding-repository.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/index.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/contained-turn-provider-access.ts",
           "mode": "type-only"
         },
         {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-binding-repository.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/index.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/dispatch-consumption-v1.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/static-provider-access-binding-repository.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/index.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/materialization-authorization-v1.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/static-provider-access-binding-repository.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/static-provider-access-binding-repository.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/index.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/ordinary-provider-access.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/application/observe-provider-access-binding.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/credential-rendering-contracts.ts",
           "mode": "type-only"
         },
         {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/application/observe-provider-access-binding.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/dispatch-operation-contracts.ts",
           "mode": "type-only"
         },
         {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/application/resolve-contained-turn-provider-access.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/application/resolve-contained-turn-provider-access.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/application/revalidate-contained-turn-provider-access.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/application/revalidate-contained-turn-provider-access.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/provider-access-binding.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/credential-rendering-owner-factory.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/in-memory-dispatch-consumption-repository.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/dispatch-consumption-v1-factory.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-capture.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/feature-module-factory.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-contracts.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/feature-module-factory.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/provider-access-binding-repository.ts",
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-operation-schema.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-control.ts",
           "mode": "type-only"
         },
         {
-          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/materialization-authorization-v1-factory.ts",
-          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/dispatch-postgres-data.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-binding-repository.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-repository.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-schema.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-transactions.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-schema.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/sha256-dispatch-consumption-digest.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/composition/credential-rendering-owner-factory.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/composition/dispatch-consumption-v1-factory.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/composition/feature-module-factory.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/composition/materialization-authorization-v1-factory.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/composition/operation-dispatch-consumption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/composition/package-composition.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-credential-rendering-owner.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-current-provider-access.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-dispatch-consumption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/composition/postgres-operation-dispatch-consumption.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/composition/route-selection-owner.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/internal.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/ordinary-provider-access.ts",
           "mode": "runtime"
         },
         {
@@ -4281,7 +5684,116 @@
       "id": "production.runtime-security",
       "owner": "runtime-security",
       "roots": [
-        "packages/contexts/runtime-security/src"
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/index.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/internal.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/adapters/inbound/contained-turn-egress-v1.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/contracts/contained-turn-egress-v1.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/dispatch-consumption.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/index.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/internal.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/index.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/internal.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/adapters/inbound/claude-code-setup-inspection-authorization-v1.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/adapters/inbound/setup-inspection-authorization-v1.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/models/claude-code-setup-inspection-models.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/models/setup-inspection-models.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/index.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/internal.ts",
+        "packages/contexts/runtime-security/src/composition.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/dispatch-boundary-value.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/inbound/contained-turn-dispatch-authority-v1-request-mappers.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/inbound/contained-turn-dispatch-authority-v1.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/node-dispatch-proxy.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/in-memory-dispatch-consumption-operations.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/in-memory-dispatch-consumption-repository.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/in-memory-dispatch-consumption-state.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/node-sha256-dispatch-digest.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-acceptance-store.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/records.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/schema.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/consume-for-dispatch.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/contained-turn-dispatch-authority-v1-result-mappers.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/dispatch-acceptance.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/dispatch-authority-dependencies.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/dispatch-canonical.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/dispatch-consumption-models.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/immutable.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/observe-dispatch-consumption.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/outbound/control-clock.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/outbound/dispatch-acceptance-owner.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/outbound/dispatch-consumption-repository.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/outbound/dispatch-digest.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/publish-dispatch-authority.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/settle-dispatch-consumption.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/dispatch-acceptance-factory.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/feature-module-factory.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/node-dispatch-boundary.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-authority-head.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/adapters/outbound/node-ed25519.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/adapters/outbound/node-monotonic-clock.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/adapters/outbound/node-security-primitives.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/adapters/outbound/node-session-transport-boundary.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/application/capture-boundary-ports.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/application/complete-exchange.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/application/contained-turn-egress-dependencies.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/application/contained-turn-egress.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/application/first-write.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/application/lifecycle.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/egress-authorization-signer.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/egress-exchange.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/egress-policy-time-authority.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/monotonic-clock.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/application/ports/outbound/provider-route-authority.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/application/prepare.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/application/revalidate-write.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/application/sign-write.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/application/write-authorization.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/composition/gateway.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/authorization-evidence.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/egress-authorization.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/egress-policy.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/egress-request.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/host-identity.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/network-address.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/provider-route-authority.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/results.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/validation.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/adapters/node-egress-boundary.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/adapters/outbound/node-egress-cryptography.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/application/egress-canonical.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/application/immutable.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/application/ports/outbound/egress-authority-owner.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/application/ports/outbound/egress-control-clock.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/application/ports/outbound/egress-cryptography.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/application/provider-process-egress-authorization.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/composition/current-egress-inputs.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/composition/current-egress-owner.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/composition/current-egress-validation.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/composition/ed25519-v2-candidate-factory.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/composition/feature-module-factory.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/contracts/provider-process-egress-authorization-v1.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/contracts/provider-process-egress-authorization-v2.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/domain/egress-values.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/domain/provider-process-egress-model.ts",
+        "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/domain/public-address.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/adapters/outbound/node-path-algebra.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/adapters/outbound/node-path-canonicalizer.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/adapters/outbound/node-source-identity-digest.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/authorize-claude-code-setup-inspection.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/authorize-setup-inspection.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/claude-code-candidate-scope.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/claude-code-path-authorization.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/claude-code-source-scope.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/deep-freeze-authorization.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/ports/outbound/path-algebra.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/ports/outbound/path-canonicalizer.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/ports/outbound/source-identity-digest.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/composition/feature-module-factory.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/contracts/claude-code-setup-inspection-authorization.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/contracts/setup-inspection-authorization.ts",
+        "packages/contexts/runtime-security/src/index.ts"
       ],
       "entrypoints": [
         "packages/contexts/runtime-security/src/composition.ts",
@@ -4332,6 +5844,96 @@
           "mode": "type-only"
         },
         {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/inbound/contained-turn-dispatch-authority-v1-request-mappers.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/in-memory-dispatch-consumption-operations.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/in-memory-dispatch-consumption-repository.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-acceptance-store.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/transaction.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-acceptance-store.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/transaction.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/transaction.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/transaction.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/dispatch-consumption-repository.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/records.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/consume-for-dispatch.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/contained-turn-dispatch-authority-v1-result-mappers.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/dispatch-acceptance.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/observe-dispatch-consumption.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/publish-dispatch-authority.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/settle-dispatch-consumption.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/dispatch-acceptance-factory.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-authority-head.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/internal.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/ordinary-security-factory.ts",
+          "mode": "runtime"
+        },
+        {
           "from": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/adapters/outbound/node-path-canonicalizer.ts",
           "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
@@ -4373,6 +5975,20 @@
         "packages/apps/embedded-runtime/tests/package/runtime-setup-assembly.types.ts",
         "packages/apps/embedded-runtime/tests/assembly-reference.test.ts"
       ]
+    },
+    {
+      "boundary": "composition.embedded-runtime",
+      "entrypoint": "packages/apps/embedded-runtime/src/composition/ordinary-agent-runtime-host.ts",
+      "implementation": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
+      "declarations": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
+      "profile": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+      "factories": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
+      "factorySymbol": "bindOrdinaryRuntime",
+      "tests": [
+        "packages/apps/embedded-runtime/tests/ordinary-runtime-assembly.test.ts"
+      ],
+      "authority": "ADR-0090",
+      "scopedFms": "architecture/feature-module-standard/ordinary-scope.json"
     }
   ],
   "exceptions": [],
@@ -4450,6 +6066,7 @@
       "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment",
       "packages/apps/embedded-runtime/src/features/linux-codex-deployment",
       "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe",
+      "packages/apps/embedded-runtime/src/features/ordinary-session-runtime",
       "packages/apps/embedded-runtime/src/features/setup-inspection-planning",
       "packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope",
       "packages/contexts/agent-execution/src/features/contained-agent-turn",

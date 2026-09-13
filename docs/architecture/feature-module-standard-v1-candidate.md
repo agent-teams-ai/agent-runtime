@@ -14,6 +14,7 @@ related:
   - ADR-0020
   - ADR-0021
   - ADR-0022
+  - ADR-0090
 code_anchors:
   - enforcement: required
     pattern: architecture/feature-module-standard/**
@@ -22,6 +23,25 @@ code_anchors:
 ---
 
 # Feature Module Standard v1 scoped active adoption
+
+## Additive ordinary session scope
+
+[ADR-0090](../decisions/0090-ordinary-user-session-codex-execution-profile.md)
+authorizes the [ordinary scoped profile](../../architecture/feature-module-standard/ordinary-scope.json).
+It actively checks the complete Embedded Runtime `ordinary-session-runtime`
+feature and the enumerated ordinary source files inside existing Agent
+Execution, Provider Access and Runtime Security features. This adds no claim
+of full Embedded Runtime or Runtime Security legacy conformance.
+
+The canonical active command also executes this scoped checker. It reuses the
+same FMS rules and retains every existing full-profile diagnostic. Exact Host
+composition seams are declared with source, target and import kind; their
+sources must be outer composition code or the named reexport-only facade.
+There are no diagnostic baselines or wildcard exceptions. Source census drift,
+stale seams, inward Node/SDK imports and layer violations fail the gate.
+Assembly graph and scoped rejecting tests also run through the existing
+Get Modular test gate. See the [current adoption record](get-modular-adoption.md)
+for the eight owners and seven turn dependencies.
 
 ## Purpose
 
@@ -103,7 +123,7 @@ with honest ownership and scope evidence. They do not require migrating every
 legacy capability, and cannot exempt the new capability from conformance.
 
 For meaningful composition boundaries, also read the canonical Get Modular
-[Consumer Module Standard](https://github.com/agent-teams-ai/get-modular/blob/03a7df64bc5e9939f7b51694a80a7f3d61453f98/docs/architecture/common-assembly.md#consumer-module-standard).
+[Consumer Module Standard](https://github.com/agent-teams-ai/get-modular/blob/669a750d8db451e04f075cdeb36576c6606fba6e/docs/architecture/common-assembly.md#consumer-module-standard).
 Its composition requirements apply inside an explicitly accepted Host scope;
 this authoring rule does not mandate installing Assembly everywhere. Review
 current upstream against the consumer pin before adoption or boundary changes,
@@ -439,3 +459,7 @@ This evidence proves conformance only for `runtime-installation-discovery`,
 `setup-source-inspection-authorization` within the five declared production
 roots and assembly files. It does not prove repository-wide Feature Module
 Standard conformance: Embedded Runtime remains pending.
+
+Current Consumer Module Standard navigation uses the reviewed 2026-09-13 pin
+recorded in [Get Modular adoption](get-modular-adoption.md#reviewed-auth-compatibility-documentation-pin-migration).
+The 2026-09-09 review above remains historical evidence.

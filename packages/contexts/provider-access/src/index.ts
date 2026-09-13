@@ -42,3 +42,6 @@ export {
   type SettleDispatchConsumptionInput,
   type SettleDispatchConsumptionOutcome,
 } from "./features/contained-turn-access/index.js";
+
+export { OrdinaryPaUnavailable, type OrdinaryPaBinding, type OrdinaryPaAuthority, type OrdinaryPaSnapshot,
+  type OrdinaryPaMaterial, type OrdinaryPaRetirement, type OrdinaryPaSettlement, type OrdinaryPaGrant } from './features/contained-turn-access/index.js';

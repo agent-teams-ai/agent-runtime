@@ -29,3 +29,11 @@ export {
   createOperationDispatchConsumption, createSha256DispatchConsumptionDigest, routeSelectionDigest,
   snapshotRouteSelectionFacts,
 } from "./features/contained-turn-access/internal.js";
+
+export { createOrdinaryCodexAuthCapture, OrdinaryCodexAuthRefused, OrdinaryCodexAuthCleanupIndeterminate,
+  type OrdinaryCodexAuthCapture, type OrdinaryCodexAuthCaptureOptions, type OrdinaryCodexAuthMetadata,
+  type OrdinaryCodexAuthObservation } from './features/contained-turn-access/internal.js';
+
+export { createPostgresOrdinaryProviderAccessOwner, type OrdinaryProviderAccessOwnerOptions } from './features/contained-turn-access/internal.js';
+export { OrdinaryPaUnavailable, type OrdinaryPaBinding, type OrdinaryPaAuthority, type OrdinaryPaSnapshot,
+  type OrdinaryPaMaterial, type OrdinaryPaRetirement, type OrdinaryPaSettlement, type OrdinaryPaGrant } from './features/contained-turn-access/internal.js';
