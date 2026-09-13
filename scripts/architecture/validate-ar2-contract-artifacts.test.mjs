@@ -154,7 +154,7 @@ test("default repository validation has no exact-legacy-checkout dependency", as
   assert.doesNotMatch(validatorSource, /legacy-exact|\/home\/agent-runtime-postmerge/u);
   for (const [path, expectedRead] of [
     ["scripts/architecture/validate-claude-official-semantics.mjs", /readCustodiedRepositoryFile\(document\.artifactPath/u],
-    ["packages/contexts/runtime-configuration/tests/features/claude-code-configuration-inspection/claude-code-contract.test.ts", /readCustodiedRepositoryFile\(/u],
+    ["packages/contexts/runtime-configuration/tests/package/claude-code-contract-custody.test.ts", /readCustodiedRepositoryFile\(/u],
     ["packages/apps/embedded-runtime/tests/claude-code-setup.e2e.test.ts", /readAr2FixtureJson\(/u],
   ]) {
     const allowedRoot = path.slice(0, path.lastIndexOf("/"));

@@ -4,11 +4,11 @@ import {
   CLAUDE_CODE_EFFORT_VOCABULARY,
   CLAUDE_CODE_MODEL_VOCABULARY,
 } from "./models/claude-code-vocabulary.js";
+import type { ClaudeCodeEffortLevel, ClaudeCodeModelName } from "./models/claude-code-vocabulary.js";
 import type {
-  ClaudeCodeConfigurationDiagnosticCode,
-  ClaudeCodeEffort,
-  ClaudeCodeModelAlias, ClaudeCodeModelSelection,
-} from "../contracts/claude-code-configuration-inspection.js";
+  ClaudeCodeInspectionDiagnosticCode,
+  ClaudeCodeModelSelection,
+} from "./models/claude-code-inspection-models.js";
 import type {
   ClassifyClaudeCodeConfigurationResult,
   PortableClaudeCodeDefinition,
@@ -25,7 +25,7 @@ interface NormalizationState {
 const portableKeys = new Set(["model", "effortLevel"] as const);
 const modelAliases = new Set<string>(CLAUDE_CODE_MODEL_VOCABULARY);
 const effortValues = new Set<string>(CLAUDE_CODE_EFFORT_VOCABULARY);
-const diagnosticCodes = new Set<ClaudeCodeConfigurationDiagnosticCode>([
+const diagnosticCodes = new Set<ClaudeCodeInspectionDiagnosticCode>([
   "configuration_dialect_unsupported", "config_duplicate_key", "config_invalid_utf8",
   "config_parse_failed", "config_too_large", "config_unreadable",
   "credential_material_rejected", "provider_route_deferred", "secret_setting_rejected",
@@ -34,7 +34,7 @@ const diagnosticCodes = new Set<ClaudeCodeConfigurationDiagnosticCode>([
   "source_inventory_overflow", "source_plan_invalid", "source_plan_unsupported",
   "source_total_too_large",
 ]);
-const parserDiagnosticCodes = new Set<ClaudeCodeConfigurationDiagnosticCode>([
+const parserDiagnosticCodes = new Set<ClaudeCodeInspectionDiagnosticCode>([
   "config_duplicate_key", "config_invalid_utf8", "config_parse_failed", "config_too_large",
 ]);
 const secretValueShape = /(?:api[_-]?key|credential|oauth|password|secret|token|\bBearer\s+\S+|\bAKIA[A-Z0-9]{16}\b|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b|\b(?:github_pat_|gh[pousr]_|glpat-|npm_|sk-|xox[baprs]-)[A-Za-z0-9_-]{12,}|\b[A-Za-z0-9_]{32,}\b|-----BEGIN [A-Z ]*PRIVATE KEY-----)/iu;
@@ -189,7 +189,7 @@ export const validateClaudeCodeJsonParseResult = (
   }
   if (record.status === "rejected" && Object.keys(record).length === 2 &&
       typeof record.diagnostic === "string" &&
-      parserDiagnosticCodes.has(record.diagnostic as ClaudeCodeConfigurationDiagnosticCode)) {
+      parserDiagnosticCodes.has(record.diagnostic as ClaudeCodeInspectionDiagnosticCode)) {
     return {
       diagnostic: record.diagnostic as Extract<
         ParseClaudeCodeJsonResult,
@@ -222,7 +222,7 @@ const modelSelection = (value: unknown): ClaudeCodeModelSelection => {
   if (record.kind === "alias" && Object.keys(record).length === 2 &&
       typeof record.value === "string" && modelAliases.has(record.value) &&
       record.value !== CLAUDE_CODE_DEFAULT_MODEL) {
-    return Object.freeze({ kind: "alias", value: record.value as ClaudeCodeModelAlias });
+    return Object.freeze({ kind: "alias", value: record.value as ClaudeCodeModelName });
   }
   if (record.kind === "exact-name" && Object.keys(record).length === 2 &&
       typeof record.value === "string" &&
@@ -248,7 +248,7 @@ const definitions = (value: unknown): readonly PortableClaudeCodeDefinition[] =>
     }
     if (record.key === "effortLevel" && Object.keys(record).length === 2 &&
         typeof record.value === "string" && effortValues.has(record.value)) {
-      return Object.freeze({ key: "effortLevel" as const, value: record.value as ClaudeCodeEffort });
+      return Object.freeze({ key: "effortLevel" as const, value: record.value as ClaudeCodeEffortLevel });
     }
     throw new TypeError("definition value");
   });
@@ -278,8 +278,8 @@ const diagnostics = (value: unknown): ClassifyClaudeCodeConfigurationResult["dia
   const output = items.map(item => {
     const record = exactRecord(item, new Set(["code"]));
     if (record === undefined || typeof record.code !== "string" ||
-        !diagnosticCodes.has(record.code as ClaudeCodeConfigurationDiagnosticCode)) {throw new TypeError("diagnostic");}
-    return Object.freeze({ code: record.code as ClaudeCodeConfigurationDiagnosticCode });
+        !diagnosticCodes.has(record.code as ClaudeCodeInspectionDiagnosticCode)) {throw new TypeError("diagnostic");}
+    return Object.freeze({ code: record.code as ClaudeCodeInspectionDiagnosticCode });
   });
   if (new Set(output.map(item => item.code)).size !== output.length) {throw new TypeError("duplicate diagnostic");}
   return Object.freeze(output.toSorted((left, right) => left.code < right.code ? -1 : 1));
