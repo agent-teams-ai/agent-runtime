@@ -4371,7 +4371,7 @@
       "tests": [
         "packages/apps/embedded-runtime/tests/package/runtime-setup-assembly.test.ts",
         "packages/apps/embedded-runtime/tests/package/runtime-setup-assembly.types.ts",
-        "packages/apps/embedded-runtime/tests/assembly-reference.test.ts"
+        "packages/apps/embedded-runtime/tests/package/assembly-reference.test.ts"
       ]
     }
   ],
