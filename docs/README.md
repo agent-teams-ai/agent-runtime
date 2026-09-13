@@ -198,7 +198,7 @@ Document status vocabulary:
 
 Production code must not use an evidence document as its architecture source
 of truth. Accepted ADR-0001 through ADR-0010, ADR-0012 through ADR-0015, and
-ADR-0017 through ADR-0022, excluding proposed ADR-0006, proposed ADR-0016, and the unassigned ADR
+ADR-0017 through ADR-0022 and ADR-0090, excluding proposed ADR-0006, proposed ADR-0016, and the unassigned ADR
 identities, plus the promoted-rule column of the traceability matrix are normative for production
 architecture. ADR-0007 governs deterministic documentation changes.
 Supporting architecture documents are accepted only as amended by the ADRs.
@@ -221,3 +221,5 @@ target returns `unqualified`.
 Current passive composition adoption: [ADR-0015](decisions/0015-passive-setup-static-assembly-adoption.md)
 and [Get Modular adoption](architecture/get-modular-adoption.md). This is authority
 groundwork, not delivered adoption or provider qualification.
+
+- [ADR-0090: Ordinary user-session Codex execution profile](decisions/0090-ordinary-user-session-codex-execution-profile.md) accepts the ordinary contract; implementation and qualification remain pending.
