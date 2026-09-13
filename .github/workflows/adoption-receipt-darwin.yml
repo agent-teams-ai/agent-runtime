@@ -1,5 +1,5 @@
 name: adoption-receipt-darwin
-# capture leftover identity d5939309 after main absorb
+# retrigger d5939309 (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host leftover-after-main identity
 # c20983e6 stacked on Host multi-package D 29e49c0b.
