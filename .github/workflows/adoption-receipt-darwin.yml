@@ -1,5 +1,5 @@
 name: adoption-receipt-darwin
-# capture recipe-owners identity d22b0d76
+# retrigger d22b0d76 (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host recipe-owners identity
 # d22b0d76 stacked on Host packed-consumer D 9710d078.
