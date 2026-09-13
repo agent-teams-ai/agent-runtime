@@ -98,18 +98,19 @@
           ".",
           "./composition"
         ],
-        "adoption": "pending"
+        "adoption": "active",
+        "activationAuthority": "ADR-0021"
       }
     ],
     "productionRoots": [
       "packages/contexts/agent-execution/src",
       "packages/contexts/provider-access/src",
       "packages/contexts/runtime-configuration/src",
-      "packages/platform/filesystem-custody/src"
+      "packages/platform/filesystem-custody/src",
+      "packages/contexts/runtime-security/src"
     ],
     "outOfScope": [
       "Embedded Runtime",
-      "Runtime Security",
       "Module Kit",
       "experiments",
       "tooling other than scripts/architecture/check-feature-modules.mjs"
@@ -206,6 +207,65 @@
         "public": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/index.ts",
         "internal": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/internal.ts"
       }
+    },
+    {
+      "id": "contained-turn-dispatch-authority",
+      "root": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority",
+      "roles": [
+        "contracts",
+        "domain",
+        "application",
+        "adapters",
+        "composition"
+      ],
+      "entrypoints": {
+        "public": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/index.ts",
+        "internal": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/internal.ts"
+      }
+    },
+    {
+      "id": "contained-turn-egress",
+      "root": "packages/contexts/runtime-security/src/features/contained-turn-egress",
+      "roles": [
+        "contracts",
+        "domain",
+        "application",
+        "adapters",
+        "composition"
+      ],
+      "entrypoints": {
+        "public": "packages/contexts/runtime-security/src/features/contained-turn-egress/index.ts",
+        "internal": "packages/contexts/runtime-security/src/features/contained-turn-egress/internal.ts"
+      }
+    },
+    {
+      "id": "provider-process-egress-authorization",
+      "root": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization",
+      "roles": [
+        "contracts",
+        "domain",
+        "application",
+        "adapters",
+        "composition"
+      ],
+      "entrypoints": {
+        "public": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/index.ts",
+        "internal": "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/internal.ts"
+      }
+    },
+    {
+      "id": "setup-source-inspection-authorization",
+      "root": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization",
+      "roles": [
+        "contracts",
+        "application",
+        "adapters",
+        "composition"
+      ],
+      "entrypoints": {
+        "public": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/index.ts",
+        "internal": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/internal.ts"
+      }
     }
   ],
   "assemblyFiles": [
@@ -216,7 +276,9 @@
     "packages/platform/filesystem-custody/src/index.ts",
     "packages/platform/filesystem-custody/src/composition.ts",
     "packages/contexts/runtime-configuration/src/index.ts",
-    "packages/contexts/runtime-configuration/src/composition.ts"
+    "packages/contexts/runtime-configuration/src/composition.ts",
+    "packages/contexts/runtime-security/src/index.ts",
+    "packages/contexts/runtime-security/src/composition.ts"
   ],
   "featureEdges": [],
   "moduleEdges": [
@@ -230,6 +292,13 @@
     },
     {
       "from": "runtime-configuration",
+      "to": "filesystem-custody",
+      "kinds": [
+        "runtime"
+      ]
+    },
+    {
+      "from": "runtime-security",
       "to": "filesystem-custody",
       "kinds": [
         "runtime"
@@ -269,13 +338,13 @@
       "packages/contexts/agent-execution",
       "packages/contexts/provider-access",
       "packages/platform/filesystem-custody",
-      "packages/contexts/runtime-configuration"
+      "packages/contexts/runtime-configuration",
+      "packages/contexts/runtime-security"
     ],
     "applicationRoots": [],
     "excludedRoots": [
       "experiments",
-      "packages/apps/embedded-runtime",
-      "packages/contexts/runtime-security"
+      "packages/apps/embedded-runtime"
     ],
     "abstractLayout": {
       "modules": [
@@ -318,6 +387,16 @@
           "testRoot": "packages/contexts/runtime-configuration/tests",
           "featureTestsRoot": "packages/contexts/runtime-configuration/tests/features",
           "moduleTestsRoot": "packages/contexts/runtime-configuration/tests/package"
+        },
+        {
+          "moduleRoot": "packages/contexts/runtime-security",
+          "sourceRoot": "packages/contexts/runtime-security/src",
+          "featuresRoot": "packages/contexts/runtime-security/src/features",
+          "moduleComposition": "packages/contexts/runtime-security/src/composition.ts",
+          "publicEntrypoint": "packages/contexts/runtime-security/src/index.ts",
+          "testRoot": "packages/contexts/runtime-security/tests",
+          "featureTestsRoot": "packages/contexts/runtime-security/tests/features",
+          "moduleTestsRoot": "packages/contexts/runtime-security/tests/package"
         }
       ],
       "applications": []
