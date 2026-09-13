@@ -134,7 +134,7 @@ export function verifyReleasedCleanup(cleanup) {
 }
 
 export async function runDarwinPublicRuntimeHostChild() {
-  const {loadDarwinLiveActivation, createDarwinLiveRuntime} = await import("../package/live/darwin-live-production-root.mjs");
+  const {loadDarwinLiveActivation, createDarwinLiveRuntime} = await import("./darwin-live-production-root.mjs");
   const sealed = await loadDarwinLiveActivation();
   // Real codexHome/sandbox/operatorApproval never enter the sealed manifest
   // (finding 6); this process (dropped to the operator's own uid, env wiped
