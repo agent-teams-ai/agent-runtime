@@ -1,4 +1,5 @@
 name: adoption-receipt-darwin
+# retrigger dc831ea4 (second push)
 # Temporary workflow: Darwin arm64 adoption receipt for Host PA/RS unpublished fixture copies
 # identity dc831ea4 stacked on Host remaining top-level support R bcc6c07c.
 # The job always checks out that SHA so this workflow-only commit does not
