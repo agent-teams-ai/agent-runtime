@@ -1,7 +1,7 @@
 import {createHash} from "node:crypto";
 import assert from "node:assert/strict";
 import test from "node:test";
-import {mkdtemp, mkdir, writeFile, readFile, readdir, realpath, symlink, link, chmod, rm} from "node:fs/promises";
+import {mkdtemp, mkdir, writeFile, readFile, readdir, realpath, symlink, link, chmod, rm, stat} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {createNodeOrdinaryWorkspace, OrdinaryWorkspacePreparationRetained} from "../../../dist/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-workspace.js";
@@ -28,9 +28,16 @@ test("ordinary generic result survives workspace cleanup and fresh artifact read
   const receipt = await artifacts.publish(operation, snapshot);
   await workspace.close(handle);
   assert.equal(Buffer.from(await readNodeOrdinaryArtifact(options, receipt)).toString(), "arbitrary result\n");
+  assert.equal((await stat(join(options.artifactRoot, receipt.artifactDigest))).mode & 0o777, 0o500);
+  assert.equal((await stat(receipt.resultRef)).mode & 0o777, 0o400);
+  assert.equal((await stat(receipt.artifactManifestRef)).mode & 0o777, 0o400);
   assert.equal((await artifacts.publish(operation, snapshot)).artifactDigest, receipt.artifactDigest);
+  assert.deepEqual(await readdir(options.artifactRoot), [receipt.artifactDigest]);
   await chmod(receipt.resultRef, 0o600); await writeFile(receipt.resultRef, "corrupt");
   await assert.rejects(readNodeOrdinaryArtifact(options, receipt), /corrupt/);
+  await assert.rejects(artifacts.publish(operation, snapshot), /corrupt/);
+  assert.deepEqual(await readdir(options.artifactRoot), [receipt.artifactDigest]);
+  assert.equal(await readFile(receipt.resultRef, "utf8"), "corrupt");
   await chmod(join(options.artifactRoot, receipt.artifactDigest), 0o700);
 });
 for (const kind of ["symlink", "hardlink", "source-mutation"] as const) {test(`ordinary rejects ${kind} and retains recovery workspace`, async t => {

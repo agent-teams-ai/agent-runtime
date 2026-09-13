@@ -38,12 +38,18 @@ export function createNodeOrdinaryArtifacts(options: NodeOrdinaryArtifactsOption
     await writeSynced(join(staging, "result.txt"), bytes, 0o400);
     await writeSynced(join(staging, "manifest.json"), manifest, 0o400);
     await syncDirectory(staging);
-    await chmod(staging, 0o500);
+    // Darwin requires a writable source directory for rename, even within one parent.
     try { await rename(staging, target); }
     catch (error) {
-      if (!(error instanceof Error && "code" in error && (error.code === "EEXIST" || error.code === "ENOTEMPTY"))) {throw error;}
-      await chmod(staging, 0o700); await rm(staging, {recursive: true});
+      if (!(error instanceof Error && "code" in error && (error.code === "EEXIST" || error.code === "ENOTEMPTY" || error.code === "EACCES"))) {throw error;}
+      // Darwin can also report EACCES for an existing sealed destination.
+      // Only reconcile a real private directory; readback below still verifies its bytes.
+      try {await directory(target, true);} catch {throw error;}
+      await rm(staging, {recursive: true});
     }
+    await directory(target, true);
+    await chmod(target, 0o500);
+    await syncDirectory(target);
     await syncDirectory(options.artifactRoot);
     const published: OrdinaryReceiptOf<"artifact_published"> = {operationId: operation.operationId, attemptId: operation.attemptId, executionProfile: operation.executionProfile, capabilityManifestRevision: operation.capabilityManifestRevision, kind: "artifact_published", workspaceId: receipt.workspaceId, snapshotDigest: receipt.snapshotDigest, artifactDigest, artifactManifestRef: join(target, "manifest.json"), resultRef: join(target, "result.txt"), byteLength: bytes.length};
     await readNodeOrdinaryArtifact(options, published);
