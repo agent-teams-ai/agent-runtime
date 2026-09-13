@@ -17,7 +17,8 @@ import type {
   CodexSetupDiagnostic,
   InspectCodexRuntimeSetup,
   InspectCodexRuntimeSetupOutcome,
-} from "../../contracts/runtime-access.js";
+} from "../../composition/contained-turn-runtime-access.js";
+
 import type { CodexSetupInspectionPlanner } from "./codex-setup-inspection-planner.js";
 import type { OpaqueReferenceDigest } from "./opaque-reference-digest.js";
 import type { TrustedCodexSetupScope } from "../../composition/trusted-runtime-access-scope.js";

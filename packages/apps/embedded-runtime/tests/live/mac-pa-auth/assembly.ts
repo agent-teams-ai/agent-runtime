@@ -2,7 +2,8 @@ import { acquireAndPublish, type OperatorApproval } from './bootstrap.ts';
 import type { PrivateAuthConfig } from './owner.ts';
 import { createCodexCurrentKernelOwner, type CreateCodexCurrentKernelOwnerOptions, type HostHttpEgressSessionDependencies } from '@agent-teams/agent-execution/composition';
 import { createDispatchAcceptanceFeature, type DispatchAcceptanceDependencies } from '@agent-teams/runtime-security/composition';
-import type { RuntimeAccessHandle } from '../../../src/contracts/runtime-access.js';
+import type { RuntimeAccessHandle } from '../../../src/composition/contained-turn-runtime-access.js';
+
 type PA = Awaited<ReturnType<typeof acquireAndPublish>>;
 type Kernel = ReturnType<typeof createCodexCurrentKernelOwner>;
 type Security = ReturnType<typeof createDispatchAcceptanceFeature>;

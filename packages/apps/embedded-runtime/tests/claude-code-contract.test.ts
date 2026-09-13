@@ -13,7 +13,13 @@ const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 test("freezes the prospective provider-specific no-product-input Claude contract", async () => {
   const declaration = await readFile(
-    join(packageRoot, "dist", "contracts", "runtime-access.d.ts"),
+    join(
+      packageRoot,
+      "dist",
+      "features",
+      "contained-turn-runtime-access",
+      "runtime-access.d.ts",
+    ),
     "utf8",
   );
   assert.match(

@@ -1159,9 +1159,9 @@ boundaries:
 - id: core.embedded-runtime.access-contracts
   dependencyMode: runtime
   roots:
-  - packages/apps/embedded-runtime/src/contracts/runtime-access.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts
   entrypoints:
-  - packages/apps/embedded-runtime/src/contracts/runtime-access.ts
+  - packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts
   allow:
     boundaries: []
     packages: []

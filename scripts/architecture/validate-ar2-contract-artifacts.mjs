@@ -22,7 +22,7 @@ const contractCoveragePath = `${fixtureRoot}/contract-coverage.json`;
 const packagePath = "package.json";
 const roadmapPath = "docs/architecture/provider-setup-delivery-roadmap.md";
 const readinessPath = "docs/architecture/readiness.md";
-const runtimeAccessPath = "packages/apps/embedded-runtime/src/contracts/runtime-access.ts";
+const runtimeAccessPath = "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts";
 const repositoryRoot = new URL("../../", import.meta.url);
 
 const readEvidence = async (path, options) => readCustodiedRepositoryFile(path, options);

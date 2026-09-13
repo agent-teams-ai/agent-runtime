@@ -252,7 +252,10 @@ outbound `OpaqueReferenceDigest` port with a Host adapter, so
 `node:crypto` directly, and the package boundary now rejects that import from
 unowned application files. Runtime-access coordination now lives under
 `src/features/contained-turn-runtime-access/` with curated `index.ts` /
-`internal.ts` entrypoints. Host composition re-exports that feature entry from
+`internal.ts` entrypoints. Public runtime-access DTOs live in that feature as
+`runtime-access.ts`; the package root and Host composition re-export them, so
+callers do not import a leftover `src/contracts/` tree. Host composition still
+re-exports the feature runtime entry from
 `src/composition/contained-turn-runtime-access.ts`, so existing composition
 imports keep working. The implementation is not yet an inward `application/`
 layer: it still imports Host composition helpers, so it stays at the feature

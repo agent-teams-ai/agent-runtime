@@ -21,7 +21,8 @@ import type {
   ClaudeCodeSetupDiagnostic,
   ClaudeCodeSetupExpectedLimitations,
   InspectClaudeCodeRuntimeSetupOutcome,
-} from "../../contracts/runtime-access.js";
+} from "../../composition/contained-turn-runtime-access.js";
+
 
 export interface BuildClaudeCodeSetupViewDependencies {
   readonly authorizeClaudeCodeSetupInspection: AuthorizeClaudeCodeSetupInspection;

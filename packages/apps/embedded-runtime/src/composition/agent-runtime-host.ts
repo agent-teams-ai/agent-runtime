@@ -16,7 +16,8 @@ import type {
   InspectCodexRuntimeSetupOutcome,
   InspectClaudeCodeRuntimeSetupOutcome,
   RuntimeAccessHandle,
-} from "../contracts/runtime-access.js";
+} from "./contained-turn-runtime-access.js";
+
 import {
   copyTrustedCodexSetupScope,
   copyTrustedClaudeCodeSetupScope,

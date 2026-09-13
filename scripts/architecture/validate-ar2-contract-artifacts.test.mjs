@@ -83,7 +83,7 @@ test("AR-2 inventory and Claude freeze packet satisfy the frozen contract", asyn
 test("Claude public diagnostics have exact set parity with the freeze", async () => {
   const [freeze, runtimeAccessSource] = await Promise.all([
     readJson("docs/architecture/claude-code-setup-freeze.json", "docs/architecture"),
-    readRepositoryText("packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+    readRepositoryText("packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts",
       "packages/apps/embedded-runtime/src"),
   ]);
   assert.doesNotThrow(() => validateClaudeDiagnosticParity(freeze.diagnostics, runtimeAccessSource));
@@ -100,7 +100,7 @@ test("Claude public diagnostics have exact set parity with the freeze", async ()
 test("Claude public expected limitations have exact field parity with the freeze", async () => {
   const [freeze, runtimeAccessSource] = await Promise.all([
     readJson("docs/architecture/claude-code-setup-freeze.json", "docs/architecture"),
-    readRepositoryText("packages/apps/embedded-runtime/src/contracts/runtime-access.ts",
+    readRepositoryText("packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/runtime-access.ts",
       "packages/apps/embedded-runtime/src"),
   ]);
   assert.doesNotThrow(() => validateClaudeExpectedLimitationsParity(
