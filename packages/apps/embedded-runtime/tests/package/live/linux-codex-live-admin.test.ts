@@ -169,8 +169,8 @@ import {
   standardHandshake,
   syntheticPrivateRoot as codexFixturePrivateRoot,
   syntheticTmp as codexFixtureTmp,
-} from "../../support/external/agent-execution/codex-app-server-contained-turn-provider-fixture.ts";
-import { emitAgentCompleted, emitAgentStarted, emitTurnStarted, generatedTurn } from "../../support/external/agent-execution/codex-app-server-test-messages.mjs";
+} from "../support/external/agent-execution/codex-app-server-contained-turn-provider-fixture.ts";
+import { emitAgentCompleted, emitAgentStarted, emitTurnStarted, generatedTurn } from "../support/external/agent-execution/codex-app-server-test-messages.mjs";
 
 test("admin inventory and real bootstrap resolver carry accepted ACL identity into the owner plan and redact output", async () => {
   const workspaceRef = codexFixtureBoundary.workspaceRef;
