@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 const readDeclarationClosure = async (entrypoint: string): Promise<string> => {
   const pending = [entrypoint];
@@ -205,7 +205,7 @@ test("application and contracts stay independent from adapters and runtime frame
 
 
 test("private default composition is async and synchronous leaf is internal", async () => {
-  const composition = await import("../dist/composition.js");
+  const composition = await import("../../dist/composition.js");
   assert.equal("createAgentRuntimeHost" in composition, false);
   assert.equal("createRuntimeSetupAttempt" in composition, false);
   const pending = composition.createDefaultAgentRuntimeHost();

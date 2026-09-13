@@ -4,12 +4,12 @@ import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { createBuildClaudeCodeSetupView } from "../dist/features/setup-inspection-planning/build-claude-code-setup-view.js";
-import { createNodeOpaqueReferenceDigest } from "../dist/composition/opaque-reference-digest.js";
+import { createBuildClaudeCodeSetupView } from "../../dist/features/setup-inspection-planning/build-claude-code-setup-view.js";
+import { createNodeOpaqueReferenceDigest } from "../../dist/composition/opaque-reference-digest.js";
 
 const referenceDigest = createNodeOpaqueReferenceDigest();
 
-const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 test("freezes the prospective provider-specific no-product-input Claude contract", async () => {
   const declaration = await readFile(

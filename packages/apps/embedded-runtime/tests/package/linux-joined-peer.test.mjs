@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {installJoinedPeer} from "./support/linux-joined-peer.mjs";
+import {installJoinedPeer} from "../support/linux-joined-peer.mjs";
 
 for (const text of ['data: {"error":"synthetic upstream failure"}\n\n', 'data:', '']) {
   test(`joined peer rejects unexpected upstream body ${JSON.stringify(text)}`, async () => {
