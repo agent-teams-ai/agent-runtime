@@ -64,8 +64,8 @@ export const testProcesses = [
     "tests/package/live/linux-codex-live-admin-firewall.test.ts",
     "tests/package/live/linux-codex-live-firewall-wiring.test.ts",
     "tests/package/contained-turn-http-digest-alignment.test.ts",
-    "tests/live/run-linux-codex-live-canary.test.mjs",
-    "tests/live/run-linux-codex-live-canary-cli.test.mjs",
+    "tests/package/live/run-linux-codex-live-canary.test.mjs",
+    "tests/package/live/run-linux-codex-live-canary-cli.test.mjs",
     "tests/package/node-docker-route-provenance-integration.test.ts"
   ],
   [

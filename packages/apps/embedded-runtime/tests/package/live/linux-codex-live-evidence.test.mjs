@@ -9,7 +9,7 @@ import {collectLinuxCodexLiveEvidence} from './linux-codex-live-evidence.mjs';
 import {encodeContainedTurnArtifactManifest, computeContainedTurnArtifactTreeDigest} from '@agent-teams/agent-execution/composition';
 import {createHash} from 'node:crypto';
 
-const platform = new URL('../../../../platform/filesystem-custody/', import.meta.url);
+const platform = new URL('../../../../../platform/filesystem-custody/', import.meta.url);
 const {createContainedTurnArtifactStore} = await import('@agent-teams/agent-execution/composition');
 const {bindContainedTurnRoot} = await import('@agent-teams/agent-execution/composition');
 

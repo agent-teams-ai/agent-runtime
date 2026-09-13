@@ -9,7 +9,7 @@ import {createHash} from 'node:crypto';
 
 export const usage = `Node 24 source-loads the test-only .ts administration modules; their runtime imports
 require existing built dist and pg dependencies:
-node packages/apps/embedded-runtime/tests/live/run-linux-codex-live-canary.mjs /absolute/approved.json 3
+node packages/apps/embedded-runtime/tests/package/live/run-linux-codex-live-canary.mjs /absolute/approved.json 3
 FD 3 must be an inherited pipe/socket carrying JSON {token: string, accountId: string}, then EOF.
 Never pass credential paths or credentials in argv/environment/configuration.
 Configuration: {ownerApproved: true, disposableDatabase: true, disposableTestParent: true,
@@ -100,7 +100,7 @@ function durableCreate(path, value) {
   syncDirectory(dirname(path));
 }
 function preflightHost(config) {
-  const repository = fileURLToPath(new URL('../../../../../', import.meta.url));
+  const repository = fileURLToPath(new URL('../../../../../../', import.meta.url));
   const actualSourceSHA = execFileSync('git', ['-C', repository, 'rev-parse', 'HEAD'],
     {encoding: 'utf8', timeout: 5000, maxBuffer: 1024}).trim();
   if (actualSourceSHA !== config.hostPins.sourceRevision ||
@@ -241,10 +241,10 @@ export function createLinuxCodexLiveCanaryDriver(configuration, credentialFd) {
     try {
       const actualSourceSHA = preflightHost(config);
       const {createLinuxCodexLiveCanaryConfiguration, setupLinuxCodexLiveCanary} =
-        await import('../package/live/linux-codex-live-canary-config.ts');
+        await import('./linux-codex-live-canary-config.ts');
       try {
         if (config.hostPins.firewall) {
-          const {createFirewallCommand} = await import('../package/live/linux-codex-live-admin-firewall.ts');
+          const {createFirewallCommand} = await import('./linux-codex-live-admin-firewall.ts');
           const {toolPaths, ...pins} = config.hostPins.firewall;
           config.hostPins.firewall = {...pins, command: createFirewallCommand(toolPaths)};
         }
