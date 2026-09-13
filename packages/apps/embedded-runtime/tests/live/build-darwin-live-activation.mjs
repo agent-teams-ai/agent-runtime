@@ -7,7 +7,7 @@ import {chmod, copyFile, lstat, mkdir, open, readdir, readFile, realpath} from "
 import {dirname, isAbsolute, join, relative, resolve as resolvePath, sep} from "node:path";
 import {fileURLToPath} from "node:url";
 
-import {createDarwinLiveActivationManifest, plainJson} from "./darwin-live-activation-manifest.mjs";
+import {createDarwinLiveActivationManifest, plainJson} from "../package/live/darwin-live-activation-manifest.mjs";
 import {validateDarwinNativeRootPacketTemplate} from "./darwin-native-root-packet.mjs";
 import {verifyPinnedSource} from "./darwin-live-filesystem-verification.mjs";
 
