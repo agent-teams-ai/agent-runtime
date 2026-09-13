@@ -1,8 +1,8 @@
 name: adoption-receipt-linux
 
-# Temporary workflow, scoped to this one branch only: produces the Linux x64
-# adoption receipt required by docs/architecture/get-modular-adoption.md's
-# paired capture runbook. Not wired into pull_request or main-branch push.
+# Temporary workflow: existing branches retain Linux x64 capture; AR-01 adds
+# paired Darwin arm64 capture on the same pushed commit. See the paired capture
+# runbook in docs/architecture/get-modular-adoption.md. No pull_request/main push.
 # Safe to delete once the receipt has been captured and merged.
 
 on:
@@ -29,18 +29,25 @@ on:
       - chore/classify-native-helper-test
       - docs/sr-contained-turn-anti-patterns
       - refactor/fms-host-access-invariants
+      - test/get-modular-abort-cleanup
 
 permissions:
   contents: read
 
 jobs:
   capture:
-    name: capture
-    runs-on: ubuntu-24.04
+    name: capture (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Keep one Linux run on every existing branch; add only the required peer.
+        target: ${{ fromJSON(github.ref == 'refs/heads/test/get-modular-abort-cleanup' && '["linux-x64","darwin-arm64"]' || '["linux-x64"]') }}
+    runs-on: ${{ matrix.target == 'linux-x64' && 'ubuntu-24.04' || 'macos-15' }}
     timeout-minutes: 20
     services:
       postgres:
-        image: postgres:18.4-trixie@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
+        # An empty image disables this service on macOS (no Docker service support).
+        image: ${{ matrix.target == 'linux-x64' && 'postgres:18.4-trixie@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636' || '' }}
         env:
           POSTGRES_DB: ar69_pa_test_adoptionreceipt
           POSTGRES_PASSWORD: postgres
@@ -136,27 +143,41 @@ jobs:
           corepack enable
           corepack install --global pnpm@11.18.0
 
+      - name: Verify capture target and tools
+        env:
+          CAPTURE_TARGET: ${{ matrix.target }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          assert.equal(`${process.platform}-${process.arch}`, process.env.CAPTURE_TARGET);
+          assert.equal(process.version, 'v24.18.0');
+          NODE
+          test "$(pnpm --version)" = "11.18.0"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build workspace dependencies
         run: pnpm --filter "@agent-teams/embedded-runtime^..." -r run build
 
-      - name: Capture Linux x64 adoption receipt
+      - name: Capture adoption receipt
         env:
-          AE_ACL_POSTGRES_DISPOSABLE_URL: postgres://postgres:postgres@127.0.0.1:5432/ar69_pa_test_adoptionreceipt
-          CAPTURE_RUN_ID: linux-x64-${{ github.run_id }}-${{ github.run_attempt }}
+          AE_ACL_POSTGRES_DISPOSABLE_URL: ${{ matrix.target == 'linux-x64' && 'postgres://postgres:postgres@127.0.0.1:5432/ar69_pa_test_adoptionreceipt' || '' }}
+          CAPTURE_RUN_ID: ${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+          CAPTURE_OUTPUT_DIR: ${{ runner.temp }}/adoption-receipt-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+          CAPTURE_TARGET: ${{ matrix.target }}
         run: |
-          mkdir -p /tmp/receipt
+          mkdir "$CAPTURE_OUTPUT_DIR"
           node scripts/architecture/runtime-setup-l0-evidence.mjs \
-            --capture-adoption-receipt --output /tmp/receipt/linux-x64.json \
+            --capture-adoption-receipt --output "$CAPTURE_OUTPUT_DIR/$CAPTURE_TARGET.json" \
             --run-id "$CAPTURE_RUN_ID"
 
       - name: Upload receipt
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: linux-x64-adoption-receipt
-          path: /tmp/receipt/
+          name: ${{ matrix.target }}-adoption-receipt
+          path: ${{ runner.temp }}/adoption-receipt-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}/
+          include-hidden-files: true
           retention-days: 7
           if-no-files-found: warn
