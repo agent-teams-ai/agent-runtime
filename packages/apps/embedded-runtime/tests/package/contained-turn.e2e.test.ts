@@ -1,4 +1,4 @@
-import { createAgentRuntimeHost } from "./helpers/create-contained-turn-host.ts";
+import { createAgentRuntimeHost } from "../helpers/create-contained-turn-host.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { createContainedTurnFeature } from "@agent-teams/agent-execution/composition";
-import { findRepoRoot } from "./helpers/repo-root.ts";
+import { findRepoRoot } from "../helpers/repo-root.ts";
 
 const { createDependencies, operationId: fixtureOperationId } = await import(pathToFileURL(join(
   findRepoRoot(),
@@ -19,8 +19,8 @@ import {
   ContainedTurnOwnerContractError,
   createClaudeCodeSetupInspectionPlanner,
   createCodexSetupInspectionPlanner,
-} from "../dist/composition.js";
-import type { ContainedTurnCapabilityBundle } from "../dist/composition.js";
+} from "../../dist/composition.js";
+import type { ContainedTurnCapabilityBundle } from "../../dist/composition.js";
 
 type ContainedTurnScope = Readonly<{ projectId: string; tenantId: string }>;
 type ContainedTurnStatus = "accepted" | "cancelled" | "failed" | "reconcile_required" | "running" | "succeeded";

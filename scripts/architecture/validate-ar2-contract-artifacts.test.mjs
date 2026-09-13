@@ -155,7 +155,7 @@ test("default repository validation has no exact-legacy-checkout dependency", as
   for (const [path, expectedRead] of [
     ["scripts/architecture/validate-claude-official-semantics.mjs", /readCustodiedRepositoryFile\(document\.artifactPath/u],
     ["packages/contexts/runtime-configuration/tests/package/claude-code-contract-custody.test.ts", /readCustodiedRepositoryFile\(/u],
-    ["packages/apps/embedded-runtime/tests/claude-code-setup.e2e.test.ts", /readAr2FixtureJson\(/u],
+    ["packages/apps/embedded-runtime/tests/package/claude-code-setup.e2e.test.ts", /readAr2FixtureJson\(/u],
   ]) {
     const allowedRoot = path.slice(0, path.lastIndexOf("/"));
     const source = await readRepositoryText(path, allowedRoot);
@@ -481,7 +481,7 @@ test("AR-2 coverage rejects removal of a required launcher test file", async () 
   validateContractCoverage(inputs);
   const owner = "packages/apps/embedded-runtime";
   inputs.packageTestInventories.set(owner, inputs.packageTestInventories.get(owner)
-    .filter(path => path !== "tests/claude-code-setup.e2e.test.ts"));
+    .filter(path => path !== "tests/package/claude-code-setup.e2e.test.ts"));
   assert.throws(() => validateContractCoverage(inputs), /test file must be executed/u);
 });
 
@@ -497,12 +497,12 @@ test("AR-2 inventory binds the manifest to the canonical launcher", async t => {
   const save = () => writeFile(join(directory, "package.json"), JSON.stringify(manifest));
   await save();
   const inventory = await readAr2TestExecutionInventory(owner, { evidenceRoot });
-  assert.ok(ar2InventoryExecutes(inventory, "tests/claude-code-setup.e2e.test.ts"));
+  assert.ok(ar2InventoryExecutes(inventory, "tests/package/claude-code-setup.e2e.test.ts"));
   assert.ok(ar2InventoryExecutes(inventory, "tests/support/linux-http-completion-negative.mjs"));
   for (const script of ["echo scripts/run-package-tests.mjs",
     "node scripts/run-package-tests.mjs --check", "node scripts/other.mjs",
     "node scripts/run-package-tests.mjs || true",
-    "node scripts/run-package-tests.mjs # tests/claude-code-setup.e2e.test.ts",
+    "node scripts/run-package-tests.mjs # tests/package/claude-code-setup.e2e.test.ts",
   ]) {
     manifest.scripts.test = script;
     await save();
@@ -511,7 +511,7 @@ test("AR-2 inventory binds the manifest to the canonical launcher", async t => {
   manifest.scripts.test = "node scripts/run-package-tests.mjs";
   await save();
   await writeFile(join(directory, "scripts/run-package-tests.mjs"), launcher.replace(
-    '"tests/claude-code-setup.e2e.test.ts",', "",
+    '"tests/package/claude-code-setup.e2e.test.ts",', "",
   ));
   await assert.rejects(readAr2TestExecutionInventory(owner, { evidenceRoot }), /altered test launcher source/u);
   await rm(join(directory, "scripts/run-package-tests.mjs"));

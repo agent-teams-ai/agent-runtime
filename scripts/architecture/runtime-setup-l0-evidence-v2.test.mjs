@@ -77,6 +77,20 @@ test("original argv lists and accepted native authority and ordinary assembly te
     ["tests/contained-turn-route-qualification.test.ts", "tests/features/contained-turn-route-qualification/contained-turn-route-qualification.test.ts"],
     ["tests/opaque-reference-digest.test.ts", "tests/features/setup-inspection-planning/opaque-reference-digest.test.ts"],
     ["tests/trusted-runtime-access-scope.unit.test.ts", "tests/features/trusted-runtime-access-scope/trusted-runtime-access-scope.unit.test.ts"],
+    ["tests/capability-bundle-contract.test.ts", "tests/package/capability-bundle-contract.test.ts"],
+    ["tests/claude-code-semantic-correction.e2e.test.ts", "tests/package/claude-code-semantic-correction.e2e.test.ts"],
+    ["tests/claude-code-setup.e2e.test.ts", "tests/package/claude-code-setup.e2e.test.ts"],
+    ["tests/codex-setup.e2e.test.ts", "tests/package/codex-setup.e2e.test.ts"],
+    ["tests/contained-turn-disposal-races.e2e.test.ts", "tests/package/contained-turn-disposal-races.e2e.test.ts"],
+    ["tests/contained-turn-host-custody-integration.test.ts", "tests/package/contained-turn-host-custody-integration.test.ts"],
+    ["tests/contained-turn-malformed-custody.e2e.test.ts", "tests/package/contained-turn-malformed-custody.e2e.test.ts"],
+    ["tests/contained-turn-nonterminal-custody.e2e.test.ts", "tests/package/contained-turn-nonterminal-custody.e2e.test.ts"],
+    ["tests/contained-turn-provider-access-integration.test.ts", "tests/package/contained-turn-provider-access-integration.test.ts"],
+    ["tests/contained-turn.e2e.test.ts", "tests/package/contained-turn.e2e.test.ts"],
+    ["tests/darwin-native-attempt-authority-join.test.ts", "tests/package/darwin-native-attempt-authority-join.test.ts"],
+    ["tests/host-custodied-agent-runtime-host-disposal-quarantine.test.ts", "tests/package/host-custodied-agent-runtime-host-disposal-quarantine.test.ts"],
+    ["tests/host-shutdown-admission.test.ts", "tests/package/host-shutdown-admission.test.ts"],
+    ["tests/runtime-access-boundaries.e2e.test.ts", "tests/package/runtime-access-boundaries.e2e.test.ts"],
   ]);
   expected[0] = expected[0].map((arg) => relocated.get(arg) ?? arg);
   assert.deepEqual(testProcesses, expected);
@@ -99,7 +113,7 @@ for (const [name, mutate] of [
   ["cancelled test", f => {f.artifacts["process-0.stdout"] = f.artifacts["process-0.stdout"].replace('"status":"passed"', '"status":"cancelled"');}],
   ["TODO test", f => {f.artifacts["process-0.stdout"] = f.artifacts["process-0.stdout"].replace('"status":"passed"', '"status":"todo"');}],
 ]) {test(`rejects ${name}`, () => {const f = fixture(); mutate(f); assert.throws(f.validate);});}
-const platformFile = `${packagePath}/tests/codex-setup.e2e.test.ts`;
+const platformFile = `${packagePath}/tests/package/codex-setup.e2e.test.ts`;
 function coveragePair() {
   const pass = event(platformFile, 44, "platform");
   return [{target: "darwin-arm64", events: [pass]}, {target: "linux-x64", events: [{...pass, status: "skipped", skip: true}]}];

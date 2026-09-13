@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { composeHostCustodiedAgentRuntimeHost } from "../dist/composition/host-custodied-agent-runtime-host.js";
+import { composeHostCustodiedAgentRuntimeHost } from "../../dist/composition/host-custodied-agent-runtime-host.js";
 
 const capability = Object.freeze({
   cancel: Object.freeze({ execute: async () => Object.freeze({ status: "not_found" as const }) }),

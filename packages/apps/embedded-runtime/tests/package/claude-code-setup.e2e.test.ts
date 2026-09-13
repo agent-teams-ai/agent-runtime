@@ -8,14 +8,14 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 import { semanticCorrectionProofsRegistered } from "./claude-code-semantic-correction.e2e.test.ts";
-import { findRepoRoot } from "./helpers/repo-root.ts";
-import { createSyntheticClaudeOwners } from "./helpers/synthetic-claude-owners.ts";
+import { findRepoRoot } from "../helpers/repo-root.ts";
+import { createSyntheticClaudeOwners } from "../helpers/synthetic-claude-owners.ts";
 
 import {
   createClaudeCodeSetupInspectionPlanner,
   createCodexSetupInspectionPlanner,
-} from "../dist/composition.js";
-import { createAgentRuntimeHost } from "./helpers/create-agent-runtime-host.ts";
+} from "../../dist/composition.js";
+import { createAgentRuntimeHost } from "../helpers/create-agent-runtime-host.ts";
 
 const { readCustodiedRepositoryFile } = await import(pathToFileURL(join(
   findRepoRoot(),
@@ -435,7 +435,7 @@ test("reports clean absence and degrades safely without touching the executable 
 
 test("traps fetch, DNS, HTTP(S), TCP/TLS, and datagram APIs in an isolated process", async () => {
   const helper = fileURLToPath(new URL(
-    "./helpers/claude-network-trap-process.ts",
+    "../helpers/claude-network-trap-process.ts",
     import.meta.url,
   ));
   await execFile(process.execPath, [helper], {
