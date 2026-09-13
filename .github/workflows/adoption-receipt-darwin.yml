@@ -1,5 +1,5 @@
 name: adoption-receipt-darwin
-# first push after absorb 3a21a004
+# retrigger 3a21a004 (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for Runtime Configuration
 # activation absorb identity 3a21a004 after architecture-load merge-commit 35357d83.
