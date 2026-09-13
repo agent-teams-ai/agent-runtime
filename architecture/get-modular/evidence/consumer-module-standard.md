@@ -144,12 +144,12 @@ does not prove all ownership or domain design rules.
 
 ### Executable examples and adoption status
 
-The existing [synthetic Host source](../../packages/assembly/tests/fixture.mjs)
-and [runtime assertions](../../packages/assembly/tests/runtime.test.mjs) exercise
+The existing [synthetic Host source](../../tests/assembly/fixture.mjs)
+and [runtime assertions](../../tests/assembly/runtime.test.mjs) exercise
 required, optional and ordered-many bindings, sharing and Host cleanup.
-[Preparation regressions](../../packages/assembly/tests/preparation.test.mjs)
-check invalid wiring before effects; [typed fixtures](../../packages/assembly/tests/types.test.mjs)
-and the [packed consumer](../../packages/assembly/tests/packed-consumer.mjs)
+[Preparation regressions](../../tests/assembly/preparation.test.mjs)
+check invalid wiring before effects; [typed fixtures](../../tests/assembly/types.test.mjs)
+and the [packed consumer](../../tests/assembly/packed-consumer.mjs)
 cover the public carrier. These belong to the existing `pnpm assembly:test`
 command, invoked by both fast and full gates, after `pnpm assembly:build`.
 Consumers must additionally link their own executable slice and independent
@@ -270,6 +270,15 @@ Resources not returned by a rejected factory belong to that factory or its
 Host-owned resource owner. Host defines cleanup policy. A journal entry is not a
 claim of independent resource ownership: do not dispose the same shared resource
 through provider, consumers and multiple capability references.
+The resource owner is known before construction handoff and registers cleanup
+at acquisition; receiving a capability gives no cleanup authority. An async
+provider remains responsible for allocations it fails to hand back. A one-shot
+Host uses roots within their protected lifetime and returns an inert summary
+after cleanup, not graph references to the closed scope. Opaque failure causes
+remain opaque; a summary does not certify that those causes contain no references.
+
+A new profile does not update previously delivered references. Construction
+success remains distinct from Host readiness and lifecycle publication.
 
 An already aborted signal yields cancelled with no calls. Check before each
 factory and before success commit. Await an already running factory after abort;
