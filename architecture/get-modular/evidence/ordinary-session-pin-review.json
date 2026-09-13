@@ -7,5 +7,5 @@
   "migrationStatus": "reviewed-documentation-migrated",
   "deltaFile": "ordinary-session-pin-delta.diff",
   "semanticDelta": "None: five executable-example link relocations only.",
-  "ordinaryAdoption": "contract accepted in ADR-0021; implementation, scoped adoption and rejecting evidence pending"
+  "ordinaryAdoption": "contract accepted in ADR-0090; implementation, scoped adoption and rejecting evidence pending"
 }

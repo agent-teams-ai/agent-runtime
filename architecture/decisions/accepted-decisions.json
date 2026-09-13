@@ -89,8 +89,13 @@
     },
     {
       "id": "ADR-0021",
-      "path": "docs/decisions/0021-ordinary-user-session-codex-execution-profile.md",
-      "immutableDigest": "sha256:2f1a96777b00e6818b85f0319f85e43d35c7de16e087ad212f69d83c97c75bd9"
+      "path": "docs/decisions/0021-runtime-security-feature-activation.md",
+      "immutableDigest": "sha256:d069d8bc82019c7efb582ba28f8006e53469be6ee873cc2b5bd5e55dc79962b0"
+    },
+    {
+      "id": "ADR-0090",
+      "path": "docs/decisions/0090-ordinary-user-session-codex-execution-profile.md",
+      "immutableDigest": "sha256:ce26ce717bd00701b2ddf4d073999591cda8b9f0e08b3238290e6646bfe02bf1"
     }
   ]
 }

@@ -99,6 +99,10 @@ async function addRequiredAnchorFixtures(root) {
     "packages/apps/embedded-runtime/src/index.ts",
     "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/README.md",
     "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/README.md",
+    "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/README.md",
+    "packages/contexts/runtime-security/src/features/contained-turn-egress/README.md",
+    "packages/contexts/runtime-security/src/features/provider-process-egress-authorization/README.md",
+    "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/README.md",
     "packages/platform/filesystem-custody/src/features/stable-filesystem-custody/README.md",
     "scripts/architecture/check-consumer-module-standard.mjs",
     "scripts/architecture/feature-module-edges.mjs"

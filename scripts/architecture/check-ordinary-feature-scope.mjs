@@ -46,9 +46,9 @@ function featureScopeShapeIssues(profile) {
 
 export function validateOrdinaryScope(profile, paths, decisions) {
   const issues = [];
-  if (profile.schemaVersion !== 1 || profile.status !== 'active' || profile.authority !== 'ADR-0021'
-    || !decisions.some(d => d.id === profile.authority && d.path === 'docs/decisions/0021-ordinary-user-session-codex-execution-profile.md')) {
-    issues.push(diagnostic('ordinary scope requires accepted ADR-0021 and active v1 profile'));
+  if (profile.schemaVersion !== 1 || profile.status !== 'active' || profile.authority !== 'ADR-0090'
+    || !decisions.some(d => d.id === profile.authority && d.path === 'docs/decisions/0090-ordinary-user-session-codex-execution-profile.md')) {
+    issues.push(diagnostic('ordinary scope requires accepted ADR-0090 and active v1 profile'));
   }
   if (!Array.isArray(profile.files) || !profile.files.length || new Set(profile.files).size !== profile.files.length
     || profile.files.some(path => !paths.includes(path)) || !same(paths.filter(ordinarySource), profile.files.filter(ordinarySource))) {

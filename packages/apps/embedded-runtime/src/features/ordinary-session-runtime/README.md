@@ -35,6 +35,6 @@ containment. No root, sudo, account fallback, resume or automatic second attempt
 is introduced.
 
 The accepted contract is
-[ADR-0021](../../../../../../docs/decisions/0021-ordinary-user-session-codex-execution-profile.md).
+[ADR-0090](../../../../../../docs/decisions/0090-ordinary-user-session-codex-execution-profile.md).
 Synthetic construction, graph rejection, observation and packed-consumer tests
 establish integration evidence; they do not qualify a live provider campaign.

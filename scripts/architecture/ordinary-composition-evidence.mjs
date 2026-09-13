@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {parseSync} from 'oxc-parser';
 
 export const ordinaryCompositionPath = 'packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts';
-export const ordinaryAuthorityPath = 'docs/decisions/0021-ordinary-user-session-codex-execution-profile.md';
+export const ordinaryAuthorityPath = 'docs/decisions/0090-ordinary-user-session-codex-execution-profile.md';
 const property = (node, name) => node?.properties?.find(p => (p.key?.name ?? p.key?.value) === name)?.value;
 const literal = node => node?.value;
 const string = (node, name) => literal(property(node, name));

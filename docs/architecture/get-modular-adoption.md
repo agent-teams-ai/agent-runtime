@@ -10,10 +10,10 @@ summary: Records scoped passive setup and ordinary session Assembly adoption wit
 
 ## Ordinary session scoped adoption
 
-[ADR-0021](../decisions/0021-ordinary-user-session-codex-execution-profile.md)
+[ADR-0090](../decisions/0090-ordinary-user-session-codex-execution-profile.md)
 authorizes the additive `user-session-v1` composition. The
 [consumer profile](../../architecture/get-modular/consumer-profile.json)
-retains ADR-0015 as its passive authority and records ADR-0021 on the ordinary
+retains ADR-0015 as its passive authority and records ADR-0090 on the ordinary
 composition itself. Accepted ADR-0016 custody adoption remains pending; ordinary
 execution does not establish contained-turn security or qualification.
 
@@ -410,7 +410,7 @@ expectation and retained document used this reviewed pin. Historical ADRs and ev
 unchanged. The retained review is
 `architecture/get-modular/evidence/ordinary-session-pin-review.json`.
 
-[ADR-0021](../decisions/0021-ordinary-user-session-codex-execution-profile.md)
+[ADR-0090](../decisions/0090-ordinary-user-session-codex-execution-profile.md)
 accepts a separate ordinary contract. It does not activate ADR-0016 or extend the
 passive adoption claim. Ordinary activation requires concrete composition paths,
 FMS ownership, typed rejecting fixtures and the actual fast/full gates before
@@ -433,5 +433,5 @@ use this revision. The prior bytes remain in
 `ordinary-auth-pin-review.json` and `ordinary-auth-pin-delta.diff` in the same
 evidence directory record the reviewed transition. The earlier pin review and
 the ordinary execution contract remains unchanged. Its pre-merge ADR-0020 bytes
-are retained by ADR-0021 following the identifier collision with main. Pin migration does not qualify a live
+are retained by ADR-0090 following the identifier collision with main. Pin migration does not qualify a live
 ordinary turn or activate the legacy pending ADR-0016 scope.

@@ -71,7 +71,7 @@ export function ordinaryCodexItem(value: unknown, cwd: string, mark: Mark = noMa
   return item;
 }
 
-/** Ordinary effects are admitted under ADR-0021, never converted into custody receipts. */
+/** Ordinary effects are admitted under ADR-0090, never converted into custody receipts. */
 export class OrdinaryCodexItems {
   readonly #cwd: string;
   readonly #mark: Mark;

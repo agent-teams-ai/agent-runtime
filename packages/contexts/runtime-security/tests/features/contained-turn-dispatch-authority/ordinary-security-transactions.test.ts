@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import {setImmediate} from "node:timers/promises";
 import test from "node:test";
-import {createOrdinarySecurityTransactions} from "../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-transactions.js";
-import type {DispatchPgClient} from "../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/transaction.js";
+import {createOrdinarySecurityTransactions} from "../../../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-transactions.js";
+import type {DispatchPgClient} from "../../../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/transaction.js";
 test("ordinary transaction disposal joins abandoned acquisition and releases a late borrowed client without BEGIN", async () => {
   let acquired!: (client: DispatchPgClient) => void; let queries = 0; let discarded = false;
   const transactions = createOrdinarySecurityTransactions({connect: () => new Promise(resolve => {acquired = resolve;})});

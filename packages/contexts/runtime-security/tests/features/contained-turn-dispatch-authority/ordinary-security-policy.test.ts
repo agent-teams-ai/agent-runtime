@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {captureOrdinarySecurityInput, captureOrdinarySecurityPolicy, createOrdinarySecretGuard} from "../dist/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.js";
+import {captureOrdinarySecurityInput, captureOrdinarySecurityPolicy, createOrdinarySecretGuard} from "../../../dist/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.js";
 const policy = {provider: "codex", mode: "workspace-write", executionProfile: "user-session-v1", effectClass: "ordinary_user_session_effect", capabilityManifestRevision: "ordinary-codex-macos-arm64-0.153.4-v1", ttlMs: 60000, maxOutputBytes: 2000000, maxArtifactBytes: 2000000} as const;
 const scope = {tenantId: "TEST", projectId: "TEST"};
 const input = {operationId: "operation:TEST", attemptId: "attempt:TEST", scope, provider: policy.provider, mode: policy.mode, executionProfile: policy.executionProfile, effectClass: policy.effectClass, capabilityManifestRevision: policy.capabilityManifestRevision};

@@ -96,7 +96,7 @@
           "boundary": {"type": "string", "minLength": 1},
           "entrypoint": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"},
           "factorySymbol": {"type": "string", "minLength": 1},
-          "authority": {"const": "ADR-0021"},
+          "authority": {"const": "ADR-0090"},
           "scopedFms": {"const": "architecture/feature-module-standard/ordinary-scope.json"},
           "implementation": {"type": "string", "minLength": 1},
           "declarations": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"},

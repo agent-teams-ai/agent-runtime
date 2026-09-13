@@ -51,7 +51,7 @@ function fixture() {
 
 test('repository profile retains passive authority with additive ordinary activation', () => {
   assert.equal(validateProfile(pending).status, 'active');
-  assert.equal(ordinaryScopeProfile.authority, 'ADR-0021');
+  assert.equal(ordinaryScopeProfile.authority, 'ADR-0090');
   const profile = structuredClone(pending); profile.status = 'pending'; profile.pending = ['missing evidence'];
   assert.throws(() => verifyAdoption(profile, {}), /pending/);
 });
@@ -256,7 +256,7 @@ test('active profile retains the two direct contained-turn seams without claimin
   }
   assert.match(composition.rationale, /contained-turn.*remains direct/);
   assert.equal(pending.compositions.length, 2);
-  assert.equal(pending.compositions[1].authority, 'ADR-0021');
+  assert.equal(pending.compositions[1].authority, 'ADR-0090');
   assert.equal(pending.compositions[0].factorySymbol, 'createDefaultAgentRuntimeHost');
 });
 
@@ -323,7 +323,7 @@ test('PR71 reviewed owners and helpers retain exact live relationships without e
     /fixed feature-local route helper.*not separate graph nodes/);
   assert.deepEqual(pending.boundaries.filter(b => b.status === 'adopted').map(b => b.id), ['composition.embedded-runtime']);
   assert.deepEqual(pending.compositions.filter(c => c.authority === undefined).map(c => c.factorySymbol), ['createDefaultAgentRuntimeHost']);
-  assert.deepEqual(pending.compositions.filter(c => c.authority === 'ADR-0021').map(c => c.factorySymbol), ['bindOrdinaryRuntime']);
+  assert.deepEqual(pending.compositions.filter(c => c.authority === 'ADR-0090').map(c => c.factorySymbol), ['bindOrdinaryRuntime']);
   assert.deepEqual(pending.exceptions, []);
 });
 
@@ -374,5 +374,5 @@ test('current lifecycle clarification pin rejects prior commit and prior documen
   assert.throws(() => verifyAdoption(profile, evidence), /bytes drift/);
 });
 
-// Additive ADR-0021 scope and graph rejecting evidence remains in the canonical gate.
+// Additive ADR-0090 scope and graph rejecting evidence remains in the canonical gate.
 import {profile as ordinaryScopeProfile} from './check-ordinary-feature-scope.test.mjs';

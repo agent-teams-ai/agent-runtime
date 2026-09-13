@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
 import test from "node:test";
 import {Pool} from "pg";
-import {createOrdinarySecurityOwner} from "../dist/composition.js";
+import {createOrdinarySecurityOwner} from "../../../dist/composition.js";
 const connectionString = process.env.ORDINARY_TEST_POSTGRES_URL;
 test("ordinary security durable consumed identity, unknown-commit readback, settlement and no persisted secrets", {skip: connectionString === undefined}, async () => {
   const schema = `ordinary_rs_test_${randomUUID().replaceAll("-", "")}`;

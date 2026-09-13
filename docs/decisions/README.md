@@ -24,6 +24,7 @@ related:
   - ADR-0019
   - ADR-0020
   - ADR-0021
+  - ADR-0090
 blocked_by: []
 code_anchors:
   - enforcement: required
@@ -94,7 +95,10 @@ immutable evidence; a later change uses an explicit superseding decision.
 - [ADR-0020: Runtime Configuration feature activation](0020-runtime-configuration-feature-activation.md)
   activates the Runtime Configuration bounded context as two Feature Module
   Standard v1 features with a runtime edge onto Filesystem Custody.
-- [ADR-0021: Ordinary user-session Codex execution profile](0021-ordinary-user-session-codex-execution-profile.md)
+- [ADR-0021: Runtime Security feature activation](0021-runtime-security-feature-activation.md)
+  activates the Runtime Security bounded context as four Feature Module
+  Standard v1 features with a runtime edge onto Filesystem Custody.
+- [ADR-0090: Ordinary user-session Codex execution profile](0090-ordinary-user-session-codex-execution-profile.md)
 
 ## Superseded
 
