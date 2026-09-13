@@ -1,4 +1,5 @@
 name: adoption-receipt-darwin
+# retrigger fa0961b3 (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host live-selection identity
 # fa0961b3 stacked on Host recipe-owners D cc1ede46.
