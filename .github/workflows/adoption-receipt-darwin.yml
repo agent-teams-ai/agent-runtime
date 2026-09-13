@@ -1,4 +1,5 @@
 name: adoption-receipt-darwin
+# retrigger 793db25b (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for Runtime Security
 # activation absorb identity 793db25b after RC activation merge-commit 4902cf56.
