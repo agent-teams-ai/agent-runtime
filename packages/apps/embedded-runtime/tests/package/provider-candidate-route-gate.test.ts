@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { requireContainedTurnLiveCanaryAuthorities } from "./support/external/agent-execution/features/contained-agent-turn/support/contained-turn-live-canary-lifecycle.mjs";
+import { requireContainedTurnLiveCanaryAuthorities } from "../support/external/agent-execution/features/contained-agent-turn/support/contained-turn-live-canary-lifecycle.mjs";
 import {
   createHostCustodiedContainedTurn, ProviderRouteEnforcementUnsupportedError,
-} from "../dist/composition/contained-turn-feature-composition.js";
+} from "../../dist/composition/contained-turn-feature-composition.js";
 
 test("exact current provider candidates are absent from the qualification registry", async () => {
   const registry = JSON.parse(await readFile(new URL(
-    "../../../../docs/architecture/qualification-registry.json", import.meta.url,
+    "../../../../../docs/architecture/qualification-registry.json", import.meta.url,
   ), "utf8")) as {entries: readonly unknown[]};
   const serialized = JSON.stringify(registry.entries);
   assert.doesNotMatch(serialized, /0\.150\.1/u);
@@ -20,7 +20,7 @@ test("exact current provider candidates are absent from the qualification regist
 
 test("the provider route gate does not alter the exact seven composition ports", async () => {
   const composition = await readFile(new URL(
-    "../src/composition/contained-turn-feature-composition.ts", import.meta.url,
+    "../../src/composition/contained-turn-feature-composition.ts", import.meta.url,
   ), "utf8");
   const supplied = [...composition.matchAll(
     /^    (operationStore|security|providerAccess|workspace|artifacts|custody|provider)(?=:|,$)/gmu,
@@ -29,12 +29,12 @@ test("the provider route gate does not alter the exact seven composition ports",
     "operationStore", "security", "providerAccess", "workspace", "artifacts", "custody", "provider",
   ]);
   const qualification = await readFile(new URL(
-    "../src/composition/contained-turn-route-qualification.ts", import.meta.url,
+    "../../src/composition/contained-turn-route-qualification.ts", import.meta.url,
   ), "utf8");
   for (const source of [composition, qualification]) {
     assert.doesNotMatch(source, /networkGateway|networkRoutePort/u);
   }
-  const publicComposition = await readFile(new URL("../src/composition.ts", import.meta.url), "utf8");
+  const publicComposition = await readFile(new URL("../../src/composition.ts", import.meta.url), "utf8");
   assert.doesNotMatch(publicComposition,
     /composeCandidateHostCustodied|composeHostCustodiedContainedTurn|composeQualifiedHostCustodied/u);
 });
@@ -51,7 +51,7 @@ test("the product entrypoint still refuses today, and refuses for a registry rea
   }) as never), (error: unknown) => error instanceof ProviderRouteEnforcementUnsupportedError &&
     error.reason === "route-enforcement-unqualified");
   const registry = JSON.parse(await readFile(new URL(
-    "../../../../docs/architecture/qualification-registry.json", import.meta.url,
+    "../../../../../docs/architecture/qualification-registry.json", import.meta.url,
   ), "utf8")) as {entries: readonly {id: string; qualification: string;
     targets: readonly Readonly<Record<string, string>>[]}[]};
   // Promotion above `scoped` stays confined to the one enforced-network-route
@@ -64,7 +64,7 @@ test("the product entrypoint still refuses today, and refuses for a registry rea
     assert.deepEqual(promoted.targets.map(target => target.platform), ["linux-x64"]);
   }
   const readiness = await readFile(new URL(
-    "../../../../docs/architecture/readiness.md", import.meta.url,
+    "../../../../../docs/architecture/readiness.md", import.meta.url,
   ), "utf8");
   assert.match(readiness, /route-enforcement-unqualified/u);
 });

@@ -1,4 +1,4 @@
-import { createAgentRuntimeHost } from "./helpers/create-contained-turn-host.ts";
+import { createAgentRuntimeHost } from "../helpers/create-contained-turn-host.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -6,15 +6,15 @@ import { createContainedTurnFeature } from "@agent-teams/agent-execution/composi
 import {
   createDependencies,
   operationId as fixtureOperationId,
-} from "./support/external/agent-execution/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
+} from "../support/external/agent-execution/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 
 import {
   AgentRuntimeHostLifecycleError,
   ContainedTurnOwnerContractError,
   createClaudeCodeSetupInspectionPlanner,
   createCodexSetupInspectionPlanner,
-} from "../dist/composition.js";
-import { copySubmitOutcome } from "../dist/composition/contained-turn-runtime-validation.js";
+} from "../../dist/composition.js";
+import { copySubmitOutcome } from "../../dist/composition/contained-turn-runtime-validation.js";
 
 const unavailable = (): never => {throw new Error("setup dependency must not be reached");};
 
