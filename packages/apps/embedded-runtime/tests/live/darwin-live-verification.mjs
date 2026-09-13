@@ -3,7 +3,7 @@ import {constants} from "node:fs";
 import {lstat, open, readFile, realpath} from "node:fs/promises";
 import {join} from "node:path";
 
-import {captureVerificationDirectoryIdentity, readStableVerificationFile, verifyPinnedSource} from "./darwin-live-filesystem-verification.mjs";
+import {captureVerificationDirectoryIdentity, readStableVerificationFile, verifyPinnedSource} from "../package/live/darwin-live-filesystem-verification.mjs";
 
 const refused = reason => new Error(`DARWIN_LIVE_VERIFICATION_REFUSED: ${reason}`);
 const gap = (kind, capability) => Object.freeze({kind, capability});

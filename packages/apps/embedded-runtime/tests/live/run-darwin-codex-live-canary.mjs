@@ -12,7 +12,7 @@ const loadedModules = Object.freeze({
   runner: fileURLToPath(import.meta.url),
   "host-entrypoint": resolvePath(dirname(fileURLToPath(import.meta.url)), "host-child-entrypoint.mjs"),
   "full-public-runtime": resolvePath(dirname(fileURLToPath(import.meta.url)), "full-public-runtime.mjs"),
-  "production-root": resolvePath(dirname(fileURLToPath(import.meta.url)), "darwin-live-production-root.mjs"),
+  "production-root": resolvePath(dirname(fileURLToPath(import.meta.url)), "../package/live/darwin-live-production-root.mjs"),
   "root-packet-builder": resolvePath(dirname(fileURLToPath(import.meta.url)), "darwin-native-root-packet.mjs"),
 });
 const fail = message => {throw new Error(`DARWIN_LIVE_PREFLIGHT: ${message}`);};
