@@ -2,7 +2,7 @@ import { createOrdinaryAuthMetadata } from '../../../dist/features/contained-tur
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createOrdinaryPaStore, ordinaryPaDigest } from '../../../dist/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-store.js';
-import { createPostgresOrdinaryProviderAccessOwner } from '../../../dist/composition.js';
+import { OrdinaryPaUnavailable, createPostgresOrdinaryProviderAccessOwner } from '../../../dist/composition.js';
 import { createPostgresCredentialRenderingOwner } from '../../../dist/features/contained-turn-access/composition/postgres-credential-rendering-owner.js';
 import type { OrdinaryPaBinding, OrdinaryCodexAuthCapture, MaterializationPostgresPool } from '../../../dist/composition.js';
 import { renderingFixture } from './credential-rendering-test-fixture.ts';
@@ -127,4 +127,15 @@ test('ordinary PA PostgreSQL grants, counters, retirement and original rendering
       assert.deepEqual([...lostAcks].toSorted(), ['retire', 'settle']);
     } finally { await owner.dispose(); }
   });
+});
+
+test('public PA owner maps malformed bindings to its exported refusal and retires capture', async () => {
+  let disposed = false;
+  const owner = createPostgresOrdinaryProviderAccessOwner({pool: {async connect() {throw new Error('must not connect');}}, registerSecrets: () => true});
+  const capture: OrdinaryCodexAuthCapture = {settled: Promise.resolve(), async capture() {throw new Error('must not capture');}, withCredentialOutputTokens() {}, admit() {}, dispose() {disposed = true;}};
+  try {
+    await assert.rejects(owner.consume({...binding('invalid'), operationId: ''}, capture, new AbortController().signal), error => error instanceof OrdinaryPaUnavailable);
+    assert.equal(disposed, true);
+    await assert.rejects(owner.observe({...binding('invalid'), attemptId: ''}), error => error instanceof OrdinaryPaUnavailable);
+  } finally {await owner.dispose();}
 });

@@ -84,7 +84,8 @@
           ".",
           "./composition"
         ],
-        "adoption": "pending"
+        "adoption": "active",
+        "activationAuthority": "ADR-0020"
       },
       {
         "id": "runtime-security",
@@ -103,11 +104,11 @@
     "productionRoots": [
       "packages/contexts/agent-execution/src",
       "packages/contexts/provider-access/src",
+      "packages/contexts/runtime-configuration/src",
       "packages/platform/filesystem-custody/src"
     ],
     "outOfScope": [
       "Embedded Runtime",
-      "Runtime Configuration",
       "Runtime Security",
       "Module Kit",
       "experiments",
@@ -177,6 +178,34 @@
         "public": "packages/platform/filesystem-custody/src/features/stable-filesystem-custody/index.ts",
         "internal": "packages/platform/filesystem-custody/src/features/stable-filesystem-custody/internal.ts"
       }
+    },
+    {
+      "id": "codex-configuration-inspection",
+      "root": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection",
+      "roles": [
+        "contracts",
+        "application",
+        "adapters",
+        "composition"
+      ],
+      "entrypoints": {
+        "public": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/index.ts",
+        "internal": "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/internal.ts"
+      }
+    },
+    {
+      "id": "claude-code-configuration-inspection",
+      "root": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection",
+      "roles": [
+        "contracts",
+        "application",
+        "adapters",
+        "composition"
+      ],
+      "entrypoints": {
+        "public": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/index.ts",
+        "internal": "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/internal.ts"
+      }
     }
   ],
   "assemblyFiles": [
@@ -185,7 +214,9 @@
     "packages/contexts/provider-access/src/index.ts",
     "packages/contexts/provider-access/src/composition.ts",
     "packages/platform/filesystem-custody/src/index.ts",
-    "packages/platform/filesystem-custody/src/composition.ts"
+    "packages/platform/filesystem-custody/src/composition.ts",
+    "packages/contexts/runtime-configuration/src/index.ts",
+    "packages/contexts/runtime-configuration/src/composition.ts"
   ],
   "featureEdges": [],
   "moduleEdges": [
@@ -195,6 +226,13 @@
       "kinds": [
         "runtime",
         "type"
+      ]
+    },
+    {
+      "from": "runtime-configuration",
+      "to": "filesystem-custody",
+      "kinds": [
+        "runtime"
       ]
     }
   ],
@@ -230,13 +268,13 @@
     "moduleRoots": [
       "packages/contexts/agent-execution",
       "packages/contexts/provider-access",
-      "packages/platform/filesystem-custody"
+      "packages/platform/filesystem-custody",
+      "packages/contexts/runtime-configuration"
     ],
     "applicationRoots": [],
     "excludedRoots": [
       "experiments",
       "packages/apps/embedded-runtime",
-      "packages/contexts/runtime-configuration",
       "packages/contexts/runtime-security"
     ],
     "abstractLayout": {
@@ -270,6 +308,16 @@
           "testRoot": "packages/platform/filesystem-custody/tests",
           "featureTestsRoot": "packages/platform/filesystem-custody/tests/features",
           "moduleTestsRoot": "packages/platform/filesystem-custody/tests/package"
+        },
+        {
+          "moduleRoot": "packages/contexts/runtime-configuration",
+          "sourceRoot": "packages/contexts/runtime-configuration/src",
+          "featuresRoot": "packages/contexts/runtime-configuration/src/features",
+          "moduleComposition": "packages/contexts/runtime-configuration/src/composition.ts",
+          "publicEntrypoint": "packages/contexts/runtime-configuration/src/index.ts",
+          "testRoot": "packages/contexts/runtime-configuration/tests",
+          "featureTestsRoot": "packages/contexts/runtime-configuration/tests/features",
+          "moduleTestsRoot": "packages/contexts/runtime-configuration/tests/package"
         }
       ],
       "applications": []

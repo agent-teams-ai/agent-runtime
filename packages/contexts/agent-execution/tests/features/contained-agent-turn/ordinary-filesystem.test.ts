@@ -1,3 +1,5 @@
+import fsPromises from "node:fs/promises";
+import {syncBuiltinESMExports} from "node:module";
 import {createHash} from "node:crypto";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -131,4 +133,21 @@ test("ordinary workspace journal is bound, synchronous and closes only after abs
   const asyncSink = createNodeOrdinaryWorkspace({...options, record: async () => {}});
   await assert.rejects(asyncSink.prepare(operation, new AbortController().signal), OrdinaryWorkspacePreparationRetained);
   assert.equal((await readdir(options.workspaceRoot)).length, 1);
+});
+
+test("failed manifest write removes only the unpublished staging directory", async t => {
+  const {options, workspace, artifacts} = await fixture(t);
+  const handle = await workspace.prepare(operation, new AbortController().signal);
+  await writeFile(join(handle.cwd, "result.txt"), "result");
+  const snapshot = await workspace.snapshot(operation, handle);
+  const original = fsPromises.open;
+  const mocked = t.mock.method(fsPromises, "open", (...args: Parameters<typeof original>) => {
+    if (String(args[0]).includes(".staging-") && String(args[0]).endsWith("manifest.json")) {return Promise.reject(new Error("synthetic disk write failure"));}
+    return original(...args);
+  });
+  syncBuiltinESMExports();
+  try {await assert.rejects(artifacts.publish(operation, snapshot), /synthetic disk write failure/);}
+  finally {mocked.mock.restore(); syncBuiltinESMExports();}
+  assert.deepEqual(await readdir(options.artifactRoot), []);
+  await workspace.close(handle);
 });

@@ -92,3 +92,10 @@ test('upstream secret in a bounded SSE response is never forwarded to the main p
   const f = await fixture({ async request() { return { status: 200, body: bytes('data: {"text":"fixture-pa"}\n\n'), close() {} }; } }); t.after(() => f.close());
   const response = await post(f.broker.endpoint, payload()); assert.equal(response.status, 502); assert.ok(!response.text.includes('fixture-pa'));
 });
+
+test('credential split across SSE delta events is refused before forwarding', async t => {
+  const f = await fixture({async request() {return {status: 200, body: bytes('data: {"type":"response.output_text.delta","delta":"fixture-"}\n\ndata: {"type":"response.output_text.delta","delta":"pa"}\n\n'), close() {}};}}); t.after(() => f.close());
+  const response = await post(f.broker.endpoint, payload());
+  assert.equal(response.status, 502); assert.ok(!response.text.includes('fixture-'));
+  assert.deepEqual(f.ended, [{sequence: 1, success: false}]);
+});

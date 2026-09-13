@@ -35,6 +35,7 @@ export function createNodeOrdinaryArtifacts(options: NodeOrdinaryArtifactsOption
     const manifest = JSON.stringify(manifestFor(options.sourceRevision, receipt, hash, bytes.length));
     const artifactDigest = digest(manifest), target = join(options.artifactRoot, artifactDigest);
     const staging = await mkdtemp(join(options.artifactRoot, ".staging-"));
+    try {
     await writeSynced(join(staging, "result.txt"), bytes, 0o400);
     await writeSynced(join(staging, "manifest.json"), manifest, 0o400);
     await syncDirectory(staging);
@@ -54,5 +55,11 @@ export function createNodeOrdinaryArtifacts(options: NodeOrdinaryArtifactsOption
     const published: OrdinaryReceiptOf<"artifact_published"> = {operationId: operation.operationId, attemptId: operation.attemptId, executionProfile: operation.executionProfile, capabilityManifestRevision: operation.capabilityManifestRevision, kind: "artifact_published", workspaceId: receipt.workspaceId, snapshotDigest: receipt.snapshotDigest, artifactDigest, artifactManifestRef: join(target, "manifest.json"), resultRef: join(target, "result.txt"), byteLength: bytes.length};
     await readNodeOrdinaryArtifact(options, published);
     return published;
+    } finally {
+      // The staging name is never canonical. After rename it is absent; before
+      // publication any partial files are still private and safe to remove.
+      try {await rm(staging, {recursive: true, force: true});}
+      catch (cause) {throw new Error(`ordinary_artifact_staging_retained:${staging}`, {cause});}
+    }
   }};
 }

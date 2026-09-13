@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "active",
-  "authority": "ADR-0020",
+  "authority": "ADR-0021",
   "files": [
     "packages/apps/embedded-runtime/src/composition/ordinary-agent-runtime-host.ts",
     "packages/apps/embedded-runtime/src/composition/ordinary-runtime-assembly.ts",

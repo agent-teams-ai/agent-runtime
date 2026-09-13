@@ -3,7 +3,7 @@ import { chmod, link, lstat, mkdir, mkdtemp, realpath, rename, rm, symlink, utim
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, type TestContext } from 'node:test';
-import { stableAuthPath } from '../../../dist/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-files.js';
+import { prepareAuthFiles, stableAuthPath } from '../../../dist/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-files.js';
 import { OrdinaryCodexAuthRefused } from '../../../dist/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-contracts.js';
 
 async function fixture(t: TestContext, directory: boolean, privateMode = true) {
@@ -73,4 +73,10 @@ test('source directory rejects group-writable mode at acquisition', async t => {
   const { path, guard } = await fixture(t, true, false);
   await chmod(path, 0o770);
   await assert.rejects(stableAuthPath(path, true, guard.identity.uid, false), OrdinaryCodexAuthRefused);
+});
+
+test('Linux ordinary auth refuses before observing any configured source', {skip: process.platform !== 'linux'}, async t => {
+  t.mock.method(process, 'getuid', () => 501);
+  const unexpected = (): never => {throw new Error('must not inspect any auth path');};
+  await assert.rejects(prepareAuthFiles({get source() {return unexpected();}, get executable() {return unexpected();}, get privateRoot() {return unexpected();}, check: unexpected}), error => error instanceof OrdinaryCodexAuthRefused);
 });

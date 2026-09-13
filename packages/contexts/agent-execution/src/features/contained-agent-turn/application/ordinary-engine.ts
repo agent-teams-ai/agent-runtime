@@ -52,7 +52,9 @@ const executeOrdinaryOperation = async (dependencies: OrdinaryTurnDependencies, 
     const expiresAt = validateAuthorityDeadline(security, provider);
     timers.push(setTimeout(() => controller.abort(), Math.max(1, expiresAt - Date.now() - 10000)));
     await observeCancellation();
-    workspace = await dependencies.workspace.prepare(operation, controller.signal);
+    // A rejected preparation may retain an allocated workspace, even on cancellation.
+    try {workspace = await dependencies.workspace.prepare(operation, controller.signal);}
+    catch (error) {uncertainty = true; throw error;}
     const materializeController = new AbortController();
     const materializeTimeout = setTimeout(() => materializeController.abort(), Math.min(15000, expiresAt - Date.now() - 10000));
     let credential: OrdinaryCredentialMaterial;

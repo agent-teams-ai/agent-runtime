@@ -33,3 +33,15 @@ test("disposable PostgreSQL ordinary namespace: concurrent accept and claim, dur
     assert.equal((await pool.query("SELECT 1 AS alive")).rows[0].alive, 1);
   } finally {await pool.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end();}
 });
+
+test("ordinary reads and migrations bound exhausted-pool acquisition and release late clients", async t => {
+  t.mock.timers.enable({apis: ["setTimeout"]});
+  const waiting: ((client: import("../../../dist/features/contained-agent-turn/adapters/outbound/postgres/ordinary-postgres-store.js").OrdinaryPostgresClient) => void)[] = [];
+  let released = 0;
+  const pool = {connect: () => new Promise<import("../../../dist/features/contained-agent-turn/adapters/outbound/postgres/ordinary-postgres-store.js").OrdinaryPostgresClient>(resolve => {waiting.push(resolve);})};
+  const store = new PostgresOrdinaryOperationStore({pool});
+  const pending = [assert.rejects(store.read({operationId: "test", scope: {tenantId: "test", projectId: "test"}}), /acquisition timed out/), assert.rejects(applyOrdinaryPostgresSchema(pool), /acquisition timed out/)];
+  t.mock.timers.tick(5001); await Promise.all(pending);
+  for (const resolve of waiting) {resolve({query: async () => {throw new Error("must not query a late client");}, release: () => {released++;}});}
+  await Promise.resolve(); assert.equal(released, 2);
+});

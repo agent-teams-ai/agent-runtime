@@ -73,3 +73,18 @@ test("provided process journal rejection fences spawn and leaves truthful unstar
     assert.deepEqual(await reservation.close(0), {kind: "not_started", reservationId: reservation.reservationId});
   } finally {await rm(root, {recursive: true, force: true});}
 });
+
+test("asynchronous journal acknowledgement prevents provider spawn", {skip: process.platform !== "darwin" || process.getuid?.() === 0}, async () => {
+  const root = await mkdtemp(join(tmpdir(), "ordinary-process-fence-TEST-"));
+  try {
+    const owner = createNodeOrdinaryProcess({record: async () => {throw new Error("journal rejected");}, prepareLaunch: async () => ({executable: "/bin/cat", arguments: [], cwd: root, environment: {}})});
+    const reservation = await owner.reserve({binding, workspace: {workspaceId: "workspace:synthetic", cwd: root, homeDirectory: root}, credential: {materializationId: "material:synthetic", generation: 1, environment: {}, brokerEndpoint: "http://127.0.0.1:1"}, deadline: performance.now() + 5000});
+    await assert.rejects(reservation.start(claim(reservation.reservationId), new AbortController().signal));
+    assert.deepEqual(await reservation.close(0), {kind: "not_started", reservationId: reservation.reservationId});
+  } finally {await rm(root, {recursive: true, force: true});}
+});
+
+test("Linux ordinary reservation refuses before preparing a provider launch", {skip: process.platform !== "linux"}, async () => {
+  const owner = createNodeOrdinaryProcess({prepareLaunch: async () => {throw new Error("must not prepare launch");}});
+  await assert.rejects(owner.reserve({binding, workspace: {workspaceId: "test", cwd: "/synthetic-TEST", homeDirectory: "/synthetic-TEST"}, credential: {materializationId: "test", generation: 1, environment: {}, brokerEndpoint: "http://127.0.0.1:1"}, deadline: performance.now() + 5000}), /ORDINARY_PROCESS_UNCONFIRMED/);
+});

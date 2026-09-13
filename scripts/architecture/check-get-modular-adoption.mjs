@@ -31,14 +31,14 @@ export function validateProfile(profile) {
   equalSet(profile.packages.map(p => p.name), ['@get-modular/core', '@get-modular/assembly'], 'exact package pair');
   assert.equal(new Set(profile.boundaries.map(b => b.id)).size, profile.boundaries.length, 'duplicate boundary');
   if (profile.boundaries.some(b => b.roots.some(path => path.includes('/ordinary-session-runtime/')))) {
-    assert.equal(profile.compositions.filter(c => c.authority === 'ADR-0020').length, 1, 'ordinary source requires one explicitly authorized composition');
+    assert.equal(profile.compositions.filter(c => c.authority === 'ADR-0021').length, 1, 'ordinary source requires one explicitly authorized composition');
   }
   return { status: 'active' };
 }
 
 function verifyOrdinaryComposition(composition, decisions, get) {
     if (composition.authority !== undefined) {
-      assert.equal(composition.authority, 'ADR-0020', 'ordinary authority drift');
+      assert.equal(composition.authority, 'ADR-0021', 'ordinary authority drift');
       assert.ok(decisions.some(d => d.id === composition.authority && d.path === ordinaryAuthorityPath), 'ordinary accepted authority missing');
       assert.equal(composition.scopedFms, 'architecture/feature-module-standard/ordinary-scope.json', 'ordinary FMS mapping missing');
       assert.equal(composition.declarations, ordinaryCompositionPath, 'ordinary declaration identity drift');
@@ -206,7 +206,7 @@ export async function checkAdoption(root) {
   assert.ok(profile.sourceCensus, 'live source census missing');
   await requireSourceDiagnostics(consumerRoot);
   verifySourceCensus(profile, await readSourceCensus(consumerRoot, policy));
-  if (profile.compositions.some(c => c.authority === 'ADR-0020')) {
+  if (profile.compositions.some(c => c.authority === 'ADR-0021')) {
     assert.deepEqual(await checkOrdinaryFeatureScope({root: consumerRoot}), [], 'ordinary scoped FMS diagnostics');
   }
   return { ...result, status: 'verified', reviewRequired: ['new capabilities inside existing source paths', 'semantic ownership'] };

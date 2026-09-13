@@ -1,32 +1,43 @@
 import {randomUUID} from "node:crypto";
-import type {Pool, PoolClient, QueryConfig} from "pg";
+interface OrdinaryQuery {readonly text: string; readonly values: unknown[]; readonly query_timeout: number}
+export interface OrdinaryPostgresClient {
+  query<Row = Record<string, unknown>>(sql: string | OrdinaryQuery, values?: unknown[]): Promise<{rows: Row[]; rowCount: number | null}>;
+  release(discard?: boolean): void;
+}
+export interface OrdinaryPostgresPool {connect(): Promise<OrdinaryPostgresClient>}
+
 import type {OrdinaryOperationStore} from "../../../application/ordinary-ports.js";
 import {containedTurnCommandFingerprint} from "../../../domain/contained-turn-authority.js";
 import {ORDINARY_PROFILE, type OrdinaryOperation, type OrdinaryPreparation, type OrdinaryReceipt, type OrdinaryOperationRef, type OrdinaryInput, type OrdinaryOutput} from "../../../domain/ordinary-model.js";
 import {ordinaryPreparationDigest, ordinaryTerminalStatus, validateOrdinaryInput, validateOrdinaryOperation} from "../../../domain/ordinary-validation.js";
 import {decodeOrdinaryState, encodeOrdinaryState} from "./ordinary-state-codec.js";
 
-const query = (text: string, values: unknown[] = []): QueryConfig<unknown[]> & {readonly query_timeout: number} => ({text, values, query_timeout: 5000});
+const query = (text: string, values: unknown[] = []): OrdinaryQuery => ({text, values, query_timeout: 5000});
 export const ORDINARY_POSTGRES_SCHEMA = `CREATE TABLE IF NOT EXISTS ordinary_turn_operations_v3 (
  tenant_id text NOT NULL, project_id text NOT NULL, command_id text NOT NULL,
  operation_id text NOT NULL, revision bigint NOT NULL CHECK (revision >= 0), state text NOT NULL,
  PRIMARY KEY (tenant_id, project_id, operation_id), UNIQUE (tenant_id, project_id, command_id)
 )`;
+const acquire = (pool: OrdinaryPostgresPool): Promise<OrdinaryPostgresClient> => new Promise((resolve, reject) => {
+  let expired = false;
+  const timer = setTimeout(() => {expired = true; reject(new Error("ordinary database acquisition timed out"));}, 5000);
+  void pool.connect().then(client => {clearTimeout(timer); if (expired) {client.release();} else {resolve(client);} return;}, error => {clearTimeout(timer); if (!expired) {reject(error);}});
+});
+const withClient = async <T>(pool: OrdinaryPostgresPool, body: (client: OrdinaryPostgresClient) => Promise<T>): Promise<T> => {
+  const client = await acquire(pool); let broken = false;
+  try {return await body(client);} catch (error) {broken = true; throw error;} finally {client.release(broken);}
+};
 /** Explicit migration, never an effect of constructing the borrowed-pool adapter. */
-export const applyOrdinaryPostgresSchema = async (pool: Pool): Promise<void> => {await pool.query(query(ORDINARY_POSTGRES_SCHEMA));};
+export const applyOrdinaryPostgresSchema = async (pool: OrdinaryPostgresPool): Promise<void> => {await withClient(pool, async client => {await client.query(query(ORDINARY_POSTGRES_SCHEMA));});};
 class UnknownCommit extends Error {constructor() {super("ordinary transaction outcome requires readback");}}
 interface StateRow {readonly state: string}
 const refValues = (ref: OrdinaryOperationRef): readonly string[] => [ref.scope.tenantId, ref.scope.projectId, ref.operationId];
 const refFor = (operation: OrdinaryOperation): OrdinaryOperationRef => ({operationId: operation.operationId, scope: operation.scope});
 export class PostgresOrdinaryOperationStore implements OrdinaryOperationStore {
-  readonly #pool: Pool;
-  constructor(options: {readonly pool: Pool}) {this.#pool = options.pool;}
-  async #transaction<T>(body: (client: PoolClient) => Promise<T>): Promise<T> {
-    const client = await new Promise<PoolClient>((resolve, reject) => {
-      let expired = false;
-      const timer = setTimeout(() => {expired = true; reject(new Error("ordinary database acquisition timed out"));}, 5000);
-      void this.#pool.connect().then(acquired => {clearTimeout(timer); if (expired) {acquired.release();} else {resolve(acquired);} return;}, error => {clearTimeout(timer); if (!expired) {reject(error);}});
-    }); let committing = false; let broken = false;
+  readonly #pool: OrdinaryPostgresPool;
+  constructor(options: {readonly pool: OrdinaryPostgresPool}) {this.#pool = options.pool;}
+  async #transaction<T>(body: (client: OrdinaryPostgresClient) => Promise<T>): Promise<T> {
+    const client = await acquire(this.#pool); let committing = false; let broken = false;
     try {
       await client.query(query("BEGIN"));
       await client.query("SET LOCAL statement_timeout = '5000ms'");
@@ -40,11 +51,11 @@ export class PostgresOrdinaryOperationStore implements OrdinaryOperationStore {
       throw error;
     } finally {client.release(broken);}
   }
-  async #read(client: Pick<PoolClient, "query">, ref: OrdinaryOperationRef, locked = false): Promise<OrdinaryOperation | undefined> {
+  async #read(client: Pick<OrdinaryPostgresClient, "query">, ref: OrdinaryOperationRef, locked = false): Promise<OrdinaryOperation | undefined> {
     const result = await client.query<StateRow>(query(`SELECT state FROM ordinary_turn_operations_v3 WHERE tenant_id=$1 AND project_id=$2 AND operation_id=$3${locked ? " FOR UPDATE" : ""}`, [...refValues(ref)]));
     const row = result.rows[0]; return row === undefined ? undefined : decodeOrdinaryState(row.state);
   }
-  async #write(client: PoolClient, previous: OrdinaryOperation, next: OrdinaryOperation): Promise<OrdinaryOperation> {
+  async #write(client: OrdinaryPostgresClient, previous: OrdinaryOperation, next: OrdinaryOperation): Promise<OrdinaryOperation> {
     validateOrdinaryOperation(next);
     const result = await client.query("UPDATE ordinary_turn_operations_v3 SET state=$4, revision=$5 WHERE tenant_id=$1 AND project_id=$2 AND operation_id=$3 AND revision=$6", [...refValues(refFor(previous)), encodeOrdinaryState(next), next.revision, previous.revision]);
     if (result.rowCount !== 1) {throw new Error("ordinary operation CAS conflict");}
@@ -71,7 +82,7 @@ export class PostgresOrdinaryOperationStore implements OrdinaryOperationStore {
       return {kind: "unknown", candidateOperationId: operation.operationId, evidenceId: `unknown:${randomUUID()}`};
     }
   }
-  async read(ref: OrdinaryOperationRef): Promise<OrdinaryOperation | undefined> {return this.#read(this.#pool, ref);}
+  async read(ref: OrdinaryOperationRef): Promise<OrdinaryOperation | undefined> {return withClient(this.#pool, client => this.#read(client, ref));}
   async prepare(operation: OrdinaryOperation, preparation: OrdinaryPreparation): Promise<OrdinaryOperation> {
     const now = Date.now();
     if ([preparation.providerAccess.expiresAt, preparation.security.expiresAt].some(expiry => expiry <= now + 10000 || expiry > now + 60000)) {throw new Error("ordinary preparation authority deadline rejected");}

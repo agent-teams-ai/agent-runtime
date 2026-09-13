@@ -32,9 +32,10 @@ export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProvi
       const materialization = createPostgresMaterializationRepository(pool);
       try { await materialization.migrate(); } finally { materialization.dispose(); }
     },
-    observe: (binding: OrdinaryPaBinding) => store.observe(binding),
+    observe: async (binding: OrdinaryPaBinding) => {try {return await store.observe(binding);} catch {throw new OrdinaryPaUnavailable();}},
     async consume(input: OrdinaryPaBinding, capture: OrdinaryCodexAuthCapture, signal: AbortSignal): Promise<OrdinaryPaGrant> {
-      check(); const binding = snapshotOrdinaryPaBinding(input);
+      check(); let binding: OrdinaryPaBinding;
+      try {binding = snapshotOrdinaryPaBinding(input);} catch {capture.dispose(); throw new OrdinaryPaUnavailable();}
       if (signal.aborted || pendingCaptures.has(capture) || grants.size + pendingCaptures.size >= 64) { capture.dispose(); throw new OrdinaryPaUnavailable(); }
       pendingCaptures.add(capture);
       let metadata: Awaited<ReturnType<OrdinaryCodexAuthCapture['capture']>>;

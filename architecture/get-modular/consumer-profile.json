@@ -20,12 +20,14 @@
   },
   "fms": {
     "profile": "architecture/feature-module-standard/candidate-profile.json",
-    "sha256": "f31d4ac720d7b2d2e96647d924c3dee12d050a905520e942e15c1ec74110f060",
+    "sha256": "9f59e4051df2cb29e628b4fde2db598f3f139934b93a998bc420dadb1cf913e2",
     "features": [
       "runtime-installation-discovery",
       "contained-agent-turn",
       "contained-turn-access",
-      "stable-filesystem-custody"
+      "stable-filesystem-custody",
+      "codex-configuration-inspection",
+      "claude-code-configuration-inspection"
     ]
   },
   "productionRoots": [
@@ -1204,7 +1206,7 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/ordinary-files.ts"
       ],
       "status": "not-adopted",
-      "rationale": "ADR-0020 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
+      "rationale": "ADR-0021 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
       "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
       "relationships": [
         {
@@ -1241,7 +1243,7 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-state-codec.ts"
       ],
       "status": "not-adopted",
-      "rationale": "ADR-0020 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
+      "rationale": "ADR-0021 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
       "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
       "relationships": [
         {
@@ -1296,7 +1298,7 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-process/node-ordinary-process.ts"
       ],
       "status": "not-adopted",
-      "rationale": "ADR-0020 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
+      "rationale": "ADR-0021 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
       "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
       "relationships": [
         {
@@ -1327,7 +1329,7 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts"
       ],
       "status": "not-adopted",
-      "rationale": "ADR-0020 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
+      "rationale": "ADR-0021 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
       "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
       "relationships": [
         {
@@ -1533,7 +1535,7 @@
         "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/static-provider-access-binding-repository.ts"
       ],
       "status": "not-adopted",
-      "rationale": "ADR-0020 ordinary implementation and explicitly reclassified existing Provider Access owner-local layer helpers. Core, adapters and composition retain separate dependency boundaries; the independently composed owner is selected at the Runtime Assembly root. Existing FMS activation remains unchanged.",
+      "rationale": "ADR-0021 ordinary implementation and explicitly reclassified existing Provider Access owner-local layer helpers. Core, adapters and composition retain separate dependency boundaries; the independently composed owner is selected at the Runtime Assembly root. Existing FMS activation remains unchanged.",
       "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
       "relationships": [
         {
@@ -1882,7 +1884,7 @@
         "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/transaction.ts"
       ],
       "status": "not-adopted",
-      "rationale": "ADR-0020 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
+      "rationale": "ADR-0021 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
       "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
       "relationships": [
         {
@@ -2080,7 +2082,7 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/ordinary-feature-factory.ts"
       ],
       "status": "not-adopted",
-      "rationale": "ADR-0020 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
+      "rationale": "ADR-0021 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
       "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
       "relationships": [
         {
@@ -3329,7 +3331,7 @@
         "packages/contexts/provider-access/src/features/contained-turn-access/composition/route-selection-owner.ts"
       ],
       "status": "not-adopted",
-      "rationale": "ADR-0020 ordinary implementation and explicitly reclassified existing Provider Access owner-local layer helpers. Core, adapters and composition retain separate dependency boundaries; the independently composed owner is selected at the Runtime Assembly root. Existing FMS activation remains unchanged.",
+      "rationale": "ADR-0021 ordinary implementation and explicitly reclassified existing Provider Access owner-local layer helpers. Core, adapters and composition retain separate dependency boundaries; the independently composed owner is selected at the Runtime Assembly root. Existing FMS activation remains unchanged.",
       "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
       "relationships": [
         {
@@ -3739,7 +3741,7 @@
         "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/ordinary-security-factory.ts"
       ],
       "status": "not-adopted",
-      "rationale": "ADR-0020 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
+      "rationale": "ADR-0021 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
       "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
       "relationships": [
         {
@@ -3878,7 +3880,7 @@
         "packages/contexts/provider-access/src/features/contained-turn-access/domain/materialization-authorization.ts"
       ],
       "status": "not-adopted",
-      "rationale": "ADR-0020 ordinary implementation and explicitly reclassified existing Provider Access owner-local layer helpers. Core, adapters and composition retain separate dependency boundaries; the independently composed owner is selected at the Runtime Assembly root. Existing FMS activation remains unchanged.",
+      "rationale": "ADR-0021 ordinary implementation and explicitly reclassified existing Provider Access owner-local layer helpers. Core, adapters and composition retain separate dependency boundaries; the independently composed owner is selected at the Runtime Assembly root. Existing FMS activation remains unchanged.",
       "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
       "relationships": [
         {
@@ -3927,7 +3929,7 @@
         "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts"
       ],
       "status": "not-adopted",
-      "rationale": "ADR-0020 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
+      "rationale": "ADR-0021 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
       "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
       "relationships": []
     },
@@ -5981,7 +5983,7 @@
       "tests": [
         "packages/apps/embedded-runtime/tests/ordinary-runtime-assembly.test.ts"
       ],
-      "authority": "ADR-0020",
+      "authority": "ADR-0021",
       "scopedFms": "architecture/feature-module-standard/ordinary-scope.json"
     }
   ],

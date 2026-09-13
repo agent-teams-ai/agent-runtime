@@ -56,7 +56,10 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
     let streamInvalid = false;
     let journalFailed = false;
     const record = (observation: OrdinaryProcessObservation): void => {
-      try {options.record?.(Object.freeze(observation));} catch {journalFailed = true; throw refusal();}
+      try {
+        const acknowledged: unknown = options.record?.(Object.freeze(observation));
+        if (acknowledged !== undefined) {if (acknowledged instanceof Promise) {void acknowledged.catch(() => {});} throw refusal();}
+      } catch {journalFailed = true; throw refusal();}
     };
     let spawnInvoked = false;
     let child: ChildProcessWithoutNullStreams | undefined;

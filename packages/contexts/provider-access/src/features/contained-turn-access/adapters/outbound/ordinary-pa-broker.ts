@@ -65,13 +65,17 @@ function admitRequestBody(body: Buffer, guard: OrdinaryPaSecretGuard): void {
   if (payload.model !== 'gpt-5.3-codex-spark' || payload.stream !== true ||
       !guard.artifact(body) || !guard.check(JSON.stringify(payload))) { throw refused(); }
 }
-function responseSafe(bytes: Buffer, guard: OrdinaryPaSecretGuard): boolean {
+function responseSafe(bytes: Buffer, guard: OrdinaryPaSecretGuard, semantic: {text: string}): boolean {
   if (!guard.artifact(bytes)) { return false; }
   const source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   for (const line of source.split('\n')) {
     if (!line.startsWith('data:') || line.slice(5).trim() === '[DONE]') { continue; }
     const value: unknown = JSON.parse(line.slice(5));
     if (!guard.check(JSON.stringify(value))) { return false; }
+    if (value !== null && typeof value === 'object' && 'delta' in value && typeof value.delta === 'string') {
+      semantic.text += value.delta;
+      if (!guard.check(semantic.text)) { return false; }
+    }
   }
   return true;
 }
@@ -79,6 +83,7 @@ function responseSafe(bytes: Buffer, guard: OrdinaryPaSecretGuard): boolean {
 /** Private loopback listener; one sequential request at a time, durable replay fence before upstream. */
 export async function createOrdinaryPaBroker(input: OrdinaryPaBrokerOptions) {
   let closed = false, failed = false, totalResponseBytes = 0;
+  const semantic = {text: ""};
   let active: Promise<void> | undefined;
   const sockets = new Set<Socket>(), lifetime = new AbortController();
   const signal = AbortSignal.any([lifetime.signal, input.selection.operationAbortSignal]);
@@ -112,7 +117,7 @@ export async function createOrdinaryPaBroker(input: OrdinaryPaBrokerOptions) {
       if (upstream.status < 200 || upstream.status >= 300) { throw refused(); }
       output = await boundedBytes(upstream.body, 2_097_152);
       totalResponseBytes += output.length;
-      if (totalResponseBytes > 8_388_608 || !responseSafe(output, input.secretGuard)) { throw refused(); }
+      if (totalResponseBytes > 8_388_608 || !responseSafe(output, input.secretGuard, semantic)) { throw refused(); }
       check(); await input.store.endRequest(input.binding, sequence, true); sequence = undefined;
       response.writeHead(upstream.status, { 'content-type': 'text/event-stream', connection: 'close' }); response.end(output);
       // end() may retain bytes until its callback; wait for finish/close before zeroization.

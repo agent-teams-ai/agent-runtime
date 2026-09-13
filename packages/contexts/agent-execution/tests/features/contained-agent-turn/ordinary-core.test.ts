@@ -204,3 +204,10 @@ test("failed before-close readback retains process cleanup but never invents out
   assert.equal(f.state().status, "reconcile_required"); assert.equal(f.state().receipts.some(receipt => receipt.kind === "output_drain"), false);
   assert.equal(f.state().receipts.some(receipt => receipt.kind === "process_group_closed"), true);
 });
+
+test("cancellation during failed workspace preparation retains reconciliation", async () => {
+  const f = fixture(); const controller = new AbortController();
+  const workspace = {...f.dependencies.workspace, prepare: async () => {controller.abort(); throw new Error("workspace retained after allocation");}};
+  await createOrdinaryTurnFeature({...f.dependencies, workspace}).submit.execute(input, {signal: controller.signal});
+  assert.equal(f.counts().starts, 0); assert.equal(f.state().status, "reconcile_required");
+});

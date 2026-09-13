@@ -21,7 +21,7 @@ test('ordinary scoped profile retains accepted owner and exact source census', (
   }
   assert.ok(validateOrdinaryScope(profile, [...paths, profile.feature.root + '/adapters/new-capability.ts'], decisions).length > 0);
   assert.ok(validateOrdinaryScope(profile, [...paths, 'packages/contexts/runtime-security/src/ordinary-hidden.ts'], decisions).length > 0);
-  assert.ok(validateOrdinaryScope(profile, paths, decisions.filter(d => d.id !== 'ADR-0020')).length > 0);
+  assert.ok(validateOrdinaryScope(profile, paths, decisions.filter(d => d.id !== 'ADR-0021')).length > 0);
 });
 
 function imports(role, specifier, target, seams = []) {
