@@ -5,7 +5,7 @@ import {types} from "node:util";
 import {createCredentialMaterializationRequestDigest} from "@agent-teams/provider-access/composition";
 import {createContainedTurnHttpCredentialMaterialization, createContainedTurnHttpProviderAccessAuthorization} from
   "../../../dist/composition/contained-turn-http-provider-access.js";
-import {erased, generation, renderingFixture, selectorFor} from "../../support/external/provider-access/features/contained-turn-access/credential-rendering-test-fixture.ts";
+import {erased, generation, renderingFixture, selectorFor} from "../../package/support/external/provider-access/features/contained-turn-access/credential-rendering-test-fixture.ts";
 import type {CredentialGenerationOutcome, CredentialGenerationRequest} from
   "@agent-teams/provider-access/composition";
 import {hostWipe, pairedFixture, type HostReceipt} from "../../package/contained-turn-http-credential-materialization-fixture.ts";
