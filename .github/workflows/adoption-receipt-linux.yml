@@ -34,6 +34,7 @@ on:
       - cursor/fms-runtime-access-linux-7d17
       - cursor/fms-rc-layer-linux-7d17
       - cursor/fms-rs-barrels-linux-7d17
+      - cursor/fms-rc-package-arch-load-7d17
       - docs/sr-contained-turn-anti-patterns
       - refactor/fms-host-access-invariants
       - refactor/fms-host-darwin-deployment
