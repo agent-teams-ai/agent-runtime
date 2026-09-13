@@ -111,7 +111,7 @@ test("root Host rejects before configuration I/O or allocation and erases materi
 });
 
 // Synthetic failures only: no database, filesystem owner or provider is started.
-import {createLinuxCodexLiveLaunchRecords, LinuxCodexLiveSetupError, setupLinuxCodexLiveBootstrap} from "./linux-codex-live-bootstrap.ts";
+import {createLinuxCodexLiveLaunchRecords, LinuxCodexLiveSetupError, setupLinuxCodexLiveBootstrap} from "../../live/linux-codex-live-bootstrap.ts";
 
 test("bootstrap schema failure retains cleanup and excludes the original error", {skip: process.platform !== "linux"}, async () => {
   const secret = "malicious-password-/private/path";
@@ -162,15 +162,15 @@ import {getuid} from "node:process";
 import {
   access, executeInput, FakeHost, ids, openInput,
   syntheticCodexEffectCustody, workspaceOwner,
-} from "../support/external/agent-execution/features/contained-agent-turn/support/current-provider-owner-fixture.ts";
+} from "../../support/external/agent-execution/features/contained-agent-turn/support/current-provider-owner-fixture.ts";
 import {
   boundary as codexFixtureBoundary,
   FakeCodexProcess,
   standardHandshake,
   syntheticPrivateRoot as codexFixturePrivateRoot,
   syntheticTmp as codexFixtureTmp,
-} from "../support/external/agent-execution/codex-app-server-contained-turn-provider-fixture.ts";
-import { emitAgentCompleted, emitAgentStarted, emitTurnStarted, generatedTurn } from "../support/external/agent-execution/codex-app-server-test-messages.mjs";
+} from "../../support/external/agent-execution/codex-app-server-contained-turn-provider-fixture.ts";
+import { emitAgentCompleted, emitAgentStarted, emitTurnStarted, generatedTurn } from "../../support/external/agent-execution/codex-app-server-test-messages.mjs";
 
 test("admin inventory and real bootstrap resolver carry accepted ACL identity into the owner plan and redact output", async () => {
   const workspaceRef = codexFixtureBoundary.workspaceRef;

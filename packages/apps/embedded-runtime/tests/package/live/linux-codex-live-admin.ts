@@ -6,10 +6,10 @@ import {isDeepStrictEqual} from "node:util";
 import type {DispatchAcceptancePolicy} from "@agent-teams/runtime-security/composition";
 import {currentEgressDigest} from
   "@agent-teams/runtime-security/composition";
-import {allocateLinuxCodexLiveAdminDirectories} from "../package/live/linux-codex-live-admin-directories.ts";
-import {createLinuxCodexLiveAdminRoute} from "../package/live/linux-codex-live-admin-route.ts";
+import {allocateLinuxCodexLiveAdminDirectories} from "./linux-codex-live-admin-directories.ts";
+import {createLinuxCodexLiveAdminRoute} from "./linux-codex-live-admin-route.ts";
 import {LinuxCodexLiveSetupError, setupLinuxCodexLiveBootstrap,
-  type LinuxCodexLivePins, type LinuxCodexLiveSetupStage} from "./linux-codex-live-bootstrap.ts";
+  type LinuxCodexLivePins, type LinuxCodexLiveSetupStage} from "../../live/linux-codex-live-bootstrap.ts";
 
 type Bootstrap = Awaited<ReturnType<typeof setupLinuxCodexLiveBootstrap>>;
 type CleanupCall = Parameters<Bootstrap["cleanup"]>[0];

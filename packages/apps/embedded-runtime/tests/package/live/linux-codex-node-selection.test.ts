@@ -122,7 +122,7 @@ test("selected resource handles pass the real V4 network recipe without normaliz
 // Actual canary configuration plus synthetic acknowledged/readback facts only.
 // Never call setup or any engine/lifecycle method.
 const canarySelection = async (elapsedMs?: number) => {
-  const {createLinuxCodexLiveCanaryConfiguration} = await import("../../live/linux-codex-live-canary-config.ts");
+  const {createLinuxCodexLiveCanaryConfiguration} = await import("./linux-codex-live-canary-config.ts");
   const {containedTurnScopeDigest} = await import(
     "@agent-teams/agent-execution/composition");
   const {digestContainedTurnCanonicalValue} = await import(
