@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { createDefaultAgentRuntimeHost, AgentRuntimeHostCreationError } from "../dist/composition.js";
-import { createRuntimeSetupAttempt } from "../dist/composition/default-agent-runtime-host.js";
-import { bindRuntimeSetup, runtimeSetupDeclarations, runtimeSetupProfile, createRuntimeSetupFactories } from "../dist/composition/runtime-setup-assembly.js";
-import { createExactParityHost, fixtureScope, registerPassiveSetupScenarios } from "./helpers/assembly-direct-reference.ts";
+import { createDefaultAgentRuntimeHost, AgentRuntimeHostCreationError } from "../../dist/composition.js";
+import { createRuntimeSetupAttempt } from "../../dist/composition/default-agent-runtime-host.js";
+import { bindRuntimeSetup, runtimeSetupDeclarations, runtimeSetupProfile, createRuntimeSetupFactories } from "../../dist/composition/runtime-setup-assembly.js";
+import { createExactParityHost, fixtureScope, registerPassiveSetupScenarios } from "../helpers/assembly-direct-reference.ts";
 
 registerPassiveSetupScenarios("Assembly", () => createDefaultAgentRuntimeHost());
 
@@ -553,8 +553,8 @@ for (const fault of ["missing-binding", "wrong-implementation", "capability", "c
 
 
 test("pinned compiler enforces the positive and negative Assembly consumer contract", () => {
-  const result = spawnSync("pnpm", ["exec", "tsc", "--project", "tests/runtime-setup-assembly.types.tsconfig.json", "--pretty", "false"], {
-    cwd: fileURLToPath(new URL("..", import.meta.url)), encoding: "utf8",
+  const result = spawnSync("pnpm", ["exec", "tsc", "--project", "tests/package/runtime-setup-assembly.types.tsconfig.json", "--pretty", "false"], {
+    cwd: fileURLToPath(new URL("../..", import.meta.url)), encoding: "utf8",
   });
   assert.equal(result.error, undefined);
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
@@ -594,7 +594,7 @@ test("default import and bootstrap remain passive under effect traps", () => {
     install(fs.promises, ['access', 'open', 'readFile', 'readdir', 'readlink', 'realpath', 'stat', 'lstat', 'writeFile', 'appendFile', 'mkdir', 'rm', 'rename', 'unlink']);
     install(fs, ['writeFile', 'writeFileSync', 'appendFile', 'appendFileSync', 'mkdir', 'mkdirSync', 'rm', 'rmSync', 'rename', 'renameSync', 'unlink', 'unlinkSync', 'createWriteStream', 'watch']);
     syncBuiltinESMExports();
-    const { createDefaultAgentRuntimeHost } = await import(${JSON.stringify(new URL("../dist/composition.js", import.meta.url).href)});
+    const { createDefaultAgentRuntimeHost } = await import(${JSON.stringify(new URL("../../dist/composition.js", import.meta.url).href)});
     assert.deepEqual(attempts, []);
     const host = await createDefaultAgentRuntimeHost();
     try { assert.deepEqual(attempts, []); }
@@ -662,7 +662,7 @@ test("independent oracle rejects a materialized wrong-platform planner binding",
   const { mkdtemp, rm } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
-  const { createCodexSetupInspectionPlanner } = await import("../dist/composition/codex-setup-inspection-planner.js");
+  const { createCodexSetupInspectionPlanner } = await import("../../dist/composition/codex-setup-inspection-planner.js");
   const root = await mkdtemp(join(tmpdir(), "ar-assembly-mutant-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   let succeeded = false;

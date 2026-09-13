@@ -2,10 +2,10 @@ import { assemblyFor } from "@get-modular/assembly";
 import { defineModule } from "@get-modular/core";
 import { createDefaultAgentRuntimeHost, type AgentRuntimeHost,
 // @ts-expect-error Internal attempt injection is not part of the package composition entrypoint.
-createRuntimeSetupAttempt } from "../dist/composition.js";
+createRuntimeSetupAttempt } from "../../dist/composition.js";
 void createRuntimeSetupAttempt;
 import { bindRuntimeSetup, createRuntimeSetupFactories, runtimeSetupDeclarations,
-  type RuntimeSetupCapabilities } from "../dist/composition/runtime-setup-assembly.js";
+  type RuntimeSetupCapabilities } from "../../dist/composition/runtime-setup-assembly.js";
 
 // Compiled by the registered runtime test; never executed as a bootstrap.
 export async function consumerContract(): Promise<AgentRuntimeHost> {

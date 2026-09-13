@@ -12,7 +12,7 @@ export const testProcesses = [
     "tests/package/darwin-native-attempt-authority-join.test.ts",
     "tests/assembly-reference.test.ts",
     "tests/assembly-packed-consumer.test.ts",
-    "tests/runtime-setup-assembly.test.ts",
+    "tests/package/runtime-setup-assembly.test.ts",
     "tests/ordinary-runtime-assembly.test.ts",
     "tests/package/capability-bundle-contract.test.ts",
     "tests/package/codex-setup.e2e.test.ts",

@@ -101,6 +101,7 @@ test("original argv lists and accepted native authority and ordinary assembly te
     ["tests/linux-codex-deployment-publication.test.ts", "tests/package/linux-codex-deployment-publication.test.ts"],
     ["tests/postgres-authority-join.test.ts", "tests/package/postgres-authority-join.test.ts"],
     ["tests/provider-candidate-route-gate.test.ts", "tests/package/provider-candidate-route-gate.test.ts"],
+    ["tests/runtime-setup-assembly.test.ts", "tests/package/runtime-setup-assembly.test.ts"],
   ]);
   expected[0] = expected[0].map((arg) => relocated.get(arg) ?? arg);
   assert.deepEqual(testProcesses, expected);
