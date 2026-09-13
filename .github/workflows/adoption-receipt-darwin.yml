@@ -1,14 +1,14 @@
 name: adoption-receipt-darwin
 
-# Temporary workflow: Darwin arm64 adoption receipt for Host README identity
-# 0bf62833 stacked on Host assembly-grammar D 026e2cb6.
+# Temporary workflow: Darwin arm64 adoption receipt for Host feature-test identity
+# 24e20d51 stacked on Host README D 1661ea7c.
 # The job always checks out that SHA so this workflow-only commit does not
-# enter the receipt identity. Safe to delete after the paired Host README receipt is merged.
+# enter the receipt identity. Safe to delete after the paired Host feature-test receipt is merged.
 
 on:
   push:
     branches:
-      - cursor/fms-darwin-gha-capture-host-readmes-7d17
+      - cursor/fms-darwin-gha-capture-host-feature-tests-7d17
 
 permissions:
   contents: read
@@ -19,16 +19,16 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     steps:
-      - name: Checkout frozen Host README SHA
+      - name: Checkout frozen Host feature-test SHA
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: 0bf62833e1d3c05b3a3c809a3bf7cdd5dba4d7f2
+          ref: 24e20d516628fbf09c4e2e6b92c6a84c672b8d85
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "0bf62833e1d3c05b3a3c809a3bf7cdd5dba4d7f2"
+        run: test "$(git rev-parse HEAD)" = "24e20d516628fbf09c4e2e6b92c6a84c672b8d85"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
