@@ -1,10 +1,10 @@
 name: adoption-receipt-darwin
-# retrigger d22b0d76 (second push)
 
-# Temporary workflow: Darwin arm64 adoption receipt for Host recipe-owners identity
-# d22b0d76 stacked on Host packed-consumer D 9710d078.
-# The job always checks out that SHA so this workflow-only commit does not
-# enter the receipt identity. Safe to delete after the paired Host recipe-owners receipt is merged.
+# Temporary workflow: Darwin arm64 adoption receipt for Host recipe-owners absorb
+# identity 0fd30f314ba680b738b08f0f58000dc468053a79 after #144
+# merge-commit 06f18bcd. The job always checks out that SHA so this
+# workflow-only commit does not enter the receipt identity. Safe to delete
+# after the paired Host recipe-owners receipt is merged.
 
 on:
   push:
@@ -25,11 +25,11 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: d22b0d76c0a83db73fd4addf330ac901d0069b82
+          ref: 0fd30f314ba680b738b08f0f58000dc468053a79
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "d22b0d76c0a83db73fd4addf330ac901d0069b82"
+        run: test "$(git rev-parse HEAD)" = "0fd30f314ba680b738b08f0f58000dc468053a79"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
