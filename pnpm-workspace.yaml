@@ -19,6 +19,7 @@ catalog:
   opencode-previous: "npm:opencode-ai@1.17.20"
   oxc-parser: "0.147.0"
   oxlint: "1.77.0"
+  oxlint-tsgolint: "7.0.2001"
   pg: "8.23.0"
   smol-toml: "1.8.0"
   typescript: "7.0.2"

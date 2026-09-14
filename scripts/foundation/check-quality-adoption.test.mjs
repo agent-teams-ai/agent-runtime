@@ -13,6 +13,7 @@ const mutations = {
   "wrong profile": value => { value.foundation.capabilities["quality.source-coverage"].configPath = "other.yaml"; },
   "wrong authority": value => { value.profile.featureProfilePath = "other.json"; },
   "wrong pin": value => { value.manifest.devDependencies["@agent-teams/engineering-foundation"] = "^1.3.1"; },
+  "missing typed lint companion": value => { delete value.manifest.devDependencies["oxlint-tsgolint"]; },
   "no-op scope": value => { value.manifest.scripts["quality:coverage:scope"] = "true"; },
   "no-op typed": value => { value.manifest.scripts["lint:typed"] = "true"; },
   "removed fast route": value => { value.manifest.scripts["check:fast"] = "pnpm lint"; },

@@ -104,6 +104,7 @@
     "opencode-previous": "catalog:",
     "oxc-parser": "catalog:",
     "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
     "typescript": "catalog:",
     "xstate": "catalog:",
     "yaml": "catalog:"
