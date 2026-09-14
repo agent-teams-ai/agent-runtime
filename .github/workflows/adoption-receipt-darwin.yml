@@ -1,9 +1,6 @@
 name: adoption-receipt-darwin
-# retrigger 4615d821 (second push)
-# Temporary workflow: Darwin arm64 adoption receipt for Host linux-joined support
-# identity 4615d821 stacked on Host package-helpers D 6de2fea1.
-# The job always checks out that SHA so this workflow-only commit does not
-# enter the receipt identity. Safe to delete after the paired receipt is merged.
+# Temporary workflow: Darwin arm64 adoption receipt for Host package-support
+# identity c2a21589 after absorb. Checkout frozen SHA; workflow-only.
 
 on:
   push:
@@ -24,7 +21,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: 4615d821f0a3e7012bf7b5b30ee778bd4b027d31
+          ref: c2a2158973de3ec55ead05ab1d89ed4208da7417
 
       - name: Verify checkout revision
         shell: bash
