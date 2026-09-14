@@ -1,8 +1,7 @@
 name: adoption-receipt-darwin
-# retrigger ae35cd8b (second push)
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host live darwin-launcher
-# identity ae35cd8b stacked on Host live darwin-verification D e030aa8a.
+# identity 678032cc stacked on Host live darwin-verification D c1c9e96f.
 # The job always checks out that SHA so this workflow-only commit does not
 # enter the receipt identity. Safe to delete after the paired receipt is merged.
 
@@ -25,11 +24,11 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: ae35cd8bb8b114586503a9e8afe886b545b27052
+          ref: 678032cc910245df0e993c714d0bc4fb20a171d3
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "ae35cd8bb8b114586503a9e8afe886b545b27052"
+        run: test "$(git rev-parse HEAD)" = "678032cc910245df0e993c714d0bc4fb20a171d3"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
