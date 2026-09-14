@@ -8,7 +8,7 @@ import {harness, selection} from "./support/external/provider-access/features/co
 import {createHarness} from "./support/external/runtime-security/postgres-dispatch.fixtures.ts";
 import {createDispatchAcceptanceFeature, createNodeSha256DispatchDigest, createPostgresDispatchAcceptanceStore} from "@agent-teams/runtime-security/composition";
 import {createDependencies} from "../support/external/agent-execution/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
-import {adapterSnapshot, manifest} from "../support/external/agent-execution/features/contained-agent-turn/support/contained-turn-fixture-snapshots.ts";
+import {adapterSnapshot, manifest} from "./support/external/agent-execution/features/contained-agent-turn/support/contained-turn-fixture-snapshots.ts";
 
 // Local assembly retains the existing synthetic AE store and observes its real
 // one-shot claim through the deployment lifecycle. No shared fixture is edited.

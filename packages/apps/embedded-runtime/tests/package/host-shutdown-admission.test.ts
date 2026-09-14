@@ -16,7 +16,7 @@ import {
   providerAccessSnapshot,
   workspaceId,
 } from "./support/external/agent-execution/contained-turn-kernel-fixtures.ts";
-import { committedDispatchProofFixture } from "../support/external/agent-execution/features/contained-agent-turn/support/committed-dispatch-proof-fixture.ts";
+import { committedDispatchProofFixture } from "./support/external/agent-execution/features/contained-agent-turn/support/committed-dispatch-proof-fixture.ts";
 
 const EMPTY_SHA256 = "0".repeat(64);
 const drain = Object.freeze({ bytes: 0, sha256: EMPTY_SHA256, status: "complete" as const });

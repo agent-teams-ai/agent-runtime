@@ -162,7 +162,7 @@ import {getuid} from "node:process";
 import {
   access, executeInput, FakeHost, ids, openInput,
   syntheticCodexEffectCustody, workspaceOwner,
-} from "../../support/external/agent-execution/features/contained-agent-turn/support/current-provider-owner-fixture.ts";
+} from "../support/external/agent-execution/features/contained-agent-turn/support/current-provider-owner-fixture.ts";
 import {
   boundary as codexFixtureBoundary,
   FakeCodexProcess,

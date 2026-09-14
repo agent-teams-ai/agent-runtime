@@ -9,8 +9,8 @@ import {createCompositionInput, setupCapabilities, submit} from "../contained-tu
 import {createHostCustodiedAgentRuntimeHost, AgentRuntimeHostDisposalIncompleteError} from "../../../dist/composition.js";
 import {createContainedTurnRouteEnforcement,renderCodexNativeBrokerConfig,HostHttpEgressV4Journal,linuxExclusiveRouteSeccomp,DOCKER_CUSTODY_NODE_PATH,DOCKER_CUSTODY_INIT_ARGUMENTS} from "@agent-teams/agent-execution/composition";
 import {DeterministicCurrentOwnerHost} from "./external/agent-execution/current-owner-success-fixture.ts";
-import {policy as basePolicy, createInput} from "../../support/external/agent-execution/features/contained-agent-turn/support/docker-host-custody-lifecycle-fixture.ts";
-import {initOptions} from "../../support/external/agent-execution/features/contained-agent-turn/support/docker-claim-init-fixture.ts";
+import {policy as basePolicy, createInput} from "./external/agent-execution/features/contained-agent-turn/support/docker-host-custody-lifecycle-fixture.ts";
+import {initOptions} from "./external/agent-execution/features/contained-agent-turn/support/docker-claim-init-fixture.ts";
 import {imageLock} from "./external/agent-execution/fixtures/docker-image-init-fixture.ts";
 import {MemoryV4Storage} from "./external/agent-execution/fixtures/host-http-egress-v4-fixture.ts";
 import {createEgressFixture} from "../../support/external/agent-execution/features/contained-agent-turn/http-egress-test-fixture.ts";
