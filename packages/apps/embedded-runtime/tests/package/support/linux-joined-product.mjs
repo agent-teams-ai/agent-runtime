@@ -8,7 +8,7 @@ import {pathToFileURL} from "node:url";
 import {createCompositionInput, setupCapabilities, submit} from "../contained-turn-product.fixture.ts";
 import {createHostCustodiedAgentRuntimeHost, AgentRuntimeHostDisposalIncompleteError} from "../../../dist/composition.js";
 import {createContainedTurnRouteEnforcement,renderCodexNativeBrokerConfig,HostHttpEgressV4Journal,linuxExclusiveRouteSeccomp,DOCKER_CUSTODY_NODE_PATH,DOCKER_CUSTODY_INIT_ARGUMENTS} from "@agent-teams/agent-execution/composition";
-import {DeterministicCurrentOwnerHost} from "../../support/external/agent-execution/current-owner-success-fixture.ts";
+import {DeterministicCurrentOwnerHost} from "./external/agent-execution/current-owner-success-fixture.ts";
 import {policy as basePolicy, createInput} from "../../support/external/agent-execution/features/contained-agent-turn/support/docker-host-custody-lifecycle-fixture.ts";
 import {initOptions} from "../../support/external/agent-execution/features/contained-agent-turn/support/docker-claim-init-fixture.ts";
 import {imageLock} from "../../support/external/agent-execution/fixtures/docker-image-init-fixture.ts";

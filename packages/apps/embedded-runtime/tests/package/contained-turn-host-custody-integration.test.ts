@@ -13,7 +13,7 @@ import {
 } from "../../dist/composition.js";
 import { composeCandidateHostCustodiedContainedTurnForImplementationEvidence } from
   "../../dist/composition/contained-turn-feature-composition.js";
-import { DeterministicCurrentOwnerHost } from "../support/external/agent-execution/current-owner-success-fixture.ts";
+import { DeterministicCurrentOwnerHost } from "./support/external/agent-execution/current-owner-success-fixture.ts";
 import {setupCapabilities, createCompositionInput, submit} from "./contained-turn-product.fixture.ts";
 
 import {createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate,
