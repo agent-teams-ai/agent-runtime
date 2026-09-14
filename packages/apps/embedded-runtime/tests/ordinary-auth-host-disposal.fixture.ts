@@ -4,7 +4,7 @@ import childProcess from 'node:child_process';
 import {PassThrough} from 'node:stream';
 import {syncBuiltinESMExports} from 'node:module';
 import {createAgentRuntimeHost} from '../dist/composition/agent-runtime-host.js';
-import {OrdinaryCodexAuthCleanupIndeterminate} from '../../../contexts/provider-access/dist/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-contracts.js';
+const {OrdinaryCodexAuthCleanupIndeterminate} = await import(new URL('../../../contexts/provider-access/dist/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-contracts.js', import.meta.url).href);
 
 function incomplete(error: unknown): boolean {return error instanceof AggregateError && error.errors.some(cause => cause instanceof OrdinaryCodexAuthCleanupIndeterminate);}
 
@@ -30,8 +30,8 @@ test('real Host retains the real auth capture after indeterminate helper cleanup
   let now = 0; t.mock.method(performance, 'now', () => {now += 1000; return now;});
   syncBuiltinESMExports();
   t.after(() => {t.mock.restoreAll(); syncBuiltinESMExports();});
-  const {createOrdinaryCodexAuthCapture} = await import('../../../contexts/provider-access/dist/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-capture.js');
-  const {createPostgresOrdinaryProviderAccessOwner} = await import('../../../contexts/provider-access/dist/composition.js');
+  const {createOrdinaryCodexAuthCapture} = await import(new URL('../../../contexts/provider-access/dist/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-capture.js', import.meta.url).href);
+  const {createPostgresOrdinaryProviderAccessOwner} = await import(new URL('../../../contexts/provider-access/dist/composition.js', import.meta.url).href);
   const capture = createOrdinaryCodexAuthCapture({operationRef: 'TEST-operation', executable: '/TEST/absent', sourceDirectory: '/TEST/source', privateRoot: '/TEST/private', generation: 1, signal: new AbortController().signal, deadline: performance.now() + 20000,
     record: observation => {if (observation.outcome === 'started') {throw new Error('TEST journal failure');}},
   });
