@@ -5,7 +5,6 @@ import {
   type ContainedTurnCompositionScope,
   type TrustedClaudeCodeSetupScope,
   type TrustedCodexSetupScope,
-  type TrustedRuntimeAccessScope,
 } from "../contracts/trusted-runtime-access-scope.js";
 
 const copyBoundedText = (value: string, limit: number): string | undefined =>
