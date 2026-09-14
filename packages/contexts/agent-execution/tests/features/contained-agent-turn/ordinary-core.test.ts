@@ -218,3 +218,54 @@ test("cancelled provider grant acquisition cannot certify retained auth cleanup"
   await createOrdinaryTurnFeature({...f.dependencies, providerAccess}).submit.execute(input, {signal: controller.signal});
   assert.equal(f.counts().starts, 0); assert.equal(f.state().status, "reconcile_required");
 });
+
+test("unproven reservation is retained across failed concurrent disposal and released once after closure", async () => {
+  const f = fixture(); const reserve = f.dependencies.process.reserve;
+  let closes = 0; let allowClosure = false;
+  const failure = new Error("TEST bounded close unconfirmed");
+  f.dependencies.process.reserve = async request => {
+    const reservation = await reserve(request);
+    return {...reservation, close: async sequence => {closes += 1; if (!allowClosure) {throw failure;} return reservation.close(sequence);}};
+  };
+  const feature = createOrdinaryTurnFeature(f.dependencies);
+  await feature.submit.execute(input);
+  assert.equal(closes, 1); assert.equal(f.state().status, "reconcile_required");
+  const first = feature.dispose(); const concurrent = feature.dispose();
+  assert.equal(first, concurrent);
+  await assert.rejects(first, error => error instanceof AggregateError && error.errors.includes(failure));
+  assert.equal(closes, 2); assert.equal(f.counts().closedWorkspaces, 0);
+  assert.equal(f.state().receipts.some(receipt => receipt.kind === "process_group_closed"), false);
+  allowClosure = true;
+  await Promise.all([feature.dispose(), feature.dispose()]); await feature.dispose();
+  assert.equal(closes, 3); assert.equal(f.counts().starts, 1);
+  assert.equal(f.state().receipts.filter(receipt => receipt.kind === "process_group_closed").length, 1);
+  assert.deepEqual(await feature.submit.execute(input), {status: "denied"});
+});
+
+test("late closure is not repeated when its evidence commit needs a retry", async () => {
+  const f = fixture(); const reserve = f.dependencies.process.reserve;
+  let closes = 0;
+  f.dependencies.process.reserve = async request => {
+    const reservation = await reserve(request);
+    return {...reservation, close: async sequence => {closes += 1; if (closes === 1) {throw new Error("TEST timeout");} return reservation.close(sequence);}};
+  };
+  const feature = createOrdinaryTurnFeature(f.dependencies); await feature.submit.execute(input);
+  const reconcile = f.dependencies.operationStore.reconcile; let fail = true;
+  f.dependencies.operationStore.reconcile = async (...args) => {if (fail) {fail = false; throw new Error("TEST evidence unavailable");} return reconcile(...args);};
+  await assert.rejects(feature.dispose(), AggregateError); assert.equal(closes, 2);
+  await feature.dispose(); await feature.dispose(); assert.equal(closes, 2);
+  assert.equal(f.state().receipts.filter(receipt => receipt.kind === "process_group_closed").length, 1);
+});
+
+test("retry still closes the process when output readback is unavailable without inventing drain", async () => {
+  const f = fixture(); const reserve = f.dependencies.process.reserve; let closes = 0;
+  f.dependencies.process.reserve = async request => {
+    const reservation = await reserve(request);
+    return {...reservation, close: async sequence => {closes += 1; if (closes === 1) {throw new Error("TEST timeout");} return reservation.close(sequence);}};
+  };
+  const feature = createOrdinaryTurnFeature(f.dependencies); await feature.submit.execute(input);
+  f.dependencies.operationStore.read = async () => {throw new Error("TEST readback unavailable");};
+  await feature.dispose(); assert.equal(closes, 2);
+  assert.equal(f.state().receipts.some(receipt => receipt.kind === "process_group_closed"), true);
+  assert.equal(f.state().receipts.some(receipt => receipt.kind === "output_drain"), false);
+});

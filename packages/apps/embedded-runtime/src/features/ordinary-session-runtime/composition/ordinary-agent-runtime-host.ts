@@ -46,9 +46,9 @@ export async function createOrdinaryAgentRuntimeHost(input: OrdinaryAgentRuntime
   let cleanupPromise: Promise<void> | undefined;
   const cleanup = (): Promise<void> => cleanupPromise ??= (async () => {
     const errors: unknown[] = [];
-    for (const dispose of cleanups.toReversed()) {try {await dispose();} catch (error) {errors.push(error);}}
+    for (const dispose of cleanups.toReversed()) {try {await dispose(); cleanups.splice(cleanups.indexOf(dispose), 1);} catch (error) {errors.push(error); break;}}
     if (errors.length > 0) {throw new AggregateError(errors, "ordinary_host_cleanup_incomplete");}
-  })();
+  })().catch(error => {cleanupPromise = undefined; throw error;});
   let codex: ReturnType<typeof createOrdinaryCodexAdapter> | undefined;
   const getCodex = () => {
     if (codex === undefined) {
@@ -73,18 +73,19 @@ export async function createOrdinaryAgentRuntimeHost(input: OrdinaryAgentRuntime
         },
         async workspace() {return createNodeOrdinaryWorkspace({sourceDirectory: options.execution.sourceDirectory, workspaceRoot: options.execution.workspaceRoot, sourceRevision: options.execution.sourceRevision, record: observation => journal.record({...observation})});},
         async artifacts() {return createNodeOrdinaryArtifacts({artifactRoot: options.execution.artifactRoot, sourceRevision: options.execution.sourceRevision, record: event => journal.record({...event})});},
-        async process() {return createNodeOrdinaryProcess({prepareLaunch: getCodex().prepareLaunch, record: event => journal.record({...event})});},
-        async provider() {return getCodex().provider;},
+        async process(prepareLaunch) {return createNodeOrdinaryProcess({prepareLaunch, record: event => journal.record({...event})});},
+        async provider() {return getCodex();},
       },
       decorateHost(host, feature) {
+        let hostDisposed = false;
         let disposal: Promise<void> | undefined;
         const dispose = (): Promise<void> => disposal ??= (async () => {
           const errors: unknown[] = [];
-          try {await feature.dispose();} catch (error) {errors.push(error);}
-          try {await host.dispose();} catch (error) {errors.push(error);}
+          try {await feature.dispose();} catch (error) {throw new AggregateError([error], "ordinary_host_disposal_incomplete", {cause: error});}
+          try {if (!hostDisposed) {await host.dispose(); hostDisposed = true;}} catch (error) {errors.push(error);}
           try {await cleanup();} catch (error) {errors.push(error);}
           if (errors.length > 0) {throw new AggregateError(errors, "ordinary_host_disposal_incomplete");}
-        })();
+        })().catch(error => {disposal = undefined; throw error;});
         return Object.freeze({bindAccess(scope: TrustedRuntimeAccessScope) {
           if (scope === null || typeof scope !== "object" || types.isProxy(scope)) {throw new Error("ordinary_host_scope_mismatch");}
           const descriptor = Object.getOwnPropertyDescriptor(scope, "containedTurn");

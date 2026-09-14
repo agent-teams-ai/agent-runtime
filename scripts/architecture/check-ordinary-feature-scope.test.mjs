@@ -48,6 +48,9 @@ test('scoped checks reuse rejecting Node/SDK/layer and exact legacy seam rules',
 test('ordinary eight owner declarations and exact seven required turn slots reject graph drift', () => {
   assert.doesNotThrow(() => verifyOrdinaryGraph(graph));
   for (const [before, after] of [
+    ['slotId: "prepare-launch"', 'slotId: "unpaired-launch"'],
+    ['capabilityId: "ordinary/prepare-launch"', 'capabilityId: "ordinary/provider"'],
+    ['consumerImplementationId: "ordinary/process", slotId: "prepare-launch", providerImplementationIds: ["ordinary/provider"]', 'consumerImplementationId: "ordinary/process", slotId: "prepare-launch", providerImplementationIds: ["ordinary/workspace"]'],
     ['moduleId: "ordinary/store"', 'moduleId: "ordinary/hidden"'],
     ['slotId: "operation-store"', 'slotId: "missing-store"'],
     ['capabilityId: "ordinary/process"', 'capabilityId: "ordinary/provider"'],

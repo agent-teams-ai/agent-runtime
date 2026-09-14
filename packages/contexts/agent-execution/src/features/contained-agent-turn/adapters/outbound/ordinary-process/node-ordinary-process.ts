@@ -168,6 +168,7 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
             }
           }
           const unread = queue.length;
+          if (unread !== 0) {streamInvalid = true;}
           queue.length = 0;
           partial = "";
           for (const key of Object.keys(environment)) {delete environment[key];}
@@ -179,6 +180,7 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
               exitObserved: true as const, groupEmptyObserved: true as const}),
           ] as const);
         })().catch(error => {
+          closePromise = undefined;
           try {record({...binding, reservationId, kind: "unconfirmed", pid: child?.pid ?? null, processGroupId: child?.pid ?? null});} catch { /* The supplied journal already failed closed. */ }
           throw error;
         });

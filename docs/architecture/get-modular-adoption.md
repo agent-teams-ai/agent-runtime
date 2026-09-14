@@ -21,7 +21,10 @@ The existing Runtime Setup Assembly remains the single construction root.
 The ordinary extension declares eight owned nodes: operation store, Runtime
 Security, Provider Access, workspace, artifacts, process, provider and turn.
 The turn requires exactly seven dependencies; Provider Access additionally
-consumes Security's operation-bound secret-registration capability. The Host
+consumes Security's operation-bound secret-registration capability. Process
+requires Provider's `ordinary/prepare-launch` capability. The same provider
+factory returns execution and launch preparation from one adapter owner; Assembly
+injects preparation into Process before the closed turn is materialized. The Host
 receives the closed ordinary turn root. The compatibility token is
 `agent-runtime/ordinary-v1`; it is distinct from the execution profile,
 manifest and persistence codec identities.
@@ -41,6 +44,36 @@ Node/SDK/layer, slot, capability, cardinality, token and binding mutants.
 Both commands remain in fast and full gates; runtime preparation, cleanup and
 public construction tests are mapped in the same profile. These architecture
 gates do not substitute for the ordinary end-to-end execution evidence.
+
+### Ordinary closure retention and binding evidence
+
+An unsuccessful bounded reservation close leaves the ordinary flight owned.
+Concurrent disposal calls join one attempt; rejection permits another bounded
+attempt, and observed closure plus durable reconciliation releases the flight.
+The Host retains its provider owner and writable observation journal until the
+feature's disposal succeeds. Successful owner cleanup is removed exactly once.
+A timeout or rejection never proves termination. Reconciliation workspaces remain
+retained; retry does not publish artifacts or reclassify a reconciled turn as success.
+
+The materialized ordinary root test uses disposable ports and asserts that Process
+receives the exact launch function exported alongside Provider execution. A wrong
+provider binding fails compilation before factory calls. The active graph checker
+and rejecting mutants enforce the required slot, capability and exact binding.
+The engine tests cover failed closure, concurrent retry, and late evidence commit
+failure without repeating an observed close. Host tests cover retained journal
+writes and exact-once final disposal. No real provider is launched.
+
+The 2026-09-14 review compared the retained complete standard against the
+controller's current upstream measurement: both are revision `669a750d` and
+SHA-256 `e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`.
+There is no standard byte delta or pin migration. This applies its existing
+Host ownership and required static binding rules; shared guidance needs no change.
+Accepted ADRs and retained standard bytes remain unchanged. The local lifecycle
+and binding evidence remains pending execution because this checkout lacks
+dependencies and the pinned pnpm runtime. The dependency-free synthetic process
+retry regression passes on Linux; six existing Darwin process tests are skipped.
+The [delivery review](../../architecture/get-modular/evidence/ordinary-lifecycle-pairing-review.json)
+records exact commands, evidence and remaining checks. Existing paired qualification evidence remains pending.
 
 ## Status and authority
 

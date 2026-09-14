@@ -8,7 +8,7 @@ const view = (operation: OrdinaryOperation): OrdinaryView => {
   const artifact = operation.receipts.find(item => item.kind === "artifact_published");
   return {commandId: operation.commandId, operationId: operation.operationId, effectId: operation.effectId, provider: operation.input.expectedProvider, revision: operation.revision, status: operation.status, output: operation.output.map(item => ({cursor: item.cursor, kind: item.kind, text: item.text})), ...ORDINARY_PROFILE, ...(artifact === undefined ? {} : {artifactManifestRef: artifact.artifactManifestRef, resultRef: artifact.resultRef})};
 };
-interface Flight {readonly operation: OrdinaryOperation; readonly controller: AbortController; readonly completion: Promise<void>}
+interface Flight {readonly operation: OrdinaryOperation; readonly controller: AbortController; readonly completion: Promise<void>; cleanup?: () => Promise<void>}
 export interface OrdinarySubmitOptions {readonly signal?: AbortSignal; readonly onAccepted?: (operation: OrdinaryOperationRef) => void}
 export type OrdinarySubmitOutcome =
   | {readonly status: "denied"}
@@ -28,7 +28,7 @@ const validateAuthorityDeadline = (security: OrdinarySecurityGrant, provider: Or
   if (expiresAt <= now + 10000 || provider.expiresAt > now + 60000 || security.expiresAt > now + 60000 || provider.authority.expiresAt !== provider.expiresAt || security.authority.expiresAt !== security.expiresAt) {throw new Error("ordinary authority deadline invalid");}
   return expiresAt;
 };
-const executeOrdinaryOperation = async (dependencies: OrdinaryTurnDependencies, initial: OrdinaryOperation, controller: AbortController): Promise<OrdinaryOperation> => {
+const executeOrdinaryOperation = async (dependencies: OrdinaryTurnDependencies, initial: OrdinaryOperation, controller: AbortController, flight: Flight): Promise<OrdinaryOperation> => {
   let operation = initial;
   let security: OrdinarySecurityGrant | undefined; let provider: OrdinaryProviderGrant | undefined;
   let workspace: OrdinaryWorkspaceHandle | undefined; let reservation: OrdinaryProcessReservation | undefined;
@@ -114,11 +114,33 @@ const executeOrdinaryOperation = async (dependencies: OrdinaryTurnDependencies, 
       if (current === undefined || current.attemptId !== operation.attemptId) {throw new Error("ordinary output readback unresolved");}
       operation = current; sequenceConfirmed = true;
     });}
-    if (reservation !== undefined) {const owned = reservation; await cleanup(async () => {
-      const closed = await owned.close(operation.output.length);
-      if ("kind" in closed) {if (launched || closed.reservationId !== owned.reservationId) {throw new Error("ordinary closure mismatch");}}
-      else {for (const receipt of closed) {if (receipt.kind !== "output_drain" || sequenceConfirmed) {retain(receipt);}}}
-    });}
+    if (reservation !== undefined) {
+      const owned = reservation;
+      const close = async (): Promise<void> => {
+        const closed = await owned.close(operation.output.length);
+        if ("kind" in closed) {
+          if (launched || closed.kind !== "not_started" || closed.reservationId !== owned.reservationId) {throw new Error("ordinary closure mismatch");}
+        } else {
+          for (const receipt of closed) {validateOrdinaryReceipt(receipt, operation);}
+          if (!closed.some(receipt => receipt.kind === "process_group_closed" && receipt.reservationId === owned.reservationId)) {throw new Error("ordinary termination unproven");}
+          for (const receipt of closed) {if (receipt.kind !== "output_drain" || sequenceConfirmed) {retain(receipt);}}
+        }
+      };
+      let closureObserved = false;
+      flight.cleanup = async () => {
+        if (!closureObserved) {
+          sequenceConfirmed = false;
+          try {
+            const current = await dependencies.operationStore.read(reference(operation));
+            if (current !== undefined && current.attemptId === operation.attemptId) {operation = current; sequenceConfirmed = true;}
+          } catch { /* Storage uncertainty must not prevent bounded physical cleanup. */ }
+          await close(); closureObserved = true;
+        }
+        await dependencies.operationStore.reconcile(operation, receipts);
+        delete flight.cleanup;
+      };
+      await cleanup(async () => {await close(); delete flight.cleanup;});
+    }
     if (workspace !== undefined && launched && receipts.some(item => item.kind === "process_group_closed") && receipts.some(item => item.kind === "output_drain")) {
       const owned = workspace;
       await cleanup(async () => {
@@ -148,7 +170,8 @@ const submitOwnedOperation = async (dependencies: OrdinaryTurnDependencies, oper
   const controller = new AbortController();
   let complete!: () => void;
   const completion = new Promise<void>(resolve => {complete = resolve;});
-  flights.set(operation.operationId, {operation, controller, completion});
+  const flight: Flight = {operation, controller, completion};
+  flights.set(operation.operationId, flight);
   const signalCancellations: Promise<void>[] = [];
   const cancel = (): void => {
     const pending = dependencies.operationStore.cancel(reference(operation)).then(() => {controller.abort(); return;}, () => {controller.abort(); throw new Error("ordinary signal cancellation persistence unresolved");});
@@ -161,11 +184,11 @@ const submitOwnedOperation = async (dependencies: OrdinaryTurnDependencies, oper
   try {
     if (isDisposed() || options?.signal?.aborted) {await dependencies.operationStore.cancel(reference(operation)); controller.abort();}
     try {options?.onAccepted?.(reference(operation));} catch {await dependencies.operationStore.cancel(reference(operation)); controller.abort();}
-    result = {status: "observed", turn: view(await executeOrdinaryOperation(dependencies, operation, controller))};
+    result = {status: "observed", turn: view(await executeOrdinaryOperation(dependencies, operation, controller, flight))};
   } catch (error) {failure = {error};} finally {
     options?.signal?.removeEventListener("abort", cancel);
     const cancellations = await Promise.allSettled(signalCancellations);
-    flights.delete(operation.operationId); complete();
+    if (flight.cleanup === undefined) {flights.delete(operation.operationId);} complete();
     cancellationFailed = cancellations.some(outcome => outcome.status === "rejected");
   }
   if (cancellationFailed) {throw new Error("ordinary signal cancellation persistence unresolved");}
@@ -179,6 +202,7 @@ export const createOrdinaryEngine = (dependencies: OrdinaryTurnDependencies): Or
   const flights = new Map<string, Flight>();
   const submissions = new Set<Promise<OrdinarySubmitOutcome>>();
   let disposed = false;
+  let disposal: Promise<void> | undefined;
   const submitAccepted = async (input: OrdinaryInput, options?: OrdinarySubmitOptions): Promise<OrdinarySubmitOutcome> => {
     if (disposed) {return {status: "denied"};}
     if (input.expectedProvider !== dependencies.provider.supported.provider) {return {status: "unsupported", code: "provider_mismatch"};}
@@ -209,14 +233,18 @@ export const createOrdinaryEngine = (dependencies: OrdinaryTurnDependencies): Or
       if (operation === undefined) {return {status: "not_found"};}
       localFlight(input)?.controller.abort(); return {status: "observed", turn: view(operation)};
     }},
-    dispose: async () => {
+    dispose: () => disposal ??= (async () => {
       disposed = true;
       const acceptedOrPending = [...submissions];
       const owned = [...flights.values()];
       const cancelled = await Promise.allSettled(owned.map(async flight => {try {await dependencies.operationStore.cancel(reference(flight.operation));} finally {flight.controller.abort();}}));
       await Promise.all(owned.map(flight => flight.completion));
       const completed = await Promise.allSettled(acceptedOrPending);
-      if (completed.some(result => result.status === "rejected") || cancelled.some(result => result.status === "rejected")) {throw new Error("ordinary disposal cancellation persistence unresolved");}
-    },
+      const cleaned = await Promise.allSettled([...flights.entries()].map(async ([id, flight]) => {
+        await flight.cleanup?.(); flights.delete(id);
+      }));
+      const errors = [...cancelled, ...completed, ...cleaned].flatMap(result => result.status === "rejected" ? [result.reason] : []);
+      if (errors.length > 0) {throw new AggregateError(errors, "ordinary disposal incomplete");}
+    })().catch(error => {disposal = undefined; throw error;}),
   };
 };

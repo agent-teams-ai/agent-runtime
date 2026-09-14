@@ -10,7 +10,7 @@ const list = node => node?.elements ?? [];
 const unwrap = node => node?.type === 'TSAsExpression' ? node.expression : node;
 const expected = {
   'ordinary/store': [], 'ordinary/security': [], 'ordinary/provider-access': ['register-secrets:ordinary/register-secrets'],
-  'ordinary/workspace': [], 'ordinary/artifacts': [], 'ordinary/process': [], 'ordinary/provider': [],
+  'ordinary/workspace': [], 'ordinary/artifacts': [], 'ordinary/process': ['prepare-launch:ordinary/prepare-launch'], 'ordinary/provider': [],
   'ordinary/turn': ['operation-store:ordinary/store', 'security:ordinary/security', 'provider-access:ordinary/provider-access',
     'workspace:ordinary/workspace', 'artifacts:ordinary/artifacts', 'process:ordinary/process', 'provider:ordinary/provider'],
 };
@@ -31,7 +31,7 @@ export function verifyOrdinaryGraph(source) {
     assert.ok(Object.hasOwn(expected, id), 'unknown ordinary module');
     assert.equal(string(object, 'implementationId'), id, 'ordinary implementation drift');
     const capabilities = list(property(object, 'provides')).map(p => string(p, 'capabilityId')).toSorted();
-    assert.deepEqual(capabilities, (id === 'ordinary/security' ? [id, 'ordinary/register-secrets'] : [id]).toSorted(), 'ordinary capability drift');
+    assert.deepEqual(capabilities, (id === 'ordinary/security' ? [id, 'ordinary/register-secrets'] : id === 'ordinary/provider' ? [id, 'ordinary/prepare-launch'] : [id]).toSorted(), 'ordinary capability drift');
     const slots = list(property(object, 'slots'));
     assert.deepEqual(slots.map(s => `${string(s, 'slotId')}:${string(s, 'capabilityId')}`).toSorted(), [...expected[id]].toSorted(), 'ordinary dependency slots drift');
     for (const item of [...list(property(object, 'provides')), ...slots]) {
@@ -54,6 +54,6 @@ export function verifyOrdinaryGraph(source) {
   const bindings = list(unwrap(variables.find(v => v.id?.name === 'ordinaryRuntimeBindings')?.init)).map(b =>
     `${string(b, 'consumerImplementationId')}:${string(b, 'slotId')}:${list(property(b, 'providerImplementationIds')).map(literal).join(',')}`);
   const wanted = expected['ordinary/turn'].map(slot => `ordinary/turn:${slot}`);
-  wanted.push('ordinary/provider-access:register-secrets:ordinary/security', 'agent-runtime/runtime-host:ordinary-turn:ordinary/turn');
+  wanted.push('ordinary/process:prepare-launch:ordinary/provider', 'ordinary/provider-access:register-secrets:ordinary/security', 'agent-runtime/runtime-host:ordinary-turn:ordinary/turn');
   assert.deepEqual(bindings.toSorted(), wanted.toSorted(), 'ordinary exact binding mapping drift');
 }
