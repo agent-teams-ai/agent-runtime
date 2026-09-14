@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {test} from 'node:test';
 import {validateOrdinaryScope, inboundImportIssues} from './check-ordinary-feature-scope.mjs';
 import {scopedFeaturePrimitives as fms} from './check-feature-modules.mjs';
-import {verifyOrdinaryGraph, ordinaryCompositionPath} from './ordinary-composition-evidence.mjs';
+import {verifyOrdinaryGraph, verifyOrdinaryHostOwnership, ordinaryCompositionPath} from './ordinary-composition-evidence.mjs';
 
 const root = new URL('../../', import.meta.url);
 export const profile = JSON.parse(await readFile(new URL('architecture/feature-module-standard/ordinary-scope.json', root)));
@@ -48,6 +48,9 @@ test('scoped checks reuse rejecting Node/SDK/layer and exact legacy seam rules',
 test('ordinary eight owner declarations and exact seven required turn slots reject graph drift', () => {
   assert.doesNotThrow(() => verifyOrdinaryGraph(graph));
   for (const [before, after] of [
+    ['slotId: "prepare-launch"', 'slotId: "unpaired-launch"'],
+    ['capabilityId: "ordinary/prepare-launch"', 'capabilityId: "ordinary/provider"'],
+    ['consumerImplementationId: "ordinary/process", slotId: "prepare-launch", providerImplementationIds: ["ordinary/provider"]', 'consumerImplementationId: "ordinary/process", slotId: "prepare-launch", providerImplementationIds: ["ordinary/workspace"]'],
     ['moduleId: "ordinary/store"', 'moduleId: "ordinary/hidden"'],
     ['slotId: "operation-store"', 'slotId: "missing-store"'],
     ['capabilityId: "ordinary/process"', 'capabilityId: "ordinary/provider"'],
@@ -66,4 +69,18 @@ test('ordinary inbound adapter rejects Node and SDK imports', () => {
     assert.equal(inboundImportIssues('feature/adapters/inbound/entry.ts', {specifier, line: 1})[0].code, 'FM_INBOUND_EXTERNAL_IMPORT');
   }
   assert.deepEqual(inboundImportIssues('feature/adapters/outbound/entry.ts', {specifier: 'node:fs', line: 1}), []);
+});
+
+
+test('ordinary Host ownership handoff rejects a dropped or substituted closed root', async () => {
+  const source = await readFile(new URL('packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts', root), 'utf8');
+  assert.doesNotThrow(() => verifyOrdinaryHostOwnership(source));
+  for (const [before, after] of [
+    ['}, dependencies["ordinary-turn"]);', '});'],
+    ['}, dependencies["ordinary-turn"]);', '}, dependencies["ordinary-process"]);'],
+    ['createAgentRuntimeHost(dependencies, ordinaryOwner)', 'createAgentRuntimeHost(dependencies)'],
+  ]) {
+    assert.ok(source.includes(before), 'stale ordinary ownership mutant');
+    assert.throws(() => verifyOrdinaryHostOwnership(source.replace(before, after)));
+  }
 });

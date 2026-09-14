@@ -113,3 +113,25 @@ test('credential fragments in interleaved reasoning summary parts remain fenced'
   assert.equal((await post(f.broker.endpoint, payload())).status, 502);
   assert.deepEqual(f.ended, [{sequence: 1, success: false}]);
 });
+
+test('ordinary broker retries late closure observation without opening a socket or repeating server close', async t => {
+  const http = await import('node:http');
+  const {syncBuiltinESMExports} = await import('node:module');
+  const server = new http.Server(); let closes = 0; let closeAll = 0;
+  let closed!: () => void;
+  t.mock.method(http.default, 'createServer', () => server);
+  t.mock.method(server, 'listen', () => {server.emit('listening'); return server;});
+  t.mock.method(server, 'address', () => ({address: '127.0.0.1', family: 'IPv4', port: 1234}));
+  t.mock.method(server, 'close', (callback: () => void) => {closes += 1; closed = callback; return server;});
+  t.mock.method(server, 'closeAllConnections', () => {closeAll += 1;});
+  syncBuiltinESMExports();
+  t.after(() => {t.mock.restoreAll(); syncBuiltinESMExports();});
+  t.mock.timers.enable({apis: ['setTimeout']});
+  const f = await fixture({async request() {assert.fail('must not call upstream');}});
+  const first = f.broker.close(); assert.equal(f.broker.close(), first);
+  const rejected = assert.rejects(first, /ORDINARY_PA_UNAVAILABLE/);
+  t.mock.timers.tick(5000); await rejected;
+  closed();
+  await f.broker.close(); await f.close();
+  assert.equal(closes, 1); assert.equal(closeAll, 1);
+});
