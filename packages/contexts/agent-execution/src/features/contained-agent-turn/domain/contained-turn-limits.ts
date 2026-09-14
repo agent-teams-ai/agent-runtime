@@ -32,11 +32,12 @@ export class ContainedTurnLimitError extends TypeError {
 
 export const utf8ByteLength = (value: string): number => new TextEncoder().encode(value).byteLength;
 
-export const validateContainedTurnText = (
+export function validateContainedTurnText(
   name: string,
-  value: string,
+  value: unknown,
   limit: ContainedTurnTextLimit,
-): void => {
+): asserts value is string {
+  if (typeof value !== "string") {throw new ContainedTurnLimitError(`${name} must be text`);}
   const byteLength = utf8ByteLength(value);
   const isAscii = limit.encoding === "utf8" || /^[\x20-\x7E]+$/u.test(value);
   if (
@@ -47,7 +48,7 @@ export const validateContainedTurnText = (
       `${name} must contain 1..${String(limit.maximumBytes)} ${limit.encoding} bytes`,
     );
   }
-};
+}
 
-export const isContainedTurnSchemaVersion = (value: number): value is ContainedTurnSchemaVersion =>
+export const isContainedTurnSchemaVersion = (value: unknown): value is ContainedTurnSchemaVersion =>
   CONTAINED_TURN_LIMITS.acceptedSchemaVersions.some(candidate => candidate === value);

@@ -218,20 +218,29 @@ test("disposal after PA transfer but before the paired continuation releases PA 
   f.renderedBuffers.forEach(erased); f.fixture.raw.forEach(eraseRaw);
 });
 
-test("disposal while authorization projection is pending suppresses the late receipt and all later owner calls", async t => {
-  const entered = Promise.withResolvers<void>(); const gate = Promise.withResolvers<void>();
-  const f = pairedFixture({async afterAuthorize(result) {entered.resolve(); await gate.promise; return result;}});
-  t.after(f.pair.dispose); const request = await f.fixture.request();
-  const pending = f.pair.providerAccess.authorize(request); await entered.promise;
-  f.pair.dispose(); gate.resolve(); assert.deepEqual(await pending, {kind: "indeterminate"});
-  const original = f.outcomes[0]; assert.ok(original?.kind === "authorized");
-  await assert.rejects(f.pair.materializer.render(original.receipt), unavailable);
-  assert.deepEqual(await f.pa.rendering.render(original.receipt), {kind: "denied"});
-  const events = f.fixture.events.length;
-  assert.deepEqual(await f.pair.providerAccess.authorize(request), {kind: "indeterminate"});
-  assert.deepEqual(await f.pair.providerAccess.observe(selectorFor(request)), {kind: "indeterminate"});
-  assert.equal(f.fixture.events.length, events); assert.equal(f.renderInputs.length, 0);
-});
+for (const completion of ["resolve", "reject", "invalid"] as const) {
+  test(`disposal while authorization projection is pending: late ${completion} cannot reopen admission`, async t => {
+    const entered = Promise.withResolvers<void>(); const gate = Promise.withResolvers<void>();
+    const f = pairedFixture({async afterAuthorize(result) {entered.resolve(); await gate.promise;
+      return completion === "invalid" ? {...result, extra: true} : result;}});
+    t.after(f.pair.dispose); const request = await f.fixture.request();
+    const pending = f.pair.providerAccess.authorize(request); await entered.promise;
+    f.pair.dispose();
+    if (completion === "reject") {gate.reject(new Error("secret late authorization rejection"));} else {gate.resolve();}
+    assert.deepEqual(await pending, {kind: "indeterminate"});
+    const original = f.outcomes[0]; assert.ok(original?.kind === "authorized");
+    await assert.rejects(f.pair.materializer.render(original.receipt), unavailable);
+    assert.deepEqual(await f.pa.rendering.render(original.receipt), {kind: "denied"});
+    const events = f.fixture.events.length;
+    assert.deepEqual(await f.pair.providerAccess.authorize(request), {kind: "indeterminate"});
+    assert.deepEqual(await f.pair.providerAccess.observe(selectorFor(request)), {kind: "indeterminate"});
+    const {requestDigest: _digest, ...unsigned} = request;
+    await assert.rejects(f.pair.providerAccess.createRequestDigest(unsigned), /digest unavailable/u);
+    await nextTurn();
+    assert.equal(f.fixture.requests.length, 0); assert.equal(f.disposals(), 1);
+    assert.equal(f.fixture.events.length, events); assert.equal(f.renderInputs.length, 0);
+  });
+}
 
 test("pair construction rejects non-native async, proxy and extra capabilities without invocation", t => {
   const f = pairedFixture(); t.after(f.pair.dispose); let calls = 0;
