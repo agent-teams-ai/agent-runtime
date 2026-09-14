@@ -32,7 +32,7 @@ test("projected direct tooling pins and exact transitive age exceptions preserve
   const manifest = await json("package.json"), workspace = await yaml("pnpm-workspace.yaml");
   assert.equal(manifest.packageManager, "pnpm@11.18.0");
   assert.deepEqual(manifest.engines, { node: ">=24.18.0 <25", pnpm: "11.18.0" });
-  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.2.0");
+  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.3.0");
   assert.equal(manifest.devDependencies["@agent-teams/docs-protocol"], "0.6.0");
   assert.equal(manifest.devDependencies["@agent-teams/docs-protocol-agent-teams"], "0.2.7");
   for (const section of ["dependencies", "optionalDependencies", "peerDependencies"]) {
@@ -46,9 +46,9 @@ test("projected direct tooling pins and exact transitive age exceptions preserve
   assert.deepEqual(workspace.minimumReleaseAgeExclude.filter(value => value.startsWith("@agent-teams/")).toSorted(), [
     "@agent-teams/docs-protocol-agent-teams@0.2.7",
     "@agent-teams/docs-protocol@0.6.0", "@agent-teams/document-authoring@0.3.0",
-    "@agent-teams/engineering-foundation@1.2.0", "@agent-teams/repository-mutation@0.2.0",
+    "@agent-teams/engineering-foundation@1.3.0", "@agent-teams/repository-mutation@0.2.0",
   ]);
-  assert.match(await read("scripts/architecture/feature-module-config.mjs"), /const FOUNDATION_VERSION = "1\.2\.0";/u);
+  assert.match(await read("scripts/architecture/feature-module-config.mjs"), /const FOUNDATION_VERSION = "1\.3\.0";/u);
 });
 
 test("managed Skill remains byte-exact with the selected installed Cohort", async () => {
@@ -73,6 +73,7 @@ test("Source Dependencies uses schema v3 with root package and every workspace p
     "packages/platform/filesystem-custody",
   ]);
   assert.deepEqual(policy.governedRoots, [
+    "packages/platform/filesystem-custody/native",
     "experiments",
     "packages/apps/embedded-runtime/src",
     "packages/apps/embedded-runtime/tests",
@@ -102,13 +103,13 @@ test("Source Dependencies uses schema v3 with root package and every workspace p
   assert.match(source, /"architecture\.source-dependencies", "--consumer", root, "--json"/u);
 });
 
-test("qualified stable20 integration and generated state preserve exact evidence", async () => {
+test("qualified stable20 evidence and current native source policy retain exact bytes", async () => {
   const expected = {
     "architecture/foundation/docs-consumer-integration.json": "e6e69b56c0e0cda72a6a732b67fd48f913a326312e78774d5ec63ddeb179e45f",
     "architecture/foundation/docs-protocol-managed-state.json": "23d0c21ef21f9f2385fe013f219d38e7a01ca0aaeb9c65ca3728ebba2b5eaedc",
     "architecture/foundation/docs-protocol-qualification.json": "1f7e50ec5b0e6ecc991668b83790b2367062240043c4b885c58377855968969b",
     "architecture/foundation/document-authoring.yaml": "d6f5ba4b178e742e122f6711c9d989d52a77768eb68527b0ecdf3c9a9699c6d2",
-    "architecture/foundation/source-dependencies.yaml": "bc8e50a05aaa95b00bb2b67f968acadac9b7905930dfa597e0217a646d4ac974",
+    "architecture/foundation/source-dependencies.yaml": "33b9323a2dffcd9aca75b09258c915f3cdcd37ca7397e14a29cee0a0d15fe4d9",
   };
   for (const [path, digest] of Object.entries(expected)) {
     assert.equal(createHash("sha256").update(await read(path)).digest("hex"), digest, path);

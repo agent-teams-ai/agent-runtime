@@ -2,6 +2,7 @@ schemaVersion: 1
 governedRoots:
   - experiments
   - scripts
+  - packages
 nonWaivableRulePrefixes:
   - access-control.
   - security.

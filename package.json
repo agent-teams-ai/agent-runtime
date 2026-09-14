@@ -10,9 +10,9 @@
     "pnpm": "11.18.0"
   },
   "scripts": {
-    "check": "pnpm lint && pnpm architecture:get-modular-adoption && pnpm test:get-modular-adoption && pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm test:consumer-modules && pnpm architecture:consumer-modules && pnpm test:ar2-contract && pnpm architecture:runtime-setup-l0-evidence && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:check && pnpm typecheck && pnpm test",
+    "check": "pnpm lint && pnpm architecture:get-modular-adoption && pnpm test:get-modular-adoption && pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm test:consumer-modules && pnpm architecture:consumer-modules && pnpm test:ar2-contract && pnpm architecture:runtime-setup-l0-evidence && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:check && pnpm typecheck && pnpm test && pnpm lint:typed && pnpm quality:native",
     "check:changed": "agent-teams-foundation agent-workflow changed --consumer .",
-    "check:fast": "pnpm lint && pnpm architecture:get-modular-adoption && pnpm test:get-modular-adoption && pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm test:consumer-modules && pnpm architecture:consumer-modules && pnpm architecture:runtime-setup-l0-evidence && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:build && pnpm typecheck",
+    "check:fast": "pnpm lint && pnpm architecture:get-modular-adoption && pnpm test:get-modular-adoption && pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm test:consumer-modules && pnpm architecture:consumer-modules && pnpm architecture:runtime-setup-l0-evidence && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:build && pnpm typecheck && pnpm quality:coverage:scope",
     "docs:check": "agent-teams-docs check --consumer . --profile architecture/foundation/docs-protocol.yaml",
     "docs:doctor": "agent-teams-docs doctor --consumer . --profile architecture/foundation/docs-protocol.yaml",
     "docs:find": "agent-teams-docs find --consumer . --profile architecture/foundation/docs-protocol.yaml",
@@ -26,7 +26,7 @@
     "foundation:assert-registry": "agent-teams-foundation assert-registry",
     "foundation:attach": "agent-teams-foundation attach",
     "foundation:boundaries:negative": "node --test scripts/architecture/source-dependency-adapter-boundaries.test.mjs scripts/docs/runtime-builtin-permissions.test.mjs",
-    "foundation:check": "agent-teams-foundation check && pnpm foundation:boundaries:negative && pnpm foundation:assert-dev-only && pnpm foundation:assert-registry",
+    "foundation:check": "agent-teams-foundation check && pnpm foundation:boundaries:negative && pnpm foundation:assert-dev-only && pnpm foundation:assert-registry && pnpm quality:adoption",
     "foundation:detach": "agent-teams-foundation detach",
     "foundation:status": "agent-teams-foundation status",
     "foundation:scaffold:plan": "agent-teams-foundation scaffold-plan --config architecture/foundation/scaffolding.yaml",
@@ -77,7 +77,11 @@
     "test:contained-turn:acceptance": "pnpm --filter @agent-teams/agent-execution run test:contained-turn:acceptance",
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false && tsc --project tsconfig.synthetic-oracle.json --noEmit --pretty false",
     "architecture:get-modular-adoption": "node scripts/architecture/check-get-modular-adoption.mjs",
-    "test:get-modular-adoption": "node --test scripts/architecture/check-get-modular-adoption.test.mjs"
+    "test:get-modular-adoption": "node --test scripts/architecture/check-get-modular-adoption.test.mjs",
+    "quality:coverage:scope": "agent-teams-foundation quality check --consumer . --scope-only",
+    "lint:typed": "agent-teams-foundation quality check --consumer .",
+    "quality:native": "node scripts/foundation/check-native-quality.mjs",
+    "quality:adoption": "node scripts/foundation/check-quality-adoption.mjs && node --test scripts/foundation/check-quality-adoption.test.mjs"
   },
   "dependencies": {
     "zod": "catalog:"
@@ -87,7 +91,7 @@
     "@agent-teams/embedded-runtime": "workspace:*",
     "@agent-teams/docs-protocol": "0.6.0",
     "@agent-teams/docs-protocol-agent-teams": "0.2.7",
-    "@agent-teams/engineering-foundation": "1.2.0",
+    "@agent-teams/engineering-foundation": "1.3.0",
     "@agentclientprotocol/sdk": "catalog:",
     "@opencode-ai/plugin": "catalog:",
     "@types/node": "catalog:",
