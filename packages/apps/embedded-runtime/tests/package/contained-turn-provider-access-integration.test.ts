@@ -11,7 +11,7 @@ import {
   createStaticContainedTurnProviderAccessFeature,
 } from "@agent-teams/provider-access/composition";
 import { createContainedTurnFeatureFromProviderAccess } from "../../dist/composition.js";
-import { findRepoRoot } from "../helpers/repo-root.ts";
+import { findRepoRoot } from "./helpers/repo-root.ts";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 

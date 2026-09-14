@@ -6,10 +6,10 @@ import { createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate,
   "@agent-teams/runtime-security/composition";
 import type { RouteSelectionCurrent, RouteSelectionInput } from "@agent-teams/provider-access/composition";
 import { createContainedTurnCurrentEgressOwners,
-  type ContainedTurnCurrentEgressOwnersInput } from "../dist/composition/contained-turn-current-egress-owners.js";
-import { bindContainedTurnHttpRuntimeSecurity } from "../dist/composition/contained-turn-http-runtime-security.js";
-import { harness, selection } from "./support/external/provider-access/features/contained-turn-access/route-selection-fixture.ts";
-import { authority } from "./support/external/runtime-security/contained-turn-dispatch-authority.fixtures.ts";
+  type ContainedTurnCurrentEgressOwnersInput } from "../../dist/composition/contained-turn-current-egress-owners.js";
+import { bindContainedTurnHttpRuntimeSecurity } from "../../dist/composition/contained-turn-http-runtime-security.js";
+import { harness, selection } from "../support/external/provider-access/features/contained-turn-access/route-selection-fixture.ts";
+import { authority } from "../support/external/runtime-security/contained-turn-dispatch-authority.fixtures.ts";
 import { routeSelectionDigest } from
   "@agent-teams/provider-access/composition";
 

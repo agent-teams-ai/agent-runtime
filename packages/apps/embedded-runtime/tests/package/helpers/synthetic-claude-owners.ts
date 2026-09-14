@@ -15,7 +15,7 @@ import {
   createSetupInspectionAuthorizationFeature,
 } from "@agent-teams/runtime-security/composition";
 
-import { createClaudeCodeSetupInspectionPlanner } from "../../dist/composition.js";
+import { createClaudeCodeSetupInspectionPlanner } from "../../../dist/composition.js";
 
 const syntheticSystemPath = (path: string): boolean =>
   path === "/opt/homebrew" || path.startsWith("/opt/homebrew/") ||

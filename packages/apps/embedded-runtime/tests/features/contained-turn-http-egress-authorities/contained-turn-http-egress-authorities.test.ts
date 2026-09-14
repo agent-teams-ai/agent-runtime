@@ -3,8 +3,8 @@ import test from "node:test";
 import {createCredentialMaterializationRequestDigest} from "@agent-teams/provider-access/composition";
 import {bindContainedTurnHttpEgressAuthorities, composeContainedTurnHttpEgressSession,
   type ContainedTurnHttpEgressBrokerPorts} from "../../../dist/composition/contained-turn-http-egress-authorities.js";
-import {pairedFixture} from "../../contained-turn-http-credential-materialization-fixture.ts";
-import {fixture} from "../../contained-turn-current-egress-owners.fixture.ts";
+import {pairedFixture} from "../../package/contained-turn-http-credential-materialization-fixture.ts";
+import {fixture} from "../../package/contained-turn-current-egress-owners.fixture.ts";
 
 const AUTHORITIES = ["providerAccess", "materializer", "runtimeSecurity", "verifier"] as const;
 /** Every remaining member of the broker session record. `identity`, `clock`,

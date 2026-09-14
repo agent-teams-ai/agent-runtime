@@ -5,7 +5,7 @@ import {join} from "node:path";
 import {createHash} from "node:crypto";
 import test from "node:test";
 import {pathToFileURL} from "node:url";
-import {createCompositionInput, setupCapabilities, submit} from "../contained-turn-product.fixture.ts";
+import {createCompositionInput, setupCapabilities, submit} from "../package/contained-turn-product.fixture.ts";
 import {createHostCustodiedAgentRuntimeHost, AgentRuntimeHostDisposalIncompleteError} from "../../dist/composition.js";
 import {createContainedTurnRouteEnforcement,renderCodexNativeBrokerConfig,HostHttpEgressV4Journal,linuxExclusiveRouteSeccomp,DOCKER_CUSTODY_NODE_PATH,DOCKER_CUSTODY_INIT_ARGUMENTS} from "@agent-teams/agent-execution/composition";
 import {DeterministicCurrentOwnerHost} from "./external/agent-execution/current-owner-success-fixture.ts";

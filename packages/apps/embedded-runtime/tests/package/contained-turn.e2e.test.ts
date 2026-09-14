@@ -1,4 +1,4 @@
-import { createAgentRuntimeHost } from "../helpers/create-contained-turn-host.ts";
+import { createAgentRuntimeHost } from "./helpers/create-contained-turn-host.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { createContainedTurnFeature } from "@agent-teams/agent-execution/composition";
-import { findRepoRoot } from "../helpers/repo-root.ts";
+import { findRepoRoot } from "./helpers/repo-root.ts";
 
 const { createDependencies, operationId: fixtureOperationId } = await import(pathToFileURL(join(
   findRepoRoot(),
