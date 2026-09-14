@@ -5,16 +5,16 @@ import {join} from "node:path";
 import {createHash} from "node:crypto";
 import test from "node:test";
 import {pathToFileURL} from "node:url";
-import {createCompositionInput, setupCapabilities, submit} from "../package/contained-turn-product.fixture.ts";
-import {createHostCustodiedAgentRuntimeHost, AgentRuntimeHostDisposalIncompleteError} from "../../dist/composition.js";
+import {createCompositionInput, setupCapabilities, submit} from "../contained-turn-product.fixture.ts";
+import {createHostCustodiedAgentRuntimeHost, AgentRuntimeHostDisposalIncompleteError} from "../../../dist/composition.js";
 import {createContainedTurnRouteEnforcement,renderCodexNativeBrokerConfig,HostHttpEgressV4Journal,linuxExclusiveRouteSeccomp,DOCKER_CUSTODY_NODE_PATH,DOCKER_CUSTODY_INIT_ARGUMENTS} from "@agent-teams/agent-execution/composition";
-import {DeterministicCurrentOwnerHost} from "./external/agent-execution/current-owner-success-fixture.ts";
-import {policy as basePolicy, createInput} from "./external/agent-execution/features/contained-agent-turn/support/docker-host-custody-lifecycle-fixture.ts";
-import {initOptions} from "./external/agent-execution/features/contained-agent-turn/support/docker-claim-init-fixture.ts";
-import {imageLock} from "./external/agent-execution/fixtures/docker-image-init-fixture.ts";
-import {MemoryV4Storage} from "./external/agent-execution/fixtures/host-http-egress-v4-fixture.ts";
-import {createEgressFixture} from "./external/agent-execution/features/contained-agent-turn/http-egress-test-fixture.ts";
-import {renderingFixture} from "./external/provider-access/features/contained-turn-access/credential-rendering-test-fixture.ts";
+import {DeterministicCurrentOwnerHost} from "../../support/external/agent-execution/current-owner-success-fixture.ts";
+import {policy as basePolicy, createInput} from "../../support/external/agent-execution/features/contained-agent-turn/support/docker-host-custody-lifecycle-fixture.ts";
+import {initOptions} from "../../support/external/agent-execution/features/contained-agent-turn/support/docker-claim-init-fixture.ts";
+import {imageLock} from "../../support/external/agent-execution/fixtures/docker-image-init-fixture.ts";
+import {MemoryV4Storage} from "../../support/external/agent-execution/fixtures/host-http-egress-v4-fixture.ts";
+import {createEgressFixture} from "../../support/external/agent-execution/features/contained-agent-turn/http-egress-test-fixture.ts";
+import {renderingFixture} from "../../support/external/provider-access/features/contained-turn-access/credential-rendering-test-fixture.ts";
 import {createCredentialMaterializationRequestDigest} from "@agent-teams/provider-access/composition";
 import {joinedDocker} from "./linux-joined-docker.mjs";
 import {joinedCurrentOwners} from "./linux-joined-current.mjs";
@@ -89,7 +89,7 @@ test(`public RuntimeAccessHandle joins native broker with evidence ${evidenceOut
     events.push("current-owners");
     return {...record, executablePath: "/usr/local/bin/codex"};
   }};
-  const registry = JSON.parse(await readFile(new URL("../../../../../docs/architecture/qualification-registry.json", import.meta.url), "utf8"));
+  const registry = JSON.parse(await readFile(new URL("../../../../../../docs/architecture/qualification-registry.json", import.meta.url), "utf8"));
   const target = registry.entries.find(entry => entry.id === "docker-linux-codex-enforced-network-route").targets[0];
   const baseBinding = {tenantId: "tenant:one", projectId: "project:one", scopeDigest: "scope:synthetic",
     operationId: "operation:one", attemptId: "attempt:one", custodyId: "custody:one",
@@ -156,7 +156,7 @@ test(`public RuntimeAccessHandle joins native broker with evidence ${evidenceOut
         nativeFiles: {async install(recipe) {
           nativeRecipe = recipe;
           await writeFile(join(nativeHome, "config.toml"), renderCodexNativeBrokerConfig(recipe), {mode: 0o600});
-          const catalog = await readFile(new URL("../../../../contexts/agent-execution/tests/fixtures/codex-native-broker-0.153.4/models.json", import.meta.url));
+          const catalog = await readFile(new URL("../../../../../contexts/agent-execution/tests/fixtures/codex-native-broker-0.153.4/models.json", import.meta.url));
           await writeFile(join(nativeHome, "models.json"), catalog, {mode: 0o600}); events.push("native-files");
         }},
         connection: {limits: {...egress.operation.limits, deadline: 20000, closureDeadline: 21000}},
