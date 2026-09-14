@@ -247,3 +247,41 @@ test("uncaught reentrant disposal failure remains sticky without reinvoking owne
   }
   assert.equal(attempts, 1);
 });
+
+for (const timing of ["immediate", "deferred"] as const) {
+  for (const failure of ["rejection", "projection"] as const) {
+    test(`${timing} ${failure}: authorize, observe and digest retain canonical failure mapping`, async () => {
+      const input = await request();
+      const gate = Promise.withResolvers<void>();
+      const receivers: unknown[] = [];
+      const adapter = createContainedTurnHttpProviderAccessAuthorization({authorization: {
+        async authorize() {
+          receivers.push(this);
+          if (timing === "deferred") {await gate.promise;}
+          if (failure === "rejection") {throw new Error("secret authorize diagnostic");}
+          return {kind: "authorized", receipt: {...input, decision: "authorized", rejectionReason: null, extra: true}};
+        },
+        async observe() {
+          receivers.push(this);
+          if (timing === "deferred") {await gate.promise;}
+          if (failure === "rejection") {throw new Error("secret observe diagnostic");}
+          return {kind: "observed", receipt: {...input, decision: "authorized", rejectionReason: null, extra: true}};
+        },
+      }, async createRequestDigest() {
+        receivers.push(this);
+        if (timing === "deferred") {await gate.promise;}
+        if (failure === "rejection") {throw new Error("secret digest diagnostic");}
+        return "";
+      }});
+      const authorized = adapter.authorize(input);
+      const observed = adapter.observe(selector(input));
+      const digest = assert.rejects(adapter.createRequestDigest(unsigned()),
+        /^TypeError: HTTP Provider Access request digest unavailable$/u);
+      assert.deepEqual(receivers, [undefined, undefined, undefined]);
+      gate.resolve();
+      assert.deepEqual(await authorized, {kind: "indeterminate"});
+      assert.deepEqual(await observed, {kind: "indeterminate"});
+      await digest;
+    });
+  }
+}

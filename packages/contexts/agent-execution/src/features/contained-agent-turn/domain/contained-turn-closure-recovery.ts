@@ -1,4 +1,6 @@
-import { digestContainedTurnCanonicalValue, type ContainedTurnCanonicalDigest, type ContainedTurnCanonicalValue } from "./contained-turn-codecs.js";
+import type { ContainedTurnOperationShape } from "./contained-turn-operation-shape.js";
+import { assertContainedTurnDataRecord } from "./contained-turn-record.js";
+import { digestContainedTurnCanonicalInput, type ContainedTurnCanonicalDigest, type ContainedTurnCanonicalValue } from "./contained-turn-codecs.js";
 import { containedTurnIdentity, type ContainedTurnCancellationCommandId, type ContainedTurnEvidenceId, type ContainedTurnIdentity, type ContainedTurnProofId } from "./contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "./contained-turn-kernel-model.js";
 
@@ -56,7 +58,7 @@ const closureRequestValue = (
     case "physical_containment":
       return { ...common, attemptId: operation.dispatch.kind === "claimed" ? operation.dispatch.attemptId : null, custodyId: operation.custodyId ?? null, hostBootId: operation.hostBootId ?? null, hostInstanceId: operation.hostInstanceId ?? null };
     case "artifact_seal":
-      return { ...common, finalCursor: operation.output.chunks.length, outputDigest: digestContainedTurnCanonicalValue(operation.output.chunks as unknown as ContainedTurnCanonicalValue), physicalContainmentProofId: operation.physicalContainment.kind === "contained" ? operation.physicalContainment.proofId : null, workspaceId: operation.workspaceId ?? null };
+      return { ...common, finalCursor: operation.output.chunks.length, outputDigest: digestContainedTurnCanonicalInput(operation.output.chunks), physicalContainmentProofId: operation.physicalContainment.kind === "contained" ? operation.physicalContainment.proofId : null, workspaceId: operation.workspaceId ?? null };
     case "workspace_close":
       return { ...common, artifactManifestRef: operation.artifactManifestRef ?? null, artifactProofId: operation.proofs.find(proof => proof.kind === "artifact_manifest_seal")?.proofId ?? null, resultProofId: operation.proofs.find(proof => proof.kind === "result_publication")?.proofId ?? null, resultRef: operation.resultRef ?? null, workspaceId: operation.workspaceId ?? null };
     case "containment_attestation":
@@ -66,8 +68,9 @@ const closureRequestValue = (
   }
 };
 
-const proofId = <Kind extends string>(operation: ContainedTurnKernelOperation, kind: Kind): ContainedTurnProofId | undefined =>
-  operation.proofs.find(proof => proof.kind === kind)?.proofId;
+const proofId = <Proof extends Readonly<{ kind?: unknown; proofId?: unknown }>>(
+  operation: Readonly<{ proofs: readonly Proof[] }>, kind: string,
+): Proof["proofId"] | undefined => operation.proofs.find(proof => proof.kind === kind)?.proofId;
 
 /** Completion is retained in validated owner facts even while a later stage has debt. */
 export const isContainedTurnClosureStageCompleted = (
@@ -86,15 +89,27 @@ export const isContainedTurnClosureStageCompleted = (
   }
 };
 
+export type ContainedTurnNoWorkspaceOperation = Pick<ContainedTurnOperationShape,
+  "workspaceId" | "dispatch" | "cancellation" | "providerProcessStart" | "providerExecution" |
+  "providerAcceptance" | "effect" | "containment" | "acceptedAuthorityVector" | "acceptedAuthorityVectorDigest" | "operationId"
+> & {
+  readonly output: { readonly chunks: readonly unknown[]; readonly fence: ContainedTurnOperationShape["output"]["fence"] };
+  readonly proofs: readonly Readonly<{ kind?: unknown; proofId?: unknown }>[];
+};
+
 /**
  * Derives the authority-defined non-applicability fact only from an already
  * persisted prevention decision and its independently issued no-start proofs.
  */
+type NoWorkspaceFactFields = { readonly [Key in keyof ContainedTurnNoWorkspaceClosureFact]: unknown };
+
+export function containedTurnNoWorkspaceClosureFact(operation: ContainedTurnKernelOperation): ContainedTurnNoWorkspaceClosureFact | undefined;
+export function containedTurnNoWorkspaceClosureFact(operation: ContainedTurnNoWorkspaceOperation): NoWorkspaceFactFields | undefined;
 // The count is the exact conjunction of independently proved no-start obligations.
 // oxlint-disable-next-line complexity
-export const containedTurnNoWorkspaceClosureFact = (
-  operation: ContainedTurnKernelOperation,
-): ContainedTurnNoWorkspaceClosureFact | undefined => {
+export function containedTurnNoWorkspaceClosureFact(
+  operation: ContainedTurnNoWorkspaceOperation,
+): NoWorkspaceFactFields | undefined {
   if (operation.workspaceId !== undefined || operation.dispatch.kind !== "prevented" ||
       operation.cancellation.kind !== "requested" || operation.providerProcessStart.kind !== "unobserved" ||
       operation.providerExecution.kind !== "closed" || operation.providerExecution.outcome !== "cancelled" ||
@@ -118,6 +133,8 @@ export const containedTurnNoWorkspaceClosureFact = (
       operation.effect.proofId !== effectProofId) {
     return undefined;
   }
+  assertContainedTurnDataRecord("accepted authority vector", operation.acceptedAuthorityVector);
+  assertContainedTurnDataRecord("cancellation command", operation.cancellation.command);
   const value = {
     authorityVectorDigest: operation.acceptedAuthorityVectorDigest,
     cancellationCommandId: operation.cancellation.command.cancellationCommandId,
@@ -132,20 +149,20 @@ export const containedTurnNoWorkspaceClosureFact = (
     scopeDigest: operation.acceptedAuthorityVector.scopeDigest,
     version: 1,
   } as const;
-  const factDigest = digestContainedTurnCanonicalValue(value);
+  const factDigest = digestContainedTurnCanonicalInput(value);
   return Object.freeze({
     ...value,
     factDigest,
   });
-};
+}
 
 export const containedTurnClosureRequest = (
   operation: ContainedTurnKernelOperation,
   stage: ContainedTurnClosureStage,
 ): Extract<ContainedTurnClosureRecovery, { readonly kind: "required" }> => {
-  const debtDigest = digestContainedTurnCanonicalValue({ operationId: operation.operationId, scopeDigest: operation.acceptedAuthorityVector.scopeDigest, stage, version: 1 });
+  const debtDigest = digestContainedTurnCanonicalInput({ operationId: operation.operationId, scopeDigest: operation.acceptedAuthorityVector.scopeDigest, stage, version: 1 });
   const debtId = containedTurnIdentity("closure_debt", `closure-debt:${debtDigest}`);
-  const requestDigest = digestContainedTurnCanonicalValue(closureRequestValue(operation, stage));
-  const requestIdDigest = digestContainedTurnCanonicalValue({ debtId, requestDigest });
+  const requestDigest = digestContainedTurnCanonicalInput(closureRequestValue(operation, stage));
+  const requestIdDigest = digestContainedTurnCanonicalInput({ debtId, requestDigest });
   return Object.freeze({ debtId, evidenceIds: Object.freeze([]), kind: "required", requestDigest, requestId: containedTurnIdentity("closure_request", `closure-request:${requestIdDigest}`), stage });
 };

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { ContainedTurnKernelOperation } from "../../../domain/contained-turn-kernel-model.js";
 import { validateContainedTurnOperation } from "../../../domain/contained-turn-validation.js";
+import { assertContainedTurnCanonicalArray, assertContainedTurnDataRecord } from "../../../domain/contained-turn-record.js";
 
 export const CONTAINED_TURN_STATE_CODEC_VERSION = 2;
 
@@ -57,9 +58,12 @@ const rejectOutsideCanonicalBudget = (root: unknown): void => {
       }
       continue;
     }
-    const values = Array.isArray(current.value)
-      ? current.value
-      : Object.values(current.value as Readonly<Record<string, unknown>>);
+    if (Array.isArray(current.value)) {
+      assertContainedTurnCanonicalArray(current.value);
+    } else {
+      assertContainedTurnDataRecord("persisted state record", current.value);
+    }
+    const values = Array.isArray(current.value) ? current.value : Object.values(current.value);
     if (values.length > CONTAINED_TURN_POSTGRES_JSON_BUDGET.maximumCollectionWidth) {
       throw new ContainedTurnStateBudgetError();
     }
@@ -125,15 +129,15 @@ const objectRecord = (value: unknown, codecVersion: number): Record<string, unkn
   return value as Record<string, unknown>;
 };
 
-const upcastV1 = (state: unknown): ContainedTurnKernelOperation => {
+const upcastV1 = (state: unknown): unknown => {
   const operation = objectRecord(state, 1);
   if (operation.schemaVersion !== 1 && operation.schemaVersion !== 2) {
     throw new ContainedTurnStateQuarantineError(1, "malformed");
   }
-  return { ...operation, schemaVersion: 2 } as unknown as ContainedTurnKernelOperation;
+  return { ...operation, schemaVersion: 2 };
 };
 
-const decodeV2 = (state: unknown): ContainedTurnKernelOperation => {
+const decodeV2 = (state: unknown): unknown => {
   const envelope = objectRecord(state, 2);
   if (Object.keys(envelope).toSorted().join(",") !== "codecVersion,payload" ||
       envelope.codecVersion !== 2) {
@@ -143,7 +147,7 @@ const decodeV2 = (state: unknown): ContainedTurnKernelOperation => {
   if (payload.schemaVersion !== 2) {
     throw new ContainedTurnStateQuarantineError(2, "malformed");
   }
-  return payload as unknown as ContainedTurnKernelOperation;
+  return payload;
 };
 
 export interface EncodedContainedTurnState {
@@ -153,7 +157,7 @@ export interface EncodedContainedTurnState {
 }
 
 export const encodeContainedTurnState = (
-  operation: ContainedTurnKernelOperation,
+  operation: unknown,
 ): EncodedContainedTurnState => {
   validateContainedTurnOperation(operation);
   if (operation.schemaVersion !== 2) {
@@ -176,6 +180,7 @@ export const decodeContainedTurnState = (
   expectedDigest: string,
   persistedCodecVersion?: number,
 ): ContainedTurnKernelOperation => {
+  assertContainedTurnDataRecord("persisted state envelope", state);
   const inferredVersion = persistedCodecVersion ??
     (state !== null && typeof state === "object" && !Array.isArray(state) &&
       "codecVersion" in state ? Number(state.codecVersion) : 1);
@@ -188,7 +193,7 @@ export const decodeContainedTurnState = (
   if (digestContainedTurnPostgresJson(state) !== expectedDigest) {
     throw new Error("contained turn state digest mismatch");
   }
-  const operation = deepFreeze(inferredVersion === 1 ? upcastV1(state) : decodeV2(state));
+  const operation = inferredVersion === 1 ? upcastV1(state) : decodeV2(state);
   validateContainedTurnOperation(operation);
-  return operation;
+  return deepFreeze(operation);
 };

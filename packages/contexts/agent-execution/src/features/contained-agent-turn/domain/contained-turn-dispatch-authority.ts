@@ -1,6 +1,8 @@
+import type { ContainedTurnKernelOperation } from "./contained-turn-kernel-model.js";
+import type { ContainedTurnOperationShape } from "./contained-turn-operation-shape.js";
 import type { ContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
 import type { ContainedTurnProvider } from "./contained-turn-authority.js";
-import { digestContainedTurnCanonicalValue, parseContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
+import { digestContainedTurnCanonicalInput, parseContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
 import type {
   ContainedTurnAttemptId,
   ContainedTurnCustodyId,
@@ -13,7 +15,11 @@ import type {
   ContainedTurnWorkspaceId,
 } from "./contained-turn-identities.js";
 import { containedTurnOperationCutoffRevision, type ContainedTurnOperationCutoffRevision } from "./contained-turn-output-authority.js";
-import { assertContainedTurnExactRecord, detachAndFreezeContainedTurnValue } from "./contained-turn-record.js";
+import { assertContainedTurnCanonicalArray, assertContainedTurnDataRecord, assertContainedTurnExactRecord, detachAndFreezeContainedTurnValue } from "./contained-turn-record.js";
+
+import { validateContainedTurnIdentity } from "./contained-turn-identities.js";
+import { CONTAINED_TURN_LIMITS, validateContainedTurnText } from "./contained-turn-limits.js";
+import { containedTurnInvariant as invariant } from "./contained-turn-invariant.js";
 
 export const CONTAINED_TURN_OWNER_DISPATCH_PURPOSE = "contained-turn.provider-dispatch/v1" as const;
 export const CONTAINED_TURN_DISPATCH_GRANT_OWNERS = Object.freeze(["provider_access", "runtime_security"] as const);
@@ -64,30 +70,30 @@ const claimBindingValue = (subject: SubjectSeed | ContainedTurnDispatchGrantSubj
 });
 export const containedTurnDispatchClaimBindingDigest = (
   subject: SubjectSeed | ContainedTurnDispatchGrantSubject,
-): ContainedTurnCanonicalDigest => digestContainedTurnCanonicalValue(claimBindingValue(subject) as never);
+): ContainedTurnCanonicalDigest => digestContainedTurnCanonicalInput(claimBindingValue(subject));
 export const containedTurnDispatchGrantRequestId = (
   owner: ContainedTurnDispatchGrantOwner,
   subject: SubjectSeed | ContainedTurnDispatchGrantSubject,
-): string => `grant-request:${digestContainedTurnCanonicalValue({
+): string => `grant-request:${digestContainedTurnCanonicalInput({
   claimBindingDigest: containedTurnDispatchClaimBindingDigest(subject), owner,
   purpose: "contained_turn_dispatch_grant_request_v1",
 })}`;
 const providerAccessClaimBindingDigest = (subject: SubjectSeed, grantRequestId: string) =>
-  digestContainedTurnCanonicalValue({
+  digestContainedTurnCanonicalInput({
     ...subject.providerAccessExpectation, grantRequestId, operationId: subject.operationId,
     provider: subject.provider, purpose: CONTAINED_TURN_OWNER_DISPATCH_PURPOSE,
     scope: { ...subject.scope, scopeDigest: subject.scopeDigest },
-  } as never);
+  });
 const providerAccessRequestDigest = (subject: SubjectSeed, grantRequestId: string, claimBindingDigest: string) =>
-  digestContainedTurnCanonicalValue({
+  digestContainedTurnCanonicalInput({
     binding: subject.providerAccessExpectation, claimBindingDigest, grantRequestId,
     operationId: subject.operationId, provider: subject.provider,
     purpose: CONTAINED_TURN_OWNER_DISPATCH_PURPOSE,
     scope: { ...subject.scope, scopeDigest: subject.scopeDigest },
-  } as never);
+  });
 const runtimeSecurityRequestDigest = (subject: SubjectSeed, grantRequestId: string, claimBindingDigest: string) => {
   const expected = subject.runtimeSecurityExpectation;
-  return digestContainedTurnCanonicalValue({
+  return digestContainedTurnCanonicalInput({
     acceptedAuthorityDigest: expected.acceptedAuthorityDigest, authorityGeneration: expected.authorityGeneration,
     claimBindingDigest, expectedAuthorityHeadDigest: expected.authorityHeadDigest,
     expectedAuthorityRevision: expected.authorityRevision, expectedConstraintsDigest: expected.constraintsDigest,
@@ -95,7 +101,7 @@ const runtimeSecurityRequestDigest = (subject: SubjectSeed, grantRequestId: stri
     providerBindingDigest: expected.providerBindingDigest, providerId: expected.providerId,
     purpose: CONTAINED_TURN_OWNER_DISPATCH_PURPOSE,
     scope: { ...subject.scope, scopeDigest: subject.scopeDigest },
-  } as never);
+  });
 };
 export const completeContainedTurnDispatchGrantSubject = (seed: SubjectSeed): ContainedTurnDispatchGrantSubject => {
   const providerAccessGrantRequestId = containedTurnDispatchGrantRequestId("provider_access", seed);
@@ -132,13 +138,69 @@ export type ContainedTurnConsumedGrantReceipts = readonly [
   ContainedTurnConsumedGrantReceipt<"runtime_security">,
 ];
 
+/** Recorded structure only. Current owner authority still requires the explicit subject below. */
+export function validateContainedTurnConsumedGrantReceiptShape(
+  receipt: unknown,
+): asserts receipt is ContainedTurnConsumedGrantReceipt<"provider_access"> | ContainedTurnConsumedGrantReceipt<"runtime_security"> {
+  assertContainedTurnExactRecord("consumed dispatch grant receipt", receipt, [
+    "authorityFacts", "claimBeforeControlTime", "claimBindingDigest", "consumedAtControlTime",
+    "consumptionDigest", "grantRequestDigest", "grantRequestId", "operationId", "owner",
+    "ownerEvidenceRef", "provider", "purpose", "requestDigest", "scope",
+    "validThroughOperationCutoffRevision",
+  ]);
+  invariant(receipt.owner === "provider_access" || receipt.owner === "runtime_security", "unknown dispatch receipt owner");
+  invariant(receipt.purpose === CONTAINED_TURN_OWNER_DISPATCH_PURPOSE, "unknown dispatch receipt purpose");
+  assertContainedTurnExactRecord("consumption scope", receipt.scope, ["projectId", "scopeDigest", "tenantId"]);
+  for (const value of [receipt.consumptionDigest, receipt.grantRequestId, receipt.ownerEvidenceRef,
+    receipt.provider, receipt.scope.projectId, receipt.scope.tenantId]) {
+    validateContainedTurnText("consumption identity", value, CONTAINED_TURN_LIMITS.text.identifier);
+  }
+  for (const value of [receipt.claimBindingDigest, receipt.grantRequestDigest, receipt.requestDigest, receipt.scope.scopeDigest]) {
+    parseContainedTurnCanonicalDigest(value);
+  }
+  validateContainedTurnIdentity("operation", receipt.operationId);
+  containedTurnOperationCutoffRevision(receipt.validThroughOperationCutoffRevision);
+  invariant(typeof receipt.claimBeforeControlTime === "number" && Number.isSafeInteger(receipt.claimBeforeControlTime) && !Object.is(receipt.claimBeforeControlTime, -0) &&
+    typeof receipt.consumedAtControlTime === "number" && Number.isSafeInteger(receipt.consumedAtControlTime) && !Object.is(receipt.consumedAtControlTime, -0),
+  "consumption control times must be safe integers");
+  validateConsumedAuthorityFacts(receipt.owner, receipt.authorityFacts);
+}
+
+const validateConsumedAuthorityFacts = (owner: ContainedTurnDispatchGrantOwner, facts: unknown): void => {
+  const textKeys = owner === "provider_access"
+    ? ["acceptedAuthorityDigest", "accessRef", "authorityHeadDigest", "bindingDigest", "credentialBindingDigest",
+      "credentialBindingRef", "providerAccountRef", "providerRouteRef"]
+    : ["acceptedAuthorityDigest", "authorityGeneration", "authorityHeadDigest", "authorityRevision",
+      "constraintsDigest", "containmentPolicyDigest", "providerBindingDigest", "providerId"];
+  const numberKeys = owner === "provider_access" ? ["bindingRevision", "credentialGeneration"] : [];
+  assertContainedTurnExactRecord("consumption authority", facts, [...textKeys, ...numberKeys]);
+  for (const key of textKeys) {
+    validateContainedTurnText("consumption authority", facts[key], CONTAINED_TURN_LIMITS.text.identifier);
+  }
+  for (const key of numberKeys) {
+    invariant(typeof facts[key] === "number" && Number.isSafeInteger(facts[key]) && !Object.is(facts[key], -0), "invalid consumption authority revision");
+  }
+};
+
+export function validateContainedTurnConsumedGrantReceiptTuple(
+  receipts: unknown,
+): asserts receipts is ContainedTurnConsumedGrantReceipts {
+  assertContainedTurnCanonicalArray(receipts);
+  invariant(receipts.length === 2, "dispatch claim requires exactly two consumed owner grant receipts");
+  const [providerAccess, runtimeSecurity] = receipts;
+  validateContainedTurnConsumedGrantReceiptShape(providerAccess);
+  validateContainedTurnConsumedGrantReceiptShape(runtimeSecurity);
+  invariant(providerAccess.owner === "provider_access" && runtimeSecurity.owner === "runtime_security",
+    "dispatch claim receipts must be ordered one per exact owner");
+}
+
 const sameFacts = (left: object, right: object): boolean =>
-  digestContainedTurnCanonicalValue(left as never) === digestContainedTurnCanonicalValue(right as never);
+  digestContainedTurnCanonicalInput(left) === digestContainedTurnCanonicalInput(right);
 
 /** Field-complete owner receipt verification. No opaque digest is accepted as a substitute for owner facts. */
 export const validateContainedTurnConsumedGrantReceipts = (
   subject: ContainedTurnDispatchGrantSubject,
-  receipts: readonly ContainedTurnConsumedGrantReceipt[],
+  receipts: unknown,
 ): ContainedTurnConsumedGrantReceipts => {
   const { providerAccessRequest: _providerRequest, runtimeSecurityRequest: _securityRequest, ...seed } = subject;
   const expectedSubject = completeContainedTurnDispatchGrantSubject(seed);
@@ -146,20 +208,18 @@ export const validateContainedTurnConsumedGrantReceipts = (
       !sameFacts(subject.runtimeSecurityRequest, expectedSubject.runtimeSecurityRequest)) {
     throw new TypeError("dispatch grant subject request identities have the wrong claim binding");
   }
+  assertContainedTurnCanonicalArray(receipts);
   if (receipts.length !== 2) {throw new TypeError("dispatch claim requires exactly two consumed owner grant receipts");}
   const [providerAccess, runtimeSecurity] = receipts;
-  if (providerAccess?.owner !== "provider_access" || runtimeSecurity?.owner !== "runtime_security") {
+  assertContainedTurnDataRecord("consumed dispatch grant receipt", providerAccess);
+  assertContainedTurnDataRecord("consumed dispatch grant receipt", runtimeSecurity);
+  if (providerAccess.owner !== "provider_access" || runtimeSecurity.owner !== "runtime_security") {
     throw new TypeError("dispatch claim receipts must be ordered one per exact owner");
   }
-  const sanitize = <Owner extends ContainedTurnDispatchGrantOwner>(
-    receipt: ContainedTurnConsumedGrantReceipt<Owner>,
-  ): ContainedTurnConsumedGrantReceipt<Owner> => {
-    assertContainedTurnExactRecord("consumed dispatch grant receipt", receipt, [
-      "authorityFacts", "claimBeforeControlTime", "claimBindingDigest", "consumedAtControlTime",
-      "consumptionDigest", "grantRequestDigest", "grantRequestId", "operationId", "owner",
-      "ownerEvidenceRef", "provider", "purpose", "requestDigest", "scope",
-      "validThroughOperationCutoffRevision",
-    ]);
+  const sanitize = (
+    receipt: unknown,
+  ): ContainedTurnConsumedGrantReceipt<"provider_access"> | ContainedTurnConsumedGrantReceipt<"runtime_security"> => {
+    validateContainedTurnConsumedGrantReceiptShape(receipt);
     const claimBindingDigest = parseContainedTurnCanonicalDigest(receipt.claimBindingDigest);
     const grantRequestDigest = parseContainedTurnCanonicalDigest(receipt.grantRequestDigest);
     const requestDigest = parseContainedTurnCanonicalDigest(receipt.requestDigest);
@@ -177,18 +237,35 @@ export const validateContainedTurnConsumedGrantReceipts = (
         receipt.claimBeforeControlTime < receipt.consumedAtControlTime) {
       throw new TypeError(`${receipt.owner} consumed receipt does not prove the exact durable owner facts`);
     }
-    return detachAndFreezeContainedTurnValue({
-      ...receipt, authorityFacts: receipt.authorityFacts, claimBindingDigest, grantRequestDigest,
-      requestDigest, validThroughOperationCutoffRevision,
-    });
+    return detachAndFreezeContainedTurnValue(receipt);
   };
-  return Object.freeze([sanitize(providerAccess), sanitize(runtimeSecurity)]) as ContainedTurnConsumedGrantReceipts;
+  const providerReceipt = sanitize(providerAccess);
+  const securityReceipt = sanitize(runtimeSecurity);
+  invariant(providerReceipt.owner === "provider_access" && securityReceipt.owner === "runtime_security",
+    "dispatch claim receipts must retain their exact owners");
+  return Object.freeze([providerReceipt, securityReceipt]);
 };
 
 export const containedTurnGrantSettlementRequestId = (
   receipt: ContainedTurnConsumedGrantReceipt,
   disposition: "abandoned_without_claim" | "claim_committed",
-): string => `grant-settlement:${digestContainedTurnCanonicalValue({
+): string => `grant-settlement:${digestContainedTurnCanonicalInput({
   consumptionDigest: receipt.consumptionDigest, disposition, grantRequestId: receipt.grantRequestId,
   operationId: receipt.operationId, owner: receipt.owner,
 })}`;
+
+export const validateContainedTurnOperationDispatchReceipts = (candidate: Pick<ContainedTurnKernelOperation,
+  "operationId" | "adapterSnapshot" | "scope" | "acceptedAuthorityVector"> & { readonly dispatch: ContainedTurnOperationShape["dispatch"] }): void => {
+  if (candidate.dispatch.kind !== "claimed") {return;}
+  validateContainedTurnConsumedGrantReceiptTuple(candidate.dispatch.grantReceipts);
+  const dispatchCutoffRevision = containedTurnOperationCutoffRevision(candidate.dispatch.operationCutoffRevision);
+  for (const receipt of candidate.dispatch.grantReceipts) {
+    invariant(receipt.operationId === candidate.operationId && receipt.provider === candidate.adapterSnapshot.provider &&
+      receipt.scope.projectId === candidate.scope.projectId && receipt.scope.tenantId === candidate.scope.tenantId &&
+      receipt.scope.scopeDigest === candidate.acceptedAuthorityVector.scopeDigest &&
+      receipt.validThroughOperationCutoffRevision >= dispatchCutoffRevision &&
+      receipt.grantRequestId === `grant-request:${receipt.grantRequestDigest}` &&
+      receipt.claimBeforeControlTime >= receipt.consumedAtControlTime,
+    "dispatch receipt must bind the operation and its claimed cutoff");
+  }
+};

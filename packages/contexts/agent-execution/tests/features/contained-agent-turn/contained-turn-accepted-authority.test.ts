@@ -1,3 +1,9 @@
+import { containedTurnClosureRequest } from "../../../dist/features/contained-agent-turn/domain/contained-turn-closure-recovery.js";
+import { validateContainedTurnConsumedGrantReceipts } from "../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
+import { assertContainedTurnCanonicalArray, assertContainedTurnExactRecord } from "../../../dist/features/contained-agent-turn/domain/contained-turn-record.js";
+import { consumedReceipt, grantSubject } from "./support/dispatch-grant-fixture.ts";
+import { validateContainedTurnOperation } from "../../../dist/features/contained-agent-turn/domain/contained-turn-validation.js";
+import { assertOperationRejectsMalformedLeaves, createOperation, createReservedOperation, createActiveOperation } from "../../contained-turn-kernel-fixtures.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -219,3 +225,145 @@ for (const field of ["hostBootId", "hostInstanceId"] as const) {
     assert.equal(fixture.custodyStartInputs.length, 0);
   });
 }
+
+void test("operation validation closes cutoff, closure stage, pending attempt and consumed receipt gaps", () => {
+  const accepted = createOperation();
+  const reserved = createReservedOperation();
+  assert.equal(reserved.dispatch.kind, "claimed");
+  const [providerReceipt, securityReceipt] = reserved.dispatch.grantReceipts;
+  const withReceipts = (grantReceipts: unknown) => ({
+    ...reserved, dispatch: { ...reserved.dispatch, grantReceipts },
+  });
+  const malformed: readonly [string, unknown, RegExp][] = [
+    ["cutoff kind", { ...accepted, revision: 1, operationCutoff: {
+      kind: "invalid", reason: "prevention", revision: 0, proofId: "proof:audit",
+    } }, /unknown operation-cutoff state/u],
+    ["closure stage", { ...accepted, revision: 1, closureRecovery: {
+      debtId: "closure-debt:audit", evidenceIds: [], kind: "required",
+      requestDigest: accepted.acceptedAuthorityVectorDigest, requestId: "closure-request:audit", stage: "invalid",
+    } }, /unknown closure-recovery stage/u],
+    ["pending identity", { ...reserved, containment: { kind: "pending", attemptId: 0 } }, /must be text/u],
+    ["pending binding", { ...reserved, containment: { kind: "pending", attemptId: "attempt:other" } }, /sole claimed attempt/u],
+    ["null tuple", withReceipts(null), /must be arrays/u],
+    ["empty tuple", withReceipts([]), /exactly two/u],
+    ["reversed owners", withReceipts([securityReceipt, providerReceipt]), /ordered one per exact owner/u],
+    ["numeric evidence", withReceipts([{ ...providerReceipt, ownerEvidenceRef: 0 }, securityReceipt]), /must be text/u],
+    ["numeric consumption", withReceipts([{ ...providerReceipt, consumptionDigest: 0 }, securityReceipt]), /must be text/u],
+    ["scope extra", withReceipts([{ ...providerReceipt, scope: { ...providerReceipt.scope, extra: true } }, securityReceipt]), /exact closed record/u],
+    ["authority value", withReceipts([{ ...providerReceipt, authorityFacts: { ...providerReceipt.authorityFacts, accessRef: 0 } }, securityReceipt]), /must be text/u],
+    ["foreign operation", withReceipts([{ ...providerReceipt, operationId: "operation:other" }, securityReceipt]), /must bind the operation/u],
+  ];
+  for (const [name, candidate, expected] of malformed) {
+    assert.throws(() => { validateContainedTurnOperation(candidate); }, expected, name);
+  }
+  assert.doesNotThrow(() => { validateContainedTurnOperation(accepted); });
+  assert.doesNotThrow(() => { validateContainedTurnOperation(reserved); });
+  assert.doesNotThrow(() => { validateContainedTurnOperation(createActiveOperation()); });
+});
+
+
+void test("paired receipts prove text and closed records while preserving subject and owner precedence", () => {
+  const subject = grantSubject();
+  const providerReceipt = consumedReceipt("provider_access", subject);
+  const securityReceipt = consumedReceipt("runtime_security", subject);
+  const pair = [providerReceipt, securityReceipt];
+  const result = validateContainedTurnConsumedGrantReceipts(subject, pair);
+  assert.notEqual(result[0], providerReceipt);
+  assert.ok(Object.isFrozen(result[0].authorityFacts));
+  for (const field of ["ownerEvidenceRef", "consumptionDigest"]) {
+    assert.throws(() => validateContainedTurnConsumedGrantReceipts(subject,
+      [{ ...providerReceipt, [field]: 0 }, securityReceipt]), /must be text/u);
+  }
+  assert.throws(() => validateContainedTurnConsumedGrantReceipts(subject,
+    [{ ...providerReceipt, scope: { ...providerReceipt.scope, extra: true } }, securityReceipt]), /exact closed record/u);
+  const wrongSubject = { ...subject, providerAccessRequest: subject.runtimeSecurityRequest };
+  assert.throws(() => validateContainedTurnConsumedGrantReceipts(wrongSubject, null), /subject request identities/u);
+  assert.throws(() => validateContainedTurnConsumedGrantReceipts(subject,
+    [{ ...providerReceipt, owner: "runtime_security", ownerEvidenceRef: 0 }, securityReceipt]), /ordered one per exact owner/u);
+  assert.throws(() => validateContainedTurnConsumedGrantReceipts(subject,
+    [{ ...providerReceipt, operationId: "operation:other" }, { ...securityReceipt, ownerEvidenceRef: 0 }]),
+  /provider_access consumed receipt does not prove/u);
+  let observations = 0;
+  const accessorReceipt = Object.defineProperty({ ...providerReceipt }, "owner", {
+    enumerable: true, get() { observations += 1; return "provider_access"; },
+  });
+  assert.throws(() => validateContainedTurnConsumedGrantReceipts(subject,
+    [accessorReceipt, securityReceipt]), /only enumerable data properties/u);
+  assert.equal(observations, 0);
+});
+
+void test("structural helpers reject non-records, array lookalikes, holes and element accessors", () => {
+  for (const value of [null, undefined, 0, "record"]) {
+    assert.throws(() => { assertContainedTurnExactRecord("test", value, []); }, TypeError);
+  }
+  let observations = 0;
+  const accessor = Object.defineProperty(["item"], "0", { enumerable: true, get() { observations += 1; return "item"; } });
+  const sparse = ["item"];
+  Reflect.deleteProperty(sparse, "0");
+  for (const value of [{ 0: "item", length: 1 }, sparse, accessor]) {
+    assert.throws(() => { assertContainedTurnCanonicalArray(value); }, TypeError);
+  }
+  assert.equal(observations, 0);
+  assert.doesNotThrow(() => { assertContainedTurnCanonicalArray(Object.freeze(["item"])); });
+});
+
+
+void test("unknown operations reject primitive roots and malformed leaves without observing accessors", () => {
+  for (const operation of [createOperation(), createReservedOperation(), createActiveOperation()]) {
+    assertOperationRejectsMalformedLeaves(operation);
+  }
+  for (const candidate of [undefined, null, false, 0, "operation", Symbol("operation"), []]) {
+    assert.throws(() => { validateContainedTurnOperation(candidate); }, TypeError);
+  }
+  let observations = 0;
+  const operation = createOperation();
+  const hostileScope = Object.defineProperty({ ...operation.scope }, "projectId", {
+    enumerable: true, get() { observations += 1; return "project:hostile"; },
+  });
+  const hostileOperation = Object.defineProperty({ ...operation }, "artifactManifestRef", {
+    enumerable: true, get() { observations += 1; return "artifact:hostile"; },
+  });
+  assert.throws(() => { validateContainedTurnOperation(hostileOperation); }, /only enumerable data properties/u);
+  assert.throws(() => { validateContainedTurnOperation({ ...operation, scope: hostileScope }); }, /only enumerable data properties/u);
+  assert.equal(observations, 0);
+  assert.throws(() => { assertContainedTurnCanonicalArray(Object.setPrototypeOf([], null)); }, /ordinary array prototype/u);
+});
+
+
+void test("unknown validation retains every declared closure-debt stage and rejects missing proof values", () => {
+  const operation = createReservedOperation();
+  for (const stage of ["physical_containment", "artifact_seal", "workspace_close", "containment_attestation", "no_workspace"] as const) {
+    const candidate = { ...operation, closureRecovery: containedTurnClosureRequest(operation, stage) };
+    assertOperationRejectsMalformedLeaves(candidate);
+  }
+  const accepted = createOperation();
+  for (const [kind, fields] of Object.entries({
+    workspace_closure: { workspaceId: undefined },
+    result_publication: { resultRef: undefined },
+    artifact_manifest_seal: { artifactManifestRef: undefined, workspaceId: undefined },
+  })) {
+    const candidate = { ...accepted, revision: 1, proofs: [...accepted.proofs, {
+      kind, proofId: `proof:missing-${kind}`, binding: {
+        authorityVectorDigest: accepted.acceptedAuthorityVectorDigest, operationId: accepted.operationId, ...fields,
+      },
+    }] };
+    assert.throws(() => { validateContainedTurnOperation(candidate); }, /must be text/u, kind);
+  }
+});
+
+void test("unknown validation keeps revision, authority, proof uniqueness and proof-kind precedence", () => {
+  const operation = createOperation();
+  const firstProof = operation.proofs[0];
+  assert.notEqual(firstProof, undefined);
+  const cases: readonly [unknown, RegExp][] = [
+    [{ ...operation, revision: -1, proofs: [null] }, /revision must be a non-negative/u],
+    [{ ...operation, revision: 1, intent: { ...operation.intent, prompt: "" }, proofs: [null] }, /prompt must contain/u],
+    [{ ...operation, intent: { ...operation.intent, prompt: "" },
+      capabilityManifest: { ...operation.capabilityManifest, supportedModes: null } }, /prompt must contain/u],
+    [{ ...operation, revision: 1, proofs: [firstProof, firstProof] }, /proof IDs must be unique/u],
+    [{ ...operation, proofs: [{ ...firstProof, kind: "alien", binding: null }, ...operation.proofs.slice(1)] }, /unknown proof kind/u],
+  ];
+  for (const [candidate, expected] of cases) {
+    assert.throws(() => { validateContainedTurnOperation(candidate); }, expected);
+  }
+});

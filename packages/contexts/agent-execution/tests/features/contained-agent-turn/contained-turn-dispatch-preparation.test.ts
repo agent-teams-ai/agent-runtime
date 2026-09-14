@@ -28,6 +28,7 @@ import type { ContainedTurnKernelDependencies } from "../../../dist/features/con
 import { containedTurnIdentity } from "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "../../../dist/features/contained-agent-turn/domain/contained-turn-kernel-model.js";
 import { mutateContainedTurnOperation } from "../../../dist/features/contained-agent-turn/domain/contained-turn-kernel.js";
+import { ContainedTurnLimitError } from "../../../dist/features/contained-agent-turn/domain/contained-turn-limits.js";
 import {
   attemptId,
   createOperation,
@@ -630,8 +631,9 @@ test("normalized consumed receipts bind the exact final claim and reject replay 
       /digest/u,
     );
   }
+  assert.notEqual(runtimeSecurity.grantRequestId, providerAccess.grantRequestId);
   for (const grantRequestId of [
-    "../../secret", "token=owner-secret", `grant-request:${"a".repeat(600)}`,
+    "../../secret", "token=owner-secret", runtimeSecurity.grantRequestId,
   ]) {
     assert.throws(
       () => validateContainedTurnConsumedGrantReceipts(subject, [
@@ -640,6 +642,13 @@ test("normalized consumed receipts bind the exact final claim and reject replay 
       /exact final claim request|durable owner facts|digest/u,
     );
   }
+  assert.throws(
+    () => validateContainedTurnConsumedGrantReceipts(subject, [
+      { ...providerAccess, grantRequestId: `grant-request:${"a".repeat(600)}` }, runtimeSecurity,
+    ]),
+    (error: unknown) => error instanceof ContainedTurnLimitError &&
+      error.message === "consumption identity must contain 1..512 ascii bytes",
+  );
   for (const cutoff of [-1, Number.MAX_SAFE_INTEGER + 1, Number.NaN]) {
     assert.throws(
       () => validateContainedTurnConsumedGrantReceipts(subject, [
