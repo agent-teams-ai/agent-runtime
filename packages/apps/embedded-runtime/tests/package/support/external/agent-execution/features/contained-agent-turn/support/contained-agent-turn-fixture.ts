@@ -1,5 +1,5 @@
 /* oxlint-disable max-lines -- The test-only factory keeps its exact owner-port composition in one fixture. */
-import { adapterSnapshot, manifest, providerAccessSnapshot } from "../../../../../../package/support/external/agent-execution/features/contained-agent-turn/support/contained-turn-fixture-snapshots.ts";
+import { adapterSnapshot, manifest, providerAccessSnapshot } from "./contained-turn-fixture-snapshots.ts";
 import assert from "node:assert/strict";
 import { digestContainedTurnCanonicalValue, containedTurnIdentity, containedTurnSatisfactionDigest, appendContainedTurnOutputForOwnerStore, mutateContainedTurnOperation, containedTurnProviderAccessSnapshotDigest, containedTurnDispatchClaimBindingDigest, validateContainedTurnConsumedGrantReceipts, containedTurnPreparationClosureBinding, CONTAINED_TURN_PREPARATION_CLOSURE_LIMIT, bindContainedTurnPreparationGrantRequests, claimContainedTurnDispatchPreparation, recordContainedTurnPreparationCleanup, retireContainedTurnDispatchPreparation, type ContainedTurnDispatchPreparation, containedTurnPreparationToken, committedDispatchProofV1, type ContainedTurnKernelOperation, type ContainedTurnProof, type ContainedTurnKernelDependencies } from "@agent-teams/agent-execution/composition";
 const identity = <Namespace extends Parameters<typeof containedTurnIdentity>[0]>(namespace: Namespace, suffix: string) =>

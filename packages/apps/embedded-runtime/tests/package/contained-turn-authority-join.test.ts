@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createContainedTurnFeatureFromProviderAccess, composeHostCustodiedContainedTurn } from "../../dist/composition/contained-turn-feature-composition.js";
 import { ContainedTurnConstructionCleanupError } from "../../dist/composition/contained-turn-construction-failure.js";
-import { createDependencies } from "../support/external/agent-execution/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
+import { createDependencies } from "./support/external/agent-execution/features/contained-agent-turn/support/contained-agent-turn-fixture.ts";
 import { createContainedTurnOperationProviderAccessPort, createContainedTurnSecurityAcceptancePort,containedTurnIdentity,acceptedProviderPreparation } from "@agent-teams/agent-execution/composition";
 import { operationHarness, fixtureHash } from "./support/external/provider-access/features/contained-turn-access/operation-dispatch-test-fixture.ts";
 import { createHarness } from "./support/external/runtime-security/postgres-dispatch.fixtures.ts";
