@@ -218,3 +218,140 @@ test("cancelled provider grant acquisition cannot certify retained auth cleanup"
   await createOrdinaryTurnFeature({...f.dependencies, providerAccess}).submit.execute(input, {signal: controller.signal});
   assert.equal(f.counts().starts, 0); assert.equal(f.state().status, "reconcile_required");
 });
+
+test("unproven reservation is retained across failed concurrent disposal and released once after closure", async () => {
+  const f = fixture(); const reserve = f.dependencies.process.reserve;
+  let closes = 0; let allowClosure = false;
+  const failure = new Error("TEST bounded close unconfirmed");
+  f.dependencies.process.reserve = async request => {
+    const reservation = await reserve(request);
+    return {...reservation, close: async sequence => {closes += 1; if (!allowClosure) {throw failure;} return reservation.close(sequence);}};
+  };
+  const feature = createOrdinaryTurnFeature(f.dependencies);
+  await feature.submit.execute(input);
+  assert.equal(closes, 1); assert.equal(f.state().status, "reconcile_required");
+  const first = feature.dispose(); const concurrent = feature.dispose();
+  assert.equal(first, concurrent);
+  await assert.rejects(first, error => error instanceof AggregateError && error.errors.some(inner => inner instanceof AggregateError && inner.errors.includes(failure)));
+  assert.equal(closes, 2); assert.equal(f.counts().closedWorkspaces, 0);
+  assert.equal(f.state().receipts.some(receipt => receipt.kind === "process_group_closed"), false);
+  allowClosure = true;
+  await Promise.all([feature.dispose(), feature.dispose()]); await feature.dispose();
+  assert.equal(closes, 3); assert.equal(f.counts().starts, 1);
+  assert.equal(f.state().receipts.filter(receipt => receipt.kind === "process_group_closed").length, 1);
+  assert.deepEqual(await feature.submit.execute(input), {status: "denied"});
+});
+
+test("late closure is not repeated when its evidence commit needs a retry", async () => {
+  const f = fixture(); const reserve = f.dependencies.process.reserve;
+  let closes = 0;
+  f.dependencies.process.reserve = async request => {
+    const reservation = await reserve(request);
+    return {...reservation, close: async sequence => {closes += 1; if (closes === 1) {throw new Error("TEST timeout");} return reservation.close(sequence);}};
+  };
+  const feature = createOrdinaryTurnFeature(f.dependencies); await feature.submit.execute(input);
+  const reconcile = f.dependencies.operationStore.reconcile; let fail = true;
+  f.dependencies.operationStore.reconcile = async (...args) => {if (fail) {fail = false; throw new Error("TEST evidence unavailable");} return reconcile(...args);};
+  await assert.rejects(feature.dispose(), AggregateError); assert.equal(closes, 2);
+  await feature.dispose(); await feature.dispose(); assert.equal(closes, 2);
+  assert.equal(f.state().receipts.filter(receipt => receipt.kind === "process_group_closed").length, 1);
+});
+
+test("retry still closes the process when output readback is unavailable without inventing drain", async () => {
+  const f = fixture(); const reserve = f.dependencies.process.reserve; let closes = 0;
+  f.dependencies.process.reserve = async request => {
+    const reservation = await reserve(request);
+    return {...reservation, close: async sequence => {closes += 1; if (closes === 1) {throw new Error("TEST timeout");} return reservation.close(sequence);}};
+  };
+  const feature = createOrdinaryTurnFeature(f.dependencies); await feature.submit.execute(input);
+  f.dependencies.operationStore.read = async () => {throw new Error("TEST readback unavailable");};
+  await feature.dispose(); assert.equal(closes, 2);
+  assert.equal(f.state().receipts.some(receipt => receipt.kind === "process_group_closed"), true);
+  assert.equal(f.state().receipts.some(receipt => receipt.kind === "output_drain"), false);
+});
+
+for (const boundary of ["cancellation_read", "start_rejected"] as const) {
+  test(`truthful unstarted reservation releases after ${boundary}`, async () => {
+    const f = fixture(); let starts = 0; let closes = 0;
+    const read = f.dependencies.operationStore.read;
+    f.dependencies.operationStore.read = async (...args) => {
+      if (boundary === "cancellation_read" && f.state().status === "running") {await f.dependencies.operationStore.cancel({operationId: f.state().operationId, scope: f.state().scope});}
+      return read(...args);
+    };
+    f.dependencies.process.reserve = async () => ({reservationId: "reservation:test", start: async () => {starts += 1; throw new Error("TEST journal rejected before spawn");}, close: async () => {closes += 1; return {kind: "not_started", reservationId: "reservation:test"};}});
+    const feature = createOrdinaryTurnFeature(f.dependencies);
+    await feature.submit.execute(input);
+    await feature.dispose(); await feature.dispose();
+    assert.equal(starts, boundary === "cancellation_read" ? 0 : 1);
+    assert.equal(closes, 1);
+    assert.equal(f.state().receipts.some(receipt => receipt.kind === "process_group_closed"), false);
+  });
+}
+
+for (const failedAction of ["retire", "provider_settle", "security_settle"] as const) {
+  test(`late closure retains and retries unfinished ${failedAction}`, async () => {
+    const f = fixture(); const reserve = f.dependencies.process.reserve;
+    const calls = {retire: 0, provider_settle: 0, security_settle: 0}; let closes = 0;
+    const run = async <T>(action: keyof typeof calls, effect: () => Promise<T>): Promise<T> => {
+      calls[action] += 1;
+      if (action === failedAction && calls[action] <= 2) {throw new Error("TEST transient owner failure");}
+      return effect();
+    };
+    const provider = f.dependencies.providerAccess.resolveAndConsume;
+    f.dependencies.providerAccess.resolveAndConsume = async (...args) => {
+      const grant = await provider(...args);
+      return {...grant, retire: () => run("retire", () => grant.retire()), settle: disposition => run("provider_settle", () => grant.settle(disposition))};
+    };
+    const security = f.dependencies.security.resolveAndConsume;
+    f.dependencies.security.resolveAndConsume = async (...args) => {
+      const grant = await security(...args);
+      return {...grant, settle: disposition => run("security_settle", () => grant.settle(disposition))};
+    };
+    f.dependencies.process.reserve = async request => {
+      const reservation = await reserve(request);
+      return {...reservation, close: sequence => {closes += 1; if (closes === 1) {return Promise.reject(new Error("TEST close timeout"));} return reservation.close(sequence);}};
+    };
+    const feature = createOrdinaryTurnFeature(f.dependencies); await feature.submit.execute(input);
+    await assert.rejects(feature.dispose(), AggregateError);
+    await feature.dispose(); await feature.dispose();
+    assert.equal(closes, 2);
+    assert.deepEqual(calls, {retire: failedAction === "retire" ? 3 : 1, provider_settle: failedAction === "provider_settle" ? 3 : 1, security_settle: failedAction === "security_settle" ? 3 : 1});
+    for (const kind of ["credential_retired", "provider_grant_settled", "security_grant_settled"]) {assert.equal(f.state().receipts.filter(receipt => receipt.kind === kind).length, 1);}
+    assert.equal(f.state().status, "reconcile_required");
+  });
+}
+
+for (const failedAction of ["retire", "provider_settle", "security_settle"] as const) {
+  test(`unconfirmed closure does not starve recovered ${failedAction}`, async () => {
+    const f = fixture(); const reserve = f.dependencies.process.reserve;
+    const calls = {retire: 0, provider_settle: 0, security_settle: 0}; let closes = 0;
+    const run = async <T>(action: keyof typeof calls, effect: () => Promise<T>): Promise<T> => {
+      calls[action] += 1;
+      if (action === failedAction && calls[action] <= 2) {throw new Error("TEST transient owner failure", {cause: "synthetic grant"});}
+      return effect();
+    };
+    const provider = f.dependencies.providerAccess.resolveAndConsume;
+    f.dependencies.providerAccess.resolveAndConsume = async (...args) => {
+      const grant = await provider(...args);
+      return {...grant, retire: () => run("retire", () => grant.retire()), settle: disposition => run("provider_settle", () => grant.settle(disposition))};
+    };
+    const security = f.dependencies.security.resolveAndConsume;
+    f.dependencies.security.resolveAndConsume = async (...args) => {
+      const grant = await security(...args);
+      return {...grant, settle: disposition => run("security_settle", () => grant.settle(disposition))};
+    };
+    f.dependencies.process.reserve = async request => {
+      const reservation = await reserve(request);
+      return {...reservation, close: sequence => {closes += 1; if (closes <= 3) {return Promise.reject(new Error("TEST close timeout", {cause: "synthetic closure"}));} return reservation.close(sequence);}};
+    };
+    const feature = createOrdinaryTurnFeature(f.dependencies); await feature.submit.execute(input);
+    await assert.rejects(feature.dispose(), error => error instanceof AggregateError && error.errors[0] instanceof AggregateError && error.errors[0].errors.length === 2);
+    await assert.rejects(feature.dispose(), error => error instanceof AggregateError && error.errors[0] instanceof AggregateError && error.errors[0].errors.length === 1);
+    assert.equal(calls[failedAction], 3);
+    await feature.dispose(); await feature.dispose();
+    assert.equal(closes, 4);
+    assert.deepEqual(calls, {retire: failedAction === "retire" ? 3 : 1, provider_settle: failedAction === "provider_settle" ? 3 : 1, security_settle: failedAction === "security_settle" ? 3 : 1});
+    for (const kind of ["credential_retired", "provider_grant_settled", "security_grant_settled"]) {assert.equal(f.state().receipts.filter(receipt => receipt.kind === kind).length, 1);}
+    assert.equal(f.state().status, "reconcile_required");
+  });
+}
