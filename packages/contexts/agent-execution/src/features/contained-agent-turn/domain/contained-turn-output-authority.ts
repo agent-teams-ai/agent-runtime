@@ -22,9 +22,9 @@ export type ContainedTurnOperationCutoffRevision = number & {
 };
 
 export const containedTurnOperationCutoffRevision = (
-  value: number,
+  value: unknown,
 ): ContainedTurnOperationCutoffRevision => {
-  invariant(Number.isSafeInteger(value) && value >= 0, "operation cutoff revision must be a non-negative safe integer");
+  invariant(typeof value === "number" && Number.isSafeInteger(value) && !Object.is(value, -0) && value >= 0, "operation cutoff revision must be a non-negative safe integer");
   return value as ContainedTurnOperationCutoffRevision;
 };
 

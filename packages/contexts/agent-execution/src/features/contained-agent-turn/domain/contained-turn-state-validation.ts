@@ -1,4 +1,8 @@
-import type { ContainedTurnKernelOperation } from "./contained-turn-kernel-model.js";
+import { containedTurnNoWorkspaceClosureFact } from "./contained-turn-closure-recovery.js";
+import { digestContainedTurnCanonicalInput } from "./contained-turn-codecs.js";
+import { type ContainedTurnOperationCollections, validateContainedTurnOperationProofRecords } from "./contained-turn-operation-shape.js";
+import type { ContainedTurnProofRecord } from "./contained-turn-proof-validation.js";
+import type { ContainedTurnProofValidatedOperation, ContainedTurnOutputValidatedOperation } from "./contained-turn-validation.js";
 import {
   CONTAINED_TURN_LIMITS,
   utf8ByteLength,
@@ -13,7 +17,7 @@ import { containedTurnInvariant as invariant } from "./contained-turn-invariant.
  * Keeping this orthogonal check in its own domain module keeps the aggregate
  * validation boundary below the repository's per-file maintainability limit.
  */
-export const validateContainedTurnOutput = (operation: ContainedTurnKernelOperation): void => {
+export function validateContainedTurnOutput(operation: ContainedTurnProofValidatedOperation): asserts operation is ContainedTurnOutputValidatedOperation {
   invariant(
     operation.output.chunks.length <= CONTAINED_TURN_LIMITS.collections.outputChunks,
     "output chunk limit exceeded",
@@ -22,7 +26,7 @@ export const validateContainedTurnOutput = (operation: ContainedTurnKernelOperat
   let totalBytes = 0;
   operation.output.chunks.forEach((chunk, index) => {
     assertContainedTurnExactRecord("output chunk", chunk, ["cursor", "kind", "text"]);
-    invariant(chunk.cursor === index, "output cursors must be contiguous from zero");
+    invariant(chunk.cursor === index && !Object.is(chunk.cursor, -0), "output cursors must be contiguous from zero");
     invariant(
       chunk.kind === "assistant" || chunk.kind === "diagnostic" || chunk.kind === "progress",
       "unknown output kind fails closed",
@@ -37,7 +41,7 @@ export const validateContainedTurnOutput = (operation: ContainedTurnKernelOperat
   }
 
   invariant(
-    operation.output.fence.finalCursor === operation.output.chunks.length,
+    operation.output.fence.finalCursor === operation.output.chunks.length && !Object.is(operation.output.fence.finalCursor, -0),
     "output final cursor must equal the contiguous next cursor",
   );
   if (operation.output.fence.proofId !== undefined) {
@@ -49,4 +53,21 @@ export const validateContainedTurnOutput = (operation: ContainedTurnKernelOperat
         : "output_drain",
     );
   }
+}
+
+export const containedTurnNoWorkspaceFactClosesReceipts = (operation: ContainedTurnOperationCollections): boolean => {
+  if (operation.closureRecovery.kind !== "proved_no_workspace") {return false;}
+  validateContainedTurnOperationProofRecords(operation);
+  const expected = containedTurnNoWorkspaceClosureFact(operation);
+  const fact = operation.closureRecovery.fact;
+  if (expected === undefined || digestContainedTurnCanonicalInput(fact) !== digestContainedTurnCanonicalInput(expected) ||
+      operation.artifactManifestRef !== undefined || operation.resultRef !== undefined) {
+    return false;
+  }
+  const proofs: readonly ContainedTurnProofRecord[] = operation.proofs;
+  const kinds = new Set(proofs.map(proof => proof.kind));
+  return [
+    "acceptance", "no_dispatch", "no_start", "provider_not_started", "output_no_start_drain",
+    "host_custody_no_start", "effect_no_start", "containment_not_required", "cutoff",
+  ].every(kind => kinds.has(kind));
 };

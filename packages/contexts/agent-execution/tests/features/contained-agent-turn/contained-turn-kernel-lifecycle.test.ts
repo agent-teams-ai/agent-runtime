@@ -31,6 +31,7 @@ import {
 } from "../../../dist/features/contained-agent-turn/domain/contained-turn-output-authority.js";
 import { type ContainedTurnProof } from "../../../dist/features/contained-agent-turn/domain/contained-turn-proofs.js";
 import {
+  assertOperationRejectsMalformedLeaves,
   adapterSnapshot,
   attemptId,
   attemptBinding,
@@ -766,6 +767,7 @@ test("indeterminate physical containment closes cutoff and remains reconcile-req
 test("accepts exact terminal proof closure and rejects false terminal truth or proof substitution", () => {
   const terminal = buildTerminalCandidate();
   assert.doesNotThrow(() => validateContainedTurnOperation(terminal));
+  assertOperationRejectsMalformedLeaves(terminal);
   const impossibleDigest = {
     ...terminal,
     terminal: { ...terminal.terminal, satisfactionDigest: digestContainedTurnCanonicalValue({ false: "closure" }) as ContainedTurnCanonicalDigest },

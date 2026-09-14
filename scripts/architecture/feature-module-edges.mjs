@@ -63,10 +63,12 @@ export const curatedModuleImportIssues = (context) => {
   }
   const isFeatureEntrypoint = Object.values(sourceFeature?.entrypoints ?? {}).includes(path);
   const sourceLayer = !isFeatureEntrypoint && sourceFeature ? layerForPath(sourceFeature, path) : undefined;
-  // The public package entry exposes only the module's own contracts, so only the
-  // module composition file may carry another module's surface.
+  // The public package entry exposes only the module's own contracts. Host-app
+  // extra composition-directory assembly files are the rest of that module
+  // composition surface, so they may carry another module's curated entry.
+  const extraHostCompositionAssembly = Boolean(isAssembly) && path.startsWith(`${source.sourceRoot}/composition/`);
   const permitted = isAssembly
-    ? path === `${source.sourceRoot}/composition.ts`
+    ? path === `${source.sourceRoot}/composition.ts` || extraHostCompositionAssembly
     : ["adapters", "composition"].includes(sourceLayer);
   if (!permitted) {
     const holder = isAssembly ? "the public package entry" : isFeatureEntrypoint ? "a feature entrypoint" : sourceLayer ?? "unowned code";

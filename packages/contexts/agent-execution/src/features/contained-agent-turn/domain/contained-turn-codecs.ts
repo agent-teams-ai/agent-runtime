@@ -1,5 +1,5 @@
 import { CONTAINED_TURN_LIMITS, validateContainedTurnText } from "./contained-turn-limits.js";
-import { assertContainedTurnCanonicalArray, assertContainedTurnExactRecord, hasContainedTurnLoneSurrogate } from "./contained-turn-record.js";
+import { assertContainedTurnCanonicalArray, assertContainedTurnDataRecord, hasContainedTurnLoneSurrogate } from "./contained-turn-record.js";
 
 declare const canonicalDigestBrand: unique symbol;
 declare const commandFingerprintBrand: unique symbol;
@@ -84,7 +84,7 @@ const sha256Hex = (value: string): string => {
   return state.map(word => (word >>> 0).toString(16).padStart(8, "0")).join("");
 };
 
-const canonicalize = (value: ContainedTurnCanonicalValue): string => {
+const canonicalize = (value: unknown): string => {
   if (value === null || typeof value === "boolean") {return JSON.stringify(value);}
   if (typeof value === "string") {
     if (hasContainedTurnLoneSurrogate(value)) {throw new TypeError("canonical strings must not contain lone surrogates");}
@@ -98,29 +98,35 @@ const canonicalize = (value: ContainedTurnCanonicalValue): string => {
   }
   if (Array.isArray(value)) {
     assertContainedTurnCanonicalArray(value);
-    for (const item of value) {
+    const array: readonly unknown[] = value;
+    for (const item of array) {
       if (item === undefined) {throw new TypeError("canonical arrays must not contain undefined");}
     }
-    return `[${value.map(item => canonicalize(item)).join(",")}]`;
+    return `[${array.map(item => canonicalize(item)).join(",")}]`;
   }
-  const record = value as { readonly [key: string]: ContainedTurnCanonicalValue };
-  assertContainedTurnExactRecord("canonical record", record, Object.keys(record));
+  assertContainedTurnDataRecord("canonical record", value);
+  const record = value;
   const keys = Object.keys(record).toSorted();
   for (const key of keys) {
     if (hasContainedTurnLoneSurrogate(key) || record[key] === undefined) {
       throw new TypeError("canonical records must not contain invalid keys or undefined");
     }
   }
-  return `{${keys.map(key => `${JSON.stringify(key)}:${canonicalize(record[key] as ContainedTurnCanonicalValue)}`).join(",")}}`;
+  return `{${keys.map(key => `${JSON.stringify(key)}:${canonicalize(record[key])}`).join(",")}}`;
 };
 
 export const encodeContainedTurnCanonicalValue = (value: ContainedTurnCanonicalValue): string => canonicalize(value);
 
-export const digestContainedTurnCanonicalValue = (
-  value: ContainedTurnCanonicalValue,
+/** Domain validation phases may hash unknown scalar fields only through canonical-value validation. */
+export const digestContainedTurnCanonicalInput = (
+  value: unknown,
 ): ContainedTurnCanonicalDigest => `sha256:${sha256Hex(canonicalize(value))}` as ContainedTurnCanonicalDigest;
 
-export const parseContainedTurnCanonicalDigest = (value: string): ContainedTurnCanonicalDigest => {
+export const digestContainedTurnCanonicalValue = (
+  value: ContainedTurnCanonicalValue,
+): ContainedTurnCanonicalDigest => digestContainedTurnCanonicalInput(value);
+
+export const parseContainedTurnCanonicalDigest = (value: unknown): ContainedTurnCanonicalDigest => {
   validateContainedTurnText("digest", value, CONTAINED_TURN_LIMITS.text.digest);
   if (!/^sha256:[a-f0-9]{64}$/u.test(value)) {throw new TypeError("digest must be canonical lowercase sha256");}
   return value as ContainedTurnCanonicalDigest;

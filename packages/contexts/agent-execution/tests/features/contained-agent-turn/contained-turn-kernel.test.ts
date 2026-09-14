@@ -45,6 +45,7 @@ import {
   selectContainedTurnOwnerStoreRead,
 } from "../../../dist/features/contained-agent-turn/application/contained-turn-store-authority.js";
 import {
+  assertOperationRejectsMalformedLeaves,
   acceptanceProof,
   adapterSnapshot,
   attemptId,
@@ -720,6 +721,10 @@ test("dispatch prevention atomically records distinct no-start authorities", () 
     outputProof: { binding: { ...commonBinding, finalCursor: 0 }, kind: "output_no_start_drain", proofId: proofId("proof:no-output") },
     providerProof: { binding: { ...commonBinding, effectId }, kind: "provider_not_started", proofId: proofId("proof:provider-not-started") },
   });
+  assertOperationRejectsMalformedLeaves(prevented);
+  assert.throws(() => { validateContainedTurnOperation({ ...prevented, proofs: prevented.proofs.map(proof =>
+    proof.kind === "effect_no_start" ? { ...proof, binding: { ...proof.binding, disposition: "committed" } } : proof,
+  ) }); }, /unknown proof disposition/u);
   assert.equal(prevented.dispatch.kind, "prevented");
   assert.equal(prevented.providerAcceptance.kind, "not_accepted");
   assert.equal(prevented.providerExecution.kind, "closed");
