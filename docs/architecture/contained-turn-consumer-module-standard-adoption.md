@@ -27,6 +27,16 @@ This separate contained-turn profile pins the same reviewed standard at commit
 ADR-0016 proposes only the contained-turn seven-port classification as pending.
 It does not weaken or duplicate the active passive setup Assembly claim.
 
+The [passive adoption migration record](get-modular-adoption.md#pr110-standard-pin-migration)
+reviews the exact PR110 byte delta and shared retained evidence. This pin update
+clarifies acquisition and handoff ownership, borrowed capabilities, opaque causes,
+and reference lifetimes; it does not adopt contained-turn or confer readiness.
+Existing Host owners retain cleanup authority. The previous contained-turn pin
+was `f1ec0152c34715395685b349844a7d1c18a2f015`; its document SHA-256 was
+`ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d`.
+The enforcing checker compares both current profile identities and hashes the
+shared retained bytes. Current paired migration evidence remains outstanding.
+
 ## Ownership boundary
 
 The governed production roots are Embedded Runtime and Agent Execution. The

@@ -156,6 +156,8 @@ test("the named negative suite runs exactly once through every Foundation gate",
     1,
   );
   for (const script of ["check", "check:fast"]) {
+    assert.equal(manifest.scripts[script].split(" && ")[0], "pnpm lint", script);
+    assert.equal(manifest.scripts[script].split(" && ").filter(command => command === "pnpm lint").length, 1, script);
     assert.equal(manifest.scripts[script].split("pnpm foundation:check").length - 1, 1, script);
   }
   assert.ok(!manifest.scripts["foundation:check"].includes("|| true"));
@@ -589,7 +591,7 @@ test("Get Modular belongs only to Embedded Runtime composition, including type i
       // AE and Runtime Configuration retain directory roots; Runtime Security
       // uses exact source roots, so mutate its owned files inside the disposable
       // fixture instead of testing an unclassified src/application location.
-      const forbiddenPaths = [
+      const negativePaths = [
         ...[
           "packages/contexts/agent-execution/src/features/contained-agent-turn",
           "packages/contexts/runtime-configuration/src",
@@ -598,13 +600,24 @@ test("Get Modular belongs only to Embedded Runtime composition, including type i
         "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.ts",
         "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts",
       ];
-      for (const path of forbiddenPaths) {
-        const diagnostics = await analyzeFixture({ [path]: statement });
-        const diagnosticRules = rules(diagnostics);
-        assert.ok(diagnosticRules.includes("architecture.source-dependencies.forbidden-package-dependency"), `${path}: ${JSON.stringify(diagnosticRules)}`);
-        assert.ok(!diagnosticRules.includes("architecture.source-dependencies.unclassified-source-file"), path);
-        assert.equal(diagnostics.find(d => d.ruleId === "architecture.source-dependencies.forbidden-package-dependency").location.path, path);
+      // Batch independent rejecting sources while retaining a separate positive CLI exit.
+      const diagnostics = await analyzeFixture(Object.fromEntries(
+        negativePaths.map(path => [path, statement]),
+      ));
+      for (const path of negativePaths) {
+        const sourceDiagnostics = diagnostics.filter(d => d.location.path === path);
+        assert.ok(
+          rules(sourceDiagnostics).includes("architecture.source-dependencies.forbidden-package-dependency"),
+          `${path}: ${JSON.stringify(rules(sourceDiagnostics))}`,
+        );
+        assert.ok(!rules(sourceDiagnostics).includes("architecture.source-dependencies.unclassified-source-file"), path);
+        assert.equal(
+          sourceDiagnostics.find(d => d.ruleId === "architecture.source-dependencies.forbidden-package-dependency").location.path,
+          path,
+        );
       }
+      assert.ok(diagnostics.every(d => negativePaths.includes(d.location.path)),
+        JSON.stringify(diagnostics));
     }
   }
 });
