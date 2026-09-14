@@ -9,7 +9,7 @@ test("deployment route provenance integration", () => {
   delete env.NODE_TEST_CONTEXT;
   const result = spawnSync(process.execPath, [...process.execArgv,
     "--experimental-test-module-mocks", "--test",
-    new URL("../support/route-provenance-integration.mjs", import.meta.url).pathname],
+    new URL("./support/route-provenance-integration.mjs", import.meta.url).pathname],
   {env, encoding: "utf8", timeout: 120_000});
   if (result.error !== undefined || result.status !== 0) {
     console.error(JSON.stringify({
