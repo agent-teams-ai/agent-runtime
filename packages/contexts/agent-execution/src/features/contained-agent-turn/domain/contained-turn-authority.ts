@@ -1,13 +1,13 @@
 import {
   asContainedTurnCancellationFingerprint,
   asContainedTurnCommandFingerprint,
-  digestContainedTurnCanonicalValue,
+  digestContainedTurnCanonicalInput,
   type ContainedTurnCancellationFingerprint,
   type ContainedTurnCanonicalDigest,
   type ContainedTurnCommandFingerprint,
 } from "./contained-turn-codecs.js";
 import { CONTAINED_TURN_LIMITS, validateContainedTurnText } from "./contained-turn-limits.js";
-import { assertContainedTurnCanonicalArray, assertContainedTurnExactRecord } from "./contained-turn-record.js";
+import { assertContainedTurnCanonicalArray, assertContainedTurnDataRecord, assertContainedTurnExactRecord } from "./contained-turn-record.js";
 import type {
   ContainedTurnCancellationCommandId,
   ContainedTurnOperationId,
@@ -90,49 +90,51 @@ export interface ContainedTurnAuthorityVector {
   readonly securityDecisionDigest: ContainedTurnCanonicalDigest;
 }
 
-const assertExactKeys = (name: string, value: object, expected: readonly string[]): void => {
-  assertContainedTurnExactRecord(name, value, expected);
-};
+type UnknownFields<Value> = { readonly [Key in keyof Value]: unknown };
+export interface ContainedTurnAuthorityShape {
+  readonly acceptedAuthorityVector: Omit<UnknownFields<ContainedTurnAuthorityVector>, "adapterSnapshot" | "providerAccessSnapshot"> & {
+    readonly adapterSnapshot: UnknownFields<ContainedTurnProviderAdapterSnapshot>;
+    readonly providerAccessSnapshot: UnknownFields<ContainedTurnProviderAccessSnapshot>;
+  };
+  readonly adapterSnapshot: UnknownFields<ContainedTurnProviderAdapterSnapshot>;
+  readonly intent: UnknownFields<ContainedTurnIntent>;
+  readonly providerAccessSnapshot: UnknownFields<ContainedTurnProviderAccessSnapshot>;
+  readonly scope: UnknownFields<ContainedTurnScope>;
+}
 
-export const validateContainedTurnAuthorityShape = (input: {
-  readonly acceptedAuthorityVector: ContainedTurnAuthorityVector;
-  readonly adapterSnapshot: ContainedTurnProviderAdapterSnapshot;
-  readonly intent: ContainedTurnIntent;
-  readonly providerAccessSnapshot: ContainedTurnProviderAccessSnapshot;
-  readonly scope: ContainedTurnScope;
-}): void => {
-  const validateAdapter = (adapter: ContainedTurnProviderAdapterSnapshot): void => assertExactKeys(
-    "adapter snapshot",
-    adapter,
-    ["adapterRevision", "binaryRevision", "capabilityManifestRevision", "provider"],
-  );
-  const validateProviderAccess = (snapshot: ContainedTurnProviderAccessSnapshot): void => assertExactKeys(
-    "Provider Access snapshot",
-    snapshot,
-    [
-      "accessRef", "credentialBindingDigest", "credentialBindingRef", "credentialGeneration",
-      "ownerAuthorityDigest", "projectId", "provider", "providerAccountRef", "providerRouteRef", "revision", "tenantId",
-    ],
-  );
-  assertExactKeys(
-    "accepted authority vector",
-    input.acceptedAuthorityVector,
-    [
-      "adapterSnapshot", "capabilityManifestRevision", "containmentPolicyDigest", "operationAuthorityRevision",
-      "providerAccessSnapshot", "scopeDigest", "securityAuthorityRevision", "securityDecisionDigest",
-    ],
-  );
-  validateAdapter(input.adapterSnapshot);
-  validateAdapter(input.acceptedAuthorityVector.adapterSnapshot);
-  validateProviderAccess(input.providerAccessSnapshot);
-  validateProviderAccess(input.acceptedAuthorityVector.providerAccessSnapshot);
-  assertExactKeys("contained-turn intent", input.intent, ["mode", "prompt"]);
-  assertExactKeys("contained-turn scope", input.scope, ["projectId", "tenantId"]);
-};
+function validateAdapterShape(adapter: unknown): asserts adapter is UnknownFields<ContainedTurnProviderAdapterSnapshot> {
+  assertContainedTurnExactRecord("adapter snapshot", adapter,
+    ["adapterRevision", "binaryRevision", "capabilityManifestRevision", "provider"]);
+}
+function validateProviderAccessShape(snapshot: unknown): asserts snapshot is UnknownFields<ContainedTurnProviderAccessSnapshot> {
+  assertContainedTurnExactRecord("Provider Access snapshot", snapshot, [
+    "accessRef", "credentialBindingDigest", "credentialBindingRef", "credentialGeneration",
+    "ownerAuthorityDigest", "projectId", "provider", "providerAccountRef", "providerRouteRef", "revision", "tenantId",
+  ]);
+}
+
+export function validateContainedTurnAuthorityShape(input: {
+  readonly acceptedAuthorityVector: unknown;
+  readonly adapterSnapshot: unknown;
+  readonly intent: unknown;
+  readonly providerAccessSnapshot: unknown;
+  readonly scope: unknown;
+}): asserts input is ContainedTurnAuthorityShape {
+  assertContainedTurnExactRecord("accepted authority vector", input.acceptedAuthorityVector, [
+    "adapterSnapshot", "capabilityManifestRevision", "containmentPolicyDigest", "operationAuthorityRevision",
+    "providerAccessSnapshot", "scopeDigest", "securityAuthorityRevision", "securityDecisionDigest",
+  ]);
+  validateAdapterShape(input.adapterSnapshot);
+  validateAdapterShape(input.acceptedAuthorityVector.adapterSnapshot);
+  validateProviderAccessShape(input.providerAccessSnapshot);
+  validateProviderAccessShape(input.acceptedAuthorityVector.providerAccessSnapshot);
+  assertContainedTurnExactRecord("contained-turn intent", input.intent, ["mode", "prompt"]);
+  assertContainedTurnExactRecord("contained-turn scope", input.scope, ["projectId", "tenantId"]);
+}
 
 export const containedTurnAuthorityVectorDigest = (
-  vector: ContainedTurnAuthorityVector,
-): ContainedTurnCanonicalDigest => digestContainedTurnCanonicalValue({
+  vector: ContainedTurnAuthorityShape["acceptedAuthorityVector"],
+): ContainedTurnCanonicalDigest => digestContainedTurnCanonicalInput({
   adapter: {
     adapterRevision: vector.adapterSnapshot.adapterRevision,
     binaryRevision: vector.adapterSnapshot.binaryRevision,
@@ -161,8 +163,8 @@ export const containedTurnAuthorityVectorDigest = (
 });
 
 export const containedTurnProviderAccessSnapshotDigest = (
-  snapshot: ContainedTurnProviderAccessSnapshot,
-): ContainedTurnCanonicalDigest => digestContainedTurnCanonicalValue({
+  snapshot: UnknownFields<ContainedTurnProviderAccessSnapshot>,
+): ContainedTurnCanonicalDigest => digestContainedTurnCanonicalInput({
   accessRef: snapshot.accessRef,
   credentialBindingDigest: snapshot.credentialBindingDigest,
   credentialBindingRef: snapshot.credentialBindingRef,
@@ -184,8 +186,8 @@ export interface ContainedTurnCommandFingerprintInput {
 }
 
 export const containedTurnCommandFingerprint = (
-  input: ContainedTurnCommandFingerprintInput,
-): ContainedTurnCommandFingerprint => asContainedTurnCommandFingerprint(digestContainedTurnCanonicalValue({
+  input: Readonly<{ intent: UnknownFields<ContainedTurnIntent>; provider: unknown; scope: UnknownFields<ContainedTurnScope> }>,
+): ContainedTurnCommandFingerprint => asContainedTurnCommandFingerprint(digestContainedTurnCanonicalInput({
   intent: { mode: input.intent.mode, prompt: input.intent.prompt },
   provider: input.provider,
   scope: { projectId: input.scope.projectId, tenantId: input.scope.tenantId },
@@ -199,25 +201,25 @@ export interface ContainedTurnCancellationCommand {
   readonly scopeDigest: ContainedTurnCanonicalDigest;
 }
 
-export const containedTurnScopeDigest = (scope: ContainedTurnScope): ContainedTurnCanonicalDigest =>
-  digestContainedTurnCanonicalValue({ projectId: scope.projectId, tenantId: scope.tenantId, version: 1 });
+export const containedTurnScopeDigest = (scope: UnknownFields<ContainedTurnScope>): ContainedTurnCanonicalDigest =>
+  digestContainedTurnCanonicalInput({ projectId: scope.projectId, tenantId: scope.tenantId, version: 1 });
 
 export const containedTurnCancellationFingerprint = (input: {
-  readonly cancellationCommandId: ContainedTurnCancellationCommandId;
-  readonly operationId: ContainedTurnOperationId;
-  readonly scopeDigest: ContainedTurnCanonicalDigest;
-}): ContainedTurnCancellationFingerprint => asContainedTurnCancellationFingerprint(digestContainedTurnCanonicalValue({
+  readonly cancellationCommandId: unknown;
+  readonly operationId: unknown;
+  readonly scopeDigest: unknown;
+}): ContainedTurnCancellationFingerprint => asContainedTurnCancellationFingerprint(digestContainedTurnCanonicalInput({
   cancellationCommandId: input.cancellationCommandId,
   operationId: input.operationId,
   scopeDigest: input.scopeDigest,
   version: 1,
 }));
 
-export const validateContainedTurnManifest = (
-  manifest: ContainedTurnCapabilityManifest,
-  adapter: ContainedTurnProviderAdapterSnapshot,
-): void => {
-  assertExactKeys(
+export function validateContainedTurnManifest(
+  manifest: unknown,
+  adapter: Readonly<{ provider: unknown; capabilityManifestRevision: unknown }>,
+): asserts manifest is ContainedTurnCapabilityManifest {
+  assertContainedTurnExactRecord(
     "capability manifest",
     manifest,
     [
@@ -236,7 +238,7 @@ export const validateContainedTurnManifest = (
     encoding: "utf8",
     maximumBytes: 128,
   });
-  const supported = new Set<ContainedTurnMode>(manifest.supportedModes);
+  const supported = new Set(manifest.supportedModes);
   const exactProofKinds = manifest.requiredProofKinds.length === CONTAINED_TURN_REQUIRED_PROOF_KINDS.length &&
     manifest.requiredProofKinds.every((kind, index) => kind === CONTAINED_TURN_REQUIRED_PROOF_KINDS[index]);
   if (
@@ -250,17 +252,26 @@ export const validateContainedTurnManifest = (
   for (const mode of supported) {
     if (mode !== "analysis" && mode !== "workspace-write") {throw new TypeError("unknown capability scope fails closed");}
   }
-};
+  validateContainedTurnText("manifestRevision", manifest.manifestRevision, CONTAINED_TURN_LIMITS.text.identifier);
+  validateContainedTurnText("resourceScopeRevision", manifest.resourceScopeRevision, CONTAINED_TURN_LIMITS.text.identifier);
+}
 
-export const validateContainedTurnAuthorityText = (input: {
+export function validateContainedTurnAuthorityText(input: {
+  readonly commandId: unknown;
+  readonly intent: unknown;
+  readonly operationId: unknown;
+  readonly scope: unknown;
+}): asserts input is {
   readonly commandId: string;
-  readonly intent: ContainedTurnIntent;
+  readonly intent: Readonly<{ prompt: string; mode?: unknown }>;
   readonly operationId: string;
   readonly scope: ContainedTurnScope;
-}): void => {
+} {
   validateContainedTurnText("commandId", input.commandId, CONTAINED_TURN_LIMITS.text.commandId);
   validateContainedTurnText("operationId", input.operationId, CONTAINED_TURN_LIMITS.text.identifier);
+  assertContainedTurnDataRecord("contained-turn scope", input.scope);
   validateContainedTurnText("projectId", input.scope.projectId, CONTAINED_TURN_LIMITS.text.identifier);
   validateContainedTurnText("tenantId", input.scope.tenantId, CONTAINED_TURN_LIMITS.text.identifier);
+  assertContainedTurnDataRecord("contained-turn intent", input.intent);
   validateContainedTurnText("prompt", input.intent.prompt, CONTAINED_TURN_LIMITS.text.prompt);
-};
+}

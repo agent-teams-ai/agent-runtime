@@ -1,7 +1,7 @@
 import { validateContainedTurnIdentity } from "../domain/contained-turn-identities.js";
-import { containedTurnProviderAccessSnapshotDigest, containedTurnScopeDigest, type ContainedTurnScope } from "../domain/contained-turn-authority.js";
+import type { ContainedTurnScope } from "../domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
-import { completeContainedTurnDispatchGrantSubject, type ContainedTurnDispatchGrantSubject } from "../domain/contained-turn-dispatch-authority.js";
+import { containedTurnOperationDispatchSubject, type ContainedTurnDispatchGrantSubject } from "../domain/contained-turn-dispatch-authority.js";
 import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
 import { detachAndFreezeContainedTurnValue } from "../domain/contained-turn-record.js";
 import { validateContainedTurnOperation } from "../domain/contained-turn-validation.js";
@@ -25,32 +25,7 @@ export const prepareContainedTurnAcceptedSubject = (
   trustedScope: ContainedTurnScope,
   subject: Pick<ContainedTurnDispatchGrantSubject, "attemptId" | "custodyId" | "executionGenerationId" | "hostBootId" | "hostInstanceId" | "preparationToken">,
 ): ContainedTurnDispatchGrantSubject => {
-  const providerAccess = operation.providerAccessSnapshot;
-  const providerBindingDigest = containedTurnProviderAccessSnapshotDigest(providerAccess);
-  return completeContainedTurnDispatchGrantSubject(Object.freeze({
-    attemptId: subject.attemptId, custodyId: subject.custodyId, effectId: operation.effectId,
-    executionGenerationId: subject.executionGenerationId, hostBootId: subject.hostBootId,
-    hostInstanceId: subject.hostInstanceId, operationCutoffRevision: operation.operationCutoff.revision,
-    operationId: operation.operationId, preparationToken: subject.preparationToken, provider: operation.adapterSnapshot.provider,
-    providerAccessExpectation: Object.freeze({
-      acceptedAuthorityDigest: operation.acceptedAuthorityVectorDigest, accessRef: providerAccess.accessRef,
-      authorityHeadDigest: providerAccess.ownerAuthorityDigest, bindingDigest: providerBindingDigest,
-      bindingRevision: providerAccess.revision, credentialBindingDigest: providerAccess.credentialBindingDigest,
-      credentialBindingRef: providerAccess.credentialBindingRef, credentialGeneration: providerAccess.credentialGeneration,
-      providerAccountRef: providerAccess.providerAccountRef, providerRouteRef: providerAccess.providerRouteRef,
-    }),
-    purpose: "contained_turn_provider_start_v1",
-    runtimeSecurityExpectation: Object.freeze({
-      acceptedAuthorityDigest: operation.acceptedAuthorityVector.securityDecisionDigest,
-      authorityGeneration: operation.acceptedAuthorityVector.operationAuthorityRevision,
-      authorityHeadDigest: operation.acceptedAuthorityVector.securityDecisionDigest,
-      authorityRevision: operation.acceptedAuthorityVector.securityAuthorityRevision,
-      constraintsDigest: containedTurnAcceptanceConstraintsDigestV1(operation),
-      containmentPolicyDigest: operation.acceptedAuthorityVector.containmentPolicyDigest,
-      providerBindingDigest, providerId: operation.adapterSnapshot.provider,
-    }),
-    scope: trustedScope, scopeDigest: containedTurnScopeDigest(trustedScope), workspaceId: operation.workspaceId,
-  }));
+  return containedTurnOperationDispatchSubject(operation, trustedScope, subject, operation.operationCutoff.revision);
 };
 
 /** Private acknowledged-owner path only. This projection is not standalone database commit proof. */
