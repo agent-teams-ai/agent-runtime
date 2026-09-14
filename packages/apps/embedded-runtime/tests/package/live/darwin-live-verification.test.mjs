@@ -5,8 +5,8 @@ import {createHash} from "node:crypto";
 import {mkdtemp, mkdir, open, readFile, readdir, realpath, rename, rm, symlink, writeFile} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {readStableVerificationFile} from "../package/live/darwin-live-filesystem-verification.mjs";
-import {verifySuccessfulPublicResult} from "./full-public-runtime.mjs";
+import {readStableVerificationFile} from "./darwin-live-filesystem-verification.mjs";
+import {verifySuccessfulPublicResult} from "../../live/full-public-runtime.mjs";
 import {createDarwinLiveVerification as createProjection} from "./darwin-live-verification.mjs";
 
 // Test-only filesystem capability. Production uses the acquired native openat
