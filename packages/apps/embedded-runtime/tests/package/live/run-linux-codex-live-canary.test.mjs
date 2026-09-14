@@ -13,10 +13,7 @@ import {SOURCE, bytes, config, publicFixture} from './linux-codex-driver-test-fi
 // Synthetic lifecycle admission; semantic validation belongs to the real factory.
 // Each test may inject a factory refusal without reproducing domain validation.
 beforeEach(t => {
-  if (process.env.AR69_REAL_SCOPE_VALIDATOR_CHILD === '1') {
-    return;
-  }
-  const hooks = registerHooks({resolve(specifier, context, next) {
+  if (process.env.AR69_REAL_SCOPE_VALIDATOR_CHILD === '1') {return;} const hooks = registerHooks({resolve(specifier, context, next) {
     if (specifier === './linux-codex-live-canary-config.ts') {
       return {url: 'ar69-admission:config', shortCircuit: true};
     }
