@@ -1,8 +1,8 @@
 import { DockerConsumptionObservations, DockerHostCustodyLifecycle, DockerCustodyJournal, decodeInspection, dockerCustodyOwnerIdentitySha256, HostHttpEgressV4Journal, v4Hash, DOCKER_CUSTODY_INIT_PROTOCOL, DockerCustodyFrameDecoder, encodeDockerCustodyFrame, type DockerCustodyProtocolMessage, type DockerEngineIdentity, type DockerEnginePort, type createDockerLinuxPostClaimPreparation } from "@agent-teams/agent-execution/composition";
 import assert from "node:assert/strict";
 import type {TestContext} from "node:test";
-import {networkFixture} from "../../../fixtures/docker-operation-network-fixture.ts";
-import {MemoryV4Storage} from "../../../fixtures/host-http-egress-v4-fixture.ts";
+import {networkFixture} from "../../../../../../package/support/external/agent-execution/fixtures/docker-operation-network-fixture.ts";
+import {MemoryV4Storage} from "../../../../../../package/support/external/agent-execution/fixtures/host-http-egress-v4-fixture.ts";
 import {MemoryStorage, engineCall, createInput} from "./docker-host-custody-lifecycle-fixture.ts";
 import {committedDispatchProofFixture} from "./committed-dispatch-proof-fixture.ts";
 import {initOptions} from "./docker-claim-init-fixture.ts";
@@ -134,7 +134,7 @@ export const postClaimFixture = async (t: TestContext, gateway?: string, selecte
 }>) => {
   const root = selected?.root ?? ROOT;
   const create = createInput(root);
-  const {policy, DAEMON_BOOT} = await import("../../../fixtures/docker-engine-test-fixture.ts");
+  const {policy, DAEMON_BOOT} = await import("../../../../../../package/support/external/agent-execution/fixtures/docker-engine-test-fixture.ts");
   const {BOOT, FixtureResidueIo, statText, privilegeText} = await import("./linux-docker-residue-fixture.ts");
   const {createHash} = await import("node:crypto");
   const networkSelection = selected === undefined ? {} : {policy: {...policy(root), cgroupParent: "agent-runtime.slice"}, create: {...create, ownerIdentitySha256: "f".repeat(64)},

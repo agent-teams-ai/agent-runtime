@@ -7,8 +7,8 @@ import {decodeBytes} from "./run-linux-codex-live-canary.mjs";
 import {createContainedTurnSecurityAcceptancePort, NodeTlsHttpEgressTransport,NodeUnixSocketDockerEngine,DockerEngineError,containedTurnScopeDigest} from "@agent-teams/agent-execution/composition";
 import {captureLinuxCodexDeploymentData} from "../../../dist/composition/linux-codex-deployment-authority.js";
 import {bindContainedTurnCapabilityAuthority} from "../../../dist/composition/contained-turn-authority-capability.js";
-import {policy} from "../../support/external/agent-execution/fixtures/docker-engine-test-fixture.ts";
-import {SYNTHETIC_LOOPBACK_CA} from "../../support/external/agent-execution/fixtures/http-egress-tls/synthetic-loopback-certificates.ts";
+import {policy} from "../support/external/agent-execution/fixtures/docker-engine-test-fixture.ts";
+import {SYNTHETIC_LOOPBACK_CA} from "../support/external/agent-execution/fixtures/http-egress-tls/synthetic-loopback-certificates.ts";
 import {allocateLinuxCodexLiveAdminDirectories} from "./linux-codex-live-admin-directories.ts";
 import {createLinuxCodexLiveCanaryConfiguration} from "./linux-codex-live-canary-config.ts";
 

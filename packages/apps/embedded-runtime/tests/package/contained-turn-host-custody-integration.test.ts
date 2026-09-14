@@ -1,6 +1,6 @@
 import { type ContainedTurnKernelWorkspaceOwner, type HostHttpGrant, type HostHttpProvisionalDecision, type HttpEgressBrokerPorts, createContainedTurnRouteEnforcement, createStrictHttpEgressBroker } from "@agent-teams/agent-execution/composition";
 import {withWorkspaceAuthority} from "../support/external/agent-execution/features/contained-agent-turn/support/docker-workspace-authority-fixture.ts";
-import { imageLock } from "../support/external/agent-execution/fixtures/docker-image-init-fixture.ts";
+import { imageLock } from "./support/external/agent-execution/fixtures/docker-image-init-fixture.ts";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";

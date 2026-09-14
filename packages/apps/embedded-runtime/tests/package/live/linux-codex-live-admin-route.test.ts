@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {test} from "node:test";
 import {createLinuxCodexLiveAdminRoute} from "./linux-codex-live-admin-route.ts";
-import {policy} from "../../support/external/agent-execution/fixtures/docker-engine-test-fixture.ts";
+import {policy} from "../support/external/agent-execution/fixtures/docker-engine-test-fixture.ts";
 import {readContainedTurnRouteEnforcementTarget} from
   "@agent-teams/agent-execution/composition";
 import {snapshotRouteSelectionFacts} from

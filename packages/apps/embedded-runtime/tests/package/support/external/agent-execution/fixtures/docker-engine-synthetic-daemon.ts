@@ -2,7 +2,7 @@ import { DockerEngineError } from "@agent-teams/agent-execution/composition";
 import { PassThrough } from "node:stream";
 import type { DockerEngineCall } from "@agent-teams/agent-execution/composition";
 import { CONTAINER, DAEMON_BOOT, HOST_BOOT, IMAGE, NONCE, SECCOMP_JSON } from "./docker-engine-test-fixture.ts";
-import { jsonResponse, multiplex } from "../features/contained-agent-turn/docker-engine-transport-test-fixture.ts";
+import { jsonResponse, multiplex } from "../../../../../support/external/agent-execution/features/contained-agent-turn/docker-engine-transport-test-fixture.ts";
 interface MutationPlan {
   readonly body?: unknown;
   readonly effect: boolean;
