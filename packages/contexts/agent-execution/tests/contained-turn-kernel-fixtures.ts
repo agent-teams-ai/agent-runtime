@@ -191,14 +191,14 @@ export const createReservedOperation = (
   acceptedOperation = createOperation(),
 ): ContainedTurnKernelOperation => {
   const operation = mutateContainedTurnOperation(acceptedOperation, { kind: "bind_workspace", workspaceId });
-  const commonBinding = { authorityVectorDigest: operation.acceptedAuthorityVectorDigest, operationId: operation.operationId };
-  const attemptBinding = { ...commonBinding, attemptId, effectId };
-  const providerAccessSnapshot = operation.providerAccessSnapshot;
-  const authorityVector = operation.acceptedAuthorityVector;
+  const reservedCommonBinding = { authorityVectorDigest: operation.acceptedAuthorityVectorDigest, operationId: operation.operationId };
+  const reservedAttemptBinding = { ...reservedCommonBinding, attemptId, effectId };
+  const reservedProviderAccessSnapshot = operation.providerAccessSnapshot;
+  const reservedAuthorityVector = operation.acceptedAuthorityVector;
   const providerAccessDispatchProof = {
     binding: {
-      ...commonBinding,
-      acceptedSnapshotDigest: containedTurnProviderAccessSnapshotDigest(providerAccessSnapshot),
+      ...reservedCommonBinding,
+      acceptedSnapshotDigest: containedTurnProviderAccessSnapshotDigest(reservedProviderAccessSnapshot),
       resolutionDigest: digestContainedTurnCanonicalValue({ providerAccess: "current" }),
     },
     kind: "provider_access_dispatch" as const,
@@ -206,17 +206,17 @@ export const createReservedOperation = (
   };
   const runtimeSecurityDispatchProof = {
     binding: {
-      ...commonBinding,
-      acceptedSecurityDecisionDigest: authorityVector.securityDecisionDigest,
-      currentSecurityDecisionDigest: authorityVector.securityDecisionDigest,
-      securityAuthorityRevision: authorityVector.securityAuthorityRevision,
+      ...reservedCommonBinding,
+      acceptedSecurityDecisionDigest: reservedAuthorityVector.securityDecisionDigest,
+      currentSecurityDecisionDigest: reservedAuthorityVector.securityDecisionDigest,
+      securityAuthorityRevision: reservedAuthorityVector.securityAuthorityRevision,
     },
     kind: "runtime_security_dispatch" as const,
     proofId: proofId("proof:runtime-security-dispatch"),
   };
   const claimProof: ContainedTurnProof = {
     binding: {
-      ...attemptBinding,
+      ...reservedAttemptBinding,
       preparationToken,
       providerAccessDispatchProofId: providerAccessDispatchProof.proofId,
       runtimeSecurityDispatchProofId: runtimeSecurityDispatchProof.proofId,
@@ -225,12 +225,12 @@ export const createReservedOperation = (
     proofId: proofId("proof:claim"),
   };
   const cutoffProof: ContainedTurnProof = {
-    binding: commonBinding,
+    binding: reservedCommonBinding,
     kind: "cutoff",
     proofId: proofId("proof:cutoff"),
   };
   const hostCustodyProof = {
-    binding: { ...attemptBinding, custodyId },
+    binding: { ...reservedAttemptBinding, custodyId },
     kind: "host_custody" as const,
     proofId: proofId("proof:host-custody"),
   };
