@@ -21,9 +21,9 @@ nonWaivableRulePrefixes:
   - access-control.
   - security.
 waivers:
-  - id: AR-SUP-5D7C9E03BCA3
-    path: packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof/contained-turn-cancellation-proof.ts
-    line: 96
+  - id: AR-SUP-0F7730EC6BD7
+    path: packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof/composition/contained-turn-cancellation-proof.ts
+    line: 90
     directive: oxlint-disable-next-line
     rules: [complexity]
     owner: architecture/tooling
@@ -31,8 +31,8 @@ waivers:
     createdOn: 2026-09-14
     expiresOn: 2026-10-14
     decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
-  - id: AR-SUP-EB337A90A239
-    path: packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/contained-turn-runtime-validation.ts
+  - id: AR-SUP-87DE12F16518
+    path: packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/composition/contained-turn-runtime-validation.ts
     line: 35
     directive: oxlint-disable-next-line
     rules: [no-control-regex]
@@ -41,8 +41,8 @@ waivers:
     createdOn: 2026-09-14
     expiresOn: 2026-10-14
     decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
-  - id: AR-SUP-243D38AD0C1A
-    path: packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/contained-turn-runtime-validation.ts
+  - id: AR-SUP-2341F03F2E57
+    path: packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/composition/contained-turn-runtime-validation.ts
     line: 48
     directive: oxlint-disable-next-line
     rules: [no-control-regex]
@@ -51,8 +51,8 @@ waivers:
     createdOn: 2026-09-14
     expiresOn: 2026-10-14
     decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
-  - id: AR-SUP-3F914FBB97A5
-    path: packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/contained-turn-runtime-validation.ts
+  - id: AR-SUP-D90573B20902
+    path: packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/composition/contained-turn-runtime-validation.ts
     line: 173
     directive: oxlint-disable-next-line
     rules: [complexity]
@@ -61,8 +61,8 @@ waivers:
     createdOn: 2026-09-14
     expiresOn: 2026-10-14
     decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
-  - id: AR-SUP-F05E87B32768
-    path: packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts
+  - id: AR-SUP-81C1F26FA35A
+    path: packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/adapters/darwin-contained-turn-deployment.ts
     line: 135
     directive: oxlint-disable-next-line
     rules: [eslint/preserve-caught-error]
