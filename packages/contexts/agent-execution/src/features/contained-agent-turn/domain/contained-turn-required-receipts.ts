@@ -62,26 +62,32 @@ export const createContainedTurnRequiredReceiptSnapshot = (): ContainedTurnRequi
   return Object.freeze({ digest: containedTurnRequiredReceiptSetDigest(set), set });
 };
 
-export const validateContainedTurnRequiredReceiptSnapshot = (
-  snapshot: ContainedTurnRequiredReceiptSnapshot,
-): void => {
-  assertContainedTurnExactRecord("required receipt snapshot", snapshot, ["digest", "set"]);
-  assertContainedTurnExactRecord("required receipt set", snapshot.set, [
+function validateRequiredReceiptSet(set: unknown): asserts set is ContainedTurnRequiredReceiptSet {
+  assertContainedTurnExactRecord("required receipt set", set, [
     "membershipFrozenAt", "membershipMutation", "receipts", "satisfaction", "setVersion",
   ]);
-  assertContainedTurnCanonicalArray(snapshot.set.receipts);
-  const exactMembership = snapshot.set.receipts.length === CONTAINED_TURN_V1_REQUIRED_RECEIPTS.length &&
-    snapshot.set.receipts.every((receipt, index) => receipt === CONTAINED_TURN_V1_REQUIRED_RECEIPTS[index]);
+  assertContainedTurnCanonicalArray(set.receipts);
+  const exactMembership = set.receipts.length === CONTAINED_TURN_V1_REQUIRED_RECEIPTS.length &&
+    set.receipts.every((receipt, index) => receipt === CONTAINED_TURN_V1_REQUIRED_RECEIPTS[index]);
   if (
-    snapshot.set.setVersion !== CONTAINED_TURN_V1_REQUIRED_RECEIPT_SET_VERSION ||
-    snapshot.set.membershipFrozenAt !== "command_acceptance" ||
-    snapshot.set.membershipMutation !== "forbidden" ||
-    snapshot.set.satisfaction !== "typed_receipt_or_authority_defined_typed_non_applicability_proof" ||
-    !exactMembership || snapshot.digest !== containedTurnRequiredReceiptSetDigest(snapshot.set)
+    set.setVersion !== CONTAINED_TURN_V1_REQUIRED_RECEIPT_SET_VERSION ||
+    set.membershipFrozenAt !== "command_acceptance" ||
+    set.membershipMutation !== "forbidden" ||
+    set.satisfaction !== "typed_receipt_or_authority_defined_typed_non_applicability_proof" || !exactMembership
   ) {
     throw new TypeError("unknown, corrupt, substituted, or mixed-version required receipt snapshot fails closed");
   }
-};
+}
+
+export function validateContainedTurnRequiredReceiptSnapshot(
+  snapshot: unknown,
+): asserts snapshot is ContainedTurnRequiredReceiptSnapshot {
+  assertContainedTurnExactRecord("required receipt snapshot", snapshot, ["digest", "set"]);
+  validateRequiredReceiptSet(snapshot.set);
+  if (snapshot.digest !== containedTurnRequiredReceiptSetDigest(snapshot.set)) {
+    throw new TypeError("unknown, corrupt, substituted, or mixed-version required receipt snapshot fails closed");
+  }
+}
 
 const receiptForProof = (proof: ContainedTurnProof): ContainedTurnRequiredReceipt | undefined => {
   switch (proof.kind) {

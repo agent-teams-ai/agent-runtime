@@ -3,20 +3,20 @@ import {
   containedTurnCancellationFingerprint,
   containedTurnCommandFingerprint,
   containedTurnScopeDigest,
+  type ContainedTurnAuthorityShape,
   validateContainedTurnAuthorityText,
   validateContainedTurnAuthorityShape,
   validateContainedTurnManifest,
 } from "./contained-turn-authority.js";
-import { containedTurnNoWorkspaceClosureFact } from "./contained-turn-closure-recovery.js";
-import { parseContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
+import { validateContainedTurnOperationDispatchReceipts } from "./contained-turn-dispatch-authority.js";
+import { digestContainedTurnCanonicalInput, parseContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
 import {
   validateContainedTurnIdentity,
-  type ContainedTurnEvidenceId,
 } from "./contained-turn-identities.js";
 import { validateContainedTurnHistory } from "./contained-turn-history.js";
 import { containedTurnInvariant as invariant } from "./contained-turn-invariant.js";
 import type { ContainedTurnKernelOperation } from "./contained-turn-kernel-model.js";
-import { validateContainedTurnOperationShape } from "./contained-turn-operation-shape.js";
+import { type ContainedTurnOperationCollections, type ContainedTurnOperationShape, validateContainedTurnOperationCollections, validateContainedTurnOperationProofRecords, validateContainedTurnOperationShape } from "./contained-turn-operation-shape.js";
 import {
   CONTAINED_TURN_LIMITS,
   isContainedTurnSchemaVersion,
@@ -26,18 +26,34 @@ import {
   containedTurnRequiredProofsSatisfied,
   requireContainedTurnProof,
   validateContainedTurnAxisProofs,
-  validateContainedTurnProofBinding,
+  validateContainedTurnProofs,
+  type ContainedTurnProofRecord,
 } from "./contained-turn-proof-validation.js";
 import { containedTurnSatisfactionDigest } from "./contained-turn-satisfaction.js";
-import { assertContainedTurnCanonicalArray, assertContainedTurnExactRecord } from "./contained-turn-record.js";
+import { assertContainedTurnDataRecord, assertContainedTurnExactRecord } from "./contained-turn-record.js";
 import { containedTurnOperationCutoffRevision } from "./contained-turn-output-authority.js";
 import { validateContainedTurnRequiredReceiptSnapshot } from "./contained-turn-required-receipts.js";
-import { validateContainedTurnOutput } from "./contained-turn-state-validation.js";
+import { containedTurnNoWorkspaceFactClosesReceipts as noWorkspaceFactClosesReceipts, validateContainedTurnOutput } from "./contained-turn-state-validation.js";
+
+type AuthorityKeys = "acceptedAuthorityVector" | "acceptedAuthorityVectorDigest" | "adapterSnapshot" |
+  "artifactManifestRef" | "capabilityManifest" | "commandFingerprint" | "intent" | "providerAccessSnapshot" |
+  "requiredReceiptSet" | "requiredReceiptSetDigest" | "resultRef" | "scope";
+type CancellationRecord = { readonly kind: "open" } | {
+  readonly kind: "requested"; readonly proofId: unknown;
+  readonly command: Readonly<{ cancellationCommandId?: unknown; fingerprint?: unknown; operationId?: unknown; scopeDigest?: unknown }>;
+};
+type AuthorityValidatedOperation = Omit<ContainedTurnOperationCollections, AuthorityKeys | "cancellation"> &
+  Pick<ContainedTurnKernelOperation, AuthorityKeys> & { readonly cancellation: CancellationRecord };
+type ProofRecordsOperation = AuthorityValidatedOperation & { readonly proofs: readonly ContainedTurnProofRecord[] };
+type IdentityKeys = "commandId" | "operationId" | "effectId" | "workspaceId" | "custodyId" | "hostBootId" | "hostInstanceId";
+export type ContainedTurnIdentityValidatedOperation = Omit<ProofRecordsOperation, IdentityKeys> & Pick<ContainedTurnKernelOperation, IdentityKeys>;
+export type ContainedTurnProofValidatedOperation = Omit<ContainedTurnIdentityValidatedOperation, "proofs"> & Pick<ContainedTurnKernelOperation, "proofs">;
+export type ContainedTurnOutputValidatedOperation = Omit<ContainedTurnProofValidatedOperation, "output"> & Pick<ContainedTurnKernelOperation, "output">;
 
 // The count exhaustively validates every disjoint identity axis and evidence source.
 // oxlint-disable-next-line complexity
-const validateIdentities = (operation: ContainedTurnKernelOperation): void => {
-  const primary: string[] = [operation.commandId, operation.operationId, operation.effectId];
+function validateIdentities(operation: ProofRecordsOperation): asserts operation is ContainedTurnIdentityValidatedOperation {
+  const primary: unknown[] = [operation.commandId, operation.operationId, operation.effectId];
   if (operation.workspaceId !== undefined) {primary.push(operation.workspaceId);}
   if (operation.custodyId !== undefined) {primary.push(operation.custodyId);}
   if (operation.hostBootId !== undefined) {primary.push(operation.hostBootId);}
@@ -70,7 +86,7 @@ const validateIdentities = (operation: ContainedTurnKernelOperation): void => {
     validateContainedTurnIdentity("cancellation_command", operation.cancellation.command.cancellationCommandId);
   }
   for (const proof of operation.proofs) {validateContainedTurnIdentity("proof", proof.proofId);}
-  const evidenceIds = new Set<ContainedTurnEvidenceId>();
+  const evidenceIds = new Set<unknown>();
   if (operation.providerProcessStart.kind === "unknown") {evidenceIds.add(operation.providerProcessStart.evidenceId);}
   if (operation.providerAcceptance.kind === "unknown") {evidenceIds.add(operation.providerAcceptance.evidenceId);}
   if (operation.providerExecution.kind === "unknown") {evidenceIds.add(operation.providerExecution.evidenceId);}
@@ -92,9 +108,9 @@ const validateIdentities = (operation: ContainedTurnKernelOperation): void => {
     invariant(!primary.includes(evidenceId), "evidence and authority identity namespaces must be textually disjoint");
     validateContainedTurnIdentity("evidence", evidenceId);
   }
-};
+}
 
-const validateCanonicalDigests = (operation: ContainedTurnKernelOperation): void => {
+const validateCanonicalDigests = (operation: ContainedTurnOperationCollections & ContainedTurnAuthorityShape): void => {
   parseContainedTurnCanonicalDigest(operation.acceptedAuthorityVectorDigest);
   parseContainedTurnCanonicalDigest(operation.commandFingerprint);
   parseContainedTurnCanonicalDigest(operation.requiredReceiptSetDigest);
@@ -108,16 +124,20 @@ const validateCanonicalDigests = (operation: ContainedTurnKernelOperation): void
   parseContainedTurnCanonicalDigest(operation.acceptedAuthorityVector.scopeDigest);
   parseContainedTurnCanonicalDigest(operation.acceptedAuthorityVector.securityDecisionDigest);
   if (operation.cancellation.kind === "requested") {
+    assertContainedTurnDataRecord("cancellation command", operation.cancellation.command);
     parseContainedTurnCanonicalDigest(operation.cancellation.command.fingerprint);
     parseContainedTurnCanonicalDigest(operation.cancellation.command.scopeDigest);
   }
 };
 
-const validateAuthorityRevisionNamespace = (name: string, value: string, acceptedPrefixes: readonly string[]): void =>
-  invariant(acceptedPrefixes.some((prefix) => value.startsWith(prefix)), `${name} must use its authority revision namespace`);
+const validateAuthorityRevisionNamespace = (name: string, value: unknown, acceptedPrefixes: readonly string[]): void => {
+  invariant(typeof value === "string" && acceptedPrefixes.some((prefix) => value.startsWith(prefix)),
+    `${name} must use its authority revision namespace`);
+};
 
-const validateAuthorityReferences = (operation: ContainedTurnKernelOperation): void => {
-  const references: Array<readonly [string, string]> = [
+const validateAuthorityReferences = (operation: ContainedTurnOperationCollections & ContainedTurnAuthorityShape): void => {
+  assertContainedTurnDataRecord("capability manifest", operation.capabilityManifest);
+  const references: Array<readonly [string, unknown]> = [
     ["accessRef", operation.providerAccessSnapshot.accessRef],
     ["adapterRevision", operation.adapterSnapshot.adapterRevision],
     ["binaryRevision", operation.adapterSnapshot.binaryRevision],
@@ -153,34 +173,21 @@ const validateAuthorityReferences = (operation: ContainedTurnKernelOperation): v
     "operation and security authority revisions must remain distinct",
   );
   invariant(
-    Number.isSafeInteger(operation.providerAccessSnapshot.credentialGeneration) &&
+    typeof operation.providerAccessSnapshot.credentialGeneration === "number" &&
+      Number.isSafeInteger(operation.providerAccessSnapshot.credentialGeneration) &&
       operation.providerAccessSnapshot.credentialGeneration >= 1 &&
+      typeof operation.providerAccessSnapshot.revision === "number" &&
       Number.isSafeInteger(operation.providerAccessSnapshot.revision) && operation.providerAccessSnapshot.revision >= 1,
     "Provider Access generation and revision must be positive safe integers",
   );
 };
 
-const hasAmbiguity = (operation: ContainedTurnKernelOperation): boolean =>
+const hasAmbiguity = (operation: ContainedTurnOperationShape): boolean =>
   operation.providerProcessStart.kind === "unknown" || operation.providerAcceptance.kind === "unknown" ||
   operation.providerExecution.kind === "unknown" || operation.containment.kind === "uncertain" ||
   operation.effect.kind === "ambiguous";
 
-const noWorkspaceFactClosesReceipts = (operation: ContainedTurnKernelOperation): boolean => {
-  if (operation.closureRecovery.kind !== "proved_no_workspace") {return false;}
-  const expected = containedTurnNoWorkspaceClosureFact(operation);
-  const fact = operation.closureRecovery.fact;
-  if (expected === undefined || JSON.stringify(fact) !== JSON.stringify(expected) ||
-      operation.artifactManifestRef !== undefined || operation.resultRef !== undefined) {
-    return false;
-  }
-  const kinds = new Set(operation.proofs.map(proof => proof.kind));
-  return [
-    "acceptance", "no_dispatch", "no_start", "provider_not_started", "output_no_start_drain",
-    "host_custody_no_start", "effect_no_start", "containment_not_required", "cutoff",
-  ].every(kind => kinds.has(kind as never));
-};
-
-const validateTerminal = (operation: ContainedTurnKernelOperation): void => {
+const validateTerminal = (operation: ContainedTurnOutputValidatedOperation): void => {
   if (operation.terminal.kind === "open") {return;}
   invariant(operation.reconciliation.kind === "clear", "reconciliation debt blocks terminal truth");
   invariant(operation.closureRecovery.kind !== "required", "closure recovery debt blocks terminal truth");
@@ -227,7 +234,7 @@ const validateTerminal = (operation: ContainedTurnKernelOperation): void => {
   requireContainedTurnProof(operation, operation.terminal.terminalProofId, "terminal_truth");
 };
 
-const validateAuthorityBindings = (candidate: ContainedTurnKernelOperation): void => {
+const validateAuthorityBindings = (candidate: ContainedTurnOperationCollections & ContainedTurnAuthorityShape, manifest: ContainedTurnKernelOperation["capabilityManifest"]): void => {
   invariant(candidate.adapterSnapshot.provider === candidate.providerAccessSnapshot.provider, "adapter and Provider Access snapshots must name the same provider");
   invariant(
     candidate.acceptedAuthorityVector.adapterSnapshot.adapterRevision === candidate.adapterSnapshot.adapterRevision &&
@@ -256,14 +263,14 @@ const validateAuthorityBindings = (candidate: ContainedTurnKernelOperation): voi
       candidate.providerAccessSnapshot.tenantId === candidate.scope.tenantId,
     "Provider Access snapshot scope binding mismatch",
   );
-  invariant(candidate.acceptedAuthorityVector.capabilityManifestRevision === candidate.capabilityManifest.manifestRevision, "authority vector manifest binding mismatch");
+  invariant(candidate.acceptedAuthorityVector.capabilityManifestRevision === manifest.manifestRevision, "authority vector manifest binding mismatch");
   invariant(candidate.acceptedAuthorityVectorDigest === containedTurnAuthorityVectorDigest(candidate.acceptedAuthorityVector), "accepted authority-vector digest does not recompute");
   invariant(candidate.commandFingerprint === containedTurnCommandFingerprint({ intent: candidate.intent, provider: candidate.adapterSnapshot.provider, scope: candidate.scope }), "command fingerprint does not recompute");
 };
 
 // The count is the frozen orthogonal execution-axis invariant matrix, not lifecycle branching.
 // oxlint-disable-next-line complexity
-const validateExecutionAxes = (candidate: ContainedTurnKernelOperation): void => {
+const validateExecutionAxes = (candidate: ContainedTurnOutputValidatedOperation): void => {
   if (candidate.effect.kind === "resolved") {
     invariant(
       candidate.effect.disposition === "committed" || candidate.effect.disposition === "not_committed",
@@ -279,6 +286,11 @@ const validateExecutionAxes = (candidate: ContainedTurnKernelOperation): void =>
   }
   if (candidate.output.chunks.length > 0) {
     invariant(candidate.dispatch.kind === "claimed" && candidate.providerProcessStart.kind === "execution_started" && candidate.providerExecution.kind !== "not_started", "canonical output requires Host Custody-confirmed started execution authority");
+  }
+  if (candidate.containment.kind === "pending") {
+    validateContainedTurnIdentity("attempt", candidate.containment.attemptId);
+    invariant(candidate.dispatch.kind === "claimed" && candidate.containment.attemptId === candidate.dispatch.attemptId,
+      "pending containment must bind the sole claimed attempt");
   }
   if (candidate.dispatch.kind === "claimed") {
     requireContainedTurnProof(candidate, candidate.dispatch.claimProofId, "dispatch_claim");
@@ -319,7 +331,7 @@ const validateExecutionAxes = (candidate: ContainedTurnKernelOperation): void =>
   }
 };
 
-const validateCancellation = (candidate: ContainedTurnKernelOperation): void => {
+const validateCancellation = (candidate: ContainedTurnOutputValidatedOperation): void => {
   if (candidate.cancellation.kind !== "requested") {return;}
   const cancellation = candidate.cancellation;
   assertContainedTurnExactRecord("cancellation command", cancellation.command, [
@@ -332,7 +344,11 @@ const validateCancellation = (candidate: ContainedTurnKernelOperation): void => 
     "cancellation command subject binding mismatch",
   );
   invariant(
-    cancellation.command.fingerprint === containedTurnCancellationFingerprint(cancellation.command),
+    cancellation.command.fingerprint === containedTurnCancellationFingerprint({
+      cancellationCommandId: cancellation.command.cancellationCommandId,
+      operationId: cancellation.command.operationId,
+      scopeDigest: cancellation.command.scopeDigest,
+    }),
     "cancellation fingerprint does not recompute",
   );
   requireContainedTurnProof(candidate, cancellation.proofId, "cancellation");
@@ -353,8 +369,8 @@ const validateCancellation = (candidate: ContainedTurnKernelOperation): void => 
   }
 };
 
-const validateCutoffAndPhysicalContainment = (candidate: ContainedTurnKernelOperation): void => {
-  containedTurnOperationCutoffRevision(candidate.operationCutoff.revision);
+const validateCutoffAndPhysicalContainment = (candidate: ContainedTurnOutputValidatedOperation): void => {
+  const cutoffRevision = containedTurnOperationCutoffRevision(candidate.operationCutoff.revision);
   if (candidate.operationCutoff.kind === "closed") {
     invariant(candidate.output.fence.kind === "fenced", "closed operation cutoff must close canonical output authority");
     if (candidate.operationCutoff.reason === "continuity_lost") {
@@ -368,11 +384,11 @@ const validateCutoffAndPhysicalContainment = (candidate: ContainedTurnKernelOper
     }
   }
   if (candidate.dispatch.kind === "claimed") {
-    containedTurnOperationCutoffRevision(candidate.dispatch.operationCutoffRevision);
+    const dispatchRevision = containedTurnOperationCutoffRevision(candidate.dispatch.operationCutoffRevision);
     invariant(
-      candidate.operationCutoff.revision >= candidate.dispatch.operationCutoffRevision &&
+      cutoffRevision >= dispatchRevision &&
         (candidate.operationCutoff.kind === "closed" ||
-          candidate.operationCutoff.revision === candidate.dispatch.operationCutoffRevision),
+          cutoffRevision === dispatchRevision),
       "dispatch must bind the current monotonic cutoff revision",
     );
   }
@@ -409,26 +425,30 @@ const validateCutoffAndPhysicalContainment = (candidate: ContainedTurnKernelOper
   }
 };
 
+function validateOperationAuthority(candidate: ContainedTurnOperationCollections): asserts candidate is AuthorityValidatedOperation {
+  validateContainedTurnAuthorityText(candidate);
+  validateContainedTurnAuthorityShape(candidate);
+  validateAuthorityReferences(candidate);
+  validateCanonicalDigests(candidate);
+  validateContainedTurnRequiredReceiptSnapshot({
+    digest: candidate.requiredReceiptSetDigest,
+    set: candidate.requiredReceiptSet,
+  });
+  validateContainedTurnManifest(candidate.capabilityManifest, candidate.adapterSnapshot);
+  invariant(candidate.capabilityManifest.supportedModes.some(mode => mode === candidate.intent.mode), "unknown or missing requested capability scope fails closed");
+  validateAuthorityBindings(candidate, candidate.capabilityManifest);
+}
+
 // Complexity here is the explicit conjunction of orthogonal, fail-closed invariant families.
 // oxlint-disable-next-line complexity
-export const validateContainedTurnOperation = (
-  candidate: ContainedTurnKernelOperation,
-  options: Readonly<{ readonly previous?: ContainedTurnKernelOperation }> = {},
-): void => {
+function validateCurrentOperation(candidate: unknown): asserts candidate is ContainedTurnKernelOperation {
   validateContainedTurnOperationShape(candidate);
-  assertContainedTurnCanonicalArray(candidate.proofs);
-  assertContainedTurnCanonicalArray(candidate.output.chunks);
-  if (candidate.reconciliation.kind === "required") {
-    assertContainedTurnCanonicalArray(candidate.reconciliation.evidenceIds);
-  }
-  if (candidate.closureRecovery.kind === "required") {
-    assertContainedTurnCanonicalArray(candidate.closureRecovery.evidenceIds);
-  }
+  validateContainedTurnOperationCollections(candidate);
   if (candidate.closureRecovery.kind === "proved_no_workspace") {
     invariant(noWorkspaceFactClosesReceipts(candidate), "no-workspace closure fact must be exact and authority-bound");
   }
   invariant(isContainedTurnSchemaVersion(candidate.schemaVersion), "unsupported contained-turn schema version");
-  invariant(Number.isSafeInteger(candidate.revision) && candidate.revision >= 0, "revision must be a non-negative safe integer");
+  invariant(typeof candidate.revision === "number" && Number.isSafeInteger(candidate.revision) && !Object.is(candidate.revision, -0) && candidate.revision >= 0, "revision must be a non-negative safe integer");
   if (candidate.revision === 0) {
     invariant(
       candidate.admissionFence.kind === "open" && candidate.cancellation.kind === "open" &&
@@ -444,32 +464,25 @@ export const validateContainedTurnOperation = (
       "revision zero is reserved for exact command-acceptance truth",
     );
   }
-  validateContainedTurnAuthorityText(candidate);
-  validateContainedTurnAuthorityShape(candidate);
-  validateAuthorityReferences(candidate);
-  validateCanonicalDigests(candidate);
-  validateContainedTurnRequiredReceiptSnapshot({
-    digest: candidate.requiredReceiptSetDigest,
-    set: candidate.requiredReceiptSet,
-  });
-  validateContainedTurnManifest(candidate.capabilityManifest, candidate.adapterSnapshot);
-  invariant(candidate.capabilityManifest.supportedModes.includes(candidate.intent.mode), "unknown or missing requested capability scope fails closed");
-  validateAuthorityBindings(candidate);
+  validateOperationAuthority(candidate);
   invariant(candidate.proofs.length <= CONTAINED_TURN_LIMITS.collections.proofs, "proof limit exceeded");
-  invariant(new Set(candidate.proofs.map(proof => proof.proofId)).size === candidate.proofs.length, "proof IDs must be unique");
-  const singletonProofKinds = candidate.proofs.filter(proof => proof.kind !== "cutoff").map(proof => proof.kind);
+  validateContainedTurnOperationProofRecords(candidate);
+  const proofs: readonly ContainedTurnProofRecord[] = candidate.proofs;
+  invariant(new Set(proofs.map(proof => proof.proofId)).size === proofs.length, "proof IDs must be unique");
+  const singletonProofKinds = proofs.filter(proof => proof.kind !== "cutoff").map(proof => proof.kind);
   invariant(
     new Set(singletonProofKinds).size === singletonProofKinds.length,
     "V1 proof kinds other than monotonic cutoff receipts may be satisfied exactly once",
   );
   validateIdentities(candidate);
-  candidate.proofs.forEach(proof => validateContainedTurnProofBinding(candidate, proof));
+  validateContainedTurnProofs(candidate);
   const firstProof = candidate.proofs[0];
   invariant(firstProof !== undefined, "command acceptance requires its own exact proof");
   if (firstProof !== undefined) {requireContainedTurnProof(candidate, firstProof.proofId, "acceptance");}
   validateContainedTurnAxisProofs(candidate);
   validateContainedTurnOutput(candidate);
   validateExecutionAxes(candidate);
+  validateContainedTurnOperationDispatchReceipts(candidate);
   validateCutoffAndPhysicalContainment(candidate);
   if (hasAmbiguity(candidate)) {
     invariant(candidate.reconciliation.kind === "required" && candidate.reconciliation.evidenceIds.length > 0, "ambiguity requires durable reconciliation debt");
@@ -477,14 +490,21 @@ export const validateContainedTurnOperation = (
   }
   validateCancellation(candidate);
   validateTerminal(candidate);
+}
+
+export function validateContainedTurnOperation(
+  candidate: unknown,
+  options: Readonly<{ readonly previous?: ContainedTurnKernelOperation }> = {},
+): asserts candidate is ContainedTurnKernelOperation {
+  validateCurrentOperation(candidate);
   if (options.previous !== undefined) {
     if (options.previous.closureRecovery.kind === "proved_no_workspace") {
       invariant(
         candidate.closureRecovery.kind === "proved_no_workspace" &&
-          JSON.stringify(candidate.closureRecovery.fact) === JSON.stringify(options.previous.closureRecovery.fact),
+          digestContainedTurnCanonicalInput(candidate.closureRecovery.fact) === digestContainedTurnCanonicalInput(options.previous.closureRecovery.fact),
         "proved no-workspace closure cannot reopen or change",
       );
     }
     validateContainedTurnHistory(candidate, options.previous, invariant);
   }
-};
+}

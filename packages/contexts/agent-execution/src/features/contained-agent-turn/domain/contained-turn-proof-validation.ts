@@ -1,28 +1,42 @@
+import type { ContainedTurnIdentityValidatedOperation, ContainedTurnProofValidatedOperation } from "./contained-turn-validation.js";
 import { containedTurnProviderAccessSnapshotDigest } from "./contained-turn-authority.js";
-import type { ContainedTurnAttemptId, ContainedTurnProofId } from "./contained-turn-identities.js";
+import { validateContainedTurnIdentity } from "./contained-turn-identities.js";
 import { containedTurnInvariant as invariant } from "./contained-turn-invariant.js";
 import type { ContainedTurnKernelOperation } from "./contained-turn-kernel-model.js";
-import { assertContainedTurnExactRecord } from "./contained-turn-record.js";
+import { assertContainedTurnDataRecord, assertContainedTurnExactRecord } from "./contained-turn-record.js";
 import { parseContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
 import {
+  CONTAINED_TURN_PROOF_KINDS,
   type ContainedTurnProof,
   type ContainedTurnProofKind,
 } from "./contained-turn-proofs.js";
-import { containedTurnRequiredReceiptsSatisfied } from "./contained-turn-required-receipts.js";
+import { CONTAINED_TURN_LIMITS, validateContainedTurnText } from "./contained-turn-limits.js";
+import { CONTAINED_TURN_V1_REQUIRED_RECEIPT_SET_VERSION, containedTurnRequiredReceiptsSatisfied } from "./contained-turn-required-receipts.js";
 
 const OPERATION_BINDING_KEYS = ["authorityVectorDigest", "operationId"] as const;
 const ATTEMPT_BINDING_KEYS = [...OPERATION_BINDING_KEYS, "attemptId", "effectId"] as const;
 
-const assertExactKeys = (name: string, value: object, expected: readonly string[]): void => {
-  assertContainedTurnExactRecord(name, value, expected);
-};
+export interface ContainedTurnProofRecord { readonly kind?: unknown; readonly proofId?: unknown; readonly binding?: unknown }
+
+type ProofShape<Value> = Value extends ContainedTurnProof ? {
+  readonly kind: Value["kind"];
+  readonly proofId: unknown;
+  readonly binding: { readonly [Key in keyof Value["binding"]]?: unknown };
+} : never;
+export type ContainedTurnProofShape = ProofShape<ContainedTurnProof>;
 
 // Exhaustive by proof kind so no proof can smuggle unbound authority fields.
 // oxlint-disable-next-line complexity
-const validateProofShape = (proof: ContainedTurnProof): void => {
-  assertExactKeys(`${proof.kind} proof`, proof, ["binding", "kind", "proofId"]);
-  const exactBinding = (keys: readonly string[]): void => assertExactKeys(`${proof.kind} proof binding`, proof.binding, keys);
-  switch (proof.kind) {
+function validateProofShape(proof: unknown): asserts proof is ContainedTurnProofShape {
+  assertContainedTurnDataRecord("contained-turn proof", proof);
+  validateProofKind(proof.kind);
+  const kind = proof.kind;
+  assertContainedTurnExactRecord(`${kind} proof`, proof, ["binding", "kind", "proofId"]);
+  assertContainedTurnDataRecord(`${kind} proof binding`, proof.binding);
+  const exactBinding = (keys: readonly string[]): void => {
+    assertContainedTurnExactRecord(`${kind} proof binding`, proof.binding, keys);
+  };
+  switch (kind) {
     case "acceptance":
       exactBinding([...OPERATION_BINDING_KEYS, "commandFingerprint", "commandId"]);
       break;
@@ -109,36 +123,45 @@ const validateProofShape = (proof: ContainedTurnProof): void => {
       exactBinding([...OPERATION_BINDING_KEYS, "effectId"]);
       break;
     default: {
-      const exhaustiveProofKind: never = proof;
-      throw new TypeError(`unknown proof kind fails closed: ${String(exhaustiveProofKind)}`);
+      const exhaustive: never = kind;
+      throw new TypeError(`unknown proof kind fails closed: ${String(exhaustive)}`);
     }
   }
-};
+}
 
-const proofById = (
-  operation: ContainedTurnKernelOperation,
-  proofId: ContainedTurnProofId,
-): ContainedTurnProof | undefined => operation.proofs.find(proof => proof.proofId === proofId);
+function validateProofKind(kind: unknown): asserts kind is ContainedTurnProofKind {
+  invariant(CONTAINED_TURN_PROOF_KINDS.some(value => value === kind), "unknown proof kind fails closed");
+}
 
-export const requireContainedTurnProof = (
-  operation: ContainedTurnKernelOperation,
-  proofId: ContainedTurnProofId,
+const proofById = <Proof extends ContainedTurnProofRecord>(
+  operation: Readonly<{ proofs: readonly Proof[] }>, proofId: unknown,
+): Proof | undefined => operation.proofs.find(proof => proof.proofId === proofId);
+
+export const requireContainedTurnProof = <Proof extends ContainedTurnProofRecord>(
+  operation: Readonly<{ proofs: readonly Proof[] }>,
+  proofId: unknown,
   kind: ContainedTurnProofKind,
-): ContainedTurnProof => {
+): Proof => {
   const proof = proofById(operation, proofId);
   invariant(proof?.kind === kind, `${kind} requires its own exact proof kind and ID`);
-  return proof as ContainedTurnProof;
+  return proof;
 };
 
-const attemptId = (operation: ContainedTurnKernelOperation): ContainedTurnAttemptId | undefined =>
+const attemptId = (operation: ContainedTurnIdentityValidatedOperation): unknown =>
   operation.dispatch.kind === "claimed" ? operation.dispatch.attemptId : undefined;
+
+export function validateContainedTurnProofs(
+  operation: ContainedTurnIdentityValidatedOperation,
+): asserts operation is ContainedTurnProofValidatedOperation {
+  for (const proof of operation.proofs) {validateContainedTurnProofBinding(operation, proof);}
+}
 
 // The count is the exhaustive closed proof union; every case validates distinct subject bindings.
 // oxlint-disable-next-line complexity, max-lines-per-function
-export const validateContainedTurnProofBinding = (
-  operation: ContainedTurnKernelOperation,
-  proof: ContainedTurnProof,
-): void => {
+export function validateContainedTurnProofBinding(
+  operation: ContainedTurnIdentityValidatedOperation,
+  proof: unknown,
+): asserts proof is ContainedTurnProof {
   validateProofShape(proof);
   invariant(proof.binding.operationId === operation.operationId, `${proof.kind} proof operation binding mismatch`);
   invariant(
@@ -307,9 +330,10 @@ export const validateContainedTurnProofBinding = (
       );
       break;
   }
-};
+  validateProofFieldTypes(proof);
+}
 
-export const containedTurnRequiredProofsSatisfied = (operation: ContainedTurnKernelOperation): boolean => {
+export const containedTurnRequiredProofsSatisfied = (operation: Pick<ContainedTurnKernelOperation, "requiredReceiptSet" | "requiredReceiptSetDigest" | "proofs">): boolean => {
   return containedTurnRequiredReceiptsSatisfied(
     { digest: operation.requiredReceiptSetDigest, set: operation.requiredReceiptSet },
     operation.proofs,
@@ -318,7 +342,7 @@ export const containedTurnRequiredProofsSatisfied = (operation: ContainedTurnKer
 
 // The branches are the closed set of independently evidenced execution axes.
 // oxlint-disable-next-line complexity
-export const validateContainedTurnAxisProofs = (operation: ContainedTurnKernelOperation): void => {
+export const validateContainedTurnAxisProofs = (operation: ContainedTurnProofValidatedOperation): void => {
   invariant(operation.proofs.some(proof => proof.kind === "provider_access_acceptance"), "Provider Access acceptance requires its own proof");
   invariant(operation.proofs.some(proof => proof.kind === "runtime_security_acceptance"), "Runtime Security acceptance requires its own proof");
   if (operation.admissionFence.kind === "fenced") {requireContainedTurnProof(operation, operation.admissionFence.proofId, "cutoff");}
@@ -366,5 +390,57 @@ export const validateContainedTurnAxisProofs = (operation: ContainedTurnKernelOp
         ? "effect_no_start" : "effect_resolution"),
       "effect resolution requires the dispatch-applicable exact proof",
     );
+  }
+};
+
+
+const validateProofFieldTypes = (proof: ContainedTurnProofShape): void => {
+  validateContainedTurnIdentity("proof", proof.proofId);
+  for (const [key, value] of Object.entries(proof.binding)) {
+    validateProofField(proof.kind, key, value);
+  }
+  if (proof.kind === "containment") {
+    validateContainedTurnIdentity("proof", proof.binding.physicalContainmentProofId);
+  }
+};
+
+const validateProofField = (kind: ContainedTurnProofKind, key: string, value: unknown): void => {
+  switch (key) {
+    case "finalCursor":
+      invariant(typeof value === "number" && Number.isSafeInteger(value) && !Object.is(value, -0) && value >= 0, "proof cursor must be a non-negative safe integer");
+      return;
+    case "disposition":
+      invariant(kind === "provider_acceptance" ? value === "accepted" || value === "not_accepted"
+        : kind === "effect_no_start" ? value === "not_committed" : value === "committed" || value === "not_committed",
+      "unknown proof disposition fails closed");
+      return;
+    case "outcome":
+    case "terminalOutcome":
+      invariant(value === "cancelled" || value === "failed" || value === "succeeded", "unknown proof outcome fails closed");
+      return;
+    case "requiredReceiptSetVersion":
+      invariant(value === CONTAINED_TURN_V1_REQUIRED_RECEIPT_SET_VERSION, "unknown proof receipt-set version");
+      return;
+    default:
+      validateProofTextField(key, value);
+  }
+};
+
+const validateProofTextField = (key: string, value: unknown): void => {
+  const identityFields = [
+    ["attemptId", "attempt"], ["cancellationCommandId", "cancellation_command"], ["commandId", "command"],
+    ["custodyId", "custody"], ["effectId", "effect"], ["hostBootId", "host_boot"],
+    ["hostInstanceId", "host_instance"], ["operationId", "operation"],
+    ["preparationToken", "preparation"], ["workspaceId", "workspace"],
+  ] as const;
+  const identity = identityFields.find(([field]) => field === key);
+  if (identity !== undefined) {
+    validateContainedTurnIdentity(identity[1], value);
+  } else if (key.endsWith("ProofId")) {
+    validateContainedTurnIdentity("proof", value);
+  } else if (key.endsWith("Digest") || key.endsWith("Fingerprint")) {
+    parseContainedTurnCanonicalDigest(value);
+  } else {
+    validateContainedTurnText("proof reference", value, CONTAINED_TURN_LIMITS.text.identifier);
   }
 };

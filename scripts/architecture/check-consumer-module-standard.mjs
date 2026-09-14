@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, posix, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,8 +22,8 @@ export const EXPECTED_PROFILE = Object.freeze({
       repository: "agent-teams-ai/get-modular",
       path: "docs/architecture/common-assembly.md",
       anchor: "consumer-module-standard",
-      gitCommit: "f1ec0152c34715395685b349844a7d1c18a2f015",
-      sha256: "ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d",
+      gitCommit: "669a750d8db451e04f075cdeb36576c6606fba6e",
+      sha256: "e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553",
     },
     featureModuleStandard: {
       repository: "agent-teams-ai/.github",
@@ -353,6 +354,10 @@ const sourceFiles = async (root, path = root) => {
 
 export async function loadConsumerModuleStandardInputs(root = repositoryRoot) {
   const profile = JSON.parse(await readFile(resolve(root, profilePath), "utf8"));
+  const passiveProfile = JSON.parse(await readFile(resolve(root,
+    "architecture/get-modular/consumer-profile.json"), "utf8"));
+  const standardBytes = await readFile(resolve(root,
+    "architecture/get-modular/evidence/consumer-module-standard.md"));
   const packageManifest = JSON.parse(await readFile(resolve(root, packagePath), "utf8"));
   const decisionRegistry = JSON.parse(await readFile(resolve(root, decisionRegistryPath), "utf8"));
   const decisionBytes = await readFile(resolve(root, decisionPath));
@@ -363,7 +368,7 @@ export async function loadConsumerModuleStandardInputs(root = repositoryRoot) {
     try { return [path, (await stat(resolve(root, path))).isFile()]; }
     catch { return [path, false]; }
   })));
-  return { decisionBytes, decisionRegistry, packageManifest, pathExistence, profile, sources };
+  return { decisionBytes, decisionRegistry, packageManifest, passiveProfile, pathExistence, profile, sources, standardBytes };
 }
 
 const validatePendingDecision = inputs => {
@@ -383,6 +388,18 @@ const validatePendingDecision = inputs => {
 export function validateConsumerModuleStandard(inputs) {
   assert.deepEqual(inputs.profile, EXPECTED_PROFILE,
     "consumer profile must equal the reviewed pending-adoption record");
+
+  const standard = inputs.profile.authority.consumerModuleStandard;
+  const passive = inputs.passiveProfile.standard;
+  assert.deepEqual({
+    repository: passive.repository, path: passive.path, anchor: passive.anchor,
+    gitCommit: passive.commit, sha256: passive.sha256,
+  }, standard, "passive and contained-turn standard pins must agree");
+  assert.equal(passive.evidencePath,
+    "architecture/get-modular/evidence/consumer-module-standard.md",
+    "standard evidence path must remain shared");
+  assert.equal(createHash("sha256").update(inputs.standardBytes).digest("hex"),
+    standard.sha256, "retained standard bytes must match the reviewed pin");
 
   for (const path of requiredPaths) {
     assert.equal(inputs.pathExistence.get(path), true, `required adoption path is missing: ${path}`);
