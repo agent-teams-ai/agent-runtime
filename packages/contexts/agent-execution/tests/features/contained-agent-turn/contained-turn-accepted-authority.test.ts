@@ -251,7 +251,7 @@ void test("operation validation closes cutoff, closure stage, pending attempt an
     ["numeric consumption", withReceipts([{ ...providerReceipt, consumptionDigest: 0 }, securityReceipt]), /must be text/u],
     ["scope extra", withReceipts([{ ...providerReceipt, scope: { ...providerReceipt.scope, extra: true } }, securityReceipt]), /exact closed record/u],
     ["authority value", withReceipts([{ ...providerReceipt, authorityFacts: { ...providerReceipt.authorityFacts, accessRef: 0 } }, securityReceipt]), /must be text/u],
-    ["foreign operation", withReceipts([{ ...providerReceipt, operationId: "operation:other" }, securityReceipt]), /must bind the operation/u],
+    ["foreign operation", withReceipts([{ ...providerReceipt, operationId: "operation:other" }, securityReceipt]), /does not prove the exact durable owner facts/u],
   ];
   for (const [name, candidate, expected] of malformed) {
     assert.throws(() => { validateContainedTurnOperation(candidate); }, expected, name);

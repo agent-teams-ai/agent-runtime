@@ -6,6 +6,9 @@ import {
   digestContainedTurnCanonicalInput,
   parseContainedTurnCanonicalDigest,
 } from "../../../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
+import { validateContainedTurnConsumedGrantReceipts } from "../../../dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
+import { mutateContainedTurnOperation } from "../../../dist/features/contained-agent-turn/domain/contained-turn-kernel.js";
+import { containedTurnIdentity } from "../../../dist/features/contained-agent-turn/domain/contained-turn-identities.js";
 import { containedTurnSatisfactionDigest } from "../../../dist/features/contained-agent-turn/domain/contained-turn-satisfaction.js";
 import { validateContainedTurnOperation } from "../../../dist/features/contained-agent-turn/domain/contained-turn-validation.js";
 import {
@@ -14,7 +17,7 @@ import {
   digestContainedTurnPostgresJson,
   encodeContainedTurnState,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-state-codec.js";
-import { createOperation, createReservedOperation } from "../../contained-turn-kernel-fixtures.ts";
+import { consumedReceipt, grantSubject, createActiveOperation, createOperation, createReservedOperation } from "../../contained-turn-kernel-fixtures.ts";
 
 test("operation counters reject negative zero before canonical serialization can alias zero", () => {
   const operation = createOperation();
@@ -128,4 +131,64 @@ test("persisted shape checks reject accessors before version inference or checks
   assert.throws(() => decodeContainedTurnState(nestedGetter, "irrelevant", 2), /only enumerable data properties/u);
   assert.throws(() => canonicalContainedTurnPostgresJson({ proofs: Array(1) }), /must be dense/u);
   assert.equal(reads, 0);
+});
+
+test("UTF-8 provider π validates at dispatch and survives PostgreSQL state round-trip", () => {
+  const original = createOperation();
+  const adapterSnapshot = { ...original.adapterSnapshot, provider: "π" };
+  const providerAccessSnapshot = { ...original.providerAccessSnapshot, provider: "π" };
+  const accepted = createOperation({
+    adapterSnapshot, providerAccessSnapshot,
+    capabilityManifest: { ...original.capabilityManifest, provider: "π" },
+    acceptedAuthorityVector: { ...original.acceptedAuthorityVector, adapterSnapshot, providerAccessSnapshot },
+  });
+  const subject = grantSubject(accepted);
+  const receipts = [consumedReceipt("provider_access", subject), consumedReceipt("runtime_security", subject)];
+  assert.deepEqual(validateContainedTurnConsumedGrantReceipts(subject, receipts), receipts);
+  const operation = createReservedOperation(accepted);
+  validateContainedTurnOperation(operation);
+  const encoded = encodeContainedTurnState(operation);
+  assert.deepEqual(decodeContainedTurnState(JSON.parse(encoded.json), encoded.digest, encoded.codecVersion), operation);
+  // Provider text does not relax the ASCII contract of actual identifiers.
+  assert.throws(() => validateContainedTurnConsumedGrantReceipts(subject, [
+    { ...receipts[0], ownerEvidenceRef: "π" }, receipts[1],
+  ]), /ascii/u);
+});
+
+for (const owner of ["provider_access", "runtime_security"] as const) {
+  const fields = owner === "provider_access"
+    ? ["requestDigest", "claimBindingDigest", "bindingDigest", "bindingRevision"]
+    : ["requestDigest", "claimBindingDigest", "providerBindingDigest", "authorityRevision"];
+  for (const field of fields) {
+    test(`checksum-valid ${owner} ${field} substitution fails live, operation and PostgreSQL validation`, () => {
+      const operation = createReservedOperation();
+      assert.ok(operation.dispatch.kind === "claimed");
+      const subject = grantSubject(operation);
+      const replacement = field.endsWith("Revision") ? (field === "bindingRevision" ? 2 : "revision:other")
+        : digestContainedTurnCanonicalInput({ substituted: field });
+      const grantReceipts = operation.dispatch.grantReceipts.map(receipt => receipt.owner !== owner ? receipt : {
+        ...receipt,
+        ...(field === "requestDigest" || field === "claimBindingDigest" ? { [field]: replacement }
+          : { authorityFacts: { ...receipt.authorityFacts, [field]: replacement } }),
+      });
+      const candidate = { ...operation, dispatch: { ...operation.dispatch, grantReceipts } };
+      const state = { codecVersion: 2, payload: candidate };
+      const checksum = digestContainedTurnPostgresJson(state);
+      const rejection = /does not prove the exact durable owner facts/u;
+      assert.throws(() => validateContainedTurnConsumedGrantReceipts(subject, grantReceipts), rejection);
+      assert.throws(() => validateContainedTurnOperation(candidate), rejection);
+      assert.throws(() => decodeContainedTurnState(state, checksum, 2), rejection);
+    });
+  }
+}
+
+
+test("persisted dispatch bindings retain the claimed cutoff after the operation cutoff advances", () => {
+  const operation = mutateContainedTurnOperation(createActiveOperation(), {
+    kind: "record_ambiguity", evidenceId: containedTurnIdentity("evidence", "evidence:lost-continuity"),
+  });
+  assert.ok(operation.dispatch.kind === "claimed");
+  assert.ok(operation.operationCutoff.revision > operation.dispatch.operationCutoffRevision);
+  const encoded = encodeContainedTurnState(operation);
+  assert.deepEqual(decodeContainedTurnState(JSON.parse(encoded.json), encoded.digest, encoded.codecVersion), operation);
 });

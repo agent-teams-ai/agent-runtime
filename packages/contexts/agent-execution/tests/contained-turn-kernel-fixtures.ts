@@ -187,8 +187,14 @@ export const createOperation = (
 export const commonBinding = Object.freeze({ authorityVectorDigest: authorityDigest, operationId });
 export const attemptBinding = Object.freeze({ ...commonBinding, attemptId, effectId });
 
-export const createReservedOperation = (): ContainedTurnKernelOperation => {
-  const operation = mutateContainedTurnOperation(createOperation(), { kind: "bind_workspace", workspaceId });
+export const createReservedOperation = (
+  acceptedOperation = createOperation(),
+): ContainedTurnKernelOperation => {
+  const operation = mutateContainedTurnOperation(acceptedOperation, { kind: "bind_workspace", workspaceId });
+  const commonBinding = { authorityVectorDigest: operation.acceptedAuthorityVectorDigest, operationId: operation.operationId };
+  const attemptBinding = { ...commonBinding, attemptId, effectId };
+  const providerAccessSnapshot = operation.providerAccessSnapshot;
+  const authorityVector = operation.acceptedAuthorityVector;
   const providerAccessDispatchProof = {
     binding: {
       ...commonBinding,

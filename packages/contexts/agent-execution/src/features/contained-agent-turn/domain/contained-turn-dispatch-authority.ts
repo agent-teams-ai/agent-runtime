@@ -1,8 +1,8 @@
 import type { ContainedTurnKernelOperation } from "./contained-turn-kernel-model.js";
 import type { ContainedTurnOperationShape } from "./contained-turn-operation-shape.js";
 import type { ContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
-import type { ContainedTurnProvider } from "./contained-turn-authority.js";
-import { digestContainedTurnCanonicalInput, parseContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
+import { containedTurnProviderAccessSnapshotDigest, containedTurnScopeDigest, type ContainedTurnScope, type ContainedTurnProvider } from "./contained-turn-authority.js";
+import { digestContainedTurnCanonicalInput, digestContainedTurnCanonicalValue, parseContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
 import type {
   ContainedTurnAttemptId,
   ContainedTurnCustodyId,
@@ -152,9 +152,10 @@ export function validateContainedTurnConsumedGrantReceiptShape(
   invariant(receipt.purpose === CONTAINED_TURN_OWNER_DISPATCH_PURPOSE, "unknown dispatch receipt purpose");
   assertContainedTurnExactRecord("consumption scope", receipt.scope, ["projectId", "scopeDigest", "tenantId"]);
   for (const value of [receipt.consumptionDigest, receipt.grantRequestId, receipt.ownerEvidenceRef,
-    receipt.provider, receipt.scope.projectId, receipt.scope.tenantId]) {
+    receipt.scope.projectId, receipt.scope.tenantId]) {
     validateContainedTurnText("consumption identity", value, CONTAINED_TURN_LIMITS.text.identifier);
   }
+  validateContainedTurnText("consumption provider", receipt.provider, { encoding: "utf8", maximumBytes: 128 });
   for (const value of [receipt.claimBindingDigest, receipt.grantRequestDigest, receipt.requestDigest, receipt.scope.scopeDigest]) {
     parseContainedTurnCanonicalDigest(value);
   }
@@ -175,7 +176,8 @@ const validateConsumedAuthorityFacts = (owner: ContainedTurnDispatchGrantOwner, 
   const numberKeys = owner === "provider_access" ? ["bindingRevision", "credentialGeneration"] : [];
   assertContainedTurnExactRecord("consumption authority", facts, [...textKeys, ...numberKeys]);
   for (const key of textKeys) {
-    validateContainedTurnText("consumption authority", facts[key], CONTAINED_TURN_LIMITS.text.identifier);
+    validateContainedTurnText("consumption authority", facts[key], key === "providerId"
+      ? { encoding: "utf8", maximumBytes: 128 } : CONTAINED_TURN_LIMITS.text.identifier);
   }
   for (const key of numberKeys) {
     invariant(typeof facts[key] === "number" && Number.isSafeInteger(facts[key]) && !Object.is(facts[key], -0), "invalid consumption authority revision");
@@ -254,18 +256,67 @@ export const containedTurnGrantSettlementRequestId = (
   operationId: receipt.operationId, owner: receipt.owner,
 })}`;
 
-export const validateContainedTurnOperationDispatchReceipts = (candidate: Pick<ContainedTurnKernelOperation,
-  "operationId" | "adapterSnapshot" | "scope" | "acceptedAuthorityVector"> & { readonly dispatch: ContainedTurnOperationShape["dispatch"] }): void => {
+/** V1 preserves the established dispatch constraints preimage byte for byte. */
+export const containedTurnAcceptanceConstraintsDigestV1 = (
+  facts: Pick<ContainedTurnKernelOperation, "adapterSnapshot" | "capabilityManifest" | "intent">,
+) => digestContainedTurnCanonicalValue({
+  adapterSnapshot: facts.adapterSnapshot,
+  capabilityManifest: facts.capabilityManifest,
+  intentMode: facts.intent.mode,
+} as never);
+
+type DispatchOperationFacts = Pick<ContainedTurnKernelOperation,
+  "operationId" | "effectId" | "adapterSnapshot" | "capabilityManifest" | "intent" |
+  "scope" | "acceptedAuthorityVector" | "acceptedAuthorityVectorDigest" | "providerAccessSnapshot">;
+
+/** Shared live and persisted projection; the cutoff is the original dispatch claim's cutoff. */
+export const containedTurnOperationDispatchSubject = (
+  operation: DispatchOperationFacts & { readonly workspaceId: ContainedTurnWorkspaceId },
+  trustedScope: ContainedTurnScope,
+  subject: Pick<ContainedTurnDispatchGrantSubject, "attemptId" | "custodyId" | "executionGenerationId" | "hostBootId" | "hostInstanceId" | "preparationToken">,
+  operationCutoffRevision: ContainedTurnOperationCutoffRevision,
+): ContainedTurnDispatchGrantSubject => {
+  const providerAccess = operation.providerAccessSnapshot;
+  const providerBindingDigest = containedTurnProviderAccessSnapshotDigest(providerAccess);
+  return completeContainedTurnDispatchGrantSubject(Object.freeze({
+    attemptId: subject.attemptId, custodyId: subject.custodyId, effectId: operation.effectId,
+    executionGenerationId: subject.executionGenerationId, hostBootId: subject.hostBootId,
+    hostInstanceId: subject.hostInstanceId, operationCutoffRevision,
+    operationId: operation.operationId, preparationToken: subject.preparationToken, provider: operation.adapterSnapshot.provider,
+    providerAccessExpectation: Object.freeze({
+      acceptedAuthorityDigest: operation.acceptedAuthorityVectorDigest, accessRef: providerAccess.accessRef,
+      authorityHeadDigest: providerAccess.ownerAuthorityDigest, bindingDigest: providerBindingDigest,
+      bindingRevision: providerAccess.revision, credentialBindingDigest: providerAccess.credentialBindingDigest,
+      credentialBindingRef: providerAccess.credentialBindingRef, credentialGeneration: providerAccess.credentialGeneration,
+      providerAccountRef: providerAccess.providerAccountRef, providerRouteRef: providerAccess.providerRouteRef,
+    }),
+    purpose: "contained_turn_provider_start_v1",
+    runtimeSecurityExpectation: Object.freeze({
+      acceptedAuthorityDigest: operation.acceptedAuthorityVector.securityDecisionDigest,
+      authorityGeneration: operation.acceptedAuthorityVector.operationAuthorityRevision,
+      authorityHeadDigest: operation.acceptedAuthorityVector.securityDecisionDigest,
+      authorityRevision: operation.acceptedAuthorityVector.securityAuthorityRevision,
+      constraintsDigest: containedTurnAcceptanceConstraintsDigestV1(operation),
+      containmentPolicyDigest: operation.acceptedAuthorityVector.containmentPolicyDigest,
+      providerBindingDigest, providerId: operation.adapterSnapshot.provider,
+    }),
+    scope: trustedScope, scopeDigest: containedTurnScopeDigest(trustedScope), workspaceId: operation.workspaceId,
+  }));
+};
+
+export const validateContainedTurnOperationDispatchReceipts = (candidate: DispatchOperationFacts &
+  Pick<ContainedTurnKernelOperation, "workspaceId" | "custodyId" | "hostBootId" | "hostInstanceId"> &
+  { readonly dispatch: ContainedTurnOperationShape["dispatch"] }): void => {
   if (candidate.dispatch.kind !== "claimed") {return;}
-  validateContainedTurnConsumedGrantReceiptTuple(candidate.dispatch.grantReceipts);
-  const dispatchCutoffRevision = containedTurnOperationCutoffRevision(candidate.dispatch.operationCutoffRevision);
-  for (const receipt of candidate.dispatch.grantReceipts) {
-    invariant(receipt.operationId === candidate.operationId && receipt.provider === candidate.adapterSnapshot.provider &&
-      receipt.scope.projectId === candidate.scope.projectId && receipt.scope.tenantId === candidate.scope.tenantId &&
-      receipt.scope.scopeDigest === candidate.acceptedAuthorityVector.scopeDigest &&
-      receipt.validThroughOperationCutoffRevision >= dispatchCutoffRevision &&
-      receipt.grantRequestId === `grant-request:${receipt.grantRequestDigest}` &&
-      receipt.claimBeforeControlTime >= receipt.consumedAtControlTime,
-    "dispatch receipt must bind the operation and its claimed cutoff");
-  }
+  const subject = containedTurnOperationDispatchSubject({
+    ...candidate, workspaceId: validateContainedTurnIdentity("workspace", candidate.workspaceId),
+  }, candidate.scope, {
+    attemptId: validateContainedTurnIdentity("attempt", candidate.dispatch.attemptId),
+    custodyId: validateContainedTurnIdentity("custody", candidate.custodyId),
+    executionGenerationId: validateContainedTurnIdentity("execution_generation", candidate.dispatch.executionGenerationId),
+    hostBootId: validateContainedTurnIdentity("host_boot", candidate.hostBootId),
+    hostInstanceId: validateContainedTurnIdentity("host_instance", candidate.hostInstanceId),
+    preparationToken: validateContainedTurnIdentity("preparation", candidate.dispatch.preparationToken),
+  }, containedTurnOperationCutoffRevision(candidate.dispatch.operationCutoffRevision));
+  validateContainedTurnConsumedGrantReceipts(subject, candidate.dispatch.grantReceipts);
 };
