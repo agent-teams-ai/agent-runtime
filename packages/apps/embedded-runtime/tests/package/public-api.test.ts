@@ -38,6 +38,7 @@ test("root API exposes only product capabilities and keeps Host in composition",
       "dist",
       "features",
       "contained-turn-runtime-access",
+      "contracts",
       "runtime-access.d.ts",
     ),
     "utf8",
@@ -73,6 +74,7 @@ test("contained-turn declarations stay owned across root and composition closure
       "src",
       "features",
       "contained-turn-runtime-access",
+      "contracts",
       "runtime-access.ts",
     ),
     "utf8",
@@ -83,6 +85,7 @@ test("contained-turn declarations stay owned across root and composition closure
       "dist",
       "features",
       "contained-turn-runtime-access",
+      "contracts",
       "runtime-access.d.ts",
     ),
     "utf8",
@@ -177,7 +180,7 @@ test("application and contracts stay independent from adapters and runtime frame
         entry.name.endsWith(".ts") &&
         (path.includes("/application/") ||
           path.includes("/contracts/") ||
-          path.endsWith("/contained-turn-runtime-access/runtime-access.ts"))
+          path.endsWith("/contained-turn-runtime-access/contracts/runtime-access.ts"))
       ) {
         files.push(path);
       }

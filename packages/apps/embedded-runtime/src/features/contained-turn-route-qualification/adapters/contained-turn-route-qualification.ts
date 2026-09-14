@@ -11,7 +11,7 @@ import {
  * governed registry qualifies nothing.
  */
 export const PRODUCT_QUALIFICATION_REGISTRY = new URL(
-  "../../../../../../docs/architecture/qualification-registry.json", import.meta.url,
+  "../../../../../../../docs/architecture/qualification-registry.json", import.meta.url,
 );
 export type ContainedTurnProductQualificationRegistry = typeof PRODUCT_QUALIFICATION_REGISTRY;
 
