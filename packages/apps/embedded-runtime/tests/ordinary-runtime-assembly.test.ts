@@ -58,9 +58,9 @@ test("ordinary observation exposes exact profile, preserves early cancellation, 
 
 test("ordinary preparation fails before owner construction when a selected factory is missing", async () => {
   let calls = 0;
-  const forbidden = async (): Promise<never> => {calls += 1; throw new Error("must not construct");};
+  const forbiddenFactory = async (): Promise<never> => {calls += 1; throw new Error("must not construct");};
   const bound = bindRuntimeSetup(createRuntimeSetupFactories(process.platform), () => {}, undefined, {
-    factories: {operationStore: forbidden, security: forbidden, providerAccess: forbidden, workspace: forbidden, artifacts: forbidden, process: forbidden, provider: forbidden},
+    factories: {operationStore: forbiddenFactory, security: forbiddenFactory, providerAccess: forbiddenFactory, workspace: forbiddenFactory, artifacts: forbiddenFactory, process: forbiddenFactory, provider: forbiddenFactory},
     decorateHost: host => host,
   });
   const composition = await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: runtimeOrdinarySetupProfile});
