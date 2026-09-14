@@ -22,10 +22,20 @@ code_anchors:
 Agent Runtime's passive setup adopts the Get Modular Consumer Module Standard
 under ADR-0015 and the active `architecture/get-modular/consumer-profile.json`.
 This separate contained-turn profile pins the same reviewed standard at commit
-`f1ec0152c34715395685b349844a7d1c18a2f015` and complete-document SHA-256
-`ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d`.
+`669a750d8db451e04f075cdeb36576c6606fba6e` and complete-document SHA-256
+`e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`.
 ADR-0016 proposes only the contained-turn seven-port classification as pending.
 It does not weaken or duplicate the active passive setup Assembly claim.
+
+The [passive adoption migration record](get-modular-adoption.md#pr110-standard-pin-migration)
+reviews the exact PR110 byte delta and shared retained evidence. This pin update
+clarifies acquisition and handoff ownership, borrowed capabilities, opaque causes,
+and reference lifetimes; it does not adopt contained-turn or confer readiness.
+Existing Host owners retain cleanup authority. The previous contained-turn pin
+was `f1ec0152c34715395685b349844a7d1c18a2f015`; its document SHA-256 was
+`ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d`.
+The enforcing checker compares both current profile identities and hashes the
+shared retained bytes. Current paired migration evidence remains outstanding.
 
 ## Ownership boundary
 
