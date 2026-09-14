@@ -31,6 +31,12 @@
       }
     },
     {
+      "files": ["packages/apps/embedded-runtime/src/features/*/index.ts"],
+      "rules": {
+        "unicorn/require-module-specifiers": "off"
+      }
+    },
+    {
       "files": ["experiments/**", "**/*.test.ts", "**/*.test.mjs", "**/fixtures/**"],
       "rules": {
         "complexity": ["error", 30],

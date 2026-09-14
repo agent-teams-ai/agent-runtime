@@ -41,7 +41,6 @@ const scopeMutations = {
   },
   "activates a pending module without the reviewed registry": (profile) => {
     const module = profile.scope.productionModules.find(({ id }) => id === "embedded-runtime");
-    module.adoption = "active";
     module.activationAuthority = "ADR-0013";
   },
   "adds a workspace container": (profile) => {
@@ -52,7 +51,7 @@ const scopeMutations = {
       .filter((container) => container !== "packages/platform");
   },
   "widens the production roots": (profile) => {
-    profile.scope.productionRoots.push("packages/apps/embedded-runtime/src");
+    profile.scope.productionRoots.push("packages/tools/smuggled/src");
   },
   "moves a declared feature to another root": (profile) => {
     const feature = profile.features.find(({ id }) => id === "contained-turn-access");
@@ -67,7 +66,7 @@ const scopeMutations = {
   },
   "drops an excluded root": (profile) => {
     profile.adoption.excludedRoots = profile.adoption.excludedRoots
-      .filter((root) => root !== "packages/apps/embedded-runtime");
+      .filter((root) => root !== "experiments");
   },
   "removes an out-of-scope entry": (profile) => {
     profile.scope.outOfScope = profile.scope.outOfScope.filter((entry) => entry !== "Module Kit");

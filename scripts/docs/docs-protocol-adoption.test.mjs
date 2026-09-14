@@ -97,6 +97,7 @@ async function addRequiredAnchorFixtures(root) {
     "experiments/rust-system-boundaries/README.md",
     "experiments/sandbox-backend-hosting/README.md",
     "packages/apps/embedded-runtime/src/index.ts",
+    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/README.md",
     "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/README.md",
     "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/README.md",
     "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/README.md",

@@ -6,6 +6,7 @@ import Ajv2020 from "ajv/dist/2020.js";
 
 import { parseDeterministicJson } from "./feature-module-config.mjs";
 import { portableRepositoryPath } from "./feature-module-paths.mjs";
+import { REVIEWED_FEATURES } from "./feature-module-reviewed-features.mjs";
 
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const PROFILE_SCHEMA = parseDeterministicJson(await readFile(resolve(REPOSITORY_ROOT, "architecture/feature-module-standard/profile.schema.json"), "utf8"));
@@ -64,14 +65,13 @@ export const REVIEWED_WORKSPACE_CONTAINERS = Object.freeze(["packages/apps", "pa
 // change and never a silent profile edit.
 const REVIEWED_PRODUCTION_MODULES = Object.freeze([
   { id: "agent-execution", role: "bounded-context", moduleRoot: "packages/contexts/agent-execution", packageName: "@agent-teams/agent-execution", ownerDocument: "ADR-0005", curatedExports: [".", "./composition"], adoption: "active", activationAuthority: "ADR-0013" },
-  { id: "embedded-runtime", role: "host-app", moduleRoot: "packages/apps/embedded-runtime", packageName: "@agent-teams/embedded-runtime", ownerDocument: "ADR-0008", curatedExports: EMBEDDED_RUNTIME_EXPORT_SET, adoption: "pending" },
+  { id: "embedded-runtime", role: "host-app", moduleRoot: "packages/apps/embedded-runtime", packageName: "@agent-teams/embedded-runtime", ownerDocument: "ADR-0008", curatedExports: EMBEDDED_RUNTIME_EXPORT_SET, adoption: "active", activationAuthority: "ADR-0023" },
   { id: "filesystem-custody", role: "platform", moduleRoot: "packages/platform/filesystem-custody", packageName: "@agent-teams/filesystem-custody", ownerDocument: "ADR-0017", curatedExports: [".", "./composition"], adoption: "active", activationAuthority: "ADR-0019" },
   { id: "provider-access", role: "bounded-context", moduleRoot: "packages/contexts/provider-access", packageName: "@agent-teams/provider-access", ownerDocument: "ADR-0005", curatedExports: [".", "./composition"], adoption: "active", activationAuthority: "ADR-0013" },
   { id: "runtime-configuration", role: "bounded-context", moduleRoot: "packages/contexts/runtime-configuration", packageName: "@agent-teams/runtime-configuration", ownerDocument: "ADR-0005", curatedExports: [".", "./composition"], adoption: "active", activationAuthority: "ADR-0020" },
   { id: "runtime-security", role: "bounded-context", moduleRoot: "packages/contexts/runtime-security", packageName: "@agent-teams/runtime-security", ownerDocument: "ADR-0005", curatedExports: [".", "./composition"], adoption: "active", activationAuthority: "ADR-0021" },
 ]);
-const REVIEWED_OUT_OF_SCOPE = Object.freeze(["Embedded Runtime", "Module Kit", "experiments", "tooling other than scripts/architecture/check-feature-modules.mjs"]);
-const REVIEWED_FEATURES = Object.freeze({ "runtime-installation-discovery": { root: "packages/contexts/agent-execution/src/features/runtime-installation-discovery", roles: ["contracts", "application", "adapters", "composition"] }, "contained-agent-turn": { root: "packages/contexts/agent-execution/src/features/contained-agent-turn", roles: STANDARD_ROLES }, "contained-turn-access": { root: "packages/contexts/provider-access/src/features/contained-turn-access", roles: STANDARD_ROLES }, "stable-filesystem-custody": { root: "packages/platform/filesystem-custody/src/features/stable-filesystem-custody", roles: ["contracts", "adapters"] }, "codex-configuration-inspection": { root: "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection", roles: ["contracts", "application", "adapters", "composition"] }, "claude-code-configuration-inspection": { root: "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection", roles: ["contracts", "application", "adapters", "composition"] }, "contained-turn-dispatch-authority": { root: "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority", roles: STANDARD_ROLES }, "contained-turn-egress": { root: "packages/contexts/runtime-security/src/features/contained-turn-egress", roles: STANDARD_ROLES }, "provider-process-egress-authorization": { root: "packages/contexts/runtime-security/src/features/provider-process-egress-authorization", roles: STANDARD_ROLES }, "setup-source-inspection-authorization": { root: "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization", roles: ["contracts", "application", "adapters", "composition"] } });
+const REVIEWED_OUT_OF_SCOPE = Object.freeze(["Module Kit", "experiments", "tooling other than scripts/architecture/check-feature-modules.mjs"]);
 const reviewedModules = (predicate) => REVIEWED_PRODUCTION_MODULES.filter(predicate);
 const REVIEWED_PRODUCTION_ROOTS = Object.freeze(reviewedModules(({ adoption }) => adoption === "active").map(({ moduleRoot }) => `${moduleRoot}/src`));
 const REVIEWED_MODULE_ROOTS = Object.freeze(reviewedModules(({ adoption, role }) => adoption === "active" && role !== "host-app").map(({ moduleRoot }) => moduleRoot));
@@ -388,13 +388,15 @@ const localOwnershipIssues = (adoption, profilePath) => {
 
 const moduleLayoutIssues = (profile, profilePath) => {
   const adoption = profile.adoption, layouts = adoption.abstractLayout.modules, issues = [];
-  const expectedRoots = profile.scope.productionRoots.map(sourceModuleRoot);
+  const expectedRoots = profile.scope.productionModules
+    .filter(({ adoption: state, role }) => state === "active" && role !== "host-app")
+    .map(({ moduleRoot }) => moduleRoot);
   const layoutRoots = layouts.map(({ moduleRoot }) => moduleRoot);
   if (!sameValues(adoption.moduleRoots, expectedRoots) || !sameValues(layoutRoots, expectedRoots)) {
-    issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "module roots and abstract module mappings must correspond one-to-one with production source roots"));
+    issues.push(issue("FM_PROFILE_INVALID", profilePath, 1, "module roots and abstract module mappings must correspond one-to-one with active bounded-context and platform source roots"));
     return issues;
   }
-  for (const sourceRoot of profile.scope.productionRoots) {
+  for (const sourceRoot of expectedRoots.map((moduleRoot) => rooted(moduleRoot, "src"))) {
     const moduleRoot = sourceModuleRoot(sourceRoot);
     const layout = layouts.find((candidate) => candidate.moduleRoot === moduleRoot);
     const testRoot = rooted(moduleRoot, "tests");

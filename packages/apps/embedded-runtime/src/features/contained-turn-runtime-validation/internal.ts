@@ -12,4 +12,4 @@ export {
   copyAcceptedOperation,
   copySubmitOutcome,
   type CopiedSubmitOutcome,
-} from "./contained-turn-runtime-validation.js";
+} from "./composition/contained-turn-runtime-validation.js";

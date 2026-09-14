@@ -321,6 +321,10 @@ const nonLocalImportIssues = ({ imported, isAssembly, path, sourceFeature }) => 
 const outsideFeatureImportIssues = ({ imported, isAssembly, path, sourceFeature, targetPath, productionRoots, assemblyFiles }) => {
   const curatedCompositionReexport = Boolean(isAssembly) && posix.basename(path) === "composition.ts" && assemblyFiles?.has(targetPath);
   if ((isHostCompositionAssembly(path, isAssembly) || curatedCompositionReexport) && assemblyFiles?.has(targetPath)) {return [];}
+  const sourceLayer = sourceFeature && !Object.values(sourceFeature.entrypoints ?? {}).includes(path)
+    ? layerForPath(sourceFeature, path)
+    : undefined;
+  if (isHostCompositionAssembly(targetPath, assemblyFiles?.has(targetPath)) && ["adapters", "composition"].includes(sourceLayer)) {return [];}
   if (!sourceFeature && !isAssembly) {return [];}
   const isRepositoryLocal = !targetPath.startsWith("../");
   const isGovernedLocal = productionRoots.some((root) => targetPath === root || targetPath.startsWith(`${root}/`));
@@ -453,6 +457,7 @@ export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath 
     productionFiles: allFiles,
     localPackageImports,
     featureForPath,
+    assemblyFiles: profile.assemblyFiles,
   }));
 
   const resources = { imports: 0 };

@@ -1,4 +1,4 @@
 export {
   createContainedTurnLinuxRouteBinding,
   type ContainedTurnLinuxRouteCampaign,
-} from "./contained-turn-linux-route-binding.js";
+} from "./adapters/contained-turn-linux-route-binding.js";

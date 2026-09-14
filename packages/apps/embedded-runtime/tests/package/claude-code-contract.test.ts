@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { createBuildClaudeCodeSetupView } from "../../dist/features/setup-inspection-planning/build-claude-code-setup-view.js";
+import { createBuildClaudeCodeSetupView } from "../../dist/composition/claude-code-setup-inspection-planner.js";
 import { createNodeOpaqueReferenceDigest } from "../../dist/composition/opaque-reference-digest.js";
 
 const referenceDigest = createNodeOpaqueReferenceDigest();
@@ -18,6 +18,7 @@ test("freezes the prospective provider-specific no-product-input Claude contract
       "dist",
       "features",
       "contained-turn-runtime-access",
+      "contracts",
       "runtime-access.d.ts",
     ),
     "utf8",
@@ -61,6 +62,7 @@ test("the real host composition owns the complete Claude dependency contract", a
         "dist",
         "features",
         "trusted-runtime-access-scope",
+        "contracts",
         "trusted-runtime-access-scope.d.ts",
       ),
       "utf8",

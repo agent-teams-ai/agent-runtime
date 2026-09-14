@@ -2,4 +2,4 @@ export {
   PRODUCT_QUALIFICATION_REGISTRY,
   registryQualifiesRouteTarget,
   type ContainedTurnProductQualificationRegistry,
-} from "./contained-turn-route-qualification.js";
+} from "./adapters/contained-turn-route-qualification.js";

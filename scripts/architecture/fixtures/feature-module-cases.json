@@ -2163,6 +2163,62 @@
       "expected": [{ "code": "FM_BEHAVIOR_OUTSIDE_FEATURE", "path": "src/legacy.ts", "line": 1 }]
     },
     {
+      "name": "host-app-feature-composition-may-import-extra-assembly",
+      "alphaRoles": ["domain", "composition"],
+      "productionModules": [{ "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "profileExtra": {
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "src/composition/host.ts"]
+      },
+      "files": {
+        "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"host-app\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+        "src/features/alpha/internal.ts": "export { value } from './domain/value.js';\nexport { compose } from './composition/host.js';\n",
+        "src/features/alpha/composition/host.ts": "import { compose as extra } from '../../../composition/host.js';\nexport const compose = extra;\n",
+        "src/composition/host.ts": "export const compose = () => true;\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "host-app-feature-adapters-may-import-extra-assembly",
+      "alphaRoles": ["domain", "adapters"],
+      "productionModules": [{ "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "profileExtra": {
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "src/composition/host.ts"]
+      },
+      "files": {
+        "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"host-app\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+        "src/features/alpha/internal.ts": "export { value } from './domain/value.js';\nexport { compose } from './adapters/host.js';\n",
+        "src/features/alpha/adapters/host.ts": "import { compose as extra } from '../../../composition/host.js';\nexport const compose = extra;\n",
+        "src/composition/host.ts": "export const compose = () => true;\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "host-app-feature-domain-cannot-import-extra-assembly",
+      "productionModules": [{ "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }],
+      "profileExtra": {
+        "assemblyFiles": ["src/index.ts", "src/composition.ts", "src/composition/host.ts"]
+      },
+      "files": {
+        "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"host-app\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+        "src/features/alpha/domain/value.ts": "import { compose } from '../../../composition/host.js';\nexport const value = compose();\n",
+        "src/composition/host.ts": "export const compose = () => true;\n"
+      },
+      "expected": [{ "code": "FM_UNDECLARED_LOCAL_DEPENDENCY", "path": "src/features/alpha/domain/value.ts", "line": 1 }]
+    },
+    {
+      "name": "host-app-package-test-may-import-another-module-curated-assembly",
+      "secondModule": true,
+      "productionModules": [
+        { "id": "fixture-runtime", "role": "host-app", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" },
+        { "id": "fixture-other", "role": "platform", "moduleRoot": "other", "sourceRoot": "other/src", "packageName": "@fixture/other", "ownerDocument": "ADR-0005", "curatedExports": [".", "./composition"], "adoption": "active", "activationAuthority": "ADR-0005" }
+      ],
+      "files": {
+        "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"host-app\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}, \"./composition\": {\"types\": \"./dist/composition.d.ts\", \"import\": \"./dist/composition.js\"}}}\n",
+        "tests/package/join.test.ts": "import { gamma } from '@fixture/other/composition';\nvoid gamma;\n"
+      },
+      "expected": []
+    },
+    {
       "name": "platform-module-exports-only-its-public-assembly-file",
       "productionModules": [{ "id": "fixture-runtime", "role": "platform", "moduleRoot": ".", "sourceRoot": "src", "packageName": "@fixture/runtime", "ownerDocument": "ADR-0005", "curatedExports": ["."], "adoption": "active", "activationAuthority": "ADR-0005" }],
       "files": { "package.json": "{\"name\": \"@fixture/runtime\", \"agentTeamsArchitecture\": {\"role\": \"platform\", \"ownerDocument\": \"ADR-0005\"}, \"exports\": {\".\": {\"types\": \"./dist/index.d.ts\", \"import\": \"./dist/index.js\"}}}\n" },

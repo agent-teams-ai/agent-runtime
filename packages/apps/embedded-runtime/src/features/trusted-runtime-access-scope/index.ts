@@ -3,4 +3,4 @@ export type {
   TrustedRuntimeAccessScope,
   TrustedClaudeCodeSetupScope,
   TrustedCodexSetupScope,
-} from "./trusted-runtime-access-scope.js";
+} from "./contracts/trusted-runtime-access-scope.js";

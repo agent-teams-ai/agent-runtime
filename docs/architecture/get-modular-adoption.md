@@ -35,7 +35,9 @@ The checker reuses existing FMS inventory, imports, layers, ownership and
 maintainability rules. A finite source/target/import-kind list covers existing
 Host composition seams only; application/domain imports cannot use that list.
 New source, unknown seams, stale seams and behavioral facade code are rejected.
-The existing full FMS profile and pending legacy modules remain unchanged.
+The existing full FMS profile now includes Embedded Runtime as an active host-app
+under ADR-0023. Ordinary scoped adoption remains additive on that same Host
+feature.
 
 `pnpm architecture:get-modular-adoption` executes blocking source diagnostics,
 the live census, exact ordinary graph checks and scoped FMS checks.

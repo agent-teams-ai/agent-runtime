@@ -71,6 +71,7 @@ on:
       - cursor/fms-host-package-external-ae-fixtures-7d17
       - cursor/fms-host-package-external-ae-features-support-7d17
       - cursor/fms-host-package-external-ae-features-remainder-7d17
+      - cursor/fms-host-activation-7d17
 
 permissions:
   contents: read

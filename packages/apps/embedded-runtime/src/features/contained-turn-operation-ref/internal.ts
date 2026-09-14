@@ -1,3 +1,3 @@
 export {
   type ContainedTurnCompositionOperationRef,
-} from "./contained-turn-operation-ref.js";
+} from "./contracts/contained-turn-operation-ref.js";

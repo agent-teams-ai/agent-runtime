@@ -2,4 +2,4 @@ export {
   snapshotContainedTurnAuthority,
   captureContainedTurnCurrentAuthority,
   type ContainedTurnAuthorityDependencies,
-} from "./contained-turn-current-authority.js";
+} from "./adapters/contained-turn-current-authority.js";

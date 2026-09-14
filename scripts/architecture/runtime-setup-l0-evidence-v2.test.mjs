@@ -68,9 +68,9 @@ test("original argv lists and accepted native authority and ordinary assembly te
   const relocated = new Map([
     ["tests/contained-turn-cancellation-proof.unit.test.ts", "tests/features/contained-turn-cancellation-proof/contained-turn-cancellation-proof.unit.test.ts"],
     ["tests/contained-turn-construction-failure.unit.test.ts", "tests/features/contained-turn-construction-failure/contained-turn-construction-failure.unit.test.ts"],
-    ["tests/contained-turn-current-egress-owners.test.ts", "tests/features/contained-turn-current-egress-owners/contained-turn-current-egress-owners.test.ts"],
+    ["tests/contained-turn-current-egress-owners.test.ts", "tests/package/contained-turn-current-egress-owners.test.ts"],
     ["tests/contained-turn-http-credential-materialization.test.ts", "tests/features/contained-turn-http-provider-access/contained-turn-http-credential-materialization.test.ts"],
-    ["tests/contained-turn-http-egress-authorities.test.ts", "tests/features/contained-turn-http-egress-authorities/contained-turn-http-egress-authorities.test.ts"],
+    ["tests/contained-turn-http-egress-authorities.test.ts", "tests/package/contained-turn-http-egress-authorities.test.ts"],
     ["tests/contained-turn-http-egress-upstream.test.ts", "tests/features/contained-turn-http-egress-upstream/contained-turn-http-egress-upstream.test.ts"],
     ["tests/contained-turn-http-provider-access.test.ts", "tests/features/contained-turn-http-provider-access/contained-turn-http-provider-access.test.ts"],
     ["tests/contained-turn-linux-route-binding.test.ts", "tests/features/contained-turn-linux-route-binding/contained-turn-linux-route-binding.test.ts"],
@@ -125,6 +125,8 @@ test("original argv lists and accepted native authority and ordinary assembly te
     ["tests/live/run-linux-codex-live-canary.test.mjs", "tests/package/live/run-linux-codex-live-canary.test.mjs"],
     ["tests/live/run-linux-codex-live-canary-cli.test.mjs", "tests/package/live/run-linux-codex-live-canary-cli.test.mjs"],
     ["tests/support/linux-http-completion-negative.mjs", "tests/package/linux-http-completion-negative.mjs"],
+    ["tests/ordinary-runtime-assembly.test.ts", "tests/package/ordinary-runtime-assembly.test.ts"],
+    ["tests/ordinary-host-disposal.test.ts", "tests/package/ordinary-host-disposal.test.ts"],
   ]);
   expected[0] = expected[0].map((arg) => relocated.get(arg) ?? arg);
   expected[1] = expected[1].map((arg) => relocated.get(arg) ?? arg);
