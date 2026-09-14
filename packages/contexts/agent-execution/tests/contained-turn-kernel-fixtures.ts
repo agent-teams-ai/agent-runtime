@@ -1,3 +1,4 @@
+import { completeContainedTurnDispatchGrantSubject, validateContainedTurnConsumedGrantReceipts } from "../dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js";
 import assert from "node:assert/strict";
 
 import {
@@ -11,7 +12,7 @@ import {
   type ContainedTurnProviderAccessSnapshot,
   type ContainedTurnProviderAdapterSnapshot,
 } from "../dist/features/contained-agent-turn/domain/contained-turn-authority.js";
-import { digestContainedTurnCanonicalValue } from "../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
+import { digestContainedTurnCanonicalValue, parseContainedTurnCanonicalDigest } from "../dist/features/contained-agent-turn/domain/contained-turn-codecs.js";
 import {
   createContainedTurnOperation,
   mutateContainedTurnOperation,
@@ -186,12 +187,18 @@ export const createOperation = (
 export const commonBinding = Object.freeze({ authorityVectorDigest: authorityDigest, operationId });
 export const attemptBinding = Object.freeze({ ...commonBinding, attemptId, effectId });
 
-export const createReservedOperation = (): ContainedTurnKernelOperation => {
-  const operation = mutateContainedTurnOperation(createOperation(), { kind: "bind_workspace", workspaceId });
+export const createReservedOperation = (
+  acceptedOperation = createOperation(),
+): ContainedTurnKernelOperation => {
+  const operation = mutateContainedTurnOperation(acceptedOperation, { kind: "bind_workspace", workspaceId });
+  const reservedCommonBinding = { authorityVectorDigest: operation.acceptedAuthorityVectorDigest, operationId: operation.operationId };
+  const reservedAttemptBinding = { ...reservedCommonBinding, attemptId, effectId };
+  const reservedProviderAccessSnapshot = operation.providerAccessSnapshot;
+  const reservedAuthorityVector = operation.acceptedAuthorityVector;
   const providerAccessDispatchProof = {
     binding: {
-      ...commonBinding,
-      acceptedSnapshotDigest: containedTurnProviderAccessSnapshotDigest(providerAccessSnapshot),
+      ...reservedCommonBinding,
+      acceptedSnapshotDigest: containedTurnProviderAccessSnapshotDigest(reservedProviderAccessSnapshot),
       resolutionDigest: digestContainedTurnCanonicalValue({ providerAccess: "current" }),
     },
     kind: "provider_access_dispatch" as const,
@@ -199,17 +206,17 @@ export const createReservedOperation = (): ContainedTurnKernelOperation => {
   };
   const runtimeSecurityDispatchProof = {
     binding: {
-      ...commonBinding,
-      acceptedSecurityDecisionDigest: authorityVector.securityDecisionDigest,
-      currentSecurityDecisionDigest: authorityVector.securityDecisionDigest,
-      securityAuthorityRevision: authorityVector.securityAuthorityRevision,
+      ...reservedCommonBinding,
+      acceptedSecurityDecisionDigest: reservedAuthorityVector.securityDecisionDigest,
+      currentSecurityDecisionDigest: reservedAuthorityVector.securityDecisionDigest,
+      securityAuthorityRevision: reservedAuthorityVector.securityAuthorityRevision,
     },
     kind: "runtime_security_dispatch" as const,
     proofId: proofId("proof:runtime-security-dispatch"),
   };
   const claimProof: ContainedTurnProof = {
     binding: {
-      ...attemptBinding,
+      ...reservedAttemptBinding,
       preparationToken,
       providerAccessDispatchProofId: providerAccessDispatchProof.proofId,
       runtimeSecurityDispatchProofId: runtimeSecurityDispatchProof.proofId,
@@ -218,18 +225,22 @@ export const createReservedOperation = (): ContainedTurnKernelOperation => {
     proofId: proofId("proof:claim"),
   };
   const cutoffProof: ContainedTurnProof = {
-    binding: commonBinding,
+    binding: reservedCommonBinding,
     kind: "cutoff",
     proofId: proofId("proof:cutoff"),
   };
   const hostCustodyProof = {
-    binding: { ...attemptBinding, custodyId },
+    binding: { ...reservedAttemptBinding, custodyId },
     kind: "host_custody" as const,
     proofId: proofId("proof:host-custody"),
   };
+  const subject = grantSubject(operation);
+  const consumedGrantReceipts = validateContainedTurnConsumedGrantReceipts(subject, [
+    consumedReceipt("provider_access", subject), consumedReceipt("runtime_security", subject),
+  ]);
   return mutateContainedTurnOperation(operation, {
     attemptId,
-    consumedGrantReceipts: Object.freeze([]) as never,
+    consumedGrantReceipts,
     claimProof: claimProof as Extract<ContainedTurnProof, { kind: "dispatch_claim" }>,
     custodyId,
     cutoffProof: cutoffProof as Extract<ContainedTurnProof, { kind: "cutoff" }>,
@@ -257,4 +268,73 @@ export const createActiveOperation = (): ContainedTurnKernelOperation => {
   return active;
 };
 
-export const expectInvariant = (action: () => unknown, pattern: RegExp): void => assert.throws(action, pattern);
+export const expectInvariant = (action: () => unknown, pattern: RegExp): void => { assert.throws(action, pattern); };
+
+export const grantSubject = (operation: ContainedTurnKernelOperation = createOperation()) => {
+  const providerAccess = operation.providerAccessSnapshot;
+  const providerBindingDigest = containedTurnProviderAccessSnapshotDigest(providerAccess);
+  return completeContainedTurnDispatchGrantSubject({
+    attemptId, custodyId, effectId, executionGenerationId, hostBootId, hostInstanceId,
+    operationCutoffRevision: operation.operationCutoff.revision, operationId, preparationToken,
+    provider: operation.adapterSnapshot.provider,
+    providerAccessExpectation: {
+      acceptedAuthorityDigest: operation.acceptedAuthorityVectorDigest, accessRef: providerAccess.accessRef,
+      authorityHeadDigest: providerAccess.ownerAuthorityDigest, bindingDigest: providerBindingDigest,
+      bindingRevision: providerAccess.revision, credentialBindingDigest: providerAccess.credentialBindingDigest,
+      credentialBindingRef: providerAccess.credentialBindingRef, credentialGeneration: providerAccess.credentialGeneration,
+      providerAccountRef: providerAccess.providerAccountRef, providerRouteRef: providerAccess.providerRouteRef,
+    },
+    purpose: "contained_turn_provider_start_v1",
+    runtimeSecurityExpectation: {
+      acceptedAuthorityDigest: operation.acceptedAuthorityVector.securityDecisionDigest,
+      authorityGeneration: operation.acceptedAuthorityVector.operationAuthorityRevision,
+      authorityHeadDigest: operation.acceptedAuthorityVector.securityDecisionDigest,
+      authorityRevision: operation.acceptedAuthorityVector.securityAuthorityRevision,
+      constraintsDigest: digestContainedTurnCanonicalValue({
+        adapterSnapshot: { ...operation.adapterSnapshot }, capabilityManifest: { ...operation.capabilityManifest }, intentMode: operation.intent.mode,
+      }),
+      containmentPolicyDigest: operation.acceptedAuthorityVector.containmentPolicyDigest,
+      providerBindingDigest, providerId: operation.adapterSnapshot.provider,
+    },
+    scope, scopeDigest: containedTurnScopeDigest(scope), workspaceId,
+  });
+};
+
+export const consumedReceipt = (owner: "provider_access" | "runtime_security", subject: ReturnType<typeof grantSubject>) => {
+  const request = owner === "provider_access" ? subject.providerAccessRequest : subject.runtimeSecurityRequest;
+  return Object.freeze({
+    authorityFacts: owner === "provider_access" ? subject.providerAccessExpectation : subject.runtimeSecurityExpectation,
+    claimBeforeControlTime: 100, claimBindingDigest: request.claimBindingDigest, consumedAtControlTime: 50,
+    consumptionDigest: `${owner}-consumption:one`, grantRequestDigest: parseContainedTurnCanonicalDigest(request.grantRequestId.slice("grant-request:".length)),
+    grantRequestId: request.grantRequestId, operationId: subject.operationId, owner,
+    ownerEvidenceRef: `${owner}-evidence:v1:one`, provider: subject.provider,
+    purpose: "contained-turn.provider-dispatch/v1" as const, requestDigest: request.requestDigest,
+    scope: { ...subject.scope, scopeDigest: subject.scopeDigest },
+    validThroughOperationCutoffRevision: subject.operationCutoffRevision,
+  });
+};
+
+
+/** Replaces each scalar separately, retaining every other part of a known-valid synthetic operation. */
+export const assertOperationRejectsMalformedLeaves = (operation: ContainedTurnKernelOperation): void => {
+  validateContainedTurnOperation(operation);
+  const paths: string[][] = [];
+  const visit = (value: unknown, path: string[]): void => {
+    if (value === null || typeof value !== "object") {paths.push(path); return;}
+    for (const [key, child] of Object.entries(value)) {visit(child, [...path, key]);}
+  };
+  visit(operation, []);
+  for (const path of paths) {
+    const candidate: unknown = structuredClone(operation);
+    let parent = candidate;
+    for (const key of path.slice(0, -1)) {
+      assert.ok(parent !== null && typeof parent === "object");
+      parent = Reflect.get(parent, key);
+    }
+    assert.ok(parent !== null && typeof parent === "object");
+    const key = path.at(-1);
+    assert.ok(key !== undefined);
+    Reflect.set(parent, key, { malformed: true });
+    assert.throws(() => { validateContainedTurnOperation(candidate); }, TypeError, path.join("."));
+  }
+};

@@ -53,8 +53,19 @@ jobs:
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
           import { execFileSync, spawnSync } from 'node:child_process';
+          import { readFileSync } from 'node:fs';
           import { changes } from './scripts/architecture/runtime-setup-l0-evidence-spec.mjs';
-          const revisions = changes.map(({ revision }) => revision);
+          const readEvidence = name => JSON.parse(readFileSync(`docs/spikes/${name}.json`, 'utf8'));
+          const historical = readEvidence('runtime-setup-l0-dogfooding-evidence');
+          const adoption = readEvidence('runtime-setup-assembly-adoption-evidence');
+          const adoptionV2 = readEvidence('runtime-setup-assembly-adoption-v2-evidence');
+          const revisions = [...new Set([
+            ...changes.map(({ revision }) => revision),
+            ...historical.historicalChanges.map(({ revision }) => revision),
+            historical.sourceRevision, adoption.sourceRevision,
+            adoptionV2.historical.revision, adoptionV2.retainedV1.revision,
+            adoptionV2.identity.sourceRevision,
+          ])];
           for (const revision of revisions) assert.match(revision, /^[a-f0-9]{40}$/u);
           const hasTrees = revision => [revision, `${revision}^`].every(ref =>
             spawnSync('git', ['cat-file', '-e', `${ref}^{tree}`]).status === 0);
