@@ -8,8 +8,6 @@ import {decodeContainedTurnState} from "../../../dist/features/contained-agent-t
 import {createOrdinaryTurnFeature} from "../../../dist/features/contained-agent-turn/composition/ordinary-feature-factory.js";
 import type {OrdinaryTurnDependencies, OrdinaryOperationStore} from "../../../dist/features/contained-agent-turn/application/ordinary-ports.js";
 
-function unavailable(): never {throw new Error("TEST setup must not execute", {cause: "synthetic setup"});}
-
 const hash = "a".repeat(64);
 const input = {commandId: "test-command", expectedProvider: "codex", intent: {mode: "workspace-write", prompt: "Read TASK.md and write result.txt"}, scope: {projectId: "ordinary-test", tenantId: "test"}} as const;
 const binding = {operationId: "ordinary:test", attemptId: "attempt:test", executionProfile: ORDINARY_PROFILE.executionProfile, capabilityManifestRevision: ORDINARY_PROFILE.capabilityManifestRevision};
@@ -357,30 +355,3 @@ for (const failedAction of ["retire", "provider_settle", "security_settle"] as c
     assert.equal(f.state().status, "reconcile_required");
   });
 }
-
-test("real Host releases proven ordinary ownership after retry while durable status remains reconciliation", async () => {
-  const root = import.meta.url.slice(0, import.meta.url.indexOf("/packages/")) + "/";
-  const {createAgentRuntimeHost} = await import(new URL("packages/apps/embedded-runtime/dist/composition/agent-runtime-host.js", root).href);
-  const {bindContainedTurnCapabilityAuthority} = await import(new URL("packages/apps/embedded-runtime/dist/composition/contained-turn-authority-capability.js", root).href);
-  const f = fixture(); const reserve = f.dependencies.process.reserve; let closes = 0;
-  f.dependencies.process.reserve = async request => {
-    const reservation = await reserve(request);
-    return {...reservation, close: sequence => {closes += 1; if (closes <= 2) {return Promise.reject(new Error("TEST physical closure unavailable"));} return reservation.close(sequence);}};
-  };
-  const feature = createOrdinaryTurnFeature(f.dependencies);
-  let submission: ReturnType<typeof feature.submit.execute> | undefined;
-  const capability = {...feature, submit: {execute: (...args: Parameters<typeof feature.submit.execute>) => {submission = feature.submit.execute(...args); return submission;}}};
-  const host = createAgentRuntimeHost({
-    codexSetup: {authorizeSetupInspection: {execute: unavailable}, discoverCodexInstallations: {execute: unavailable}, inspectCodexConfiguration: {execute: unavailable}, planCodexSetupInspection: {plan: unavailable}},
-    claudeCodeSetup: {authorizeClaudeCodeSetupInspection: {execute: unavailable}, discoverClaudeCodeInstallations: {execute: unavailable}, inspectClaudeCodeConfiguration: {execute: unavailable}, planClaudeCodeSetupInspection: {plan: unavailable}},
-    containedTurn: bindContainedTurnCapabilityAuthority(capability, "runtime-access-authority:ordinary-user-session-v1"),
-  }, feature);
-  const access = host.bindAccess({containedTurn: input.scope});
-  const result = await access.containedTurn.submit({commandId: input.commandId, expectedProvider: input.expectedProvider, intent: input.intent});
-  assert.equal(result.status, "accepted"); await submission;
-  assert.equal(f.state().status, "reconcile_required");
-  await assert.rejects(host.dispose(), AggregateError);
-  await host.dispose(); await host.dispose();
-  assert.equal(closes, 3); assert.equal(f.state().status, "reconcile_required");
-  assert.equal(f.state().receipts.some(receipt => receipt.kind === "process_group_closed"), true);
-});

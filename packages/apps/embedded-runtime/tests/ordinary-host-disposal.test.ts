@@ -1,3 +1,5 @@
+import {ordinaryHostOwnershipRetry} from "./package/ordinary-host-ownership.fixture.ts";
+import {ordinaryHostProviderOwnerRetry} from "./package/ordinary-host-pa-owner-disposal.fixture.ts";
 import fs from "node:fs";
 import {syncBuiltinESMExports} from "node:module";
 import assert from "node:assert/strict";
@@ -66,3 +68,8 @@ test('real auth helper indeterminate cleanup remains owned through Host disposal
   const {fileURLToPath} = await import('node:url');
   execFileSync(process.execPath, ['--experimental-test-module-mocks', '--test', fileURLToPath(new URL('./ordinary-auth-host-disposal.fixture.ts', import.meta.url))], {timeout: 10000, stdio: 'pipe'});
 });
+
+test("real Host releases proven ordinary ownership after retry while durable status remains reconciliation", ordinaryHostOwnershipRetry);
+for (const boundary of ["retirement", "capture"] as const) {
+  test(`real Host pending capture failure does not starve PA owner ${boundary} retries or independent capture disposal`, () => ordinaryHostProviderOwnerRetry(boundary));
+}
