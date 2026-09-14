@@ -165,7 +165,7 @@ test("builder rejects a pinned role file that references ambient process.execPat
 });
 
 test("builder statically walks real pinned files' local imports and refuses a closure missing a transitive dependency (P1 real-closure containment)", async () => {
-  const liveDir = new URL(".", import.meta.url).pathname;
+  const liveDir = new URL("../../live/", import.meta.url).pathname;
   const launcherBytes = await readFile(join(liveDir, "darwin-root-launcher.mjs"));
   const packetBytes = await readFile(join(liveDir, "darwin-native-root-packet.mjs"));
   assert.match(launcherBytes.toString("utf8"), /from\s+["']\.\/darwin-native-root-packet\.mjs["']/,

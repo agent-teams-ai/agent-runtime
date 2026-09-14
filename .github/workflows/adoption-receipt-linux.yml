@@ -59,6 +59,7 @@ on:
       - cursor/fms-host-live-canary-7d17
       - cursor/fms-host-live-darwin-infra-7d17
       - feat/foundation-contained-turn-quality
+      - cursor/fms-host-live-darwin-activation-7d17
 
 permissions:
   contents: read
