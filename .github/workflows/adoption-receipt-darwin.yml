@@ -25,7 +25,7 @@ jobs:
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "4615d821f0a3e7012bf7b5b30ee778bd4b027d31"
+        run: test "$(git rev-parse HEAD)" = "c2a2158973de3ec55ead05ab1d89ed4208da7417"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
