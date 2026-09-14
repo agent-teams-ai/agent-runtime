@@ -4543,6 +4543,11 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-state-codec.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-record.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-state-codec.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-validation.ts",
           "mode": "runtime"
         },
