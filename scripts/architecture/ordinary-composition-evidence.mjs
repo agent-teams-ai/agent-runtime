@@ -57,3 +57,25 @@ export function verifyOrdinaryGraph(source) {
   wanted.push('ordinary/process:prepare-launch:ordinary/provider', 'ordinary/provider-access:register-secrets:ordinary/security', 'agent-runtime/runtime-host:ordinary-turn:ordinary/turn');
   assert.deepEqual(bindings.toSorted(), wanted.toSorted(), 'ordinary exact binding mapping drift');
 }
+
+/** The Host's physical-closure handoff must be the same closed ordinary root. */
+export function verifyOrdinaryHostOwnership(source) {
+  const parsed = parseSync('runtime-setup-assembly.ts', source);
+  assert.equal(parsed.errors.length, 0, 'ordinary Host handoff parse failure');
+  const calls = [];
+  const visit = node => {
+    if (!node || typeof node !== 'object') {return;}
+    if (node.type === 'CallExpression') {calls.push(node);}
+    for (const value of Object.values(node)) {
+      if (Array.isArray(value)) {value.forEach(visit);} else {visit(value);}
+    }
+  };
+  visit(parsed.program);
+  const host = calls.filter(call => call.callee?.object?.name === 'factories' && call.callee?.property?.name === 'host');
+  assert.equal(host.length, 1, 'ordinary Host factory must be unique');
+  assert.equal(host[0].arguments[1]?.object?.name, 'dependencies', 'ordinary Host owner handoff missing');
+  assert.equal(host[0].arguments[1]?.property?.value, 'ordinary-turn', 'ordinary Host owner handoff mismatch');
+  const construction = calls.filter(call => call.callee?.name === 'createAgentRuntimeHost');
+  assert.equal(construction.length, 1, 'ordinary Host construction must be unique');
+  assert.equal(construction[0].arguments[1]?.name, 'ordinaryOwner', 'ordinary Host factory dropped ownership');
+}

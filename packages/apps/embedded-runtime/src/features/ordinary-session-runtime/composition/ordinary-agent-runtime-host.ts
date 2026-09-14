@@ -82,7 +82,7 @@ export async function createOrdinaryAgentRuntimeHost(input: OrdinaryAgentRuntime
         const dispose = (): Promise<void> => disposal ??= (async () => {
           const errors: unknown[] = [];
           try {await feature.dispose();} catch (error) {throw new AggregateError([error], "ordinary_host_disposal_incomplete", {cause: error});}
-          try {if (!hostDisposed) {await host.dispose(); hostDisposed = true;}} catch (error) {errors.push(error);}
+          try {if (!hostDisposed) {await host.dispose(); hostDisposed = true;}} catch (error) {throw new AggregateError([error], "ordinary_host_disposal_incomplete", {cause: error});}
           try {await cleanup();} catch (error) {errors.push(error);}
           if (errors.length > 0) {throw new AggregateError(errors, "ordinary_host_disposal_incomplete");}
         })().catch(error => {disposal = undefined; throw error;});

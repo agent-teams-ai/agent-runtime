@@ -1,0 +1,119 @@
+{
+  "baseCommit": "be3c9b1746ae280f0eb2f968f228ef12bc17b53c",
+  "scope": "Five ordinary lifecycle retry and ownership findings; no live runtime or network execution.",
+  "standard": {
+    "revision": "669a750d8db451e04f075cdeb36576c6606fba6e",
+    "sha256": "e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553",
+    "review": "Read retained complete standard and prior measured comparison in ordinary-lifecycle-pairing-review.json. Current retained bytes hash identically. No fresh upstream observation is possible under the network prohibition. Accepted bytes and pin remain unchanged."
+  },
+  "contract": {
+    "change": "Ordinary construction passes the same closed turn owner to the real Host for physical-ownership disposal handoff; successful disposal does not terminalize reconcile_required operations. The static adoption gate and rejecting mutants enforce this forwarding.",
+    "unchanged": "Eight Assembly nodes, seven turn slots, Provider/prepare-launch identity, capability contracts and compatibility token. No new graph node or source relationship."
+  },
+  "findings": [
+    {
+      "id": 1,
+      "fix": "Discarding a buffered fragment permanently invalidates output-drain evidence, including late EOF after close timeout.",
+      "regression": "timed out close cannot certify a discarded fragment after late EOF"
+    },
+    {
+      "id": 2,
+      "fix": "Explicit ordinary owner disposal handoff releases physical Host ownership after engine reconciliation and required actions succeed. Ordinary Host rejection is retryable; contained-turn behavior is unchanged.",
+      "regression": "real Host releases proven ordinary ownership after retry while durable status remains reconciliation"
+    },
+    {
+      "id": 3,
+      "fix": "Attempted dispatch is separate from returned transport ownership; a correctly bound not_started close can release after cancellation or start rejection. Spawn invocation without closure evidence still rejects.",
+      "regression": "cancellation_read and start_rejected engine tests; cancelled, journal and spawn process boundary tests"
+    },
+    {
+      "id": 4,
+      "fix": "Each close, retirement and grant settlement remains separately owned until successful. Successful actions are removed; durable receipt reconciliation is retried without repeating them.",
+      "regression": "late closure retains and retries unfinished retire/provider_settle/security_settle, plus existing late evidence commit retry"
+    },
+    {
+      "id": 5,
+      "fix": "Provider Access resets failed disposal/retirement promises, retains unsuccessful grants and its writable store, and skips successful destructive actions. Ordinary outer cleanup also stops when the inner Host fails. Broker disposal retries bounded observation of the original close work without restarting server cleanup.",
+      "regression": "real PA owner and Host retry failed retirement/capture without repeating successful destructive work; synthetic SQL pool only; mocked-server late close observation retry"
+    }
+  ],
+  "passed": [
+    {
+      "command": "node --experimental-transform-types --import ./packages/contexts/agent-execution/tests/features/contained-agent-turn/ordinary-source-loader.mjs --test packages/contexts/agent-execution/tests/features/contained-agent-turn/ordinary-core.test.ts packages/apps/embedded-runtime/tests/package/agent-runtime-host-disposal.unit.test.ts",
+      "tests": 29
+    },
+    {
+      "command": "node --experimental-transform-types --import ./packages/contexts/agent-execution/tests/features/contained-agent-turn/ordinary-source-loader.mjs --test packages/contexts/provider-access/tests/features/contained-turn-access/ordinary-pa-owner-disposal.test.ts",
+      "tests": 2
+    },
+    {
+      "command": "node --test --test-name-pattern='Linux ordinary|without spawning|discarded fragment|boundary distinguishes' packages/contexts/agent-execution/tests/features/contained-agent-turn/ordinary-node-process.test.ts",
+      "tests": 6
+    },
+    {
+      "command": "node --experimental-transform-types --import ./packages/contexts/agent-execution/tests/features/contained-agent-turn/ordinary-source-loader.mjs --test --test-name-pattern='retries late closure observation' packages/contexts/provider-access/tests/features/contained-turn-access/ordinary-pa-broker.test.ts",
+      "tests": 1
+    },
+    {
+      "command": "node --test scripts/docs/verify-frozen-document-bytes.test.mjs",
+      "tests": 5
+    },
+    {
+      "command": "node --check on each changed TypeScript/JavaScript file",
+      "files": 17
+    },
+    {
+      "command": "git diff --check"
+    }
+  ],
+  "unavailable": [
+    {
+      "commands": [
+        "COREPACK_ENABLE_NETWORK=0 pnpm check:changed",
+        "COREPACK_ENABLE_NETWORK=0 pnpm check:fast",
+        "COREPACK_ENABLE_NETWORK=0 pnpm docs:info",
+        "COREPACK_ENABLE_NETWORK=0 pnpm docs:find -- --text ordinary",
+        "COREPACK_ENABLE_NETWORK=0 pnpm docs:check",
+        "COREPACK_ENABLE_NETWORK=0 pnpm docs:protocol:check"
+      ],
+      "reason": "Pinned pnpm unavailable; Corepack failed with ENOENT for its cache directory before commands ran. No dependencies installed."
+    },
+    {
+      "command": "node --test scripts/architecture/check-ordinary-feature-scope.test.mjs",
+      "reason": "oxc-parser is absent; source diagnostics and new rejecting handoff mutants remain unexecuted."
+    },
+    {
+      "command": "node --experimental-transform-types --import ./packages/contexts/agent-execution/tests/features/contained-agent-turn/ordinary-source-loader.mjs --test --test-name-pattern='materialized ordinary root' packages/apps/embedded-runtime/tests/ordinary-runtime-assembly.test.ts",
+      "reason": "pg is absent at import time; materialized Assembly identity regression remains unexecuted."
+    }
+  ],
+  "limitations": [
+    "Source checks use a retained test-only Node resolution hook that maps missing built workspace modules to actual source; no dependency or owner stubs are substituted by the loader. They do not replace supported builds or typechecks.",
+    "Full architecture/adoption, build, lint and typecheck gates remain pending with absent dependencies.",
+    "Organization Engineering Quality Standard is referenced remotely; no retained copy is present in this repo and network access was prohibited.",
+    "No real provider, agent, terminal, provisioning, smoke flow, PostgreSQL service or user project was used. Process tests mock spawn and signals; six existing real Darwin process tests were excluded by name.",
+    "No new restart recovery or contained-turn qualification; reconciliation workspace retention remains unchanged."
+  ],
+  "changedFiles": [
+    "architecture/get-modular/consumer-profile.json",
+    "architecture/get-modular/evidence/ordinary-lifecycle-retry-review.json",
+    "docs/architecture/get-modular-adoption.md",
+    "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
+    "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+    "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
+    "packages/apps/embedded-runtime/tests/ordinary-runtime-assembly.test.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-process/node-ordinary-process.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-engine.ts",
+    "packages/contexts/agent-execution/tests/features/contained-agent-turn/ordinary-core.test.ts",
+    "packages/contexts/agent-execution/tests/features/contained-agent-turn/ordinary-node-process.test.ts",
+    "packages/contexts/agent-execution/tests/features/contained-agent-turn/ordinary-source-loader.mjs",
+    "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-broker.ts",
+    "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
+    "packages/contexts/provider-access/tests/features/contained-turn-access/ordinary-pa-broker.test.ts",
+    "packages/contexts/provider-access/tests/features/contained-turn-access/ordinary-pa-owner-disposal.test.ts",
+    "scripts/architecture/check-get-modular-adoption.mjs",
+    "scripts/architecture/check-ordinary-feature-scope.test.mjs",
+    "scripts/architecture/ordinary-composition-evidence.mjs"
+  ]
+}

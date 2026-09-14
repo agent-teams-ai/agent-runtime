@@ -33,7 +33,8 @@ const executeOrdinaryOperation = async (dependencies: OrdinaryTurnDependencies, 
   let security: OrdinarySecurityGrant | undefined; let provider: OrdinaryProviderGrant | undefined;
   let workspace: OrdinaryWorkspaceHandle | undefined; let reservation: OrdinaryProcessReservation | undefined;
   let disposition: "claim_committed" | "abandoned_without_claim" | undefined = "abandoned_without_claim";
-  let uncertainty = false; let launched = false;
+  let uncertainty = false; let launched = false; let dispatchAttempted = false;
+  const unfinished = new Set<() => Promise<void>>();
   const receipts: OrdinaryReceipt[] = [];
   const timers: ReturnType<typeof setTimeout>[] = [];
   const retain = (receipt: OrdinaryReceipt): void => {validateOrdinaryReceipt(receipt, operation); receipts.push(receipt);};
@@ -84,9 +85,10 @@ const executeOrdinaryOperation = async (dependencies: OrdinaryTurnDependencies, 
     }
     disposition = "claim_committed"; operation = claim.operation; retain(claim.receipt);
     controller.signal.throwIfAborted();
-    launched = true;
     await observeCancellation();
+    dispatchAttempted = true;
     const transport = await reservation.start(claim.receipt, controller.signal);
+    launched = true;
     controller.signal.throwIfAborted();
     let polling: Promise<void> | undefined;
     const poll = setInterval(() => {
@@ -104,16 +106,19 @@ const executeOrdinaryOperation = async (dependencies: OrdinaryTurnDependencies, 
     }});
     retain(terminal);
     } finally {clearInterval(poll); await polling;}
-  } catch {uncertainty = uncertainty || launched || disposition === undefined || !controller.signal.aborted;}
+  } catch {uncertainty = uncertainty || dispatchAttempted || disposition === undefined || !controller.signal.aborted;}
   finally {for (const timer of timers) {clearTimeout(timer);}}
   const settleOwnedEffects = async (): Promise<void> => {
-    const cleanup = async (effect: () => Promise<void>): Promise<void> => {try {await effect();} catch {uncertainty = true;}};
+    flight.cleanup = async () => {
+      for (const effect of unfinished) {await effect(); unfinished.delete(effect);}
+      await dependencies.operationStore.reconcile(operation, receipts);
+      delete flight.cleanup;
+    };
+    const cleanup = async (effect: () => Promise<void>, required = false): Promise<void> => {
+      if (required) {unfinished.add(effect);}
+      try {await effect(); unfinished.delete(effect);} catch {uncertainty = true;}
+    };
     let sequenceConfirmed = false;
-    if (reservation !== undefined) {await cleanup(async () => {
-      const current = await dependencies.operationStore.read(reference(operation));
-      if (current === undefined || current.attemptId !== operation.attemptId) {throw new Error("ordinary output readback unresolved");}
-      operation = current; sequenceConfirmed = true;
-    });}
     if (reservation !== undefined) {
       const owned = reservation;
       const close = async (): Promise<void> => {
@@ -126,20 +131,15 @@ const executeOrdinaryOperation = async (dependencies: OrdinaryTurnDependencies, 
           for (const receipt of closed) {if (receipt.kind !== "output_drain" || sequenceConfirmed) {retain(receipt);}}
         }
       };
-      let closureObserved = false;
-      flight.cleanup = async () => {
-        if (!closureObserved) {
-          sequenceConfirmed = false;
-          try {
-            const current = await dependencies.operationStore.read(reference(operation));
-            if (current !== undefined && current.attemptId === operation.attemptId) {operation = current; sequenceConfirmed = true;}
-          } catch { /* Storage uncertainty must not prevent bounded physical cleanup. */ }
-          await close(); closureObserved = true;
-        }
-        await dependencies.operationStore.reconcile(operation, receipts);
-        delete flight.cleanup;
-      };
-      await cleanup(async () => {await close(); delete flight.cleanup;});
+      await cleanup(async () => {
+        sequenceConfirmed = false;
+        try {
+          const current = await dependencies.operationStore.read(reference(operation));
+          if (current === undefined || current.attemptId !== operation.attemptId) {throw new Error("ordinary output readback unresolved");}
+          operation = current; sequenceConfirmed = true;
+        } catch {uncertainty = true; /* Storage uncertainty must not prevent bounded physical cleanup. */ }
+        await close();
+      }, true);
     }
     if (workspace !== undefined && launched && receipts.some(item => item.kind === "process_group_closed") && receipts.some(item => item.kind === "output_drain")) {
       const owned = workspace;
@@ -149,14 +149,29 @@ const executeOrdinaryOperation = async (dependencies: OrdinaryTurnDependencies, 
         retain(await dependencies.artifacts.publish(operation, snapshot));
       });
     }
-    if (provider !== undefined) {const owned = provider; await cleanup(async () => {retain(await owned.retire());});
-      if (disposition !== undefined) {const settled = disposition; await cleanup(async () => {retain(await owned.settle(settled));});}}
-    if (security !== undefined && disposition !== undefined) {const owned = security; const settled = disposition; await cleanup(async () => {retain(await owned.settle(settled));});}
+    const settlementDisposition = async (): Promise<"claim_committed" | "abandoned_without_claim"> => {
+      if (disposition === undefined) {
+        const current = await dependencies.operationStore.read(reference(operation));
+        if (current === undefined || current.attemptId !== operation.attemptId) {throw new Error("ordinary claim disposition unresolved");}
+        disposition = current.receipts.some(receipt => receipt.kind === "dispatch_claim") ? "claim_committed" : "abandoned_without_claim";
+      }
+      return disposition;
+    };
+    if (provider !== undefined) {
+      const owned = provider;
+      await cleanup(async () => {retain(await owned.retire());}, true);
+      await cleanup(async () => {retain(await owned.settle(await settlementDisposition()));}, true);
+    }
+    if (security !== undefined) {const owned = security; await cleanup(async () => {retain(await owned.settle(await settlementDisposition()));}, true);}
     // Temporary deletion follows truthful closure. Failure is retained as reconciliation, never hidden cleanup PASS.
     if (workspace !== undefined && !uncertainty) {const owned = workspace; await cleanup(async () => {await dependencies.workspace.close(owned);});}
   };
   await settleOwnedEffects();
-  try {return await (uncertainty ? dependencies.operationStore.reconcile(operation, receipts) : dependencies.operationStore.finish(operation, receipts));}
+  try {
+    const result = await (uncertainty ? dependencies.operationStore.reconcile(operation, receipts) : dependencies.operationStore.finish(operation, receipts));
+    if (unfinished.size === 0) {delete flight.cleanup;}
+    return result;
+  }
   catch {
     // A confirmed readback may reveal terminal success. It never authorizes a retry or new launch.
     const current = await dependencies.operationStore.read(reference(operation));

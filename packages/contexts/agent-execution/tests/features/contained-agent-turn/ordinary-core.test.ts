@@ -269,3 +269,82 @@ test("retry still closes the process when output readback is unavailable without
   assert.equal(f.state().receipts.some(receipt => receipt.kind === "process_group_closed"), true);
   assert.equal(f.state().receipts.some(receipt => receipt.kind === "output_drain"), false);
 });
+
+for (const boundary of ["cancellation_read", "start_rejected"] as const) {
+  test(`truthful unstarted reservation releases after ${boundary}`, async () => {
+    const f = fixture(); let starts = 0; let closes = 0;
+    const read = f.dependencies.operationStore.read;
+    f.dependencies.operationStore.read = async (...args) => {
+      if (boundary === "cancellation_read" && f.state().status === "running") {await f.dependencies.operationStore.cancel({operationId: f.state().operationId, scope: f.state().scope});}
+      return read(...args);
+    };
+    f.dependencies.process.reserve = async () => ({reservationId: "reservation:test", start: async () => {starts += 1; throw new Error("TEST journal rejected before spawn");}, close: async () => {closes += 1; return {kind: "not_started", reservationId: "reservation:test"};}});
+    const feature = createOrdinaryTurnFeature(f.dependencies);
+    await feature.submit.execute(input);
+    await feature.dispose(); await feature.dispose();
+    assert.equal(starts, boundary === "cancellation_read" ? 0 : 1);
+    assert.equal(closes, 1);
+    assert.equal(f.state().receipts.some(receipt => receipt.kind === "process_group_closed"), false);
+  });
+}
+
+for (const failedAction of ["retire", "provider_settle", "security_settle"] as const) {
+  test(`late closure retains and retries unfinished ${failedAction}`, async () => {
+    const f = fixture(); const reserve = f.dependencies.process.reserve;
+    const calls = {retire: 0, provider_settle: 0, security_settle: 0}; let closes = 0;
+    const run = async <T>(action: keyof typeof calls, effect: () => Promise<T>): Promise<T> => {
+      calls[action] += 1;
+      if (action === failedAction && calls[action] <= 2) {throw new Error("TEST transient owner failure");}
+      return effect();
+    };
+    const provider = f.dependencies.providerAccess.resolveAndConsume;
+    f.dependencies.providerAccess.resolveAndConsume = async (...args) => {
+      const grant = await provider(...args);
+      return {...grant, retire: () => run("retire", () => grant.retire()), settle: disposition => run("provider_settle", () => grant.settle(disposition))};
+    };
+    const security = f.dependencies.security.resolveAndConsume;
+    f.dependencies.security.resolveAndConsume = async (...args) => {
+      const grant = await security(...args);
+      return {...grant, settle: disposition => run("security_settle", () => grant.settle(disposition))};
+    };
+    f.dependencies.process.reserve = async request => {
+      const reservation = await reserve(request);
+      return {...reservation, close: sequence => {closes += 1; if (closes === 1) {return Promise.reject(new Error("TEST close timeout"));} return reservation.close(sequence);}};
+    };
+    const feature = createOrdinaryTurnFeature(f.dependencies); await feature.submit.execute(input);
+    await assert.rejects(feature.dispose(), AggregateError);
+    await feature.dispose(); await feature.dispose();
+    assert.equal(closes, 2);
+    assert.deepEqual(calls, {retire: failedAction === "retire" ? 3 : 1, provider_settle: failedAction === "provider_settle" ? 3 : 1, security_settle: failedAction === "security_settle" ? 3 : 1});
+    for (const kind of ["credential_retired", "provider_grant_settled", "security_grant_settled"]) {assert.equal(f.state().receipts.filter(receipt => receipt.kind === kind).length, 1);}
+    assert.equal(f.state().status, "reconcile_required");
+  });
+}
+
+test("real Host releases proven ordinary ownership after retry while durable status remains reconciliation", async () => {
+  const root = import.meta.url.slice(0, import.meta.url.indexOf("/packages/")) + "/";
+  const {createAgentRuntimeHost} = await import(new URL("packages/apps/embedded-runtime/dist/composition/agent-runtime-host.js", root).href);
+  const {bindContainedTurnCapabilityAuthority} = await import(new URL("packages/apps/embedded-runtime/dist/composition/contained-turn-authority-capability.js", root).href);
+  const f = fixture(); const reserve = f.dependencies.process.reserve; let closes = 0;
+  f.dependencies.process.reserve = async request => {
+    const reservation = await reserve(request);
+    return {...reservation, close: sequence => {closes += 1; if (closes <= 2) {return Promise.reject(new Error("TEST physical closure unavailable"));} return reservation.close(sequence);}};
+  };
+  const feature = createOrdinaryTurnFeature(f.dependencies);
+  let submission: ReturnType<typeof feature.submit.execute> | undefined;
+  const capability = {...feature, submit: {execute: (...args: Parameters<typeof feature.submit.execute>) => {submission = feature.submit.execute(...args); return submission;}}};
+  const unavailable = () => {throw new Error("TEST setup must not execute");};
+  const host = createAgentRuntimeHost({
+    codexSetup: {authorizeSetupInspection: {execute: unavailable}, discoverCodexInstallations: {execute: unavailable}, inspectCodexConfiguration: {execute: unavailable}, planCodexSetupInspection: {plan: unavailable}},
+    claudeCodeSetup: {authorizeClaudeCodeSetupInspection: {execute: unavailable}, discoverClaudeCodeInstallations: {execute: unavailable}, inspectClaudeCodeConfiguration: {execute: unavailable}, planClaudeCodeSetupInspection: {plan: unavailable}},
+    containedTurn: bindContainedTurnCapabilityAuthority(capability, "runtime-access-authority:ordinary-user-session-v1"),
+  }, feature);
+  const access = host.bindAccess({containedTurn: input.scope});
+  const result = await access.containedTurn.submit({commandId: input.commandId, expectedProvider: input.expectedProvider, intent: input.intent});
+  assert.equal(result.status, "accepted"); await submission;
+  assert.equal(f.state().status, "reconcile_required");
+  await assert.rejects(host.dispose(), AggregateError);
+  await host.dispose(); await host.dispose();
+  assert.equal(closes, 3); assert.equal(f.state().status, "reconcile_required");
+  assert.equal(f.state().receipts.some(receipt => receipt.kind === "process_group_closed"), true);
+});

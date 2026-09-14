@@ -168,7 +168,8 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
             }
           }
           const unread = queue.length;
-          if (unread !== 0) {streamInvalid = true;}
+          // Discarding a fragment is permanent loss, even if EOF arrives on a later retry.
+          if (unread !== 0 || partial.length !== 0) {streamInvalid = true;}
           queue.length = 0;
           partial = "";
           for (const key of Object.keys(environment)) {delete environment[key];}

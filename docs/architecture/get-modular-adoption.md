@@ -55,6 +55,25 @@ feature's disposal succeeds. Successful owner cleanup is removed exactly once.
 A timeout or rejection never proves termination. Reconciliation workspaces remain
 retained; retry does not publish artifacts or reclassify a reconciled turn as success.
 
+The ordinary Host construction also receives the same closed turn owner for an
+explicit disposal handoff. Successful owner disposal releases physical ownership
+from the Host ledger while durable operations remain `reconcile_required`.
+Only ordinary owner disposal is retryable through this handoff; contained-turn
+termination rules remain unchanged. Engine retries retain each unfinished process,
+credential retirement and grant settlement action until its receipt is reconciled.
+Provider Access retains its writable store on disposal failure and does not repeat
+successful destructive cleanup. Broker retries observe the original server close
+work after a bounded timeout. Process output loss remains permanently visible
+across close retries, including an unterminated fragment discarded before late EOF.
+The static adoption checker rejects a missing or substituted Host owner handoff.
+No Assembly slot, capability, compatibility token, provider binding or standard
+byte changes accompany this Host construction contract extension.
+
+The [second lifecycle review](../../architecture/get-modular/evidence/ordinary-lifecycle-retry-review.json)
+records the five fixes and focused source checks using synthetic ports and real
+Host/Provider Access owners. Supported builds, typechecks and the full adoption
+checks remain pending because dependencies are unavailable in this checkout.
+
 The materialized ordinary root test uses disposable ports and asserts that Process
 receives the exact launch function exported alongside Provider execution. A wrong
 provider binding fails compilation before factory calls. The active graph checker

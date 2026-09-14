@@ -122,3 +122,68 @@ test("bounded close rejection retries observed group closure and memoizes succes
   assert.equal(await reservation.close(0), receipts); assert.equal(spawns, 1);
   assert.deepEqual(observations, ["launch_requested", "started", "exited", "unconfirmed", "closed"]);
 });
+
+test("timed out close cannot certify a discarded fragment after late EOF", async t => {
+  const childProcess = await import("node:child_process");
+  const {syncBuiltinESMExports} = await import("node:module");
+  const {PassThrough} = await import("node:stream");
+  const child = new childProcess.ChildProcess();
+  child.pid = 424242;
+  child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+  const originalPlatform = Object.getOwnPropertyDescriptor(process, "platform")!;
+  Object.defineProperty(process, "platform", {...originalPlatform, value: "darwin"});
+  t.mock.method(process, "getuid", () => 1000);
+  let empty = false; let spawns = 0;
+  t.mock.method(childProcess.default, "spawn", () => {spawns += 1; return child;});
+  t.mock.method(process, "kill", (_pid: number, signal?: NodeJS.Signals | number) => {
+    assert.equal(signal, 0);
+    if (empty) {throw Object.assign(new Error("TEST group absent"), {code: "ESRCH"});}
+    return true;
+  });
+  syncBuiltinESMExports();
+  t.after(() => {Object.defineProperty(process, "platform", originalPlatform); t.mock.restoreAll(); syncBuiltinESMExports();});
+  const observations: string[] = [];
+  const owner = createNodeOrdinaryProcess({record: event => {observations.push(event.kind);}, prepareLaunch: async () => ({executable: "/TEST/never-executed", arguments: [], cwd: "/TEST", environment: {}})});
+  const reservation = await owner.reserve({binding, workspace: {workspaceId: "workspace:synthetic", cwd: "/TEST", homeDirectory: "/TEST"}, credential: {materializationId: "material:synthetic", generation: 1, environment: {}, brokerEndpoint: "http://127.0.0.1:1"}, deadline: performance.now() + 5000});
+  await reservation.start(claim(reservation.reservationId), new AbortController().signal);
+  child.stdout.emit("data", Buffer.from("unterminated"));
+  child.emit("exit", 0);
+  const first = reservation.close(0); assert.equal(first, reservation.close(0));
+  await assert.rejects(first, /ORDINARY_PROCESS_UNCONFIRMED/);
+  assert.equal(observations.includes("closed"), false);
+  empty = true;
+  child.stdout.emit("end"); child.stderr.emit("end"); child.emit("close", 0);
+  const retry = reservation.close(0); assert.equal(retry, reservation.close(0));
+  await assert.rejects(retry, /ORDINARY_PROCESS_UNCONFIRMED/);
+  await assert.rejects(reservation.close(0), /ORDINARY_PROCESS_UNCONFIRMED/);
+  assert.equal(spawns, 1);
+  assert.equal(observations.includes("closed"), false);
+});
+
+for (const boundary of ["cancelled", "journal", "spawn"] as const) {
+  test(`ordinary ${boundary} boundary distinguishes dispatch attempt from proven no spawn`, async t => {
+    const childProcess = await import("node:child_process");
+    const {syncBuiltinESMExports} = await import("node:module");
+    const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+    Object.defineProperty(process, "platform", {...platform, value: "darwin"});
+    t.mock.method(process, "getuid", () => 1000);
+    let spawns = 0;
+    t.mock.method(childProcess.default, "spawn", () => {spawns += 1; throw new Error("TEST spawn boundary unknown");});
+    syncBuiltinESMExports();
+    t.after(() => {Object.defineProperty(process, "platform", platform); t.mock.restoreAll(); syncBuiltinESMExports();});
+    const owner = createNodeOrdinaryProcess({
+      prepareLaunch: async () => ({executable: "/TEST/never-executed", arguments: [], cwd: "/TEST", environment: {}}),
+      record: () => {if (boundary === "journal") {throw new Error("TEST journal unavailable");}},
+    });
+    const reservation = await owner.reserve({binding, workspace: {workspaceId: "workspace:synthetic", cwd: "/TEST", homeDirectory: "/TEST"}, credential: {materializationId: "material:synthetic", generation: 1, environment: {}, brokerEndpoint: "http://127.0.0.1:1"}, deadline: performance.now() + 5000});
+    const controller = new AbortController(); if (boundary === "cancelled") {controller.abort();}
+    await assert.rejects(reservation.start(claim(reservation.reservationId), controller.signal));
+    if (boundary === "spawn") {
+      await assert.rejects(reservation.close(0)); await assert.rejects(reservation.close(0));
+      assert.equal(spawns, 1);
+    } else {
+      assert.deepEqual(await reservation.close(0), {kind: "not_started", reservationId: reservation.reservationId});
+      assert.equal(spawns, 0);
+    }
+  });
+}

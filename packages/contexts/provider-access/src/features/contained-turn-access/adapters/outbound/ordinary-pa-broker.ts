@@ -166,15 +166,17 @@ export async function createOrdinaryPaBroker(input: OrdinaryPaBrokerOptions) {
     });
     const address = server.address(); if (!address || typeof address === 'string') { throw refused(); }
     let closing: Promise<void> | undefined;
+    let closureWork: Promise<void> | undefined;
     const close = (): Promise<void> => {
       if (closing) { return closing; } closed = true;
-      const work = (async () => {
+      closureWork ??= (async () => {
         cutoff(); clearTimeout(timer); signal.removeEventListener('abort', cutoff);
         await new Promise<void>((resolve, reject) => { server.close(error => { if (error) { reject(refused()); } else { resolve(); } }); server.closeAllConnections(); });
         await active;
         if (sockets.size !== 0 || server.listening) { throw refused(); }
       })();
-      closing = closeWithin(work); return closing;
+      // A bounded observation timeout does not restart destructive server cleanup.
+      closing = closeWithin(closureWork).catch(error => {closing = undefined; throw error;}); return closing;
     };
     return Object.freeze({ endpoint: `http://127.0.0.1:${address.port}/v1`, close });
   } catch {

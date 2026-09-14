@@ -23,6 +23,10 @@ export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProvi
   const pool = options.pool, registerSecrets = options.registerSecrets;
   const store = createOrdinaryPaStore(pool), grants = new Set<OrdinaryPaGrant>();
   const pendingCaptures = new Set<OrdinaryCodexAuthCapture>();
+  const disposedCaptures = new WeakSet<OrdinaryCodexAuthCapture>();
+  const disposeCapture = (capture: OrdinaryCodexAuthCapture): void => {
+    if (!disposedCaptures.has(capture)) {capture.dispose(); disposedCaptures.add(capture);}
+  };
   let disposed = false;
   let disposal: Promise<void> | undefined;
   const check = () => { if (disposed) { throw new OrdinaryPaUnavailable(); } };
@@ -35,8 +39,8 @@ export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProvi
     observe: async (binding: OrdinaryPaBinding) => {try {return await store.observe(binding);} catch {throw new OrdinaryPaUnavailable();}},
     async consume(input: OrdinaryPaBinding, capture: OrdinaryCodexAuthCapture, signal: AbortSignal): Promise<OrdinaryPaGrant> {
       check(); let binding: OrdinaryPaBinding;
-      try {binding = snapshotOrdinaryPaBinding(input);} catch {capture.dispose(); throw new OrdinaryPaUnavailable();}
-      if (signal.aborted || pendingCaptures.has(capture) || grants.size + pendingCaptures.size >= 64) { capture.dispose(); throw new OrdinaryPaUnavailable(); }
+      try {binding = snapshotOrdinaryPaBinding(input);} catch {disposeCapture(capture); throw new OrdinaryPaUnavailable();}
+      if (signal.aborted || pendingCaptures.has(capture) || grants.size + pendingCaptures.size >= 64) { disposeCapture(capture); throw new OrdinaryPaUnavailable(); }
       pendingCaptures.add(capture);
       let metadata: Awaited<ReturnType<OrdinaryCodexAuthCapture['capture']>>;
       let consumed: Awaited<ReturnType<typeof store.consume>>;
@@ -45,7 +49,7 @@ export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProvi
         if (signal.aborted) { throw new OrdinaryPaUnavailable(); }
         consumed = await store.consume(binding, { generation: metadata.generation, accountId: metadata.accountId, expiresAt: metadata.expiresAt });
         check();
-      } catch { capture.dispose(); throw new OrdinaryPaUnavailable(); }
+      } catch { disposeCapture(capture); throw new OrdinaryPaUnavailable(); }
       finally { pendingCaptures.delete(capture); }
       const selection: CredentialRenderingSelection = Object.freeze({ operationRef: binding.operationId, recipe: 'codex-chatgpt',
         operationAbortSignal: signal, deadline: metadata.deadline,
@@ -58,25 +62,39 @@ export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProvi
       let rendering: ReturnType<typeof createPostgresCredentialRenderingOwner> | undefined;
       let broker: Awaited<ReturnType<typeof createOrdinaryPaBroker>> | undefined;
       let capability: Buffer | undefined;
+      let brokerClosed = false, renderingDisposed = false, captureDisposed = false, guardDisposed = false, capabilityErased = false;
+      let retirementStarted = false, retired = false, settled = false;
       let attempted = false, retiring: Promise<OrdinaryPaRetirement> | undefined;
       const retire = (): Promise<OrdinaryPaRetirement> => {
         if (retiring) { return retiring; }
+        retirementStarted = true;
         retiring = (async () => {
-          try { await broker?.close(); }
-          finally { rendering?.owner.dispose(); capture.dispose(); guard.dispose(); capability?.fill(0); }
+          const results = await Promise.allSettled([(async () => {
+            if (!brokerClosed) {await broker?.close(); brokerClosed = true;}
+          })()]);
+          const actions = [
+            async () => {if (!renderingDisposed) {rendering?.owner.dispose(); renderingDisposed = true;}},
+            async () => {if (!captureDisposed) {disposeCapture(capture); captureDisposed = true;}},
+            async () => {if (!guardDisposed) {guard.dispose(); guardDisposed = true;}},
+            async () => {if (!capabilityErased) {capability?.fill(0); capabilityErased = true;}},
+          ];
+          results.push(...await Promise.allSettled(actions.map(action => action())));
+          if (results.some(result => result.status === 'rejected')) {throw new OrdinaryPaUnavailable();}
           await capture.settled;
-          const retired = await store.retire(binding).catch(async () => {
+          const retirement = await store.retire(binding).catch(async () => {
             const observed = await store.observe(binding);
             if (!observed || observed.retiredAt === null) { throw new OrdinaryPaUnavailable(); }
             return observed;
           });
-          if (retired.retiredAt === null) { throw new OrdinaryPaUnavailable(); }
-          return Object.freeze({ materializationId: retired.materializationId, generation: retired.generation, retiredAt: retired.retiredAt });
-        })(); return retiring;
+          if (retirement.retiredAt === null) { throw new OrdinaryPaUnavailable(); }
+          retired = true;
+          if (settled) {grants.delete(grant);}
+          return Object.freeze({ materializationId: retirement.materializationId, generation: retirement.generation, retiredAt: retirement.retiredAt });
+        })().catch(error => {retiring = undefined; throw error;}); return retiring;
       };
       const grant = Object.freeze<OrdinaryPaGrant>({ grantId: consumed.authority.grantId, expiresAt: consumed.authority.expiresAt, authority: consumed.authority,
         async materialize() {
-          if (attempted || retiring || signal.aborted || performance.now() >= metadata.deadline) { throw new OrdinaryPaUnavailable(); }
+          if (attempted || retirementStarted || signal.aborted || performance.now() >= metadata.deadline) { throw new OrdinaryPaUnavailable(); }
           attempted = true;
           try {
             check(); rendering = createPostgresCredentialRenderingOwner(pool, selection);
@@ -103,15 +121,16 @@ export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProvi
         },
         retire,
         async settle(disposition) {
-          const settled = await store.settle(binding, disposition).catch(async () => {
+          const settlement = await store.settle(binding, disposition).catch(async () => {
             const observed = await store.observe(binding);
             if (!observed || observed.disposition !== disposition) { throw new OrdinaryPaUnavailable(); }
             return observed;
           });
-          if (!settled.settlementReceiptId || !settled.disposition) { throw new OrdinaryPaUnavailable(); }
-          grants.delete(grant);
+          if (!settlement.settlementReceiptId || !settlement.disposition) { throw new OrdinaryPaUnavailable(); }
+          settled = true;
+          if (retired) {grants.delete(grant);}
           return Object.freeze({ grantId: consumed.authority.grantId, ownerReceiptId: consumed.authority.ownerReceiptId,
-            settlementReceiptId: settled.settlementReceiptId, disposition: settled.disposition });
+            settlementReceiptId: settlement.settlementReceiptId, disposition: settlement.disposition });
         },
         admitCanonicalText: text => guard.check(text),
         admitArtifactBytes: bytes => guard.artifact(bytes),
@@ -121,12 +140,12 @@ export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProvi
     dispose(): Promise<void> {
       if (disposal) { return disposal; } disposed = true;
       disposal = (async () => {
-        for (const capture of pendingCaptures) { capture.dispose(); }
-        const results = await Promise.allSettled([...grants].map(grant => grant.retire()));
+        for (const capture of pendingCaptures) { disposeCapture(capture); }
+        const results = await Promise.allSettled([...grants].map(async grant => {await grant.retire(); grants.delete(grant);}));
         const captures = await Promise.allSettled([...pendingCaptures].map(capture => capture.settled));
-        grants.clear(); store.dispose();
         if ([...results, ...captures].some(result => result.status === 'rejected')) { throw new OrdinaryPaUnavailable(); }
-      })(); return disposal;
+        store.dispose();
+      })().catch(error => {disposal = undefined; throw error;}); return disposal;
 
     },
   });

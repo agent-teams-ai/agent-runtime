@@ -143,7 +143,7 @@ export const createRuntimeSetupFactories = (platform: NodeJS.Platform) => ({
   claudeConfiguration: async () => createClaudeCodeConfigurationInspectionFeature({ digest: createNodeClaudeCodeConfigurationDigest(), parser: createStrictClaudeCodeJsonParser(), semanticClassifier: createClaudeCodeConfigurationSemanticClassifierV2(), sourceIdentityKey: randomBytes(32), sourceReader: createClaudeCodeConfigurationSourceReaderAdapter() }),
   codexPlanner: async () => createCodexSetupInspectionPlanner(platform),
   claudePlanner: async () => createClaudeCodeSetupInspectionPlanner(platform),
-  host: (dependencies: AgentRuntimeHostDependencies) => createAgentRuntimeHost(dependencies),
+  host: (dependencies: AgentRuntimeHostDependencies, ordinaryOwner?: OrdinaryFeature) => createAgentRuntimeHost(dependencies, ordinaryOwner),
 });
 export type RuntimeSetupFactories = ReturnType<typeof createRuntimeSetupFactories>;
 
@@ -217,7 +217,7 @@ export function bindRuntimeSetup(factories: RuntimeSetupFactories, captureHost: 
         planClaudeCodeSetupInspection: dependencies["plan-claude-code-setup-inspection"],
       },
       ...(dependencies["ordinary-turn"] === undefined ? {} : {containedTurn: bindContainedTurnCapabilityAuthority(dependencies["ordinary-turn"], "runtime-access-authority:ordinary-user-session-v1")}),
-    });
+    }, dependencies["ordinary-turn"]);
     const host = ordinary !== undefined && dependencies["ordinary-turn"] !== undefined ? ordinary.decorateHost(rawHost, dependencies["ordinary-turn"]) : rawHost;
     captureHost(host);
     if (completeRoot !== undefined) {return await completeRoot({ instance: host, capabilities: {} });}

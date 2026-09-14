@@ -84,7 +84,11 @@ test("materialized ordinary root injects the provider owner's launch capability 
   const prepareLaunch = async (): Promise<never> => {throw new Error("TEST paired launch");};
   const registerSecrets = () => true;
   let calls = 0;
-  const bound = bindRuntimeSetup(createRuntimeSetupFactories(process.platform), () => {}, undefined, {
+  const factories = createRuntimeSetupFactories(process.platform);
+  let hostOwner: Parameters<typeof factories.host>[1];
+  const bound = bindRuntimeSetup({...factories, host: (dependencies, owner) => {
+    hostOwner = owner; return factories.host(dependencies, owner);
+  }}, () => {}, undefined, {
     factories: {
       operationStore: async () => {calls += 1; return store;},
       security: async () => {calls += 1; return {port: security, registerSecrets};},
@@ -93,7 +97,7 @@ test("materialized ordinary root injects the provider owner's launch capability 
       artifacts: async () => {calls += 1; return artifacts;},
       provider: async () => {calls += 1; return {provider, prepareLaunch};},
       process: async launch => {calls += 1; assert.equal(launch, prepareLaunch); return processPort;},
-    }, decorateHost: host => host,
+    }, decorateHost: (host, feature) => {assert.equal(hostOwner, feature); return host;},
   });
   const mismatched = {...runtimeOrdinarySetupProfile, bindings: runtimeOrdinarySetupProfile.bindings.map(binding => binding.consumerImplementationId === "ordinary/process" ? {...binding, providerImplementationIds: ["ordinary/workspace"]} : binding)};
   const invalid = await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: mismatched});

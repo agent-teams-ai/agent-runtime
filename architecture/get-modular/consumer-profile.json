@@ -5987,7 +5987,9 @@
       "tests": [
         "packages/apps/embedded-runtime/tests/ordinary-runtime-assembly.test.ts",
         "packages/contexts/agent-execution/tests/features/contained-agent-turn/ordinary-core.test.ts",
-        "packages/contexts/agent-execution/tests/features/contained-agent-turn/ordinary-node-process.test.ts"
+        "packages/contexts/agent-execution/tests/features/contained-agent-turn/ordinary-node-process.test.ts",
+        "packages/contexts/provider-access/tests/features/contained-turn-access/ordinary-pa-owner-disposal.test.ts",
+        "packages/contexts/provider-access/tests/features/contained-turn-access/ordinary-pa-broker.test.ts"
       ],
       "authority": "ADR-0090",
       "scopedFms": "architecture/feature-module-standard/ordinary-scope.json"
