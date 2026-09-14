@@ -215,7 +215,7 @@ for (const overflow of ['chunk', 'line', 'queue', 'partial', 'stderr'] as const)
       child.stdout.emit('data', bytes);
     }
     child.stdout.emit('end'); child.stderr.emit('end'); child.emit('exit', 0); child.emit('close', 0);
-    await assert.rejects(async () => {for await (const _line of transport.lines) {assert.fail('discarded output must fail the stream');}});
+    await assert.rejects(async () => {for await (const line of transport.lines) {assert.fail(`discarded output must fail the stream: ${line}`);}});
     await assert.rejects(reservation.close(0), /ORDINARY_PROCESS_UNCONFIRMED/);
     await assert.rejects(reservation.close(0), /ORDINARY_PROCESS_UNCONFIRMED/);
     assert.equal(observations.includes('closed'), false);

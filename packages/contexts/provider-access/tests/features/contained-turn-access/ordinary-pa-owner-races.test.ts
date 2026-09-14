@@ -48,8 +48,8 @@ test('owner disposal joins consume COMMIT and retires the late grant before clos
   const consuming = assert.rejects(f.owner.consume(binding, f.capture, new AbortController().signal));
   await f.entered.promise;
   let closed = false;
-  const disposal = f.owner.dispose().then(() => {closed = true;});
-  await new Promise(resolve => setImmediate(resolve));
+  const disposal = f.owner.dispose().then(() => {closed = true; return;});
+  await new Promise<void>(resolve => {setImmediate(resolve);});
   assert.equal(closed, false); assert.equal(f.counts().retired, 0);
   f.resume.resolve();
   await Promise.all([consuming, disposal]);
@@ -58,30 +58,32 @@ test('owner disposal joins consume COMMIT and retires the late grant before clos
   await f.owner.dispose(); assert.deepEqual(f.counts(), {disposed: 1, retired: 1});
 });
 
-for (const boundary of ['binding', 'broker'] as const) for (const winner of ['retire', 'dispose'] as const) {
-  test(`${winner} joins pending ${boundary} construction and materialize cannot publish`, {timeout: 5000}, async t => {
-    const listening = Promise.withResolvers<http.Server>();
-    let serverCloses = 0, listens = 0;
-    t.mock.method(http.Server.prototype, 'listen', function (this: http.Server) {listens += 1; listening.resolve(this); return this;});
-    t.mock.method(http.Server.prototype, 'address', () => ({address: '127.0.0.1', family: 'IPv4', port: 12345}));
-    t.mock.method(http.Server.prototype, 'close', function (this: http.Server, callback?: (error?: Error) => void) {serverCloses += 1; callback?.(); return this;});
-    t.mock.method(http.Server.prototype, 'closeAllConnections', () => {});
-    const f = fixture(boundary === 'binding' ? 'binding' : 'none');
-    const grant = await f.owner.consume(binding, f.capture, new AbortController().signal);
-    let failure: unknown;
-    const materializing = assert.rejects(grant.materialize(), error => {failure = error; return true;});
-    // A pre-barrier refusal must fail the fixture instead of leaving its barrier pending.
-    const barrier = boundary === 'broker' ? listening.promise : f.entered.promise.then(() => undefined);
-    const server = await Promise.race([barrier, materializing.then(() => {throw new Error(`TEST materialize failed before ${boundary} barrier`, {cause: failure});})]);
-    let closed = false;
-    const retirement = (winner === 'retire' ? grant.retire() : f.owner.dispose()).then(() => {closed = true;});
-    await new Promise(resolve => setImmediate(resolve));
-    assert.equal(closed, false); assert.equal(f.counts().retired, 0);
-    if (server) {server.emit('listening');} else {f.resume.resolve();}
-    await Promise.all([materializing, retirement]);
-    await f.owner.dispose(); await grant.retire(); await assert.rejects(grant.materialize());
-    assert.deepEqual(f.counts(), {disposed: 1, retired: 1});
-    assert.equal(listens, boundary === 'broker' ? 1 : 0);
-    assert.equal(serverCloses, boundary === 'broker' ? 1 : 0);
-  });
+for (const boundary of ['binding', 'broker'] as const) {
+  for (const winner of ['retire', 'dispose'] as const) {
+    test(`${winner} joins pending ${boundary} construction and materialize cannot publish`, {timeout: 5000}, async t => {
+      const listening = Promise.withResolvers<http.Server>();
+      let serverCloses = 0, listens = 0;
+      t.mock.method(http.Server.prototype, 'listen', function (this: http.Server) {listens += 1; listening.resolve(this); return this;});
+      t.mock.method(http.Server.prototype, 'address', () => ({address: '127.0.0.1', family: 'IPv4', port: 12345}));
+      t.mock.method(http.Server.prototype, 'close', function (this: http.Server, callback?: (error?: Error) => void) {serverCloses += 1; callback?.(); return this;});
+      t.mock.method(http.Server.prototype, 'closeAllConnections', () => {});
+      const f = fixture(boundary === 'binding' ? 'binding' : 'none');
+      const grant = await f.owner.consume(binding, f.capture, new AbortController().signal);
+      let failure: unknown;
+      const materializing = assert.rejects(grant.materialize(), error => {failure = error; return true;});
+      // A pre-barrier refusal must fail the fixture instead of leaving its barrier pending.
+      const barrier = boundary === 'broker' ? listening.promise : f.entered.promise;
+      const server = await Promise.race([barrier, materializing.then(() => {throw new Error(`TEST materialize failed before ${boundary} barrier`, {cause: failure});})]);
+      let closed = false;
+      const retirement = (winner === 'retire' ? grant.retire() : f.owner.dispose()).then(() => {closed = true; return;});
+      await new Promise<void>(resolve => {setImmediate(resolve);});
+      assert.equal(closed, false); assert.equal(f.counts().retired, 0);
+      if (server) {server.emit('listening');} else {f.resume.resolve();}
+      await Promise.all([materializing, retirement]);
+      await f.owner.dispose(); await grant.retire(); await assert.rejects(grant.materialize());
+      assert.deepEqual(f.counts(), {disposed: 1, retired: 1});
+      assert.equal(listens, boundary === 'broker' ? 1 : 0);
+      assert.equal(serverCloses, boundary === 'broker' ? 1 : 0);
+    });
+  }
 }

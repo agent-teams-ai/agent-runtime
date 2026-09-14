@@ -6,6 +6,8 @@ import {syncBuiltinESMExports} from 'node:module';
 import {createAgentRuntimeHost} from '../dist/composition/agent-runtime-host.js';
 import {OrdinaryCodexAuthCleanupIndeterminate} from '../../../contexts/provider-access/dist/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-contracts.js';
 
+function incomplete(error: unknown): boolean {return error instanceof AggregateError && error.errors.some(cause => cause instanceof OrdinaryCodexAuthCleanupIndeterminate);}
+
 function forbidden(): never {throw new Error('TEST unexpected external action');}
 
 test('real Host retains the real auth capture after indeterminate helper cleanup settles', async t => {
@@ -41,7 +43,6 @@ test('real Host retains the real auth capture after indeterminate helper cleanup
   await assert.rejects(owner.consume({tenantId: 'TEST', projectId: 'TEST', operationId: 'TEST-operation', attemptId: 'TEST-attempt', executionProfile: 'user-session-v1', effectClass: 'ordinary_user_session_effect', capabilityManifestRevision: 'ordinary-codex-macos-arm64-0.153.4-v1'}, capture, new AbortController().signal), OrdinaryCodexAuthCleanupIndeterminate);
   await capture.settled;
   assert.equal(retained, 1); assert.equal(spawns, 1);
-  const incomplete = (error: unknown) => error instanceof AggregateError && error.errors.some(cause => cause instanceof OrdinaryCodexAuthCleanupIndeterminate);
   await assert.rejects(host.dispose(), incomplete);
   child.emit('exit', 0);
   const signalled = signals;

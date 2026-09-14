@@ -65,7 +65,7 @@ export function createOrdinaryCodexAuthCapture(options: OrdinaryCodexAuthCapture
           try {process.kill(-child.pid, 0);} catch (error) {gone = error instanceof Error && 'code' in error && error.code === 'ESRCH';}
         }
         const observation = Object.freeze({captureRef, outcome: 'cleanup-indeterminate' as const,
-          exitObserved: exited, closeObserved: closed, processGroupGone: gone, retainedDirectory: files?.home});
+          exitObserved: exited, closeObserved: closed, processGroupGone: gone, ...(files ? {retainedDirectory: files.home} : {})});
         if (!exited || !closed || !gone) {
           // Never signal a numeric group after its leader exit has been observed.
           if (!exited && child.pid && child.pid > 1) {try {process.kill(-child.pid, 'SIGKILL');} catch { /* readback on retry decides */ }}

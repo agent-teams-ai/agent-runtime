@@ -12,22 +12,10 @@ import { createOrdinaryPaBroker } from '../adapters/outbound/ordinary-pa-broker.
 import { createOrdinaryPaUpstream } from '../adapters/outbound/ordinary-pa-upstream.js';
 import { createOrdinaryPaSecretGuard } from '../adapters/outbound/ordinary-pa-secret-guard.js';
 
-export interface OrdinaryProviderAccessOwnerOptions {
-  readonly pool: MaterializationPostgresPool;
-  /** Trusted ER/RS sink. Receives exactly one complete inventory before dispatch. */
-  readonly registerSecrets: (operationId: string, tokens: readonly string[]) => boolean;
-}
-/** Ordinary grant and credential authorities stay inside PA; Host borrows only closed capabilities. */
-export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProviderAccessOwnerOptions) {
-  if (typeof options.registerSecrets !== 'function' || types.isAsyncFunction(options.registerSecrets)) { throw new OrdinaryPaUnavailable(); }
-  const pool = options.pool, registerSecrets = options.registerSecrets;
-  const store = createOrdinaryPaStore(pool), grants = new Set<OrdinaryPaGrant>();
-  const pendingConsumptions = new Map<OrdinaryCodexAuthCapture, Promise<void>>();
-  const pendingCaptures = new Set<OrdinaryCodexAuthCapture>();
-  const settledCaptures = new WeakSet<OrdinaryCodexAuthCapture>();
+function createCaptureDisposer(settledCaptures: WeakSet<OrdinaryCodexAuthCapture>) {
   const disposedCaptures = new WeakSet<OrdinaryCodexAuthCapture>();
   const captureDisposals = new WeakMap<OrdinaryCodexAuthCapture, Promise<void>>();
-  const disposeCapture = (capture: OrdinaryCodexAuthCapture): Promise<void> => {
+  return (capture: OrdinaryCodexAuthCapture): Promise<void> => {
     const pending = captureDisposals.get(capture);
     if (pending) {return pending;}
     const disposal = (async () => {
@@ -41,6 +29,22 @@ export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProvi
     captureDisposals.set(capture, disposal);
     return disposal;
   };
+}
+
+export interface OrdinaryProviderAccessOwnerOptions {
+  readonly pool: MaterializationPostgresPool;
+  /** Trusted ER/RS sink. Receives exactly one complete inventory before dispatch. */
+  readonly registerSecrets: (operationId: string, tokens: readonly string[]) => boolean;
+}
+/** Ordinary grant and credential authorities stay inside PA; Host borrows only closed capabilities. */
+export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProviderAccessOwnerOptions) {
+  if (typeof options.registerSecrets !== 'function' || types.isAsyncFunction(options.registerSecrets)) { throw new OrdinaryPaUnavailable(); }
+  const pool = options.pool, registerSecrets = options.registerSecrets;
+  const store = createOrdinaryPaStore(pool), grants = new Set<OrdinaryPaGrant>();
+  const pendingConsumptions = new Map<OrdinaryCodexAuthCapture, Promise<void>>();
+  const pendingCaptures = new Set<OrdinaryCodexAuthCapture>();
+  const settledCaptures = new WeakSet<OrdinaryCodexAuthCapture>();
+  const disposeCapture = createCaptureDisposer(settledCaptures);
   let disposed = false;
   let disposal: Promise<void> | undefined;
   const check = () => { if (disposed) { throw new OrdinaryPaUnavailable(); } };
@@ -53,7 +57,7 @@ export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProvi
     observe: async (binding: OrdinaryPaBinding) => {try {return await store.observe(binding);} catch {throw new OrdinaryPaUnavailable();}},
     async consume(input: OrdinaryPaBinding, capture: OrdinaryCodexAuthCapture, signal: AbortSignal): Promise<OrdinaryPaGrant> {
       check();
-      void capture.settled.then(() => {settledCaptures.add(capture);});
+      void capture.settled.then(() => settledCaptures.add(capture));
       let binding: OrdinaryPaBinding;
       try {binding = snapshotOrdinaryPaBinding(input);} catch {await disposeCapture(capture); throw new OrdinaryPaUnavailable();}
       if (signal.aborted || pendingCaptures.has(capture) || grants.size + pendingCaptures.size >= 64) { await disposeCapture(capture); throw new OrdinaryPaUnavailable(); }
@@ -171,9 +175,7 @@ export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProvi
       if (disposal) { return disposal; } disposed = true;
       disposal = (async () => {
         const captures = [...new Set([...pendingCaptures, ...pendingConsumptions.keys()])];
-        const results = await Promise.allSettled([
-          ...captures.map(async capture => {await disposeCapture(capture); await capture.settled; await pendingConsumptions.get(capture); pendingCaptures.delete(capture);}),
-        ]);
+        const results = await Promise.allSettled(captures.map(async capture => {await disposeCapture(capture); await capture.settled; await pendingConsumptions.get(capture); pendingCaptures.delete(capture);}));
         results.push(...await Promise.allSettled([...grants].map(async grant => {await grant.retire(); grants.delete(grant);})));
         const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
         if (errors.length > 0) {throw new AggregateError(errors, 'ORDINARY_PA_UNAVAILABLE', {cause: errors[0]});}
