@@ -37,3 +37,12 @@ export { createInMemoryDispatchConsumptionRepository } from "./adapters/outbound
 export { createMaterializationBindingRepository } from "./adapters/outbound/postgres/materialization-binding-repository.js";
 export { createOperationDispatchConsumption } from "./composition/operation-dispatch-consumption.js";
 export { createSha256DispatchConsumptionDigest } from "./adapters/outbound/sha256-dispatch-consumption-digest.js";
+
+export { createOrdinaryCodexAuthCapture } from './adapters/outbound/ordinary-codex-auth-capture.js';
+export { OrdinaryCodexAuthRefused, OrdinaryCodexAuthCleanupIndeterminate,
+  type OrdinaryCodexAuthCapture, type OrdinaryCodexAuthCaptureOptions, type OrdinaryCodexAuthMetadata,
+  type OrdinaryCodexAuthObservation } from './adapters/outbound/ordinary-codex-auth-contracts.js';
+
+export { createPostgresOrdinaryProviderAccessOwner, type OrdinaryProviderAccessOwnerOptions } from './composition/ordinary-provider-access-owner.js';
+export { OrdinaryPaUnavailable, type OrdinaryPaBinding, type OrdinaryPaAuthority, type OrdinaryPaSnapshot,
+  type OrdinaryPaMaterial, type OrdinaryPaRetirement, type OrdinaryPaSettlement, type OrdinaryPaGrant } from './contracts/ordinary-provider-access.js';
