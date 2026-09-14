@@ -231,3 +231,14 @@ export {createDockerOperationNetworkOwner} from "./composition/docker-operation-
 export {createWorkspaceCapabilityRetention} from "./adapters/outbound/filesystem/contained-turn-workspace-capability.js";
 export {parseResultPublicationRecord} from "./adapters/outbound/filesystem/contained-turn-result-publication.js";
 export {parseWorkspaceSealRecord} from "./adapters/outbound/filesystem/contained-turn-workspace-state.js";
+
+export {createOrdinaryTurnFeature} from "./composition/ordinary-feature-factory.js";
+export {createOrdinaryCodexAdapter, type OrdinaryCodexAdapterOptions, type OrdinaryCodexObservation} from "./adapters/outbound/ordinary-codex/ordinary-codex-provider.js";
+export {createNodeOrdinaryProcess, type NodeOrdinaryProcessOptions, type OrdinaryLaunchSpecification} from "./adapters/outbound/ordinary-process/node-ordinary-process.js";
+export {applyOrdinaryPostgresSchema, PostgresOrdinaryOperationStore} from "./adapters/outbound/postgres/ordinary-postgres-store.js";
+export {ORDINARY_PROFILE} from "./domain/ordinary-model.js";
+export type {OrdinaryOperation, OrdinaryAuthoritySnapshot, OrdinaryReceipt, OrdinaryReceiptOf} from "./domain/ordinary-model.js";
+export type {OrdinaryFeature} from "./composition/ordinary-feature-factory.js";
+export type {OrdinaryTurnDependencies, OrdinaryOperationStore, OrdinarySecurityPort, OrdinaryProviderAccessPort, OrdinarySecurityGrant, OrdinaryProviderGrant, OrdinaryCredentialMaterial, OrdinaryWorkspaceHandle, OrdinaryWorkspaceSnapshot, OrdinaryWorkspacePort, OrdinaryArtifactsPort, OrdinaryProcessPort, OrdinaryProcessReservation, OrdinaryTransport, OrdinaryProviderPort} from "./application/ordinary-ports.js";
+export {createNodeOrdinaryWorkspace, type NodeOrdinaryWorkspaceOptions} from "./adapters/outbound/ordinary-filesystem/node-ordinary-workspace.js";
+export {createNodeOrdinaryArtifacts, readNodeOrdinaryArtifact, type NodeOrdinaryArtifactsOptions} from "./adapters/outbound/ordinary-filesystem/node-ordinary-artifacts.js";

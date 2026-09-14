@@ -1,4 +1,4 @@
-import type { runtimeSetupDeclarations } from "./runtime-setup-assembly.js";
+import type { runtimeSetupDeclarations, runtimeOrdinarySetupDeclarations } from "./runtime-setup-assembly.js";
 import type { Diagnostic, DiagnosticCode } from "@get-modular/core";
 import type { BindingErrorCode, PreparationErrorCode, RunErrorCode } from "@get-modular/assembly";
 
@@ -59,7 +59,7 @@ export const assemblyErrorCodes = {
   "assembly.run.internal": "internal_failure",
 } satisfies Record<BindingErrorCode | PreparationErrorCode | RunErrorCode, AgentRuntimeHostCreationErrorCode>;
 
-export type RuntimeSetupModuleId = (typeof runtimeSetupDeclarations)[number]["moduleId"];
+export type RuntimeSetupModuleId = (typeof runtimeSetupDeclarations)[number]["moduleId"] | (typeof runtimeOrdinarySetupDeclarations)[number]["moduleId"];
 
 interface CreationErrorDetails {
   readonly cancellationObserved?: boolean | undefined;
