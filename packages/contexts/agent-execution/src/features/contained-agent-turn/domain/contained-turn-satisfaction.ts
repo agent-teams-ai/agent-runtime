@@ -1,24 +1,23 @@
 import {
-  digestContainedTurnCanonicalValue,
+  digestContainedTurnCanonicalInput,
   type ContainedTurnCanonicalDigest,
-  type ContainedTurnCanonicalValue,
 } from "./contained-turn-codecs.js";
-import type { ContainedTurnKernelOperation } from "./contained-turn-kernel-model.js";
+import type { ContainedTurnOutputValidatedOperation } from "./contained-turn-validation.js";
 
 export const containedTurnSatisfactionDigest = (
-  operation: ContainedTurnKernelOperation,
-): ContainedTurnCanonicalDigest => digestContainedTurnCanonicalValue({
+  operation: ContainedTurnOutputValidatedOperation,
+): ContainedTurnCanonicalDigest => digestContainedTurnCanonicalInput({
   artifactManifestRef: operation.artifactManifestRef ?? null,
   authorityVectorDigest: operation.acceptedAuthorityVectorDigest,
   effectDisposition: operation.effect.kind === "resolved" ? operation.effect.disposition : "unresolved",
-  outputDigest: digestContainedTurnCanonicalValue(operation.output.chunks as unknown as ContainedTurnCanonicalValue),
+  outputDigest: digestContainedTurnCanonicalInput(operation.output.chunks),
   outputFinalCursor: operation.output.chunks.length,
   providerProcessStart: operation.providerProcessStart,
   proofs: operation.proofs
     .filter(proof => proof.kind !== "terminal_truth")
     .map(proof => ({
       kind: proof.kind,
-      proofDigest: digestContainedTurnCanonicalValue(proof as unknown as ContainedTurnCanonicalValue),
+      proofDigest: digestContainedTurnCanonicalInput(proof),
       proofId: proof.proofId,
     }))
     .toSorted((left, right) => left.proofId.localeCompare(right.proofId)),

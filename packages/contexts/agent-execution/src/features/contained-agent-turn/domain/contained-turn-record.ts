@@ -2,26 +2,30 @@ import { containedTurnInvariant as invariant } from "./contained-turn-invariant.
 
 const isPlainRecord = (value: object): boolean => Object.getPrototypeOf(value) === Object.prototype;
 
-export const assertContainedTurnExactRecord = (
-  name: string,
-  value: object,
-  expected: readonly string[],
-): void => {
+export function assertContainedTurnDataRecord(name: string, value: unknown): asserts value is Record<string, unknown> {
+  invariant(typeof value === "object" && value !== null, `${name} must be a record`);
   invariant(isPlainRecord(value), `${name} must use the ordinary object prototype`);
-  const keys = Reflect.ownKeys(value);
-  invariant(keys.every(key => typeof key === "string"), `${name} must not contain symbol keys`);
+  invariant(Reflect.ownKeys(value).every(key => typeof key === "string"), `${name} must not contain symbol keys`);
   const descriptors = Object.getOwnPropertyDescriptors(value);
   invariant(
-    Object.values(descriptors).every(descriptor => descriptor.enumerable && "value" in descriptor),
+    Object.values(descriptors).every(descriptor => descriptor.enumerable === true && "value" in descriptor),
     `${name} must contain only enumerable data properties`,
   );
-  const actual = (keys as string[]).toSorted();
+}
+
+export function assertContainedTurnExactRecord(name: string, value: object, expected: readonly string[]): void;
+export function assertContainedTurnExactRecord<Key extends string>(
+  name: string, value: unknown, expected: readonly Key[],
+): asserts value is Record<Key, unknown>;
+export function assertContainedTurnExactRecord(name: string, value: unknown, expected: readonly string[]): void {
+  assertContainedTurnDataRecord(name, value);
+  const actual = Object.keys(value).toSorted();
   const wanted = [...expected].toSorted();
   invariant(
     actual.length === wanted.length && actual.every((key, index) => key === wanted[index]),
     `${name} must be an exact closed record`,
   );
-};
+}
 
 export const hasContainedTurnLoneSurrogate = (value: string): boolean => {
   for (let index = 0; index < value.length; index += 1) {
@@ -35,7 +39,9 @@ export const hasContainedTurnLoneSurrogate = (value: string): boolean => {
   return false;
 };
 
-export const assertContainedTurnCanonicalArray = (value: readonly unknown[]): void => {
+export function assertContainedTurnCanonicalArray(value: unknown): asserts value is readonly unknown[] {
+  invariant(Array.isArray(value), "canonical arrays must be arrays");
+  invariant(Object.getPrototypeOf(value) === Array.prototype, "canonical arrays must use the ordinary array prototype");
   const keys = Reflect.ownKeys(value);
   invariant(
     keys.length === value.length + 1 && keys.at(-1) === "length" &&
@@ -45,10 +51,10 @@ export const assertContainedTurnCanonicalArray = (value: readonly unknown[]): vo
   const descriptors = Object.getOwnPropertyDescriptors(value);
   invariant(
     Object.entries(descriptors).every(([key, descriptor]) =>
-      key === "length" || (descriptor.enumerable && "value" in descriptor)),
+      key === "length" || (descriptor.enumerable === true && "value" in descriptor)),
     "canonical arrays must contain only data elements",
   );
-};
+}
 
 export const detachAndFreezeContainedTurnValue = <Value>(value: Value): Value => {
   if (value === null || typeof value === "boolean" || typeof value === "number") {return value;}
