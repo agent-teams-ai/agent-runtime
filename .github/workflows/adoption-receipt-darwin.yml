@@ -1,9 +1,6 @@
 name: adoption-receipt-darwin
-# retrigger dc831ea4 (second push)
-# Temporary workflow: Darwin arm64 adoption receipt for Host PA/RS unpublished fixture copies
-# identity dc831ea4 stacked on Host remaining top-level support R bcc6c07c.
-# The job always checks out that SHA so this workflow-only commit does not
-# enter the receipt identity. Safe to delete after the paired receipt is merged.
+# Temporary workflow: Darwin arm64 adoption receipt for Host package-external-pa-rs
+# identity b1947d81 after absorb. Checkout frozen SHA; workflow-only.
 
 on:
   push:
@@ -24,11 +21,11 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: dc831ea4dee190724b9167f4e4f7580e19b63978
+          ref: b1947d81827190fb3560c0e81f45b2e68ddb3969
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "dc831ea4dee190724b9167f4e4f7580e19b63978"
+        run: test "$(git rev-parse HEAD)" = "b1947d81827190fb3560c0e81f45b2e68ddb3969"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
