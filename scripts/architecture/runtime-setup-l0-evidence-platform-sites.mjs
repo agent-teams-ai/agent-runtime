@@ -18,8 +18,8 @@ const sites = [
   ["package/live/linux-codex-live-canary-config.test.ts", 17, 18, x64, "linux-x64"],
   ["package/live/linux-codex-live-admin.test.ts", 116, 116, linux, "linux-x64"],
   ...[9, 32].map(line => ["package/live/linux-codex-live-admin-directories.test.ts", line, line, linux, "linux-x64"]),
-  ["live/run-linux-codex-live-canary.test.mjs", 328, 328, "process.platform !== 'linux'", "linux-x64", "descriptor-relative collector requires Linux"],
-  ["live/run-linux-codex-live-canary-cli.test.mjs", 11, 12, "process.platform !== 'linux'", "linux-x64"],
+  ["package/live/run-linux-codex-live-canary.test.mjs", 328, 328, "process.platform !== 'linux'", "linux-x64", "descriptor-relative collector requires Linux"],
+  ["package/live/run-linux-codex-live-canary-cli.test.mjs", 11, 12, "process.platform !== 'linux'", "linux-x64"],
 ];
 export const platformSites = sites.map(([file, line, skipLine, predicate, target, reason = true]) =>
   ({file: root + file, line, skipLine, predicate, target, reason}));

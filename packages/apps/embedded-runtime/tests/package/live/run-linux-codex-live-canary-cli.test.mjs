@@ -41,7 +41,7 @@ for (const failure of ['source', 'configuration', 'setup']) {
       globalThis.fixture = {event, root};
       const sources = {
         pg: 'export class Pool {constructor() {globalThis.fixture.event("pool-created");} on() {} async end() {globalThis.fixture.event("pool-closed");}}',
-        '../package/live/linux-codex-live-canary-config.ts': \`
+        './linux-codex-live-canary-config.ts': \`
           export function createLinuxCodexLiveCanaryConfiguration() {
             globalThis.fixture.event('configuration');
             ${failure === 'configuration' ? "throw new Error('synthetic configuration failure');" : ''}

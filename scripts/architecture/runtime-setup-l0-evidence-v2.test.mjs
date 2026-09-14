@@ -122,6 +122,8 @@ test("original argv lists and accepted native authority and ordinary assembly te
     ["tests/live/linux-codex-live-firewall-wiring.test.ts", "tests/package/live/linux-codex-live-firewall-wiring.test.ts"],
     ["tests/live/linux-codex-live-admin.test.ts", "tests/package/live/linux-codex-live-admin.test.ts"],
     ["tests/live/linux-codex-live-canary-config.test.ts", "tests/package/live/linux-codex-live-canary-config.test.ts"],
+    ["tests/live/run-linux-codex-live-canary.test.mjs", "tests/package/live/run-linux-codex-live-canary.test.mjs"],
+    ["tests/live/run-linux-codex-live-canary-cli.test.mjs", "tests/package/live/run-linux-codex-live-canary-cli.test.mjs"],
   ]);
   expected[0] = expected[0].map((arg) => relocated.get(arg) ?? arg);
   assert.deepEqual(testProcesses, expected);
