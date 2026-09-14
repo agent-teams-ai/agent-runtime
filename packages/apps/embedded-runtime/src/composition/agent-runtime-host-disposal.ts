@@ -202,6 +202,14 @@ class ContainedTurnOwnershipLedger {
     }));
   };
 
+  // Ordinary owner disposal proves physical closure and required owner settlement.
+  // It does not change the durable operation's reconcile_required status.
+  public readonly releaseOrdinaryOwnership = (): void => {
+    for (const [id, active] of this.#active) {
+      if (active.status !== "contract_violation") {this.#active.delete(id);}
+    }
+  };
+
   public readonly recordStatus = (
     operationId: string,
     status: AgentRuntimeHostContainedTurnStatus,
@@ -299,11 +307,13 @@ class ContainedTurnOwnershipLedger {
 class HostDisposalOrchestrator {
   readonly #calls: HostCallLedger;
   readonly #containedTurns: ContainedTurnOwnershipLedger;
+  readonly #disposeOrdinaryOwner: (() => Promise<void>) | undefined;
   readonly #hostAbort = new AbortController();
   #disposal: Promise<void> | undefined;
   #disposed = false;
 
-  public constructor(calls: HostCallLedger, containedTurns: ContainedTurnOwnershipLedger) {
+  public constructor(calls: HostCallLedger, containedTurns: ContainedTurnOwnershipLedger, disposeOrdinaryOwner?: () => Promise<void>) {
+    this.#disposeOrdinaryOwner = disposeOrdinaryOwner;
     this.#calls = calls;
     this.#containedTurns = containedTurns;
   }
@@ -328,6 +338,11 @@ class HostDisposalOrchestrator {
       resolveDisposal = resolve;
       rejectDisposal = reject;
     });
+    const attempt = this.#disposal;
+    const reject = (error: unknown): void => {
+      if (this.#disposeOrdinaryOwner !== undefined && this.#disposal === attempt) {this.#disposal = undefined;}
+      rejectDisposal(error);
+    };
     this.#disposed = true;
     try {
       this.#hostAbort.abort(new DOMException("Agent Runtime Host is disposed", "AbortError"));
@@ -335,15 +350,19 @@ class HostDisposalOrchestrator {
       void Promise.race([
         this.#finishDisposal(),
         this.#rejectAtDeadline(),
-      ]).then(resolveDisposal, rejectDisposal);
+      ]).then(resolveDisposal, reject);
     } catch (error) {
-      rejectDisposal(error);
+      reject(error);
     }
-    return this.#disposal;
+    return attempt;
   };
 
   readonly #finishDisposal = async (): Promise<void> => {
     await this.#calls.settle();
+    if (this.#disposeOrdinaryOwner !== undefined) {
+      await this.#disposeOrdinaryOwner();
+      this.#containedTurns.releaseOrdinaryOwnership();
+    }
     const { containedTurns, omittedContainedTurnCount } = this.#containedTurns.diagnostics();
     if (containedTurns.length > 0) {
       throw new AgentRuntimeHostDisposalIncompleteError(
@@ -373,10 +392,11 @@ class HostDisposalOrchestrator {
 
 export const createAgentRuntimeHostDisposalLifecycle = (
   containedTurn: AuthorityBoundContainedTurnCapability | undefined,
+  disposeOrdinaryOwner?: () => Promise<void>,
 ): AgentRuntimeHostDisposalLifecycle => {
   const calls = new HostCallLedger();
   const containedTurns = new ContainedTurnOwnershipLedger(containedTurn, calls.execute);
-  const disposal = new HostDisposalOrchestrator(calls, containedTurns);
+  const disposal = new HostDisposalOrchestrator(calls, containedTurns, disposeOrdinaryOwner);
   return Object.freeze({
     assertActive: () => disposal.assertActive(),
     dispose: disposal.dispose,
