@@ -1,5 +1,6 @@
 name: adoption-receipt-darwin
-# retrigger 09fbd6c9 (second push)
+# Temporary workflow: Darwin arm64 adoption receipt for Host package-helpers
+# identity 04f2226b after absorb. Checkout frozen SHA; workflow-only.
 
 # Temporary workflow: Darwin arm64 adoption receipt for Host package-helpers
 # identity 09fbd6c9 stacked on Host live mac-pa-auth D 93dd87ae.
@@ -25,7 +26,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: 09fbd6c95c93f0c28d15ab342ec19d5fca1b804f
+          ref: 04f2226b4cb16431548f1afa5d93e5eeed736c00
 
       - name: Verify checkout revision
         shell: bash
