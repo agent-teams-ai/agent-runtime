@@ -4,7 +4,7 @@ import { createContainedTurnLinuxRouteBinding, type ContainedTurnLinuxRouteCampa
   from "../../../dist/composition/contained-turn-linux-route-binding.js";
 import { installLinuxExclusiveRoute } from
   "@agent-teams/agent-execution/composition";
-import { harness, selection } from "../../support/external/provider-access/features/contained-turn-access/route-selection-fixture.ts";
+import { harness, selection } from "../../package/support/external/provider-access/features/contained-turn-access/route-selection-fixture.ts";
 
 /** Product facts the trusted deployment composition owns; none of them is a
  * Provider Access fact and none is read from the environment here. */
