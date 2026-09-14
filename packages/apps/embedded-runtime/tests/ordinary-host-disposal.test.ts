@@ -60,3 +60,9 @@ test("ordinary Host retains owners and writable journal until retry proves featu
   const closedFd = journalFd;
   assert.throws(() => fs.fstatSync(closedFd), /EBADF/);
 });
+
+test('real auth helper indeterminate cleanup remains owned through Host disposal', async () => {
+  const {execFileSync} = await import('node:child_process');
+  const {fileURLToPath} = await import('node:url');
+  execFileSync(process.execPath, ['--experimental-test-module-mocks', '--test', fileURLToPath(new URL('./ordinary-auth-host-disposal.fixture.ts', import.meta.url))], {timeout: 10000, stdio: 'pipe'});
+});

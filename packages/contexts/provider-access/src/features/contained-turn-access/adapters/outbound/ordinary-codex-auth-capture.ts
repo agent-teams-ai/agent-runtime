@@ -25,13 +25,18 @@ export function createOrdinaryCodexAuthCapture(options: OrdinaryCodexAuthCapture
   };
   const erase = () => { held?.token.fill(0); held?.accountId.fill(0); held = undefined; };
   let expiry: ReturnType<typeof setTimeout> | undefined;
+  let retryHelperClosure: (() => void) | undefined;
   const dispose = () => {
+    revoke();
+    retryHelperClosure?.();
+  };
+  const revoke = () => {
     if (disposed) { return; } disposed = true; lifetime.abort(); erase();
-    clearTimeout(expiry); signal.removeEventListener('abort', dispose);
+    clearTimeout(expiry); signal.removeEventListener('abort', revoke);
     if (!attempted) { settle(); }
   };
-  signal.addEventListener('abort', dispose, { once: true });
-  expiry = setTimeout(dispose, input.deadline - startedAt); expiry.unref();
+  signal.addEventListener('abort', revoke, { once: true });
+  expiry = setTimeout(revoke, input.deadline - startedAt); expiry.unref();
   const capture = async (): Promise<OrdinaryCodexAuthMetadata> => {
     if (attempted) { throw new OrdinaryCodexAuthRefused(); } attempted = true;
     let files: Awaited<ReturnType<typeof prepareAuthFiles>> | undefined;
@@ -47,17 +52,40 @@ export function createOrdinaryCodexAuthCapture(options: OrdinaryCodexAuthCapture
         detached: true, stdio: ['pipe', 'pipe', 'pipe'],
       });
       helperSpawned = true;
+      // Keep live-child observations after the bounded IPC attempt has settled.
+      // An indeterminate attempt is not evidence that this owned helper stopped.
+      let exited = false, closed = false;
+      const onExit = () => {exited = true;};
+      const onClose = () => {closed = true;};
+      child.on('exit', onExit); child.on('close', onClose);
+      const forgetHelper = () => {child.off('exit', onExit); child.off('close', onClose); retryHelperClosure = undefined;};
+      retryHelperClosure = () => {
+        let gone = false;
+        if (child.pid && child.pid > 1) {
+          try {process.kill(-child.pid, 0);} catch (error) {gone = error instanceof Error && 'code' in error && error.code === 'ESRCH';}
+        }
+        const observation = Object.freeze({captureRef, outcome: 'cleanup-indeterminate' as const,
+          exitObserved: exited, closeObserved: closed, processGroupGone: gone, retainedDirectory: files?.home});
+        if (!exited || !closed || !gone) {
+          // Never signal a numeric group after its leader exit has been observed.
+          if (!exited && child.pid && child.pid > 1) {try {process.kill(-child.pid, 'SIGKILL');} catch { /* readback on retry decides */ }}
+          throw new OrdinaryCodexAuthCleanupIndeterminate(observation);
+        }
+        input.record(Object.freeze({...observation, outcome: 'closed'}));
+        forgetHelper();
+      };
       captured = await captureAuthHelper({ child, signal, deadline, home: files.home, source: input.sourceDirectory, captureRef, record: input.record });
+      forgetHelper();
       await files.check(); check();
       metadata = createOrdinaryAuthMetadata(captured, { generation: input.generation, captureRef, sourceIdentity: files.sourceIdentity,
         deadline: input.deadline }, Date.now(), performance.now());
       const effectiveDeadline = metadata.deadline;
       await files.cleanup(); files = undefined; check();
       held = captured; captured = undefined;
-      clearTimeout(expiry); expiry = setTimeout(dispose, Math.max(1, effectiveDeadline - performance.now())); expiry.unref();
+      clearTimeout(expiry); expiry = setTimeout(revoke, Math.max(1, effectiveDeadline - performance.now())); expiry.unref();
       return metadata;
     } catch (error) {
-      dispose();
+      revoke();
       if (!helperSpawned) {
         const reason = error instanceof OrdinaryCodexAuthRefused && ORDINARY_AUTH_REFUSAL_REASONS.includes(error.reason)
           ? error.reason : 'io_error';
@@ -77,7 +105,7 @@ export function createOrdinaryCodexAuthCapture(options: OrdinaryCodexAuthCapture
       try {
         if (files) { if (retain) { await files.retain(); } else { await files.cleanup(); } }
       } catch {
-        dispose();
+        revoke();
         // Only non-secret, observed facts are supplied to the host sink.
         try { input.record(Object.freeze({ captureRef, outcome: 'refused', exitObserved: false, closeObserved: false, processGroupGone: false, ...(files ? { retainedDirectory: files.home } : {}) })); } catch { /* refusal remains */ }
         // A cleanup refusal must override a would-be returned capture.
@@ -99,7 +127,7 @@ export function createOrdinaryCodexAuthCapture(options: OrdinaryCodexAuthCapture
         }
         if (result !== true) { throw new OrdinaryCodexAuthRefused(); }
         check(); if (held !== material) { throw new OrdinaryCodexAuthRefused(); }
-      } catch { dispose(); throw new OrdinaryCodexAuthRefused(); }
+      } catch { revoke(); throw new OrdinaryCodexAuthRefused(); }
     },
     admit(selection, admission) {
       try {
@@ -108,7 +136,7 @@ export function createOrdinaryCodexAuthCapture(options: OrdinaryCodexAuthCapture
             selection.operationAbortSignal !== input.signal || !Number.isFinite(selection.deadline) ||
             selection.deadline > metadata.deadline || selection.deadline <= performance.now() ||
             selection.binding.credentialGeneration !== input.generation || selection.binding.providerAccountRef !== metadata.accountId) { throw new OrdinaryCodexAuthRefused(); }
-        const material = held; held = undefined; dispose();
+        const material = held; held = undefined; revoke();
         try {
           if (admission.admit({ operationRef: input.operationRef, binding: selection.binding, recipe: selection.recipe,
             fields: [{ name: 'token', valueBytes: material.token }, { name: 'accountId', valueBytes: material.accountId }] }).kind !== 'admitted') { throw new OrdinaryCodexAuthRefused(); }
@@ -116,7 +144,7 @@ export function createOrdinaryCodexAuthCapture(options: OrdinaryCodexAuthCapture
           if (material.token.byteLength) { material.token.fill(0); }
           if (material.accountId.byteLength) { material.accountId.fill(0); }
         }
-      } catch { dispose(); throw new OrdinaryCodexAuthRefused(); }
+      } catch { revoke(); throw new OrdinaryCodexAuthRefused(); }
     },
   });
 }

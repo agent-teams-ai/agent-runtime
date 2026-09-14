@@ -14,6 +14,7 @@ export const testProcesses = [
     "tests/package/assembly-packed-consumer.test.ts",
     "tests/package/runtime-setup-assembly.test.ts",
     "tests/ordinary-runtime-assembly.test.ts",
+    "tests/ordinary-host-disposal.test.ts",
     "tests/package/capability-bundle-contract.test.ts",
     "tests/package/codex-setup.e2e.test.ts",
     "tests/package/claude-code-setup.e2e.test.ts",

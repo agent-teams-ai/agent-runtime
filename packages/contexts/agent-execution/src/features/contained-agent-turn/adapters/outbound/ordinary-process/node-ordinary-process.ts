@@ -87,17 +87,17 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
     };
     const onData = (bytes: Buffer) => {
       totalBytes += bytes.length;
-      if (totalBytes > 1_048_576) { interrupt(); return; }
+      if (totalBytes > 1_048_576) { streamInvalid = true; interrupt(); return; }
       try {partial += decoder.decode(bytes, {stream: true});} catch {streamInvalid = true; interrupt(); return;}
       for (;;) {
         const newline = partial.indexOf("\n");
         if (newline < 0) { break; }
         const line = partial.slice(0, newline);
         partial = partial.slice(newline + 1);
-        if (Buffer.byteLength(line) > 262_144 || queue.length >= 256) { interrupt(); return; }
+        if (Buffer.byteLength(line) > 262_144 || queue.length >= 256) { streamInvalid = true; interrupt(); return; }
         queue.push(line);
       }
-      if (Buffer.byteLength(partial) > 262_144) { interrupt(); }
+      if (Buffer.byteLength(partial) > 262_144) { streamInvalid = true; interrupt(); }
       wake?.();
     };
     const transport: OrdinaryTransport = Object.freeze({
@@ -144,7 +144,7 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
         child.stderr.on("error", fail);
         child.stdout.on("data", onData);
         child.stdout.once("end", () => { try {partial += decoder.decode();} catch {streamInvalid = true; fail();} if (partial.length > 0) {streamInvalid = true; fail();} stdoutClosed = true; wake?.(); });
-        child.stderr.on("data", (bytes: Buffer) => { totalBytes += bytes.length; try {stderrDecoder.decode(bytes, {stream: true});} catch {streamInvalid = true; interrupt();} bytes.fill(0); if (totalBytes > 1_048_576) { interrupt(); } });
+        child.stderr.on("data", (bytes: Buffer) => { totalBytes += bytes.length; try {stderrDecoder.decode(bytes, {stream: true});} catch {streamInvalid = true; interrupt();} bytes.fill(0); if (totalBytes > 1_048_576) { streamInvalid = true; interrupt(); } });
         child.stderr.once("end", () => {try {stderrDecoder.decode();} catch {streamInvalid = true; fail();} stderrClosed = true;});
         signal.addEventListener("abort", interrupt, {once: true});
         deadlineTimer = setTimeout(interrupt, Math.max(1, input.deadline - performance.now()));

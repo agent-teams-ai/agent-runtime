@@ -187,3 +187,37 @@ for (const boundary of ["cancelled", "journal", "spawn"] as const) {
     }
   });
 }
+
+for (const overflow of ['chunk', 'line', 'queue', 'partial', 'stderr'] as const) {
+  test(`discarded ${overflow} output permanently prevents drain certification`, async t => {
+    const childProcess = await import('node:child_process');
+    const {syncBuiltinESMExports} = await import('node:module');
+    const {PassThrough} = await import('node:stream');
+    const child = new childProcess.ChildProcess();
+    child.pid = 424242;
+    child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    Object.defineProperty(process, 'platform', {...platform, value: 'darwin'});
+    t.mock.method(process, 'getuid', () => 1000);
+    t.mock.method(childProcess.default, 'spawn', () => child);
+    t.mock.method(process, 'kill', () => {throw Object.assign(new Error('TEST group absent'), {code: 'ESRCH'});});
+    syncBuiltinESMExports();
+    t.after(() => {Object.defineProperty(process, 'platform', platform); t.mock.restoreAll(); syncBuiltinESMExports();});
+    const observations: string[] = [];
+    const owner = createNodeOrdinaryProcess({record: event => {observations.push(event.kind);}, prepareLaunch: async () => ({executable: '/TEST/never-executed', arguments: [], cwd: '/TEST', environment: {}})});
+    const reservation = await owner.reserve({binding, workspace: {workspaceId: 'workspace:synthetic', cwd: '/TEST', homeDirectory: '/TEST'}, credential: {materializationId: 'material:synthetic', generation: 1, environment: {}, brokerEndpoint: 'http://127.0.0.1:1'}, deadline: performance.now() + 5000});
+    const transport = await reservation.start(claim(reservation.reservationId), new AbortController().signal);
+    if (overflow === 'stderr') {child.stderr.emit('data', Buffer.alloc(1_048_577, 97));}
+    else {
+      const bytes = overflow === 'chunk' ? Buffer.alloc(1_048_577, 97)
+        : overflow === 'queue' ? Buffer.from('\n'.repeat(257))
+        : Buffer.from('a'.repeat(262_145) + (overflow === 'line' ? '\n' : ''));
+      child.stdout.emit('data', bytes);
+    }
+    child.stdout.emit('end'); child.stderr.emit('end'); child.emit('exit', 0); child.emit('close', 0);
+    await assert.rejects(async () => {for await (const _line of transport.lines) {assert.fail('discarded output must fail the stream');}});
+    await assert.rejects(reservation.close(0), /ORDINARY_PROCESS_UNCONFIRMED/);
+    await assert.rejects(reservation.close(0), /ORDINARY_PROCESS_UNCONFIRMED/);
+    assert.equal(observations.includes('closed'), false);
+  });
+}

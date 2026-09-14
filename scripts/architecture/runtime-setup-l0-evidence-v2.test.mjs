@@ -64,7 +64,7 @@ test("original argv lists and accepted native authority and ordinary assembly te
   const expected = original.scripts.test.split(" && ").map(s => s.split(" ").slice(1));
   expected[0].splice(2, 0, "tests/darwin-native-attempt-authority-join.test.ts");
   expected[0].splice(47, 0, "tests/opaque-reference-digest.test.ts");
-  expected[0].splice(6, 0, "tests/ordinary-runtime-assembly.test.ts");
+  expected[0].splice(6, 0, "tests/ordinary-runtime-assembly.test.ts", "tests/ordinary-host-disposal.test.ts");
   const relocated = new Map([
     ["tests/contained-turn-cancellation-proof.unit.test.ts", "tests/features/contained-turn-cancellation-proof/contained-turn-cancellation-proof.unit.test.ts"],
     ["tests/contained-turn-construction-failure.unit.test.ts", "tests/features/contained-turn-construction-failure/contained-turn-construction-failure.unit.test.ts"],
@@ -127,7 +127,7 @@ test("original argv lists and accepted native authority and ordinary assembly te
   assert.deepEqual(testProcesses, expected);
 });
 test("complete receipts require both entire manifest processes", () => {
-  const f = fixture(); assert.equal(f.validate().length, 60);
+  const f = fixture(); assert.equal(f.validate().length, 61);
 });
 for (const [name, mutate] of [
   ["missing first process", f => {f.artifacts["processes.json"] = json(JSON.parse(f.artifacts["processes.json"]).slice(1));}],
