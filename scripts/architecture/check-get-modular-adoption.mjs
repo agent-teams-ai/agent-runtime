@@ -4,7 +4,7 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import { resolve, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv';
-import {ordinaryCompositionPath, ordinaryAuthorityPath, verifyOrdinaryGraph} from './ordinary-composition-evidence.mjs';
+import {ordinaryCompositionPath, ordinaryAuthorityPath, verifyOrdinaryGraph, verifyOrdinaryHostOwnership} from './ordinary-composition-evidence.mjs';
 import {checkOrdinaryFeatureScope} from './check-ordinary-feature-scope.mjs';
 import { foundationModule, readSourceCensus, requireSourceDiagnostics, verifySourceCensus } from './get-modular-source-census.mjs';
 
@@ -43,6 +43,7 @@ function verifyOrdinaryComposition(composition, decisions, get) {
       assert.equal(composition.scopedFms, 'architecture/feature-module-standard/ordinary-scope.json', 'ordinary FMS mapping missing');
       assert.equal(composition.declarations, ordinaryCompositionPath, 'ordinary declaration identity drift');
       verifyOrdinaryGraph(get(ordinaryCompositionPath));
+      verifyOrdinaryHostOwnership(get(composition.profile));
     } else {
       assert.ok(!composition.entrypoint.includes('ordinary') && !composition.declarations.includes('ordinary'), 'ordinary composition must retain explicit authority');
     }

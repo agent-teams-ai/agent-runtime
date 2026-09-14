@@ -259,6 +259,8 @@ const snapshotAgentRuntimeHostDependencies = (
 
 export const createAgentRuntimeHost = (
   dependencies: AgentRuntimeHostDependencies,
+  /** Trusted ordinary composition only: the owner of the entire containedTurn bundle. */
+  ordinaryOwner?: {dispose(): Promise<void>},
 ): AgentRuntimeHost => {
   const capabilityDependencies = snapshotAgentRuntimeHostDependencies(dependencies);
   const referenceDigest = createNodeOpaqueReferenceDigest();
@@ -272,7 +274,7 @@ export const createAgentRuntimeHost = (
     randomBytes(32),
     referenceDigest,
   );
-  const lifecycle = createAgentRuntimeHostDisposalLifecycle(capabilityDependencies.containedTurn);
+  const lifecycle = createAgentRuntimeHostDisposalLifecycle(capabilityDependencies.containedTurn, ordinaryOwner === undefined ? undefined : () => ordinaryOwner.dispose());
   const containedTurnSubmissionCoordinator = capabilityDependencies.containedTurn === undefined
     ? undefined
     : createContainedTurnSubmissionCoordinator({

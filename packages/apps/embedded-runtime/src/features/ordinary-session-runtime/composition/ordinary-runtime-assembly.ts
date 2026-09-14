@@ -1,6 +1,6 @@
 import {defineModule} from "@get-modular/core";
 import {assemblyFor, type CapabilityContract} from "@get-modular/assembly";
-import {createOrdinaryTurnFeature, type OrdinaryTurnDependencies, type OrdinaryProcessPort} from "@agent-teams/agent-execution/composition";
+import {createOrdinaryTurnFeature, type OrdinaryTurnDependencies, type OrdinaryProcessPort, type NodeOrdinaryProcessOptions} from "@agent-teams/agent-execution/composition";
 import type {RuntimeSetupCapabilities} from "../../../composition/runtime-setup-assembly.js";
 
 type OrdinaryFeature = ReturnType<typeof createOrdinaryTurnFeature>;
@@ -15,6 +15,7 @@ export interface OrdinaryRuntimeCapabilities {
   "ordinary/workspace": Contract<OrdinaryTurnDependencies["workspace"]>;
   "ordinary/artifacts": Contract<OrdinaryTurnDependencies["artifacts"]>;
   "ordinary/process": Contract<OrdinaryTurnDependencies["process"]>;
+  "ordinary/prepare-launch": Contract<NodeOrdinaryProcessOptions["prepareLaunch"]>;
   "ordinary/provider": Contract<OrdinaryTurnDependencies["provider"]>;
   "ordinary/turn": Contract<OrdinaryFeature>;
 }
@@ -24,8 +25,8 @@ const security = defineModule({kind: "get-modular.module-declaration", schemaVer
 const providerAccess = defineModule({kind: "get-modular.module-declaration", schemaVersion: 1, moduleId: "ordinary/provider-access", implementationId: "ordinary/provider-access", owner: {authority: "agent-teams", path: ["provider-access"]}, provides: [{capabilityId: "ordinary/provider-access", compatibility}], slots: [{slotId: "register-secrets", capabilityId: "ordinary/register-secrets", compatibility, cardinality: {kind: "required"}}]});
 const workspace = defineModule({kind: "get-modular.module-declaration", schemaVersion: 1, moduleId: "ordinary/workspace", implementationId: "ordinary/workspace", owner, provides: [{capabilityId: "ordinary/workspace", compatibility}], slots: []});
 const artifacts = defineModule({kind: "get-modular.module-declaration", schemaVersion: 1, moduleId: "ordinary/artifacts", implementationId: "ordinary/artifacts", owner, provides: [{capabilityId: "ordinary/artifacts", compatibility}], slots: []});
-const processOwner = defineModule({kind: "get-modular.module-declaration", schemaVersion: 1, moduleId: "ordinary/process", implementationId: "ordinary/process", owner, provides: [{capabilityId: "ordinary/process", compatibility}], slots: []});
-const provider = defineModule({kind: "get-modular.module-declaration", schemaVersion: 1, moduleId: "ordinary/provider", implementationId: "ordinary/provider", owner, provides: [{capabilityId: "ordinary/provider", compatibility}], slots: []});
+const processOwner = defineModule({kind: "get-modular.module-declaration", schemaVersion: 1, moduleId: "ordinary/process", implementationId: "ordinary/process", owner, provides: [{capabilityId: "ordinary/process", compatibility}], slots: [{slotId: "prepare-launch", capabilityId: "ordinary/prepare-launch", compatibility, cardinality: {kind: "required"}}]});
+const provider = defineModule({kind: "get-modular.module-declaration", schemaVersion: 1, moduleId: "ordinary/provider", implementationId: "ordinary/provider", owner, provides: [{capabilityId: "ordinary/provider", compatibility}, {capabilityId: "ordinary/prepare-launch", compatibility}], slots: []});
 const turn = defineModule({kind: "get-modular.module-declaration", schemaVersion: 1, moduleId: "ordinary/turn", implementationId: "ordinary/turn", owner, provides: [{capabilityId: "ordinary/turn", compatibility}], slots: [
   {slotId: "operation-store", capabilityId: "ordinary/store", compatibility, cardinality: {kind: "required"}},
   {slotId: "security", capabilityId: "ordinary/security", compatibility, cardinality: {kind: "required"}},
@@ -38,6 +39,7 @@ const turn = defineModule({kind: "get-modular.module-declaration", schemaVersion
 export const ordinaryRuntimeDeclarations = [store, security, providerAccess, workspace, artifacts, processOwner, provider, turn] as const;
 export const ordinaryTurnHostSlot = {slotId: "ordinary-turn", capabilityId: "ordinary/turn", compatibility, cardinality: {kind: "required"}} as const;
 export const ordinaryRuntimeBindings = [
+  {consumerImplementationId: "ordinary/process", slotId: "prepare-launch", providerImplementationIds: ["ordinary/provider"]},
   {consumerImplementationId: "ordinary/provider-access", slotId: "register-secrets", providerImplementationIds: ["ordinary/security"]},
   {consumerImplementationId: "ordinary/turn", slotId: "operation-store", providerImplementationIds: ["ordinary/store"]},
   {consumerImplementationId: "ordinary/turn", slotId: "security", providerImplementationIds: ["ordinary/security"]},
@@ -54,8 +56,8 @@ export interface OrdinaryRuntimeFactories {
   providerAccess(registerSecrets: RegisterSecrets): Promise<OrdinaryTurnDependencies["providerAccess"]>;
   workspace(): Promise<OrdinaryTurnDependencies["workspace"]>;
   artifacts(): Promise<OrdinaryTurnDependencies["artifacts"]>;
-  process(): Promise<OrdinaryProcessPort>;
-  provider(): Promise<OrdinaryTurnDependencies["provider"]>;
+  process(prepareLaunch: NodeOrdinaryProcessOptions["prepareLaunch"]): Promise<OrdinaryProcessPort>;
+  provider(): Promise<{readonly provider: OrdinaryTurnDependencies["provider"]; readonly prepareLaunch: NodeOrdinaryProcessOptions["prepareLaunch"]}>;
 }
 export function bindOrdinaryRuntime(assembly: ReturnType<typeof assemblyFor<RuntimeSetupCapabilities>>, factories: OrdinaryRuntimeFactories) {
   const storeBinding = assembly.bindFactory(store, async () => {const instance = await factories.operationStore(); return {instance, capabilities: {"ordinary/store": instance}};});
@@ -63,8 +65,8 @@ export function bindOrdinaryRuntime(assembly: ReturnType<typeof assemblyFor<Runt
   const accessBinding = assembly.bindFactory(providerAccess, async dependencies => {const instance = await factories.providerAccess(dependencies["register-secrets"]); return {instance, capabilities: {"ordinary/provider-access": instance}};});
   const workspaceBinding = assembly.bindFactory(workspace, async () => {const instance = await factories.workspace(); return {instance, capabilities: {"ordinary/workspace": instance}};});
   const artifactsBinding = assembly.bindFactory(artifacts, async () => {const instance = await factories.artifacts(); return {instance, capabilities: {"ordinary/artifacts": instance}};});
-  const processBinding = assembly.bindFactory(processOwner, async () => {const instance = await factories.process(); return {instance, capabilities: {"ordinary/process": instance}};});
-  const providerBinding = assembly.bindFactory(provider, async () => {const instance = await factories.provider(); return {instance, capabilities: {"ordinary/provider": instance}};});
+  const processBinding = assembly.bindFactory(processOwner, async dependencies => {const instance = await factories.process(dependencies["prepare-launch"]); return {instance, capabilities: {"ordinary/process": instance}};});
+  const providerBinding = assembly.bindFactory(provider, async () => {const instance = await factories.provider(); return {instance, capabilities: {"ordinary/provider": instance.provider, "ordinary/prepare-launch": instance.prepareLaunch}};});
   const turnBinding = assembly.bindFactory(turn, async dependencies => {
     const instance = createOrdinaryTurnFeature({operationStore: dependencies["operation-store"], security: dependencies.security, providerAccess: dependencies["provider-access"], workspace: dependencies.workspace, artifacts: dependencies.artifacts, process: dependencies.process, provider: dependencies.provider});
     return {instance, capabilities: {"ordinary/turn": instance}};
