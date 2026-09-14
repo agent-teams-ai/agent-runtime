@@ -1,5 +1,5 @@
-export {
-  type OwnerTurnObservation,
-  type OwnerObservationOutcome,
-  type OwnerSubmitOutcome,
-} from "./contained-turn-composition-types.js";
+export type {
+  OwnerTurnObservation,
+  OwnerObservationOutcome,
+  OwnerSubmitOutcome,
+} from "./contracts/contained-turn-composition-types.js";

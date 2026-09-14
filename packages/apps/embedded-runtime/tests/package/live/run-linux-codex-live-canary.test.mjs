@@ -473,8 +473,7 @@ test('real scope validator refuses mismatched approval before driver effects', a
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
     return;
   }
-  const {createLinuxCodexLiveCanaryConfiguration} = await import(
-    new URL('./linux-codex-live-canary-config.ts', import.meta.url).href);
+  const {createLinuxCodexLiveCanaryConfiguration} = await import("./linux-codex-live-canary-config.ts");
   const fs = (await import('node:fs')).default;
   const {root, credential, originalStat} = await publicFixture(t);
   const c = config(root);

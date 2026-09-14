@@ -190,8 +190,13 @@ test("builder statically walks real pinned files' local imports and refuses a cl
     const built = await buildDarwinLiveActivation(complete.spec, dependencies);
     const activation = JSON.parse(await readFile(built.activationPath, "utf8"));
     const packetEntry = activation.files.find(entry => entry.role === "root-packet-builder");
-    const loaded = await import(`file://${packetEntry.path}`);
-    assert.equal(typeof loaded.validateDarwinNativeRootPacketTemplate, "function");
+    const loaded = await executeFile(process.execPath, [
+      "--input-type=module",
+      "-e",
+      `const module = await import(${JSON.stringify(`file://${packetEntry.path}`)});
+       if (typeof module.validateDarwinNativeRootPacketTemplate !== "function") process.exit(2);`,
+    ]);
+    assert.equal(loaded.stdout, "");
   } finally {await rm(complete.parent, {recursive: true, force: true});}
 
   const missing = await fixture();

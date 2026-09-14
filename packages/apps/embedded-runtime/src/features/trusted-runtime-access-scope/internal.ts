@@ -1,10 +1,14 @@
+export type {
+  ContainedTurnCompositionScope,
+  TrustedRuntimeAccessScope,
+  TrustedClaudeCodeSetupScope,
+  TrustedCodexSetupScope,
+} from "./contracts/trusted-runtime-access-scope.js";
 export {
   TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS,
+} from "./contracts/trusted-runtime-access-scope.js";
+export {
   copyTrustedClaudeCodeSetupScope,
   copyTrustedCodexSetupScope,
   copyTrustedContainedTurnScope,
-  type ContainedTurnCompositionScope,
-  type TrustedRuntimeAccessScope,
-  type TrustedClaudeCodeSetupScope,
-  type TrustedCodexSetupScope,
-} from "./trusted-runtime-access-scope.js";
+} from "./adapters/trusted-runtime-access-scope.js";

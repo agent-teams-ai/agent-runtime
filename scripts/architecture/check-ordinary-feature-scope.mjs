@@ -79,13 +79,16 @@ export async function checkOrdinaryFeatureScope({root = fileURLToPath(new URL('.
   const paths = inventory.files.map(path => repositoryPath(identity, path));
   const issues = [...inventory.issues, ...validateOrdinaryScope(scope, paths, registry.decisions)];
   if (issues.length) {return issues;}
-  const features = [...baseline.features, scope.feature, {id: 'contained-turn-dispatch-authority', root: RS,
-    roles: baseline.moduleRoles, entrypoints: {public: `${RS}/index.ts`, internal: `${RS}/internal.ts`}}];
+  const features = [...baseline.features];
+  for (const feature of [scope.feature, {id: 'contained-turn-dispatch-authority', root: RS,
+    roles: baseline.moduleRoles, entrypoints: {public: `${RS}/index.ts`, internal: `${RS}/internal.ts`}}]) {
+    if (!features.some(existing => existing.id === feature.id)) {features.push(feature);}
+  }
   const localPackageImports = await readLocalPackageImports({root: identity, productionRoots, issue: fms.issue, pathIndex: createPathIndex(paths), declaredModules});
   issues.push(...localPackageImports.issues);
   issues.push(...await fms.featureStructureIssues(scope.feature, paths, identity, localPackageImports.packageMetadata));
   const declaredEdges = edges([...baseline.featureEdges, ...scope.featureEdges]);
-  const declaredModuleEdges = edges([...baseline.moduleEdges, ...scope.moduleEdges]);
+  const declaredModuleEdges = edges([...scope.moduleEdges, ...baseline.moduleEdges]);
   const observedEdges = new Map(), edgeLocations = new Map(), observedModuleEdges = new Map(), moduleEdgeLocations = new Map();
   const resources = {imports: 0};
   const observedCompositionDependencies = new Set();

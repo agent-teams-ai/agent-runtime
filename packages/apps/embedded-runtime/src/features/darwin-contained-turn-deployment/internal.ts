@@ -1,4 +1,4 @@
 export {
   createDarwinContainedTurnDeployment,
   type DarwinContainedTurnDeploymentInput,
-} from "./darwin-contained-turn-deployment.js";
+} from "./adapters/darwin-contained-turn-deployment.js";

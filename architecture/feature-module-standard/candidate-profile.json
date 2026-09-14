@@ -43,7 +43,8 @@
           "./composition",
           "./scripts/run-package-tests.mjs"
         ],
-        "adoption": "pending"
+        "adoption": "active",
+        "activationAuthority": "ADR-0023"
       },
       {
         "id": "filesystem-custody",
@@ -104,13 +105,13 @@
     ],
     "productionRoots": [
       "packages/contexts/agent-execution/src",
+      "packages/apps/embedded-runtime/src",
+      "packages/platform/filesystem-custody/src",
       "packages/contexts/provider-access/src",
       "packages/contexts/runtime-configuration/src",
-      "packages/platform/filesystem-custody/src",
       "packages/contexts/runtime-security/src"
     ],
     "outOfScope": [
-      "Embedded Runtime",
       "Module Kit",
       "experiments",
       "tooling other than scripts/architecture/check-feature-modules.mjs"
@@ -266,11 +267,295 @@
         "public": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/index.ts",
         "internal": "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/internal.ts"
       }
+    },
+    {
+      "id": "contained-turn-access-authority",
+      "root": "packages/apps/embedded-runtime/src/features/contained-turn-access-authority",
+      "roles": [
+        "contracts",
+        "adapters"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/contained-turn-access-authority/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/contained-turn-access-authority/internal.ts"
+      }
+    },
+    {
+      "id": "contained-turn-authority-capability",
+      "root": "packages/apps/embedded-runtime/src/features/contained-turn-authority-capability",
+      "roles": [
+        "adapters"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/internal.ts"
+      }
+    },
+    {
+      "id": "contained-turn-cancellation-proof",
+      "root": "packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof",
+      "roles": [
+        "contracts",
+        "composition"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof/internal.ts"
+      }
+    },
+    {
+      "id": "contained-turn-composition-types",
+      "root": "packages/apps/embedded-runtime/src/features/contained-turn-composition-types",
+      "roles": [
+        "contracts"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/contained-turn-composition-types/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/contained-turn-composition-types/internal.ts"
+      }
+    },
+    {
+      "id": "contained-turn-construction-failure",
+      "root": "packages/apps/embedded-runtime/src/features/contained-turn-construction-failure",
+      "roles": [
+        "contracts"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/contained-turn-construction-failure/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/contained-turn-construction-failure/internal.ts"
+      }
+    },
+    {
+      "id": "contained-turn-current-authority",
+      "root": "packages/apps/embedded-runtime/src/features/contained-turn-current-authority",
+      "roles": [
+        "adapters"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/contained-turn-current-authority/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/contained-turn-current-authority/internal.ts"
+      }
+    },
+    {
+      "id": "contained-turn-current-egress-owners",
+      "root": "packages/apps/embedded-runtime/src/features/contained-turn-current-egress-owners",
+      "roles": [
+        "adapters"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/contained-turn-current-egress-owners/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/contained-turn-current-egress-owners/internal.ts"
+      }
+    },
+    {
+      "id": "contained-turn-http-egress-authorities",
+      "root": "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-authorities",
+      "roles": [
+        "adapters"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-authorities/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-authorities/internal.ts"
+      }
+    },
+    {
+      "id": "contained-turn-http-egress-upstream",
+      "root": "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-upstream",
+      "roles": [
+        "adapters"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-upstream/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/contained-turn-http-egress-upstream/internal.ts"
+      }
+    },
+    {
+      "id": "contained-turn-http-provider-access",
+      "root": "packages/apps/embedded-runtime/src/features/contained-turn-http-provider-access",
+      "roles": [
+        "adapters"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/contained-turn-http-provider-access/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/contained-turn-http-provider-access/internal.ts"
+      }
+    },
+    {
+      "id": "contained-turn-http-runtime-security",
+      "root": "packages/apps/embedded-runtime/src/features/contained-turn-http-runtime-security",
+      "roles": [
+        "adapters"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/contained-turn-http-runtime-security/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/contained-turn-http-runtime-security/internal.ts"
+      }
+    },
+    {
+      "id": "contained-turn-linux-route-binding",
+      "root": "packages/apps/embedded-runtime/src/features/contained-turn-linux-route-binding",
+      "roles": [
+        "adapters"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/contained-turn-linux-route-binding/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/contained-turn-linux-route-binding/internal.ts"
+      }
+    },
+    {
+      "id": "contained-turn-operation-ref",
+      "root": "packages/apps/embedded-runtime/src/features/contained-turn-operation-ref",
+      "roles": [
+        "contracts"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/contained-turn-operation-ref/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/contained-turn-operation-ref/internal.ts"
+      }
+    },
+    {
+      "id": "contained-turn-owner-contract-error",
+      "root": "packages/apps/embedded-runtime/src/features/contained-turn-owner-contract-error",
+      "roles": [
+        "contracts"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/contained-turn-owner-contract-error/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/contained-turn-owner-contract-error/internal.ts"
+      }
+    },
+    {
+      "id": "contained-turn-provider-selection",
+      "root": "packages/apps/embedded-runtime/src/features/contained-turn-provider-selection",
+      "roles": [
+        "adapters"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/contained-turn-provider-selection/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/contained-turn-provider-selection/internal.ts"
+      }
+    },
+    {
+      "id": "contained-turn-route-qualification",
+      "root": "packages/apps/embedded-runtime/src/features/contained-turn-route-qualification",
+      "roles": [
+        "adapters"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/internal.ts"
+      }
+    },
+    {
+      "id": "contained-turn-runtime-access",
+      "root": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access",
+      "roles": [
+        "contracts",
+        "composition"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/internal.ts"
+      }
+    },
+    {
+      "id": "contained-turn-runtime-validation",
+      "root": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation",
+      "roles": [
+        "composition"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/internal.ts"
+      }
+    },
+    {
+      "id": "darwin-contained-turn-authority",
+      "root": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority",
+      "roles": [
+        "adapters"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/internal.ts"
+      }
+    },
+    {
+      "id": "darwin-contained-turn-deployment",
+      "root": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment",
+      "roles": [
+        "adapters"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/internal.ts"
+      }
+    },
+    {
+      "id": "linux-codex-deployment",
+      "root": "packages/apps/embedded-runtime/src/features/linux-codex-deployment",
+      "roles": [
+        "adapters"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/linux-codex-deployment/internal.ts"
+      }
+    },
+    {
+      "id": "linux-codex-node-recipe",
+      "root": "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe",
+      "roles": [
+        "adapters"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/internal.ts"
+      }
+    },
+    {
+      "id": "ordinary-session-runtime",
+      "root": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime",
+      "roles": [
+        "contracts",
+        "adapters",
+        "composition"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/internal.ts"
+      }
+    },
+    {
+      "id": "setup-inspection-planning",
+      "root": "packages/apps/embedded-runtime/src/features/setup-inspection-planning",
+      "roles": [
+        "contracts",
+        "adapters"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/setup-inspection-planning/internal.ts"
+      }
+    },
+    {
+      "id": "trusted-runtime-access-scope",
+      "root": "packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope",
+      "roles": [
+        "contracts",
+        "adapters"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope/internal.ts"
+      }
     }
   ],
   "assemblyFiles": [
     "packages/contexts/agent-execution/src/index.ts",
     "packages/contexts/agent-execution/src/composition.ts",
+    "packages/apps/embedded-runtime/src/index.ts",
+    "packages/apps/embedded-runtime/src/composition.ts",
     "packages/contexts/provider-access/src/index.ts",
     "packages/contexts/provider-access/src/composition.ts",
     "packages/platform/filesystem-custody/src/index.ts",
@@ -278,9 +563,57 @@
     "packages/contexts/runtime-configuration/src/index.ts",
     "packages/contexts/runtime-configuration/src/composition.ts",
     "packages/contexts/runtime-security/src/index.ts",
-    "packages/contexts/runtime-security/src/composition.ts"
+    "packages/contexts/runtime-security/src/composition.ts",
+    "packages/apps/embedded-runtime/src/composition/agent-runtime-host-creation-error.ts",
+    "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal-diagnostics.ts",
+    "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
+    "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+    "packages/apps/embedded-runtime/src/composition/claude-code-setup-inspection-planner.ts",
+    "packages/apps/embedded-runtime/src/composition/codex-setup-inspection-planner.ts",
+    "packages/apps/embedded-runtime/src/composition/contained-turn-access-authority.ts",
+    "packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts",
+    "packages/apps/embedded-runtime/src/composition/contained-turn-cancellation-proof.ts",
+    "packages/apps/embedded-runtime/src/composition/contained-turn-composition-types.ts",
+    "packages/apps/embedded-runtime/src/composition/contained-turn-construction-failure.ts",
+    "packages/apps/embedded-runtime/src/composition/contained-turn-current-authority.ts",
+    "packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts",
+    "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts",
+    "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts",
+    "packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts",
+    "packages/apps/embedded-runtime/src/composition/contained-turn-http-provider-access.ts",
+    "packages/apps/embedded-runtime/src/composition/contained-turn-http-runtime-security.ts",
+    "packages/apps/embedded-runtime/src/composition/contained-turn-linux-route-binding.ts",
+    "packages/apps/embedded-runtime/src/composition/contained-turn-operation-ref.ts",
+    "packages/apps/embedded-runtime/src/composition/contained-turn-owner-contract-error.ts",
+    "packages/apps/embedded-runtime/src/composition/contained-turn-provider-selection.ts",
+    "packages/apps/embedded-runtime/src/composition/contained-turn-route-qualification.ts",
+    "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts",
+    "packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts",
+    "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-authority.ts",
+    "packages/apps/embedded-runtime/src/composition/darwin-contained-turn-deployment.ts",
+    "packages/apps/embedded-runtime/src/composition/default-agent-runtime-host.ts",
+    "packages/apps/embedded-runtime/src/composition/host-custodied-agent-runtime-host.ts",
+    "packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts",
+    "packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts",
+    "packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts",
+    "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts",
+    "packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe.ts",
+    "packages/apps/embedded-runtime/src/composition/opaque-reference-digest.ts",
+    "packages/apps/embedded-runtime/src/composition/ordinary-agent-runtime-host.ts",
+    "packages/apps/embedded-runtime/src/composition/ordinary-runtime-assembly.ts",
+    "packages/apps/embedded-runtime/src/composition/runtime-access-lifecycle.ts",
+    "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+    "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts"
   ],
-  "featureEdges": [],
+  "featureEdges": [
+    {
+      "from": "contained-turn-operation-ref",
+      "to": "trusted-runtime-access-scope",
+      "kinds": [
+        "type"
+      ]
+    }
+  ],
   "moduleEdges": [
     {
       "from": "agent-execution",
@@ -302,6 +635,37 @@
       "to": "filesystem-custody",
       "kinds": [
         "runtime"
+      ]
+    },
+    {
+      "from": "embedded-runtime",
+      "to": "agent-execution",
+      "kinds": [
+        "runtime",
+        "type"
+      ]
+    },
+    {
+      "from": "embedded-runtime",
+      "to": "provider-access",
+      "kinds": [
+        "runtime"
+      ]
+    },
+    {
+      "from": "embedded-runtime",
+      "to": "runtime-configuration",
+      "kinds": [
+        "runtime",
+        "type"
+      ]
+    },
+    {
+      "from": "embedded-runtime",
+      "to": "runtime-security",
+      "kinds": [
+        "runtime",
+        "type"
       ]
     }
   ],
@@ -341,10 +705,11 @@
       "packages/contexts/runtime-configuration",
       "packages/contexts/runtime-security"
     ],
-    "applicationRoots": [],
-    "excludedRoots": [
-      "experiments",
+    "applicationRoots": [
       "packages/apps/embedded-runtime"
+    ],
+    "excludedRoots": [
+      "experiments"
     ],
     "abstractLayout": {
       "modules": [
@@ -399,7 +764,12 @@
           "moduleTestsRoot": "packages/contexts/runtime-security/tests/package"
         }
       ],
-      "applications": []
+      "applications": [
+        {
+          "applicationRoot": "packages/apps/embedded-runtime",
+          "compositionRoot": "packages/apps/embedded-runtime/src/composition"
+        }
+      ]
     },
     "localExtensions": {
       "language": {

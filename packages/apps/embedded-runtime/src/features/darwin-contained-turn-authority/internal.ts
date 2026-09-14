@@ -4,4 +4,4 @@ export {
   bindDarwinNativeAttemptAuthority,
   createDarwinContainedTurnAuthority,
   type DarwinContainedTurnAuthority,
-} from "./darwin-contained-turn-authority.js";
+} from "./adapters/darwin-contained-turn-authority.js";

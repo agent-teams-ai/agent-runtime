@@ -1,4 +1,4 @@
 export {
   snapshotContainedTurnProviderSelection,
   type ContainedTurnProviderSelectionSnapshot,
-} from "./contained-turn-provider-selection.js";
+} from "./adapters/contained-turn-provider-selection.js";

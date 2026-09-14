@@ -11,28 +11,12 @@ import {
   createStaticContainedTurnProviderAccessFeature,
 } from "@agent-teams/provider-access/composition";
 import { createContainedTurnFeatureFromProviderAccess } from "../../dist/composition.js";
-import { findRepoRoot } from "./helpers/repo-root.ts";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
-
-const repoRoot = findRepoRoot();
-// Load compiled internals. Node type-stripping does not rewrite `.js` specifiers
-// inside source `.ts`, so a repo-root import of `src/` fails at runtime.
-const { digestContainedTurnCanonicalValue } = await import(pathToFileURL(join(
-  repoRoot,
-  "packages/contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-codecs.js",
-)).href);
-const {
+import {
   completeContainedTurnDispatchGrantSubject,
   containedTurnGrantSettlementRequestId,
-} = await import(pathToFileURL(join(
-  repoRoot,
-  "packages/contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-dispatch-authority.js",
-)).href);
-const { containedTurnIdentity } = await import(pathToFileURL(join(
-  repoRoot,
-  "packages/contexts/agent-execution/dist/features/contained-agent-turn/domain/contained-turn-identities.js",
-)).href);
+  containedTurnIdentity,
+  digestContainedTurnCanonicalValue,
+} from "./support/ae-unpublished-dispatch-authority.mjs";
 
 const scope = Object.freeze({ projectId: "project:kernel", tenantId: "tenant:kernel" });
 const record = Object.freeze({

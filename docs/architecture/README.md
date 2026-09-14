@@ -28,9 +28,9 @@ Documents:
   current seven-port legacy classification and rejecting gate without extending
   the active passive setup Assembly scope.
 - [Feature Module Standard v1 scoped active adoption](feature-module-standard-v1-candidate.md):
-  exact immutable authority binding, narrow Agent Execution and Provider Access
-  active scope, deterministic gates, and zero-diagnostic evidence. This is not
-  repository-wide conformance.
+  exact immutable authority binding, scoped active modules including Embedded
+  Runtime host-app activation, deterministic gates, and zero-diagnostic
+  evidence. This is not repository-wide conformance.
 - [Architecture foundation](architecture-foundation.md): ownership, DDD
   boundaries, dependency rules, persistence, public API, and quality gates.
 - [Execution generation model](execution-generation-model.md): execution

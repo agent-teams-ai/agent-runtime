@@ -2,4 +2,4 @@ export {
   ContainedTurnConstructionCleanupError,
   ContainedTurnOwnerDisposalError,
   disposeAfterContainedTurnConstructionFailure,
-} from "./contained-turn-construction-failure.js";
+} from "./contracts/contained-turn-construction-failure.js";

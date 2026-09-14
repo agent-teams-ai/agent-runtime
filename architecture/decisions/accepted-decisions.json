@@ -98,6 +98,11 @@
       "immutableDigest": "sha256:13def70c8554d01fbf254ef3afce598f0a18edc44d7d3af4eaf634b0635fddd8"
     },
     {
+      "id": "ADR-0023",
+      "path": "docs/decisions/0023-embedded-runtime-host-app-feature-activation.md",
+      "immutableDigest": "sha256:6932ada5202b24d2f5f05c7da52638dcb2f0e19c44a13b9218d63a2f4c149019"
+    },
+    {
       "id": "ADR-0090",
       "path": "docs/decisions/0090-ordinary-user-session-codex-execution-profile.md",
       "immutableDigest": "sha256:ce26ce717bd00701b2ddf4d073999591cda8b9f0e08b3238290e6646bfe02bf1"

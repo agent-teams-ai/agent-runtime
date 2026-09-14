@@ -3,4 +3,4 @@ export {
   composeContainedTurnHttpEgressSession,
   type ContainedTurnHttpEgressAuthorities,
   type ContainedTurnHttpEgressBrokerPorts,
-} from "./contained-turn-http-egress-authorities.js";
+} from "./adapters/contained-turn-http-egress-authorities.js";

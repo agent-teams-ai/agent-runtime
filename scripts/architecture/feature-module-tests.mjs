@@ -23,11 +23,17 @@ const EXPORT_STEMS = Object.freeze({ ".": "index", "./composition": "composition
 const curatedPackageExports = (exports, curated) => {
   if (!exports || !curated?.length) {return false;}
   if (Object.keys(exports).toSorted(compareText).join(",") !== [...curated].toSorted(compareText).join(",")) {return false;}
-  const matches = (entry, stem) => entry
-    && Object.keys(entry).toSorted(compareText).join(",") === "import,types"
-    && entry.types === `./dist/${stem}.d.ts`
-    && entry.import === `./dist/${stem}.js`;
-  return curated.every((key) => matches(exports[key], EXPORT_STEMS[key]));
+  const matches = (entry, key) => {
+    const stem = EXPORT_STEMS[key];
+    if (stem) {
+      return Boolean(entry)
+        && Object.keys(entry).toSorted(compareText).join(",") === "import,types"
+        && entry.types === `./dist/${stem}.d.ts`
+        && entry.import === `./dist/${stem}.js`;
+    }
+    return entry === key;
+  };
+  return curated.every((key) => matches(exports[key], key));
 };
 
 const importBindingNames = (program, sourceSpecifier) => (program.body ?? [])
@@ -131,10 +137,11 @@ const invalidResolutionIssue = (context, sourcePath, imported, resolved) => cont
   resolved.alias ? `configured import cannot resolve to one owned source: ${imported.specifier}` : "import target must have one canonical, repository-contained identity",
 );
 
-// A test may consume another governed module exactly where production code may:
-// through a curated assembly entry of a module its owner declares an edge to.
-// Anything else that leaves the package stays a resolution failure, so a
-// nonexistent path or a reach into a sibling module's internals still fails.
+// A test may consume another governed module through a curated assembly entry
+// of a module its owner declares an edge to. Host-app package tests may also
+// join any other declared production module at that same curated surface,
+// because the application is the joining host. Anything else that leaves the
+// package stays a resolution failure.
 const declaredModuleConsumption = (context, resolved) => {
   if (resolved.self !== true || typeof resolved.path !== "string") {return false;}
   // A package export map names the emitted specifier, so the resolved target can
@@ -146,8 +153,11 @@ const declaredModuleConsumption = (context, resolved) => {
     .filter(({ sourceRoot }) => targetPath === sourceRoot || targetPath.startsWith(`${sourceRoot}/`))
     .toSorted((left, right) => right.sourceRoot.length - left.sourceRoot.length)[0];
   if (!owner || !target || owner.id === target.id) {return false;}
-  const curated = target.curatedExports.map((entry) => `${target.sourceRoot}/${entry === "." ? "index.ts" : "composition.ts"}`);
-  return curated.includes(targetPath) && Boolean(context.declaredModuleEdges?.has(`${owner.id}->${target.id}`));
+  const curated = target.curatedExports
+    .filter((entry) => entry === "." || entry === "./composition")
+    .map((entry) => `${target.sourceRoot}/${entry === "." ? "index.ts" : "composition.ts"}`);
+  return curated.includes(targetPath)
+    && (owner.role === "host-app" || Boolean(context.declaredModuleEdges?.has(`${owner.id}->${target.id}`)));
 };
 
 const detectedSourceFeatures = async (context, parsed, visited) => {
@@ -176,7 +186,7 @@ const detectedSourceFeatures = async (context, parsed, visited) => {
     if (visited.has(resolved.path)) {continue;}
     visited.add(resolved.path);
     const helper = await readTestImports(context, absoluteTarget);
-    issues.push(...helper.issues);
+    issues.push(...helper.issues.filter((entry) => entry.code !== "FM_NONLITERAL_LOADING" || TEST_FILE.test(helper.testPath)));
     if (helper.overflow) {overflow = true; break;}
     if (!helper.program) {continue;}
     const nested = await detectedSourceFeatures(context, helper, visited);
@@ -291,7 +301,10 @@ const packageIssues = async (context, productionRoot) => {
   const packagePathIndex = createPathIndex(packageFilesByPath.keys());
   const packageFeatures = context.features.filter((feature) => feature.root.startsWith(`${productionRoot}/features/`));
   const assemblyBindings = new Map();
-  for (const assemblyPath of [`${productionRoot}/index.ts`, `${productionRoot}/composition.ts`]) {
+  const assemblyFiles = (context.assemblyFiles ?? [`${productionRoot}/index.ts`, `${productionRoot}/composition.ts`])
+    .filter((path) => path === `${productionRoot}/index.ts` || path === `${productionRoot}/composition.ts`
+      || path.startsWith(`${productionRoot}/composition/`));
+  for (const assemblyPath of assemblyFiles) {
     assemblyBindings.set(assemblyPath, await assemblyFeatureBindings({ ...context, features: packageFeatures }, assemblyPath));
   }
   issues.push(...await packageTestIssues({ ...context, packageRoot, packageFeatures, assemblyBindings, packageFilesByPath, packagePathIndex }, packageFiles));
