@@ -8,7 +8,7 @@ import {dirname, isAbsolute, join, relative, resolve as resolvePath, sep} from "
 import {fileURLToPath} from "node:url";
 
 import {createDarwinLiveActivationManifest, plainJson} from "./darwin-live-activation-manifest.mjs";
-import {validateDarwinNativeRootPacketTemplate} from "../../live/darwin-native-root-packet.mjs";
+import {validateDarwinNativeRootPacketTemplate} from "./darwin-native-root-packet.mjs";
 import {verifyPinnedSource} from "./darwin-live-filesystem-verification.mjs";
 
 const fail = message => {throw new Error(`DARWIN_ACTIVATION_BUILDER: ${message}`);};

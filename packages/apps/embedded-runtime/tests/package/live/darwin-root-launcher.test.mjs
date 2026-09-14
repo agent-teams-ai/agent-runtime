@@ -34,7 +34,7 @@ test("inert root preflight validates the adjacent activation and exact packet", 
 });
 
 test("production root refuses before acquiring owners outside the admitted Darwin Host", async () => {
-  const {createDarwinLiveRuntime} = await import("../package/live/darwin-live-production-root.mjs");
+  const {createDarwinLiveRuntime} = await import("./darwin-live-production-root.mjs");
   await assert.rejects(createDarwinLiveRuntime({runtimeRootModulePath: "/does/not/exist"}), /PRODUCTION_ROOT_REFUSED/);
 });
 

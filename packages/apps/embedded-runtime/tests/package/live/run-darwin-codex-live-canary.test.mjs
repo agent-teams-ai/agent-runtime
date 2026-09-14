@@ -6,7 +6,7 @@ import {fileURLToPath} from "node:url";
 import test from "node:test";
 import {createHash} from "node:crypto";
 
-import {createDarwinLiveActivationManifest} from "../package/live/darwin-live-activation-manifest.mjs";
+import {createDarwinLiveActivationManifest} from "./darwin-live-activation-manifest.mjs";
 import {consumeAttempt, loadAndVerifyActivation, main} from "./run-darwin-codex-live-canary.mjs";
 import {executeOnePublicContainedTurn, verifyReleasedCleanup} from "./full-public-runtime.mjs";
 
