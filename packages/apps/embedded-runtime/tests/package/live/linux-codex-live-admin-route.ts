@@ -4,7 +4,7 @@ import {createContainedTurnRouteEnforcement,snapshotDockerEnginePolicy} from
   "@agent-teams/agent-execution/composition";
 import {routeSelectionDigest, snapshotRouteSelectionFacts} from
   "@agent-teams/provider-access/composition";
-import type {LinuxCodexLivePins} from "../../live/linux-codex-live-bootstrap.ts";
+import type {LinuxCodexLivePins} from "./linux-codex-live-bootstrap.ts";
 
 const target = Object.freeze({
   provider: "codex",
