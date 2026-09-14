@@ -1,6 +1,5 @@
 import type { ContainedTurnIntent } from "../domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
-import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
 
 export const containedTurnAcceptanceIntentDigestV1 = (intent: ContainedTurnIntent) =>
   digestContainedTurnCanonicalValue({
@@ -9,11 +8,4 @@ export const containedTurnAcceptanceIntentDigestV1 = (intent: ContainedTurnInten
     version: 1,
   });
 
-/** V1 preserves the established dispatch constraints preimage byte for byte. */
-export const containedTurnAcceptanceConstraintsDigestV1 = (
-  facts: Pick<ContainedTurnKernelOperation, "adapterSnapshot" | "capabilityManifest" | "intent">,
-) => digestContainedTurnCanonicalValue({
-  adapterSnapshot: facts.adapterSnapshot,
-  capabilityManifest: facts.capabilityManifest,
-  intentMode: facts.intent.mode,
-} as never);
+export { containedTurnAcceptanceConstraintsDigestV1 } from "../domain/contained-turn-dispatch-authority.js";
