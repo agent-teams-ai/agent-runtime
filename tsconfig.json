@@ -22,6 +22,7 @@
     "experiments/runtime-profile-behavior/test/**/*.ts",
     "experiments/rust-system-boundaries/client/**/*.ts",
     "packages/contexts/agent-execution/tests/features/contained-agent-turn/native-plan-provenance-types.ts",
+    "packages/contexts/agent-execution/tests/features/contained-agent-turn/contained-turn-operation-validation.type-fixture.ts",
     "packages/contexts/agent-execution/tests/features/contained-agent-turn/claude-sdk-spawned-process-contract.ts",
     "packages/contexts/agent-execution/tests/features/contained-agent-turn/darwin-cooperative-process-custody-test-support.ts"
   ],

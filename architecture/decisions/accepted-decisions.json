@@ -96,6 +96,11 @@
       "id": "ADR-0022",
       "path": "docs/decisions/0022-host-app-composition-directory-assembly-grammar.md",
       "immutableDigest": "sha256:13def70c8554d01fbf254ef3afce598f0a18edc44d7d3af4eaf634b0635fddd8"
+    },
+    {
+      "id": "ADR-0090",
+      "path": "docs/decisions/0090-ordinary-user-session-codex-execution-profile.md",
+      "immutableDigest": "sha256:ce26ce717bd00701b2ddf4d073999591cda8b9f0e08b3238290e6646bfe02bf1"
     }
   ]
 }

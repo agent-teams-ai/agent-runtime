@@ -50,7 +50,7 @@ export type ContainedTurnIdentityNamespace = keyof typeof CONTAINED_TURN_IDENTIT
 
 export const validateContainedTurnIdentity = <Namespace extends ContainedTurnIdentityNamespace>(
   namespace: Namespace,
-  value: string,
+  value: unknown,
 ): ContainedTurnIdentity<Namespace> => {
   validateContainedTurnText(`${namespace} identity`, value, CONTAINED_TURN_LIMITS.text.identifier);
   if (!value.startsWith(CONTAINED_TURN_IDENTITY_PREFIXES[namespace])) {

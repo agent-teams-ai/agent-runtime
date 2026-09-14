@@ -3,10 +3,96 @@ id: runtime.architecture.get-modular-adoption
 type: architecture
 status: active
 owner: architecture
-summary: Tracks the passive setup adoption contract and outstanding evidence without extending runtime qualification.
+summary: Records scoped passive setup and ordinary session Assembly adoption without extending contained-turn qualification.
 ---
 
 # Get Modular adoption
+
+## Ordinary session scoped adoption
+
+[ADR-0090](../decisions/0090-ordinary-user-session-codex-execution-profile.md)
+authorizes the additive `user-session-v1` composition. The
+[consumer profile](../../architecture/get-modular/consumer-profile.json)
+retains ADR-0015 as its passive authority and records ADR-0090 on the ordinary
+composition itself. Accepted ADR-0016 custody adoption remains pending; ordinary
+execution does not establish contained-turn security or qualification.
+
+The existing Runtime Setup Assembly remains the single construction root.
+The ordinary extension declares eight owned nodes: operation store, Runtime
+Security, Provider Access, workspace, artifacts, process, provider and turn.
+The turn requires exactly seven dependencies; Provider Access additionally
+consumes Security's operation-bound secret-registration capability. Process
+requires Provider's `ordinary/prepare-launch` capability. The same provider
+factory returns execution and launch preparation from one adapter owner; Assembly
+injects preparation into Process before the closed turn is materialized. The Host
+receives the closed ordinary turn root. The compatibility token is
+`agent-runtime/ordinary-v1`; it is distinct from the execution profile,
+manifest and persistence codec identities.
+
+The ordinary feature's full source and exact new files in existing features
+have [scoped active FMS adoption](../../architecture/feature-module-standard/ordinary-scope.json).
+The checker reuses existing FMS inventory, imports, layers, ownership and
+maintainability rules. A finite source/target/import-kind list covers existing
+Host composition seams only; application/domain imports cannot use that list.
+New source, unknown seams, stale seams and behavioral facade code are rejected.
+The existing full FMS profile and pending legacy modules remain unchanged.
+
+`pnpm architecture:get-modular-adoption` executes blocking source diagnostics,
+the live census, exact ordinary graph checks and scoped FMS checks.
+`pnpm test:get-modular-adoption` includes ordinary authority, source census,
+Node/SDK/layer, slot, capability, cardinality, token and binding mutants.
+Both commands remain in fast and full gates; runtime preparation, cleanup and
+public construction tests are mapped in the same profile. These architecture
+gates do not substitute for the ordinary end-to-end execution evidence.
+
+### Ordinary closure retention and binding evidence
+
+An unsuccessful bounded reservation close leaves the ordinary flight owned.
+Concurrent disposal calls join one attempt; rejection permits another bounded
+attempt, and observed closure plus durable reconciliation releases the flight.
+The Host retains its provider owner and writable observation journal until the
+feature's disposal succeeds. Successful owner cleanup is removed exactly once.
+A timeout or rejection never proves termination. Reconciliation workspaces remain
+retained; retry does not publish artifacts or reclassify a reconciled turn as success.
+
+The ordinary Host construction also receives the same closed turn owner for an
+explicit disposal handoff. Successful owner disposal releases physical ownership
+from the Host ledger while durable operations remain `reconcile_required`.
+Only ordinary owner disposal is retryable through this handoff; contained-turn
+termination rules remain unchanged. Engine retries retain each unfinished process,
+credential retirement and grant settlement action until its receipt is reconciled.
+Provider Access retains its writable store on disposal failure and does not repeat
+successful destructive cleanup. Broker retries observe the original server close
+work after a bounded timeout. Process output loss remains permanently visible
+across close retries, including an unterminated fragment discarded before late EOF.
+The static adoption checker rejects a missing or substituted Host owner handoff.
+No Assembly slot, capability, compatibility token, provider binding or standard
+byte changes accompany this Host construction contract extension.
+
+The [second lifecycle review](../../architecture/get-modular/evidence/ordinary-lifecycle-retry-review.json)
+records the five fixes and focused source checks using synthetic ports and real
+Host/Provider Access owners. Supported builds, typechecks and the full adoption
+checks remain pending because dependencies are unavailable in this checkout.
+
+The materialized ordinary root test uses disposable ports and asserts that Process
+receives the exact launch function exported alongside Provider execution. A wrong
+provider binding fails compilation before factory calls. The active graph checker
+and rejecting mutants enforce the required slot, capability and exact binding.
+The engine tests cover failed closure, concurrent retry, and late evidence commit
+failure without repeating an observed close. Host tests cover retained journal
+writes and exact-once final disposal. No real provider is launched.
+
+The 2026-09-14 review compared the retained complete standard against the
+controller's current upstream measurement: both are revision `669a750d` and
+SHA-256 `e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`.
+There is no standard byte delta or pin migration. This applies its existing
+Host ownership and required static binding rules; shared guidance needs no change.
+Accepted ADRs and retained standard bytes remain unchanged. The local lifecycle
+and binding evidence remains pending execution because this checkout lacks
+dependencies and the pinned pnpm runtime. The dependency-free synthetic process
+retry regression passes on Linux; six existing Darwin process tests are skipped.
+The [delivery review](../../architecture/get-modular/evidence/ordinary-lifecycle-pairing-review.json)
+records exact commands, evidence and remaining checks. Existing paired qualification evidence remains pending.
 
 ## Status and authority
 
@@ -19,23 +105,22 @@ bounded contract. ADR-0008 and its historical evidence remain immutable;
 ADR-0013 continues to govern exactly its three active FMS features.
 
 The central authority is Get Modular's accepted ADR-0026 and
-[consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/a05f2cb51553e1efc5ba89be352e4aba04675088/docs/architecture/common-assembly.md#consumer-module-standard).
-The merged revision supersedes the earlier unmerged candidate reference:
+[consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/669a750d8db451e04f075cdeb36576c6606fba6e/docs/architecture/common-assembly.md#consumer-module-standard).
+The merged PR110 revision supersedes the previous reviewed standard pin:
 
 - Repository: `agent-teams-ai/get-modular`.
-- Commit: `a05f2cb51553e1efc5ba89be352e4aba04675088`.
+- Commit: `669a750d8db451e04f075cdeb36576c6606fba6e`.
 - Path: `docs/architecture/common-assembly.md`; anchor: `consumer-module-standard`.
-- Complete document SHA-256: `ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d`.
+- Complete document SHA-256: `e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`.
 - Retained bytes are recorded by the consumer profile; they are evidence, not a second authority.
 
 Document identity, package versions/archive integrity, Core compatibility token,
 and local adoption authority are distinct. The profile retains the approved published
 Core and Assembly 0.1.0 archives, verifies their SHA-256 and lock integrity,
 and requires exact catalog versions. It records actual blocking commands,
-without `conformant: true` for the repository. Upstream main was rechecked on
-2026-09-09 at `03a7df64bc5e9939f7b51694a80a7f3d61453f98`. The complete
-standard still has the SHA-256 recorded above, so the accepted pin remains
-content-current; no normative standard delta needs migration.
+without `conformant: true` for the repository. The exact merged PR110 document
+was reviewed on 2026-09-13 against the previously retained bytes. The migration
+and its remaining evidence work are recorded below; no moving main is consumed.
 
 The consumed release sources are distinct from the standard pin:
 
@@ -68,8 +153,8 @@ configurable cross-module relationships require standard mapping or an exact
 accepted exception. Ordinary fixed feature-local helpers keep static typed
 imports. No feature-per-class rule, wildcard legacy allowance, implicit
 inventory growth, string service locator, or universal manager is authorized.
-The scoped FMS gate remains independent. The live Foundation inventory records six workspace package roots, thirty-four feature
-roots, sixteen policy boundaries and exact source/target/runtime-or-type
+The scoped FMS gate remains independent. The live Foundation inventory records six workspace package roots, thirty-five feature
+roots, forty-one policy boundaries and exact source/target/runtime-or-type
 relationships. Unknown or stale roots and relationships fail, including new
 cross-feature edges inside an existing policy boundary. Fixed helpers within
 one feature remain ordinary imports. The two retained Host-custodied
@@ -138,6 +223,55 @@ coverage preserves the mixed type-only/runtime Darwin authority classification
 and the explicit outside-passive-scope ownership decision. Passive Assembly
 remains the same seven-node composition. This reconciliation makes no native or
 provider readiness claim and changes no runtime behavior.
+
+## PR110 standard pin migration
+
+Both consumer profiles now pin merged Get Modular PR110 commit
+`669a750d8db451e04f075cdeb36576c6606fba6e`. Exact complete document bytes
+match SHA-256 `e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`.
+The previous passive pin was `a05f2cb51553e1efc5ba89be352e4aba04675088`;
+the contained-turn pin was `f1ec0152c34715395685b349844a7d1c18a2f015`.
+Their retained document identity was
+`ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d`.
+The earlier PR71 observations above describe their historical checkpoints.
+
+The complete byte delta relocates five executable example links from
+`packages/assembly/tests` to `tests/assembly`, and clarifies ownership before
+handoff, cleanup registration at acquisition, borrowed capability lifetimes,
+async provider responsibility for allocations not handed back, one-shot Host
+summaries, opaque causes, existing references and readiness/publication.
+The migration packet's premerge status is superseded by the exact merged
+identity; its scoped applicability remains relevant.
+
+In passive setup, `runtime-setup-assembly.ts` captures the Host before the
+completion seam. `default-agent-runtime-host.ts` retains this owner while
+awaiting Assembly, awaits cleanup on failed handoff, and clears attempt
+ownership only when transferring the usable Host to its caller. Passive
+factories construct objects and closures; the review found no external
+acquisition before Host capture requiring new cleanup machinery. Receiving a
+capability does not authorize its disposal. A rejected async provider owns any
+allocation it cannot return. This API transfers a live Host; the one-shot
+summary rule does not change that API or dispose the Host before return.
+Opaque causes remain private, and safe summaries do not certify their reference
+contents. A new profile affects new construction only, without replacing
+already delivered dependencies or conferring readiness or publication authority.
+
+The independently reviewed two-test checkpoint `dbfaafe9` retains the valid
+late-root-after-abort and malformed-root-plus-abort-plus-rejecting-cleanup
+regressions. This pin migration preserves those tests and the independent
+literal binding parity oracle. No production, API, lifecycle or boundary changes
+are introduced. ADR-0015 accepted bytes, package/archive pins, PR120 feature
+moves and source census, and historical evidence remain unchanged.
+Contained-turn remains pending with empty active wiring and adopted boundaries;
+the seven-port direct Pure DI boundary remains `not-adopted`.
+
+Current paired evidence remains outstanding: the retained v2 receipt predates
+these tracked inputs and cannot prove this migration. The controller must commit
+all final non-report inputs, capture new Linux x64 and Darwin arm64 receipts on
+that same commit, merge through the existing command below, and run the required
+gates. Do not edit receipt identities manually or claim full migration completion
+from focused checker results. Preserve the old generated report outside the
+checkout before removing only that output for the merger's exclusive creation.
 
 ## Evidence and executable references
 
@@ -362,3 +496,48 @@ unverified adoption is unfinished work.
 ## Retained direct capture from the qualification branch
 
 The [direct-composition capture retained from e411638](../spikes/runtime-setup-l0-direct-e411638-evidence.json) records source e615369 and remains byte-identical to the qualification branch (SHA-256 `879b333361889b250fb834c3bfb41a1006c4d0d2adcc5fd56df126de4c3eaf10`). It is a separate ADR-0008 experiment, not an Assembly capture. The original historical L0 report remains at its ADR-0015-authenticated path and digest. Neither capture establishes current Assembly acceptance or measured benefit.
+
+## Reviewed ordinary-session documentation pin migration
+
+On 2026-09-12, current upstream `714d6194afd24e0bb4375f4d38e2422c892ad021`
+was compared with retained `a05f2cb51553e1efc5ba89be352e4aba04675088`.
+The complete document SHA-256 is
+`63bbf8f6e0c92a74116bce40ac96e4fc5f1c4ed3d28325be79b5c75448a23bc3`.
+The only delta relocates five executable-example links from
+`packages/assembly/tests` to `tests/assembly`; no normative rule changes.
+At that checkpoint the active profile, pending contained-turn profile, checker
+expectation and retained document used this reviewed pin. Historical ADRs and evidence remain
+unchanged. The retained review is
+`architecture/get-modular/evidence/ordinary-session-pin-review.json`.
+
+[ADR-0090](../decisions/0090-ordinary-user-session-codex-execution-profile.md)
+accepts a separate ordinary contract. It does not activate ADR-0016 or extend the
+passive adoption claim. Ordinary activation requires concrete composition paths,
+FMS ownership, typed rejecting fixtures and the actual fast/full gates before
+activation; this documentation migration alone supplies none of that evidence.
+
+## Reviewed auth-compatibility documentation pin migration
+
+On 2026-09-13, the reviewed upstream revision is
+`669a750d8db451e04f075cdeb36576c6606fba6e`, complete-document SHA-256
+`e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`.
+The nine added lines clarify acquisition-time cleanup registration, responsibility
+for failed async construction, inert one-shot summaries, and the distinction
+between construction and readiness. The ordinary auth adapter remains the owner
+of its helper and cleanup; no new capability, graph node or dependency slot is
+introduced. This delivery corrects failed RPC settlement within that owner.
+
+The mutable profiles, rejecting checker expectation and retained current document
+use this revision. The prior bytes remain in
+`architecture/get-modular/evidence/consumer-module-standard-714d6194.md`;
+`ordinary-auth-pin-review.json` and `ordinary-auth-pin-delta.diff` in the same
+evidence directory record the reviewed transition. The earlier pin review and
+the ordinary execution contract remains unchanged. Its pre-merge ADR-0020 bytes
+are retained by ADR-0090 following the identifier collision with main. Pin migration does not qualify a live
+ordinary turn or activate the legacy pending ADR-0016 scope.
+
+Before this delivery, current upstream `a10f33a37bbf8f65134156f1e7d09cbb20b7633a`
+was compared with the accepted pin. The canonical
+`docs/architecture/common-assembly.md` bytes are unchanged, so the reviewed
+`669a750d8db451e04f075cdeb36576c6606fba6e` pin and its retained evidence remain
+current; no pin migration is required.

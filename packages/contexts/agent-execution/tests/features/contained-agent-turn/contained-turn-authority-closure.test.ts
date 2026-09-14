@@ -212,6 +212,11 @@ test("pre-workspace cancellation closes only with an authority-bound no-workspac
   assert.equal(closed.artifactManifestRef, undefined);
   assert.equal(closed.resultRef, undefined);
   if (closed.closureRecovery.kind === "proved_no_workspace") {
+    const reordered = { ...closed, closureRecovery: { ...closed.closureRecovery,
+      fact: Object.fromEntries(Object.entries(closed.closureRecovery.fact).toReversed()),
+    } };
+    assert.doesNotThrow(() => validateContainedTurnOperation(reordered));
+    assert.doesNotThrow(() => validateContainedTurnOperation({ ...reordered, revision: closed.revision + 1 }, { previous: closed }));
     const forged = {
       ...closed,
       closureRecovery: {
