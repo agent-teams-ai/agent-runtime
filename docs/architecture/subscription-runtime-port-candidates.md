@@ -92,7 +92,7 @@ descendant can escape by creating a new session.
 
 What stays off as Desktop UX is the Darwin **privileged canary**: root
 launcher, `sandbox-exec` / seatbelt, sudo re-exec in
-[run-darwin-codex-live-canary.mjs](../../packages/apps/embedded-runtime/tests/live/run-darwin-codex-live-canary.mjs).
+[run-darwin-codex-live-canary.mjs](../../packages/apps/embedded-runtime/tests/package/live/run-darwin-codex-live-canary.mjs).
 That path is operator qualification, not the ordinary default, and not a
 substitute for either user-session assembly or the Host Custody profile.
 
