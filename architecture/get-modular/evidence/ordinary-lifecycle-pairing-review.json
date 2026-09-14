@@ -1,0 +1,58 @@
+{
+  "baseCommit": "3cd722f607e1643b809f6946ee303a5a94469171",
+  "standard": {
+    "revision": "669a750d8db451e04f075cdeb36576c6606fba6e",
+    "sha256": "e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553",
+    "currentEvidence": "Controller-provided upstream measurement matches locally hashed complete retained bytes. No network used.",
+    "delta": "None; existing static binding and Host ownership guidance applies. No shared standard edit or pin migration."
+  },
+  "passed": [
+    "git diff --check",
+    "node --check on each changed TypeScript/JavaScript file",
+    "node --test scripts/docs/verify-frozen-document-bytes.test.mjs (5 passed)",
+    "node --test packages/contexts/agent-execution/tests/features/contained-agent-turn/ordinary-node-process.test.ts (2 passed including new disposable retry regression; 6 existing Darwin tests skipped on Linux)"
+  ],
+  "attemptedButUnavailable": {
+    "pnpm docs:info": "Corepack cannot load pinned pnpm from its absent cache.",
+    "pnpm check:changed": "Same unavailable pinned pnpm runtime (COREPACK_ENABLE_NETWORK=0).",
+    "node --test scripts/architecture/check-ordinary-feature-scope.test.mjs": "ERR_MODULE_NOT_FOUND: oxc-parser; test body did not run."
+  },
+  "unrunCommands": [
+    "pnpm product:build",
+    "pnpm --filter @agent-teams/agent-execution exec node --test tests/features/contained-agent-turn/ordinary-core.test.ts tests/features/contained-agent-turn/ordinary-node-process.test.ts",
+    "pnpm --filter @agent-teams/embedded-runtime exec node --test tests/ordinary-runtime-assembly.test.ts",
+    "pnpm architecture:get-modular-adoption",
+    "pnpm test:get-modular-adoption",
+    "pnpm architecture:consumer-modules",
+    "pnpm test:consumer-modules",
+    "pnpm docs:info",
+    "pnpm docs:find -- --text ordinary",
+    "pnpm docs:check",
+    "pnpm docs:protocol:check",
+    "pnpm check:changed",
+    "pnpm check:fast",
+    "pnpm check"
+  ],
+  "limitations": [
+    "No dependencies installed and no network used; supported builds, typechecks, lifecycle tests and adoption gates remain unverified.",
+    "Organization Engineering Quality Standard is referenced only by remote URL; no retained local copy found in repo, and network was prohibited.",
+    "Docs-authoring workflow could not load; existing document frontmatter and accepted ADR bytes were preserved.",
+    "Live process ownership is in-memory only; this does not introduce restart recovery or change contained-turn qualification.",
+    "Reconciliation workspaces remain retained; successful late closure does not synthesize artifact success.",
+    "Current paired Linux/Darwin adoption receipts remain pending; historical evidence was not rewritten."
+  ],
+  "changedFiles": [
+    "architecture/get-modular/consumer-profile.json",
+    "docs/architecture/get-modular-adoption.md",
+    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
+    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
+    "packages/apps/embedded-runtime/tests/ordinary-runtime-assembly.test.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-process/node-ordinary-process.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-engine.ts",
+    "packages/contexts/agent-execution/tests/features/contained-agent-turn/ordinary-core.test.ts",
+    "packages/contexts/agent-execution/tests/features/contained-agent-turn/ordinary-node-process.test.ts",
+    "scripts/architecture/check-ordinary-feature-scope.test.mjs",
+    "scripts/architecture/ordinary-composition-evidence.mjs",
+    "architecture/get-modular/evidence/ordinary-lifecycle-pairing-review.json"
+  ]
+}
