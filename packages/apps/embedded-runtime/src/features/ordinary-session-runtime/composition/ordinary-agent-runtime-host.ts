@@ -47,7 +47,7 @@ export async function createOrdinaryAgentRuntimeHost(input: OrdinaryAgentRuntime
   const cleanup = (): Promise<void> => cleanupPromise ??= (async () => {
     const errors: unknown[] = [];
     for (const dispose of cleanups.toReversed()) {try {await dispose(); cleanups.splice(cleanups.indexOf(dispose), 1);} catch (error) {errors.push(error); break;}}
-    if (errors.length > 0) {throw new AggregateError(errors, "ordinary_host_cleanup_incomplete");}
+    if (errors.length > 0) {throw new AggregateError(errors, "ordinary_host_cleanup_incomplete", {cause: errors[0]});}
   })().catch(error => {cleanupPromise = undefined; throw error;});
   let codex: ReturnType<typeof createOrdinaryCodexAdapter> | undefined;
   const getCodex = () => {
@@ -78,13 +78,17 @@ export async function createOrdinaryAgentRuntimeHost(input: OrdinaryAgentRuntime
       },
       decorateHost(host, feature) {
         let hostDisposed = false;
+        let featureDisposed = false;
         let disposal: Promise<void> | undefined;
         const dispose = (): Promise<void> => disposal ??= (async () => {
           const errors: unknown[] = [];
-          try {await feature.dispose();} catch (error) {throw new AggregateError([error], "ordinary_host_disposal_incomplete", {cause: error});}
-          try {if (!hostDisposed) {await host.dispose(); hostDisposed = true;}} catch (error) {throw new AggregateError([error], "ordinary_host_disposal_incomplete", {cause: error});}
-          try {await cleanup();} catch (error) {errors.push(error);}
-          if (errors.length > 0) {throw new AggregateError(errors, "ordinary_host_disposal_incomplete");}
+          const results = await Promise.allSettled([
+            (async () => {if (!hostDisposed) {await host.dispose(); hostDisposed = true;}})(),
+            (async () => {if (!featureDisposed) {await feature.dispose(); featureDisposed = true;}})(),
+          ]);
+          for (const result of results) {if (result.status === "rejected") {errors.push(result.reason);}}
+          if (hostDisposed && featureDisposed) {try {await cleanup();} catch (error) {errors.push(error);}}
+          if (errors.length > 0) {throw new AggregateError(errors, "ordinary_host_disposal_incomplete", {cause: errors[0]});}
         })().catch(error => {disposal = undefined; throw error;});
         return Object.freeze({bindAccess(scope: TrustedRuntimeAccessScope) {
           if (scope === null || typeof scope !== "object" || types.isProxy(scope)) {throw new Error("ordinary_host_scope_mismatch");}

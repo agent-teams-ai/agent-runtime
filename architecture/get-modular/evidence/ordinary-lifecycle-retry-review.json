@@ -115,5 +115,58 @@
     "scripts/architecture/check-get-modular-adoption.mjs",
     "scripts/architecture/check-ordinary-feature-scope.test.mjs",
     "scripts/architecture/ordinary-composition-evidence.mjs"
-  ]
+  ],
+  "compositionFollowup": {
+    "task": "ar-ordinary-lifecycle-composition-fix-20260914-r4",
+    "baseCommit": "5f42062b50a494c175ec57b6182c0f4e69a9ad44",
+    "baseTree": "ddee5d39ea0c8832e06f612644e520cddbab1110",
+    "equivalentGithubHead": "b434636cb7c6624d4979b7809ea75d79f464277d",
+    "fixes": [
+      "Engine retries every unfinished independent action despite unconfirmed closure, retains successful action completion, reconciles receipts and aggregates current failures. Snapshot eligibility and terminal recovery are private helpers reducing async complexity without suppressions.",
+      "Ordinary wrapper starts real Host shutdown immediately alongside feature cleanup; closes admission and cancels active synthetic setup inspection even on independent Host/feature failure. Owner cleanup and journal release require both successes. Real Host invariant test replaces fake Host ordering expectation.",
+      "PA pending capture throws become independently settled results; other pending captures and acquired grants still run, successful actions are retained, and failures include causes. Pending captures remain retained if consume cleanup throws."
+    ],
+    "lintRemediation": "Error causes attached to changed Host and engine aggregate errors and terminal recovery. Both unavailable helpers and Assembly forbidden/prepareLaunch/registerSecrets moved to module scope. No suppressions added. Full lint execution unavailable.",
+    "standard": "Retained standard revision and hash above preserved; reviewed Host ownership and static private-helper guidance. No graph, profile, capability or pin change. No new upstream observation under network prohibition.",
+    "checks": [
+      {
+        "command": "node --experimental-transform-types --import ./packages/contexts/agent-execution/tests/features/contained-agent-turn/ordinary-source-loader.mjs --test packages/apps/embedded-runtime/tests/ordinary-host-disposal.test.ts packages/contexts/agent-execution/tests/features/contained-agent-turn/ordinary-core.test.ts packages/contexts/provider-access/tests/features/contained-turn-access/ordinary-pa-owner-disposal.test.ts packages/apps/embedded-runtime/tests/package/agent-runtime-host-disposal.unit.test.ts",
+        "passed": 35
+      },
+      {
+        "command": "node --test scripts/docs/verify-frozen-document-bytes.test.mjs",
+        "passed": 5
+      },
+      "node --experimental-transform-types --check for all seven changed TypeScript files",
+      "JSON parse of retained evidence",
+      "git diff --check",
+      {
+        "command": "Dependency-free AST audit using node --expose-internals, bundled Acorn and node:module.stripTypeScriptTypes; no dependency substitutes installed",
+        "results": [
+          "Cyclomatic AST count reproduces exact parent executeOrdinaryOperation complexity 21 and measures current complexity 18; every engine function is at most 20. Counts branches, catch clauses, loops, logical operators, defaults and optional operations; excludes nested function bodies from parent counts.",
+          "All five named test helpers are module-scope function declarations.",
+          "All three ordinary Host AggregateError constructions contain cause, including the two cleanup paths."
+        ],
+        "limitation": "Targeted structural evidence for the eight reported lint blockers; not an execution of the full oxlint gate."
+      }
+    ],
+    "unavailable": [
+      "COREPACK_ENABLE_NETWORK=0 pnpm check:changed, check:fast, docs:info, docs:check: pinned pnpm absent; Corepack ENOENT before execution.",
+      "Assembly test import: pg absent.",
+      "Feature-scope rejecting tests: oxc-parser absent.",
+      "Full build, typecheck, lint and architecture gates require unavailable dependencies; no CI-green claim."
+    ],
+    "safety": "Only synthetic ports, real in-process Host lifecycle and disposable journal used. Planner selected darwin solely to enter synthetic authorization; no setup, agent, provider, terminal, provisioning, smoke or network flow executed. No dependencies installed.",
+    "changedFiles": [
+      "architecture/get-modular/evidence/ordinary-lifecycle-retry-review.json",
+      "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
+      "packages/apps/embedded-runtime/tests/ordinary-host-disposal.test.ts",
+      "packages/apps/embedded-runtime/tests/ordinary-runtime-assembly.test.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-engine.ts",
+      "packages/contexts/agent-execution/tests/features/contained-agent-turn/ordinary-core.test.ts",
+      "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
+      "packages/contexts/provider-access/tests/features/contained-turn-access/ordinary-pa-owner-disposal.test.ts"
+    ],
+    "checkEnvironment": "Final 35 synthetic lifecycle and five frozen-evidence tests rerun with TMPDIR pointing to a disposable directory inside repo because /tmp became read-only. Disposable fixtures removed after checks."
+  }
 }

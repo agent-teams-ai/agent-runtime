@@ -49,8 +49,8 @@ export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProvi
         if (signal.aborted) { throw new OrdinaryPaUnavailable(); }
         consumed = await store.consume(binding, { generation: metadata.generation, accountId: metadata.accountId, expiresAt: metadata.expiresAt });
         check();
-      } catch { disposeCapture(capture); throw new OrdinaryPaUnavailable(); }
-      finally { pendingCaptures.delete(capture); }
+      } catch { disposeCapture(capture); pendingCaptures.delete(capture); throw new OrdinaryPaUnavailable(); }
+      pendingCaptures.delete(capture);
       const selection: CredentialRenderingSelection = Object.freeze({ operationRef: binding.operationId, recipe: 'codex-chatgpt',
         operationAbortSignal: signal, deadline: metadata.deadline,
         binding: Object.freeze({ accessRef: consumed.authority.grantId, availability: 'available', bindingRevision: 1,
@@ -79,7 +79,8 @@ export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProvi
             async () => {if (!capabilityErased) {capability?.fill(0); capabilityErased = true;}},
           ];
           results.push(...await Promise.allSettled(actions.map(action => action())));
-          if (results.some(result => result.status === 'rejected')) {throw new OrdinaryPaUnavailable();}
+          const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
+          if (errors.length > 0) {throw new AggregateError(errors, 'ORDINARY_PA_UNAVAILABLE', {cause: errors[0]});}
           await capture.settled;
           const retirement = await store.retire(binding).catch(async () => {
             const observed = await store.observe(binding);
@@ -140,10 +141,13 @@ export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProvi
     dispose(): Promise<void> {
       if (disposal) { return disposal; } disposed = true;
       disposal = (async () => {
-        for (const capture of pendingCaptures) { disposeCapture(capture); }
-        const results = await Promise.allSettled([...grants].map(async grant => {await grant.retire(); grants.delete(grant);}));
-        const captures = await Promise.allSettled([...pendingCaptures].map(capture => capture.settled));
-        if ([...results, ...captures].some(result => result.status === 'rejected')) { throw new OrdinaryPaUnavailable(); }
+        const captures = [...pendingCaptures];
+        const results = await Promise.allSettled([
+          ...captures.map(async capture => {disposeCapture(capture); await capture.settled; pendingCaptures.delete(capture);}),
+          ...[...grants].map(async grant => {await grant.retire(); grants.delete(grant);}),
+        ]);
+        const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
+        if (errors.length > 0) {throw new AggregateError(errors, 'ORDINARY_PA_UNAVAILABLE', {cause: errors[0]});}
         store.dispose();
       })().catch(error => {disposal = undefined; throw error;}); return disposal;
 

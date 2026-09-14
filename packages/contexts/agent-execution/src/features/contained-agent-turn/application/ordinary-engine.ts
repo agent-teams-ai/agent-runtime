@@ -28,6 +28,15 @@ const validateAuthorityDeadline = (security: OrdinarySecurityGrant, provider: Or
   if (expiresAt <= now + 10000 || provider.expiresAt > now + 60000 || security.expiresAt > now + 60000 || provider.authority.expiresAt !== provider.expiresAt || security.authority.expiresAt !== security.expiresAt) {throw new Error("ordinary authority deadline invalid");}
   return expiresAt;
 };
+const canSnapshot = (launched: boolean, receipts: readonly OrdinaryReceipt[]): boolean =>
+  launched && receipts.some(item => item.kind === "process_group_closed") && receipts.some(item => item.kind === "output_drain");
+const recoverTerminalCommit = async (store: OrdinaryTurnDependencies["operationStore"], operation: OrdinaryOperation, receipts: OrdinaryReceipt[]): Promise<OrdinaryOperation> => {
+  // A confirmed readback may reveal terminal success. It never authorizes a retry or new launch.
+  const current = await store.read(reference(operation));
+  if (current === undefined) {throw new Error("ordinary terminal commit unresolved", {cause: "missing terminal readback"});}
+  if (["succeeded", "failed", "cancelled", "reconcile_required"].includes(current.status)) {return current;}
+  try {return await store.reconcile(current, receipts.filter(receipt => receipt.kind !== "output_drain" || receipt.finalSequence === current.output.length));} catch (cause) {throw new Error("ordinary terminal commit unresolved", {cause});}
+};
 const executeOrdinaryOperation = async (dependencies: OrdinaryTurnDependencies, initial: OrdinaryOperation, controller: AbortController, flight: Flight): Promise<OrdinaryOperation> => {
   let operation = initial;
   let security: OrdinarySecurityGrant | undefined; let provider: OrdinaryProviderGrant | undefined;
@@ -110,8 +119,10 @@ const executeOrdinaryOperation = async (dependencies: OrdinaryTurnDependencies, 
   finally {for (const timer of timers) {clearTimeout(timer);}}
   const settleOwnedEffects = async (): Promise<void> => {
     flight.cleanup = async () => {
-      for (const effect of unfinished) {await effect(); unfinished.delete(effect);}
-      await dependencies.operationStore.reconcile(operation, receipts);
+      const errors: unknown[] = [];
+      for (const effect of unfinished) {try {await effect(); unfinished.delete(effect);} catch (error) {errors.push(error);}}
+      try {await dependencies.operationStore.reconcile(operation, receipts);} catch (error) {errors.push(error);}
+      if (errors.length > 0) {throw new AggregateError(errors, "ordinary cleanup incomplete", {cause: errors[0]});}
       delete flight.cleanup;
     };
     const cleanup = async (effect: () => Promise<void>, required = false): Promise<void> => {
@@ -141,7 +152,7 @@ const executeOrdinaryOperation = async (dependencies: OrdinaryTurnDependencies, 
         await close();
       }, true);
     }
-    if (workspace !== undefined && launched && receipts.some(item => item.kind === "process_group_closed") && receipts.some(item => item.kind === "output_drain")) {
+    if (workspace !== undefined && canSnapshot(launched, receipts)) {
       const owned = workspace;
       await cleanup(async () => {
         const snapshot = await dependencies.workspace.snapshot(operation, owned); retain(snapshot.receipt);
@@ -172,13 +183,7 @@ const executeOrdinaryOperation = async (dependencies: OrdinaryTurnDependencies, 
     if (unfinished.size === 0) {delete flight.cleanup;}
     return result;
   }
-  catch {
-    // A confirmed readback may reveal terminal success. It never authorizes a retry or new launch.
-    const current = await dependencies.operationStore.read(reference(operation));
-    if (current === undefined) {throw new Error("ordinary terminal commit unresolved");}
-    if (["succeeded", "failed", "cancelled", "reconcile_required"].includes(current.status)) {return current;}
-    try {return await dependencies.operationStore.reconcile(current, receipts.filter(receipt => receipt.kind !== "output_drain" || receipt.finalSequence === current.output.length));} catch {throw new Error("ordinary terminal commit unresolved");}
-  }
+  catch {return recoverTerminalCommit(dependencies.operationStore, operation, receipts);}
 };
 
 const submitOwnedOperation = async (dependencies: OrdinaryTurnDependencies, operation: OrdinaryOperation, flights: Map<string, Flight>, isDisposed: () => boolean, options?: OrdinarySubmitOptions): Promise<OrdinarySubmitOutcome> => {
@@ -259,7 +264,7 @@ export const createOrdinaryEngine = (dependencies: OrdinaryTurnDependencies): Or
         await flight.cleanup?.(); flights.delete(id);
       }));
       const errors = [...cancelled, ...completed, ...cleaned].flatMap(result => result.status === "rejected" ? [result.reason] : []);
-      if (errors.length > 0) {throw new AggregateError(errors, "ordinary disposal incomplete");}
+      if (errors.length > 0) {throw new AggregateError(errors, "ordinary disposal incomplete", {cause: errors[0]});}
     })().catch(error => {disposal = undefined; throw error;}),
   };
 };

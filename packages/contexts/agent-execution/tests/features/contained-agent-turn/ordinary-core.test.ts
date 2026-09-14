@@ -8,6 +8,8 @@ import {decodeContainedTurnState} from "../../../dist/features/contained-agent-t
 import {createOrdinaryTurnFeature} from "../../../dist/features/contained-agent-turn/composition/ordinary-feature-factory.js";
 import type {OrdinaryTurnDependencies, OrdinaryOperationStore} from "../../../dist/features/contained-agent-turn/application/ordinary-ports.js";
 
+function unavailable(): never {throw new Error("TEST setup must not execute", {cause: "synthetic setup"});}
+
 const hash = "a".repeat(64);
 const input = {commandId: "test-command", expectedProvider: "codex", intent: {mode: "workspace-write", prompt: "Read TASK.md and write result.txt"}, scope: {projectId: "ordinary-test", tenantId: "test"}} as const;
 const binding = {operationId: "ordinary:test", attemptId: "attempt:test", executionProfile: ORDINARY_PROFILE.executionProfile, capabilityManifestRevision: ORDINARY_PROFILE.capabilityManifestRevision};
@@ -232,7 +234,7 @@ test("unproven reservation is retained across failed concurrent disposal and rel
   assert.equal(closes, 1); assert.equal(f.state().status, "reconcile_required");
   const first = feature.dispose(); const concurrent = feature.dispose();
   assert.equal(first, concurrent);
-  await assert.rejects(first, error => error instanceof AggregateError && error.errors.includes(failure));
+  await assert.rejects(first, error => error instanceof AggregateError && error.errors.some(inner => inner instanceof AggregateError && inner.errors.includes(failure)));
   assert.equal(closes, 2); assert.equal(f.counts().closedWorkspaces, 0);
   assert.equal(f.state().receipts.some(receipt => receipt.kind === "process_group_closed"), false);
   allowClosure = true;
@@ -321,6 +323,41 @@ for (const failedAction of ["retire", "provider_settle", "security_settle"] as c
   });
 }
 
+for (const failedAction of ["retire", "provider_settle", "security_settle"] as const) {
+  test(`unconfirmed closure does not starve recovered ${failedAction}`, async () => {
+    const f = fixture(); const reserve = f.dependencies.process.reserve;
+    const calls = {retire: 0, provider_settle: 0, security_settle: 0}; let closes = 0;
+    const run = async <T>(action: keyof typeof calls, effect: () => Promise<T>): Promise<T> => {
+      calls[action] += 1;
+      if (action === failedAction && calls[action] <= 2) {throw new Error("TEST transient owner failure", {cause: "synthetic grant"});}
+      return effect();
+    };
+    const provider = f.dependencies.providerAccess.resolveAndConsume;
+    f.dependencies.providerAccess.resolveAndConsume = async (...args) => {
+      const grant = await provider(...args);
+      return {...grant, retire: () => run("retire", () => grant.retire()), settle: disposition => run("provider_settle", () => grant.settle(disposition))};
+    };
+    const security = f.dependencies.security.resolveAndConsume;
+    f.dependencies.security.resolveAndConsume = async (...args) => {
+      const grant = await security(...args);
+      return {...grant, settle: disposition => run("security_settle", () => grant.settle(disposition))};
+    };
+    f.dependencies.process.reserve = async request => {
+      const reservation = await reserve(request);
+      return {...reservation, close: sequence => {closes += 1; if (closes <= 3) {return Promise.reject(new Error("TEST close timeout", {cause: "synthetic closure"}));} return reservation.close(sequence);}};
+    };
+    const feature = createOrdinaryTurnFeature(f.dependencies); await feature.submit.execute(input);
+    await assert.rejects(feature.dispose(), error => error instanceof AggregateError && error.errors[0] instanceof AggregateError && error.errors[0].errors.length === 2);
+    await assert.rejects(feature.dispose(), error => error instanceof AggregateError && error.errors[0] instanceof AggregateError && error.errors[0].errors.length === 1);
+    assert.equal(calls[failedAction], 3);
+    await feature.dispose(); await feature.dispose();
+    assert.equal(closes, 4);
+    assert.deepEqual(calls, {retire: failedAction === "retire" ? 3 : 1, provider_settle: failedAction === "provider_settle" ? 3 : 1, security_settle: failedAction === "security_settle" ? 3 : 1});
+    for (const kind of ["credential_retired", "provider_grant_settled", "security_grant_settled"]) {assert.equal(f.state().receipts.filter(receipt => receipt.kind === kind).length, 1);}
+    assert.equal(f.state().status, "reconcile_required");
+  });
+}
+
 test("real Host releases proven ordinary ownership after retry while durable status remains reconciliation", async () => {
   const root = import.meta.url.slice(0, import.meta.url.indexOf("/packages/")) + "/";
   const {createAgentRuntimeHost} = await import(new URL("packages/apps/embedded-runtime/dist/composition/agent-runtime-host.js", root).href);
@@ -333,7 +370,6 @@ test("real Host releases proven ordinary ownership after retry while durable sta
   const feature = createOrdinaryTurnFeature(f.dependencies);
   let submission: ReturnType<typeof feature.submit.execute> | undefined;
   const capability = {...feature, submit: {execute: (...args: Parameters<typeof feature.submit.execute>) => {submission = feature.submit.execute(...args); return submission;}}};
-  const unavailable = () => {throw new Error("TEST setup must not execute");};
   const host = createAgentRuntimeHost({
     codexSetup: {authorizeSetupInspection: {execute: unavailable}, discoverCodexInstallations: {execute: unavailable}, inspectCodexConfiguration: {execute: unavailable}, planCodexSetupInspection: {plan: unavailable}},
     claudeCodeSetup: {authorizeClaudeCodeSetupInspection: {execute: unavailable}, discoverClaudeCodeInstallations: {execute: unavailable}, inspectClaudeCodeConfiguration: {execute: unavailable}, planClaudeCodeSetupInspection: {plan: unavailable}},

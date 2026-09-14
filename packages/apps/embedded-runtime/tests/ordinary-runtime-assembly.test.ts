@@ -1,6 +1,3 @@
-import fs from "node:fs";
-import {syncBuiltinESMExports} from "node:module";
-import {createOrdinaryAgentRuntimeHost} from "../dist/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {mkdtemp, realpath, mkdir, readdir, rm} from "node:fs/promises";
@@ -72,8 +69,12 @@ test("ordinary preparation fails before owner construction when a selected facto
   assert.equal(prepared.status, "failed"); assert.equal(calls, 0);
 });
 
+async function forbidden(): Promise<never> {throw new Error("TEST port must remain passive", {cause: "synthetic forbidden port"});}
+async function prepareLaunch(): Promise<never> {throw new Error("TEST paired launch", {cause: "synthetic launch"});}
+function registerSecrets() {return true;}
+
 test("materialized ordinary root injects the provider owner's launch capability and all seven bindings", async () => {
-  const forbidden = async (): Promise<never> => {throw new Error("TEST port must remain passive");};
+
   const store = {accept: forbidden, prepare: forbidden, read: forbidden, claim: forbidden, cancel: forbidden, append: forbidden, finish: forbidden, reconcile: forbidden};
   const security = {resolveAndConsume: forbidden};
   const access = {resolveAndConsume: forbidden};
@@ -81,8 +82,7 @@ test("materialized ordinary root injects the provider owner's launch capability 
   const artifacts = {publish: forbidden};
   const processPort = {reserve: forbidden};
   const provider = {supported: {provider: "codex", mode: "workspace-write", executionProfile: "user-session-v1", capabilityManifestRevision: "ordinary-codex-macos-arm64-0.153.4-v1"} as const, execute: forbidden};
-  const prepareLaunch = async (): Promise<never> => {throw new Error("TEST paired launch");};
-  const registerSecrets = () => true;
+
   let calls = 0;
   const factories = createRuntimeSetupFactories(process.platform);
   let hostOwner: Parameters<typeof factories.host>[1];
@@ -116,38 +116,4 @@ test("materialized ordinary root injects the provider owner's launch capability 
   }
   assert.equal(calls, 7);
   await result.roots.host.dispose();
-});
-
-test("ordinary Host retains owners and writable journal until retry proves feature closure", async t => {
-  const root = await mkdtemp(join(await realpath(tmpdir()), "ordinary-retained-TEST-"));
-  t.after(() => rm(root, {recursive: true, force: true}));
-  const open = fs.openSync; const close = fs.closeSync;
-  let journalFd: number | undefined; let journalCloses = 0; let hostCloses = 0; let featureCloses = 0;
-  t.mock.method(fs, "openSync", (...args: Parameters<typeof fs.openSync>) => {
-    const fd = open(...args); if (String(args[0]).endsWith(".jsonl")) {journalFd = fd;} return fd;
-  });
-  t.mock.method(fs, "closeSync", (fd: number) => {if (fd === journalFd) {journalCloses += 1;} return close(fd);});
-  syncBuiltinESMExports();
-  t.after(() => {t.mock.restoreAll(); syncBuiltinESMExports();});
-  const failure = new Error("TEST process termination unproven"); let stopped = false;
-  const pool = new Pool();
-  const dispose = async () => {hostCloses += 1;};
-  const host = await createOrdinaryAgentRuntimeHost({execution: {provider: "codex", executablePath: join(root, "absent-TEST"), authSourceDirectory: root, privateRoot: root, evidenceRoot: root, sourceDirectory: root, workspaceRoot: root, artifactRoot: root, sourceRevision: "TEST"}, storage: {pool}, scope: {tenantId: "test", projectId: "TEST"}}, async (_signal, ordinary) => {
-    await ordinary.factories.provider();
-    return ordinary.decorateHost({bindAccess() {throw new Error("unused TEST access");}, dispose, [Symbol.asyncDispose]: dispose}, {
-      submit: {execute: async () => ({status: "denied"})},
-      observe: {execute: async () => ({status: "not_found"})},
-      cancel: {execute: async () => ({status: "not_found"})},
-      dispose: async () => {featureCloses += 1; if (!stopped) {throw failure;}},
-    });
-  });
-  const first = host.dispose(); assert.equal(first, host.dispose());
-  await assert.rejects(first, error => error instanceof AggregateError && error.errors.includes(failure));
-  assert.equal(hostCloses, 0); assert.equal(journalCloses, 0); assert.equal(featureCloses, 1);
-  assert.ok(journalFd !== undefined); fs.writeSync(journalFd, '{"kind":"TEST late evidence"}\n'); fs.fsyncSync(journalFd);
-  stopped = true;
-  await Promise.all([host.dispose(), host.dispose()]); await host[Symbol.asyncDispose]();
-  assert.equal(hostCloses, 1); assert.equal(journalCloses, 1); assert.equal(featureCloses, 2);
-  const closedFd = journalFd;
-  assert.throws(() => fs.fstatSync(closedFd), /EBADF/);
 });
