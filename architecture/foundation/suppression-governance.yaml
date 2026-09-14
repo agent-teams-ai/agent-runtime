@@ -1,9 +1,303 @@
+# Temporary production suppression baseline reviewed with PR #171.
+# Exact path/line/rule entries preserve existing source exceptions, not new budgets.
+# Removal owner: architecture/tooling. By 2026-10-14, inspect each target with
+# unused-directive reporting; remove obsolete exceptions and extract cohesive
+# validators/custody setup where focused rejecting tests preserve each invariant.
+# For intentional redaction, control ranges or authority bindings that still need
+# an exception, record a fresh narrow decision before expiry; never auto-renew.
+# Delete the waiver whenever its directive is removed; line/rule drift must fail.
 schemaVersion: 1
 governedRoots:
   - experiments
   - scripts
-  - packages
+  - packages/apps/embedded-runtime/src
+  - packages/contexts/agent-execution/src
+  - packages/contexts/provider-access/src
+  - packages/contexts/runtime-configuration/src
+  - packages/contexts/runtime-security/src
+  - packages/platform/filesystem-custody/src
+  - packages/platform/filesystem-custody/native
 nonWaivableRulePrefixes:
   - access-control.
   - security.
-waivers: []
+waivers:
+  - id: AR-SUP-5D7C9E03BCA3
+    path: packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof/contained-turn-cancellation-proof.ts
+    line: 96
+    directive: oxlint-disable-next-line
+    rules: [complexity]
+    owner: architecture/tooling
+    reason: "validateCancellationTurn: terminal proof validates the complete detached owner DTO."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-EB337A90A239
+    path: packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/contained-turn-runtime-validation.ts
+    line: 35
+    directive: oxlint-disable-next-line
+    rules: [no-control-regex]
+    owner: architecture/tooling
+    reason: "Bounded owner identity: the owner identity contract excludes exact C0/C1 ranges."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-243D38AD0C1A
+    path: packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/contained-turn-runtime-validation.ts
+    line: 48
+    directive: oxlint-disable-next-line
+    rules: [no-control-regex]
+    owner: architecture/tooling
+    reason: "Provider identity copy: the owner identity contract excludes exact C0/C1 ranges."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-3F914FBB97A5
+    path: packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/contained-turn-runtime-validation.ts
+    line: 173
+    directive: oxlint-disable-next-line
+    rules: [complexity]
+    owner: architecture/tooling
+    reason: "mapContainedTurnView: this anti-corruption boundary validates every detached DTO field."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-F05E87B32768
+    path: packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/darwin-contained-turn-deployment.ts
+    line: 135
+    directive: oxlint-disable-next-line
+    rules: [eslint/preserve-caught-error]
+    owner: architecture/tooling
+    reason: "Darwin acquisition cleanup failure: original error is retained in errors; preserve the existing cause/redaction surface"
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-D44E4F8CAEC7
+    path: packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts
+    line: 107
+    directive: oxlint-disable-next-line
+    rules: [eslint/preserve-caught-error]
+    owner: architecture/tooling
+    reason: "Ordinary host cleanup failure: AggregateError retains the primary error in both errors and cause."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-ECD479F9058F
+    path: packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts
+    line: 211
+    directive: oxlint-disable-next-line
+    rules: [max-params]
+    owner: architecture/tooling
+    reason: "request: request correlation and bounded buffer state are explicit protocol seams."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-1162587F16D9
+    path: packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace.ts
+    line: 247
+    directive: oxlint-disable-next-line
+    rules: [max-lines-per-function]
+    owner: architecture/tooling
+    reason: "createNodeContainedTurnWorkspaceBackend: owner backend keeps the shared custody initialization and retention bindings together"
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-142D688A1300
+    path: packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace.ts
+    line: 254
+    directive: oxlint-disable-next-line
+    rules: [max-lines-per-function]
+    owner: architecture/tooling
+    reason: "Workspace initialization callback: one shared legacy/owner custody engine"
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-68472D48684A
+    path: packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-runtime-security-v2.ts
+    line: 93
+    directive: oxlint-disable-next-line
+    rules: [complexity]
+    owner: architecture/tooling
+    reason: "verifiedProvisional: exact signed proof binding is intentionally one closed conjunction"
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-BD6E073318F6
+    path: packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-runtime-security-v2.ts
+    line: 123
+    directive: oxlint-disable-next-line
+    rules: [complexity]
+    owner: architecture/tooling
+    reason: "verifiedGrant: exact signed proof binding is intentionally one closed conjunction"
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-214E4C78F3EF
+    path: packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-evidence.ts
+    line: 511
+    directive: oxlint-disable-next-line
+    rules: [complexity]
+    owner: architecture/tooling
+    reason: "containCustody: ordered fail-closed closure phases remain explicit."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-BA145CBD39F0
+    path: packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-launch.ts
+    line: 407
+    directive: oxlint-disable-next-line
+    rules: [complexity]
+    owner: architecture/tooling
+    reason: "verifyPrivateLaunchPaths: exact path, ancestry, inode, and qualified-alias guards remain one verification."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-11135B650544
+    path: packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-grant-claim.ts
+    line: 92
+    directive: oxlint-disable-next-line
+    rules: [complexity]
+    owner: architecture/tooling
+    reason: "claimContainedTurnWithConsumedGrants: the ordered owner outcomes are intentionally fail-closed."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-BE59A85F20B7
+    path: packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-preparation-cleanup.ts
+    line: 58
+    directive: oxlint-disable-next-line
+    rules: [max-params]
+    owner: architecture/tooling
+    reason: "retireAndCleanupContainedTurnPreparation: each argument is an independent authority binding."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-EBB6AAD0E670
+    path: packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-closure-recovery.ts
+    line: 46
+    directive: oxlint-disable-next-line
+    rules: [complexity]
+    owner: architecture/tooling
+    reason: "closureRequestValue: The score counts closed-stage binding alternatives and null normalization, not control flow."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-30A17796955E
+    path: packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-closure-recovery.ts
+    line: 109
+    directive: oxlint-disable-next-line
+    rules: [complexity]
+    owner: architecture/tooling
+    reason: "containedTurnNoWorkspaceClosureFact: The count is the exact conjunction of independently proved no-start obligations."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-091F89B93EC8
+    path: packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-history.ts
+    line: 66
+    directive: oxlint-disable-next-line
+    rules: [complexity]
+    owner: architecture/tooling
+    reason: "validateContainedTurnHistory: The count is the frozen write-once/append-only invariant matrix, not branching policy."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-D5395BB749E0
+    path: packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-operation-shape.ts
+    line: 50
+    directive: oxlint-disable-next-line
+    rules: [complexity]
+    owner: architecture/tooling
+    reason: "validateContainedTurnOperationShape: The count exhaustively mirrors closed orthogonal record variants, not lifecycle transitions."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-DE831F59F662
+    path: packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-proof-validation.ts
+    line: 29
+    directive: oxlint-disable-next-line
+    rules: [complexity]
+    owner: architecture/tooling
+    reason: "validateProofShape: Exhaustive by proof kind so no proof can smuggle unbound authority fields."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-483C43ACDC69
+    path: packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-proof-validation.ts
+    line: 160
+    directive: oxlint-disable-next-line
+    rules: [complexity, max-lines-per-function]
+    owner: architecture/tooling
+    reason: "validateContainedTurnProofBinding: The count is the exhaustive closed proof union; every case validates distinct subject bindings."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-5889532DB6F6
+    path: packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-proof-validation.ts
+    line: 344
+    directive: oxlint-disable-next-line
+    rules: [complexity]
+    owner: architecture/tooling
+    reason: "validateContainedTurnAxisProofs: The branches are the closed set of independently evidenced execution axes."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-C504E03C21BE
+    path: packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-validation.ts
+    line: 54
+    directive: oxlint-disable-next-line
+    rules: [complexity]
+    owner: architecture/tooling
+    reason: "validateIdentities: The count exhaustively validates every disjoint identity axis and evidence source."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-DF9559EB7CE8
+    path: packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-validation.ts
+    line: 272
+    directive: oxlint-disable-next-line
+    rules: [complexity]
+    owner: architecture/tooling
+    reason: "validateExecutionAxes: The count is the frozen orthogonal execution-axis invariant matrix, not lifecycle branching."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-A46ECCF8B30F
+    path: packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-validation.ts
+    line: 443
+    directive: oxlint-disable-next-line
+    rules: [complexity]
+    owner: architecture/tooling
+    reason: "validateCurrentOperation: Complexity here is the explicit conjunction of orthogonal, fail-closed invariant families."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-2252398936B7
+    path: packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-capture.ts
+    line: 112
+    directive: oxlint-disable-next-line
+    rules: [no-unsafe-finally]
+    owner: architecture/tooling
+    reason: "Refused auth capture cleanup: no credential authority escapes failed resource cleanup"
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-97F8395A53DD
+    path: packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/consume-for-dispatch.ts
+    line: 31
+    directive: oxlint-disable-next-line
+    rules: [eslint/complexity]
+    owner: architecture/tooling
+    reason: "closeConsumeSnapshot: closed projection enumerates persisted variants."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
+  - id: AR-SUP-4204F9A10593
+    path: packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/contained-turn-dispatch-authority-v1-result-mappers.ts
+    line: 124
+    directive: oxlint-disable-next-line
+    rules: [eslint/complexity]
+    owner: architecture/tooling
+    reason: "mapSettlementResultToV1: exact result variants are intentionally closed here."
+    createdOn: 2026-09-14
+    expiresOn: 2026-10-14
+    decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171

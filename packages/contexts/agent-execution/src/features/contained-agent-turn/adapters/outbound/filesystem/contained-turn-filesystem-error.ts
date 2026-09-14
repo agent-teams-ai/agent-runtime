@@ -43,7 +43,7 @@ export const guardContainedTurnFilesystemOperation = async <Result>(
       Buffer.byteLength(candidate, "utf8") <= 512
       ? candidate
       : `contained turn filesystem ${operation} failed (${filesystemCode(error) ?? "unknown"})`;
-    // eslint-disable-next-line preserve-caught-error -- public custody errors intentionally redact causes
+    // Public custody errors intentionally redact causes.
     throw new ContainedTurnFilesystemCustodyError(operation, safeMessage);
   }
 };
