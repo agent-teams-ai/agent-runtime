@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {readdirSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {publicFixture} from '../../live/linux-codex-driver-test-fixture.mjs';
+import {publicFixture} from './linux-codex-driver-test-fixture.mjs';
 import {createLiveNativeStartCollector} from './linux-codex-live-native-start.ts';
 
 for (const phase of ['install', 'process-input-tmpdir', 'bridge-open']) {

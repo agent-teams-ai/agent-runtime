@@ -14,7 +14,7 @@ import {SOURCE, bytes, config, publicFixture} from './linux-codex-driver-test-fi
 // Each test may inject a factory refusal without reproducing domain validation.
 beforeEach(t => {
   const hooks = registerHooks({resolve(specifier, context, next) {
-    if (specifier === '../package/live/linux-codex-live-canary-config.ts') {
+    if (specifier === './linux-codex-live-canary-config.ts') {
       return {url: 'ar69-admission:config', shortCircuit: true};
     }
     return next(specifier, context);
@@ -327,7 +327,7 @@ test('failed observation cannot release on a stale succeeded submit value', asyn
 
 test('public driver collects real admin layout before tree release (synthetic artifact bytes)', {skip: process.platform !== 'linux' && 'descriptor-relative collector requires Linux'}, async t => {
   // Keep compiled-only dependencies scoped so CLI regressions run without a build.
-  const {allocateLinuxCodexLiveAdminDirectories} = await import('../package/live/linux-codex-live-admin-directories.ts');
+  const {allocateLinuxCodexLiveAdminDirectories} = await import('./linux-codex-live-admin-directories.ts');
   const {encodeContainedTurnArtifactManifest, computeContainedTurnArtifactTreeDigest} = await import('@agent-teams/agent-execution/composition');
   const {collectLinuxCodexLiveEvidence} = await import('./linux-codex-live-evidence.mjs');
   const {writeFileSync, existsSync} = await import('node:fs');
@@ -474,7 +474,7 @@ test('real scope validator refuses mismatched approval before driver effects', a
     return;
   }
   const {createLinuxCodexLiveCanaryConfiguration} = await import(
-    new URL('../package/live/linux-codex-live-canary-config.ts', import.meta.url).href);
+    new URL('./linux-codex-live-canary-config.ts', import.meta.url).href);
   const fs = (await import('node:fs')).default;
   const {root, credential, originalStat} = await publicFixture(t);
   const c = config(root);

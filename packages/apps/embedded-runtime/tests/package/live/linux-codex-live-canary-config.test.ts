@@ -3,7 +3,7 @@ import {mkdtemp, realpath, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {test} from "node:test";
-import {decodeBytes} from "../../live/run-linux-codex-live-canary.mjs";
+import {decodeBytes} from "./run-linux-codex-live-canary.mjs";
 import {createContainedTurnSecurityAcceptancePort, NodeTlsHttpEgressTransport,NodeUnixSocketDockerEngine,DockerEngineError,containedTurnScopeDigest} from "@agent-teams/agent-execution/composition";
 import {captureLinuxCodexDeploymentData} from "../../../dist/composition/linux-codex-deployment-authority.js";
 import {bindContainedTurnCapabilityAuthority} from "../../../dist/composition/contained-turn-authority-capability.js";

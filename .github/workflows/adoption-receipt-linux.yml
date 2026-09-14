@@ -56,6 +56,7 @@ on:
       - cursor/fms-host-live-admin-7d17
       - cursor/fms-host-live-admin-setup-7d17
       - cursor/fms-host-live-bootstrap-7d17
+      - cursor/fms-host-live-canary-7d17
       - feat/foundation-contained-turn-quality
 
 permissions:
