@@ -1,7 +1,7 @@
 name: adoption-receipt-darwin
 # Temporary workflow: Darwin arm64 adoption receipt for Host unpublished AE
-# fixtures identity e5de0615a3ae6f4c813f4aa662b77313c7d5935d stacked
-# on Host unpublished AE top-level copies D 66fa1c83. The job always checks
+# fixtures identity 1020628d4176ba63683c0b3ecc7e1648b4aca0c1 after absorbing
+# Host package-external-ae-top (#161) into main. The job always checks
 # out that SHA so this workflow-only commit does not enter the receipt
 # identity. Safe to delete after the paired receipt is merged.
 
@@ -24,11 +24,11 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: e5de0615a3ae6f4c813f4aa662b77313c7d5935d
+          ref: 1020628d4176ba63683c0b3ecc7e1648b4aca0c1
 
       - name: Verify checkout revision
         shell: bash
-        run: test "$(git rev-parse HEAD)" = "e5de0615a3ae6f4c813f4aa662b77313c7d5935d"
+        run: test "$(git rev-parse HEAD)" = "1020628d4176ba63683c0b3ecc7e1648b4aca0c1"
 
       # Same unreachable historical objects as adoption-receipt-linux.yml.
       - name: Fetch retained historical objects
