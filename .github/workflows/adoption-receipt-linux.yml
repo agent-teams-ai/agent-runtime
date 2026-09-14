@@ -56,6 +56,7 @@ on:
       - cursor/fms-host-live-admin-7d17
       - cursor/fms-host-live-admin-setup-7d17
       - cursor/fms-host-live-bootstrap-7d17
+      - feat/foundation-contained-turn-quality
 
 permissions:
   contents: read
@@ -67,7 +68,7 @@ jobs:
       fail-fast: false
       matrix:
         # Keep one Linux run on every existing branch; add only the required peer.
-        target: ${{ fromJSON(github.ref == 'refs/heads/test/get-modular-abort-cleanup-r4' && '["linux-x64","darwin-arm64"]' || '["linux-x64"]') }}
+        target: ${{ fromJSON((github.ref == 'refs/heads/test/get-modular-abort-cleanup-r4' || github.ref == 'refs/heads/feat/foundation-contained-turn-quality') && '["linux-x64","darwin-arm64"]' || '["linux-x64"]') }}
     runs-on: ${{ matrix.target == 'linux-x64' && 'ubuntu-24.04' || 'macos-15' }}
     timeout-minutes: 20
     services:
