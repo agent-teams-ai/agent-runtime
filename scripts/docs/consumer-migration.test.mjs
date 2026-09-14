@@ -32,9 +32,9 @@ test("projected direct tooling pins and exact transitive age exceptions preserve
   const manifest = await json("package.json"), workspace = await yaml("pnpm-workspace.yaml");
   assert.equal(manifest.packageManager, "pnpm@11.18.0");
   assert.deepEqual(manifest.engines, { node: ">=24.18.0 <25", pnpm: "11.18.0" });
-  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.3.0");
+  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.3.1");
   assert.equal(manifest.devDependencies["@agent-teams/docs-protocol"], "0.6.0");
-  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol-agent-teams"], "0.2.7");
+  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol-agent-teams"], "0.2.8");
   for (const section of ["dependencies", "optionalDependencies", "peerDependencies"]) {
     assert.equal(Object.hasOwn(manifest[section] ?? {}, "@agent-teams/docs-protocol-agent-teams"), false);
   }
@@ -44,11 +44,11 @@ test("projected direct tooling pins and exact transitive age exceptions preserve
     assert.equal(Object.hasOwn(manifest.devDependencies, `@agent-teams/${name}`), false);
   }
   assert.deepEqual(workspace.minimumReleaseAgeExclude.filter(value => value.startsWith("@agent-teams/")).toSorted(), [
-    "@agent-teams/docs-protocol-agent-teams@0.2.7",
+    "@agent-teams/docs-protocol-agent-teams@0.2.8",
     "@agent-teams/docs-protocol@0.6.0", "@agent-teams/document-authoring@0.3.0",
-    "@agent-teams/engineering-foundation@1.3.0", "@agent-teams/repository-mutation@0.2.0",
+    "@agent-teams/engineering-foundation@1.3.1", "@agent-teams/repository-mutation@0.2.0",
   ]);
-  assert.match(await read("scripts/architecture/feature-module-config.mjs"), /const FOUNDATION_VERSION = "1\.3\.0";/u);
+  assert.match(await read("scripts/architecture/feature-module-config.mjs"), /const FOUNDATION_VERSION = "1\.3\.1";/u);
 });
 
 test("managed Skill remains byte-exact with the selected installed Cohort", async () => {
@@ -103,10 +103,10 @@ test("Source Dependencies uses schema v3 with root package and every workspace p
   assert.match(source, /"architecture\.source-dependencies", "--consumer", root, "--json"/u);
 });
 
-test("qualified stable20 evidence and current native source policy retain exact bytes", async () => {
+test("qualified stable22 evidence and current native source policy retain exact bytes", async () => {
   const expected = {
-    "architecture/foundation/docs-consumer-integration.json": "e6e69b56c0e0cda72a6a732b67fd48f913a326312e78774d5ec63ddeb179e45f",
-    "architecture/foundation/docs-protocol-managed-state.json": "23d0c21ef21f9f2385fe013f219d38e7a01ca0aaeb9c65ca3728ebba2b5eaedc",
+    "architecture/foundation/docs-consumer-integration.json": "343cd2e012c1036b2b1deddfb52c1f5040dbd8817a471870f543d7e86185e802",
+    "architecture/foundation/docs-protocol-managed-state.json": "cdadfaf7bf4f9424a236f2a5c90cbd84ecc9b0e81f078c34df352fca1ba6802a",
     "architecture/foundation/docs-protocol-qualification.json": "1f7e50ec5b0e6ecc991668b83790b2367062240043c4b885c58377855968969b",
     "architecture/foundation/document-authoring.yaml": "d6f5ba4b178e742e122f6711c9d989d52a77768eb68527b0ecdf3c9a9699c6d2",
     "architecture/foundation/source-dependencies.yaml": "825582a7106592afda9f478076f7b601acfa26aa6a2ac97e5bfd2d369ba38423",
