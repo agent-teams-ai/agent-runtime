@@ -304,8 +304,9 @@ export const createAuthorizeClaudeCodeSetupInspection = (
     const signal = options?.signal;
     signal?.throwIfAborted();
     const trustedScope = trustScope(scope);
+    const candidate: {readonly dialect: unknown} = trustedScope;
     if (
-      trustedScope.dialect !== "claude-code-settings@2026-08-28" ||
+      candidate.dialect !== "claude-code-settings@2026-08-28" ||
       trustedScope.observationEpoch.length === 0 ||
       trustedScope.observationEpoch.length > MAX_EPOCH_LENGTH
     ) {

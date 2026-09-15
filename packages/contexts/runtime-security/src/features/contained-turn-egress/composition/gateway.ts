@@ -27,11 +27,12 @@ export const createContainedTurnEgressGatewayCore = (trustedIdentity: TrustedEgr
   const validation = createEgressValidation(primitives); const captured = captureComposition(primitives, trustedIdentity, dependencies);
   const owners = freeze({...captured.dependencies, clock}) as ContainedTurnEgressRuntimeDependencies;
   const lifecycle = new EgressOneShotLifecycle();
+  const isActive = (): boolean => lifecycle.active;
   const run = async (unsafe: Parameters<ContainedTurnEgress["exchange"]>[0]): Promise<ContainedTurnEgressResult> => {
     const prepared = await prepareExchange(unsafe, validation, owners, lifecycle);
     if ("status" in prepared) {return prepared;}
     const {request, route, policy, capturedRequest} = prepared;
-    if (!lifecycle.active) {return deny("authority_drift");}
+    if (!isActive()) {return deny("authority_drift");}
     try {const acquired = await lifecycle.owner(async () => {
         const session = await owners.transportGateway.openOneShotHttps();
         lifecycle.retainClose(captureClose(session)); return session;
@@ -42,7 +43,7 @@ export const createContainedTurnEgressGatewayCore = (trustedIdentity: TrustedEgr
     const transport = lifecycle.transport;
     if (transport === undefined || lifecycle.writeExact === undefined) {lifecycle.markUsed();
       return await lifecycle.closeTransport() ? deny("transport_denied") : uncertain("close_failed");}
-    if (!lifecycle.active) {return await lifecycle.closeTransport() ? deny("authority_drift") : uncertain("close_failed");}
+    if (!isActive()) {return await lifecycle.closeTransport() ? deny("authority_drift") : uncertain("close_failed");}
 
     const boundary = createFirstWriteBoundary({owners, request, route, policy, capturedRequest,
       identity: captured.identity, validation, lifecycle, primitives});
@@ -52,7 +53,7 @@ export const createContainedTurnEgressGatewayCore = (trustedIdentity: TrustedEgr
       responseByteLimit: request.budgets.responseBytes, deadlineMs: request.budgets.deadlineMs, beforeFirstWrite: boundary.beforeFirstWrite}))));
       returnedWhilePending = boundary.callbackPending;
     } catch {result = freeze({status: "write_indeterminate" as const});}
-    await boundary.finish(); const interrupted = !lifecycle.active;
+    await boundary.finish(); const interrupted = !isActive();
     const closed = await lifecycle.closeTransport(); lifecycle.releaseTransport();
     return completeExchange({result, closed, interrupted, returnedWhilePending, lifecycle, boundary, capturedRequest});
   };

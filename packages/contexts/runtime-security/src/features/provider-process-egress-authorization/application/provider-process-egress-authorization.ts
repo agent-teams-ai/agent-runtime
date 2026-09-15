@@ -69,10 +69,12 @@ const denial = (phase: "provisional" | "final", issueCode: EgressAuthorizationIs
 const validScope = (scope: TrustedEgressCompositionScope): boolean =>
   validRef(scope.tenantId) && validRef(scope.projectId) && validRef(scope.operationId) &&
   validDigest(scope.scopeDigest);
-const validSigningKeyMetadata = (key: EgressCurrentAuthority["policy"]["signingKey"]): boolean =>
-  validRef(key.keyRef) && validRef(key.keyGeneration) && (key.algorithm === "hmac-sha256-synthetic" ||
-    (key.signatureEncoding === "hex-lower" && validDigest(key.publicKeyDigest) &&
+const validSigningKeyMetadata = (key: EgressCurrentAuthority["policy"]["signingKey"]): boolean => {
+  const candidate: {readonly algorithm: unknown; readonly signatureEncoding?: unknown} = key;
+  return validRef(key.keyRef) && validRef(key.keyGeneration) && (key.algorithm === "hmac-sha256-synthetic" ||
+    (candidate.signatureEncoding === "hex-lower" && validDigest(key.publicKeyDigest) &&
       validRef(key.signerRevision) && validRef(key.hostReservationId)));
+};
 const validPolicy = (policy: EgressCurrentAuthority["policy"],
   operations: ProviderProcessEgressOperations): boolean =>
   validRef(policy.policyRef) && validRef(policy.policyRevision) && validRef(policy.policyGeneration) &&
@@ -108,7 +110,8 @@ const requestAuthorityIssue = (request: TrustedHostRequestProjection,
   authority: EgressCurrentAuthority, requestDigest: string): EgressAuthorizationIssueCode | undefined => {
   if (authority.policy.revoked) {return "revoked";}
   if (authority.policy.authorizedRequestDigest !== requestDigest) {return "policy_denied";}
-  if (request.scheme !== authority.policy.origin.scheme ||
+  const candidate: {readonly scheme: unknown} = request;
+  if (candidate.scheme !== authority.policy.origin.scheme ||
     request.authority.hostname !== authority.policy.origin.hostname ||
     request.authority.port !== authority.policy.origin.port ||
     authority.policy.dnsIdentity !== authority.policy.origin.hostname) {return "origin_invalid";}
@@ -285,7 +288,8 @@ const validateNetworkFacts = (input: RequestFinalEgressAuthorization):
     input.tls.sniHostname !== input.provisional.policy.origin.hostname) {
     return { issue: "sni_mismatch" };
   }
-  if (input.tls.certificateValidated !== true) {return { issue: "certificate_invalid" };}
+  const tls: {readonly certificateValidated: unknown} = input.tls;
+  if (tls.certificateValidated !== true) {return { issue: "certificate_invalid" };}
   if (normalizeHostname(input.tls.dnsIdentity) !== input.tls.dnsIdentity ||
     input.tls.dnsIdentity !== input.provisional.policy.dnsIdentity ||
     !validDigest(input.tls.certificateDigest) ||

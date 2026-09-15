@@ -12,7 +12,7 @@ export const createOrdinarySecurityTransactions = (pool: DispatchPgPool) => {
       const controller = new AbortController(); active.add(controller);
       let complete!: () => void;
       const completion = new Promise<void>(resolve => {complete = resolve;}); completions.add(completion);
-      const timer = setTimeout(() => controller.abort(), 10000);
+      const timer = setTimeout(() => {controller.abort();}, 10000);
       let client: DispatchPgClient | undefined; let broken = false; let committing = false;
       const assertOpen = (): void => {if (closed || controller.signal.aborted) {throw unavailable();}};
       const bounded = <V>(start: () => Promise<V>): Promise<V> => new Promise((resolve, reject) => {
@@ -21,7 +21,7 @@ export const createOrdinarySecurityTransactions = (pool: DispatchPgPool) => {
         const release = (): void => {clearTimeout(queryTimer); controller.signal.removeEventListener("abort", abort);};
         const abort = (): void => {release(); broken = true; reject(unavailable());};
         controller.signal.addEventListener("abort", abort, {once: true});
-        queryTimer = setTimeout(() => controller.abort(), 5000);
+        queryTimer = setTimeout(() => {controller.abort();}, 5000);
         try {start().then(value => {release(); if (controller.signal.aborted) {reject(unavailable());} else {resolve(value);} return;}, () => {release(); reject(unavailable());});}
         catch {release(); reject(unavailable());}
       });

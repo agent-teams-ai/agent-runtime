@@ -153,7 +153,7 @@ const detachArray = (value: object,
   }
   return keys.map(key => {
     const descriptor = descriptors[key];
-    if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+    if (descriptor === undefined || !("value" in descriptor) || descriptor.enumerable !== true) {
       throw new TypeError("invalid boundary array property");
     }
     return detach(descriptor.value, schema.array, seen);
@@ -174,7 +174,7 @@ const detachRecord = (value: object, schema: { readonly object: Readonly<Record<
   const clone: Record<string, unknown> = {};
   for (const key of expected) {
     const descriptor = descriptors[key];
-    if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+    if (descriptor === undefined || !("value" in descriptor) || descriptor.enumerable !== true) {
       throw new TypeError("invalid boundary property");
     }
     clone[key] = detach(descriptor.value, schema.object[key]!, seen);

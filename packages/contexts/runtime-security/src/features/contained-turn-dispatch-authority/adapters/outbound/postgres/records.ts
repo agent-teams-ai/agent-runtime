@@ -83,8 +83,8 @@ export const lockId = (key: OperationKey) =>
 // 128 characters per member cover the fixed key, separators, numbers and nesting.
 const maxFactCharacters = 64 * (512 * 6 + 128);
 export const serializeFact = (value: unknown): string => {
-  const serialized = JSON.stringify(value);
-  if (serialized === undefined || serialized.length > maxFactCharacters) {return invalid();}
+  const serialized: unknown = JSON.stringify(value);
+  if (typeof serialized !== "string" || serialized.length > maxFactCharacters) {return invalid();}
   return serialized;
 };
 export const parseFact = (value: unknown): unknown => {

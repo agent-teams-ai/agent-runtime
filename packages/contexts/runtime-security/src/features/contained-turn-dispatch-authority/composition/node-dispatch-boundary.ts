@@ -24,9 +24,9 @@ export const exactOwnerMethods = <Name extends string>(
   if (isNodeDispatchProxy(owner) || typeof owner !== "object" || owner === null) {
     return invalidBoundary();
   }
-  const prototype = Object.getPrototypeOf(owner);
+  const prototype: unknown = Object.getPrototypeOf(owner);
   if (prototype !== Object.prototype && prototype !== null) {return invalidBoundary();}
-  const descriptors = Object.getOwnPropertyDescriptors(owner);
+  const descriptors: Record<string, PropertyDescriptor | undefined> = Object.getOwnPropertyDescriptors(owner);
   const keys = Reflect.ownKeys(descriptors);
   if (keys.some(key => typeof key !== "string") ||
       names.some(name => !keys.includes(name))) {return invalidBoundary();}
@@ -43,7 +43,7 @@ export const exactOwnerMethods = <Name extends string>(
 };
 
 const nativePromisePrototype = Promise.prototype;
-const nativePromiseThen = Promise.prototype.then;
+const nativePromiseThen = Object.getOwnPropertyDescriptor(Promise.prototype, "then")!.value as typeof Promise.prototype.then;
 const nativePromiseConstructor = Promise;
 
 // Only ordinary local-realm native promises are supported. Subclasses and
@@ -62,7 +62,7 @@ export const ownerPromise = <T>(value: T | Promise<T>): Promise<T> => {
   if (then === undefined || !("value" in then) || then.value !== nativePromiseThen ||
       constructor === undefined || !("value" in constructor) ||
       constructor.value !== nativePromiseConstructor) {return invalidBoundary();}
-  return value as Promise<T>;
+  return value;
 };
 
 export const createNodeDispatchAuthorityOperations = (
@@ -72,13 +72,14 @@ export const createNodeDispatchAuthorityOperations = (
     readonly digest: DispatchDigest;
   },
 ): DispatchAuthorityOperations => {
-  if (isNodeDispatchProxy(dependencies) || typeof dependencies !== "object" ||
-      dependencies === null) {
+  const input: unknown = dependencies;
+  if (isNodeDispatchProxy(input) || typeof input !== "object" ||
+      input === null) {
     return invalidBoundary();
   }
-  const prototype = Object.getPrototypeOf(dependencies);
+  const prototype: unknown = Object.getPrototypeOf(input);
   if (prototype !== Object.prototype && prototype !== null) {return invalidBoundary();}
-  const dependencyDescriptors = Object.getOwnPropertyDescriptors(dependencies);
+  const dependencyDescriptors: Record<string, PropertyDescriptor | undefined> = Object.getOwnPropertyDescriptors(input);
   const dependencyKeys = Reflect.ownKeys(dependencyDescriptors);
   if (dependencyKeys.length !== 3 ||
       !["repository", "clock", "digest"].every(name => dependencyKeys.includes(name)) ||
@@ -91,31 +92,32 @@ export const createNodeDispatchAuthorityOperations = (
     ["consumeAtomically", "observe", "settleAtomically"]);
   const clock = exactOwnerMethods(clockOwner, ["now"]);
   const digest = exactOwnerMethods(digestOwner, ["digestCanonical"]);
-  return Object.freeze({
+  const readClock = clock.now as DispatchControlClock["now"];
+  const digestCanonical = digest.digestCanonical as DispatchDigest["digestCanonical"];
+  return Object.freeze<DispatchAuthorityOperations>({
     consumeAtomically: (async (key, decide) => {
-      const detachedKey = detachDispatchBoundaryValue(key) as typeof key;
-      const pending = Reflect.apply(repository.consumeAtomically, repository, [detachedKey,
+      const detachedKey = detachDispatchBoundaryValue(key);
+      const pending: unknown = Reflect.apply(repository.consumeAtomically, repository, [detachedKey,
         (snapshot: unknown) => detachDispatchBoundaryValue(
           decide(detachDispatchBoundaryValue(snapshot) as never),
         )]);
       return detachDispatchBoundaryValue(await ownerPromise(pending)) as never;
-    }) as DispatchConsumptionRepository["consumeAtomically"],
+    }),
     observe: (async key => {
-      const pending = Reflect.apply(repository.observe, repository,
+      const pending: unknown = Reflect.apply(repository.observe, repository,
         [detachDispatchBoundaryValue(key)]);
-      const result = await ownerPromise(pending);
+      const result: unknown = await ownerPromise(pending);
       return result === undefined ? undefined : detachDispatchBoundaryValue(result) as never;
-    }) as DispatchConsumptionRepository["observe"],
+    }),
     settleAtomically: (async (key, decide) => {
-      const detachedKey = detachDispatchBoundaryValue(key) as typeof key;
-      const pending = Reflect.apply(repository.settleAtomically, repository, [detachedKey,
+      const detachedKey = detachDispatchBoundaryValue(key);
+      const pending: unknown = Reflect.apply(repository.settleAtomically, repository, [detachedKey,
         (snapshot: unknown) => detachDispatchBoundaryValue(
           decide(detachDispatchBoundaryValue(snapshot) as never),
         )]);
       return detachDispatchBoundaryValue(await ownerPromise(pending)) as never;
-    }) as DispatchConsumptionRepository["settleAtomically"],
-    now: (() => Reflect.apply(clock.now, clock, [])) as DispatchControlClock["now"],
-    digestCanonical: ((value: string) => Reflect.apply(digest.digestCanonical, digest, [value])) as
-      DispatchDigest["digestCanonical"],
+    }),
+    now: () => Reflect.apply<unknown, [], number>(readClock, clock, []),
+    digestCanonical: value => Reflect.apply<unknown, [string], string>(digestCanonical, digest, [value]),
   });
 };

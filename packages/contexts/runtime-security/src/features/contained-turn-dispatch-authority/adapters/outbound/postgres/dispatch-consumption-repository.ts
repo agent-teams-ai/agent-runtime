@@ -66,7 +66,7 @@ const assertPriorSettlement = (
     !same(prior.outcome.receipt, consumption.settlement))) {invalid();}
 };
 const assertPendingSettlement = (settle: unknown, consumption: PersistedConsumption | undefined) => {
-  if (settle && (consumption === undefined || consumption.lifecycleState !== "consumed_pending" ||
+  if (Boolean(settle) && (consumption === undefined || consumption.lifecycleState !== "consumed_pending" ||
     consumption.settlement !== undefined)) {invalid();}
 };
 

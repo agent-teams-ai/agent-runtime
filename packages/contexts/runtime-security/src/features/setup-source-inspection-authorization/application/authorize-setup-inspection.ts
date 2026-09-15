@@ -29,7 +29,7 @@ const rootLabels: Readonly<Record<TrustedSetupPathRoot["kind"], string>> = {
 };
 
 const safePathSegment = (value: string): string =>
-  [...value]
+  Array.from(value)
     .map(character =>
       /^[A-Za-z0-9._-]$/u.test(character)
         ? character
@@ -94,17 +94,18 @@ const displayPath = (
   return safeSuffix === "" ? label : `${label}/${safeSuffix}`;
 };
 
+
+const isCancellation = (error: unknown): boolean =>
+  typeof error === "object" && error !== null &&
+  "name" in error && error.name === "AbortError";
+
 const rethrowCancellation = (error: unknown, signal?: AbortSignal): void => {
   signal?.throwIfAborted();
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "name" in error &&
-    error.name === "AbortError"
-  ) {
+  if (isCancellation(error)) {
     throw error;
   }
 };
+
 
 const cancellationOptions = (
   signal?: AbortSignal,
@@ -257,13 +258,10 @@ const authorizeExecutable = async (
     rethrowCancellation(error, signal);
     return { code: "path_outside_scope", subject: "unreadable-path" };
   }
-  if (root === undefined || hardLinked || nonRegular) {
+  if (hardLinked || nonRegular) {
     return {
       code: "path_outside_scope",
-      subject:
-        root === undefined
-          ? "unscoped-path"
-          : displayPath(pathAlgebra, lexicalPath, canonicalPath, root),
+      subject: displayPath(pathAlgebra, lexicalPath, canonicalPath, root),
     };
   }
   return {
@@ -373,13 +371,10 @@ const collectConfigurationSources = async (
       diagnostics.push({ code: "path_outside_scope", subject: `${source.kind}-config` });
       continue;
     }
-    if (root === undefined || hardLinked || nonRegular) {
+    if (hardLinked || nonRegular) {
       diagnostics.push({
         code: "path_outside_scope",
-        subject:
-          root === undefined
-            ? `${source.kind}-config`
-            : displayPath(pathAlgebra, lexicalPath, canonicalPath, root),
+        subject: displayPath(pathAlgebra, lexicalPath, canonicalPath, root),
       });
       continue;
     }

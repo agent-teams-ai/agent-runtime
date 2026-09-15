@@ -9,9 +9,10 @@ export const revalidateWrite = async (rawObservation: unknown, input: FirstWrite
   const {validation, owners, route, policy, request, capturedRequest, lifecycle, identity} = input;
   const observation = validation.snapshotObservation(rawObservation);
   if (observation === undefined) {return deny("address_denied");}
+  const peer: {readonly peerPort: unknown} = observation;
   if (observation.resolutionAuthorityId !== route.resolutionAuthorityId ||
       observation.resolutionGeneration !== route.resolutionGeneration || observation.tlsServerName !== route.tlsServerName ||
-      observation.peerPort !== route.port || !route.allowedTlsSpkiDigests.includes(observation.tlsSpkiDigest)) {
+      peer.peerPort !== route.port || !route.allowedTlsSpkiDigests.includes(observation.tlsSpkiDigest)) {
     return deny("tls_peer_mismatch");
   }
   if (observation.applicationBytesDigest !== capturedRequest.applicationBytesDigest ||

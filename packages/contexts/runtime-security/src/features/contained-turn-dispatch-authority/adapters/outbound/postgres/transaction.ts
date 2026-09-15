@@ -63,10 +63,11 @@ export const createDispatchPgTransactions = (pool: DispatchPgPool, options: Disp
           const abandon = () => {onAbandon(); finish(true);};
           const timer = setTimeout(abandon, Math.max(1, Math.min(cap, expires - performance.now())));
           controller.signal.addEventListener("abort", abandon, { once: true });
-          try {start().then(value => finish(false, value), () => finish(true));}
+          try {start().then(value => {finish(false, value); return;}, () => {finish(true);});}
           catch {finish(true);}
         });
       };
+      const canRollback = (): boolean => begun && !committing && !discarded;
       const query: DispatchPgTransaction["query"] = async (sql, values) => {
         if (client === undefined || discarded) {throw unavailable();}
         const connection = client;
@@ -99,7 +100,7 @@ export const createDispatchPgTransactions = (pool: DispatchPgPool, options: Disp
         begun = false;
         return result;
       } catch {
-        if (begun && !committing && !discarded) {
+        if (canRollback()) {
           try {await query("ROLLBACK");} catch {discarded = true;}
         } else {discarded = true;}
         throw unavailable();

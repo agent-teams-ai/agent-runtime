@@ -41,9 +41,7 @@ export const prepareClaudeCodeSourceRequests = (
     requests.length !== SOURCE_SLOTS ||
     new Set(requests.map(request => request.kind)).size !== SOURCE_SLOTS ||
     requests.some(request =>
-      request.kind !== "user" &&
-      request.kind !== "shared-project" &&
-      request.kind !== "project-local"
+      !["user", "shared-project", "project-local"].includes(request.kind)
     ) ||
     requests.some(request => !pathIsBoundedAbsolute(pathAlgebra, request.absolutePath)) ||
     requests.some(request => request.absolutePath !== expectedPaths[request.kind]);

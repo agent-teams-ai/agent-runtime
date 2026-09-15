@@ -141,8 +141,10 @@ const sameDispatchScope = (
 
 export const validConsumptionReceipt = (
   receipt: DispatchConsumptionRecordReceipt,
-): boolean => receipt.contractVersion === "contained-turn-dispatch-consumption/v1" &&
-  receipt.purpose === "contained-turn.provider-dispatch/v1" &&
+): boolean => {
+  const candidate: {readonly contractVersion: unknown; readonly purpose: unknown} = receipt;
+  return candidate.contractVersion === "contained-turn-dispatch-consumption/v1" &&
+  candidate.purpose === "contained-turn.provider-dispatch/v1" &&
   [
     receipt.operationId, receipt.scope.tenantId, receipt.scope.projectId,
     receipt.scope.scopeDigest, receipt.grantRequestId, receipt.requestDigest,
@@ -158,12 +160,15 @@ export const validConsumptionReceipt = (
   receipt.claimBeforeControlTime >= 0 &&
   Number.isSafeInteger(receipt.consumedAtControlTime) &&
   receipt.consumedAtControlTime >= 0;
+};
 
 export const sameConsumptionReceipt = (
   left: DispatchConsumptionRecordReceipt,
   right: DispatchConsumptionRecordReceipt,
-): boolean => left.contractVersion === right.contractVersion &&
-  left.purpose === right.purpose &&
+): boolean => {
+  const candidate: {readonly contractVersion: unknown; readonly purpose: unknown} = left;
+  return candidate.contractVersion === right.contractVersion &&
+  candidate.purpose === right.purpose &&
   left.operationId === right.operationId &&
   sameDispatchScope(left.scope, right.scope) &&
   left.grantRequestId === right.grantRequestId &&
@@ -181,3 +186,4 @@ export const sameConsumptionReceipt = (
   left.claimBeforeControlTime === right.claimBeforeControlTime &&
   left.consumedAtControlTime === right.consumedAtControlTime &&
   left.ownerEvidenceRef === right.ownerEvidenceRef;
+};

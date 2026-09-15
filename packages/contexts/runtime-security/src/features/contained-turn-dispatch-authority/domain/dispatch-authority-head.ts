@@ -110,8 +110,9 @@ export const validDispatchOwnerEvidenceRef = (value: unknown): value is string =
   !value.includes("/") &&
   !value.includes("\\");
 
-export const validConsumeInput = (input: DispatchConsumeRequest): boolean =>
-  input.purpose === "contained-turn.provider-dispatch/v1" &&
+export const validConsumeInput = (input: DispatchConsumeRequest): boolean => {
+  const candidate: {readonly purpose: unknown} = input;
+  return candidate.purpose === "contained-turn.provider-dispatch/v1" &&
   [
     input.operationId,
     input.scope.tenantId,
@@ -129,14 +130,16 @@ export const validConsumeInput = (input: DispatchConsumeRequest): boolean =>
     input.expectedConstraintsDigest,
     input.expectedContainmentPolicyDigest,
   ].every(boundedOpaque);
+};
 
 export const validAuthorityHead = (head: DispatchAuthorityHead): boolean => {
+  const candidate: {readonly decision: unknown; readonly purpose: unknown} = head;
   const revoked = Object.getOwnPropertyDescriptor(head, "revoked");
   return revoked !== undefined &&
   "value" in revoked &&
   typeof revoked.value === "boolean" &&
-  head.decision === "accepted" &&
-  head.purpose === "contained-turn.provider-dispatch/v1" &&
+  candidate.decision === "accepted" &&
+  candidate.purpose === "contained-turn.provider-dispatch/v1" &&
   Number.isSafeInteger(head.claimBeforeControlTime) &&
   head.claimBeforeControlTime >= 0 &&
   validDispatchOwnerEvidenceRef(head.ownerEvidenceRef) &&

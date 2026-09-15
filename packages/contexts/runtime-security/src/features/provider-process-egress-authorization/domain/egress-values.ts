@@ -20,9 +20,11 @@ export const normalizeHostname = (value: string): string | undefined => {
     !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label)) ? undefined : hostname;
 };
 
-export const validOrigin = (origin: EgressTlsOrigin): boolean =>
-  origin.scheme === "https" && normalizeHostname(origin.hostname) === origin.hostname &&
+export const validOrigin = (origin: EgressTlsOrigin): boolean => {
+  const candidate: {readonly scheme: unknown} = origin;
+  return candidate.scheme === "https" && normalizeHostname(origin.hostname) === origin.hostname &&
   Number.isSafeInteger(origin.port) && origin.port >= 1 && origin.port <= 65_535;
+};
 
 export const validBudgets = (budgets: EgressBudgets): boolean =>
   Number.isSafeInteger(budgets.requestBytes) && budgets.requestBytes >= 0 &&
@@ -38,8 +40,9 @@ const headerName = (value: string): boolean => value.length <= 128 &&
   /^[!#$%&'*+.^_`|~0-9a-z-]+$/.test(value);
 
 export const validRequestProjection = (request: TrustedHostRequestProjection): boolean => {
+  const candidate: {readonly scheme: unknown} = request;
   if (!["DELETE", "GET", "PATCH", "POST", "PUT"].includes(request.method) ||
-    request.scheme !== "https" || normalizeHostname(request.authority.hostname) !==
+    candidate.scheme !== "https" || normalizeHostname(request.authority.hostname) !==
       request.authority.hostname || !validOrigin({ scheme: "https", ...request.authority }) ||
     !validDigest(request.requestTarget.digest) ||
     !validLength(request.requestTarget.byteLength, 16_384) ||

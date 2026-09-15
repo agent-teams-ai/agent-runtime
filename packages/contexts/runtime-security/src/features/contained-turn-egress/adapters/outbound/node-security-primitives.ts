@@ -5,50 +5,47 @@ import type { EgressSecurityPrimitives } from "../../domain/validation.js";
 
 const exactObject = <Name extends string>(value: unknown, names: readonly Name[]) => {
   if (typeof value !== "object" || value === null || nodeTypes.isProxy(value)) {return;}
-  try {const prototype = Object.getPrototypeOf(value); if (prototype !== Object.prototype && prototype !== null) {return;}
+  try {const prototype: unknown = Object.getPrototypeOf(value); if (prototype !== Object.prototype && prototype !== null) {return;}
     const keys = Reflect.ownKeys(value);
     if (keys.length !== names.length || keys.some(key => typeof key !== "string" || !names.includes(key as Name))) {return;}
-    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const descriptors: Record<string, PropertyDescriptor | undefined> = Object.getOwnPropertyDescriptors(value);
     const result = Object.create(null) as Record<Name, unknown>;
     for (const name of names) {const descriptor = descriptors[name]; if (descriptor === undefined || !("value" in descriptor)) {return;}
-      result[name] = descriptor.value;} return result as Readonly<Record<Name, unknown>>;} catch {return;}
+      result[name] = descriptor.value as unknown;} return result as Readonly<Record<Name, unknown>>;} catch {return;}
 };
 const intrinsicUint8Array = Uint8Array;
 const intrinsicDataView = DataView;
 const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype) as object;
-const typedArrayBuffer = Object.getOwnPropertyDescriptor(typedArrayPrototype, "buffer")?.get as
-  (this: Uint8Array) => ArrayBufferLike;
-const typedArrayByteLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, "byteLength")?.get as
-  (this: Uint8Array) => number;
-const typedArrayByteOffset = Object.getOwnPropertyDescriptor(typedArrayPrototype, "byteOffset")?.get as
-  (this: Uint8Array) => number;
-const typedArrayLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, "length")?.get as
-  (this: Uint8Array) => number;
-const arrayBufferByteLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "byteLength")?.get as
-  (this: ArrayBuffer) => number;
-const arrayBufferResizable = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "resizable")?.get as
-  ((this: ArrayBuffer) => boolean) | undefined;
+const intrinsicGetter = (prototype: object, name: string): unknown => {
+  const descriptor: { get?: unknown } | undefined = Object.getOwnPropertyDescriptor(prototype, name);
+  return descriptor?.get;
+};
+const typedArrayBuffer = intrinsicGetter(typedArrayPrototype, "buffer") as (this: Uint8Array) => ArrayBufferLike;
+const typedArrayByteLength = intrinsicGetter(typedArrayPrototype, "byteLength") as (this: Uint8Array) => number;
+const typedArrayByteOffset = intrinsicGetter(typedArrayPrototype, "byteOffset") as (this: Uint8Array) => number;
+const typedArrayLength = intrinsicGetter(typedArrayPrototype, "length") as (this: Uint8Array) => number;
+const arrayBufferByteLength = intrinsicGetter(ArrayBuffer.prototype, "byteLength") as (this: ArrayBufferLike) => number;
+const arrayBufferResizable = intrinsicGetter(ArrayBuffer.prototype, "resizable") as ((this: ArrayBufferLike) => boolean) | undefined;
 const sharedArrayBufferByteLength = typeof SharedArrayBuffer === "undefined" ? undefined :
-  Object.getOwnPropertyDescriptor(SharedArrayBuffer.prototype, "byteLength")?.get as
-    ((this: SharedArrayBuffer) => number) | undefined;
+  intrinsicGetter(SharedArrayBuffer.prototype, "byteLength") as ((this: ArrayBufferLike) => number) | undefined;
 
 const snapshotUint8Array = (value: unknown, maximumByteLength: number): Uint8Array | undefined => {
   try {
     if (!nodeTypes.isUint8Array(value) || nodeTypes.isProxy(value) || Object.getPrototypeOf(value) !== Uint8Array.prototype) {return;}
-    const source = value as Uint8Array;
-    const byteLength = Reflect.apply(typedArrayByteLength, source, []);
+    const source = value;
+    const byteLength = Reflect.apply<Uint8Array, [], number>(typedArrayByteLength, source, []);
     if (!Number.isSafeInteger(byteLength) || byteLength < 0 || byteLength > maximumByteLength) {return;}
-    const backing = Reflect.apply(typedArrayBuffer, source, []);
+    const backing = Reflect.apply<Uint8Array, [], ArrayBufferLike>(typedArrayBuffer, source, []);
     if (sharedArrayBufferByteLength !== undefined) {
-      try {Reflect.apply(sharedArrayBufferByteLength, backing, []); return;} catch {/* Ordinary ArrayBuffer. */}
+      try {Reflect.apply<ArrayBufferLike, [], number>(sharedArrayBufferByteLength, backing, []); return;} catch {/* Ordinary ArrayBuffer. */}
     }
-    const backingByteLength = Reflect.apply(arrayBufferByteLength, backing, []);
-    if (arrayBufferResizable !== undefined && Reflect.apply(arrayBufferResizable, backing, [])) {return;}
+    const backingByteLength = Reflect.apply<ArrayBufferLike, [], number>(arrayBufferByteLength, backing, []);
+    if (arrayBufferResizable !== undefined && Reflect.apply<ArrayBufferLike, [], boolean>(arrayBufferResizable, backing, [])) {return;}
     // DataView construction rejects detached ArrayBuffers, including detached zero-length buffers.
     const detachedProof = new intrinsicDataView(backing as ArrayBuffer, 0, 0);
     if (detachedProof.byteLength !== 0) {return;}
-    const byteOffset = Reflect.apply(typedArrayByteOffset, source, []);
-    const length = Reflect.apply(typedArrayLength, source, []);
+    const byteOffset = Reflect.apply<Uint8Array, [], number>(typedArrayByteOffset, source, []);
+    const length = Reflect.apply<Uint8Array, [], number>(typedArrayLength, source, []);
     if (!Number.isSafeInteger(byteOffset) || byteOffset < 0 || byteOffset + byteLength > backingByteLength ||
         length !== byteLength) {return;}
     const output = new intrinsicUint8Array(byteLength);

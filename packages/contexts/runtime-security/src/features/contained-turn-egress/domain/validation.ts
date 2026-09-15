@@ -46,7 +46,7 @@ const count = (value: unknown): value is number => Number.isSafeInteger(value) &
 const normalizedPath = (value: unknown): value is string => typeof value === "string" && value.length > 0 &&
   value.length <= 2_048 && value.startsWith("/") && !value.includes("\\") && !value.includes("#") &&
   !/(?:^|\/)\.{1,2}(?:\/|$)/u.test(value.split("?", 1)[0]!) &&
-  !value.includes("//") && ![...value].some(character => (character.codePointAt(0) ?? 0) <= 32 ||
+  !value.includes("//") && !Array.from(value).some(character => (character.codePointAt(0) ?? 0) <= 32 ||
     character.codePointAt(0) === 127) && !/%(?:2e|2f|5c|25|0[0-9a-f]|7f)/iu.test(value) && !/%(?![0-9a-f]{2})/iu.test(value);
 const dangerousHeaders = new Set(["authorization", "connection", "content-length", "cookie", "forwarded", "host",
   "proxy-authorization", "proxy-connection", "te", "trailer", "transfer-encoding", "upgrade", "x-forwarded-for",
@@ -254,7 +254,7 @@ const createTransportValidation = (tools: ValidationTools) => {
         (address.family === "ipv6" && !subnet(address.bytesHex, "20000000000000000000000000000000", 3)) ||
         (address.family === "ipv4" ? deniedV4 : deniedV6SpecialPurposeV1)
           .some(([network, bits]) => subnet(address.bytesHex as string, network, bits))) {return;}
-    return Object.freeze({family: address.family, bytesHex: address.bytesHex}) as NetworkAddressV1;
+    return Object.freeze({family: address.family, bytesHex: address.bytesHex});
   };
   const answerDigest = (addresses: readonly NetworkAddressV1[]) => hash(frame("contained-turn-egress-answer-set/v1",
     addresses.map(addressKey)));
@@ -295,7 +295,7 @@ const createTransportValidation = (tools: ValidationTools) => {
       receipt.claimBindingDigest, receipt.acceptedAuthorityDigest, receipt.authorityHeadDigestAtConsumption,
       receipt.constraintsDigest, receipt.containmentPolicyDigest, receipt.consumptionDigest].every(isDigest) ||
       !count(receipt.claimBeforeControlTime) || !count(receipt.consumedAtControlTime) ||
-      (receipt.claimBeforeControlTime as number) <= (receipt.consumedAtControlTime as number) || !isEgressIdentifier(receipt.ownerEvidenceRef)) {return;}
+      receipt.claimBeforeControlTime <= receipt.consumedAtControlTime || !isEgressIdentifier(receipt.ownerEvidenceRef)) {return;}
     return Object.freeze({...receipt, scope: Object.freeze({...scope})}) as EgressDispatchConsumptionReceipt;
   };
   const canonicalReceipt = (value: EgressDispatchConsumptionReceipt) => frame("contained-turn-egress-dispatch-receipt/v1", [

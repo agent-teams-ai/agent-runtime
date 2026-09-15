@@ -41,7 +41,7 @@ export const createFirstWriteBoundary = (input: FirstWriteInput) => {
       const exposedCanonical = canonicalBody.slice(); const exposedApplication = capturedRequest.applicationBuffer.slice();
       const authorization = freeze({body, canonicalBody: exposedCanonical, envelope});
       const permit = createWriteAuthorization({validation, owner: owners.policyAuthority, route, policy, issuedAt,
-        startedAt, deadlineMs: request.budgets.deadlineMs, active, now: owners.clock.now});
+        startedAt, deadlineMs: request.budgets.deadlineMs, active, now: owners.clock.now.bind(owners.clock)});
       try {const returned = lifecycle.writeExact?.(freeze({authorization, applicationBytes: exposedApplication,
         consumeAuthorization: () => {const allowed = permit.consumeAuthorization(); writeAttempted ||= allowed; return allowed;}}));
         if (!permit.consumed && permit.rejected) {callbackDenial = deny("authority_drift"); return freeze({status: "denied" as const});}

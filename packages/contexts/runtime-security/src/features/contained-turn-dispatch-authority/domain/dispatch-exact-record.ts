@@ -4,9 +4,9 @@ export const snapshotExactDispatchRecord = <Name extends string>(
   names: readonly Name[],
 ): Readonly<Record<Name, unknown>> | undefined => {
   if (typeof value !== "object" || value === null) {return undefined;}
-  const prototype = Object.getPrototypeOf(value);
+  const prototype: unknown = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) {return undefined;}
-  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const descriptors: Record<string, PropertyDescriptor | undefined> = Object.getOwnPropertyDescriptors(value);
   const keys = Reflect.ownKeys(descriptors);
   if (keys.length !== names.length ||
       keys.some(key => typeof key !== "string" || !names.includes(key as Name))) {
@@ -16,7 +16,7 @@ export const snapshotExactDispatchRecord = <Name extends string>(
   for (const name of names) {
     const descriptor = descriptors[name];
     if (descriptor === undefined || !("value" in descriptor)) {return undefined;}
-    snapshot[name] = descriptor.value;
+    snapshot[name] = descriptor.value as unknown;
   }
   return snapshot;
 };
@@ -27,9 +27,9 @@ export const snapshotExactDispatchVariant = (
   variants: readonly (readonly string[])[],
 ): Readonly<Record<string, unknown>> | undefined => {
   if (typeof value !== "object" || value === null) {return undefined;}
-  const prototype = Object.getPrototypeOf(value);
+  const prototype: unknown = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) {return undefined;}
-  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const descriptors: Record<string, PropertyDescriptor | undefined> = Object.getOwnPropertyDescriptors(value);
   const keys = Reflect.ownKeys(descriptors);
   const names = variants.find(candidate => keys.length === candidate.length &&
     keys.every(key => typeof key === "string" && candidate.includes(key)));
@@ -38,7 +38,7 @@ export const snapshotExactDispatchVariant = (
   for (const name of names) {
     const descriptor = descriptors[name];
     if (descriptor === undefined || !("value" in descriptor)) {return undefined;}
-    snapshot[name] = descriptor.value;
+    snapshot[name] = descriptor.value as unknown;
   }
   return snapshot;
 };

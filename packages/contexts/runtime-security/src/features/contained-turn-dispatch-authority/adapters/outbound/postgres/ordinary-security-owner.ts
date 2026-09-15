@@ -48,7 +48,7 @@ export const createPostgresOrdinarySecurityOwner = (options: OrdinarySecurityOwn
   };
   const observe = async (input: OrdinarySecurityInput): Promise<Stored | undefined> => transactions.run(tx => read(tx, input));
   const settle = async (input: OrdinarySecurityInput, disposition: OrdinarySecuritySettlement["disposition"]): Promise<OrdinarySecuritySettlement> => {
-    if (disposed || (disposition !== "claim_committed" && disposition !== "abandoned_without_claim")) {throw ordinarySecurityDenied();}
+    if (disposed || !["claim_committed", "abandoned_without_claim"].includes(disposition)) {throw ordinarySecurityDenied();}
     let receipt: OrdinarySecuritySettlement;
     try {receipt = await transactions.run(async tx => {
       const prior = await read(tx, input, true); if (prior === undefined) {throw ordinarySecurityDenied();}
