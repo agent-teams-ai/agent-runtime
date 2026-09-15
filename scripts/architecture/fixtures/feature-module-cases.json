@@ -19,6 +19,98 @@
       "expected": []
     },
     {
+      "name": "feature-without-public-contracts-needs-only-internal-entrypoint",
+      "files": {
+        "src/features/alpha/index.ts": null,
+        "src/index.ts": "// No public contracts.\n"
+      },
+      "expected": []
+    },
+    {
+      "name": "contracts-role-still-requires-public-entrypoint",
+      "alphaRoles": [
+        "contracts",
+        "domain"
+      ],
+      "files": {
+        "src/features/alpha/index.ts": null,
+        "src/features/alpha/contracts/public.ts": "export interface Public { readonly value: string }\n",
+        "src/index.ts": "// No exports.\n"
+      },
+      "expected": [
+        {
+          "code": "FM_ENTRYPOINT_MISSING",
+          "path": "src/features/alpha/index.ts",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "name": "no-public-contracts-still-requires-internal-entrypoint",
+      "files": {
+        "src/features/alpha/index.ts": null,
+        "src/features/alpha/internal.ts": null,
+        "src/index.ts": "// No exports.\n",
+        "src/composition.ts": "// No exports.\n"
+      },
+      "expected": [
+        {
+          "code": "FM_ENTRYPOINT_MISSING",
+          "path": "src/features/alpha/internal.ts",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "name": "absent-public-entrypoint-cannot-be-imported",
+      "files": {
+        "src/features/alpha/index.ts": null
+      },
+      "expected": [
+        {
+          "code": "FM_FILESYSTEM_IDENTITY",
+          "path": "src/index.ts",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "name": "no-contracts-public-entrypoint-still-rejects-adapter-exports",
+      "alphaRoles": [
+        "domain",
+        "adapters"
+      ],
+      "files": {
+        "src/features/alpha/adapters/value.ts": "export const adapterValue = true;\n",
+        "src/features/alpha/index.ts": "export { adapterValue } from \"./adapters/value.js\";\n"
+      },
+      "expected": [
+        {
+          "code": "FM_PUBLIC_ENTRYPOINT_EXPORT",
+          "path": "src/features/alpha/index.ts",
+          "line": 1
+        }
+      ]
+    },
+    {
+      "name": "optional-public-entrypoint-still-rejects-symlinks",
+      "symlinks": [
+        {
+          "path": "src/features/alpha/index.ts",
+          "target": "src/features/alpha/internal.ts",
+          "kind": "file",
+          "existingTarget": true
+        }
+      ],
+      "expected": [
+        {
+          "code": "FM_FILESYSTEM_IDENTITY",
+          "path": "src/features/alpha/index.ts",
+          "line": 1
+        }
+      ]
+    },
+    {
       "name": "public-entrypoint-exposes-only-own-contracts",
       "files": {
         "src/features/alpha/index.ts": "export { value } from \"./domain/value.js\";\n"

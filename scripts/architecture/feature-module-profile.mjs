@@ -84,6 +84,8 @@ const LOCAL_CLASSIFICATION_AUTHORITY = Object.freeze({
 });
 export const LOCAL_MODULE_FILES = Object.freeze(["index.ts", "composition.ts"]);
 const LOCAL_FEATURE_ENTRYPOINTS = Object.freeze(["index.ts", "internal.ts"]);
+export const isOptionalPublicEntrypoint = (feature, path) =>
+  path === feature.entrypoints?.public && feature.roles?.includes("contracts") === false;
 const LOCAL_ARCHITECTURE_DOCUMENT = "docs/architecture/feature-module-standard-v1-candidate.md";
 const LOCAL_DECISIONS = Object.freeze([
   { id: ACTIVATION_AUTHORITY.acceptedAdr, path: ACTIVATION_AUTHORITY.decisionPath, owner: "architecture" },
