@@ -17,6 +17,9 @@ interface ParseBudgetState {
 
 class DuplicateKeyError extends Error {}
 
+const nullRecord = (): Record<string, unknown> =>
+  Object.create(null) as Record<string, unknown>;
+
 const rejected = (
   diagnostic: ClaudeCodeConfigurationDiagnosticCode,
 ): ParseClaudeCodeJsonResult => ({ diagnostic, status: "rejected" });
@@ -81,7 +84,7 @@ const materializeObject = (
     throw new RangeError("json object budget exceeded");
   }
   const seen = new Set<string>();
-  const output: Record<string, unknown> = Object.create(null);
+  const output = nullRecord();
   for (const property of properties) {
     const [key, valueNode] = materializeProperty(property, signal);
     if (seen.has(key)) {

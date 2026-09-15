@@ -235,7 +235,8 @@ const createApplySettings = (
 ) =>
   (document: Readonly<Record<string, unknown>>, source: PreparedSource): void => {
     const safeProjection =
-      collections.safeProjectionBySource.get(source.sourceRef) ?? new Map();
+      collections.safeProjectionBySource.get(source.sourceRef) ??
+      new Map<CodexSettingKey, string>();
     collections.safeProjectionBySource.set(source.sourceRef, safeProjection);
     const classification = validateSemanticClassification(
       classifier.classify(dialect, document),
@@ -458,8 +459,9 @@ const executeInspection = async (
 export const createInspectCodexConfiguration = (
   dependencies: InspectionDependencies,
 ): InspectCodexConfigurationUseCase => {
+  const classifierContract: string = dependencies.semanticClassifier.contract;
   if (
-    dependencies.semanticClassifier.contract !==
+    classifierContract !==
       codexConfigurationSemanticClassifierContract ||
     !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$/u.test(
       dependencies.semanticClassifier.revision,

@@ -47,16 +47,19 @@ export const isProviderRouteOrDeploymentShapedClaudeCodeValue = (value: string):
   providerRouteOrDeploymentShape.test(value);
 
 export const isControlBearingClaudeCodeValue = (value: string): boolean =>
-  [...value].some(character => {
+  Array.from(value).some(character => {
     const codePoint = character.codePointAt(0);
     return codePoint !== undefined && (codePoint < 32 || codePoint === 127);
   });
 
 const isPlainRecord = (value: unknown): value is Record<string, unknown> => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {return false;}
-  const prototype = Object.getPrototypeOf(value);
+  const prototype = Object.getPrototypeOf(value) as unknown;
   return prototype === null || prototype === Object.prototype;
 };
+
+const nullRecord = (): Record<string, unknown> =>
+  Object.create(null) as Record<string, unknown>;
 
 const dataDescriptors = (value: object): Readonly<Record<string, PropertyDescriptor>> | undefined => {
   if (Object.getOwnPropertySymbols(value).length > 0) {return undefined;}
@@ -118,7 +121,7 @@ const normalizeRecord = (
   if (state.objectKeys > CLAUDE_CODE_BUDGETS.objectKeys) {
     throw new TypeError("key budget");
   }
-  const output: Record<string, unknown> = Object.create(null);
+  const output = nullRecord();
   for (const key of keys) {
     if (key.length === 0 || key.length > CLAUDE_CODE_BUDGETS.keyLength) {
       throw new TypeError("key");
@@ -174,7 +177,7 @@ const exactRecord = (value: unknown, keys: ReadonlySet<string>): Readonly<Record
   if (!isPlainRecord(value)) {return undefined;}
   const descriptors = dataDescriptors(value);
   if (descriptors === undefined || Object.keys(descriptors).some(key => !keys.has(key))) {return undefined;}
-  const output: Record<string, unknown> = Object.create(null);
+  const output = nullRecord();
   for (const key of Object.keys(descriptors)) {output[key] = descriptors[key]?.value;}
   return output;
 };
