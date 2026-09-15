@@ -109,7 +109,7 @@ test("qualified stable23 evidence and current native source policy retain exact 
     "architecture/foundation/docs-protocol-managed-state.json": "40e7697e06fb6e0c55956a3b028f63606c5c4d82cc83453dd9cc6b89ef85fa51",
     "architecture/foundation/docs-protocol-qualification.json": "1f7e50ec5b0e6ecc991668b83790b2367062240043c4b885c58377855968969b",
     "architecture/foundation/document-authoring.yaml": "d6f5ba4b178e742e122f6711c9d989d52a77768eb68527b0ecdf3c9a9699c6d2",
-    "architecture/foundation/source-dependencies.yaml": "33b9323a2dffcd9aca75b09258c915f3cdcd37ca7397e14a29cee0a0d15fe4d9",
+    "architecture/foundation/source-dependencies.yaml": "7a74368481deb91346bebf856abdc673f4ca2c9068805565f7c7082eebc8fd9a",
   };
   for (const [path, digest] of Object.entries(expected)) {
     assert.equal(createHash("sha256").update(await read(path)).digest("hex"), digest, path);

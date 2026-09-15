@@ -32,7 +32,7 @@ export const prepareBootstrapProject = async (t: Pick<TestContext, "after">): Pr
     "init/node-docker-custody-init-driver", "init/docker-custody-init-protocol",
     "init/docker-custody-init-runtime", "init/docker-custody-init-runtime-types",
     "init/docker-custody-init-guards", "init/docker-custody-init-input",
-    "init/docker-custody-init-control-writer", "serialization/strict-json",
+    "init/docker-custody-init-control-writer", "init/docker-custody-init-observation", "serialization/strict-json",
   ];
   for (const file of files) {
     const code = await readFile(new URL(`${file}.ts`, source), "utf8");
