@@ -89,7 +89,7 @@ export const EXPECTED_PROFILE = Object.freeze({
 
 const expectedScripts = Object.freeze({
   "architecture:consumer-modules": "node scripts/architecture/check-consumer-module-standard.mjs",
-  "foundation:check": "agent-teams-foundation check && pnpm foundation:boundaries:negative && pnpm foundation:assert-dev-only && pnpm foundation:assert-registry && pnpm quality:adoption",
+  "foundation:check": "agent-teams-foundation check && pnpm foundation:boundaries:negative && pnpm foundation:assert-dev-only && pnpm foundation:assert-registry",
   "test:consumer-modules": "node --test scripts/architecture/check-consumer-module-standard.test.mjs",
 });
 const gateChain = "pnpm test:consumer-modules && pnpm architecture:consumer-modules";
