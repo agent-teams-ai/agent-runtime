@@ -19,11 +19,17 @@ const text = (bytes: Buffer): string => {
   if ((end >= 0 && !zero(bytes.subarray(end))) || value.some(byte => byte < 32 || byte > 126)) {return fail();}
   return value.toString("ascii");
 };
+const isOctalPadding = (value: string): boolean => {
+  for (const character of value) {if (character !== "\0" && character !== " ") {return false;}}
+  return true;
+};
 const octal = (bytes: Buffer): number => {
   // Reject GNU base-256 and every non-octal/ambiguous numeric representation.
   const value = bytes.toString("latin1");
-  if (!/^[0-7]+[\0 ]*$/u.test(value)) {return fail();}
-  const number = Number.parseInt(value, 8);
+  let digitEnd = 0;
+  while (digitEnd < value.length && value.charCodeAt(digitEnd) >= 48 && value.charCodeAt(digitEnd) <= 55) {digitEnd += 1;}
+  if (digitEnd === 0 || !isOctalPadding(value.slice(digitEnd))) {return fail();}
+  const number = Number.parseInt(value.slice(0, digitEnd), 8);
   if (!Number.isSafeInteger(number)) {return fail();}
   return number;
 };

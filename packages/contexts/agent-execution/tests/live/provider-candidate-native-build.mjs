@@ -11,7 +11,8 @@ const ROLES = ["compiler", "linker", "resources", "nodeHeaders", "sysroot"];
 const rolesFor = native => native.recipe === "linux-x64-gcc-shared/v1" ? [...ROLES, "assembler"] : ROLES;
 const fail = () => {throw new TypeError("exact host-bound native qualification required");};
 const boundedText = value => {
-  if (typeof value !== "string" || !value.length || value.length > 512 || /[\0\r\n]/u.test(value)) {fail();}
+  if (typeof value !== "string" || !value.length || value.length > 512 ||
+      value.includes("\0") || value.includes("\r") || value.includes("\n")) {fail();}
   return value;
 };
 const absolutePath = value => {

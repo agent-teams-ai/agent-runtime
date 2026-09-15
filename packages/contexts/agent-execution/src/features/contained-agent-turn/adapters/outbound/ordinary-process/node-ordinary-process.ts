@@ -35,6 +35,13 @@ async function within(promise: Promise<void>, milliseconds: number): Promise<boo
   try { return await Promise.race([promise.then(() => true), new Promise<false>(resolve => { timer = setTimeout(() => resolve(false), milliseconds); })]); }
   finally { clearTimeout(timer); }
 }
+const writeMessage = async (child: ChildProcessWithoutNullStreams, message: string): Promise<void> =>
+  new Promise((resolve, reject) => {
+    child.stdin.write(message, (error: Error | null | undefined) => {
+      if (error !== null && error !== undefined) {reject(refusal()); return;}
+      resolve();
+    });
+  });
 
 /** Live ownership is retained only in this process. This adapter never recovers a persisted PID. */
 export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): OrdinaryProcessPort {
@@ -115,7 +122,7 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
       }},
       async write(message: string) {
         if (failure !== undefined || child === undefined || closed || exited || Buffer.byteLength(message) > 262_144) { throw refusal(); }
-        await new Promise<void>((resolve, reject) => { child!.stdin.write(message, (error: Error | null | undefined) => error ? reject(refusal()) : resolve()); });
+        await writeMessage(child, message);
       },
       async closeInput() { child?.stdin.end(); },
     });

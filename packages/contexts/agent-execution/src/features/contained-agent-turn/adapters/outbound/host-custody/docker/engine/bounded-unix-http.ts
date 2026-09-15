@@ -16,6 +16,8 @@ const MAX_REQUEST_BYTES = 131_072;
 const MAX_RESPONSE_BYTES = 262_144;
 const BOOT_ID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u;
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/u;
+const hasRequestTargetControlCharacter = (value: string): boolean =>
+  value.includes("\0") || value.includes("\r") || value.includes("\n");
 
 export interface DockerEndpointIdentity {
   readonly canonicalSocketPath: string;
@@ -321,7 +323,7 @@ export class BoundedUnixHttpClient {
     const call = snapshotDockerEngineCall(input.call);
     const observationCall = snapshotDockerEngineCall(input.observationCall ?? call);
     this.#checkCall(call);
-    if (!input.path.startsWith("/") || input.path.length > 4096 || /[\0\r\n]/u.test(input.path)) {
+    if (!input.path.startsWith("/") || input.path.length > 4096 || hasRequestTargetControlCharacter(input.path)) {
       throw new DockerEngineError("protocol-violation");
     }
     const custody = await this.#observeCustody();
@@ -392,7 +394,7 @@ export class BoundedUnixHttpClient {
     if ((input.body?.byteLength ?? 0) > MAX_REQUEST_BYTES) {
       throw new DockerEngineError("invalid-create-request");
     }
-    if (!input.path.startsWith("/") || input.path.length > 4096 || /[\0\r\n]/u.test(input.path)) {
+    if (!input.path.startsWith("/") || input.path.length > 4096 || hasRequestTargetControlCharacter(input.path)) {
       throw new DockerEngineError("protocol-violation");
     }
     const custody = await this.#observeCustody();
