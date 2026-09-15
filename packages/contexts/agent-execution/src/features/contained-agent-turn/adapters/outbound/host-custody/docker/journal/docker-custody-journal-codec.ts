@@ -68,7 +68,7 @@ const assertPlainDataObject: (
   if (
     ownKeys.some(key => typeof key !== "string") ||
     (ownKeys as string[]).toSorted().join("\0") !== [...keys].toSorted().join("\0") ||
-    Object.values(descriptors).some(candidate => !("value" in candidate) || !candidate.enumerable)
+    Object.values(descriptors).some(candidate => !("value" in candidate) || candidate.enumerable !== true)
   ) {
     throw new TypeError(`${label} must have its exact data-only shape`);
   }

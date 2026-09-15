@@ -75,7 +75,7 @@ export class HostHttpEgressV4NodeStorage implements HostHttpEgressV4Storage {
       try { await release.promise; await this.#rootOwned(); }
       finally { this.#locked = false; }
     }, { onContention: () => { throw new HostHttpEgressV4Error("busy"); } });
-    void this.#held.catch(error => { this.#unknown = true; entered.reject(error); });
+    void this.#held.catch((error: unknown) => { this.#unknown = true; entered.reject(error); });
     await entered.promise;
   }
   async #scan(): Promise<Set<string>> {

@@ -1,3 +1,4 @@
+import type {DockerCustodyDuplexChannel} from "../engine/docker-engine-port.js";
 import type {
   DockerCustodyChildSignal,
   DockerCustodyHostSignal,
@@ -63,3 +64,83 @@ export interface DockerCustodyInitSnapshot {
 }
 
 export type DockerCustodyObservationKind = DockerCustodyProviderObservation["observation"];
+
+export interface DockerCustodyProviderGeneration {
+  readonly pid: number;
+  readonly rootHandle: DockerCustodyProviderRootHandle; readonly stderr: DockerCustodyProviderOutputHandle; readonly stdout: DockerCustodyProviderOutputHandle;
+}
+
+export interface DockerCustodyInitHostAuthority {
+  readonly expectedIdentity: DockerCustodyIdentity;
+  readonly generation: string;
+  readonly launchFingerprintSha256: string;
+  readonly operationNonce: string;
+}
+
+export interface DockerCustodyInitHostExec {
+  readonly argv: readonly string[];
+  readonly environment: readonly {readonly name: string; readonly value: string}[];
+  readonly executableSha256: string;
+  readonly gid: number;
+  readonly requestId: string;
+  readonly uid: number;
+  readonly wallDeadlineUnixMs: number;
+}
+
+export interface DockerCustodyInitHostOptions {
+  readonly acknowledgementTimeoutMs: number;
+  readonly authority: DockerCustodyInitHostAuthority;
+  readonly channel: DockerCustodyDuplexChannel;
+  readonly isCurrentGeneration: (generation: string) => boolean;
+  readonly isObservationActive?: () => boolean;
+  readonly maximumStderrBytes: number;
+  readonly maximumStdoutBytes: number;
+  readonly monotonicNow?: () => number;
+  readonly onDrainComplete?: (drain: DockerCustodyInitHostClosedEvidence["drain"]) => void | Promise<void>;
+  readonly onOutput?: (chunk: DockerCustodyInitHostOutput) => void | Promise<void>;
+  readonly onRootExit?: (exit: DockerCustodyInitHostRootExit) => void | Promise<void>;
+  readonly readyTimeoutMs: number;
+  readonly signal?: AbortSignal;
+}
+
+export interface DockerCustodyInitHostOutput {
+  readonly bytes: Uint8Array;
+  readonly stream: "stderr" | "stdout";
+}
+
+export interface DockerCustodyInitHostRootExit {
+  readonly exitCode: number | null;
+  readonly signal: DockerCustodyChildSignal | null;
+}
+
+export interface DockerCustodyInitHostClosedEvidence {
+  readonly acknowledgement: "started";
+  readonly drain: {readonly outerContainmentClaim: "unproven"; readonly rootExit: "observed"; readonly stderr: "eof"; readonly stdout: "eof"};
+  readonly generation: string;
+  readonly kind: "closed";
+  readonly rootExit: DockerCustodyInitHostRootExit;
+  readonly stderrBytes: number;
+  readonly stdoutBytes: number;
+}
+
+export type DockerCustodyInitHostResult = DockerCustodyInitHostClosedEvidence | {
+  readonly generation: string;
+  readonly kind: "failed";
+  readonly reason: "cancelled" | "channel-ended" | "init-not-ready" | "not-started" | "output-limit" | "protocol-violation" | "transport-failed";
+} | {
+  readonly generation: string;
+  readonly kind: "unknown";
+  readonly reason: "acknowledgement-conflict" | "acknowledgement-lost" | "exec-write-unknown";
+};
+
+export type DockerCustodyInitHostReady =
+  | {readonly generation: string; readonly kind: "ready"}
+  | Exclude<DockerCustodyInitHostResult, {kind: "closed"}>;
+export type DockerCustodyInitHostStart =
+  | {readonly generation: string; readonly kind: "started"}
+  | Exclude<DockerCustodyInitHostResult, {kind: "closed"}>;
+
+export type DockerCustodyInitHostWriteResult =
+  | {readonly committedBytes: number; readonly kind: "committed"}
+  | {readonly committedBytes: "unknown"; readonly kind: "unknown"}
+  | {readonly committedBytes: 0; readonly kind: "closed"};

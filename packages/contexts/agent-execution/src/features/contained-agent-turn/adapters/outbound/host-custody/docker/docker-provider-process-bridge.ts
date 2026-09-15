@@ -32,8 +32,8 @@ export class DockerProviderProcessIoError extends Error {
 /** IO only: waitForExit joins authenticated root exit AND verified drain. Neither
  * it nor EOF proves physical containment. Construction creates no session or IO. */
 class DockerProviderProcess {
-  public readonly stdout = new DockerProviderOutput(error => this.fail(error));
-  public readonly stderr = new DockerProviderOutput(error => this.fail(error));
+  public readonly stdout = new DockerProviderOutput(error => {this.fail(error);});
+  public readonly stderr = new DockerProviderOutput(error => {this.fail(error);});
   #session: DockerContainedTurnInitSession | undefined;
   #failure: Error | undefined;
   #completion: DockerCustodyInitHostResult | undefined;
@@ -65,7 +65,7 @@ class DockerProviderProcess {
         this.#exit.resolve(Object.freeze({code: result.rootExit.exitCode, signal: result.rootExit.signal}));
       }
       return;
-    }, () => this.fail(new DockerProviderProcessIoError("completion-rejected")));
+    }, () => {this.fail(new DockerProviderProcessIoError("completion-rejected"));});
   }
 
   public fail(error: Error): void {
@@ -120,11 +120,12 @@ class DockerProviderProcess {
     const interrupted = Promise.withResolvers<DockerCustodyInitHostWriteResult>();
     let admissionRejection: DockerProviderProcessIoError | undefined;
     // One fixed pending-write slot, not one retained completion reaction per write.
-    this.#interruptWrite = () => interrupted.resolve({kind: "unknown", committedBytes: "unknown"});
+    this.#interruptWrite = () => {interrupted.resolve({kind: "unknown", committedBytes: "unknown"});};
     try {
       // Completion/abort cannot prove zero bytes for a pending channel write.
       const result = await Promise.race([write(), interrupted.promise]);
-      if (result.kind === "closed" && result.committedBytes === 0 && committedPrefix === 0 && this.#failure === undefined) {
+      const committedBytes: unknown = result.committedBytes;
+      if (result.kind === "closed" && committedBytes === 0 && committedPrefix === 0 && this.#failure === undefined) {
         // Admission rejected this entire logical operation before any bytes or
         // EOF committed. Seal input without cancelling the sole output reader:
         // the Host still owns physical stop, final observations and cleanup.
@@ -206,7 +207,7 @@ const prepareIo = (input: PreparationInput, issued: ReturnType<typeof prepareDoc
   process.bind(session, expected.generation);
   const capability = Object.freeze({ready: session.ready.bind(session), completion: session.completion, get observation() {return session.observation;}});
   observed.set(capability, input.launch);
-  prepared.set(capability, Object.freeze({isAdmitted: () => !init.signal?.aborted && init.isCurrentGeneration(expected.generation),
+  prepared.set(capability, Object.freeze({isAdmitted: () => init.signal?.aborted !== true && init.isCurrentGeneration(expected.generation),
     launch: input.launch, expected, init: captureInit(options), process, session}));
   return capability;
 };
@@ -254,9 +255,9 @@ export const createDockerProviderProcessBridge = () => Object.freeze({
     };
     try {
       if (!joined) {
-        const abort = () => process.fail(new DockerProviderProcessIoError("execution-call-aborted"));
+        const abort = () => {process.fail(new DockerProviderProcessIoError("execution-call-aborted"));};
         call.signal.addEventListener("abort", abort, {once: true});
-        void session.completion.then(() => call.signal.removeEventListener("abort", abort));
+        void session.completion.then(() => {call.signal.removeEventListener("abort", abort); return;});
         if (call.signal.aborted) {abort();}
       }
       assertAdmitted();

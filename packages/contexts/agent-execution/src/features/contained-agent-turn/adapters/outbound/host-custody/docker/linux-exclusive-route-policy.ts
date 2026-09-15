@@ -135,8 +135,9 @@ const policyEntry = (entry: unknown): {kind: string; body: Record<string, unknow
   if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {return undefined;}
   const keys = Object.keys(entry);
   if (keys.length !== 1) {return undefined;}
-  const kind = keys[0]!; const value = Reflect.get(entry, kind) as Record<string, unknown>;
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {return undefined;}
+  const kind = keys[0]!; const raw: unknown = Reflect.get(entry, kind);
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {return undefined;}
+  const value = raw as Record<string, unknown>;
   if (kind === "metainfo") {
     if (value.json_schema_version !== 1 || typeof value.version !== "string" ||
         typeof value.release_name !== "string" || Object.keys(value).length !== 3) {return undefined;}
@@ -163,11 +164,12 @@ const readMembership = (entries: readonly unknown[], timeoutSeconds: number | fa
     if (parsed === undefined) {return undefined;}
     if (parsed.kind !== "set") {cleaned.push(entry); continue;}
     if (timeoutSeconds === false || !Array.isArray(parsed.body.elem) || parsed.body.elem.length !== 1) {return undefined;}
-    const wrapper = parsed.body.elem[0];
-    if (wrapper === null || typeof wrapper !== "object" || Object.keys(wrapper).length !== 1 ||
-        wrapper.elem === null || typeof wrapper.elem !== "object" || Array.isArray(wrapper.elem)) {return undefined;}
-    const {expires: countdown, ...element} = wrapper.elem;
-    if (!Number.isSafeInteger(countdown) || countdown < 1 || countdown > timeoutSeconds) {return undefined;}
+    const rawWrapper: unknown = parsed.body.elem[0];
+    if (rawWrapper === null || typeof rawWrapper !== "object" || Object.keys(rawWrapper).length !== 1) {return undefined;}
+    const wrapper = rawWrapper as Record<string, unknown>;
+    if (wrapper.elem === null || typeof wrapper.elem !== "object" || Array.isArray(wrapper.elem)) {return undefined;}
+    const {expires: countdown, ...element} = wrapper.elem as Record<string, unknown>;
+    if (typeof countdown !== "number" || !Number.isSafeInteger(countdown) || countdown < 1 || countdown > timeoutSeconds) {return undefined;}
     expires = countdown;
     cleaned.push({set: {...parsed.body, elem: [{elem: element}]}});
   }

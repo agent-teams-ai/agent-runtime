@@ -1,8 +1,10 @@
+import type {DockerCustodyJournalRecoveryReader, DockerCustodyJournalWriter} from "./journal/docker-custody-journal.js";
 import type {
   DockerContainerAuthority,
   DockerContainerCreate,
   DockerContainerObservation,
   DockerEngineIdentity,
+  DockerEngineCall, DockerEnginePort,
 } from "./engine/docker-engine-port.js";
 import {
   bindDockerCustodyAttemptKey,
@@ -11,6 +13,7 @@ import {
 import type {
   DockerCustodyAttemptKey,
   DockerCustodyOwnerIdentity,
+  DockerCustodyJournalLimits, DockerCustodyJournalStorage, DockerCustodyRecoveryObservation, DockerCustodyJournalRecord,
 } from "./journal/docker-custody-journal-types.js";
 
 export type DockerHostCustodyContainerCreateInput = Omit<DockerContainerCreate, "ownerIdentitySha256">;
@@ -93,3 +96,47 @@ export const dockerHostCustodyAttemptKey = (
   operationNonceSha256: create.operationNonceSha256,
   owner,
 });
+
+export interface DockerHostCustodyJournalPort extends DockerCustodyJournalWriter, DockerCustodyJournalRecoveryReader {}
+export interface DockerHostCustodyResiduePort {
+  proveEmpty(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<"empty" | "residue" | "unknown">;
+}
+/** Outer composition supplies launch facts only; the lifecycle derives and seals ownerIdentitySha256. */
+export type DockerHostCustodyContainerCreate = DockerHostCustodyContainerCreateInput;
+export interface DockerHostCustodyRecoveryResolver {
+  resolve(key: DockerCustodyAttemptKey): Promise<Readonly<{
+    /** Optional durable authority permits exact absence proof after a remove acknowledgement was lost. */
+    authority?: DockerContainerAuthority;
+    call: DockerEngineCall;
+    create: DockerHostCustodyContainerCreate;
+  }> | undefined>;
+}
+export interface DockerHostCustodyCompositionDependencies {
+  readonly engine: DockerEnginePort;
+  readonly journalLimits?: Partial<DockerCustodyJournalLimits>;
+  readonly journalStorage: DockerCustodyJournalStorage;
+  readonly residue: DockerHostCustodyResiduePort;
+}
+export type DockerHostCustodyRecovery =
+  | { readonly journal: DockerCustodyRecoveryObservation; readonly kind: "journal_unproven"; readonly containment?: "closed" | "indeterminate" }
+  | { readonly journal: DockerCustodyJournalRecord; readonly kind: "closed" }
+  | {
+    readonly journal: Extract<DockerCustodyRecoveryObservation, { readonly kind: "replayed" }>;
+    readonly kind: "indeterminate";
+    readonly reason: "authority_unavailable" | "engine_observation_unavailable" | "containment_unproven";
+  };
+export type DockerHostCustodyContainment =
+  | Readonly<{ journal: DockerCustodyJournalRecord; kind: "closed" }>
+  | Readonly<{ journal: DockerCustodyJournalRecord; kind: "indeterminate"; reason: "containment_unproven" }>
+  | Readonly<{
+      authority: DockerContainerAuthority;
+      containment: "closed" | "indeterminate";
+      kind: "indeterminate";
+      reason: "journal_unavailable";
+    }>
+  | Readonly<{
+      authority: DockerContainerAuthority;
+      containment: "indeterminate";
+      kind: "indeterminate";
+      reason: "authority_mismatch" | "authority_unavailable";
+    }>;

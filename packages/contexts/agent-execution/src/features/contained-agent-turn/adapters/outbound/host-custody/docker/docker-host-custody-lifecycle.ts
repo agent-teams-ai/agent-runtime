@@ -6,7 +6,6 @@ import {DockerContainedTurnHostCustody, type DockerHostCustodyLifetime, type Doc
 import type {DockerCustodyInitHostExec} from "./init/docker-custody-init-host-session.js";
 import { createDockerRemovalObservationOwner, type DockerHostCustodyContainmentInput } from "./docker-removal-observation-owner.js";
 import type {DockerContainerAuthority, DockerContainerObservation, DockerEngineCall, DockerEnginePort} from "./engine/docker-engine-port.js";
-import type {DockerCustodyJournalRecoveryReader, DockerCustodyJournalWriter} from "./journal/docker-custody-journal.js";
 import { dockerCustodyAttemptLocator, dockerCustodyAuthoritySha256 } from "./journal/docker-custody-journal-codec.js";
 import {
   DEFAULT_DOCKER_CUSTODY_JOURNAL_LIMITS,
@@ -21,61 +20,15 @@ import {
   dockerHostCustodyAttemptKey,
   isInactiveDockerObservation,
   isRunningDockerObservation,
-  sameDockerAuthority,
-  type DockerHostCustodyContainerCreateInput,
 } from "./docker-host-custody-lifecycle-guards.js";
 import type {
   DockerCustodyAttemptKey,
   DockerCustodyJournalEvidence,
-  DockerCustodyJournalLimits,
   DockerCustodyJournalRecord,
-  DockerCustodyJournalStorage,
   DockerCustodyOwnerIdentity,
-  DockerCustodyRecoveryObservation,
 } from "./journal/docker-custody-journal-types.js";
-export interface DockerHostCustodyJournalPort extends DockerCustodyJournalWriter, DockerCustodyJournalRecoveryReader {}
-export interface DockerHostCustodyResiduePort {
-  proveEmpty(authority: DockerContainerAuthority, call: DockerEngineCall): Promise<"empty" | "residue" | "unknown">;
-}
-/** Outer composition supplies launch facts only; the lifecycle derives and seals ownerIdentitySha256. */
-export type DockerHostCustodyContainerCreate = DockerHostCustodyContainerCreateInput;
-export interface DockerHostCustodyRecoveryResolver {
-  resolve(key: DockerCustodyAttemptKey): Promise<Readonly<{
-    /** Optional durable authority permits exact absence proof after a remove acknowledgement was lost. */
-    authority?: DockerContainerAuthority;
-    call: DockerEngineCall;
-    create: DockerHostCustodyContainerCreate;
-  }> | undefined>;
-}
-export interface DockerHostCustodyCompositionDependencies {
-  readonly engine: DockerEnginePort;
-  readonly journalLimits?: Partial<DockerCustodyJournalLimits>;
-  readonly journalStorage: DockerCustodyJournalStorage;
-  readonly residue: DockerHostCustodyResiduePort;
-}
-export type DockerHostCustodyRecovery =
-  | { readonly journal: DockerCustodyRecoveryObservation; readonly kind: "journal_unproven"; readonly containment?: "closed" | "indeterminate" }
-  | { readonly journal: DockerCustodyJournalRecord; readonly kind: "closed" }
-  | {
-    readonly journal: Extract<DockerCustodyRecoveryObservation, { readonly kind: "replayed" }>;
-    readonly kind: "indeterminate";
-    readonly reason: "authority_unavailable" | "engine_observation_unavailable" | "containment_unproven";
-  };
-export type DockerHostCustodyContainment =
-  | Readonly<{ journal: DockerCustodyJournalRecord; kind: "closed" }>
-  | Readonly<{ journal: DockerCustodyJournalRecord; kind: "indeterminate"; reason: "containment_unproven" }>
-  | Readonly<{
-      authority: DockerContainerAuthority;
-      containment: "closed" | "indeterminate";
-      kind: "indeterminate";
-      reason: "journal_unavailable";
-    }>
-  | Readonly<{
-      authority: DockerContainerAuthority;
-      containment: "indeterminate";
-      kind: "indeterminate";
-      reason: "authority_mismatch" | "authority_unavailable";
-    }>;
+export type {DockerHostCustodyJournalPort, DockerHostCustodyResiduePort, DockerHostCustodyContainerCreate, DockerHostCustodyRecoveryResolver, DockerHostCustodyCompositionDependencies, DockerHostCustodyRecovery, DockerHostCustodyContainment} from "./docker-host-custody-lifecycle-guards.js";
+import type {DockerHostCustodyJournalPort, DockerHostCustodyResiduePort, DockerHostCustodyContainerCreate, DockerHostCustodyRecoveryResolver, DockerHostCustodyCompositionDependencies, DockerHostCustodyRecovery, DockerHostCustodyContainment} from "./docker-host-custody-lifecycle-guards.js";
 const launchIssuer = createDockerProviderProcessLaunchIssuer();
 export const prepareDockerProviderProcessLaunch = launchIssuer.prepare;
 export const claimDockerProviderProcessLaunch = launchIssuer.claim;
@@ -228,7 +181,7 @@ export class DockerHostCustodyLifecycle {
           privateRootSource: create.privateRootSource, imageDigest: authority.imageDigest}),
         workspaceAuthorityPath: create.workspaceSource, openInitSession: launched.openInitSession,
         execute: (exec: DockerCustodyInitHostExec, call: DockerEngineCall) => executeProvider({authority, call, exec, key}),
-      }, () => live.assertOpen(lifetime?.admission ?? input.call));
+      }, () => {live.assertOpen(lifetime?.admission ?? input.call);});
       return launched;
     } catch (error) {
       if (!createInvoked) {
@@ -476,36 +429,10 @@ export class DockerHostCustodyLifecycle {
     return observation?.existence === "absent";
   }
 
-  private async resolveAuthority(
-    key: DockerCustodyAttemptKey,
+  private resolveAuthority(key: DockerCustodyAttemptKey,
     resolved: Awaited<ReturnType<DockerHostCustodyRecoveryResolver["resolve"]>>,
-    journal?: DockerCustodyJournalRecord,
-  ): Promise<DockerContainerAuthority | undefined> {
-    if (resolved === undefined) {return undefined;}
-    const create = bindDockerHostCustodyCreate(key, resolved.create);
-    if (resolved.authority !== undefined) {
-      assertDockerAuthorityBinding(key, resolved.authority);
-      let canonical: DockerContainerAuthority;
-      try {canonical = await this.engine.reconcileCreate(create, resolved.call);} catch {
-        if (this.#authority.match(key, resolved.authority, journal) !== "match") {return undefined;}
-        try {
-          return (await this.inspect(resolved.authority, resolved.call)).existence === "absent"
-            ? resolved.authority
-            : undefined;
-        } catch {return undefined;}
-      }
-      if (!sameDockerAuthority(canonical, resolved.authority)) {return undefined;}
-      this.#authority.hold(key, resolved.authority);
-      return resolved.authority;
-    }
-    try {
-      const authority = await this.engine.reconcileCreate(create, resolved.call);
-      assertDockerAuthorityBinding(key, authority);
-      this.#authority.hold(key, authority);
-      return authority;
-    } catch {
-      return undefined;
-    }
+    journal?: DockerCustodyJournalRecord): Promise<DockerContainerAuthority | undefined> {
+    return this.#authority.resolve(this.engine, this.inspect.bind(this), key, resolved, journal);
   }
 
   private async containWithoutJournal(authority: DockerContainerAuthority, call: DockerEngineCall, live?: DockerContainedTurnHostCustody,

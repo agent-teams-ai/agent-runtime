@@ -8,7 +8,11 @@ type Identity = Readonly<Pick<HostHttpEgressV4Subject["attempt"], typeof attempt
   effectId: string; workspaceId: string; executionGenerationId: string;
   committedClaimSha256: string; acceptedAuthoritySha256: string;
 }>;
-const {evidence, target, recordIntent} = HostHttpEgressV4Journal.prototype;
+const journalMethods: {
+  [Key in "evidence" | "target" | "recordIntent"]: (this: HostHttpEgressV4Journal,
+    ...args: Parameters<HostHttpEgressV4Journal[Key]>) => ReturnType<HostHttpEgressV4Journal[Key]>;
+} = HostHttpEgressV4Journal.prototype;
+const {evidence, target, recordIntent} = journalMethods;
 const reject = (): never => {throw new TypeError("V4 listener lifecycle identity unavailable");};
 
 /** Inert composition adapter, not an observation issuer. The existing journal

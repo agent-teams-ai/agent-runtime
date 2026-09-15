@@ -66,7 +66,12 @@ const release = (r: Resource, receipt: boolean): void => {
   ensure(receipt ? r.phase === 3 : r.phase === 1 || r.phase === 2);
   r.phase = receipt ? 4 : 3;
 };
+const isEventKind = <Kind extends HostHttpEgressV4Event["kind"]>(
+  event: HostHttpEgressV4Event, kinds: readonly Kind[],
+): event is HostHttpEgressV4Event & {kind: Kind} => kinds.some(kind => kind === event.kind);
+
 const setup = (state: HostHttpEgressV4Ledger, event: HostHttpEgressV4Event): boolean => {
+  if (!isEventKind(event, ["network_intent", "network_allocated", "listener_intent", "listener_allocated", "container_attached", "route_intent", "route_installed"] as const)) {return false;}
   const observation = "observation" in event ? event.observation : undefined;
   switch (event.kind) {
     case "network_intent": case "network_allocated":
@@ -78,10 +83,10 @@ const setup = (state: HostHttpEgressV4Ledger, event: HostHttpEgressV4Event): boo
       state.container = event.observation.container; return true;
     case "route_intent": case "route_installed":
       ensure(!state.cutoff && state.container !== null); allocate(state.route, observation); return true;
-    default: return false;
   }
 };
 const exchange = (state: HostHttpEgressV4Ledger, event: HostHttpEgressV4Event): boolean => {
+  if (!isEventKind(event, ["inbound_intent", "inbound_allocated", "upstream_intent", "upstream_allocated"] as const)) {return false;}
   switch (event.kind) {
     case "inbound_intent":
       ensure(!state.cutoff && !state.reconcileRequired && state.route.phase === 2 && state.exchange === null && state.exchanges < LIMITS.maxExchanges);
@@ -95,10 +100,10 @@ const exchange = (state: HostHttpEgressV4Ledger, event: HostHttpEgressV4Event): 
       else { ensure(active.inbound.phase === 2); allocate(active.upstream, "observation" in event ? event.observation : undefined); }
       return true;
     }
-    default: return false;
   }
 };
 const closeSockets = (state: HostHttpEgressV4Ledger, event: HostHttpEgressV4Event): boolean => {
+  if (!isEventKind(event, ["sockets_close", "sockets_closed"] as const)) {return false;}
   switch (event.kind) {
     case "sockets_close":
       ensure(state.exchange !== null && !state.exchange.closing);
@@ -108,10 +113,10 @@ const closeSockets = (state: HostHttpEgressV4Ledger, event: HostHttpEgressV4Even
       if (active?.inbound.phase === 1 || active?.upstream.phase === 1 || event.observation.writeOutcome === "unknown") { state.reconcileRequired = true; }
       state.exchange = null; return true;
     }
-    default: return false;
   }
 };
 const cleanup = (state: HostHttpEgressV4Ledger, event: HostHttpEgressV4Event): void => {
+  if (!isEventKind(event, ["cutoff", "cutoff_observed", "container_absent", "uncertain", "retired"] as const)) {releaseEndpoints(state, event); return;}
   switch (event.kind) {
     case "cutoff":
       ensure(!state.cutoff); state.cutoff = true;
@@ -125,16 +130,15 @@ const cleanup = (state: HostHttpEgressV4Ledger, event: HostHttpEgressV4Event): v
     case "retired":
       ensure(state.cutoffObserved && state.containerAbsent && state.exchange === null &&
         [0, 4].includes(state.listener.phase) && [0, 4].includes(state.network.phase)); state.retired = true; return;
-    default: releaseEndpoints(state, event);
   }
 };
 const releaseEndpoints = (state: HostHttpEgressV4Ledger, event: HostHttpEgressV4Event): void => {
   ensure(state.containerAbsent && state.cutoffObserved && state.exchange === null);
+  if (!isEventKind(event, ["listener_release", "listener_absent", "network_release", "network_absent"] as const)) {throw new HostHttpEgressV4Error("conflict");}
   switch (event.kind) {
     case "listener_release": case "listener_absent": release(state.listener, event.kind === "listener_absent"); return;
     case "network_release": case "network_absent":
       ensure([0, 4].includes(state.listener.phase)); release(state.network, event.kind === "network_absent"); return;
-    default: throw new HostHttpEgressV4Error("conflict");
   }
 };
 /** Shared append/replay recipe; only resource axes live here. Kernel operation truth is elsewhere. */

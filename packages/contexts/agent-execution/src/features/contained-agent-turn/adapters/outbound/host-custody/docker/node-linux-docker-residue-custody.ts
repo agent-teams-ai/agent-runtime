@@ -6,12 +6,17 @@ import {sameDockerAuthority, isInactiveDockerObservation} from "./docker-host-cu
 import {validateAuthorityShape, snapshotDockerEnginePolicy, NodeUnixSocketDockerEngine}
   from "./engine/docker-engine-composition.js";
 import type {DockerContainerAuthority, DockerContainerCreate, DockerContainerObservation, DockerEngineCall,
-  DockerEngineIdentity, DockerEnginePolicy, DockerEnginePort} from "./engine/docker-engine-port.js";
+  DockerEngineIdentity, DockerEnginePolicy, DockerEnginePort, DockerContainerResourceFacts} from "./engine/docker-engine-port.js";
 import {boundResidueWork, NodeLinuxDockerResidueIo, ResidueIoScope, type DockerResidueIo,
   type ResidueFile, type ResiduePin} from "./linux-docker-residue-io.js";
 import {compareResidueTrees, openResidueTree, pinResidueProcess, requireLeafMembership,
   scanResidueTree, verifyResidueProcess, type ResidueProcess, type ResidueTree} from "./linux-docker-residue-kernel.js";
 import {recursivePopulation, residueFault, residueLeaf, residueParent, sameResidueEngine} from "./linux-docker-residue-parsers.js";
+type ResourceReadback = Omit<DockerContainerResourceFacts,
+  "cgroupNamespaceMode" | "capabilitiesDropped" | "noNewPrivileges" | "restart" | "readOnlyRoot" | "pidNamespaceMode" | "mountPropagation"> & {
+  readonly cgroupNamespaceMode: string; readonly capabilitiesDropped: string; readonly noNewPrivileges: boolean;
+  readonly restart: string; readonly readOnlyRoot: boolean; readonly pidNamespaceMode: string; readonly mountPropagation: string;
+};
 type Launched = Parameters<DockerHostCustodyLifecycle["observeLaunch"]>[0];
 const concreteLifecycles = new WeakMap<DockerHostCustodyLifecycle, LinuxDockerResidueOwner>();
 export const readNodeLinuxDockerCgroup = async (lifecycle: DockerHostCustodyLifecycle,
@@ -26,7 +31,10 @@ export const readNodeLinuxDockerCgroup = async (lifecycle: DockerHostCustodyLife
 };
 /** Provenance readback only; no caller-supplied empty callback qualifies. */
 export const isConcreteLinuxDockerLifecycle = (lifecycle: object): boolean => concreteLifecycles.has(lifecycle as DockerHostCustodyLifecycle);
-const observeWorkspaceLaunch = DockerHostCustodyLifecycle.prototype.observeLaunch;
+const methods: {
+  observeLaunch: (this: DockerHostCustodyLifecycle, ...args: Parameters<DockerHostCustodyLifecycle["observeLaunch"]>) => ReturnType<DockerHostCustodyLifecycle["observeLaunch"]>;
+} = DockerHostCustodyLifecycle.prototype;
+const observeWorkspaceLaunch = methods.observeLaunch;
 const workspaceProofs = new WeakMap<object, Readonly<{launch: Launched; lifecycle: DockerHostCustodyLifecycle; capture: DockerWorkspaceCapture}>>();
 const capturedLaunches = new WeakSet<Launched>();
 /** One-use launch provenance; no pathname or caller-created object can issue proof. */
@@ -133,10 +141,12 @@ class LinuxDockerResidueOwner implements DockerHostCustodyResiduePort {
         authority.daemonIdentitySha256 !== observation.engine.daemonIdentitySha256 ||
         authority.daemonBootGenerationSha256 !== observation.engine.daemonBootGenerationSha256) {throw residueFault();}
     residueParent(this.policy.cgroupParent, observation.engine.cgroupDriver);
-    if (observation.existence === "present" && (observation.resources.cgroupParent !== this.policy.cgroupParent ||
-        observation.resources.user !== this.policy.user || observation.resources.containerId !== authority.containerId ||
-        observation.resources.cgroupNamespaceMode !== "private" || observation.resources.capabilitiesDropped !== "all" ||
-        !observation.resources.noNewPrivileges || observation.resources.restart !== "disabled")) {throw residueFault();}
+    if (observation.existence !== "present") {return;}
+    const resources: ResourceReadback = observation.resources;
+    if (resources.cgroupParent !== this.policy.cgroupParent ||
+        resources.user !== this.policy.user || resources.containerId !== authority.containerId ||
+        resources.cgroupNamespaceMode !== "private" || resources.capabilitiesDropped !== "all" ||
+        !resources.noNewPrivileges || resources.restart !== "disabled") {throw residueFault();}
   }
   private record(authority: DockerContainerAuthority, allowReleased = false): RetainedResidue {
     const record = this.records.get(authority.containerId);
@@ -230,10 +240,12 @@ class LinuxDockerResidueOwner implements DockerHostCustodyResiduePort {
       try {
         const actual = await this.engine.inspect(authority, call);
         this.assertObservation(authority, actual);
-        if (actual.existence !== "present" || !actual.state.running ||
-          actual.resources.seccompProfileSha256 !== linuxExclusiveRouteSeccomp().sha256 ||
-          !actual.resources.readOnlyRoot || actual.resources.pidNamespaceMode !== "private" ||
-          actual.resources.mountPropagation !== "rprivate") {throw residueFault();}
+        if (actual.existence !== "present") {throw residueFault();}
+        const resources: ResourceReadback = actual.resources;
+        if (!actual.state.running ||
+          resources.seccompProfileSha256 !== linuxExclusiveRouteSeccomp().sha256 ||
+          !resources.readOnlyRoot || resources.pidNamespaceMode !== "private" ||
+          resources.mountPropagation !== "rprivate") {throw residueFault();}
         await this.validateRunning(scope, record, actual, call);
         const capture = await capturePinnedDockerWorkspace(scope, record.process!.directory, actual.resources.workspaceWritable);
         const after = await this.engine.inspect(authority, call);

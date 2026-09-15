@@ -62,7 +62,7 @@ export const validateDockerWorkspaceMounts = (text: string, workspace: DockerMou
         (within(other.root, mount.root) || within(mount.root, other.root))) {throw residueFault();}
     }
   }
-  if (!mounts.find(entry => entry.path === "/")?.options.includes("ro")) {throw residueFault();}
+  if (mounts.find(entry => entry.path === "/")?.options.includes("ro") !== true) {throw residueFault();}
 };
 
 /** Docker daemon/Host trust only: the image init lock does not pin these bytes.

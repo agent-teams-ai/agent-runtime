@@ -40,7 +40,7 @@ export class DockerContainedTurnHostCustody {
   }
 
   private watchAdmission(call: DockerEngineCall): void {
-    const cutoff = () => this.cutOffAdmission();
+    const cutoff = (): void => {this.cutOffAdmission();};
     call.signal.addEventListener("abort", cutoff, {once: true});
     const timer = setTimeout(cutoff, Math.max(0, Math.min(2_147_483_647, call.deadlineEpochMs - Date.now())));
     timer.unref();
@@ -73,7 +73,7 @@ export class DockerContainedTurnHostCustody {
 
   public assertOpen(call: DockerEngineCall): void {
     if (this.#cutoff || call.signal.aborted || Date.now() >= call.deadlineEpochMs ||
-        this.lifetime?.admission.signal.aborted || Date.now() >= (this.lifetime?.admission.deadlineEpochMs ?? Infinity)) {
+        this.lifetime?.admission.signal.aborted === true || Date.now() >= (this.lifetime?.admission.deadlineEpochMs ?? Infinity)) {
       this.cutOffAdmission();
       throw new TypeError("Docker Host Custody launch authority is cut off");
     }

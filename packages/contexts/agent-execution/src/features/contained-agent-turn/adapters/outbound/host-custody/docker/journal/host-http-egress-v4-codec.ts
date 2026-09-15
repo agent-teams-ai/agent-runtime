@@ -22,7 +22,7 @@ export const v4Exact: (value: unknown, keys: readonly string[]) => asserts value
   if (value === null || typeof value !== "object" || types.isProxy(value) ||
       Object.getPrototypeOf(value) !== Object.prototype ||
       Reflect.ownKeys(value).length !== keys.length || keys.some(key => !Object.hasOwn(value, key)) ||
-      Object.values(Object.getOwnPropertyDescriptors(value)).some(d => !("value" in d) || !d.enumerable)) {
+      Object.values(Object.getOwnPropertyDescriptors(value)).some(d => !("value" in d) || d.enumerable !== true)) {
     throw new HostHttpEgressV4Error("conflict");
   }
 };

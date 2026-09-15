@@ -43,17 +43,21 @@ const POLICY_NUMBER_KEYS = Object.freeze([
 ]);
 
 const ABORT_SIGNAL_PROTO = AbortSignal.prototype;
-const ABORTED_GETTER = Object.getOwnPropertyDescriptor(ABORT_SIGNAL_PROTO, "aborted")?.get;
-const REASON_GETTER = Object.getOwnPropertyDescriptor(ABORT_SIGNAL_PROTO, "reason")?.get;
-const THROW_IF_ABORTED = Object.getOwnPropertyDescriptor(ABORT_SIGNAL_PROTO, "throwIfAborted")?.value;
-const EVENT_TARGET_PROTO = Object.getPrototypeOf(ABORT_SIGNAL_PROTO);
-const ADD_EVENT_LISTENER = EVENT_TARGET_PROTO === null
+const abortedDescriptor: {get?: (this: AbortSignal) => unknown} | undefined =
+  Object.getOwnPropertyDescriptor(ABORT_SIGNAL_PROTO, "aborted");
+const reasonDescriptor: {get?: (this: AbortSignal) => unknown} | undefined =
+  Object.getOwnPropertyDescriptor(ABORT_SIGNAL_PROTO, "reason");
+const ABORTED_GETTER = abortedDescriptor?.get;
+const REASON_GETTER = reasonDescriptor?.get;
+const THROW_IF_ABORTED: unknown = Object.getOwnPropertyDescriptor(ABORT_SIGNAL_PROTO, "throwIfAborted")?.value;
+const EVENT_TARGET_PROTO: object | null = Object.getPrototypeOf(ABORT_SIGNAL_PROTO) as object | null;
+const ADD_EVENT_LISTENER: unknown = EVENT_TARGET_PROTO === null
   ? undefined
   : Object.getOwnPropertyDescriptor(EVENT_TARGET_PROTO, "addEventListener")?.value;
-const REMOVE_EVENT_LISTENER = EVENT_TARGET_PROTO === null
+const REMOVE_EVENT_LISTENER: unknown = EVENT_TARGET_PROTO === null
   ? undefined
   : Object.getOwnPropertyDescriptor(EVENT_TARGET_PROTO, "removeEventListener")?.value;
-const DISPATCH_EVENT = EVENT_TARGET_PROTO === null
+const DISPATCH_EVENT: unknown = EVENT_TARGET_PROTO === null
   ? undefined
   : Object.getOwnPropertyDescriptor(EVENT_TARGET_PROTO, "dispatchEvent")?.value;
 const ABORT_SIGNAL_SNAPSHOTS = new WeakSet<AbortSignal>();
@@ -197,15 +201,15 @@ export const snapshotDockerEngineCall = (value: unknown): DockerEngineCall => {
     if (!(call.signal instanceof AbortSignal) || utilTypes.isProxy(call.signal) ||
         Object.getPrototypeOf(call.signal) !== ABORT_SIGNAL_PROTO) {return fail("aborted");}
     if (ABORT_SIGNAL_SNAPSHOTS.has(call.signal)) {
-      return Object.freeze({ deadlineEpochMs: call.deadlineEpochMs, signal: call.signal }) as DockerEngineCall;
+      return Object.freeze({ deadlineEpochMs: call.deadlineEpochMs, signal: call.signal });
     }
     if (ABORTED_GETTER === undefined || REASON_GETTER === undefined || typeof THROW_IF_ABORTED !== "function" ||
         typeof ADD_EVENT_LISTENER !== "function" || typeof REMOVE_EVENT_LISTENER !== "function" ||
         typeof DISPATCH_EVENT !== "function") {return fail("aborted");}
 
     const source = call.signal;
-    const nativeAborted = ABORTED_GETTER as (this: AbortSignal) => unknown;
-    const nativeReason = REASON_GETTER as (this: AbortSignal) => unknown;
+    const nativeAborted = ABORTED_GETTER;
+    const nativeReason = REASON_GETTER;
     if (typeof nativeAborted.call(source) !== "boolean") {return fail("aborted");}
     const controller = new AbortController();
     const snapshot = controller.signal;
@@ -214,12 +218,12 @@ export const snapshotDockerEngineCall = (value: unknown): DockerEngineCall => {
     const nativeDispatch = DISPATCH_EVENT as (...args: unknown[]) => unknown;
     const nativeThrowIfAborted = THROW_IF_ABORTED as (...args: unknown[]) => unknown;
     const propagateAbort = (): void => {
-      if (!nativeAborted.call(source)) {return;}
+      if (nativeAborted.call(source) !== true) {return;}
       nativeRemove.call(source, "abort", propagateAbort);
       controller.abort(nativeReason.call(source));
     };
     propagateAbort();
-    if (!nativeAborted.call(source)) {
+    if (nativeAborted.call(source) !== true) {
       // Subscribe on the ORIGINAL native receiver, bypassing source expandos.
       // Preserve Node's resistant subscription options at this first boundary.
       // A synthetic event cannot consume the listener before the real abort.
@@ -272,6 +276,6 @@ export const snapshotDockerEngineCall = (value: unknown): DockerEngineCall => {
     // expando or method shadowing on the signal boundary.
     Object.preventExtensions(snapshot);
     ABORT_SIGNAL_SNAPSHOTS.add(snapshot);
-    return Object.freeze({ deadlineEpochMs: call.deadlineEpochMs, signal: snapshot }) as DockerEngineCall;
+    return Object.freeze({ deadlineEpochMs: call.deadlineEpochMs, signal: snapshot });
   } catch {return fail("aborted");}
 };

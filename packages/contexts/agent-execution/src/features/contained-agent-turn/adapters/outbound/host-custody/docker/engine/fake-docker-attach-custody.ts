@@ -48,6 +48,7 @@ export class FakeDockerAttachCustody {
     let closed = false;
     let retired = false;
     let valid = true;
+    const isActive = (): boolean => valid && !retired;
     let timer: NodeJS.Timeout | undefined;
     const cleanup = (): void => {
       if (timer !== undefined) {clearTimeout(timer);}
@@ -81,7 +82,7 @@ export class FakeDockerAttachCustody {
     try {
       input.checkContinuation();
       if (input.endpointCustodyLost()) {throw new DockerEngineError("endpoint-custody-lost");}
-      if (!valid || retired || this.#generation.get(id) !== generation || this.#state.get(id) !== "opening") {
+      if (!isActive() || this.#generation.get(id) !== generation || this.#state.get(id) !== "opening") {
         throw new DockerEngineError("protocol-violation");
       }
     } catch (error) {

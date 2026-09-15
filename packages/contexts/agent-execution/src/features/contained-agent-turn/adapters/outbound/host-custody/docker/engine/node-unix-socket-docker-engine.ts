@@ -439,7 +439,7 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
       const response = await this.#json("GET", `${API}/containers/${name}/json`, call);
       if (response.statusCode !== 200) {throw new DockerEngineError("create-acknowledgement-unknown");}
       const value = response.value as { readonly Id?: unknown };
-      const id = typeof value?.Id === "string" ? value.Id : "";
+      const id = typeof value.Id === "string" ? value.Id : "";
       const authority = this.#authority(id, input, currentEngine);
       decodeInspection(response.value, authority, currentEngine, this.#policy);
       this.#assertSameEngine(currentEngine, await this.#identity(call));
@@ -529,7 +529,7 @@ export class NodeUnixSocketDockerEngine implements DockerEnginePort {
     }
     if (!hasBody && response.contentType !== "") {throw new DockerEngineError("protocol-violation");}
     if (!hasBody) {throw new DockerEngineError("protocol-violation");}
-    const value = hasBody ? parseStrictJson(response.body) : undefined;
+    const value = parseStrictJson(response.body);
     if (response.statusCode >= 400) {decodeErrorResponse(value);}
     return { statusCode: response.statusCode, value };
   }

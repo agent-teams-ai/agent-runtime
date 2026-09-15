@@ -15,6 +15,7 @@ import {
   type DockerCustodyJournalStorage,
 } from "./docker-custody-journal-types.js";
 
+const platformFlags: Partial<Pick<typeof constants, "O_DIRECTORY" | "O_NOFOLLOW">> = constants;
 const LOCATOR = /^[a-f0-9]{64}$/u;
 const FILE_PREFIX = "docker-custody-v1-";
 const FILE_SUFFIX = ".journal";
@@ -57,10 +58,9 @@ const diagnosticFor = (error: unknown): DockerCustodyFilesystemDiagnostic => {
   return "io_failure";
 };
 
-const mapped = (error: unknown): never => {
-  if (error instanceof DockerCustodyJournalError) {throw error;}
-  throw new DockerCustodyJournalFilesystemError(diagnosticFor(error));
-};
+const mappedError = (error: unknown): DockerCustodyJournalError =>
+  error instanceof DockerCustodyJournalError ? error : new DockerCustodyJournalFilesystemError(diagnosticFor(error));
+const mapped = (error: unknown): never => {throw mappedError(error);};
 
 const sameIdentity = (left: BigIntStats, right: BigIntStats): boolean =>
   left.dev === right.dev && left.ino === right.ino;
@@ -158,7 +158,7 @@ export class NodeDockerCustodyJournalStorage implements DockerCustodyJournalStor
     try {
       const canonical = await port.realpath(root);
       const pathStats = await port.lstat(root);
-      rootHandle = await port.open(root, constants.O_RDONLY | (constants.O_DIRECTORY ?? 0) | (constants.O_NOFOLLOW ?? 0));
+      rootHandle = await port.open(root, constants.O_RDONLY | (platformFlags.O_DIRECTORY ?? 0) | (platformFlags.O_NOFOLLOW ?? 0));
       const handleStats = await rootHandle.stat({ bigint: true });
       const currentUid = typeof process.getuid === "function" ? BigInt(process.getuid()) : pathStats.uid;
       if (
@@ -227,7 +227,7 @@ export class NodeDockerCustodyJournalStorage implements DockerCustodyJournalStor
     try {
       lock = await this.port.open(
         this.descriptorPath(LOCK_NAME),
-        constants.O_CREAT | constants.O_EXCL | constants.O_RDWR | (constants.O_NOFOLLOW ?? 0),
+        constants.O_CREAT | constants.O_EXCL | constants.O_RDWR | (platformFlags.O_NOFOLLOW ?? 0),
         0o600,
       );
     } catch (error) {
@@ -235,7 +235,7 @@ export class NodeDockerCustodyJournalStorage implements DockerCustodyJournalStor
       return mapped(error);
     }
     let result: Result;
-    let operationError: unknown;
+    let operationError: DockerCustodyJournalError | undefined;
     try {
       const stats = await lock.stat({ bigint: true });
       assertPrivateFile(stats, this.rootStats.uid);
@@ -247,9 +247,9 @@ export class NodeDockerCustodyJournalStorage implements DockerCustodyJournalStor
       result = await operation();
       await this.assertRootIdentity();
     } catch (error) {
-      try {mapped(error);} catch (safeError) {operationError = safeError;}
+      operationError = mappedError(error);
     } finally {
-      try {await this.releaseLock(lock);} catch (error) {if (operationError === undefined) {operationError = error;}}
+      try {await this.releaseLock(lock);} catch (error) {if (operationError === undefined) {operationError = mappedError(error);}}
       try {await lock.close();} catch (error) {operationError = new DockerCustodyJournalFilesystemError(diagnosticFor(error));}
     }
     if (operationError !== undefined) {throw operationError;}
@@ -263,7 +263,7 @@ export class NodeDockerCustodyJournalStorage implements DockerCustodyJournalStor
       const path = this.descriptorPath(name);
       const named = await this.port.lstat(path);
       assertPrivateFile(named, this.rootStats.uid);
-      handle = await this.port.open(path, constants.O_RDWR | constants.O_APPEND | (constants.O_NOFOLLOW ?? 0));
+      handle = await this.port.open(path, constants.O_RDWR | constants.O_APPEND | (platformFlags.O_NOFOLLOW ?? 0));
       const opened = await handle.stat({ bigint: true });
       if (!sameIdentity(opened, named)) {throw new DockerCustodyJournalFilesystemError("unsafe_entry");}
       assertPrivateFile(opened, this.rootStats.uid);
@@ -281,7 +281,7 @@ export class NodeDockerCustodyJournalStorage implements DockerCustodyJournalStor
     try {
       handle = await this.port.open(
         this.descriptorPath(name),
-        constants.O_CREAT | constants.O_EXCL | constants.O_RDWR | constants.O_APPEND | (constants.O_NOFOLLOW ?? 0),
+        constants.O_CREAT | constants.O_EXCL | constants.O_RDWR | constants.O_APPEND | (platformFlags.O_NOFOLLOW ?? 0),
         0o600,
       );
     } catch (error) {
@@ -347,7 +347,7 @@ export class NodeDockerCustodyJournalStorage implements DockerCustodyJournalStor
       const path = this.descriptorPath(name);
       const named = await this.port.lstat(path);
       assertPrivateFile(named, this.rootStats.uid);
-      handle = await this.port.open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+      handle = await this.port.open(path, constants.O_RDONLY | (platformFlags.O_NOFOLLOW ?? 0));
       const opened = await handle.stat({ bigint: true });
       if (!sameIdentity(opened, named)) {throw new DockerCustodyJournalFilesystemError("unsafe_entry");}
       assertPrivateFile(opened, this.rootStats.uid);
@@ -365,7 +365,7 @@ export class NodeDockerCustodyJournalStorage implements DockerCustodyJournalStor
     if (!Number.isSafeInteger(maxFiles) || maxFiles <= 0) {throw new TypeError("scan bound must be a positive integer");}
     const names: string[] = [];
     let directory: { close(): Promise<void>; read(): Promise<Dirent | null> } | undefined;
-    let scanError: unknown;
+    let scanError: DockerCustodyJournalError | undefined;
     try {
       directory = await this.port.opendir(this.descriptorPath());
       for (;;) {
@@ -376,7 +376,7 @@ export class NodeDockerCustodyJournalStorage implements DockerCustodyJournalStor
         names.push(entry.name);
       }
     } catch (error) {
-      try {mapped(error);} catch (safeError) {scanError = safeError;}
+      scanError = mappedError(error);
     } finally {
       if (directory !== undefined) {
         try {await directory.close();} catch (error) {

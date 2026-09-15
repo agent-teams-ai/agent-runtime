@@ -123,7 +123,7 @@ export class DockerOperationNetwork {
     try {
       const call = snapshotDockerEngineCall(input);
       this.#admit(call);
-      this.#launchAbort = addAbortListener(call.signal, () => this.sealAdmission());
+      this.#launchAbort = addAbortListener(call.signal, () => {this.sealAdmission();});
       void this.#allocate(call).then(completion.resolve, completion.reject);
     }
     catch (error) {this.#uncertain = true; this.sealAdmission(); completion.reject(error);}
@@ -146,7 +146,7 @@ export class DockerOperationNetwork {
       // throws, cancellation, reentrancy and a late successful acknowledgement.
       this.#createIssued = true;
       const response = await this.#client.buffered({call, method: "POST", path: `${API}create`, body,
-        beforeWrite: () => this.#admit(call)});
+        beforeWrite: () => {this.#admit(call);}});
       const created = networkObject(json(response));
       if (response.statusCode !== 201) {throw networkFailure();}
       this.#networkId = networkDigest(created.Id);
@@ -240,10 +240,10 @@ export class DockerOperationNetwork {
     this.sealAdmission();
     // Validate inside the owned promise so a malformed call cannot strand it.
     void this.#remove(input).then(result => {
-      this.#removal = undefined; return completion.resolve(result);
+      this.#removal = undefined; completion.resolve(result); return;
     }, () => {
       this.#uncertain = true; this.#removal = undefined;
-      return completion.resolve(Object.freeze({state: "unknown"}));
+      completion.resolve(Object.freeze({state: "unknown"}));
     });
     return completion.promise;
   }

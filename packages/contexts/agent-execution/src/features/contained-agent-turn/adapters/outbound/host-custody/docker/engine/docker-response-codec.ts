@@ -1,3 +1,4 @@
+import type {IncomingMessage} from "node:http";
 import { DockerEngineError } from "./docker-engine-error.js";
 
 const SHA256 = /^[a-f0-9]{64}$/u;
@@ -55,4 +56,49 @@ export const decodeWaitExitCode = (value: unknown): number => {
     if (message !== "") {throw new DockerEngineError("request-rejected");}
   }
   return safeInteger(response.StatusCode);
+};
+
+const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/u;
+
+interface ResponseFraming {
+  readonly contentLength: number | undefined;
+  readonly contentType: string;
+}
+
+export const validateResponseHeaders = (response: IncomingMessage): ResponseFraming => {
+  if (response.rawHeaders.length % 2 !== 0) {throw new DockerEngineError("protocol-violation");}
+  const seen = new Set<string>();
+  let contentType = "";
+  let contentLength: number | undefined;
+  let chunked = false;
+  for (let index = 0; index < response.rawHeaders.length; index += 2) {
+    const rawName = response.rawHeaders[index];
+    const rawValue = response.rawHeaders[index + 1];
+    if (rawName === undefined || rawValue === undefined || !HEADER_NAME.test(rawName) || /[\r\n]/u.test(rawValue)) {
+      throw new DockerEngineError("protocol-violation");
+    }
+    const name = rawName.toLowerCase();
+    if (seen.has(name)) {throw new DockerEngineError("protocol-violation");}
+    seen.add(name);
+    if (name === "content-type") {contentType = rawValue;}
+    if (name === "content-length") {
+      if (!/^(?:0|[1-9][0-9]*)$/u.test(rawValue)) {throw new DockerEngineError("protocol-violation");}
+      const parsed = Number(rawValue);
+      if (!Number.isSafeInteger(parsed)) {throw new DockerEngineError("protocol-violation");}
+      contentLength = parsed;
+    }
+    if (name === "transfer-encoding") {
+      if (rawValue.trim().toLowerCase() !== "chunked") {throw new DockerEngineError("protocol-violation");}
+      chunked = true;
+    }
+  }
+  const bodyForbidden = response.statusCode === 204 || response.statusCode === 304;
+  if (bodyForbidden) {
+    if (chunked || (contentLength !== undefined && contentLength !== 0)) {
+      throw new DockerEngineError("protocol-violation");
+    }
+  } else if ((contentLength === undefined) === !chunked) {
+    throw new DockerEngineError("protocol-violation");
+  }
+  return { contentLength, contentType };
 };

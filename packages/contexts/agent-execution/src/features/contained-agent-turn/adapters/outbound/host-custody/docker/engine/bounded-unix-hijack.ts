@@ -69,6 +69,7 @@ export const openBoundedUnixHijack = (input: HijackInput): Promise<UnixHijackCha
   let expired = false;
   let sessionExpired = false;
   let settled = false;
+  const isSettled = (): boolean => settled;
   let released = false;
   let operation: ClientRequest | undefined;
   let establishmentSocketClose: (() => void) | undefined;
@@ -124,7 +125,7 @@ export const openBoundedUnixHijack = (input: HijackInput): Promise<UnixHijackCha
       setHost: false,
     });
   } catch (error) {fail(error); return;}
-  if (settled) {try {operation.destroy();} catch {} return;}
+  if (isSettled()) {try {operation.destroy();} catch {} return;}
   operation.once("error", fail);
   operation.once("response", response => {
     try {response.destroy();} catch {}
@@ -156,16 +157,16 @@ export const openBoundedUnixHijack = (input: HijackInput): Promise<UnixHijackCha
             throw new DockerEngineError("deadline-exceeded");
           }
         };
-        socket.write = new Proxy(socket.write, {
+        socket.write = new Proxy(socket.write.bind(socket), {
           apply: (target, _thisArgument, arguments_) => {
             checkSessionCall();
-            return Reflect.apply(target, socket, arguments_);
+            return Reflect.apply(target, socket, arguments_) as boolean;
           },
         });
-        socket.end = new Proxy(socket.end, {
+        socket.end = new Proxy(socket.end.bind(socket), {
           apply: (target, _thisArgument, arguments_) => {
             checkSessionCall();
-            return Reflect.apply(target, socket, arguments_);
+            return Reflect.apply(target, socket, arguments_) as Socket;
           },
         });
         if (head.byteLength > 0) {socket.unshift(head);}
@@ -178,7 +179,7 @@ export const openBoundedUnixHijack = (input: HijackInput): Promise<UnixHijackCha
         // the custody-channel listener installation.
         socket.on("error", ignoreSocketError);
         const close = async (): Promise<void> => {
-          if (establishmentTimer !== undefined) {try {clearTimeout(establishmentTimer);} catch {}}
+          try {clearTimeout(establishmentTimer);} catch {}
           if (sessionTimer !== undefined) {try {clearTimeout(sessionTimer);} catch {}}
           try {observationCall.signal.removeEventListener("abort", observationAbort);} catch {}
           if (!socket.destroyed) {try {socket.destroy();} catch {}}
@@ -188,8 +189,8 @@ export const openBoundedUnixHijack = (input: HijackInput): Promise<UnixHijackCha
         };
         const lifetimeClose = (): void => {void close();};
         socket.once("close", lifetimeClose);
-        if (establishmentSocketError !== undefined) {socket.removeListener("error", establishmentSocketError);}
-        if (establishmentSocketClose !== undefined) {socket.removeListener("close", establishmentSocketClose);}
+        socket.removeListener("error", establishmentSocketError);
+        socket.removeListener("close", establishmentSocketClose);
         settled = true; cleanupOpening();
         observationCall.signal.addEventListener("abort", observationAbort, {once: true});
         if (observationCall.signal.aborted) {observationAbort();}

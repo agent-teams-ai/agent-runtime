@@ -1,3 +1,4 @@
+import {validateResponseHeaders} from "./docker-response-codec.js";
 import { createHash } from "node:crypto";
 import { lstat, readFile, readlink, readdir, realpath } from "node:fs/promises";
 import { Agent, request, type ClientRequest, type IncomingMessage, type RequestOptions } from "node:http";
@@ -15,7 +16,6 @@ const MAX_HEADER_BYTES = 16_384;
 const MAX_REQUEST_BYTES = 131_072;
 const MAX_RESPONSE_BYTES = 262_144;
 const BOOT_ID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u;
-const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/u;
 const hasRequestTargetControlCharacter = (value: string): boolean =>
   value.includes("\0") || value.includes("\r") || value.includes("\n");
 
@@ -197,7 +197,7 @@ const requestFailureFor = (
   deadlineExpired: boolean,
 ): DockerEngineError => {
   if (error instanceof DockerEngineError) {return error;}
-  const code = typeof error === "object" && error !== null ? Reflect.get(error, "code") : undefined;
+  const code: unknown = typeof error === "object" && error !== null ? Reflect.get(error, "code") : undefined;
   if (code === "HPE_HEADER_OVERFLOW") {return new DockerEngineError("response-too-large");}
   if (typeof code === "string" && code.startsWith("HPE_")) {return new DockerEngineError("protocol-violation");}
   return failureFor(call, deadlineExpired);
@@ -207,11 +207,6 @@ const headerBytes = (response: IncomingMessage): number => response.rawHeaders.r
   (total, part) => total + Buffer.byteLength(part),
   0,
 );
-
-interface ResponseFraming {
-  readonly contentLength: number | undefined;
-  readonly contentType: string;
-}
 
 interface BoundBodyInput {
   readonly abort: () => void;
@@ -223,43 +218,6 @@ interface BoundBodyInput {
   readonly timer: NodeJS.Timeout;
 }
 
-const validateResponseHeaders = (response: IncomingMessage): ResponseFraming => {
-  if (response.rawHeaders.length % 2 !== 0) {throw new DockerEngineError("protocol-violation");}
-  const seen = new Set<string>();
-  let contentType = "";
-  let contentLength: number | undefined;
-  let chunked = false;
-  for (let index = 0; index < response.rawHeaders.length; index += 2) {
-    const rawName = response.rawHeaders[index];
-    const rawValue = response.rawHeaders[index + 1];
-    if (rawName === undefined || rawValue === undefined || !HEADER_NAME.test(rawName) || /[\r\n]/u.test(rawValue)) {
-      throw new DockerEngineError("protocol-violation");
-    }
-    const name = rawName.toLowerCase();
-    if (seen.has(name)) {throw new DockerEngineError("protocol-violation");}
-    seen.add(name);
-    if (name === "content-type") {contentType = rawValue;}
-    if (name === "content-length") {
-      if (!/^(?:0|[1-9][0-9]*)$/u.test(rawValue)) {throw new DockerEngineError("protocol-violation");}
-      const parsed = Number(rawValue);
-      if (!Number.isSafeInteger(parsed)) {throw new DockerEngineError("protocol-violation");}
-      contentLength = parsed;
-    }
-    if (name === "transfer-encoding") {
-      if (rawValue.trim().toLowerCase() !== "chunked") {throw new DockerEngineError("protocol-violation");}
-      chunked = true;
-    }
-  }
-  const bodyForbidden = response.statusCode === 204 || response.statusCode === 304;
-  if (bodyForbidden) {
-    if (chunked || (contentLength !== undefined && contentLength !== 0)) {
-      throw new DockerEngineError("protocol-violation");
-    }
-  } else if ((contentLength === undefined) === !chunked) {
-    throw new DockerEngineError("protocol-violation");
-  }
-  return { contentLength, contentType };
-};
 
 export class BoundedUnixHttpClient {
   readonly #policy: EndpointPolicy;

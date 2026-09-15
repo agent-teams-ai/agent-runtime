@@ -31,7 +31,8 @@ export class DockerCustodyProviderInputWriter {
     if (this.#pendingCursor === pending.byteLength) {this.closePending(); return "accepted";}
     const offered = pending.subarray(this.#pendingCursor).slice();
     const result = this.#write(offered);
-    if ((result.status !== "accepted" && result.status !== "blocked" && result.status !== "closed") ||
+    const status: unknown = result.status;
+    if ((status !== "accepted" && status !== "blocked" && status !== "closed") ||
       !Number.isSafeInteger(result.committedBytes) || result.committedBytes < 0 || result.committedBytes > offered.byteLength ||
       result.status === "accepted" && result.committedBytes !== offered.byteLength || result.status === "closed" && result.committedBytes !== 0) {
       throw new Error("provider input write returned an invalid cursor");

@@ -11,7 +11,8 @@ import type { HostHttpEgressV4Intent, HostHttpEgressV4Observation, HostHttpEgres
 
 /** Adapter-private resource capture and native abort subscription used by outer composition. */
 export const captureDockerHttpResourceRecord = <T extends object>(input: T): T => {
-  if (input === null || typeof input !== "object" || types.isProxy(input) ||
+  const value: unknown = input;
+  if (value === null || typeof value !== "object" || types.isProxy(input) ||
     Object.getPrototypeOf(input) !== Object.prototype || Reflect.ownKeys(input).some(key =>
       !("value" in Object.getOwnPropertyDescriptor(input, key)!))) {throw new TypeError("Host resource recipe unavailable");}
   return Object.freeze({...input});
@@ -19,8 +20,16 @@ export const captureDockerHttpResourceRecord = <T extends object>(input: T): T =
 export const subscribeDockerHttpAbort = addAbortListener;
 
 const rejected = (): Error => new Error("Docker HTTP operation resource ownership is unproven");
-const {evidence, recordIntent, target, recordObservation} = HostHttpEgressV4Journal.prototype;
-const {sealAdmission, allocate, retainContainer, inspectMembership, remove} = DockerOperationNetwork.prototype;
+const hostHttpEgressV4JournalMethods: {
+  [Key in "evidence" | "recordIntent" | "target" | "recordObservation"]: (this: HostHttpEgressV4Journal,
+    ...args: Parameters<HostHttpEgressV4Journal[Key]>) => ReturnType<HostHttpEgressV4Journal[Key]>;
+} = HostHttpEgressV4Journal.prototype;
+const {evidence, recordIntent, target, recordObservation} = hostHttpEgressV4JournalMethods;
+const dockerOperationNetworkMethods: {
+  [Key in "sealAdmission" | "allocate" | "retainContainer" | "inspectMembership" | "remove"]: (this: DockerOperationNetwork,
+    ...args: Parameters<DockerOperationNetwork[Key]>) => ReturnType<DockerOperationNetwork[Key]>;
+} = DockerOperationNetwork.prototype;
+const {sealAdmission, allocate, retainContainer, inspectMembership, remove} = dockerOperationNetworkMethods;
 const identityKeys = ["tenantId", "projectId", "operationId", "attemptId", "custodyId", "hostInstanceId", "hostBootId"] as const;
 const claimKeys = ["effectId", "workspaceId", "executionGenerationId", "committedClaimSha256", "acceptedAuthoritySha256"] as const;
 export type DockerHttpResourceClaim = Readonly<Record<typeof identityKeys[number], string> & {
@@ -132,8 +141,8 @@ export class DockerHttpNetworkResources implements HostHttpEgressV4ObservationOw
     } catch (error) {this.cutoff(); completion.resolve(); throw error;}
     // The preparation signal owns the resource lifetime, including the idle
     // interval after prepare returns. Retire this listener only at cutoff.
-    this.#launchAbort = addAbortListener(call.signal, () => this.cutoff());
-    return this.#prepare(call).finally(() => completion.resolve());
+    this.#launchAbort = addAbortListener(call.signal, () => {this.cutoff();});
+    return this.#prepare(call).finally(() => {completion.resolve();});
   }
   async #prepare(call: DockerEngineCall): Promise<Readonly<{networkName: string; gateway: string}>> {
     try {
@@ -162,13 +171,13 @@ export class DockerHttpNetworkResources implements HostHttpEgressV4ObservationOw
     if (this.#membership !== undefined) {throw rejected();}
     // Own completion before validating/retaining a possibly late launch handle.
     const completion = Promise.withResolvers<void>(); this.#membership = completion.promise;
-    return this.#observeContainer(input, invocation).finally(() => completion.resolve());
+    return this.#observeContainer(input, invocation).finally(() => {completion.resolve();});
   }
   async #observeContainer(input: DockerContainerAuthority, invocation: DockerEngineCall): Promise<void> {
     let abort: ReturnType<typeof addAbortListener> | undefined;
     try {
       const call = snapshotDockerEngineCall(invocation);
-      abort = addAbortListener(call.signal, () => this.cutoff());
+      abort = addAbortListener(call.signal, () => {this.cutoff();});
       const authority = validateAuthorityShape(input);
       if (authority.imageDigest !== this.#subject.imageDigest) {throw rejected();}
       // A late launch identity still belongs to cleanup even after admission cut.
@@ -199,8 +208,8 @@ export class DockerHttpNetworkResources implements HostHttpEgressV4ObservationOw
     }, () => {this.#cleanupWork = undefined; return "unknown" as const;});
     const work = this.#cleanupWork;
     void awaitNetworkCleanupWork(work, call).then(() => work).then(result => {
-      this.#cleanup = undefined; return completion.resolve(result);
-    }, () => {this.#cleanup = undefined; return completion.resolve("unknown");});
+      this.#cleanup = undefined; completion.resolve(result); return;
+    }, () => {this.#cleanup = undefined; completion.resolve("unknown");});
     return completion.promise;
   }
   async #clean(call: DockerEngineCall): Promise<"absent" | "unknown"> {

@@ -1,3 +1,4 @@
+import type {DockerCustodyStreamEvidence} from "./docker-custody-init-runtime-types.js";
 import {createHash, randomBytes} from "node:crypto";
 import {DockerCustodyProtocolError, type DockerCustodyObservationBinding, type DockerCustodyProviderExecRequest, type DockerCustodyProviderInstance} from "./docker-custody-init-protocol.js";
 import type {DockerCustodyInitHostAuthority, DockerCustodyInitHostResult, DockerCustodyInitHostRootExit} from "./docker-custody-init-host-session.js";
@@ -85,3 +86,18 @@ export class DockerCustodyHostObservationWriter {
       stderr: evidence(this.#stderr), stdout: evidence(this.#stdout), supervisorFinality: "unproven"});
   }
 }
+
+export interface MutableStreamEvidence {
+  bytes: number; eof: boolean; eofPending: boolean; hash: ReturnType<typeof createHash>; pendingBytes: Uint8Array | null;
+  pendingCursor: number; status: DockerCustodyStreamEvidence["status"];
+}
+export const EMPTY_SHA256 = createHash("sha256").digest("hex");
+export const newStreamEvidence = (): MutableStreamEvidence => ({
+  bytes: 0, eof: false, eofPending: false, hash: createHash("sha256"), pendingBytes: null, pendingCursor: 0, status: "open",
+});
+export const streamTerminal = (accounting: MutableStreamEvidence): boolean =>
+  accounting.eof || accounting.status === "failed" || accounting.status === "overflow";
+
+
+export const snapshotStreamEvidence = (value: MutableStreamEvidence): DockerCustodyStreamEvidence => Object.freeze({bytes: value.bytes, eof: value.eof,
+      sha256: value.bytes === 0 ? EMPTY_SHA256 : value.hash.copy().digest("hex"), status: value.status});

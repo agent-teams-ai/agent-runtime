@@ -1,6 +1,8 @@
+export {validateDockerEgressJournalTransitions} from "./docker-egress-journal-codec.js";
 import { createHash } from "node:crypto";
 
 import {
+  nextCleanup, isDebtFree, replayState, replayValidPrefix, type ReplayState,
   createDockerEgressRecord,
   createDockerEgressTombstone,
   decodeDockerEgressTombstone,
@@ -17,7 +19,6 @@ import {
 import { classifyDockerEgressLegacyV2 } from "./docker-egress-v2-cleanup-reader.js";
 import {
   DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS,
-  DOCKER_EGRESS_CLEANUP_ORDER,
   DOCKER_EGRESS_RESOURCE_KINDS,
   DockerEgressJournalCapacityError,
   DockerEgressJournalConflictError,
@@ -40,120 +41,6 @@ import {
 } from "./docker-egress-journal-types.js";
 import { DEFAULT_DOCKER_CUSTODY_JOURNAL_LIMITS } from "./docker-custody-journal-types.js";
 
-interface ReplayState {
-  readonly possible: Set<DockerEgressResourceKind>;
-  readonly cleaned: Set<DockerEgressResourceKind>;
-  materializePending: DockerEgressResourceKind | null;
-  cleanupPending: DockerEgressResourceKind | null;
-  materializeCursor: number;
-  cleanupStarted: boolean;
-  reconcileRequired: boolean;
-  unscopedReconciliation: boolean;
-  terminal: boolean;
-  quarantined: boolean;
-}
-const invalid = (): never => { throw new DockerEgressJournalCorruptionError("invalid custody transition"); };
-const nextCleanup = (state: ReplayState): DockerEgressResourceKind | null =>
-  DOCKER_EGRESS_CLEANUP_ORDER.find(resource => state.possible.has(resource) && !state.cleaned.has(resource)) ?? null;
-const isDebtFree = (state: ReplayState): boolean => nextCleanup(state) === null &&
-  state.materializePending === null && state.cleanupPending === null &&
-  !state.reconcileRequired && !state.quarantined;
-const initialState = (): ReplayState => ({
-  possible: new Set(), cleaned: new Set(), materializePending: null, cleanupPending: null,
-  materializeCursor: 0, cleanupStarted: false, reconcileRequired: false, unscopedReconciliation: false, terminal: false, quarantined: false,
-});
-const requiredReservation = (state: ReplayState, kind: "materialize" | "cleanup"): number => kind === "cleanup"
-  ? 3
-  : 4 + (state.possible.size + 1) * 2;
-
-const observationMatches = (subject: DockerEgressJournalSubject, resource: DockerEgressResourceKind,
-  observation: DockerEgressCleanupObservation, observer: DockerEgressCleanupObserverAuthority): boolean => {
-  const identity = subject.identity;
-  return observation.resource === resource && observation.cleanupHandle === dockerEgressCleanupHandle(subject, resource) &&
-    observation.scopeSha256 === subject.authority.scopeSha256 && observation.hostInstanceId === identity.hostInstanceId &&
-    observation.hostBootId === identity.hostBootId && observation.executionGenerationId === identity.executionGenerationId &&
-    observation.daemonId === identity.daemonId && observation.daemonGenerationId === identity.daemonGenerationId &&
-    observation.slotGenerationId === identity.slotGenerationId && observation.observerId === observer.observerId &&
-    observation.capabilityRevisionSha256 === observer.capabilityRevisionSha256 && observation.result === "absent";
-};
-const applyMaterializeIntent = (state: ReplayState, event: Extract<DockerEgressJournalEvent, {kind: "materialize_intent"}>): void => {
-    if (state.cleanupStarted || state.reconcileRequired || state.materializePending !== null || state.cleanupPending !== null ||
-        DOCKER_EGRESS_RESOURCE_KINDS[state.materializeCursor] !== event.resource ||
-        event.reservation.recordCount !== requiredReservation(state, "materialize") ||
-        event.reservation.byteCount !== event.reservation.recordCount * DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS.maxRecordBytes) { invalid(); }
-    state.possible.add(event.resource); state.materializeCursor += 1; state.materializePending = event.resource;
-};
-const applyMaterializeReceipt = (state: ReplayState, event: Extract<DockerEgressJournalEvent, {kind: "materialize_receipt"}>): void => {
-    if (state.materializePending !== event.resource || state.cleanupPending !== null) { invalid(); }
-    state.materializePending = null;
-};
-const applyCleanupIntent = (state: ReplayState, event: Extract<DockerEgressJournalEvent, {kind: "cleanup_intent"}>): void => {
-    if (state.materializePending !== null || state.cleanupPending !== null || nextCleanup(state) !== event.resource ||
-        event.reservation.recordCount !== requiredReservation(state, "cleanup") ||
-        event.reservation.byteCount !== event.reservation.recordCount * DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS.maxRecordBytes) { invalid(); }
-    state.cleanupStarted = true; state.cleanupPending = event.resource;
-};
-const applyCleanupReceipt = (state: ReplayState, subject: DockerEgressJournalSubject,
-  event: Extract<DockerEgressJournalEvent, {kind: "cleanup_receipt"}>, observer: DockerEgressCleanupObserverAuthority): void => {
-    if (state.cleanupPending !== event.resource || !observationMatches(subject, event.resource, event.observation, observer)) { invalid(); }
-    state.cleaned.add(event.resource); state.cleanupPending = null;
-    if (nextCleanup(state) === null) { state.reconcileRequired = state.unscopedReconciliation; }
-};
-const applyReconciliation = (state: ReplayState, event: Extract<DockerEgressJournalEvent, {kind: "reconcile_required"}>): void => {
-    if (event.resource === null) {
-      if (state.materializePending !== null || state.cleanupPending !== null) { invalid(); }
-      state.unscopedReconciliation = true;
-    } else if (state.materializePending === event.resource && event.reason === "acknowledgement_unknown") {
-      state.materializePending = null; state.cleanupStarted = true;
-    } else if (state.cleanupPending === event.resource &&
-        ["acknowledgement_unknown", "cleanup_failed", "cleanup_observation_unknown"].includes(event.reason)) {
-      state.cleanupPending = null; state.cleanupStarted = true;
-    } else { invalid(); }
-    state.reconcileRequired = true;
-};
-const applyClosed = (state: ReplayState): void => {
-  if (state.materializePending !== null || state.cleanupPending !== null || nextCleanup(state) !== null ||
-      state.reconcileRequired || state.quarantined) { invalid(); }
-  state.terminal = true;
-};
-const applyEvent = (state: ReplayState, record: DockerEgressJournalRecord, observer: DockerEgressCleanupObserverAuthority): void => {
-  const event = record.event;
-  if (state.terminal || (record.sequence === 0 && event.kind !== "open_intent") ||
-      (record.sequence !== 0 && event.kind === "open_intent")) { invalid(); }
-  switch (event.kind) {
-    case "open_intent": return;
-    case "materialize_intent": return applyMaterializeIntent(state, event);
-    case "materialize_receipt": return applyMaterializeReceipt(state, event);
-    case "cleanup_intent": return applyCleanupIntent(state, event);
-    case "cleanup_receipt": return applyCleanupReceipt(state, record.subject, event, observer);
-    case "reconcile_required": return applyReconciliation(state, event);
-    case "quarantined": {
-      if (state.quarantined) { invalid(); }
-      state.quarantined = true; state.reconcileRequired = true; return;
-    }
-    case "closed": return applyClosed(state);
-  }
-};
-const replayState = (records: readonly DockerEgressJournalRecord[], observer: DockerEgressCleanupObserverAuthority): ReplayState => {
-  if (records.length === 0) { invalid(); }
-  const state = initialState(); records.forEach(record => applyEvent(state, record, observer)); return state;
-};
-const replayValidPrefix = (records: readonly DockerEgressJournalRecord[],
-  observer: DockerEgressCleanupObserverAuthority): Readonly<{
-    records: readonly DockerEgressJournalRecord[]; state: ReplayState; tail: "complete" | "partial";
-  }> => {
-  const state = initialState();
-  for (const [index, record] of records.entries()) {
-    try { applyEvent(state, record, observer); }
-    catch { return Object.freeze({ records: Object.freeze(records.slice(0, index)), state, tail: "partial" }); }
-  }
-  return Object.freeze({ records, state, tail: "complete" });
-};
-export const validateDockerEgressJournalTransitions = (records: readonly DockerEgressJournalRecord[],
-  observerInput: DockerEgressCleanupObserverAuthority): void => {
-  replayState(records, validateDockerEgressCleanupObserverAuthority(observerInput));
-};
-
 const limitsFrom = (input?: Partial<DockerEgressJournalLimits>): DockerEgressJournalLimits => {
   const result = Object.freeze({ ...DEFAULT_DOCKER_EGRESS_JOURNAL_LIMITS, ...input });
   for (const [name, value] of Object.entries(result)) {
@@ -175,7 +62,7 @@ const trustedMatches = (subject: DockerEgressJournalSubject, trusted: DockerEgre
 const uniquenessValues = (subject: DockerEgressJournalSubject): readonly string[] => Object.freeze([
   subject.identity.operationId, subject.identity.effectId, subject.identity.attemptId, subject.identity.custodyId,
   subject.identity.workspaceId, subject.identity.executionGenerationId, subject.identity.daemonGenerationId,
-  subject.identity.slotGenerationId, ...Object.values(subject.resources),
+  subject.identity.slotGenerationId, ...Object.values({...subject.resources}),
 ]);
 const identitiesOverlap = (left: DockerEgressJournalSubject, right: DockerEgressJournalSubject): boolean => {
   const seen = new Set(uniquenessValues(left)); return uniquenessValues(right).some(value => seen.has(value));
