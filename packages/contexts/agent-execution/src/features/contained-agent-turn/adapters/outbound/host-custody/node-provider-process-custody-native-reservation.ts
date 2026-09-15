@@ -53,11 +53,11 @@ export function assertNativeBoundReservation(reserved: LiveCustody): void {
 
 function assertNativeEnvironmentRoots(reserved: LiveCustody, facts: NonNullable<LiveCustody["nativeWorkspaceFacts"]>): void {
   if (reserved.privatePaths!.byEnvironmentKey.HOME?.dev !== facts.privateRoot.dev ||
-      reserved.privatePaths!.byEnvironmentKey.HOME?.ino !== facts.privateRoot.ino ||
+      reserved.privatePaths!.byEnvironmentKey.HOME.ino !== facts.privateRoot.ino ||
       reserved.privatePaths!.byEnvironmentKey.CODEX_HOME?.dev !== facts.codexHome.dev ||
-      reserved.privatePaths!.byEnvironmentKey.CODEX_HOME?.ino !== facts.codexHome.ino ||
+      reserved.privatePaths!.byEnvironmentKey.CODEX_HOME.ino !== facts.codexHome.ino ||
       reserved.privatePaths!.byEnvironmentKey.TMPDIR?.dev !== facts.tmpDir.dev ||
-      reserved.privatePaths!.byEnvironmentKey.TMPDIR?.ino !== facts.tmpDir.ino) {
+      reserved.privatePaths!.byEnvironmentKey.TMPDIR.ino !== facts.tmpDir.ino) {
     throw new TypeError("Native launch plan differs from prepared roots");
   }
 }

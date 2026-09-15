@@ -1,3 +1,4 @@
+import {nativeAborted, nativeAbort, nativeRemoveEventListener, isSignalObject} from "./host-custody-abort-intrinsics.js";
 import {addAbortListener} from "node:events";
 import { types } from "node:util";
 import { custodyDataRecord } from "./host-custody-inert-record.js";
@@ -36,7 +37,7 @@ export const readHostCustodyHttpHandoff = (input: HostCustodyHttpHandoff): HostC
     }
   }
   const signal = record.signal;
-  if (signal === null || typeof signal !== "object" || types.isProxy(signal) ||
+  if (!isSignalObject(signal) || types.isProxy(signal) ||
       Object.getPrototypeOf(signal) !== AbortSignal.prototype ||
       Reflect.ownKeys(signal).some(key => typeof key === "string" ||
         !("value" in Object.getOwnPropertyDescriptor(signal, key)!))) {
@@ -48,9 +49,6 @@ export const readHostCustodyHttpHandoff = (input: HostCustodyHttpHandoff): HostC
 };
 
 
-const nativeAborted = Object.getOwnPropertyDescriptor(AbortSignal.prototype, "aborted")!.get!;
-const nativeAbort = AbortController.prototype.abort;
-const nativeRemoveEventListener = EventTarget.prototype.removeEventListener;
 const subscribe = (signal: AbortSignal, listener: (event: Event) => void): ReturnType<typeof addAbortListener> => {
   addAbortListener(signal, listener);
   // Node's Disposable reads signal.removeEventListener when disposed. The
@@ -64,6 +62,6 @@ const subscribe = (signal: AbortSignal, listener: (event: Event) => void): Retur
 export const hostHttpAbortOperations = Object.freeze({
   aborted: (signal: AbortSignal): boolean => nativeAborted.call(signal),
   subscribe,
-  remove: (subscription: ReturnType<typeof addAbortListener>): void => subscription[Symbol.dispose](),
-  abort: (controller: AbortController): void => nativeAbort.call(controller),
+  remove: (subscription: ReturnType<typeof addAbortListener>): void => {subscription[Symbol.dispose]();},
+  abort: (controller: AbortController): void => {nativeAbort.call(controller);},
 });

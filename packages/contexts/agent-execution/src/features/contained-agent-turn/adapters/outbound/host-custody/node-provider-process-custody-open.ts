@@ -1,3 +1,4 @@
+import {isLiveCustodySealed} from "./host-custody-live-state-readback.js";
 import {
   HostCustodyFingerprintConflictError,
   HostCustodyLaunchRejectedError,
@@ -77,12 +78,12 @@ const bindLaunchCandidate = async (reservation: HostCustodyOpenReservation): Pro
     ])),
     status: "active",
   });
-  if (live.sealed) {return;}
+  if (isLiveCustodySealed(live)) {return;}
   if (retainPrivateRootCleanupAuthority(live) === undefined) {
     throw new HostCustodyLaunchRejectedError("authority-verification-failed");
   }
   live.executable = Object.freeze(await verifyExecutable(candidate.plan));
-  if (live.sealed) {return;}
+  if (isLiveCustodySealed(live)) {return;}
   live.residueAuthority = await reservation.residueAuthorityFactory.create(live.custodyRef);
 };
 
@@ -155,3 +156,20 @@ export const openHostCustodyReservation = async (
     throw new HostCustodyLaunchRejectedError(phase);
   }
 };
+
+export async function resolveNodeCustodyCandidate(launchPlans: HostCustodyLaunchPlanResolver,
+ containmentProfile: import("./host-custody-runtime-profile.js").ProcessCustodyRuntimeProfile["containmentProfile"],
+ input: Parameters<ProviderProcessCustodyPort["open"]>[0], requiredSpawnMode?: "sdk-delegated") {
+    try {
+      const candidate = await resolveLaunchCandidate(launchPlans, input);
+      if (candidate.plan.containmentProfile !== containmentProfile) {
+        throw new HostCustodyUnsupportedError("platform-profile-unavailable");
+      }
+      assertHostCustodyReservationMode(candidate.plan, requiredSpawnMode);
+      return candidate;
+    }
+    catch (error) {
+      if (error instanceof HostCustodyUnsupportedError) {throw error;}
+      throw new HostCustodyLaunchRejectedError();
+    }
+}

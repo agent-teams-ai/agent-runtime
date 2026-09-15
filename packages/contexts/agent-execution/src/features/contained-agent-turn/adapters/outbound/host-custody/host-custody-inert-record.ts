@@ -1,8 +1,11 @@
 import { isDeepStrictEqual, types } from "node:util";
 
+const isInertObject = (value: unknown): value is object =>
+  value !== null && typeof value === "object" && !types.isProxy(value);
+
 /** Snapshot data without executing proxy traps, accessors or inherited properties. */
 export const custodyDataRecord = <Value extends object>(value: Value): Value => {
-  if (value === null || typeof value !== "object" || types.isProxy(value)) {
+  if (!isInertObject(value)) {
     throw new TypeError("Host Custody requires an inert data record");
   }
   const result = Object.create(null) as Value;

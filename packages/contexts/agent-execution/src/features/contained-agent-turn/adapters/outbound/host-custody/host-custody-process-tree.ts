@@ -59,19 +59,19 @@ export class NodeCustodiedSdkProcess implements CustodiedSdkProcess {
   public off(event: "error", listener: (error: Error) => void): void;
   public off(event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): void;
   public off(event: "error" | "exit", listener: ((error: Error) => void) | ((code: number | null, signal: NodeJS.Signals | null) => void)): void {
-    this.#guardian.off(event, listener as never);
+    this.#guardian.off(event, listener);
   }
 
   public on(event: "error", listener: (error: Error) => void): void;
   public on(event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): void;
   public on(event: "error" | "exit", listener: ((error: Error) => void) | ((code: number | null, signal: NodeJS.Signals | null) => void)): void {
-    this.#guardian.on(event, listener as never);
+    this.#guardian.on(event, listener);
   }
 
   public once(event: "error", listener: (error: Error) => void): void;
   public once(event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): void;
   public once(event: "error" | "exit", listener: ((error: Error) => void) | ((code: number | null, signal: NodeJS.Signals | null) => void)): void {
-    this.#guardian.once(event, listener as never);
+    this.#guardian.once(event, listener);
   }
 }
 
@@ -145,16 +145,13 @@ const boundedObservation = async <Value>(
 ): Promise<Value | null> => {
   const remaining = deadline - monotonicNow();
   if (remaining <= 0) {return null;}
-  return new Promise<Value | null>(resolve => {
-    const timer = setTimeout(() => {resolve(null);}, remaining);
-    void promise.then(
-      value => {
-        clearTimeout(timer);
-        return resolve(monotonicNow() < deadline ? value : null);
-      },
-      () => {clearTimeout(timer); return resolve(null);},
-    );
-  });
+  const completion = Promise.withResolvers<Value | null>();
+  const timer = setTimeout(() => {completion.resolve(null);}, remaining);
+  void promise.then(
+    value => {clearTimeout(timer); completion.resolve(monotonicNow() < deadline ? value : null); return;},
+    () => {clearTimeout(timer); completion.resolve(null); return;},
+  );
+  return completion.promise;
 };
 
 interface ObserveProcessIdentityInput {

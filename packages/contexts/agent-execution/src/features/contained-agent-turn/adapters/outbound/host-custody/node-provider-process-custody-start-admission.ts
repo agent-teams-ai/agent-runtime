@@ -1,3 +1,4 @@
+import {nativeAborted, nativeRemoveEventListener as nativeRemove, isSignalObject} from "./host-custody-abort-intrinsics.js";
 import { types } from "node:util";
 import { addAbortListener } from "node:events";
 import {
@@ -12,9 +13,7 @@ import type { LiveCustody } from "./node-provider-process-custody-state.js";
 
 type StartInput = Parameters<CustodiedSdkProcessLauncher["start"]>[1];
 const signalPrototype = AbortSignal.prototype;
-const nativeAborted = Object.getOwnPropertyDescriptor(signalPrototype, "aborted")!.get!;
 const nativeSubscribe = addAbortListener;
-const nativeRemove = EventTarget.prototype.removeEventListener;
 
 const snapshotArguments = (value: readonly string[]): readonly string[] => {
   const record = custodyDataRecord(value);
@@ -41,7 +40,7 @@ const snapshotEnvironment = (value: StartInput["environment"]): StartInput["envi
 };
 
 const retainAbortOperations = (signal: AbortSignal) => {
-  if (signal === null || typeof signal !== "object" || types.isProxy(signal) ||
+  if (!isSignalObject(signal) || types.isProxy(signal) ||
       Object.getPrototypeOf(signal) !== signalPrototype ||
       Reflect.ownKeys(signal).some(key => typeof key === "string" ||
         !("value" in Object.getOwnPropertyDescriptor(signal, key)!) ||
@@ -81,7 +80,7 @@ export const readCustodyStartAdmission = (input: StartInput, live: LiveCustody) 
   const fingerprint = createFingerprint({
     attemptId: live.attemptId, intentMode: plan.intentMode, operationId: live.operationId,
     providerBinding: live.providerBinding, workspaceRef: live.workspaceRef,
-  }, plan, live.workspaceRef, snapshot.arguments, live.launchBinding?.materialSha256);
+  }, plan, live.workspaceRef, snapshot.arguments, live.launchBinding.materialSha256);
   if (live.fingerprint?.fingerprintSha256 !== fingerprint.fingerprintSha256 ||
       (live.startIdentitySha256 !== undefined &&
         (live.startIdentitySha256 !== startIdentitySha256 || live.sdkProcess === undefined || live.exit === undefined))) {

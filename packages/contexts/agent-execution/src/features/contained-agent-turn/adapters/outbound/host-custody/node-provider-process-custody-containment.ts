@@ -1,3 +1,4 @@
+import {hasLiveCustodyGuardian} from "./host-custody-live-state-readback.js";
 import { containCustody, containedResult, identityBase, notStartedIdentity, strictClosure, unprovenResult, type ContainmentResult } from "./host-custody-evidence.js";
 import { sha256 } from "./host-custody-launch.js";
 import { quarantinePrivateRootForReconciliation } from "./host-custody-private-root.js";
@@ -24,7 +25,7 @@ export async function containNodeCustody(
       // If it throws instead, keep custody for reconciliation: the no-guardian
       // no-start cleanup path has no evidence for this admitted launch.
       await Promise.resolve();
-      if (live.guardian === undefined) {return unprovenResult("stable-guardian-unavailable", input, live);}
+      if (!hasLiveCustodyGuardian(live)) {return unprovenResult("stable-guardian-unavailable", input, live);}
     }
     if (live.residueAllocation === "uncertain") {
       return unprovenResult("operation-cgroup-release-unproven", input, live);

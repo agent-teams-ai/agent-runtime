@@ -28,7 +28,7 @@ export class DeferredNativeProviderProcess implements CustodiedProviderProcess {
       catch (error) {target.destroy(error as Error); throw error;}
     };
     void Promise.all([pump("stdout", process.stdout, this.stdout), pump("stderr", process.stderr, this.stderr)]).then(
-      () => this.#drained.resolve(), error => this.#drained.reject(error),
+      () => {this.#drained.resolve(); return;}, (error: unknown) => {this.#drained.reject(error);},
     );
   }
   public fail(error: unknown): void {if (!this.#settled) {this.#settled = true; this.#ready.reject(error); this.#drained.reject(error);}}
@@ -45,8 +45,8 @@ export class DeferredNativeSdkProcess implements CustodiedSdkProcess {
     this.#stdout = stdout;
     this.#events.on("error", () => {});
     this.#stdout.on("error", () => {});
-    this.#stdin.on("data", (bytes: Buffer) => {void this.#ready.promise.then(p => p.write(bytes)).catch(e => this.#events.emit("error", e));});
-    this.#stdin.on("end", () => {void this.#ready.promise.then(p => p.closeInput()).catch(e => this.#events.emit("error", e));});
+    this.#stdin.on("data", (bytes: Buffer) => {void this.#ready.promise.then(p => p.write(bytes)).catch((e: unknown) => this.#events.emit("error", e));});
+    this.#stdin.on("end", () => {void this.#ready.promise.then(p => p.closeInput()).catch((e: unknown) => this.#events.emit("error", e));});
     void this.#ready.promise.then(async process => {
       try {
         const exit = await process.waitForExit(); this.#exitCode = exit.code; this.#signalCode = exit.signal;

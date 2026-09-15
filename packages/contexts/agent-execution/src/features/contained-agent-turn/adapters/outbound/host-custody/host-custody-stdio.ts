@@ -78,8 +78,8 @@ export class HostStdoutIngress extends Readable implements StreamAccounting {
   public attach(source: Readable, providerFinal: Promise<GuardianProviderStreamFinal>): void {
     this.#source = source;
     void providerFinal.then(
-      status => {this.#providerFinal = status; return this.#trySettle();},
-      () => {this.#providerFinal = "incomplete"; return this.#trySettle();},
+      status => {this.#providerFinal = status; this.#trySettle(); return;},
+      () => {this.#providerFinal = "incomplete"; this.#trySettle(); return;},
     );
     source.on("data", (chunk: Buffer) => {
       if (this.#settled) {return;}
@@ -186,7 +186,7 @@ export class RedactedDiagnosticRing implements AsyncIterable<Uint8Array> {
   #bytes = 0;
   #consumerRegistered = false;
   #ended = false;
-  #queue: Buffer[] = [];
+  readonly #queue: Buffer[] = [];
   #waiter: ((result: IteratorResult<Uint8Array>) => void) | undefined;
 
   public constructor(maxBytes: number) {this.#maxBytes = maxBytes;}
@@ -260,8 +260,8 @@ export class HostStderrIngress implements StreamAccounting {
 
   public attach(source: Readable, providerFinal: Promise<GuardianProviderStreamFinal>): void {
     void providerFinal.then(
-      status => {this.#providerFinal = status; return this.#trySettle();},
-      () => {this.#providerFinal = "incomplete"; return this.#trySettle();},
+      status => {this.#providerFinal = status; this.#trySettle(); return;},
+      () => {this.#providerFinal = "incomplete"; this.#trySettle(); return;},
     );
     source.on("data", (chunk: Buffer) => {
       if (this.#settled) {return;}
@@ -337,8 +337,8 @@ export class HostStderrIngress implements StreamAccounting {
 
 export const processExit = (child: ChildProcessWithoutNullStreams): Promise<CustodiedProviderProcessExit> =>
   new Promise(resolve => {
-    child.once("error", () => resolve(Object.freeze({ code: null, signal: null })));
-    child.once("exit", (code, signal) => resolve(Object.freeze({ code, signal })));
+    child.once("error", () => {resolve(Object.freeze({ code: null, signal: null }));});
+    child.once("exit", (code, signal) => {resolve(Object.freeze({ code, signal }));});
   });
 
 export const writeBytes = (child: ChildProcessWithoutNullStreams, bytes: Uint8Array): Promise<void> =>
@@ -400,8 +400,8 @@ export const boundedPromise = <Value>(promise: Promise<Value>, milliseconds: num
   new Promise((resolve, reject) => {
     const timer = setTimeout(() => {resolve(void 0);}, milliseconds);
     void promise.then(
-      value => {clearTimeout(timer); return resolve(value);},
-      error => {clearTimeout(timer); return reject(error);},
+      value => {clearTimeout(timer); resolve(value); return;},
+      (error: unknown) => {clearTimeout(timer); reject(error); return;},
     );
   });
 

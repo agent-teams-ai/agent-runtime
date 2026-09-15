@@ -73,7 +73,7 @@ export class DarwinSeatbeltRouteOwner {
   public assertActive(): void {
     try {
       if (!["reserved", "launch-authorized", "installed"].includes(this.#state) || this.lifetime.signal.aborted ||
-          this.localCut.hostShutdownSignal?.aborted) {rejected();}
+          this.localCut.hostShutdownSignal?.aborted === true) {rejected();}
       const clock = this.localCut.clock.read();
       if (clock.authorityId !== this.localCut.expectedClock.authorityId || clock.epoch !== this.localCut.expectedClock.epoch ||
           !Number.isSafeInteger(clock.controlTime) || clock.controlTime < this.#lastTime || clock.controlTime < 0 ||

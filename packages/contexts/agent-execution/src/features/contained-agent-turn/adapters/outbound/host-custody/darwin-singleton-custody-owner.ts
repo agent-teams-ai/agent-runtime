@@ -86,11 +86,27 @@ type RecordState = {
   custody?: SingletonCustody;
   closure?: SingletonClosure;
 };
+type AdmissionPolicyObservation = Pick<SingletonAdmission, "binding" | "birth"> & {
+  readonly ordering: unknown;
+  readonly descendants: unknown;
+  readonly delegation: unknown;
+  readonly inheritedAuthority: unknown;
+  readonly imageEnforcement: unknown;
+};
+type TerminalObservation = Pick<SingletonTerminal, "binding" | "birth" | "imageChain"> & {
+  readonly exit: unknown;
+  readonly launch: unknown;
+  readonly stdout: unknown;
+  readonly stderr: unknown;
+  readonly ownerFlights: unknown;
+};
+const isImageChainArray = (value: unknown): boolean => Array.isArray(value);
+const hasPhase = (state: RecordState, phase: RecordState["phase"]): boolean => state.phase === phase;
 const bindingKeys = ['operation', 'attempt', 'custody', 'hostGeneration',
   'helper', 'profile', 'policy', 'ipcPolicy'] as const;
-function snapshot(binding: SingletonBinding): SingletonBinding | undefined {
+function snapshot(binding: SingletonBinding | null | undefined): SingletonBinding | undefined {
   if (!binding || bindingKeys.some((key) => typeof binding[key] !== 'string' ||
-      binding[key].length === 0) || !Array.isArray(binding.imageChain) ||
+      binding[key].length === 0) || !isImageChainArray(binding.imageChain) ||
       binding.imageChain.length === 0 || binding.imageChain.length > 16 ||
       !Array.from(binding.imageChain).every((value) => typeof value === 'string' && value.length > 0)) {
     return undefined;
@@ -103,15 +119,15 @@ function snapshot(binding: SingletonBinding): SingletonBinding | undefined {
 function sameChain(a: readonly string[], b: readonly string[]): boolean {
   return Array.isArray(b) && a.length === b.length && a.every((image, i) => image === b[i]);
 }
-function sameBinding(a: SingletonBinding, b: SingletonBinding): boolean {
+function sameBinding(a: SingletonBinding, b: SingletonBinding | null | undefined): boolean {
   return !!b && bindingKeys.every((key) => a[key] === b[key]) && sameChain(a.imageChain, b.imageChain);
 }
-function validBirth(birth: SingletonBirth): boolean {
+function validBirth(birth: SingletonBirth | null | undefined): boolean {
   return !!birth && Number.isSafeInteger(birth.pid) && birth.pid > 0 &&
     Number.isSafeInteger(birth.seconds) && birth.seconds >= 0 &&
     Number.isSafeInteger(birth.micros) && birth.micros >= 0 && birth.micros < 1_000_000;
 }
-function sameBirth(a: SingletonBirth, b: SingletonBirth): boolean {
+function sameBirth(a: SingletonBirth, b: SingletonBirth | null | undefined): boolean {
   return !!b && a.pid === b.pid && a.seconds === b.seconds && a.micros === b.micros;
 }
 
@@ -126,10 +142,11 @@ export function createDarwinSingletonCustodyOwner(
   const closures = new WeakMap<SingletonClosure, RecordState>();
   const used = new Set<string>();
   let active = true;
+  const isActive = (): boolean => active;
   // Empty frozen objects intentionally carry no serializable authority. These
   // exact local casts mint nominal handles; only the WeakMaps confer authority.
   function reserve(request: SingletonBinding): SingletonReservation | undefined {
-    if (!active || !reserveNative) { return undefined; }
+    if (!isActive() || !reserveNative) { return undefined; }
     try {
       const binding = snapshot(request);
       if (!binding || binding.hostGeneration !== hostGeneration) { return undefined; }
@@ -137,7 +154,7 @@ export function createDarwinSingletonCustodyOwner(
       if (used.has(key)) { return undefined; }
       used.add(key); // A failed/throwing native reservation can never be retried.
       const native = reserveNative(binding);
-      if (!active || !native) { return undefined; }
+      if (!isActive() || !native) { return undefined; }
       const session: Session = Object.freeze({
         readAdmission: native.readAdmission.bind(native),
         closeAdmission: native.closeAdmission.bind(native),
@@ -150,15 +167,15 @@ export function createDarwinSingletonCustodyOwner(
   }
   function admit(token: SingletonReservation): SingletonCustody | undefined {
     const state = reservations.get(token);
-    if (!active || !state || state.phase !== 'reserved') { return undefined; }
+    if (!isActive() || !state || state.phase !== 'reserved') { return undefined; }
     state.phase = 'admitting';
     try {
       const observation = state.session.readAdmission();
-      if (!active || state.phase !== 'admitting') { return undefined; }
+      if (!isActive() || !hasPhase(state, 'admitting')) { return undefined; }
       if (observation.kind === 'pending') { state.phase = 'reserved'; return undefined; }
       state.phase = 'unknown';
       if (observation.kind !== 'authenticated') { return undefined; }
-      const a = observation.evidence;
+      const a: AdmissionPolicyObservation = observation.evidence;
       if (!sameBinding(state.binding, a.binding) || !validBirth(a.birth) ||
           a.ordering !== 'policy-and-observer-before-untrusted-exec' ||
           a.descendants !== 'all-creation-denied-across-exec' ||
@@ -175,28 +192,28 @@ export function createDarwinSingletonCustodyOwner(
   /** Closes admission synchronously even when called before an acknowledgment. */
   function closeAdmission(token: SingletonReservation): boolean {
     const state = reservations.get(token);
-    if (!active || !state || state.closeAttempted || state.phase === 'closed') { return false; }
+    if (!isActive() || !state || state.closeAttempted === true || state.phase === 'closed') { return false; }
     state.closeAttempted = true;
     const admitted = state.phase === 'admitted';
     state.phase = 'sealing';
     try {
       const closed = state.session.closeAdmission() === 'closed';
-      if (!active || state.phase !== 'sealing') { return false; }
+      if (!isActive() || !hasPhase(state, 'sealing')) { return false; }
       state.phase = closed && admitted ? 'closing' : 'unknown';
       return closed;
     } catch { state.phase = 'unknown'; return false; }
   }
   function settle(token: SingletonReservation, custody: SingletonCustody): SingletonClosure | undefined {
     const state = reservations.get(token);
-    if (!active || !state || custodies.get(custody) !== state || state.phase !== 'closing') { return undefined; }
+    if (!isActive() || !state || custodies.get(custody) !== state || state.phase !== 'closing') { return undefined; }
     state.phase = 'settling';
     try {
       const observation = state.session.readTerminal();
-      if (!active || state.phase !== 'settling') { return undefined; }
+      if (!isActive() || !hasPhase(state, 'settling')) { return undefined; }
       if (observation.kind === 'pending') { state.phase = 'closing'; return undefined; }
       state.phase = 'unknown';
       if (observation.kind !== 'authenticated') { return undefined; }
-      const t = observation.evidence;
+      const t: TerminalObservation = observation.evidence;
       if (!state.birth || !sameBinding(state.binding, t.binding) || !sameBirth(state.birth, t.birth) ||
           !sameChain(state.binding.imageChain, t.imageChain) || t.exit !== 'exact-birth-exited' ||
           t.launch !== 'settled' || t.stdout !== 'sealed' || t.stderr !== 'sealed' ||
@@ -211,14 +228,14 @@ export function createDarwinSingletonCustodyOwner(
     /** Cutoff cannot turn a pending launch into proof of no-start. */
     cutoff(token: SingletonReservation): void {
       const state = reservations.get(token);
-      if (!active || !state || state.phase === 'closed') { return; }
+      if (!isActive() || !state || state.phase === 'closed') { return; }
       closeAdmission(token);
       state.phase = 'unknown';
     },
     /** One-shot consumption by a future private issuer; original reservation only. */
     consume(token: SingletonReservation, proof: SingletonClosure): boolean {
       const state = reservations.get(token);
-      if (!active || !state || state.phase !== 'closed' || closures.get(proof) !== state) { return false; }
+      if (!isActive() || !state || state.phase !== 'closed' || closures.get(proof) !== state) { return false; }
       closures.delete(proof);
       return true;
     },

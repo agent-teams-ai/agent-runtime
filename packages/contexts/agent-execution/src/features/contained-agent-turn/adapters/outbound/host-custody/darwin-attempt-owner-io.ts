@@ -56,11 +56,20 @@ export function nativeExecution() {
           (event.kind === "STDOUT" ? stdout : stderr).push(event.payload); break;
         case "EXIT": {
           if (!imageSeen) {rejectImage(new Error("native child exited before provider image observation"));}
-          const signal = event.exitSignal ? darwinSignals[event.exitSignal - 1] : null;
-          if (signal === undefined) {throw new Error("unknown Darwin native exit signal");}
-          resolveExit(Object.freeze({code: event.exitCode ?? null, signal})); break;
+          resolveExit(nativeExitObservation(event)); break;
         }
         case "STREAMS": stdout.end(); stderr.end(); break;
+        case "CLOSED_READ":
+        case "HELLO":
+        case "MATERIAL_RESULT":
+        case "OBSERVATION":
+        case "PREEXEC":
+        case "REFUSED":
+        case "RELEASED":
+        case "STATUS":
+        case "TREE_CHUNK":
+        case "TREE_END":
+        case "TREE_ENTRY":
         default: break;
       }
     },
@@ -102,4 +111,10 @@ export function nativeInput(
       return enqueue();
     },
   });
+}
+
+function nativeExitObservation(event: DarwinAttemptOwnerEvent): CustodiedProviderProcessExit {
+  const signal = event.exitSignal ? darwinSignals[event.exitSignal - 1] : null;
+  if (signal === undefined) {throw new Error("unknown Darwin native exit signal");}
+  return Object.freeze({code: event.exitCode ?? null, signal});
 }

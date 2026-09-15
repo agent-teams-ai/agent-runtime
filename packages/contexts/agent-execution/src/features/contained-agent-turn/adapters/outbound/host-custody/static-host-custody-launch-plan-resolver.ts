@@ -10,6 +10,8 @@ export interface StaticHostCustodyLaunchPlan {
   readonly providerBinding: ContainedTurnProviderBinding;
 }
 
+const isRecordsArray = (value: unknown): boolean => Array.isArray(value);
+
 const bindingKey = (binding: ContainedTurnProviderBinding): string => JSON.stringify([
   binding.provider,
   binding.adapterRevision,
@@ -44,7 +46,7 @@ export const createStaticHostCustodyLaunchPlanResolver = (
   records: readonly StaticHostCustodyLaunchPlan[],
 ): HostCustodyLaunchPlanResolver => {
   assertInertHostLaunchData(records);
-  if (!Array.isArray(records)) {throw new TypeError("Host Custody launch records must be an array");}
+  if (!isRecordsArray(records)) {throw new TypeError("Host Custody launch records must be an array");}
   const byBinding = new Map<string, HostCustodyLaunchPlan>();
   for (let index = 0; index < records.length; index += 1) {
     const record = records[index]!;

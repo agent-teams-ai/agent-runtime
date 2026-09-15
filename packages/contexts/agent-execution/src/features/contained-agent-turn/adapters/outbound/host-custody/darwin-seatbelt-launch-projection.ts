@@ -35,7 +35,7 @@ export const recheckDarwinExecutable = (pin: DarwinExecutablePin): void => {
   if (current.dev !== pin.dev || current.ino !== pin.ino || current.uid !== pin.uid) {throw new TypeError("Darwin executable identity changed");}
 };
 const literal = (path: string): string => {
-  if (path.length > 1024 || resolve(path) !== path || realpathSync(path) !== path || [...path].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 || char === '"' || char === "\\")) {
+  if (path.length > 1024 || resolve(path) !== path || realpathSync(path) !== path || Array.from(path).some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 || char === '"' || char === "\\")) {
     throw new TypeError("Darwin profile path rejected");
   }
   return `"${path}"`;
@@ -69,7 +69,7 @@ export const createDarwinSeatbeltProjection = (input: Readonly<{
   installationPath?: string;
 }>): DarwinSeatbeltProjection => {
   const endpoint = Object.freeze({...input.endpoint});
-  if (endpoint.address !== "127.0.0.1" || endpoint.family !== "IPv4" || !Number.isSafeInteger(endpoint.port) ||
+  if (!isLoopbackEndpoint(endpoint) || !Number.isSafeInteger(endpoint.port) ||
       endpoint.port < 1 || endpoint.port > 65535 || input.launcher.path !== "/usr/bin/sandbox-exec" ||
       input.readPaths.length > 32 || input.readPaths.includes("/") || input.writePaths.length > 8) {throw new TypeError("Darwin route projection rejected");}
   const protectedPaths = [input.protectedRoot, input.launcher.path, input.observer.path, input.provider.path];
@@ -120,3 +120,5 @@ export const createDarwinSeatbeltProjection = (input: Readonly<{
     launcher: Object.freeze({...input.launcher}), observer: Object.freeze({...input.observer}), provider: Object.freeze({...input.provider})});
   issuedProjections.add(projection); return projection;
 };
+
+const isLoopbackEndpoint = (endpoint: {readonly address: unknown; readonly family: unknown}): boolean => endpoint.address === "127.0.0.1" && endpoint.family === "IPv4";

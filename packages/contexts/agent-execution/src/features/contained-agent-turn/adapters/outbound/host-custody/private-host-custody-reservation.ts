@@ -31,7 +31,7 @@ export interface RetainedHostCustodyWorkspaceAuthority {
 }
 
 const observeHostCustodyMountIdentity = (descriptor: number): string => {
-  const fdinfo = openSync(`/proc/self/fdinfo/${descriptor}`, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  const fdinfo = openSync(`/proc/self/fdinfo/${descriptor}`, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const buffer = Buffer.allocUnsafe(4_097);
     const bytesRead = readSync(fdinfo, buffer, 0, buffer.length, 0);

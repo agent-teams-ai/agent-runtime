@@ -1,3 +1,4 @@
+import {nativeRemoveEventListener as nativeRemove} from "./host-custody-abort-intrinsics.js";
 import { addAbortListener } from "node:events";
 import type { HostCustodyHttpHandoff as Handoff, HostCustodyHttpResourceLifetime } from "./host-custody-http-resource-lifetime.js";
 import type { LiveCustody } from "./node-provider-process-custody-state.js";
@@ -14,7 +15,6 @@ import {cutoffDarwinNativeExecution, disposeDarwinNativeExecution,
 
 import { isIssuedDarwinRouteOwner } from "./darwin-route-identity.js";
 
-const nativeRemove = EventTarget.prototype.removeEventListener;
 
 /** Private identity of a reserved execution session, never evidence of a PID or start. */
 declare const executionSession: unique symbol;
