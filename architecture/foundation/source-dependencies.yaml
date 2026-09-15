@@ -961,37 +961,6 @@ boundaries:
     - node:events
     - node:tls
     runtimeReferences: []
-- id: tooling.foundation-quality
-  dependencyMode: development
-  roots:
-  - scripts/foundation/check-native-quality.mjs
-  - scripts/foundation/check-quality-adoption.mjs
-  entrypoints:
-  - scripts/foundation/check-quality-adoption.mjs
-  allow:
-    boundaries: []
-    packages:
-    - yaml
-    builtins:
-    - node:assert/strict
-    - node:child_process
-    - node:fs/promises
-    - node:path
-    - node:url
-    runtimeReferences: []
-- id: tooling.foundation-quality-tests
-  dependencyMode: development
-  roots:
-  - scripts/foundation/check-quality-adoption.test.mjs
-  entrypoints: []
-  allow:
-    boundaries:
-    - tooling.foundation-quality
-    packages: []
-    builtins:
-    - node:assert/strict
-    - node:test
-    runtimeReferences: []
 - id: adapter.agent-execution.codex-data
   dependencyMode: runtime
   roots:

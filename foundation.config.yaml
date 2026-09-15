@@ -18,5 +18,3 @@ capabilities:
     configPath: architecture/foundation/repository-agent-workflow.yaml
   workspace.dependency-declarations:
     configPath: architecture/foundation/dependency-declarations.yaml
-  quality.source-coverage:
-    configPath: architecture/foundation/quality-source-coverage.yaml
