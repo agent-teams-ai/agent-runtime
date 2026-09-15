@@ -20,11 +20,11 @@
   ],
   "cohort": {
     "schemaVersion": 2,
-    "cohortId": "docs-2026-09-14-stable22",
+    "cohortId": "docs-2026-09-15-stable23",
     "channel": "stable",
-    "recordDigest": "sha256:88d1d8f31cc780f5a911088d17038c2680483559bf9263ae7fef6fb1312251e1",
-    "qualificationEventDigest": "sha256:82f5a35615004daa3c08756dced750cba56bd8896b82e0c965f614f3e54f8f8f",
-    "eligibleAfter": "2026-09-14T16:46:59Z",
+    "recordDigest": "sha256:287fca0b66c212e93d865b3a54fcb681eda12f4f8954c077a59148a348a361c9",
+    "qualificationEventDigest": "sha256:d65de3c1885c948dcdfa9b7fe79e9638ed74542ac32b85097ece90b5e02866d9",
+    "eligibleAfter": "2026-09-14T23:46:38Z",
     "upgradeFrom": [
       "docs-2026-09-11-stable20"
     ],
@@ -49,8 +49,8 @@
         "integrity": "sha512-C9AHrx68EqtdJ3kUAyLu6mCYnsVU63QSk4sQqWfoTijODqg9mMktaUGcjsc1G+BYqupJUI0QhgwCcPilg+aonA=="
       },
       "engineeringFoundation": {
-        "version": "1.3.1",
-        "integrity": "sha512-7yU/SyHhzlDJUZSw05lHcb2F1cqo5kJyL7Tf0RFFQJUMlW3Dh7Mw/hXCxXXxqEXk3xU67SBWRmarXs+psIM+Dg=="
+        "version": "1.3.3",
+        "integrity": "sha512-WNHEi2A3Hx7KvHha3hJapTQn4u6m5DLk/VkBuLe4Y6EeosMsCJazBJ8gfOdcbupid9qjaEeT/0RNDhlIBs2eVw=="
       }
     },
     "workflow": {
@@ -73,7 +73,7 @@
     "runtime": {
       "node": ">=24.18.0 <25",
       "pnpm": ">=11.17.0 <12",
-      "runtimeClosureDigest": "sha256:d80791a5a3e55c69c8cdef0f6a3ae0d1f5bf74c1f0883e7f0a4d91e663dc0cac"
+      "runtimeClosureDigest": "sha256:6e768aa2e3be45c358d27d6a8a234f10806ba9ac22f1a003b36396ecc41ae157"
     }
   }
 }
