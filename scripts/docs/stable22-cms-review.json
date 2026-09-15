@@ -1,0 +1,7 @@
+{
+  "standardRepository": "agent-teams-ai/get-modular",
+  "pinnedRevision": "669a750d8db451e04f075cdeb36576c6606fba6e",
+  "upstreamRevision": "ac49bb3374946330ec820591f8195a22d2c90900",
+  "upstreamSha256": "d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f",
+  "review": "Complete canonical document read and compared through gh at exact upstream revision. Only delta is reciprocal Agent Runtime PR #168 passive setup and ordinary-session adoption evidence; no normative contract or composition change. Existing retained pin remains explicitly acknowledged upstream and is preserved. Stable22 changes development tooling only, with no new production composition boundaries."
+}

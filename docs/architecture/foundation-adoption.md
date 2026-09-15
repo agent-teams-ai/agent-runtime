@@ -32,9 +32,10 @@ capability below has an AR-owned configuration and executes in `pnpm check`.
 | `quality.executable-specifications` | enabled for synthetic architecture evidence | The ADR-0006 JSON oracle, ADR-0010 disposition, independent evaluator, property/mutation checks, and XState path evidence support accepted ADR-0009 and ADR-0010 authority; they do not bind or implement a production runtime or establish implementation/deployment qualification |
 | `documentation.local-references` | enabled | Local links and GitHub anchors under `docs`; the root README only points into that governed tree |
 | `governance.architecture-decisions` | enabled | Stable ADR frontmatter, lifecycle index, and immutable accepted baseline |
-| unified documentation protocol | adoption prepared | Portable profile v3 and Authoring profile v3, strict frozen-document sidecar, executable portable Skill, and byte-preservation gate; published Foundation 1.2.0 / Docs 0.6.0 / managed adapter 0.2.7 are pinned in the manifest and registry lockfile. Qualified stable20 integration and managed state were produced by the supported stable19 source-owner upgrade; required current-head CI and central admission remain release gates |
+| unified documentation protocol | stable23 installed | Portable profile v3, strict frozen-document sidecar, executable portable Skill and byte-preservation gate; published Foundation 1.3.3 / Docs 0.6.0 / managed adapter 0.2.8 are pinned in the manifest and registry lockfile |
 | `quality.suppression-governance` | enabled | Inline suppressions require exact, expiring AR-owned waivers; security and access-control suppressions are non-waivable |
-| TypeScript and Oxlint presets | enabled | Node correctness plus the agreed production and test maintainability budgets |
+| `quality.source-coverage` and canonical type-aware lint | pending | The first installed run found existing protected-rule debt; Foundation rejects baselines and production overrides for those rules, so activation moves to a focused remediation PR |
+| TypeScript and Oxlint base presets | enabled | Existing Node correctness and consumer-owned production/test maintainability budgets remain blocking |
 | deterministic scaffolding | configured and consumer-qualified | Four exact bounded-context package identities are owned by immutable ADR-0005; synthetic Plan, Apply, and generated-package checks are blocking |
 | `package.public-api-compatibility` | gated | Enable when an independently consumed TypeScript package has release-owned API evidence |
 | `contract.protobuf-evolution` | gated | Enable when AR accepts its first Published Language Protobuf module and released descriptor |
@@ -71,6 +72,23 @@ and experiment evidence use 800, 250, 30, 5, and 6. Generated and vendored code
 is excluded. A temporary exception must be represented by a supported,
 owner-bound and expiring waiver; silently weakening the shared preset is
 forbidden.
+
+## Type-aware quality activation
+
+The exact `oxlint-tsgolint` toolchain is installed, but Agent Runtime does not
+claim active `quality.source-coverage` adoption in this checkpoint. The first
+full installed route on commit `a2294ea81f82e5fd18eab8c5bac53551366efa1b`
+reported 1,384 existing protected-rule diagnostics in the Ubuntu `check` job.
+Engineering Foundation correctly requires its typed and maintainability rules
+at error severity and rejects production overrides that weaken them. Its public
+route also requires direct execution, so an advisory wrapper or mutable debt
+baseline cannot be presented as active adoption.
+
+The follow-up must remediate coherent owner-local slices until the unmodified
+public route passes. Each slice keeps the existing product contract and focused
+tests, and no production root may be excluded. Until then, the current blocking
+base lint, typecheck, source-dependency checks, suppression governance, product
+tests and platform jobs remain authoritative.
 
 ## Bounded-context scaffolding
 

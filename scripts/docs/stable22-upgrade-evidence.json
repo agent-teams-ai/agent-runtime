@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "command": "consumer.upgrade",
+  "outcome": "upgraded",
+  "issues": [],
+  "authority": {
+    "repository": "agent-teams-ai/.github",
+    "path": "governance/docs-qualified-cohorts.json",
+    "revision": "5f123db3bf393f403f06d918095ae71f4f030f3c",
+    "cohortId": "docs-2026-09-14-stable22",
+    "recordDigest": "sha256:88d1d8f31cc780f5a911088d17038c2680483559bf9263ae7fef6fb1312251e1",
+    "qualificationEventDigest": "sha256:82f5a35615004daa3c08756dced750cba56bd8896b82e0c965f614f3e54f8f8f"
+  },
+  "receipt": {
+    "schemaVersion": 1,
+    "protocol": "agent-teams.repository-mutation.known-file/v1",
+    "planDigest": "sha256:0d0d66626e3868437a94b4a8e75631a429ef5750547599ac3057d80aec764a88",
+    "outcome": "applied",
+    "operations": [
+      {
+        "path": "architecture/foundation/docs-consumer-integration.json",
+        "outcome": "replaced",
+        "resultDigest": "sha256:343cd2e012c1036b2b1deddfb52c1f5040dbd8817a471870f543d7e86185e802"
+      },
+      {
+        "path": "architecture/foundation/docs-protocol-managed-state.json",
+        "outcome": "replaced",
+        "resultDigest": "sha256:cdadfaf7bf4f9424a236f2a5c90cbd84ecc9b0e81f078c34df352fca1ba6802a"
+      },
+      {
+        "path": "package.json",
+        "outcome": "replaced",
+        "resultDigest": "sha256:52974e1e57dfb1c993ce78b30a2ba3f47e74bc91b0634f70eed25ed5d3a0dfb0"
+      },
+      {
+        "path": "pnpm-lock.yaml",
+        "outcome": "replaced",
+        "resultDigest": "sha256:684b7169bde1f56e716cefacd6dce38bce9a47fef83346508d99e27cf315c2ac"
+      },
+      {
+        "path": "pnpm-workspace.yaml",
+        "outcome": "replaced",
+        "resultDigest": "sha256:5b375eeae22d8391d1b57092916432cf627b3989af5092d1aadf3825d68a9c02"
+      }
+    ],
+    "receiptDigest": "sha256:4adfad1234fb383d3355ba60b1f2056d5cf5fdcb0b729bef235091eb3bb50a3a"
+  }
+}

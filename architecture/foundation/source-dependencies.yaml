@@ -11,6 +11,7 @@ packageRoots:
 - packages/platform/filesystem-custody
 rootPackage: true
 governedRoots:
+- packages/platform/filesystem-custody/native
 - experiments
 - packages/apps/embedded-runtime/src
 - packages/apps/embedded-runtime/tests
@@ -185,6 +186,7 @@ boundaries:
 - id: adapter.agent-execution.host-custody
   dependencyMode: runtime
   roots:
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/native
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-contracts.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-deadline.ts
@@ -280,8 +282,6 @@ boundaries:
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-launch-platform-material.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/native-host-custody-workspace-authority.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/native-host-custody-workspace-entrypoint.ts
-  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/native/build-darwin-attempt-owner.mjs
-  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/native/build-darwin-owned-image.mjs
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-custody-http-resources.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-inert-record.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-containment.ts
@@ -767,6 +767,7 @@ boundaries:
   dependencyMode: runtime
   roots:
   - packages/platform/filesystem-custody/src
+  - packages/platform/filesystem-custody/native
   entrypoints:
   - packages/platform/filesystem-custody/src/index.ts
   - packages/platform/filesystem-custody/src/composition.ts
