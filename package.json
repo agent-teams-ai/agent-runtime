@@ -10,9 +10,9 @@
     "pnpm": "11.18.0"
   },
   "scripts": {
-    "check": "pnpm lint && pnpm architecture:get-modular-adoption && pnpm test:get-modular-adoption && pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm test:consumer-modules && pnpm architecture:consumer-modules && pnpm test:ar2-contract && pnpm architecture:runtime-setup-l0-evidence && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:check && pnpm typecheck && pnpm test",
+    "check": "pnpm lint && pnpm test:ar-c0 && pnpm architecture:get-modular-adoption && pnpm test:get-modular-adoption && pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm test:consumer-modules && pnpm architecture:consumer-modules && pnpm test:ar2-contract && pnpm architecture:runtime-setup-l0-evidence && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:check && pnpm typecheck && pnpm test",
     "check:changed": "agent-teams-foundation agent-workflow changed --consumer .",
-    "check:fast": "pnpm lint && pnpm architecture:get-modular-adoption && pnpm test:get-modular-adoption && pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm test:consumer-modules && pnpm architecture:consumer-modules && pnpm architecture:runtime-setup-l0-evidence && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:build && pnpm typecheck",
+    "check:fast": "pnpm lint && pnpm test:ar-c0 && pnpm architecture:get-modular-adoption && pnpm test:get-modular-adoption && pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm test:consumer-modules && pnpm architecture:consumer-modules && pnpm architecture:runtime-setup-l0-evidence && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:build && pnpm typecheck",
     "docs:check": "agent-teams-docs check --consumer . --profile architecture/foundation/docs-protocol.yaml",
     "docs:doctor": "agent-teams-docs doctor --consumer . --profile architecture/foundation/docs-protocol.yaml",
     "docs:find": "agent-teams-docs find --consumer . --profile architecture/foundation/docs-protocol.yaml",
@@ -77,7 +77,8 @@
     "test:contained-turn:acceptance": "pnpm --filter @agent-teams/agent-execution run test:contained-turn:acceptance",
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false && tsc --project tsconfig.synthetic-oracle.json --noEmit --pretty false",
     "architecture:get-modular-adoption": "node scripts/architecture/check-get-modular-adoption.mjs",
-    "test:get-modular-adoption": "node --test scripts/architecture/check-get-modular-adoption.test.mjs"
+    "test:get-modular-adoption": "node --test scripts/architecture/check-get-modular-adoption.test.mjs",
+    "test:ar-c0": "node scripts/architecture/validate-ar-c0.mjs && node --test scripts/architecture/validate-ar-c0.test.mjs"
   },
   "dependencies": {
     "zod": "catalog:"

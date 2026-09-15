@@ -1,0 +1,419 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agent-runtime:c0:ar-owned-lifetime:1",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "contractRevision",
+    "status",
+    "source",
+    "allowedConsumers",
+    "prohibitions",
+    "repositoryReferences",
+    "cms",
+    "inventory",
+    "ci",
+    "ownership",
+    "waitPolicy",
+    "verdicts",
+    "delivery",
+    "evidence"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "number"
+    },
+    "contractRevision": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft-input-blocked",
+        "frozen-c0-only"
+      ]
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "repository",
+        "commit",
+        "tree",
+        "detached",
+        "planPath",
+        "planSha256",
+        "qualityStandardPath",
+        "qualityStandardSha256",
+        "planReview"
+      ],
+      "properties": {
+        "planReview": {
+          "type": "object",
+          "required": [
+            "result",
+            "observedSha256",
+            "requiredBytesRead",
+            "reason"
+          ]
+        }
+      }
+    },
+    "allowedConsumers": {
+      "type": "array"
+    },
+    "prohibitions": {
+      "type": "array"
+    },
+    "repositoryReferences": {
+      "type": "object"
+    },
+    "cms": {
+      "type": "object",
+      "required": [
+        "activeProfile",
+        "before",
+        "after",
+        "deltaPath",
+        "deltaSha256",
+        "fullDocumentBytesEqual",
+        "normativeContractDelta",
+        "review",
+        "upstreamFreshness",
+        "migration"
+      ]
+    },
+    "inventory": {
+      "type": "object",
+      "required": [
+        "packages",
+        "profiles",
+        "lock",
+        "archives",
+        "workspace",
+        "coverage"
+      ]
+    },
+    "ci": {
+      "type": "object",
+      "required": [
+        "workflow",
+        "sha256",
+        "job",
+        "command",
+        "otherJobs",
+        "requiredContext",
+        "currentTool",
+        "baseSelection",
+        "SDKAdmission",
+        "checks",
+        "trustedAnchor"
+      ]
+    },
+    "ownership": {
+      "type": "object",
+      "required": [
+        "scopeCandidates",
+        "admission",
+        "requiredDistinctScopes",
+        "provenDistinctScopes",
+        "apiFreeze",
+        "responsibilities",
+        "owners",
+        "constructionAllSettledDebt",
+        "conditionalConstraints",
+        "prerequisiteRule"
+      ],
+      "properties": {
+        "owners": {
+          "type": "array",
+          "minItems": 11,
+          "items": {
+            "type": "object",
+            "required": [
+              "actionId",
+              "scope",
+              "acquire",
+              "strongRetentionOwner",
+              "resourceEffectOwner",
+              "handoff",
+              "cleanup",
+              "rawCompletion",
+              "errorPending",
+              "retry",
+              "recovery",
+              "prerequisites",
+              "evidence",
+              "prerequisiteOutcome"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "actionId": {
+                "type": "string"
+              },
+              "scope": {
+                "type": "string"
+              },
+              "acquire": {
+                "type": "string"
+              },
+              "strongRetentionOwner": {
+                "type": "string"
+              },
+              "resourceEffectOwner": {
+                "type": "string"
+              },
+              "handoff": {
+                "type": "string"
+              },
+              "cleanup": {
+                "type": "string"
+              },
+              "rawCompletion": {
+                "type": "string"
+              },
+              "errorPending": {
+                "type": "string"
+              },
+              "retry": {
+                "type": "string"
+              },
+              "recovery": {
+                "type": "string"
+              },
+              "prerequisites": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "evidence": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "prerequisiteOutcome": {
+                "type": "string",
+                "enum": [
+                  "host-prerequisite-rule",
+                  "not-applicable"
+                ]
+              }
+            }
+          }
+        },
+        "scopeCandidates": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "counted",
+              "reason"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "counted": {
+                "type": "boolean"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "waitPolicy": {
+      "type": "object",
+      "required": [
+        "currentInnerWaitMs",
+        "currentOuterWaitMs",
+        "proposedOrdinaryWaitMs",
+        "selectedOrdinaryWaitMs",
+        "status",
+        "wrapInnerFacade",
+        "path",
+        "ownerIdentity",
+        "rawSeam",
+        "errorCarrier",
+        "deadlines",
+        "futureCohortRules",
+        "futureRejectingFixtures"
+      ]
+    },
+    "verdicts": {
+      "type": "object",
+      "required": [
+        "K1",
+        "A1",
+        "A2",
+        "ARSourceInventory",
+        "SDKActivation",
+        "CMSComparison",
+        "C0Freeze"
+      ],
+      "properties": {
+        "K1": {
+          "type": "object",
+          "required": [
+            "result",
+            "reason"
+          ],
+          "properties": {
+            "result": {
+              "type": "string",
+              "enum": [
+                "go",
+                "blocked"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "A1": {
+          "type": "object",
+          "required": [
+            "result",
+            "reason"
+          ],
+          "properties": {
+            "result": {
+              "type": "string",
+              "enum": [
+                "go",
+                "blocked"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "A2": {
+          "type": "object",
+          "required": [
+            "result",
+            "reason"
+          ],
+          "properties": {
+            "result": {
+              "type": "string",
+              "enum": [
+                "go",
+                "blocked"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "ARSourceInventory": {
+          "type": "object",
+          "required": [
+            "result",
+            "reason"
+          ],
+          "properties": {
+            "result": {
+              "type": "string",
+              "enum": [
+                "go",
+                "blocked"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "SDKActivation": {
+          "type": "object",
+          "required": [
+            "result",
+            "reason"
+          ],
+          "properties": {
+            "result": {
+              "type": "string",
+              "enum": [
+                "go",
+                "blocked"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "CMSComparison": {
+          "type": "object",
+          "required": [
+            "result",
+            "reason"
+          ],
+          "properties": {
+            "result": {
+              "type": "string",
+              "enum": [
+                "go",
+                "blocked"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "C0Freeze": {
+          "type": "object",
+          "required": [
+            "result",
+            "reason"
+          ],
+          "properties": {
+            "result": {
+              "type": "string",
+              "enum": [
+                "go",
+                "blocked"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "delivery": {
+      "type": "object",
+      "required": [
+        "newAdoptions",
+        "publicationOrder",
+        "separateAuthority",
+        "unresolved"
+      ]
+    },
+    "evidence": {
+      "type": "object"
+    }
+  }
+}
