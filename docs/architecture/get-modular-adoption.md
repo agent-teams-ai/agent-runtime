@@ -269,7 +269,7 @@ the seven-port direct Pure DI boundary remains `not-adopted`.
 
 Current paired evidence remains outstanding: the retained v2 receipt predates
 these tracked inputs and cannot prove this migration. The controller must commit
-all final non-report inputs, capture new Linux x64 and Darwin arm64 receipts on
+all final bounded Runtime Setup inputs, capture new Linux x64 and Darwin arm64 receipts on
 that same commit, merge through the existing command below, and run the required
 gates. Do not edit receipt identities manually or claim full migration completion
 from focused checker results. Preserve the old generated report outside the
@@ -311,7 +311,7 @@ following bounded transition contract:
    shape/digests to make current source pass. Current artifact equality cannot
    require changed composition bytes to equal historical capture bytes.
 4. Preserve all unchanged behavior gates, source-boundary prohibitions, full
-   input closure, and strict capture rules. Adoption v2 requires zero skipped
+   bounded input closure, and strict capture rules. Adoption v2 requires zero skipped
    applicable tests and zero unaccounted platform skips across the required pair.
    Historical validators retain their original zero-skip rules. Add rejecting fixtures for
    missing/wrong adoption authority, trace drift, altered historical evidence,
@@ -334,8 +334,8 @@ original source closure. Current specification counts cannot redefine that recor
 
 The current gate requires a new `runtime-setup-assembly-adoption-v2-evidence.json`
 under `docs/spikes`. Its absence keeps current evidence pending. V2 binds ADR-0015,
-the historical records, current construction traces and the full tracked source
-input closure to exactly two receipts: Linux x64 and Darwin arm64, both using
+the historical records, current construction traces and a bounded tracked Runtime
+Setup input closure to exactly two receipts: Linux x64 and Darwin arm64, both using
 Node `v24.18.0` and pnpm `11.18.0`. The two original explicit Node test argv lists
 are retained in the package-local `scripts/run-package-tests.mjs`; ordinary
 package checks and capture share that launcher. It runs clean, typecheck, build
@@ -400,23 +400,65 @@ additional input exclusion is required.
 
 Commit the complete implementation as source revision R before either final
 capture. Capture both targets at R, then create delivery revision D by adding
-only the report. The report alone is excluded from the source closure to avoid
-self-reference; every other tracked path, mode and byte, including tools' source,
-locks, manifests, tests and native recipes, must still match R. Clean CI needs
-only the delivered report and full Git object closure for R and the required
-historical revisions. Bundled receipts do not replace historical source readback.
+only the report. The development-only
+[`runtime-setup-l0-evidence-v2-inputs.mjs`](../../scripts/architecture/runtime-setup-l0-evidence-v2-inputs.mjs)
+owns policy `runtime-setup-v2-inputs/1`, shared by capture, merge and check.
+It covers all six evidence package roots, including sources, tests, launcher,
+reporter, assets, configuration, Agent Execution asset-copy/native recipes and
+the entire Filesystem Custody native directory. It also covers root manifests,
+lock/workspace/tool and TypeScript configuration; architecture evidence/checker
+helpers (including platform-site and AR-2 custody); consumer profiles, schema,
+retained standard/package archives; FMS/source policy, authority registry and
+explicit accepted authority inputs; this adoption record (read by the checker);
+qualification/readiness and retained L0/v1 reports. Architecture checker and
+authority dependencies are enumerated as files, not directory-wide roots.
+The policy declares required roots and files explicitly. New dependencies outside
+these roots require a reviewed policy update before capture.
+
+Cleanliness, revision comparison and hashing use the same literal Git pathspecs.
+NUL-delimited inventory is sorted and deduplicated by path and binds each regular
+file's path, Git mode and SHA-256. Missing required inputs, symlinks, submodules,
+additions, removals, renames and mode/byte changes reject evidence. Git diff
+status 0 accepts equality, status 1 rejects drift; other Git errors propagate as
+infrastructure failures. Receipt inventories cannot omit or add inputs, and old
+or mixed policy identities cannot satisfy the current gate.
+
+The generated v2 report is outside the closure to avoid self-reference.
+Unrelated tracked files (for example the root README and unrelated files inside
+`scripts/architecture` or `docs/decisions`), unrelated untracked files
+and report-only edits/commits do not invalidate an otherwise identical capture.
+Repository-wide Foundation governance checks remain independent and unchanged.
+Clean CI still needs the report and Git object closure for R and the required
+historical revisions; bundled receipts do not replace historical source readback.
 The rejecting fixtures deliver a report-only commit into a fresh clone, delete
 the original capture tree and validate against R. Missing or mutated bundled
-bytes, mixed source receipts and other tracked input changes must fail. The
+bytes, mixed source receipts and changes inside the bounded closure must fail. The
 existing architecture gate runs these fixtures via
 `runtime-setup-l0-evidence-validation.test.mjs`.
+
+The retained v2 report predates this policy and remains stale; its receipts and
+inventories are preserved byte-for-byte, without filtering or relabeling. Current
+paired evidence is pending. After committing the policy and all included inputs,
+run the capture commands above on Linux x64 and Darwin arm64 at that same commit,
+then merge the fresh receipts. This bounded-identity change does not itself
+establish current platform evidence or adoption completion.
+The bounded-policy review used the current retained standard pin
+`669a750d8db451e04f075cdeb36576c6606fba6e`, whose complete bytes match the profile's
+SHA-256 `e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`.
+On 2026-09-15, the orchestrator verified with `gh` that current get-modular main
+is `610e595fe1f2e893d01ee44ceecd6349b5a3c8ce`, four commits ahead of the retained
+pin. The only `common-assembly.md` delta is the reciprocal Agent Runtime
+PR #168 ledger paragraph, which explicitly retains consumer standard revision
+`669a750d` and limits accepted passive scope. No pin migration or shared-behavior
+change is required for this bounded evidence-policy patch. Adoption remains
+pending for fresh Linux x64 and Darwin arm64 receipts.
 
 Implementation review re-read the pinned Consumer Module Standard and compared
 it with the locally retained upstream `03a7df64bc5e9939f7b51694a80a7f3d61453f98`
 snapshot: both complete documents retain SHA-256
 `ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d`.
-Live upstream refresh was unavailable in the implementation sandbox; delivery
-must recheck it before claiming a current upstream comparison. V2 changes evidence
+That historical comparison is supplemented by the current upstream review above.
+V2 changes evidence
 collection only, with no new composition boundary or shared contract.
 
 Delivery remains pending until focused gates, fast/full integrated-source checks,
@@ -466,7 +508,8 @@ provenance, and the exact final evidence and gates. The retained v2 report
 records its own exact source identity and platform receipts. Before delivery,
 validate that report against the complete implementation and documentation
 checkpoint with `pnpm architecture:runtime-setup-l0-evidence`. If tracked inputs
-have changed, refresh the supported paired capture. A report-only commit may
+in the bounded Runtime Setup closure have changed, refresh the supported paired
+capture. A report-only commit may
 reuse the authenticated source only under the existing validator rules.
 
 A consumer-local rollback must be one governed release replacement. Restore one

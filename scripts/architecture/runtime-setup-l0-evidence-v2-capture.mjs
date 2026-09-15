@@ -1,3 +1,4 @@
+import { v2Inputs } from "./runtime-setup-l0-evidence-v2-inputs.mjs";
 import {historicalSpecRevision} from "./runtime-setup-l0-evidence-historical.mjs";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -18,29 +19,12 @@ const git = (root, ...args) => execFileSync("git", args, {cwd: root, encoding: "
   env: {...process.env, GIT_NO_LAZY_FETCH: "1", GIT_OPTIONAL_LOCKS: "0"}}).trimEnd();
 export function identity(root, sourceRevision = git(root, "rev-parse", "HEAD")) {
   assert.match(sourceRevision, /^[a-f0-9]{40}$/u);
-  // Full tracked repository closure (including launcher, reporter, manifests, locks,
-  // native recipes, authority and rejecting tests); only the new output is excluded.
-  const pathspec = [".", `:(exclude)${v2ReportPath}`];
-  assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all", "--", ...pathspec), "", "capture inputs must be committed and clean");
-  try {
-    git(root, "diff", "--quiet", sourceRevision, "--", ...pathspec);
-  } catch (error) {
-    if (error.status !== 1) {throw error;}
-    assert.fail("source/input mismatch");
-  }
-  const entries = git(root, "ls-tree", "-r", sourceRevision).split("\n")
-    .filter(entry => entry.split("\t")[1] !== v2ReportPath);
-  const inputs = entries.map(entry => {
-    const [meta, path] = entry.split("\t"), [mode, type] = meta.split(" ");
-    assert.equal(type, "blob");
-    assert.ok(["100644", "100755"].includes(mode), `non-regular input: ${path}`);
-    return {path, mode, sha256: sha256(readFileSync(resolve(root, path)))};
-  });
+  const {inputPolicy, inputs} = v2Inputs(root, sourceRevision);
   const manifest = JSON.parse(readFileSync(resolve(root, "packages/apps/embedded-runtime/package.json")));
   assert.equal(manifest.scripts.check, checkCommand, "altered check chain");
   assert.equal(manifest.scripts.test, testCommand, "altered test command");
   validatePlatformSites(root);
-  return {sourceRevision, inputs, runner: {path: runner, sha256: sha256(readFileSync(resolve(root, runner)))},
+  return {sourceRevision, inputPolicy, inputs, runner: {path: runner, sha256: sha256(readFileSync(resolve(root, runner)))},
     reporter: {path: reporter, sha256: sha256(readFileSync(resolve(root, reporter)))}};
 }
 function observedTools(root) {
