@@ -1,0 +1,1166 @@
+{
+  "schemaVersion": 1,
+  "contractRevision": "ar-c0-be96f01e-r2",
+  "status": "frozen-c0-only",
+  "source": {
+    "repository": "agent-teams-ai/agent-runtime",
+    "commit": "be96f01ea54ec7d2ec0156774e3dfb75fac46803",
+    "tree": "821135f9e4c4585db639e5139468829396e966de",
+    "detached": true,
+    "planPath": "architecture/c0/ar-owned-lifetime/evidence/sdk-and-owned-lifetime-implementation-plan.md",
+    "planSha256": "e025978dcf3cfac12b7795fa3aafc96f06838620e124df4cc091ebee45352864",
+    "qualityStandardPath": "architecture/c0/ar-owned-lifetime/evidence/engineering-quality-standard.md",
+    "qualityStandardSha256": "8346f1a448f2c1afc0ee7b0aded338d1894f893c763836a17b79422515077d8b",
+    "planReview": {
+      "result": "go",
+      "observedSha256": "e025978dcf3cfac12b7795fa3aafc96f06838620e124df4cc091ebee45352864",
+      "requiredBytesRead": true,
+      "reason": "Exact final e025978d bytes supplied during continuation and reviewed, including section 4 go/blocked matrix, S3 external anchor, sections 6-7 transition/retention/handoff/wait constraints and delivery DAG. Earlier ef336219 input is superseded."
+    }
+  },
+  "allowedConsumers": [
+    "AR C0 validation and orchestrator review",
+    "EF S1 surface-matrix input (AR facts only)",
+    "AR A3 SDK planning (activation pending)"
+  ],
+  "prohibitions": [
+    "production runtime changes",
+    "new ownership package or lifecycle state machine",
+    "SDK analyzer implementation",
+    "public exports/dependency/lock/workflow changes",
+    "pending adoption activation",
+    "live provider/auth/agent/project experiments",
+    "applying old-ar-c0.preserved.patch"
+  ],
+  "repositoryReferences": {
+    "AR": "be96f01ea54ec7d2ec0156774e3dfb75fac46803",
+    "GM": "ac49bb3374946330ec820591f8195a22d2c90900",
+    "EF": "eadd117f98e8b93318426ab9d77d5890aab2e15e",
+    "XF": "6379c8d3be3b9946f9ef1dc168cb8272dd726078",
+    "authority": "Other repository SHAs are exact plan inputs, not independently authenticated local integration bases. Their C0 artifacts remain separately authoritative; no copied API or SDK envelope."
+  },
+  "cms": {
+    "activeProfile": "architecture/get-modular/consumer-profile.json",
+    "before": {
+      "repository": "agent-teams-ai/get-modular",
+      "path": "docs/architecture/common-assembly.md",
+      "anchor": "consumer-module-standard",
+      "decision": "ADR-0026",
+      "commit": "669a750d8db451e04f075cdeb36576c6606fba6e",
+      "sha256": "e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553",
+      "evidencePath": "architecture/get-modular/evidence/consumer-module-standard.md"
+    },
+    "after": {
+      "commit": "ac49bb3374946330ec820591f8195a22d2c90900",
+      "path": "docs/architecture/common-assembly.md",
+      "evidencePath": "architecture/c0/ar-owned-lifetime/evidence/common-assembly-ac49bb33.md",
+      "sha256": "d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f"
+    },
+    "deltaPath": "architecture/c0/ar-owned-lifetime/evidence/cms-delta.diff",
+    "deltaSha256": "d22d933840bf7826d74ecce20843986be22ea7e8eb325d9e63a1cb0061a53b09",
+    "fullDocumentBytesEqual": false,
+    "normativeContractDelta": "no-op: only reciprocal AR PR 168 adoption reference replaces planned-consumer paragraph; requirements, API, ownership and rejecting gates unchanged",
+    "review": "Complete 358-line retained and 363-line supplied upstream documents read and compared, including execution/Promise, returned-product custody, and acceptance sections. No shared behavior changed in this C0. Historical ordinary-session-pin-review is not active authority.",
+    "upstreamFreshness": "unverified: resumed retained ac49bb33 snapshot matches supplied plan; fresh gh needs GH_TOKEN; sandbox denied api.github.com and raw.githubusercontent.com. Do not claim a new remote-main measurement.",
+    "migration": "pending for later owning adoption PR: authenticate current remote and reviewed exact bytes; migrate active pin/evidence and rejecting checks together. Existing active scoped adoption stays at 669a750d; no new ownership adoption."
+  },
+  "inventory": {
+    "packages": [
+      {
+        "manifest": "package.json",
+        "sha256": "42fe3cc72a9e09ca77528ed57dbb3d0a8c61d99e2b26528057bb4b6f0f709615",
+        "name": "@vioxen/agent-runtime",
+        "version": "0.0.0",
+        "private": true,
+        "classification": "private-tooling-root-no-supported-sdk",
+        "exports": null,
+        "files": [],
+        "main": null,
+        "types": null,
+        "bin": null,
+        "branches": [],
+        "activation": "pending",
+        "notes": "No exports map on private unpublished root: no full-SDK or deep-import coverage claim."
+      },
+      {
+        "manifest": "packages/apps/embedded-runtime/package.json",
+        "sha256": "d654e30e7d002af040e880ad3a7d1430e07f055318ff594023049bb65d2cf7af",
+        "name": "@agent-teams/embedded-runtime",
+        "version": "0.0.0",
+        "private": true,
+        "classification": "private-package-with-governed-development-entrypoints",
+        "exports": {
+          ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+          },
+          "./composition": {
+            "types": "./dist/composition.d.ts",
+            "import": "./dist/composition.js"
+          },
+          "./scripts/run-package-tests.mjs": "./scripts/run-package-tests.mjs"
+        },
+        "files": [
+          "dist"
+        ],
+        "main": null,
+        "types": null,
+        "bin": null,
+        "branches": [
+          {
+            "subpath": ".",
+            "shape": "ordered-types-import",
+            "resolutionTree": {
+              "types": "./dist/index.d.ts",
+              "import": "./dist/index.js"
+            },
+            "observer": "EF existing API Extractor for declarations; S1 ordered branch observer required",
+            "coverage": "incomplete"
+          },
+          {
+            "subpath": "./composition",
+            "shape": "ordered-types-import",
+            "resolutionTree": {
+              "types": "./dist/composition.d.ts",
+              "import": "./dist/composition.js"
+            },
+            "observer": "EF existing API Extractor for declarations; S1 ordered branch observer required",
+            "coverage": "incomplete"
+          },
+          {
+            "subpath": "./scripts/run-package-tests.mjs",
+            "shape": "static-esm-file",
+            "resolutionTree": "./scripts/run-package-tests.mjs",
+            "observer": "EF static runtime export observation; positive fixture and packed membership not verified in AR C0",
+            "coverage": "incomplete"
+          }
+        ],
+        "activation": "pending",
+        "notes": "Private flag does not erase importable development obligations; packed artifact and observer fixture coverage remain A3/EF obligations."
+      },
+      {
+        "manifest": "packages/contexts/agent-execution/package.json",
+        "sha256": "c4b74da6c503d5f35b68cb03308c241accb00f05a38e2485571a8a4ee29c6143",
+        "name": "@agent-teams/agent-execution",
+        "version": "0.0.0",
+        "private": true,
+        "classification": "private-package-with-governed-development-entrypoints",
+        "exports": {
+          ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+          },
+          "./composition": {
+            "types": "./dist/composition.d.ts",
+            "import": "./dist/composition.js"
+          }
+        },
+        "files": [
+          "dist"
+        ],
+        "main": null,
+        "types": null,
+        "bin": null,
+        "branches": [
+          {
+            "subpath": ".",
+            "shape": "ordered-types-import",
+            "resolutionTree": {
+              "types": "./dist/index.d.ts",
+              "import": "./dist/index.js"
+            },
+            "observer": "EF existing API Extractor for declarations; S1 ordered branch observer required",
+            "coverage": "incomplete"
+          },
+          {
+            "subpath": "./composition",
+            "shape": "ordered-types-import",
+            "resolutionTree": {
+              "types": "./dist/composition.d.ts",
+              "import": "./dist/composition.js"
+            },
+            "observer": "EF existing API Extractor for declarations; S1 ordered branch observer required",
+            "coverage": "incomplete"
+          }
+        ],
+        "activation": "pending",
+        "notes": "Private flag does not erase importable development obligations; packed artifact and observer fixture coverage remain A3/EF obligations."
+      },
+      {
+        "manifest": "packages/contexts/provider-access/package.json",
+        "sha256": "16f99b9c4468594593d55c2554660b298923f4344312895fe30cc9d0c3969c59",
+        "name": "@agent-teams/provider-access",
+        "version": "0.0.0",
+        "private": true,
+        "classification": "private-package-with-governed-development-entrypoints",
+        "exports": {
+          ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+          },
+          "./composition": {
+            "types": "./dist/composition.d.ts",
+            "import": "./dist/composition.js"
+          }
+        },
+        "files": [
+          "dist"
+        ],
+        "main": null,
+        "types": null,
+        "bin": null,
+        "branches": [
+          {
+            "subpath": ".",
+            "shape": "ordered-types-import",
+            "resolutionTree": {
+              "types": "./dist/index.d.ts",
+              "import": "./dist/index.js"
+            },
+            "observer": "EF existing API Extractor for declarations; S1 ordered branch observer required",
+            "coverage": "incomplete"
+          },
+          {
+            "subpath": "./composition",
+            "shape": "ordered-types-import",
+            "resolutionTree": {
+              "types": "./dist/composition.d.ts",
+              "import": "./dist/composition.js"
+            },
+            "observer": "EF existing API Extractor for declarations; S1 ordered branch observer required",
+            "coverage": "incomplete"
+          }
+        ],
+        "activation": "pending",
+        "notes": "Private flag does not erase importable development obligations; packed artifact and observer fixture coverage remain A3/EF obligations."
+      },
+      {
+        "manifest": "packages/contexts/runtime-configuration/package.json",
+        "sha256": "5c5d561eecb4ad9323a310ebcb454b62af31e2e5d1929cd365940b4d1ae059c3",
+        "name": "@agent-teams/runtime-configuration",
+        "version": "0.0.0",
+        "private": true,
+        "classification": "private-package-with-governed-development-entrypoints",
+        "exports": {
+          ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+          },
+          "./composition": {
+            "types": "./dist/composition.d.ts",
+            "import": "./dist/composition.js"
+          }
+        },
+        "files": [
+          "dist"
+        ],
+        "main": null,
+        "types": null,
+        "bin": null,
+        "branches": [
+          {
+            "subpath": ".",
+            "shape": "ordered-types-import",
+            "resolutionTree": {
+              "types": "./dist/index.d.ts",
+              "import": "./dist/index.js"
+            },
+            "observer": "EF existing API Extractor for declarations; S1 ordered branch observer required",
+            "coverage": "incomplete"
+          },
+          {
+            "subpath": "./composition",
+            "shape": "ordered-types-import",
+            "resolutionTree": {
+              "types": "./dist/composition.d.ts",
+              "import": "./dist/composition.js"
+            },
+            "observer": "EF existing API Extractor for declarations; S1 ordered branch observer required",
+            "coverage": "incomplete"
+          }
+        ],
+        "activation": "pending",
+        "notes": "Private flag does not erase importable development obligations; packed artifact and observer fixture coverage remain A3/EF obligations."
+      },
+      {
+        "manifest": "packages/contexts/runtime-security/package.json",
+        "sha256": "a8c96cafbef73e589796ae79d00258029890d59e497c51377b79405a6c89e001",
+        "name": "@agent-teams/runtime-security",
+        "version": "0.0.0",
+        "private": true,
+        "classification": "private-package-with-governed-development-entrypoints",
+        "exports": {
+          ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+          },
+          "./composition": {
+            "types": "./dist/composition.d.ts",
+            "import": "./dist/composition.js"
+          }
+        },
+        "files": [
+          "dist"
+        ],
+        "main": null,
+        "types": null,
+        "bin": null,
+        "branches": [
+          {
+            "subpath": ".",
+            "shape": "ordered-types-import",
+            "resolutionTree": {
+              "types": "./dist/index.d.ts",
+              "import": "./dist/index.js"
+            },
+            "observer": "EF existing API Extractor for declarations; S1 ordered branch observer required",
+            "coverage": "incomplete"
+          },
+          {
+            "subpath": "./composition",
+            "shape": "ordered-types-import",
+            "resolutionTree": {
+              "types": "./dist/composition.d.ts",
+              "import": "./dist/composition.js"
+            },
+            "observer": "EF existing API Extractor for declarations; S1 ordered branch observer required",
+            "coverage": "incomplete"
+          }
+        ],
+        "activation": "pending",
+        "notes": "Private flag does not erase importable development obligations; packed artifact and observer fixture coverage remain A3/EF obligations."
+      },
+      {
+        "manifest": "packages/platform/filesystem-custody/package.json",
+        "sha256": "0575039c9e373e95b470d69ecdbf7f9d234420c3817a784c701c74c13f121ce5",
+        "name": "@agent-teams/filesystem-custody",
+        "version": "0.0.0",
+        "private": true,
+        "classification": "private-package-with-governed-development-entrypoints",
+        "exports": {
+          ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+          },
+          "./composition": {
+            "types": "./dist/composition.d.ts",
+            "import": "./dist/composition.js"
+          }
+        },
+        "files": [
+          "dist"
+        ],
+        "main": null,
+        "types": null,
+        "bin": null,
+        "branches": [
+          {
+            "subpath": ".",
+            "shape": "ordered-types-import",
+            "resolutionTree": {
+              "types": "./dist/index.d.ts",
+              "import": "./dist/index.js"
+            },
+            "observer": "EF existing API Extractor for declarations; S1 ordered branch observer required",
+            "coverage": "incomplete"
+          },
+          {
+            "subpath": "./composition",
+            "shape": "ordered-types-import",
+            "resolutionTree": {
+              "types": "./dist/composition.d.ts",
+              "import": "./dist/composition.js"
+            },
+            "observer": "EF existing API Extractor for declarations; S1 ordered branch observer required",
+            "coverage": "incomplete"
+          }
+        ],
+        "activation": "pending",
+        "notes": "Private flag does not erase importable development obligations; packed artifact and observer fixture coverage remain A3/EF obligations."
+      }
+    ],
+    "profiles": [
+      {
+        "path": "architecture/get-modular/consumer-profile.json",
+        "sha256": "2373779b480bd455978189e2ed3cee726346827d626bbc4545401e3f393c01e6",
+        "status": "active"
+      },
+      {
+        "path": "architecture/feature-module-standard/candidate-profile.json",
+        "sha256": "8e644e832bedf1553a6632aaf809e5b7bbc144fbb27042b4e9dadd21c0d3bccb",
+        "status": "active"
+      },
+      {
+        "path": "architecture/feature-module-standard/ordinary-scope.json",
+        "sha256": "d183ef1f809c945c2e7f0e47c695a16f825400176b5ae313f0cfb86cfed30fdf",
+        "status": "active"
+      },
+      {
+        "path": "architecture/consumer-module-standard/contained-turn-profile.json",
+        "sha256": "a53a648f1ba80928e568c20fb7d4fb11ea11ef38f4cff7daeea908d6d818cf5f",
+        "status": "pending"
+      }
+    ],
+    "lock": {
+      "path": "pnpm-lock.yaml",
+      "sha256": "cd819da54703d785a9950a3369a4479aca774ba4b2b6396d699884dd1855c961"
+    },
+    "archives": [
+      {
+        "name": "@get-modular/core",
+        "version": "0.1.0",
+        "archiveSha256": "50803ea69e2fb4078013a897f858908b4d73d26296336ab155a6118809dfb8ba",
+        "archivePath": "architecture/get-modular/evidence/get-modular-core-0.1.0.tgz"
+      },
+      {
+        "name": "@get-modular/assembly",
+        "version": "0.1.0",
+        "archiveSha256": "e89207171e44afd5e813aa5e7a0db8abc999b42338559d38b44b4db71da228ab",
+        "archivePath": "architecture/get-modular/evidence/get-modular-assembly-0.1.0.tgz"
+      }
+    ],
+    "workspace": {
+      "path": "pnpm-workspace.yaml",
+      "sha256": "c8ad241ff1190df95f3f9c1604252d9935c430b49b1e583370be54a1c56b4b71",
+      "packageRoots": [
+        {
+          "name": "@agent-teams/embedded-runtime",
+          "root": "packages/apps/embedded-runtime"
+        },
+        {
+          "name": "@agent-teams/agent-execution",
+          "root": "packages/contexts/agent-execution"
+        },
+        {
+          "name": "@agent-teams/provider-access",
+          "root": "packages/contexts/provider-access"
+        },
+        {
+          "name": "@agent-teams/runtime-configuration",
+          "root": "packages/contexts/runtime-configuration"
+        },
+        {
+          "name": "@agent-teams/runtime-security",
+          "root": "packages/contexts/runtime-security"
+        },
+        {
+          "name": "@agent-teams/filesystem-custody",
+          "root": "packages/platform/filesystem-custody"
+        }
+      ],
+      "experimentalPackages": []
+    },
+    "coverage": "AR source manifest inventory complete; full-SDK observation incomplete. No EF positive fixtures, exact packed AR output or released baseline qualified here. Embedded-runtime string script export is outside files=[dist], requiring packed membership proof."
+  },
+  "ci": {
+    "workflow": ".github/workflows/ci.yml",
+    "sha256": "d94dd969854f3ebcfecbcfbf6f3517f038fa955e7756bb3ce87f153877ec7c03",
+    "job": "check",
+    "command": "pnpm check",
+    "otherJobs": [
+      "postgres-durability",
+      "runtime-macos"
+    ],
+    "requiredContext": "Repository workflow check observed; remote branch-protection required-check configuration not verified",
+    "currentTool": "@agent-teams/engineering-foundation@1.2.0 (devDependency); retained lock integrity binds installed registry artifact; not a trusted target-base execution proof",
+    "baseSelection": "PR head SHA for pull_request; github.sha for merge_group/push; fetched historical commits are evidence identities, not SDK comparison baselines",
+    "SDKAdmission": "pending: trusted base/tool/owner decision and packed observation belong to EF S3 / AR A3. Existing workflow does not prove growth approval.",
+    "checks": [
+      "pnpm check:changed",
+      "pnpm check:fast",
+      "pnpm check (authoritative before PR/merge)",
+      "pnpm docs:check",
+      "pnpm docs:protocol:check"
+    ],
+    "trustedAnchor": {
+      "result": "blocked",
+      "authorityLocation": "outside candidate-controlled workflow",
+      "verifiedAnchor": null,
+      "requirements": [
+        "Externally enforced required workflow/ruleset or equivalent authenticated anchor",
+        "Exact trusted tool SHA/artifact, target/base and owner decision",
+        "Required context bound to candidate run and exact artifact custody"
+      ],
+      "reason": "Candidate ci.yml and editable package/lock pins alone cannot authenticate S3. No external enforcement or current ruleset was verified."
+    }
+  },
+  "ownership": {
+    "scopeCandidates": [
+      {
+        "id": "default-construction",
+        "counted": false,
+        "reason": "Only synchronous ownedHost capture/return in production; Assembly async execution and synthetic completeRoot hooks do not prove repeated primitive use. No additional protected reserve/late settlement invariant with existing recovery owner."
+      },
+      {
+        "id": "ordinary-session",
+        "counted": true,
+        "reason": "Real retained failed cleanup and pending owner work; PA grants/materialization and engine flights show resource lifetime beyond caller observation. This is one scope, including its wrappers."
+      }
+    ],
+    "admission": "blocked",
+    "requiredDistinctScopes": 2,
+    "provenDistinctScopes": 1,
+    "apiFreeze": "not-admitted: no new GM public API or runtime stub. Section 6 remains conditional GM-owned design input; this AR artifact freezes stop evidence only.",
+    "responsibilities": {
+      "GM": "Future generic ownership phase only, contingent on admission; no resources, timers, IO, policy or new graph nodes.",
+      "AR owners": "Resources/effects, exact retry/readback proof and strong retention. Existing flights/unfinished/receipts are distinct operation semantics, not a generic lifecycle replica.",
+      "AR Host": "Ordering, prerequisites, wait/deadline policy and public result projection."
+    },
+    "owners": [
+      {
+        "actionId": "construction-host",
+        "scope": "default-construction",
+        "acquire": "Synchronous factories.host; captureHost before completeRoot checkpoint; Assembly compile/prepare/run awaited.",
+        "strongRetentionOwner": "Attempt ownedHost until local clear; catch host local only while awaiting dispose. No reachable holder after failed settlement.",
+        "resourceEffectOwner": "Embedded Runtime construction attempt, then returned Host caller",
+        "handoff": "Identity equality with outcome.roots.host; checkCancellation; local clear and synchronous return. No production late-acquire registration; async test checkpoints are not a second use site.",
+        "cleanup": "await host.dispose in catch; preserve original creation error and cleanup failure",
+        "prerequisites": [],
+        "rawCompletion": "prepared.run Promise and existing Host dispose facade, not raw shutdown",
+        "errorPending": "Abort awaits running Assembly; created/returned outcome is evidence, not a cleanup owner. All-settled cleanup debt has no returned Host.",
+        "retry": "No existing retry API on creation error. Do not add earlier construction timeout.",
+        "recovery": "ABSENT: after all Promises settle with cleanup debt, AgentRuntimeHostCreationError has private causes and cleanupFailed only.",
+        "evidence": [
+          "attempt",
+          "assembly",
+          "creationError",
+          "assemblyTests"
+        ],
+        "prerequisiteOutcome": "not-applicable"
+      },
+      {
+        "actionId": "ordinary-flight",
+        "scope": "ordinary-session",
+        "acquire": "accept/submissions; flights.set before execution; security/provider/workspace/process acquired inside executeOrdinaryOperation",
+        "strongRetentionOwner": "Returned decorated Host -> raw Host ordinaryOwner AND feature reference -> one OrdinaryFeature -> submissions/flights -> cleanup/unfinished closures",
+        "resourceEffectOwner": "Agent Execution OrdinaryFeature; resource owners retain their effects",
+        "handoff": "buildHost passes dependencies[ordinary-turn] unchanged to factories.host and decorateHost. Capability references do not transfer disposal authority.",
+        "cleanup": "One owner-local feature.dispose flight cancels, waits completion/submissions, retries retained required effects, reconciles",
+        "prerequisites": [],
+        "rawCompletion": "ordinary-engine disposal Promise (unbounded aggregate); flight.completion alone does not prove cleanup success",
+        "errorPending": "Failures reset disposal Promise and retain failed flights. Host and feature dispose observations can join the same flight; after rejection a subsequent owner call may retry.",
+        "retry": "Explicit dispose retries retained cleanup; successful required actions removed. No generic replay of unknown external effects.",
+        "recovery": "Returned Host.dispose / Symbol.asyncDispose -> feature.dispose -> flight.cleanup -> operationStore.reconcile",
+        "evidence": [
+          "ordinaryHost",
+          "assembly",
+          "host",
+          "lifecycle",
+          "engine"
+        ],
+        "prerequisiteOutcome": "not-applicable"
+      },
+      {
+        "actionId": "host-call-drain",
+        "scope": "ordinary-session",
+        "acquire": "HostCallLedger.execute inserts executingCall before operation invocation",
+        "strongRetentionOwner": "raw Host lifecycle -> HostCallLedger activeCalls and ContainedTurnOwnershipLedger maps",
+        "resourceEffectOwner": "Embedded Runtime Host calls and cancellation projection",
+        "handoff": "No resource handoff; calls settle before internal ordinary owner observation",
+        "cleanup": "Abort Host, request cancellations, settle calls; releaseOrdinaryOwnership after feature success; check diagnostics",
+        "prerequisites": [],
+        "rawCompletion": "Private #finishDisposal Promise; lifecycle returns only 1000 ms raced facade",
+        "errorPending": "Ordinary rejection resets facade and can start another #finishDisposal while previous remains pending; contained-only caches rejection.",
+        "retry": "Existing public Host.dispose ordinary retry; no externally accessible raw join today.",
+        "recovery": "Returned decorated Host retains raw Host. This does not recover an unreturned construction Host.",
+        "evidence": [
+          "host",
+          "lifecycle"
+        ],
+        "prerequisiteOutcome": "not-applicable"
+      },
+      {
+        "actionId": "codex-adapter",
+        "scope": "ordinary-session",
+        "acquire": "Lazy getCodex creates adapter; pushes owned.dispose immediately",
+        "strongRetentionOwner": "Outer cleanups closure retains owned Codex adapter; Assembly dependencies share provider/prepareLaunch",
+        "resourceEffectOwner": "Agent Execution Codex adapter owns prepared map; process owner owns child",
+        "handoff": "Same provider instance supplies execution and prepareLaunch; no second consumer counted",
+        "cleanup": "owned.dispose clears prepared map",
+        "prerequisites": [
+          "ordinary-flight",
+          "host-call-drain"
+        ],
+        "rawCompletion": "Synchronous dispose returns void",
+        "errorPending": "Outer reverse cleanup breaks at first failure and retains remaining actions.",
+        "retry": "Successful action removed from cleanups; repeat failed action only with owner proof.",
+        "recovery": "Returned decorated Host.dispose -> cleanup",
+        "evidence": [
+          "ordinaryHost",
+          "ordinaryAssembly",
+          "codex"
+        ],
+        "prerequisiteOutcome": "host-prerequisite-rule"
+      },
+      {
+        "actionId": "provider-access-owner",
+        "scope": "ordinary-session",
+        "acquire": "Construct PA owner; push disposer before await migrate; lazy auth capture through ACL on submit",
+        "strongRetentionOwner": "Outer cleanups -> PA owner -> pendingCaptures/pendingConsumptions/grants; grant closures retain rendering/broker/capture/guard/capability",
+        "resourceEffectOwner": "Provider Access owns grants, auth helper, broker and credential material",
+        "handoff": "Borrowed narrow port returned; grants retained before returning and on disposal races",
+        "cleanup": "dispose captures independently then grant.retire then store.dispose",
+        "prerequisites": [
+          "ordinary-flight",
+          "host-call-drain",
+          "codex-adapter"
+        ],
+        "rawCompletion": "PA dispose Promise; grant.retire waits materialization construction; broker.close is itself a 5000 ms facade over closureWork",
+        "errorPending": "Capture dispose may throw after settled cleanup-indeterminate; failures retain records. Grant retirement saves per-action successes.",
+        "retry": "Explicit Host.dispose retries owner; retire/readback store.observe; broker closing resets only observation while closureWork remains retained.",
+        "recovery": "Returned Host.dispose -> PA owner.dispose; grant.retire / grant.settle and PA observe for durable readback",
+        "evidence": [
+          "ordinaryHost",
+          "acl",
+          "pa",
+          "capture",
+          "broker",
+          "paTransactions"
+        ],
+        "prerequisiteOutcome": "host-prerequisite-rule"
+      },
+      {
+        "actionId": "security-owner",
+        "scope": "ordinary-session",
+        "acquire": "Construct RS owner; push disposer before await owner.migrate",
+        "strongRetentionOwner": "Outer cleanups -> RS owner -> guards/grants and transaction completions",
+        "resourceEffectOwner": "Runtime Security owns grants, secret guards and transaction adapter",
+        "handoff": "Borrowed security port and secret registration callback; no effect custody in GM",
+        "cleanup": "dispose erases guards/grants then awaits transactions.close",
+        "prerequisites": [
+          "ordinary-flight",
+          "host-call-drain",
+          "provider-access-owner"
+        ],
+        "rawCompletion": "RS dispose Promise and transaction completions (bounded observers may precede external settlement)",
+        "errorPending": "RS disposed flag prevents further grant settlement. Therefore never dispose before engine required settlements.",
+        "retry": "Grant.settle uses observed matching disposition after write uncertainty; not automatic repeat of unknown claim.",
+        "recovery": "While retained: grant.settle / owner.observe; after disposal no grant recovery is promised.",
+        "evidence": [
+          "ordinaryHost",
+          "engine",
+          "security",
+          "securityTransactions"
+        ],
+        "prerequisiteOutcome": "host-prerequisite-rule"
+      },
+      {
+        "actionId": "journal",
+        "scope": "ordinary-session",
+        "acquire": "createOrdinaryObservationJournal opens fd synchronously before construct; fsync file/directory",
+        "strongRetentionOwner": "Outer cleanups[0] -> journal object -> fd; callbacks also retain journal",
+        "resourceEffectOwner": "Embedded Runtime observation journal",
+        "handoff": "No handoff to logger/GM; record callback borrows sink",
+        "cleanup": "journal.close last",
+        "prerequisites": [
+          "ordinary-flight",
+          "host-call-drain",
+          "codex-adapter",
+          "provider-access-owner",
+          "security-owner"
+        ],
+        "rawCompletion": "Synchronous closeSync; no raw async work",
+        "errorPending": "Creation fsync unwind calls closeSync; close sets closed=true before closeSync, so a thrown close cannot be claimed retry-safe.",
+        "retry": "Outer loop retains failed action, but journal owner replay proof is missing on thrown close.",
+        "recovery": "Successful construction: Host.dispose reaches action; failed construction: no recovery handle; close-failure slice blocked.",
+        "evidence": [
+          "ordinaryHost",
+          "journal"
+        ],
+        "prerequisiteOutcome": "host-prerequisite-rule"
+      },
+      {
+        "actionId": "borrowed-pool",
+        "scope": "ordinary-session",
+        "acquire": "Caller supplies options.storage.pool",
+        "strongRetentionOwner": "Caller retains pool; owners borrow it",
+        "resourceEffectOwner": "Caller owns pool shutdown",
+        "handoff": "Borrow only; schema changes durable and not rolled back by disposal",
+        "cleanup": "NEVER pool.end",
+        "prerequisites": [],
+        "rawCompletion": "Not an owned cleanup action",
+        "errorPending": "Client release differs from pool shutdown; late database work uses adapter retention.",
+        "retry": "No Host pool retry or close.",
+        "recovery": "Caller pool lifecycle, outside AR C0",
+        "evidence": [
+          "ordinaryHost",
+          "operationStore",
+          "paTransactions",
+          "securityTransactions"
+        ],
+        "prerequisiteOutcome": "not-applicable"
+      },
+      {
+        "actionId": "process-reservation",
+        "scope": "ordinary-session",
+        "acquire": "process.reserve retains configuration; start requires durable claim before child spawn",
+        "strongRetentionOwner": "Flight cleanup/unfinished -> reservation closure -> child/closure Promise, exit/stdout/stderr/group facts",
+        "resourceEffectOwner": "Agent Execution process owner",
+        "handoff": "Transport borrowed by provider; reservation remains sole process owner",
+        "cleanup": "reservation.close plus receipt validation",
+        "prerequisites": [],
+        "rawCompletion": "closePromise observes closure; bounded 1500+1000+1000 ms attempts, not raw termination proof",
+        "errorPending": "Unconfirmed resets closePromise; never recover persisted PID. Leader exit alone forbids signaling possibly recycled group.",
+        "retry": "Existing close re-observes and only signals live owned child; invalid drain/journal facts remain failures.",
+        "recovery": "OrdinaryFeature.dispose -> flight.cleanup -> retained reservation.close",
+        "evidence": [
+          "engine",
+          "process"
+        ],
+        "prerequisiteOutcome": "not-applicable"
+      },
+      {
+        "actionId": "operation-grants",
+        "scope": "ordinary-session",
+        "acquire": "security.resolveAndConsume; PA resolveAndConsume and materialize",
+        "strongRetentionOwner": "Flight closures and RS/PA owners retain grants; unfinished retains required retire/settle effects",
+        "resourceEffectOwner": "RS/PA own external grant facts; AE owns reconciliation sequencing",
+        "handoff": "No owner migration to generic ticket",
+        "cleanup": "Provider retire/settle and security settle with confirmed claim disposition",
+        "prerequisites": [
+          "process-reservation"
+        ],
+        "rawCompletion": "Required cleanup closures awaited; PA broker may yield incomplete before raw closure",
+        "errorPending": "Unknown claim disposition requires operationStore.read; failure retained as reconciliation, never success.",
+        "retry": "Remove proven required effects; retry via readback and same binding.",
+        "recovery": "feature.dispose -> flight.cleanup plus owner store observe/settle",
+        "evidence": [
+          "engine",
+          "pa",
+          "security"
+        ],
+        "prerequisiteOutcome": "host-prerequisite-rule"
+      },
+      {
+        "actionId": "workspace-artifacts",
+        "scope": "ordinary-session",
+        "acquire": "Workspace prepare stores owned entry after mkdtemp; snapshots and artifact publication after closure evidence",
+        "strongRetentionOwner": "Workspace adapter owned map; flight holds handle only on successful prepare; artifact receipts remain operation evidence",
+        "resourceEffectOwner": "Agent Execution workspace/artifact owners",
+        "handoff": "No external cleanup handle on preparation-retained error; error fields are inert root/workspaceId",
+        "cleanup": "Snapshot/admit/publish after process closure; close workspace only when !uncertainty",
+        "prerequisites": [
+          "process-reservation"
+        ],
+        "rawCompletion": "prepare/snapshot/publish/close Promises with filesystem readback, no encompassing timeout",
+        "errorPending": "Uncertain workspace intentionally retained. Failed prepare without returned handle has no general enumeration/recovery API. Artifact success cannot be synthesized on later closure.",
+        "retry": "Snapshot and workspace.close are not required unfinished entries: no blanket retry claim.",
+        "recovery": "Successful handle can call workspace.close; failed prepare/reconciliation slice lacks reachable handle entrypoint and stays blocked.",
+        "evidence": [
+          "engine",
+          "workspace",
+          "artifacts"
+        ],
+        "prerequisiteOutcome": "host-prerequisite-rule"
+      }
+    ],
+    "constructionAllSettledDebt": {
+      "recoveryOwner": null,
+      "entrypoint": null,
+      "verdict": "blocked",
+      "affectedSlice": "Unreturned Host / ordinary construction cleanup failure; also journal close failure and workspace prepare without returned recovery handle remain unproven.",
+      "evidence": [
+        "attempt",
+        "creationError",
+        "ordinaryHost",
+        "journal",
+        "workspace"
+      ],
+      "reason": "Attempt clears ownedHost before await dispose; catch throws error only. Ordinary catch awaits cleanup then throws AggregateError. Neither transfers debt to a reachable application owner."
+    },
+    "conditionalConstraints": {
+      "authority": "Exact plan e025978d sections 1, 5.5, 6.2-6.3 and 7.2-7.3; conditional on future ownership admission.",
+      "A2Prerequisites": [
+        "K1",
+        "A1"
+      ],
+      "ARLocalDuplicateAllowed": false,
+      "genericTransitions": "synchronous",
+      "genericFailureChannel": "one discriminated result",
+      "rawCauseOwner": "AR resource/effect owner",
+      "handoffCommit": "one synchronous ownership commit",
+      "rawFlightPublication": "publish joinable deferred raw flight before cleanup effect",
+      "observerOrdering": "settle state before observers",
+      "coordinator": "fixed Host-local coordinator",
+      "diagnosticIdentity": "stable actionId",
+      "runtimeImplementation": "none; conditional constraints only, no copied generic state machine or API"
+    },
+    "prerequisiteRule": {
+      "id": "host-prerequisite-rule",
+      "status": "conditional-future-policy",
+      "pendingOrUnknown": "retain dependent pending; no cleanup effect; strong owner remains",
+      "terminalFailure": "blocked_by_prerequisite; no cleanup effect; explicit retry only with owner proof",
+      "success": "eligible only after every listed prerequisite succeeds; fixed Host-local policy, not GM graph traversal"
+    }
+  },
+  "waitPolicy": {
+    "currentInnerWaitMs": 1000,
+    "currentOuterWaitMs": null,
+    "proposedOrdinaryWaitMs": 30000,
+    "selectedOrdinaryWaitMs": null,
+    "status": "blocked",
+    "wrapInnerFacade": false,
+    "path": [
+      "ordinaryHost.decorateHost.dispose / Symbol.asyncDispose",
+      "Promise.allSettled(host.dispose(), feature.dispose())",
+      "raw Host lifecycle.dispose",
+      "HostDisposalOrchestrator.dispose -> race(#finishDisposal, #rejectAtDeadline)",
+      "HostCallLedger.settle -> disposeOrdinaryOwner -> ordinary-engine.dispose",
+      "ordinary ownership release and diagnostics -> outer cleanup only after both observations succeed"
+    ],
+    "ownerIdentity": {
+      "assemblyExpression": "dependencies[\"ordinary-turn\"]",
+      "sameInstance": true,
+      "effectOwnerCount": 1,
+      "observationCount": 2,
+      "independentActions": false,
+      "evidence": [
+        "assembly",
+        "host",
+        "ordinaryHost",
+        "engine"
+      ]
+    },
+    "rawSeam": {
+      "availableNow": false,
+      "owner": "HostDisposalOrchestrator",
+      "currentRaw": "#finishDisposal is private; current facade #disposal races and resets on ordinary rejection; does not retain a publicly joinable raw flight.",
+      "candidate": "Later private lifecycle owner split into one retained raw driver and existing public wait facade; pass an explicit owner-only completion observation through trusted internal construction/decorator wiring before public carrier return. No reflection, cast, new package export or second driver.",
+      "signatureCompatibility": "Structurally possible: trusted ordinaryOwner injection and internal decorator exist; public AgentRuntimeHost dispose(): Promise<void> and contained-only 1000 ms facade can remain unchanged. This is feasibility, not implemented compatibility proof.",
+      "behaviorCompatibility": "unproven: ordinary outer currently waits unbounded feature allSettled; an early AggregateError changes observable behavior. Public tests include a synthetic different feature owner, so they do not prove production same-owner compatibility. Need owning compatibility decision and future static/synthetic runtime conformance; A2 cannot start.",
+      "construction": "Existing awaited construction/unwind preserved; no proposed outer budget applies before returned Host."
+    },
+    "errorCarrier": {
+      "outer": "AggregateError(errors, \"ordinary_host_disposal_incomplete\", {cause: errors[0]})",
+      "cleanup": "AggregateError(errors, \"ordinary_host_cleanup_incomplete\", {cause: errors[0]})",
+      "construction": "AgentRuntimeHostCreationError.withCleanupFailure; ordinary wrapper AggregateError([error, cleanup], \"ordinary_host_creation_cleanup_incomplete\", {cause: error})",
+      "inner": "AgentRuntimeHostDisposalIncompleteError",
+      "innerFields": [
+        "activeCallCount",
+        "status",
+        "containedTurns",
+        "omittedContainedTurnCount"
+      ],
+      "innerStatuses": [
+        "disposal_incomplete",
+        "termination_unproven"
+      ],
+      "newPublicErrorClass": false,
+      "projectionCompatibility": {
+        "result": "blocked",
+        "currentDuplicatesPrimary": true,
+        "futurePrimary": "retain primary product cause separately; never replace with timeout or cleanup failure",
+        "futureSecondaryOrder": "stable actionId",
+        "futureDuplicatePrimary": false,
+        "reason": "be96 outer AggregateError stores errors[0] both as cause and in errors. Plan 7.2 requires no duplicate raw outcome; changing this observable projection needs compatibility evidence alongside the new ordinary caller bound."
+      }
+    },
+    "deadlines": [
+      {
+        "id": "host-observer",
+        "evidence": "lifecycle",
+        "milliseconds": [
+          1000
+        ],
+        "meaning": "Caller observation only; raw #finishDisposal continues."
+      },
+      {
+        "id": "outer-and-engine",
+        "evidence": "ordinaryHost",
+        "milliseconds": [],
+        "meaning": "No aggregate outer bound; allSettled includes unbounded feature wait."
+      },
+      {
+        "id": "engine-operation",
+        "evidence": "engine",
+        "milliseconds": [
+          60000,
+          10000,
+          15000,
+          45000,
+          250
+        ],
+        "meaning": "Authority max 60s with 10s reserve; materialization <=15s; operation <=45s and authority remainder; cancel poll 250ms. TTL is not shutdown budget."
+      },
+      {
+        "id": "process-close",
+        "evidence": "process",
+        "milliseconds": [
+          1500,
+          1000,
+          1000
+        ],
+        "meaning": "Sequential close grace, TERM wait, KILL wait; unresolved closure rejects, child facts retained."
+      },
+      {
+        "id": "protocol-read",
+        "evidence": "protocol",
+        "milliseconds": [],
+        "meaning": "Uses operation absolute monotonic deadline; transport write has no separate local bound."
+      },
+      {
+        "id": "pa-broker-close",
+        "evidence": "broker",
+        "milliseconds": [
+          5000
+        ],
+        "meaning": "closeWithin facade observes retained closureWork; late completion is not represented by facade rejection."
+      },
+      {
+        "id": "pa-broker-http",
+        "evidence": "broker",
+        "milliseconds": [
+          15000,
+          5000
+        ],
+        "meaning": "Node HTTP server requestTimeout 15000 and headersTimeout 5000. Broker cutoff also uses the operation absolute monotonic deadline; upstream fetch uses the owner AbortSignal. These observers do not prove raw request/socket closure; unspecified platform/network defaults remain unqualified."
+      },
+      {
+        "id": "pa-capture",
+        "evidence": "capture",
+        "milliseconds": [
+          60000,
+          15000,
+          1500
+        ],
+        "meaning": "Input lifetime <=60s; helper <=15s; refuse helper remaining <=1500ms; expiry revokes."
+      },
+      {
+        "id": "pa-helper-close",
+        "evidence": "ipc",
+        "milliseconds": [
+          1000,
+          500,
+          300,
+          20
+        ],
+        "meaning": "RPC stops deadline-1000; TERM until min(deadline-500,now+300); KILL to same deadline; poll <=20ms. Cleanup-indeterminate persists."
+      },
+      {
+        "id": "pa-db",
+        "evidence": "paTransactions",
+        "milliseconds": [
+          2000,
+          5000,
+          10000
+        ],
+        "meaning": "Connection/statement/transaction defaults; public overrides 1..300000ms not used here; late client released; adapter dispose only seals."
+      },
+      {
+        "id": "ae-db",
+        "evidence": "operationStore",
+        "milliseconds": [
+          5000,
+          3000,
+          10000
+        ],
+        "meaning": "Connect/query/statement 5000; DB lock 3000; idle transaction 10000. No total shutdown bound."
+      },
+      {
+        "id": "rs-db",
+        "evidence": "securityTransactions",
+        "milliseconds": [
+          10000,
+          5000
+        ],
+        "meaning": "Transaction abort 10000, query/connect observer 5000, SQL statement 5000/idle 10000; close waits adapter completions, not every external query settlement."
+      },
+      {
+        "id": "filesystem-and-pool",
+        "evidence": "workspace",
+        "milliseconds": [],
+        "meaning": "Filesystem APIs and borrowed pool external configuration have no local encompassing bound. Journal closeSync may block event loop."
+      }
+    ],
+    "futureCohortRules": [
+      "Publish joinable deferred raw flight before any cleanup effect, including synchronous reentry; settle retained owner/action state before resolving or rejecting observers. Concurrent public callers share one waitAttempt and remaining budget.",
+      "After timeout clear only waitAttempt; next explicit dispose joins pending rawShutdown with new observer budget.",
+      "Raw terminal rejection retains per-action outcomes before identity-guarded reset; retry only explicit and owner-proven safe.",
+      "Known full success wins simultaneous deadline; otherwise incomplete. Dispose timer/listeners and consume losing rejection.",
+      "Feature is one effect action even when two observers remain; borrowed pool is never an action.",
+      "A2 follows admitted K1/A1 only; fixed Host-local prerequisite coordinator uses stable actionId diagnostics and never implements an AR-local duplicate of generic ownership transitions."
+    ],
+    "futureRejectingFixtures": [
+      "late join shares deadline",
+      "timeout does not settle raw flight",
+      "timeout then late failure retained",
+      "same-turn deadline/completion in both orders",
+      "failed driver retains successful actions",
+      "construction wait unchanged",
+      "same feature identity initiates one pending flight",
+      "contained-only 1000 ms behavior unchanged",
+      "synchronous cleanup reentry joins published raw flight",
+      "owner state settles before fulfillment and rejection observers",
+      "stable actionId survives retry and diagnostic projection"
+    ]
+  },
+  "verdicts": {
+    "K1": {
+      "result": "blocked",
+      "reason": "Only one materially distinct admitted ownership scope. Do not create optional ownership package for a ceremonial synchronous Host transfer."
+    },
+    "A1": {
+      "result": "blocked",
+      "reason": "K1 admission blocked; independently, unreturned construction Host all-settled cleanup debt has no existing reachable recovery owner/entrypoint. Block that slice without inventing registry."
+    },
+    "A2": {
+      "result": "blocked",
+      "reason": "K1/A1 prerequisites blocked; owner-only raw seam is not available and proposed ordinary 30000 ms behavior compatibility is unproven. Nested PA/DB observer waits also preclude claiming raw physical closure."
+    },
+    "ARSourceInventory": {
+      "result": "go",
+      "reason": "Seven exact private manifests, six development export maps, no package version/export changes."
+    },
+    "SDKActivation": {
+      "result": "blocked",
+      "reason": "Independent SDK lane may continue from AR matrix; observer fixtures, trusted CI admission and exact packed evidence pending."
+    },
+    "CMSComparison": {
+      "result": "blocked",
+      "reason": "Retained full-document comparison completed: byte delta nonzero, normative requirements no-op. Current upstream authentication unavailable, so the requested full current-upstream comparison is blocked."
+    },
+    "C0Freeze": {
+      "result": "go",
+      "reason": "Exact final plan reviewed and one byte-bound AR contract frozen for facts/stop evidence; blocked lanes and unverified current remote CMS remain explicitly blocked."
+    }
+  },
+  "delivery": {
+    "newAdoptions": "pending",
+    "publicationOrder": [
+      "EF publishes qualified SDK gate; AR A3 pins exact version and consumer evidence.",
+      "GM ownership publication and AR A1/A2 dependency consumption forbidden until K1 admission changes by a successor C0 revision.",
+      "CMS pin migration belongs to relevant later owning adoption PR; no dependency version selected here."
+    ],
+    "separateAuthority": "Only this per-repository artifact owns AR C0 claims. GM API and EF report envelope must be read from their named artifacts; no duplicate authority.",
+    "unresolved": [
+      "Authenticate remote refs and upstream full-document bytes when network/auth available.",
+      "Prove a second materially different production ownership scope; current construction candidate does not qualify.",
+      "Existing reachable recovery owner absent for unreturned construction debt; no invented registry.",
+      "Owner-only raw seam plus supported ordinary compatibility decision and nested owner readback qualifications required for A2.",
+      "SDK fixtures/packed output/CI authority remain independent lane work.",
+      "Required Foundation/docs/fast gates need the pinned dependencies; local frozen install is incomplete and registry access was denied. Focused C0 validation does not replace these gates."
+    ]
+  },
+  "evidence": {
+    "attempt": {
+      "path": "packages/apps/embedded-runtime/src/composition/default-agent-runtime-host.ts",
+      "sha256": "999a426602c19830fca5e230c58a467ccda717e157f05db61f4b3373e5a1d951"
+    },
+    "assembly": {
+      "path": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+      "sha256": "81db02c309ecf09446e6fa274d769727b4d15c6983e4d0f35eedd08bbcc72fc3"
+    },
+    "host": {
+      "path": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+      "sha256": "d89f7df9a2f5ea586f34cc450dcf2908d84da9b67e106dbd9a2ac0f25a385f24"
+    },
+    "lifecycle": {
+      "path": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
+      "sha256": "43336923bc197a5a98765adf34febeeb374dc826121e74902a34eea6ae0efacd"
+    },
+    "creationError": {
+      "path": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-creation-error.ts",
+      "sha256": "7df3983b52777f180f989ed85ab336b9091ea9cb1a07a1339352a7b242b1e4cd"
+    },
+    "ordinaryHost": {
+      "path": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
+      "sha256": "0cb13268e0bafc2448b709639d0eeb6e091759aa5e4885b15383c859b9d8fec8"
+    },
+    "ordinaryAssembly": {
+      "path": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
+      "sha256": "3d0cab7fad4fe7177e10f195b6d8ee253036a2c92744240063f8aab9c3843666"
+    },
+    "acl": {
+      "path": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/adapters/ordinary-owner-acl.ts",
+      "sha256": "1ed929e472b21f38c9d9328963b3f9c960ea3e3730551e4a0ac5bcc69538e0e3"
+    },
+    "journal": {
+      "path": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/adapters/ordinary-observation-journal.ts",
+      "sha256": "962aad2f99f1c946080da43f947b7cdf930842baac517515428b5b54d6e279c8"
+    },
+    "engine": {
+      "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-engine.ts",
+      "sha256": "e6d5c463daba7db7c4905d4ce0aaface3c6154e1e1313fd36680f26292daa3b1"
+    },
+    "process": {
+      "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-process/node-ordinary-process.ts",
+      "sha256": "4d3f926e223838eb08d0905b010808748ff583c60bbf76bf5c7ec6c6f15ad11f"
+    },
+    "workspace": {
+      "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-workspace.ts",
+      "sha256": "769dc840564fbc2c18915fac944910e014b91569c187e64bbfc0645ea131930d"
+    },
+    "artifacts": {
+      "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-artifacts.ts",
+      "sha256": "34680feee56e10565f15d43ace18989b64a5d6b8ab3238e40772720eaa7a4e64"
+    },
+    "codex": {
+      "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts",
+      "sha256": "8a631183dc4312aeb611cb0e78600f69f713f6f2e5334ccc3011d000929cea18"
+    },
+    "protocol": {
+      "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.ts",
+      "sha256": "9a39b4d86e301b1ce6323fdc8389bc2d165b5a263778d8904966f7e6bf92ac9c"
+    },
+    "operationStore": {
+      "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-postgres-store.ts",
+      "sha256": "a0a4f07b39d3eb9dcaac9f09c96b9882cf0282e7c917944245c92198c2b5670c"
+    },
+    "pa": {
+      "path": "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
+      "sha256": "a04008f343cabfc5ea0c3c8b69e0cae44f9217ef8a67341bb95349975e117f1d"
+    },
+    "broker": {
+      "path": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-broker.ts",
+      "sha256": "cb5a0c18ce61f5665dbbc16bb42d2d58b4a38cbddece3ca6fe381834d02a5c9c"
+    },
+    "capture": {
+      "path": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-capture.ts",
+      "sha256": "9b342af6519cd8ffbdf7bedd4e57d5abea4c4d4d72703f20b54132372eb52d10"
+    },
+    "ipc": {
+      "path": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-ipc.ts",
+      "sha256": "d2675c93f02f831b3f65cbe2f9fdc99fcc0e367f5e3ea1948243cb753c23b8a6"
+    },
+    "authFiles": {
+      "path": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-files.ts",
+      "sha256": "6e97179207b7352cb25d5c4e4dfa1406f721b115469956b0bb3b84172d96a674"
+    },
+    "paTransactions": {
+      "path": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-transactions.ts",
+      "sha256": "aa5e26a1f859bbbf9181fc476853eb228e1b94f4c17c47a675e7a220c1f34339"
+    },
+    "security": {
+      "path": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-owner.ts",
+      "sha256": "41bdc853781d8c42f2534550dd021a8760d638c956c8022c6af6e0dd79206681"
+    },
+    "securityTransactions": {
+      "path": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-transactions.ts",
+      "sha256": "1e49e6b66d1baeefe798f8ecdfba35fbca5b5d7910cbdef43a00910359c6fb7f"
+    },
+    "assemblyTests": {
+      "path": "packages/apps/embedded-runtime/tests/package/runtime-setup-assembly.test.ts",
+      "sha256": "ca249347d48f8b1ee30d12eff424f412700fa01119350bf9bd77ec7da210e76e"
+    },
+    "hostTests": {
+      "path": "packages/apps/embedded-runtime/tests/package/ordinary-host-disposal.test.ts",
+      "sha256": "03603fabc33d5e5236854a60bf62cf5cafb309f82234f596c6af56eeaf2f13d9"
+    },
+    "disposalTests": {
+      "path": "packages/apps/embedded-runtime/tests/package/agent-runtime-host-disposal.unit.test.ts",
+      "sha256": "d9d7db80b1b1ffe6925ec423d22ad59004f1a52e813bad7012abec6425829cab"
+    },
+    "retryTests": {
+      "path": "packages/apps/embedded-runtime/tests/package/ordinary-host-ownership.fixture.ts",
+      "sha256": "882895904bb5d1da9f989877053773812d1e54fcb7ca58695394d5e9c8db6f9e"
+    },
+    "publicEntry": {
+      "path": "packages/apps/embedded-runtime/src/composition.ts",
+      "sha256": "2880d1c5e3eda01de465468f9db809f6d86201086c3b93c221f617716ab181b8"
+    },
+    "publicApiTests": {
+      "path": "packages/apps/embedded-runtime/tests/package/public-api.test.ts",
+      "sha256": "8e3a9f609f389a32bf0211b62c5a93a93a7fe9ab0d48f13c92e82cfdb352b014"
+    }
+  }
+}
