@@ -23,7 +23,7 @@ nonWaivableRulePrefixes:
 waivers:
   - id: AR-SUP-ECD479F9058F
     path: packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts
-    line: 211
+    line: 196
     directive: oxlint-disable-next-line
     rules: [max-params]
     owner: architecture/tooling
@@ -73,7 +73,7 @@ waivers:
     decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
   - id: AR-SUP-214E4C78F3EF
     path: packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-evidence.ts
-    line: 511
+    line: 454
     directive: oxlint-disable-next-line
     rules: [complexity]
     owner: architecture/tooling
@@ -83,7 +83,7 @@ waivers:
     decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
   - id: AR-SUP-BA145CBD39F0
     path: packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-launch.ts
-    line: 407
+    line: 342
     directive: oxlint-disable-next-line
     rules: [complexity]
     owner: architecture/tooling
@@ -173,7 +173,7 @@ waivers:
     decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
   - id: AR-SUP-5889532DB6F6
     path: packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-proof-validation.ts
-    line: 344
+    line: 338
     directive: oxlint-disable-next-line
     rules: [complexity]
     owner: architecture/tooling
@@ -193,7 +193,7 @@ waivers:
     decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
   - id: AR-SUP-DF9559EB7CE8
     path: packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-validation.ts
-    line: 272
+    line: 270
     directive: oxlint-disable-next-line
     rules: [complexity]
     owner: architecture/tooling
@@ -203,7 +203,7 @@ waivers:
     decisionRef: https://github.com/agent-teams-ai/agent-runtime/pull/171
   - id: AR-SUP-A46ECCF8B30F
     path: packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-validation.ts
-    line: 443
+    line: 441
     directive: oxlint-disable-next-line
     rules: [complexity]
     owner: architecture/tooling
