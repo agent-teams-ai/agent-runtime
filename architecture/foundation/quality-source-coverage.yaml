@@ -1,0 +1,22 @@
+schemaVersion: 1
+sourcePolicyPath: architecture/foundation/source-dependencies.yaml
+suppressionPolicyPath: architecture/foundation/suppression-governance.yaml
+featureProfilePath: architecture/feature-module-standard/candidate-profile.json
+lintConfigPath: .oxlintrc.type-aware.json
+compilerProjects:
+  - packages/apps/embedded-runtime/tsconfig.json
+  - packages/contexts/agent-execution/tsconfig.json
+  - packages/contexts/provider-access/tsconfig.json
+  - packages/contexts/runtime-configuration/tsconfig.json
+  - packages/contexts/runtime-security/tsconfig.json
+  - packages/platform/filesystem-custody/tsconfig.json
+scripts:
+  fast: check:fast
+  full: check
+  scope: quality:coverage:scope
+  typed: lint:typed
+nativeChecks:
+  - boundaryId: adapter.agent-execution.host-custody
+    script: quality:native
+  - boundaryId: production.filesystem-custody
+    script: quality:native
