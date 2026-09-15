@@ -2,6 +2,7 @@ import type {
   DispatchConsumeResult,
   DispatchConsumptionRecordReceipt,
   DispatchObserveResult,
+  DispatchSettlementRecordReceipt,
   DispatchSettlementResult,
 } from "./dispatch-consumption-models.js";
 import {
@@ -121,7 +122,35 @@ export const mapObservedResultToV1 = (result: DispatchConsumeResult,
     ? Object.freeze({ status: "consumed", receipt: mapped.receipt, lifecycleState }) : mapped;
 };
 
-// oxlint-disable-next-line eslint/complexity -- exact result variants are intentionally closed here.
+const settlementReceiptToV1 = (value: unknown): DispatchSettlementRecordReceipt => {
+  const receipt = snapshotExactDispatchRecord(value, ["contractVersion", "settlementRequestId",
+    "providerId", "authorityGeneration", "consumptionDigest", "disposition",
+    "settledAtControlTime"]);
+  if (receipt === undefined || receipt.contractVersion !== "contained-turn-dispatch-settlement/v1" ||
+      ![receipt.settlementRequestId, receipt.providerId, receipt.authorityGeneration,
+        receipt.consumptionDigest].every(isBoundedDispatchIdentifier) ||
+      !isSettlementDisposition(receipt.disposition) || !Number.isSafeInteger(receipt.settledAtControlTime) ||
+      (receipt.settledAtControlTime as number) < 0) {
+    throw new TypeError("invalid settlement receipt");
+  }
+  return Object.freeze({
+    contractVersion: "contained-turn-dispatch-settlement/v1",
+    settlementRequestId: receipt.settlementRequestId as string,
+    providerId: receipt.providerId as string,
+    authorityGeneration: receipt.authorityGeneration as string,
+    consumptionDigest: receipt.consumptionDigest as string,
+    disposition: receipt.disposition,
+    settledAtControlTime: receipt.settledAtControlTime as number,
+  });
+};
+
+const settlementConflictReason = (
+  value: unknown,
+): Extract<DispatchSettlementResult, { status: "conflict" }>["reason"] | undefined =>
+  value === "settlement_request_digest_conflict" || value === "consumption_already_settled"
+    ? value
+    : undefined;
+
 export const mapSettlementResultToV1 = (
   result: DispatchSettlementResult,
 ): DispatchSettlementResult => {
@@ -131,24 +160,13 @@ export const mapSettlementResultToV1 = (
     return Object.freeze({ status: variant.status });
   }
   if (variant?.status === "settled" && "receipt" in variant) {
-    const receipt = snapshotExactDispatchRecord(variant.receipt, ["contractVersion", "settlementRequestId",
-      "providerId", "authorityGeneration", "consumptionDigest", "disposition",
-      "settledAtControlTime"]);
-    if (receipt === undefined || receipt.contractVersion !== "contained-turn-dispatch-settlement/v1" ||
-        ![receipt.settlementRequestId, receipt.providerId, receipt.authorityGeneration,
-          receipt.consumptionDigest].every(isBoundedDispatchIdentifier) ||
-        !isSettlementDisposition(receipt.disposition) || !Number.isSafeInteger(receipt.settledAtControlTime) ||
-        (receipt.settledAtControlTime as number) < 0) {throw new TypeError("invalid settlement receipt");}
-    return Object.freeze({ status: "settled", receipt: Object.freeze({
-      contractVersion: "contained-turn-dispatch-settlement/v1" as const,
-      settlementRequestId: receipt.settlementRequestId as string,
-      providerId: receipt.providerId as string, authorityGeneration: receipt.authorityGeneration as string,
-      consumptionDigest: receipt.consumptionDigest as string, disposition: receipt.disposition,
-      settledAtControlTime: receipt.settledAtControlTime as number }) });
+    return Object.freeze({ status: "settled", receipt: settlementReceiptToV1(variant.receipt) });
   }
-  if (variant?.status === "conflict" && (variant.reason === "settlement_request_digest_conflict" ||
-      variant.reason === "consumption_already_settled")) {
-    return Object.freeze({ status: "conflict", reason: variant.reason });
+  const conflictReason = variant?.status === "conflict"
+    ? settlementConflictReason(variant.reason)
+    : undefined;
+  if (conflictReason !== undefined) {
+    return Object.freeze({ status: "conflict", reason: conflictReason });
   }
   if (variant?.status === "indeterminate" && variant.reason === "owner_unavailable") {
     return Object.freeze({ status: "indeterminate", reason: variant.reason });
