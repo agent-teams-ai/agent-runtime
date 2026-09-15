@@ -92,7 +92,7 @@ export const closeWorkspaceHandles = async (handles: readonly FileHandle[]): Pro
   for (const handle of handles.toReversed()) {
     try {await handle.close();} catch (error) {failure ??= error;}
   }
-  if (failure !== undefined) {throw failure;}
+  if (failure !== undefined) {throw failure instanceof Error ? failure : new Error("Filesystem handle cleanup failed", {cause: failure});}
 };
 
 export const throwWorkspaceCleanupFailure = (

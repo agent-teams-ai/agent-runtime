@@ -134,7 +134,8 @@ const assertBinding = (options: CreateDockerCodexCurrentKernelOwnerOptions): voi
     || boundary.codexHomeIdentity.device !== plan.codexHomeIdentity.device || boundary.codexHomeIdentity.inode !== plan.codexHomeIdentity.inode) {
     throw new TypeError("Docker Codex permission boundary does not match the issued plan");
   }
-  if (options.effectCustody === undefined) {throw new TypeError("Docker Codex requires effect custody");}
+  const effectCustody: unknown = options.effectCustody;
+  if (effectCustody === undefined) {throw new TypeError("Docker Codex requires effect custody");}
 };
 
 /** One explicitly selected, operation-scoped Docker connection to the existing

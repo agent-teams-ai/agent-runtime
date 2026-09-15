@@ -3,7 +3,7 @@ import type { ContainedTurnHostPostClaimPreparation } from "../adapters/outbound
 const isProxy = process.getBuiltinModule("node:util").types.isProxy;
 const apply = Reflect.apply;
 export const capturePostClaimPreparation = (
-  options: Readonly<{postClaimPreparation?: ContainedTurnHostPostClaimPreparation}>,
+  options: unknown,
 ): "current-owner" | ContainedTurnHostPostClaimPreparation => {
   if (options === null || typeof options !== "object") {
     throw new TypeError("Host post-claim preparation options must be an object");
@@ -14,7 +14,7 @@ export const capturePostClaimPreparation = (
     if (isProxy(owner)) {throw new TypeError("Host post-claim preparation options must not be a Proxy");}
     option = Object.getOwnPropertyDescriptor(owner, "postClaimPreparation");
     if (option !== undefined) {break;}
-    owner = Object.getPrototypeOf(owner);
+    owner = Object.getPrototypeOf(owner) as object | null;
   }
   if (option === undefined) {return "current-owner";}
   if (!("value" in option)) {throw new TypeError("Host post-claim preparation must be a data property");}

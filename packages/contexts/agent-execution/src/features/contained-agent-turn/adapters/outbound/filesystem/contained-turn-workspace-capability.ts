@@ -81,12 +81,13 @@ const closeRetainedAuthority = async (retained: RetainedAuthority): Promise<void
 export const createWorkspaceCapabilityRetention = (): WorkspaceCapabilityRetention => {
   const retainedAuthorities = new Map<string, RetainedAuthority>();
   let disposed = false;
+  const isDisposed = (): boolean => disposed;
   let disposal: Promise<void> | undefined;
 
   const retain = async (
     input: RetainWorkspaceCapabilityInput,
   ): Promise<ContainedTurnWorkspaceLaunchAuthority> => {
-    if (disposed) {throw new Error("contained turn workspace capability owner is disposed");}
+    if (isDisposed()) {throw new Error("contained turn workspace capability owner is disposed");}
     const parent = await open(
       descriptorChildPath(input.parent),
       constants.O_RDONLY | constants.O_DIRECTORY,
@@ -117,7 +118,7 @@ export const createWorkspaceCapabilityRetention = (): WorkspaceCapabilityRetenti
       await parent.close();
       throw error;
     }
-    if (disposed) {
+    if (isDisposed()) {
       await closeRetainedAuthority(Object.freeze({
         canonicalPath: input.canonicalPath,
         handle,
@@ -154,7 +155,7 @@ export const createWorkspaceCapabilityRetention = (): WorkspaceCapabilityRetenti
     input: ConsumeWorkspaceLaunchAuthorityInput,
     callback: (target: ResolvedWorkspaceLaunchAuthority) => Promise<Result>,
   ): Promise<Result> => {
-    if (disposed) {throw new Error("contained turn workspace capability owner is disposed");}
+    if (isDisposed()) {throw new Error("contained turn workspace capability owner is disposed");}
     const retained = retainedAuthorities.get(input.authority.authorityRef);
     if (retained === undefined) {
       throw new Error("contained turn workspace launch authority is stale or already consumed");
@@ -194,7 +195,7 @@ export const createWorkspaceCapabilityRetention = (): WorkspaceCapabilityRetenti
       }
       throw outcome.error;
     }
-    if (closeFailure !== undefined) {throw closeFailure;}
+    if (closeFailure !== undefined) {throw closeFailure instanceof Error ? closeFailure : new Error("Workspace authority closure failed", {cause: closeFailure});}
     return outcome.value;
   };
 
@@ -205,7 +206,7 @@ export const createWorkspaceCapabilityRetention = (): WorkspaceCapabilityRetenti
     retainedAuthorities.clear();
     disposal = (async () => {
       const outcomes = await Promise.allSettled(authorities.map(closeRetainedAuthority));
-      const failures = outcomes.flatMap(outcome =>
+      const failures = outcomes.flatMap((outcome): unknown[] =>
         outcome.status === "rejected" ? [outcome.reason] : []
       );
       if (failures.length === 1) {throw failures[0];}

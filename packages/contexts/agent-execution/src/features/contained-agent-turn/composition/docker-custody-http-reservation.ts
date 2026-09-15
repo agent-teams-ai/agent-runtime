@@ -5,7 +5,7 @@ import { custodyDataRecord, readHostCustodyHttpHandoff, hostHttpAbortOperations,
 import { DockerHostCustodyLifecycle, dockerProviderProcessMountFacts, sameDockerAuthority, awaitNetworkCleanupWork,
   type LaunchedDockerCustody
 } from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
-const {observeLaunch} = DockerHostCustodyLifecycle.prototype;
+const observeLaunch = Object.getOwnPropertyDescriptor(DockerHostCustodyLifecycle.prototype, "observeLaunch")!.value as DockerHostCustodyLifecycle["observeLaunch"];
 const rejected = (): TypeError => new TypeError("Docker HTTP custody lifetime unavailable or conflicts");
 const ownerKeys = ["tenantId", "projectId", "operationId", "attemptId", "custodyId", "hostInstanceId", "hostBootId"] as const;
 
@@ -32,7 +32,7 @@ export class DockerCustodyHttpReservation {
   readonly #controller = new AbortController();
   readonly #signal = this.#controller.signal;
   readonly #resources = new NodeCustodyHttpResources(Object.freeze({cutoff: () => {this.#cutoff();}}), this.#controller);
-  readonly #identity: object = Object.freeze(Object.create(null));
+  readonly #identity: object = Object.freeze(Object.create(null) as object);
   readonly #input: DockerCustodyHttpReservationInput;
   readonly #observed: ReturnType<DockerHostCustodyLifecycle["observeLaunch"]>;
   readonly #preparation;
@@ -83,7 +83,7 @@ export class DockerCustodyHttpReservation {
   }
 
   /** Nominal private owner lookup; foreign objects/proxies cannot supply a facade. */
-  public static httpPreparation(owner: unknown) {
+  public static httpPreparation(this: void, owner: unknown) {
     return typeof owner === "object" && owner !== null && #preparation in owner ? owner.#preparation : undefined;
   }
   public get signal(): AbortSignal {return this.#signal;}

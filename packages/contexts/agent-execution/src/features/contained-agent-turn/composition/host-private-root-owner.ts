@@ -68,7 +68,7 @@ export const createHostPrivateRootOwnerFactory = (input: Readonly<{
       const reservation = custodyDataRecord(options);
       if (owners.size >= 64) {throw new TypeError("Private root Host retention capacity exhausted");}
       if (owners.has(reservation.custodyRef)) {throw new TypeError("Private root reservation already owned");}
-      const quiescence = custodyDataRecord(quiescenceOwner);
+      const quiescence: {readonly cutoff: DockerKernelReservationCleanup["cutoff"]; readonly cleanup: DockerKernelReservationCleanup["cleanup"]} = custodyDataRecord(quiescenceOwner);
       if (typeof quiescence.cutoff !== "function" || typeof quiescence.cleanup !== "function") {
         throw new TypeError("Private root cleanup owner invalid");
       }

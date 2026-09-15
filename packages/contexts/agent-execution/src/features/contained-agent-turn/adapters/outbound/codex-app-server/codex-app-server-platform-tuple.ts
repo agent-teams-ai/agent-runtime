@@ -93,7 +93,7 @@ const selectTuple = (platform: unknown, architecture: unknown): CodexAppServerPl
   return selected;
 };
 
-export const selectCodexAppServerPlatformTuple = (input: CodexAppServerPlatformTarget): CodexAppServerPlatformTuple => {
+export const selectCodexAppServerPlatformTuple = (input: unknown): CodexAppServerPlatformTuple => {
   if (typeof input !== "object" || input === null || Object.getPrototypeOf(input) !== Object.prototype) {
     throw new CodexAppServerPlatformTupleUnsupportedError();
   }
@@ -116,7 +116,7 @@ export const codexAppServerTupleForBinaryRevision = (binaryRevision: string): Co
   return selected;
 };
 
-export const assertExactCodexAppServerPlatformTuple = (candidate: CodexAppServerPlatformTuple): CodexAppServerPlatformTuple => {
+export const assertExactCodexAppServerPlatformTuple = (candidate: unknown): CodexAppServerPlatformTuple => {
   if (typeof candidate !== "object" || candidate === null || Object.getPrototypeOf(candidate) !== Object.prototype) {
     throw new TypeError("Codex App Server platform tuple must be a plain record");
   }
@@ -136,7 +136,7 @@ const OS_VERSION = /^[0-9]+(?:\.[0-9]+){1,3}$/u;
 
 export const validateCodexAppServerUserAgent = (value: unknown, expected: CodexAppServerPlatformTuple): void => {
   if (typeof value !== "string" || value.length === 0 || value.length > 512
-    || [...value].some(character => {
+    || Array.from(value).some(character => {
       const codePoint = character.codePointAt(0);
       return codePoint !== undefined && (codePoint <= 31 || codePoint === 127);
     })) {throw new TypeError("Codex App Server user agent is malformed");}

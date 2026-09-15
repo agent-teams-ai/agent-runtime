@@ -5,7 +5,7 @@ import {assertContainedTurnExactRecord, detachAndFreezeContainedTurnValue} from 
 const canonical = (value: unknown): ContainedTurnCanonicalValue => {
   if (value === null || typeof value === "string" || typeof value === "boolean" || typeof value === "number") {return value;}
   if (Array.isArray(value)) {return value.map(canonical);}
-  if (typeof value !== "object" || value === null) {throw new TypeError("noncanonical ordinary data");}
+  if (typeof value !== "object") {throw new TypeError("noncanonical ordinary data");}
   return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, canonical(item)]));
 };
 export const ORDINARY_STATE_CODEC_VERSION = 3;

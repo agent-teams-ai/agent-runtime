@@ -17,7 +17,7 @@ const rejected = (reason: string): Error => new Error(`Codex permission evidence
 
 const dataProperty = (descriptors: Record<string, PropertyDescriptor>, key: string): unknown => {
   const descriptor = descriptors[key];
-  if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+  if (descriptor === undefined || !("value" in descriptor) || descriptor.enumerable !== true) {
     throw rejected("config wire has a missing or non-data property");
   }
   return descriptor.value;
@@ -28,8 +28,8 @@ const snapshotArray = (
   keyCount: number,
   child: (value: unknown) => Json,
 ): Json[] => {
-  const length = descriptors.length?.value;
-  if (!Number.isSafeInteger(length) || length < 0 || length > 256 || keyCount !== length + 1) {
+  const length: unknown = descriptors.length?.value;
+  if (typeof length !== "number" || !Number.isSafeInteger(length) || length < 0 || length > 256 || keyCount !== length + 1) {
     throw rejected("config wire has a sparse or extended array");
   }
   const result: Json[] = [];
@@ -193,7 +193,7 @@ export const validateCodexConfigEvidence = (
   ];
   const sessionLeaves = ["default_permissions", ...disabledFeatures.map(feature =>
     feature === "multi_agent_v2" ? "features.multi_agent_v2.enabled" : `features.${feature}`)];
-  const origins = Object.fromEntries([
+  const origins: unknown = Object.fromEntries([
     ...userLeaves.map(key => [key, user]), ...sessionLeaves.map(key => [key, session]),
   ]);
   exact(result.origins, origins, "config leaf origins do not match unique exact layer names and versions");

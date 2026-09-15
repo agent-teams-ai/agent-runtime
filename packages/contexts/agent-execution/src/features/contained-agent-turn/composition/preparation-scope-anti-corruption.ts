@@ -80,7 +80,7 @@ const cloneContainedTurnPortArray = (
   const output: PortValue[] = [];
   for (let index = 0; index < length; index += 1) {
     const descriptor = descriptors[String(index)];
-    if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+    if (descriptor === undefined || !("value" in descriptor) || descriptor.enumerable !== true) {
       throw new TypeError("owner port arrays must contain only enumerable data elements");
     }
     output.push(cloneContainedTurnPortEntry(descriptor.value, depth + 1, state));
@@ -101,7 +101,7 @@ const cloneContainedTurnPortRecord = (
   for (const key of trustedOwnKeys(descriptors)) {
     if (typeof key !== "string") {throw new TypeError("owner port records must not contain symbols");}
     const descriptor = descriptors[key];
-    if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+    if (descriptor === undefined || !("value" in descriptor) || descriptor.enumerable !== true) {
       throw new TypeError("owner port records must contain only enumerable data properties");
     }
     entries.push([key, cloneContainedTurnPortEntry(descriptor.value, depth + 1, state)]);
@@ -171,7 +171,8 @@ const projectAcceptanceOwnerOutcome = (outcome: AcceptanceOwnerOutcome): Accepta
       kind: "potential_acceptance",
     });
   }
-  if (safeOutcome.kind === "not_found" || safeOutcome.kind === "fingerprint_conflict") {
+  const absentKind: unknown = safeOutcome.kind;
+  if (absentKind === "not_found" || absentKind === "fingerprint_conflict") {
     assertContainedTurnExactRecord("absent acceptance outcome", safeOutcome, ["kind"]);
     return trustedFreeze({ kind: safeOutcome.kind });
   }
@@ -200,7 +201,8 @@ const projectGrantOwnerOutcome = <Outcome extends GrantOwnerOutcome>(outcome: Ou
       preventionProofId: validateContainedTurnIdentity("proof", safeOutcome.preventionProofId),
     }) as Outcome;
   }
-  if (safeOutcome.kind === "indeterminate") {
+  const remainingKind: unknown = safeOutcome.kind;
+  if (remainingKind === "indeterminate") {
     assertContainedTurnExactRecord("indeterminate grant outcome", safeOutcome, ["evidenceId", "kind"]);
     return trustedFreeze({
       evidenceId: validateContainedTurnIdentity("evidence", safeOutcome.evidenceId),
@@ -242,7 +244,8 @@ const projectClaimOwnerOutcome = (outcome: ClaimOwnerOutcome): ClaimOwnerOutcome
       kind: "indeterminate",
     });
   }
-  if (safeOutcome.kind === "not_found") {
+  const absentKind: unknown = safeOutcome.kind;
+  if (absentKind === "not_found") {
     assertContainedTurnExactRecord("not-found claim outcome", safeOutcome, ["kind"]);
     return trustedFreeze({ kind: "not_found" });
   }
@@ -269,7 +272,8 @@ const projectRetirementOwnerOutcome = (outcome: RetirementOwnerOutcome): Retirem
     assertContainedTurnExactRecord("retirement stale outcome", safeOutcome, ["current", "kind"]);
     return trustedFreeze({ current: snapshotContainedTurnOwnedOperation(safeOutcome.current), kind: "stale" });
   }
-  if (safeOutcome.kind === "indeterminate") {
+  const remainingKind: unknown = safeOutcome.kind;
+  if (remainingKind === "indeterminate") {
     assertContainedTurnExactRecord("retirement indeterminate outcome", safeOutcome, ["evidenceId", "kind"]);
     return trustedFreeze({
       evidenceId: validateContainedTurnIdentity("evidence", safeOutcome.evidenceId),
@@ -294,7 +298,8 @@ const projectCleanupOwnerOutcome = <Outcome extends CleanupOwnerOutcome>(outcome
     successful ? ["kind"] : ["evidenceId", "kind"],
   );
   if (successful) {return trustedFreeze({ kind: safeOutcome.kind }) as Outcome;}
-  if (safeOutcome.kind !== "indeterminate") {throw new TypeError("unknown cleanup owner outcome");}
+  const remainingKind: unknown = safeOutcome.kind;
+  if (remainingKind !== "indeterminate") {throw new TypeError("unknown cleanup owner outcome");}
   return trustedFreeze({
     evidenceId: validateContainedTurnIdentity("evidence", safeOutcome.evidenceId),
     kind: "indeterminate",
@@ -329,11 +334,11 @@ const snapshotBoundaryPort = <Port extends object>(name: string, port: Port): Po
       members.set(
         key,
         typeof value === "function"
-          ? trustedFreeze((...args: unknown[]) => trustedApply(value, port, args))
+          ? trustedFreeze((...args: unknown[]): unknown => trustedApply(value, port, args))
           : cloneContainedTurnPortValue(value),
       );
     }
-    owner = trustedGetPrototypeOf(owner);
+    owner = trustedGetPrototypeOf(owner) as object | null;
   }
   return trustedFreeze(trustedFromEntries(members)) as Port;
 };
@@ -356,13 +361,14 @@ export const createContainedTurnPreparationScopeDependencies = (
   assertContainedTurnExactRecord("contained-turn composition dependencies", dependencies, [
     "operationStore", "security", "providerAccess", "workspace", "artifacts", "custody", "provider",
   ]);
-  const descriptor = trustedGetOwnPropertyDescriptors(dependencies);
+  const descriptor: PropertyDescriptorMap = trustedGetOwnPropertyDescriptors(dependencies);
   const raw = (key: keyof ContainedTurnKernelDependencies): object => {
     const member = descriptor[key];
-    if (member === undefined || !("value" in member) || typeof member.value !== "object" || member.value === null) {
+    const value: unknown = member?.value;
+    if (member === undefined || !("value" in member) || typeof value !== "object" || value === null) {
       throw new TypeError(`contained-turn composition dependency ${key} must be an object data property`);
     }
-    return member.value;
+    return value;
   };
   const rawOperationStore = snapshotBoundaryPort("operation store", raw("operationStore")) as ContainedTurnKernelDependencies["operationStore"];
   const rawProviderAccess = snapshotBoundaryPort("Provider Access", raw("providerAccess")) as ContainedTurnKernelDependencies["providerAccess"];
@@ -378,28 +384,18 @@ export const createContainedTurnPreparationScopeDependencies = (
     provider: snapshotBoundaryPort("provider", raw("provider")) as ContainedTurnKernelDependencies["provider"],
   });
   validateContainedTurnKernelDependencies(rawDependencies);
-  const accept = rawOperationStore.accept;
-  const proveClosure = rawOperationStore.proveDispatchPreparationClosure;
-  const claim = rawOperationStore.claimPreparedDispatch;
-  const retire = rawOperationStore.retireDispatchPreparation;
-  const record = rawOperationStore.recordDispatchPreparationCleanup;
-  const providerConsume = rawProviderAccess.consumeForDispatch;
-  const providerSettle = rawProviderAccess.settleConsumedGrant;
-  const securityConsume = rawSecurity.consumeForDispatch;
-  const securitySettle = rawSecurity.settleConsumedGrant;
-  const custodyRelease = rawCustody.releaseRetiredReservation;
 
   const operationStore = overrideBoundaryPort(rawOperationStore, trustedFreeze({
-    accept: async (...args: Parameters<typeof accept>) =>
-      projectAcceptanceOwnerOutcome(await awaitContainedTurnOwnerPromise(accept(...args))),
-    proveDispatchPreparationClosure: async (input: Parameters<NonNullable<typeof proveClosure>>[0]) => {
-      if (proveClosure === undefined) {return;}
-      const outcome = await awaitContainedTurnOwnerPromise(proveClosure(input));
+    accept: async (...args: Parameters<typeof rawOperationStore.accept>) =>
+      projectAcceptanceOwnerOutcome(await awaitContainedTurnOwnerPromise(rawOperationStore.accept(...args))),
+    proveDispatchPreparationClosure: async (input: Parameters<NonNullable<typeof rawOperationStore.proveDispatchPreparationClosure>>[0]) => {
+      if (rawOperationStore.proveDispatchPreparationClosure === undefined) {return;}
+      const outcome = await awaitContainedTurnOwnerPromise(rawOperationStore.proveDispatchPreparationClosure(input));
       if (outcome === undefined) {return;}
       return trustedFreeze(cloneContainedTurnPortValue(outcome));
     },
-    claimPreparedDispatch: async (input: Parameters<typeof claim>[0]) => {
-      const outcome = projectClaimOwnerOutcome(await awaitContainedTurnOwnerPromise(claim(input)));
+    claimPreparedDispatch: async (input: Parameters<typeof rawOperationStore.claimPreparedDispatch>[0]) => {
+      const outcome = projectClaimOwnerOutcome(await awaitContainedTurnOwnerPromise(rawOperationStore.claimPreparedDispatch(input)));
       if (outcome.kind !== "claimed") {return outcome;}
       return trustedFreeze({
         committedDispatchProof: validateCommittedDispatchClaimV1(
@@ -409,28 +405,28 @@ export const createContainedTurnPreparationScopeDependencies = (
         operation: outcome.operation,
       });
     },
-    recordDispatchPreparationCleanup: async (input: Parameters<typeof record>[0]) =>
+    recordDispatchPreparationCleanup: async (input: Parameters<typeof rawOperationStore.recordDispatchPreparationCleanup>[0]) =>
       snapshotContainedTurnDispatchPreparation(cloneContainedTurnPortValue(
-        await awaitContainedTurnOwnerPromise(record(input)),
+        await awaitContainedTurnOwnerPromise(rawOperationStore.recordDispatchPreparationCleanup(input)),
       )),
-    retireDispatchPreparation: async (input: Parameters<typeof retire>[0]) =>
-      projectRetirementOwnerOutcome(await awaitContainedTurnOwnerPromise(retire(input))),
+    retireDispatchPreparation: async (input: Parameters<typeof rawOperationStore.retireDispatchPreparation>[0]) =>
+      projectRetirementOwnerOutcome(await awaitContainedTurnOwnerPromise(rawOperationStore.retireDispatchPreparation(input))),
   }));
   const providerAccess = overrideBoundaryPort(rawProviderAccess, trustedFreeze({
-    consumeForDispatch: async (input: Parameters<typeof providerConsume>[0]) =>
-      projectGrantOwnerOutcome(await awaitContainedTurnOwnerPromise(providerConsume(input))),
-    settleConsumedGrant: async (input: Parameters<typeof providerSettle>[0]) =>
-      projectCleanupOwnerOutcome(await awaitContainedTurnOwnerPromise(providerSettle(input))),
+    consumeForDispatch: async (input: Parameters<typeof rawProviderAccess.consumeForDispatch>[0]) =>
+      projectGrantOwnerOutcome(await awaitContainedTurnOwnerPromise(rawProviderAccess.consumeForDispatch(input))),
+    settleConsumedGrant: async (input: Parameters<typeof rawProviderAccess.settleConsumedGrant>[0]) =>
+      projectCleanupOwnerOutcome(await awaitContainedTurnOwnerPromise(rawProviderAccess.settleConsumedGrant(input))),
   }));
   const security = overrideBoundaryPort(rawSecurity, trustedFreeze({
-    consumeForDispatch: async (input: Parameters<typeof securityConsume>[0]) =>
-      projectGrantOwnerOutcome(await awaitContainedTurnOwnerPromise(securityConsume(input))),
-    settleConsumedGrant: async (input: Parameters<typeof securitySettle>[0]) =>
-      projectCleanupOwnerOutcome(await awaitContainedTurnOwnerPromise(securitySettle(input))),
+    consumeForDispatch: async (input: Parameters<typeof rawSecurity.consumeForDispatch>[0]) =>
+      projectGrantOwnerOutcome(await awaitContainedTurnOwnerPromise(rawSecurity.consumeForDispatch(input))),
+    settleConsumedGrant: async (input: Parameters<typeof rawSecurity.settleConsumedGrant>[0]) =>
+      projectCleanupOwnerOutcome(await awaitContainedTurnOwnerPromise(rawSecurity.settleConsumedGrant(input))),
   }));
   const custody = overrideBoundaryPort(rawCustody, trustedFreeze({
-    releaseRetiredReservation: async (input: Parameters<typeof custodyRelease>[0]) =>
-      projectCleanupOwnerOutcome(await awaitContainedTurnOwnerPromise(custodyRelease(input))),
+    releaseRetiredReservation: async (input: Parameters<typeof rawCustody.releaseRetiredReservation>[0]) =>
+      projectCleanupOwnerOutcome(await awaitContainedTurnOwnerPromise(rawCustody.releaseRetiredReservation(input))),
   }));
 
   const snapshot = trustedFreeze({

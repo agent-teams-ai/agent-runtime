@@ -74,7 +74,7 @@ export const createDarwinCodexRouteEnforcement = (
   const localCut = data(prep.localCut); const clock = data(localCut.clock);
   const read = method(clock.read); const within = method(clock.within);
   if (Object.hasOwn(prep, "session")) {throw invalid();}
-  const sessionOwner = data(captured.sessionOwner);
+  const sessionOwner: {readonly acquire: DarwinCodexClaimedSessionOwner["acquire"]} = data(captured.sessionOwner);
   if (Reflect.ownKeys(sessionOwner).length !== 1) {throw invalid();}
   const acquire = method(sessionOwner.acquire);
   const catalogSource = snapshotHttpBytes(prep.catalogSource, Number.MAX_SAFE_INTEGER);
@@ -106,7 +106,7 @@ export const createDarwinCodexRouteEnforcement = (
       } catch {return Object.freeze({kind: "quarantined" as const});}
     },
   });
-  const records = data(source.launchRecords); const resolve = method(records.resolve);
+  const records: {readonly resolve: Options["launchRecords"]["resolve"]} = data(source.launchRecords); const resolve = method(records.resolve);
   const launchRecords: Options["launchRecords"] = Object.freeze({resolve: async (request: Parameters<Options["launchRecords"]["resolve"]>[0]) => {
     const binding = custodyDataRecord(request.providerBinding);
     if (binding.provider !== "codex" || binding.adapterRevision !== tuple.adapterRevision ||

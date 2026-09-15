@@ -10,7 +10,7 @@ const rejected = () => new TypeError("Docker native broker installed route unava
  * supplier or observation body can replace this operation's successful admission.
  * This is a trusted composition join, not an independent kernel proof issuer. */
 export const retainDockerNativeBrokerRoute = (input: DockerLinuxOperationRouteAdmission) => {
-  const data = custodyDataRecord(input);
+  const data: {readonly admit: DockerLinuxOperationRouteAdmission["admit"]; readonly releaseAfterContainerRemoval: DockerLinuxOperationRouteAdmission["releaseAfterContainerRemoval"]} = custodyDataRecord(input);
   if (typeof data.admit !== "function" || typeof data.releaseAfterContainerRemoval !== "function") {throw rejected();}
   const admitMethod = data.admit;
   const releaseMethod = data.releaseAfterContainerRemoval;

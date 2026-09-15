@@ -56,7 +56,7 @@ import {
   codexNotAccepted,
   type CodexReceiptIdentity,
 } from "./codex-app-server-receipt-identity.js";
-import { detachCodexProviderOptions } from "./codex-app-server-provider-options.js";
+import { detachCodexProviderOptions, positiveInteger, boundedPositiveInteger } from "./codex-app-server-provider-options.js";
 import {
   codexContainmentRequired,
   type CodexAppServerExecutionOutcome,
@@ -104,21 +104,6 @@ export interface CodexAppServerContainedTurnProviderOptions {
   readonly tmpDir: string;
   readonly turnTimeoutMs?: number;
 }
-
-const positiveInteger = (name: string, value: number | undefined, fallback: number): number => {const selected = value ?? fallback;
-  if (!Number.isSafeInteger(selected) || selected <= 0) {throw new TypeError(`${name} must be a positive integer`);}
-  return selected;
-};
-
-const boundedPositiveInteger = (
-  name: string,
-  value: number | undefined,
-  maximum: number,
-): number => {
-  const selected = positiveInteger(name, value, maximum);
-  if (selected > maximum) {throw new TypeError(`${name} exceeds the fixed Codex containment envelope`);}
-  return selected;
-};
 
 const deadlineAfter = (milliseconds: number): number => performance.now() + milliseconds;
 

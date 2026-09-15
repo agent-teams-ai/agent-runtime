@@ -137,9 +137,7 @@ export const canonicalCodexJson = (value: unknown): string => {
       .map(([key, nested]) => `${JSON.stringify(key)}:${canonicalCodexJson(nested)}`)
       .join(",")}}`;
   }
-  const encoded = JSON.stringify(value);
-  if (encoded === undefined) {throw new TypeError("canonical JSON rejects non-serializable values");}
-  return encoded;
+  return JSON.stringify(value);
 };
 
 export interface CodexAppServerPermissionBoundary {
@@ -216,7 +214,7 @@ export const createDarwinNativeCodexPermissionBoundary = (
 const issuePermissionBoundary = (
   privateHome: Readonly<{path: string; identity: CodexDirectoryIdentity}>,
   workspace: Readonly<{path: string; identity: CodexDirectoryIdentity}>,
-  intentMode: CodexContainedTurnMode,
+  intentMode: unknown,
 ): CodexAppServerPermissionBoundary => {
   const codexHome = privateHome.path;
   const workspaceRef = workspace.path;
@@ -296,7 +294,8 @@ export const validateCodexPermissionProfileEvidence = (
       || (value.description !== null && typeof value.description !== "string"))) {
     throw evidenceError("permission profile list is incomplete");
   }
-  const selected = result.data.filter(value => isCodexRecord(value) && value.id === boundary.permissionProfileId);
+  const data: unknown[] = result.data;
+  const selected = data.filter((value): value is CodexJsonRecord => isCodexRecord(value) && value.id === boundary.permissionProfileId);
   const summary = selected[0];
   if (selected.length !== 1 || summary === undefined || summary.allowed !== true
     || !("description" in summary) || (summary.description !== null && typeof summary.description !== "string")

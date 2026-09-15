@@ -39,15 +39,16 @@ const validateRootJoin = (input: DockerEffectInput, capture: ReturnType<typeof r
 export const createDockerCodexEffectCustodyOwner = (input: DockerEffectInput) => {
   const capture = readDockerWorkspaceCustody(input.proof, input.launch);
   const root = retainedHostPrivateRootBinding(input.root);
+  const source: {readonly backingTreeOwnership?: {readonly kind: unknown}} = input;
   if (executionFields.some(field => typeof input.execution[field] !== "string" || input.execution[field].length === 0) ||
-      input.backingTreeOwnership?.kind !== "exclusive-host-owned-disposable-tree" ||
+      source.backingTreeOwnership?.kind !== "exclusive-host-owned-disposable-tree" ||
       !/^urn:[^\s]{1,1000}$/u.test(input.backingTreeOwnership.evidenceRef)) {
     throw new TypeError("Docker contained-turn ownership unavailable");
   }
   validateRootJoin(input, capture, root);
   // Mode is checked against the actual mount table again at this composition join.
   const workspaceLine = capture.mountTable.split("\n").find(line => line.split(" ")[4] === "/workspace");
-  if (!workspaceLine?.split(" ")[5]?.split(",").includes(input.workspaceWritable ? "rw" : "ro")) {
+  if (workspaceLine?.split(" ")[5]?.split(",").includes(input.workspaceWritable ? "rw" : "ro") !== true) {
     throw new TypeError("Docker workspace mode conflicts with committed attempt");
   }
   const evidence = Object.freeze({execution: Object.freeze({...input.execution}), capture,

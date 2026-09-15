@@ -11,8 +11,8 @@ import {assertDockerPreparedIoLaunch, canonicalJsonSha256,
 
 const hash = (value: unknown): string => typeof value === "string"
   ? createHash("sha256").update(value).digest("hex") : canonicalJsonSha256(value);
-const observeLaunch = DockerHostCustodyLifecycle.prototype.observeLaunch;
-const observeImage = DockerHostCustodyLifecycle.prototype.imageInitWitness;
+const observeLaunch = Object.getOwnPropertyDescriptor(DockerHostCustodyLifecycle.prototype, "observeLaunch")!.value as DockerHostCustodyLifecycle["observeLaunch"];
+const observeImage = Object.getOwnPropertyDescriptor(DockerHostCustodyLifecycle.prototype, "imageInitWitness")!.value as DockerHostCustodyLifecycle["imageInitWitness"];
 const retainedObservation = (owner: DockerHostCustodyLifecycle, launch: LaunchedDockerCustody) => observeLaunch.call(owner, launch);
 const empty = createHash("sha256").digest("hex");
 
@@ -118,7 +118,8 @@ export class DockerKernelEvidence {
           hostIdentitySha256: source.launch.authority.hostIdentitySha256,
           hostBootGenerationSha256: source.launch.authority.hostBootGenerationSha256,
           hostLifecycleGenerationSha256: root.hostLifecycleGenerationSha256});
-        imageProved = witness.scope === "created-image-init-readback";
+        const scope: unknown = witness.scope;
+        imageProved = scope === "created-image-init-readback";
       } catch { /* Missing or foreign readback remains unproven. */ }
     }
     return {imageProved, hostLifecycleGenerationSha256: root?.hostLifecycleGenerationSha256 ?? empty};

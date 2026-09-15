@@ -158,7 +158,7 @@ export function bindContainedTurnRouteEnforcement(
       }
       return result;
     },
-    releaseAfterContainerRemoval: admission.releaseAfterContainerRemoval,
+    releaseAfterContainerRemoval: (...args: Parameters<DockerLinuxOperationRouteAdmission["releaseAfterContainerRemoval"]>) => admission.releaseAfterContainerRemoval(...args),
   }));
   return route;
 }

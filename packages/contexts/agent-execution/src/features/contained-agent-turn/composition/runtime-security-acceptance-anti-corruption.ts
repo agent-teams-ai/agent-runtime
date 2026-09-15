@@ -31,8 +31,9 @@ const checkDecision = (decision: Decision, intent: Intent, constraintsDigest: st
   const {policy, decisionDigest, ownerEvidenceRef, ...selector} = decision;
   exact("RS policy", policy, ["scope", "providerId", "intentDigest", "policyRevision", "enabled", "revoked", "constraintsDigest", "containmentPolicyDigest", "validFromControlTime", "claimBeforeControlTime"]);
   const {operationId: _operationId, ...policySelector} = intent;
+  const enabled: unknown = policy.enabled; const revoked: unknown = policy.revoked;
   if (!same(selector, intent) || !same({scope: policy.scope, providerId: policy.providerId, intentDigest: policy.intentDigest, policyRevision: policy.policyRevision}, policySelector) ||
-      policy.constraintsDigest !== constraintsDigest || policy.enabled !== true || policy.revoked !== false ||
+      policy.constraintsDigest !== constraintsDigest || enabled !== true || revoked !== false ||
       typeof ownerEvidenceRef !== "string" || ownerEvidenceRef.length === 0 || ownerEvidenceRef.length > 512) {throw new TypeError("RS decision does not bind acceptance");}
   parseContainedTurnCanonicalDigest(decisionDigest);
   parseContainedTurnCanonicalDigest(policy.containmentPolicyDigest);
@@ -90,7 +91,7 @@ export const createContainedTurnSecurityAcceptancePort = (
     settleDispatchConsumption: input => securitySettlementOutcome(owner.settleDispatchConsumption(input), input),
   });
   const settlement = createContainedTurnRuntimeSecurityPort(acceptance, authority(async () => {throw new TypeError("publication required");}));
-  return Object.freeze<ContainedTurnKernelSecurityPort>({...acceptance, settleConsumedGrant: settlement.settleConsumedGrant,
+  return Object.freeze<ContainedTurnKernelSecurityPort>({...acceptance, settleConsumedGrant: input => settlement.settleConsumedGrant(input),
     async consumeForDispatch(input) {
       try {
         const {accepted, subject, bindingDigest} = acceptedAuthority(input);

@@ -19,7 +19,7 @@ import {
 } from "./codex-app-server-platform-tuple.js";
 
 type KernelExecutionInput = Parameters<ContainedTurnKernelProviderPort["execute"]>[0];
-const executeReviewedCodexProtocol = CodexAppServerContainedTurnProvider.prototype.execute;
+const executeReviewedCodexProtocol = Object.getOwnPropertyDescriptor(CodexAppServerContainedTurnProvider.prototype, "execute")!.value as CodexAppServerContainedTurnProvider["execute"];
 
 interface CodexAppServerKernelProcess {
   readonly custody: ContainedTurnCustodyHandle;

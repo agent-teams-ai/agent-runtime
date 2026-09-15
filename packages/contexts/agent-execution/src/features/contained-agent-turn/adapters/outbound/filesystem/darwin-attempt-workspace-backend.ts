@@ -35,14 +35,16 @@ function createDarwinAttemptWorkspaceBackend(bridge: Bridge, selected: DarwinNat
         creation.workspaceName !== workspaceName(creation.operationId, creation.scope)) {
       throw new Error("workspace creation does not match root operation/scope reservation");
     }
-    if (creation.schemaVersion !== 1 || creation.rootIdentity.dev !== native.workspaceDev ||
+    const version: unknown = creation.schemaVersion;
+    if (version !== 1 || creation.rootIdentity.dev !== native.workspaceDev ||
         creation.rootIdentity.ino !== native.workspaceIno ||
         !materialized || creation.materializationDigest !== materialized.treeDigest) {throw new Error("native workspace is not the original creation inode");}
     return creation;
   };
   const sealForCreation = async (creation: ContainedTurnWorkspaceCreationRecord): Promise<ContainedTurnWorkspaceSealRecord> => {
     const sealed = await records.seal();
-    if (sealed.schemaVersion !== 2 || sealed.operationId !== creation.operationId ||
+    const version: unknown = sealed.schemaVersion;
+    if (version !== 2 || sealed.operationId !== creation.operationId ||
         sealed.workspaceName !== creation.workspaceName || sealed.scope.projectId !== creation.scope.projectId ||
         sealed.scope.tenantId !== creation.scope.tenantId || sealed.rootIdentity.dev !== creation.rootIdentity.dev ||
         sealed.rootIdentity.ino !== creation.rootIdentity.ino) {throw new Error("workspace seal belongs to another retained root");}
@@ -52,7 +54,8 @@ function createDarwinAttemptWorkspaceBackend(bridge: Bridge, selected: DarwinNat
   const closure = async (): Promise<ContainedTurnWorkspaceClosureRecord> => {
     const sealed = await seal();
     const closed = await records.closure();
-    if (closed.schemaVersion !== 3 || closed.operationId !== sealed.operationId || closed.workspaceName !== sealed.workspaceName ||
+    const version: unknown = closed.schemaVersion;
+    if (version !== 3 || closed.operationId !== sealed.operationId || closed.workspaceName !== sealed.workspaceName ||
         closed.scope.projectId !== sealed.scope.projectId || closed.scope.tenantId !== sealed.scope.tenantId ||
         closed.treeDigest !== sealed.treeDigest || closed.manifestDigest !== sealed.manifestDigest ||
         closed.receiptRef !== createWorkspaceClosureRecord(sealed.workspaceName, sealed).receiptRef) {

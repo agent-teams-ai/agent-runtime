@@ -117,7 +117,7 @@ export const decodeCodexResponseEnvelope = (message: CodexJsonRecord): CodexResp
 export const codexResponseResult = (
   message: CodexJsonRecord,
   requestId: string,
-): unknown | typeof CODEX_APP_SERVER_TIMEOUT => {
+): unknown => {
   const response = decodeCodexResponseEnvelope(message);
   if (response.id !== requestId) {return CODEX_APP_SERVER_TIMEOUT;}
   if (response.kind === "error") {
@@ -229,7 +229,7 @@ export class BoundedCodexJsonLineReader {
       }
       const next = await this.#nextChunk(deadline);
       if (next === CODEX_APP_SERVER_TIMEOUT) {return CODEX_APP_SERVER_TIMEOUT;}
-      if (next.done) {
+      if (next.done === true) {
         this.#ended = true;
       } else {
         this.#chunk = Buffer.from(next.value);

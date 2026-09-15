@@ -40,8 +40,9 @@ export class DockerKernelHostCustody implements ContainedTurnHostCustodyPort {
   public async open(): ReturnType<ContainedTurnHostCustodyPort["open"]> {
     throw new HostCustodyUnsupportedError("launch-plan-unavailable");
   }
+  private retentionUnavailable(): boolean {return this.#disposed || this.#records.size >= 64;}
   public async reserve(value: HostCustodyReservationInput): ReturnType<ContainedTurnHostCustodyPort["reserve"]> {
-    if (this.#disposed || this.#records.size >= 64) {throw new HostCustodyUnsupportedError("retention-capacity-exhausted");}
+    if (this.retentionUnavailable()) {throw new HostCustodyUnsupportedError("retention-capacity-exhausted");}
     value = custodyDataRecord(value);
     if (isNativeHostCustodyWorkspaceAuthority(value.workspaceAuthority)) {
       throw new HostCustodyUnsupportedError("platform-profile-unavailable");
@@ -57,7 +58,7 @@ export class DockerKernelHostCustody implements ContainedTurnHostCustodyPort {
     const custodyRef = `docker-host-reservation:${randomUUID()}`;
     const evidence = new DockerKernelEvidence(input);
     const workspace = await retainLaunchWorkspace(value.workspaceAuthority, value.operationId, value.workspaceRef);
-    if (this.#disposed || this.#records.size >= 64) {await workspace.close(); throw new HostCustodyUnsupportedError("retention-capacity-exhausted");}
+    if (this.retentionUnavailable()) {await workspace.close(); throw new HostCustodyUnsupportedError("retention-capacity-exhausted");}
     this.#records.set(custodyRef, {input, workspace, custodyRef, evidence, resourcesReleased: false});
     return Object.freeze({custodyRef});
   }
@@ -68,7 +69,7 @@ export class DockerKernelHostCustody implements ContainedTurnHostCustodyPort {
   }
   public installCleanup(custodyRef: string, cleanup: DockerKernelReservationCleanup): void {
     const record = this.#records.get(custodyRef);
-    if (this.#disposed || record === undefined || record.cleanup !== undefined || record.containmentStarted) {
+    if (this.#disposed || record === undefined || record.cleanup !== undefined || record.containmentStarted === true) {
       throw new TypeError("Docker cleanup ownership cannot be replaced");
     }
     record.cleanup = Object.freeze({cutoff: cleanup.cutoff.bind(cleanup), cleanup: cleanup.cleanup.bind(cleanup)});
@@ -76,7 +77,7 @@ export class DockerKernelHostCustody implements ContainedTurnHostCustodyPort {
   public installPrivateRoot(custodyRef: string, root: HostPrivateRootOwner): void {
     const record = this.#records.get(custodyRef);
     retainedHostPrivateRootBinding(root);
-    if (this.#disposed || record === undefined || record.cleanup === undefined || record.root !== undefined || record.containmentStarted) {
+    if (this.#disposed || record === undefined || record.cleanup === undefined || record.root !== undefined || record.containmentStarted === true) {
       throw new TypeError("Docker private root cannot be replaced");
     }
     record.evidence.attachPrivateRoot(root);
@@ -96,7 +97,7 @@ export class DockerKernelHostCustody implements ContainedTurnHostCustodyPort {
     // Share each observation; the preparation owner retains the single destructive
     // cleanup flight across bounded observations. A timeout is not its result.
     if (record.containment !== undefined) {return record.containment;}
-    const first = !record.containmentStarted;
+    const first = record.containmentStarted !== true;
     record.containmentStarted = true;
     record.containment = Promise.resolve().then(async () => {
       try {
@@ -109,14 +110,14 @@ export class DockerKernelHostCustody implements ContainedTurnHostCustodyPort {
           return this.unproven(record.custodyRef);
         }
         if (!record.resourcesReleased) {
-          const result = await record.cleanup?.cleanup({deadlineEpochMs: Date.now() + this.cleanupMilliseconds});
-          record.resourcesReleased = result?.kind === "released";
+          const result = await record.cleanup.cleanup({deadlineEpochMs: Date.now() + this.cleanupMilliseconds});
+          record.resourcesReleased = result.kind === "released";
         }
         if (record.resourcesReleased && record.root !== undefined) {
           await record.root.quarantineAndDelete({deadlineEpochMs: Date.now() + this.cleanupMilliseconds});
         }
         const evidence = record.evidence.snapshot();
-        if (record.cutoffFailed || !record.resourcesReleased || !evidence.sealed || evidence.closure.status !== "closed" ||
+        if (record.cutoffFailed === true || !record.resourcesReleased || !evidence.sealed || evidence.closure.status !== "closed" ||
           record.root !== undefined && evidence.privateRoot.status !== "deleted") {return this.unproven(record.custodyRef);}
         await record.workspace.close();
         record.receipt = `urn:agent-runtime:docker-containment:${createHash("sha256")

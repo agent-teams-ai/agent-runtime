@@ -61,7 +61,7 @@ const nativeLaunchInput = (options: CodexAppServerLaunchPlanOptions): Readonly<N
   const files = data.files as CodexNativeBrokerFiles;
   assertCodexNativeBrokerBoundary(recipe, options.boundary);
   const stateDirectory = codexNativeBrokerDarwinStateDirectory(recipe);
-  if (stateDirectory !== undefined && (options.platformTarget?.platform !== "darwin" || stateDirectory !== options.tmpDir)) {
+  if (stateDirectory !== undefined && (options.platformTarget.platform !== "darwin" || stateDirectory !== options.tmpDir)) {
     throw new TypeError("Darwin native state differs from reserved TMPDIR");
   }
   if (typeof data.localCapability !== "string" || data.localCapability.length < 32 || data.localCapability.length > 128
@@ -165,7 +165,7 @@ const validateLaunchEnvironment = (plan: HostCustodyLaunchPlan): void => {
   }
 };
 
-const assertInertLaunchPlan = (plan: HostCustodyLaunchPlan): void => {
+const assertInertLaunchPlan = (plan: unknown): void => {
   if (typeof plan !== "object" || plan === null || types.isProxy(plan)
     || Object.getPrototypeOf(plan) !== Object.prototype
     || Object.values(Object.getOwnPropertyDescriptors(plan)).some(d => !("value" in d))) {
@@ -261,7 +261,7 @@ export const createCodexAppServerLaunchPlan = (
     "boundary", "executablePath", "intentMode", "platformTarget", "privateRootPath", "tmpDir",
   ], ["nativeBroker"]) as unknown as CodexAppServerLaunchPlanOptions;
   const platformTarget = snapshotCodexNativeInput(options.platformTarget, ["architecture", "platform"]);
-  const platformTuple = selectCodexAppServerPlatformTuple(platformTarget as unknown as CodexAppServerPlatformTarget);
+  const platformTuple = selectCodexAppServerPlatformTuple(platformTarget);
   assertIssuedCodexPermissionBoundary(options.boundary);
   const native = nativeLaunchInput(options);
   // Both selected 0.153.4 tuples use the captured native config. Darwin keeps

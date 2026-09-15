@@ -92,7 +92,7 @@ export const readNodeContainedTurnNativeWorkspaceClosure = (
   owner: NodeContainedTurnWorkspaceOwner, input: ClosureInput,
 ): ReturnType<SelectedNativeWorkspaceBackend["readClosed"]> => {
   const facts = issuedOwners.get(owner);
-  if (!facts?.native) {throw new Error("contained turn native workspace owner is not issued");}
+  if (facts?.native !== true) {throw new Error("contained turn native workspace owner is not issued");}
   return facts.readNativeClosure(input);
 };
 
@@ -102,7 +102,7 @@ export const readNodeContainedTurnNativeWorkspaceReceipts = (
   owner: NodeContainedTurnWorkspaceOwner, input: ClosureInput,
 ): ReturnType<SelectedNativeWorkspaceBackend["readReceipts"]> => {
   const facts = issuedOwners.get(owner);
-  if (!facts?.native) {throw new Error("contained turn native workspace owner is not issued");}
+  if (facts?.native !== true) {throw new Error("contained turn native workspace owner is not issued");}
   return facts.readNativeReceipts(Object.freeze({...input}));
 };
 

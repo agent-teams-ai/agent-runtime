@@ -6,12 +6,11 @@ import type { ContainedTurnFilesystemArtifactPort as ContainedTurnArtifactPort }
 import {
   computeContainedTurnArtifactTreeDigest,
   encodeContainedTurnArtifactManifest,
-  MAX_CONTAINED_TURN_ARTIFACT_OUTPUT_RECORDS,
   type ContainedTurnArtifactEntry,
   type ContainedTurnArtifactOutputRecord,
 } from "./contained-turn-artifact-manifest.js";
-import type { VerifiedStoredArtifact } from "./contained-turn-artifact-store.js";
-import { closeWorkspaceHandles } from "./contained-turn-workspace-io.js";
+import { projectArtifactOutput as projectOutput, type ProjectedOutput, type VerifiedStoredArtifact } from "./contained-turn-artifact-store.js";
+import { closeWorkspaceHandles, directoryExistsAt, prefixedWorkspaceFaults as prefixedFaults } from "./contained-turn-workspace-io.js";
 import {
   inspectFileHandle,
   isMissingFilesystemEntry,
@@ -74,15 +73,6 @@ export interface ContainedTurnArtifactSealingContext {
   ) => Promise<void>;
 }
 
-interface ProjectedOutput {
-  readonly items: readonly Readonly<{
-    bytes: Buffer;
-    record: ContainedTurnArtifactOutputRecord;
-  }>[];
-  readonly records: readonly ContainedTurnArtifactOutputRecord[];
-  readonly totalBytes: number;
-}
-
 interface SealDirectories {
   readonly active: StableFilesystemHandle;
   readonly creations: StableFilesystemHandle;
@@ -93,24 +83,6 @@ interface SealDirectories {
   readonly results: StableFilesystemHandle;
   readonly seals: StableFilesystemHandle;
 }
-
-const prefixedFaults = (
-  faults: ContainedTurnFilesystemFaults | undefined,
-  prefix: string,
-): ContainedTurnFilesystemFaults | undefined => faults === undefined ? undefined : Object.freeze({
-  checkpoint: (point: string) => faults.checkpoint(`${prefix}.${point}`),
-});
-
-const directoryExistsAt = async (parent: StableFilesystemHandle, name: string): Promise<boolean> => {
-  try {
-    const child = await openDirectoryEntry(parent, name);
-    await child.close();
-    return true;
-  } catch (error) {
-    if (isMissingFilesystemEntry(error)) {return false;}
-    throw error;
-  }
-};
 
 const readOptionalFileAt = async (
   parent: StableFilesystemHandle, name: string, maxBytes: number,
@@ -133,44 +105,6 @@ const assertWorkspaceRef = (workspaceRef: string, activeRoot: string): string =>
     throw new Error("contained turn artifact workspace reference has an invalid identity");
   }
   return name;
-};
-
-const projectOutput = (
-  output: ArtifactSealInput["output"],
-  limits: ContainedTurnWorkspaceTreeLimits,
-  contentDigest: ContainedTurnArtifactSealingContext["contentDigest"],
-): ProjectedOutput => {
-  if (output.length > MAX_CONTAINED_TURN_ARTIFACT_OUTPUT_RECORDS) {
-    throw new Error("contained turn artifact output exceeded its record limit");
-  }
-  const kinds = new Set(["assistant", "diagnostic", "progress"]);
-  const items: { bytes: Buffer; record: ContainedTurnArtifactOutputRecord }[] = [];
-  let totalBytes = 0;
-  for (const [index, chunk] of output.entries()) {
-    if (chunk.cursor !== index || !kinds.has(chunk.kind)) {
-      throw new Error("contained turn artifact output projection is invalid");
-    }
-    const bytes = Buffer.from(chunk.text, "utf8");
-    totalBytes += bytes.length;
-    if (
-      bytes.length > limits.maxFileBytes || !Number.isSafeInteger(totalBytes) ||
-      totalBytes > limits.maxTotalBytes
-    ) {
-      throw new Error("contained turn artifact output exceeded its operation byte limit");
-    }
-    const record = Object.freeze({
-      cursor: chunk.cursor,
-      digest: contentDigest("blob", bytes),
-      kind: chunk.kind,
-      size: bytes.length,
-    });
-    items.push(Object.freeze({ bytes, record }));
-  }
-  return Object.freeze({
-    items: Object.freeze(items),
-    records: Object.freeze(items.map(item => item.record)),
-    totalBytes,
-  });
 };
 
 const assertOperationWorkspaceIdentity = (
@@ -303,7 +237,6 @@ const replaySealedArtifact = async (input: {
   if (replayStateConflicts({ closure, manifestDigest, name, operationId, seal })) {
     throw new Error("contained turn artifact replay state conflicts with its workspace");
   }
-  if (manifestDigest === undefined) {throw new Error("contained turn replay manifest is missing");}
   const verified = await verifyArtifact(manifestDigest);
   if (replayManifestConflicts({ closure, operationId, output, scope, seal, verified })) {
     throw new Error("contained turn artifact replay manifest conflicts with workspace state");

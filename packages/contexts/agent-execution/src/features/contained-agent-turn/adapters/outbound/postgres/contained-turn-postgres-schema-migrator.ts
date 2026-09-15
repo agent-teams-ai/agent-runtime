@@ -168,7 +168,7 @@ const validateV5RuntimeFenceCatalog = async (
   client: ContainedTurnPostgresClient,
   triggerDefinition: string | undefined,
 ): Promise<void> => {
-  const quarantine = await client.query<{ relforcerowsecurity: boolean; relrowsecurity: boolean }>(
+  const quarantine = await client.query<{ relforcerowsecurity: unknown; relrowsecurity: unknown }>(
     `SELECT relforcerowsecurity, relrowsecurity
        FROM pg_class
       WHERE oid = 'agent_execution.contained_turn_dispatch_preparation_quarantine_v1'::regclass`,
@@ -201,7 +201,7 @@ const validateV5RuntimeFenceCatalog = async (
   );
   if (triggerDefinition === undefined || !triggerDefinition.includes("tenant_id") ||
       quarantine.rows[0]?.relrowsecurity !== true ||
-      quarantine.rows[0]?.relforcerowsecurity !== true || fencedTables.rowCount !== 5 ||
+      quarantine.rows[0].relforcerowsecurity !== true || fencedTables.rowCount !== 5 ||
       writeFences.rowCount !== 5) {
     throw new Error("contained turn PostgreSQL v5 runtime fence drift detected");
   }

@@ -50,7 +50,7 @@ const snapshotRecord = (
   if (typeof value !== "object" || value === null || utilTypes.isProxy(value)) {
     throw new TypeError(`${name} must be a non-Proxy plain record`);
   }
-  const prototype = Object.getPrototypeOf(value);
+  const prototype: unknown = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) {
     throw new TypeError(`${name} must be a plain record`);
   }
@@ -61,7 +61,7 @@ const snapshotRecord = (
   if (keys.some(key => !allowed.has(String(key))) || required.some(key => !Object.hasOwn(descriptors, key))) {
     throw new TypeError(`${name} has missing or unknown keys`);
   }
-  const snapshot: Record<string, unknown> = Object.create(null);
+  const snapshot = Object.create(null) as Record<string, unknown>;
   for (const key of keys as string[]) {
     const descriptor = descriptors[key];
     if (descriptor === undefined || !("value" in descriptor) || descriptor.enumerable !== true) {
@@ -121,7 +121,7 @@ const snapshotBoundary = (value: unknown): CodexAppServerPermissionBoundary => {
   const workspaceIdentity = directoryIdentity(boundary.workspaceIdentity, "Codex workspace identity");
   if (codexHomeIdentity.path !== codexHome || workspaceIdentity.path !== workspaceRef
     || detachedEntries.length !== 3 || detachedEntries[0]?.path !== codexHome
-    || detachedEntries[0]?.access !== "deny"
+    || detachedEntries[0].access !== "deny"
     || !detachedEntries.some(entry => entry.path === ":tmpdir" && entry.access === "read")
     || !detachedEntries.some(entry => entry.path === ":slash_tmp" && entry.access === "read")) {
     throw new TypeError("Codex permission boundary identities do not match its exact roots");
@@ -263,4 +263,19 @@ export const detachCodexProviderOptions = (input: CodexProviderOptionsInput): Co
     tmpDir: boundedString(options.tmpDir, "Codex private TMPDIR"),
     ...(options.turnTimeoutMs === undefined ? {} : { turnTimeoutMs: options.turnTimeoutMs as number }),
   });
+};
+
+export const positiveInteger = (name: string, value: number | undefined, fallback: number): number => {const selected = value ?? fallback;
+  if (!Number.isSafeInteger(selected) || selected <= 0) {throw new TypeError(`${name} must be a positive integer`);}
+  return selected;
+};
+
+export const boundedPositiveInteger = (
+  name: string,
+  value: number | undefined,
+  maximum: number,
+): number => {
+  const selected = positiveInteger(name, value, maximum);
+  if (selected > maximum) {throw new TypeError(`${name} exceeds the fixed Codex containment envelope`);}
+  return selected;
 };

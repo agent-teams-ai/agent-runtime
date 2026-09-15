@@ -1,7 +1,7 @@
 import {randomUUID} from "node:crypto";
 interface OrdinaryQuery {readonly text: string; readonly values: unknown[]; readonly query_timeout: number}
 export interface OrdinaryPostgresClient {
-  query<Row = Record<string, unknown>>(sql: string | OrdinaryQuery, values?: unknown[]): Promise<{rows: Row[]; rowCount: number | null}>;
+  query(sql: string | OrdinaryQuery, values?: unknown[]): Promise<{rows: Record<string, unknown>[]; rowCount: number | null}>;
   release(discard?: boolean): void;
 }
 export interface OrdinaryPostgresPool {connect(): Promise<OrdinaryPostgresClient>}
@@ -22,11 +22,11 @@ const boundedClient = (client: OrdinaryPostgresClient): OrdinaryPostgresClient =
   let released = false;
   const release = (discard = false): void => {if (!released) {released = true; client.release(discard);}};
   return {
-    async query<Row = Record<string, unknown>>(sql: string | OrdinaryQuery, values?: unknown[]) {
+    async query(sql: string | OrdinaryQuery, values?: unknown[]) {
       if (released) {throw new Error("ordinary database client closed");}
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {return await Promise.race([
-        client.query<Row>(typeof sql === "string" ? query(sql, values) : sql),
+        client.query(typeof sql === "string" ? query(sql, values) : sql),
         new Promise<never>((_resolve, reject) => {timer = setTimeout(() => {
           try {release(true);} catch (error) {reject(error); return;}
           reject(new Error("ordinary database query timed out"));
@@ -48,7 +48,6 @@ const withClient = async <T>(pool: OrdinaryPostgresPool, body: (client: Ordinary
 /** Explicit migration, never an effect of constructing the borrowed-pool adapter. */
 export const applyOrdinaryPostgresSchema = async (pool: OrdinaryPostgresPool): Promise<void> => {await withClient(pool, async client => {await client.query(query(ORDINARY_POSTGRES_SCHEMA));});};
 class UnknownCommit extends Error {constructor() {super("ordinary transaction outcome requires readback");}}
-interface StateRow {readonly state: string}
 const refValues = (ref: OrdinaryOperationRef): readonly string[] => [ref.scope.tenantId, ref.scope.projectId, ref.operationId];
 const refFor = (operation: OrdinaryOperation): OrdinaryOperationRef => ({operationId: operation.operationId, scope: operation.scope});
 export class PostgresOrdinaryOperationStore implements OrdinaryOperationStore {
@@ -70,7 +69,7 @@ export class PostgresOrdinaryOperationStore implements OrdinaryOperationStore {
     } finally {client.release(broken);}
   }
   async #read(client: Pick<OrdinaryPostgresClient, "query">, ref: OrdinaryOperationRef, locked = false): Promise<OrdinaryOperation | undefined> {
-    const result = await client.query<StateRow>(query(`SELECT state FROM ordinary_turn_operations_v3 WHERE tenant_id=$1 AND project_id=$2 AND operation_id=$3${locked ? " FOR UPDATE" : ""}`, [...refValues(ref)]));
+    const result = await client.query(query(`SELECT state FROM ordinary_turn_operations_v3 WHERE tenant_id=$1 AND project_id=$2 AND operation_id=$3${locked ? " FOR UPDATE" : ""}`, [...refValues(ref)]));
     const row = result.rows[0]; return row === undefined ? undefined : decodeOrdinaryState(row.state);
   }
   async #write(client: OrdinaryPostgresClient, previous: OrdinaryOperation, next: OrdinaryOperation): Promise<OrdinaryOperation> {
@@ -86,7 +85,7 @@ export class PostgresOrdinaryOperationStore implements OrdinaryOperationStore {
     try {return await this.#transaction(async client => {
       const inserted = await client.query("INSERT INTO ordinary_turn_operations_v3 (tenant_id,project_id,command_id,operation_id,revision,state) VALUES ($1,$2,$3,$4,0,$5) ON CONFLICT (tenant_id,project_id,command_id) DO NOTHING", [input.scope.tenantId, input.scope.projectId, input.commandId, operation.operationId, encodeOrdinaryState(operation)]);
       if (inserted.rowCount === 1) {return {kind: "accepted", operation};}
-      const existing = await client.query<StateRow>("SELECT state FROM ordinary_turn_operations_v3 WHERE tenant_id=$1 AND project_id=$2 AND command_id=$3", [input.scope.tenantId, input.scope.projectId, input.commandId]);
+      const existing = await client.query("SELECT state FROM ordinary_turn_operations_v3 WHERE tenant_id=$1 AND project_id=$2 AND command_id=$3", [input.scope.tenantId, input.scope.projectId, input.commandId]);
       const row = existing.rows[0]; if (row === undefined) {throw new Error("ordinary acceptance disappeared");}
       const prior = decodeOrdinaryState(row.state);
       return prior.fingerprint === fingerprint ? {kind: "duplicate", operation: prior} : {kind: "conflict"};

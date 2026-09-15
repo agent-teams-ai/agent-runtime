@@ -7,18 +7,23 @@ import {inspectDarwinNativeExecutionLease, inspectDarwinNativeLaunchObservation,
 
 const executionFields = ["attemptId", "custodyRef", "effectId", "operationId", "workspaceRef"] as const;
 const issued = new WeakSet<object>();
+const isInertObject = (value: unknown): value is object => value !== null && typeof value === "object" && !isNodeProxy(value);
 const captureExecution = (execution: CodexEffectCustodyExecution): CodexEffectCustodyExecution => {
-  if (!execution || typeof execution !== "object" || isNodeProxy(execution) ||
+  if (!isInertObject(execution) ||
       Object.getPrototypeOf(execution) !== Object.prototype) {
     throw new TypeError("Darwin execution must be an exact inert data record");
   }
-  const fields = Object.getOwnPropertyDescriptors(execution);
-  if (Reflect.ownKeys(fields).length !== executionFields.length || executionFields.some(key => {
-    const field = fields[key];
-    return !field || !("value" in field) || typeof field.value !== "string" || field.value.length === 0;
-  })) {throw new TypeError("Darwin execution must contain only exact own data fields");}
-  return Object.freeze({attemptId: fields.attemptId!.value!, custodyRef: fields.custodyRef!.value!,
-    effectId: fields.effectId!.value!, operationId: fields.operationId!.value!, workspaceRef: fields.workspaceRef!.value!});
+  const fields: PropertyDescriptorMap = Object.getOwnPropertyDescriptors(execution);
+  if (Reflect.ownKeys(fields).length !== executionFields.length) {throw new TypeError("Darwin execution must contain only exact own data fields");}
+  const read = (key: typeof executionFields[number]): string => {
+    const field = fields[key]; const value: unknown = field?.value;
+    if (field === undefined || !("value" in field) || typeof value !== "string" || value.length === 0) {
+      throw new TypeError("Darwin execution must contain only exact own data fields");
+    }
+    return value;
+  };
+  return Object.freeze({attemptId: read("attemptId"), custodyRef: read("custodyRef"),
+    effectId: read("effectId"), operationId: read("operationId"), workspaceRef: read("workspaceRef")});
 };
 
 const directoriesJoined = (facts: ReturnType<typeof inspectDarwinNativeLaunchObservation>): boolean =>
@@ -60,7 +65,7 @@ export const createDarwinCodexEffectCustodyOwner = () => {
       // PG receiver's committed claim. Caller-shaped evidence cannot issue it.
       // Reject proxy traps before invoking the native proof comparator. Its
       // successful comparison establishes that every proof field is inert data.
-      if (!proof || typeof proof !== "object" || isNodeProxy(proof)) {
+      if (!isInertObject(proof)) {
         throw new TypeError("Darwin committed proof must be inert data");
       }
       assertDarwinNativeExecutionClaim(lease, proof);

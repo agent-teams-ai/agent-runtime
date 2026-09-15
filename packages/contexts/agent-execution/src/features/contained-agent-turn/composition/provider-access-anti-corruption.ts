@@ -136,14 +136,14 @@ const exactFrozenDataRecord = (value: unknown, keys: readonly string[]): Record<
   return record;
 };
 
-export const capturedMethod = <Method>(owner: object, value: unknown): Method => {
+export const capturedMethod = (owner: object, value: unknown): ((...args: unknown[]) => unknown) => {
   try {
     if (typeof value !== "function" || trustedIsProxy(value) ||
         trustedGetOwnPropertyDescriptor(value, "bind") !== undefined) {
       throw new ProviderAccessRouteCOwnerError("invalid_method");
     }
     // Native bind reads callable name/length accessors even on frozen methods.
-    return trustedFreeze((...args: unknown[]) => trustedApply(value, owner, args)) as unknown as Method;
+    return trustedFreeze((...args: unknown[]): unknown => trustedApply(value, owner, args));
   } catch {
     throw new ProviderAccessRouteCOwnerError("invalid_method");
   }
@@ -158,11 +158,11 @@ const captureProviderAccessOwner = (value: unknown): CapturedOwner => {
   const revalidateOwner = exactStableDataRecord(outer.revalidate, ["execute"]);
   try {
     return trustedFreeze({
-      consumeForDispatch: capturedMethod<CapturedOwner["consumeForDispatch"]>(outer.dispatchConsumptionV1 as object, dispatchOwner.consumeForDispatch),
-      observeDispatchConsumption: capturedMethod<CapturedOwner["observeDispatchConsumption"]>(outer.dispatchConsumptionV1 as object, dispatchOwner.observeDispatchConsumption),
-      resolve: capturedMethod<CapturedOwner["resolve"]>(outer.resolve as object, resolveOwner.execute),
-      revalidate: capturedMethod<CapturedOwner["revalidate"]>(outer.revalidate as object, revalidateOwner.execute),
-      settleDispatchConsumption: capturedMethod<CapturedOwner["settleDispatchConsumption"]>(outer.dispatchConsumptionV1 as object, dispatchOwner.settleDispatchConsumption),
+      consumeForDispatch: capturedMethod(outer.dispatchConsumptionV1 as object, dispatchOwner.consumeForDispatch) as CapturedOwner["consumeForDispatch"],
+      observeDispatchConsumption: capturedMethod(outer.dispatchConsumptionV1 as object, dispatchOwner.observeDispatchConsumption) as CapturedOwner["observeDispatchConsumption"],
+      resolve: capturedMethod(outer.resolve as object, resolveOwner.execute) as CapturedOwner["resolve"],
+      revalidate: capturedMethod(outer.revalidate as object, revalidateOwner.execute) as CapturedOwner["revalidate"],
+      settleDispatchConsumption: capturedMethod(outer.dispatchConsumptionV1 as object, dispatchOwner.settleDispatchConsumption) as CapturedOwner["settleDispatchConsumption"],
     });
   } catch {
     throw new ProviderAccessRouteCOwnerError("invalid_method");
@@ -361,7 +361,8 @@ const providerAccessPort = (owner: CapturedOwner, publish?: (input: Parameters<C
       const outcome = await ownerOutputValue(owner.resolve(request));
       if (outcome.evidence.purpose !== "acceptance") {return { evidenceId: evidenceId(outcome.evidence, "acceptance"), kind: "indeterminate", reason: "authority_unknown" };}
       if (outcome.kind === "resolved") {exactFrozenDataRecord(outcome, ["kind", "binding", "evidence"]); const binding = snapshot(outcome.binding, outcome.evidence); if (binding.provider !== input.provider || binding.tenantId !== input.scope.tenantId || binding.projectId !== input.scope.projectId) {throw new TypeError("PA current selector mismatch");} return { acceptanceProofId: proofId(outcome.evidence, "acceptance"), acceptanceResolutionDigest: resolutionDigest(binding, outcome.evidence, "acceptance"), kind: "resolved", snapshot: binding };}
-      if (outcome.kind !== "unavailable") {throw new TypeError("PA invalid resolution kind");}
+      const remainingKind: unknown = outcome.kind;
+      if (remainingKind !== "unavailable") {throw new TypeError("PA invalid resolution kind");}
       exactFrozenDataRecord(outcome, ["kind", "reason", "evidence"]);
       exactFrozenDataRecord(outcome.evidence, ["authorityDigest", "bindingAuthorityDigest", "proofRef", "purpose"]);
       if (outcome.reason === "revoked" || outcome.reason === "not_found") {return { kind: "prevented", preventionProofId: proofId(outcome.evidence, "acceptance"), reason: "access_denied" };}
@@ -377,7 +378,8 @@ const providerAccessPort = (owner: CapturedOwner, publish?: (input: Parameters<C
       const outcome = await ownerOutputValue(owner.revalidate(request));
       if (outcome.evidence.purpose !== "dispatch") {return { evidenceId: evidenceId(outcome.evidence, "dispatch"), kind: "indeterminate", reason: "authority_unknown" };}
       if (outcome.kind === "valid") {exactFrozenDataRecord(outcome, ["kind", "binding", "evidence"]); const binding = snapshot(outcome.binding, outcome.evidence); if (containedTurnProviderAccessSnapshotDigest(binding) !== containedTurnProviderAccessSnapshotDigest(input.acceptedSnapshot)) {throw new TypeError("PA current binding changed");} return { dispatchProofId: proofId(outcome.evidence, "dispatch"), dispatchResolutionDigest: resolutionDigest(binding, outcome.evidence, "dispatch"), kind: "current", snapshot: binding };}
-      if (outcome.kind !== "rejected") {throw new TypeError("PA invalid revalidation kind");}
+      const remainingKind: unknown = outcome.kind;
+      if (remainingKind !== "rejected") {throw new TypeError("PA invalid revalidation kind");}
       exactFrozenDataRecord(outcome, ["kind", "reason", "evidence"]);
       exactFrozenDataRecord(outcome.evidence, ["authorityDigest", "bindingAuthorityDigest", "proofRef", "purpose"]);
       if (outcome.reason === "revoked" || outcome.reason.endsWith("_changed") || outcome.reason === "credential_rotated" || outcome.reason === "revision_changed") {return { kind: "prevented", preventionProofId: proofId(outcome.evidence, "dispatch"), reason: "access_revoked" };}
@@ -404,6 +406,6 @@ export const createContainedTurnOperationProviderAccessPort = (outer: OuterConta
   const captured = Object.freeze(Object.fromEntries(["consumeForDispatch", "observeDispatchConsumption", "settleDispatchConsumption"].map(key =>
     [key, capturedMethod(fields.dispatchConsumption as object, dispatch[key])])));
   const legacy = Object.freeze({resolve: fields.resolve, revalidate: fields.revalidate, dispatchConsumptionV1: captured}) as unknown as OuterContainedTurnProviderAccess;
-  const publisher = capturedMethod<OuterContainedTurnProviderAccessOperation["dispatchConsumption"]["publishAndConsumeForDispatch"]>(fields.dispatchConsumption as object, dispatch.publishAndConsumeForDispatch);
+  const publisher = capturedMethod(fields.dispatchConsumption as object, dispatch.publishAndConsumeForDispatch) as OuterContainedTurnProviderAccessOperation["dispatchConsumption"]["publishAndConsumeForDispatch"];
   return providerAccessPort(captureProviderAccessOwner(legacy), (input, request) => publisher(acceptedProviderPreparation(input), request));
 };

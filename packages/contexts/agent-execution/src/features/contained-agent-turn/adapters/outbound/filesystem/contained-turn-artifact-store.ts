@@ -1,7 +1,10 @@
+import type { ContainedTurnFilesystemArtifactPort } from "./contained-turn-filesystem-port.js";
 import { createHash } from "node:crypto";
 
 import {
   decodeContainedTurnArtifactManifest,
+  MAX_CONTAINED_TURN_ARTIFACT_OUTPUT_RECORDS,
+  type ContainedTurnArtifactOutputRecord,
   type ContainedTurnArtifactManifest,
 } from "./contained-turn-artifact-manifest.js";
 import {
@@ -44,7 +47,7 @@ export interface ContainedTurnArtifactStore {
 }
 
 const prefixFaults = (
-  faults: ContainedTurnFilesystemFaults | undefined,
+  faults: (Omit<ContainedTurnFilesystemFaults, "writeFile"> & {readonly writeFile?: ContainedTurnFilesystemFaults["writeFile"]}) | undefined,
   prefix: string,
 ): ContainedTurnFilesystemFaults | undefined => faults === undefined ? undefined : Object.freeze({
   checkpoint: (point: string) => faults.checkpoint(`${prefix}.${point}`),
@@ -162,4 +165,51 @@ export const createContainedTurnArtifactStore = (input: {
   };
 
   return Object.freeze({ contentDigest, verifyArtifact, writeContentAddressed });
+};
+
+export interface ProjectedOutput {
+  readonly items: readonly Readonly<{
+    bytes: Buffer;
+    record: ContainedTurnArtifactOutputRecord;
+  }>[];
+  readonly records: readonly ContainedTurnArtifactOutputRecord[];
+  readonly totalBytes: number;
+}
+
+export const projectArtifactOutput = (
+  output: Parameters<ContainedTurnFilesystemArtifactPort["seal"]>[0]["output"],
+  limits: ContainedTurnWorkspaceTreeLimits,
+  contentDigest: ContainedTurnArtifactStore["contentDigest"],
+): ProjectedOutput => {
+  if (output.length > MAX_CONTAINED_TURN_ARTIFACT_OUTPUT_RECORDS) {
+    throw new Error("contained turn artifact output exceeded its record limit");
+  }
+  const kinds = new Set(["assistant", "diagnostic", "progress"]);
+  const items: { bytes: Buffer; record: ContainedTurnArtifactOutputRecord }[] = [];
+  let totalBytes = 0;
+  for (const [index, chunk] of output.entries()) {
+    if (chunk.cursor !== index || !kinds.has(chunk.kind)) {
+      throw new Error("contained turn artifact output projection is invalid");
+    }
+    const bytes = Buffer.from(chunk.text, "utf8");
+    totalBytes += bytes.length;
+    if (
+      bytes.length > limits.maxFileBytes || !Number.isSafeInteger(totalBytes) ||
+      totalBytes > limits.maxTotalBytes
+    ) {
+      throw new Error("contained turn artifact output exceeded its operation byte limit");
+    }
+    const record = Object.freeze({
+      cursor: chunk.cursor,
+      digest: contentDigest("blob", bytes),
+      kind: chunk.kind,
+      size: bytes.length,
+    });
+    items.push(Object.freeze({ bytes, record }));
+  }
+  return Object.freeze({
+    items: Object.freeze(items),
+    records: Object.freeze(items.map(item => item.record)),
+    totalBytes,
+  });
 };

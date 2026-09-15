@@ -11,12 +11,15 @@ export const retainLaunchWorkspace = async (authority: ResolvedWorkspaceLaunchAu
   const handle = await open(authority.descriptorPath, constants.O_RDONLY | constants.O_DIRECTORY);
   let closed = false;
   let closure: Promise<void> | undefined;
-  const verify = async () => {
+  const assertOpen = (): void => {
     if (closed) {throw new Error("Retained workspace closed");}
+  };
+  const verify = async () => {
+    assertOpen();
     const facts = await inspectFileHandle(handle);
     if (!facts.isDirectory || facts.nlink === 0n || !sameFilesystemIdentity(facts, identity) ||
       await readFilesystemMountIdentity(handle) !== identity.mountId) {throw new Error("Retained workspace identity changed");}
-    if (closed) {throw new Error("Retained workspace closed");}
+    assertOpen();
     return identity;
   };
   try {await verify();} catch (error) {await handle.close(); throw error;}

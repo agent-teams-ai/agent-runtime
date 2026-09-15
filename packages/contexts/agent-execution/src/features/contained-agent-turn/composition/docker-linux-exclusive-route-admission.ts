@@ -1,3 +1,4 @@
+const isAborted = (signal: AbortSignal): boolean => signal.aborted;
 import { LinuxExclusiveRouteOpeningError, openNodeLinuxExclusiveRoute,
   type LinuxExclusiveRouteBinding, type LinuxExclusiveRouteOwner, type LinuxRouteToolPin,
 } from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
@@ -45,7 +46,7 @@ export const createDockerLinuxExclusiveRouteAdmission = (
   let retained: (() => Promise<"quarantined">) | undefined;
   return Object.freeze({
     async admit(request: Admit): Promise<Outcome> {
-      if (entered || request.signal.aborted || !Number.isSafeInteger(request.deadlineEpochMs) ||
+      if (entered || isAborted(request.signal) || !Number.isSafeInteger(request.deadlineEpochMs) ||
         Date.now() >= request.deadlineEpochMs) {return refused;}
       entered = true;
       let opened: LinuxExclusiveRouteOwner;
@@ -60,7 +61,7 @@ export const createDockerLinuxExclusiveRouteAdmission = (
       }
       owner = opened;
       // A cutoff during installation revokes the lease it can no longer use.
-      if (request.signal.aborted) {opened.revoke(); return refused;}
+      if (isAborted(request.signal)) {opened.revoke(); return refused;}
       // The first-write port closes over this factory's own binding: reservation
       // authority stays with the lease and is never mintable from a caller fact.
       return Object.freeze({kind: "installed" as const, owner: opened,

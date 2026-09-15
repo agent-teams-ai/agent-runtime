@@ -3,7 +3,7 @@ import { detachAndFreezeContainedTurnValue } from "../domain/contained-turn-reco
 
 const types = process.getBuiltinModule("node:util").types;
 const prototype = Promise.prototype;
-const then = Promise.prototype.then;
+const then: unknown = Object.getOwnPropertyDescriptor(Promise.prototype, "then")?.value;
 const constructor = Promise;
 /** Check before any async adoption; never invoke an owner-supplied then/constructor. */
 const ownerPromise = <T>(value: Promise<T>): Promise<T> => {
