@@ -213,9 +213,9 @@ export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelPr
       throw new TypeError("Claude current-kernel adapter requires one exact Claude snapshot and manifest");
     }
     this.adapterSnapshot = Object.freeze({ ...options.adapterSnapshot });
-    this.manifest = Object.freeze({
+    this.manifest = Object.freeze<ContainedTurnCapabilityManifest>({
       ...options.manifest,
-      requiredProofKinds: Object.freeze([...options.manifest.requiredProofKinds]) as typeof options.manifest.requiredProofKinds,
+      requiredProofKinds: Object.freeze([...options.manifest.requiredProofKinds]),
       supportedModes: Object.freeze([...options.manifest.supportedModes]),
     });
     positiveTurnTimeout(options.turnTimeoutMs);
@@ -255,6 +255,7 @@ export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelPr
     let callbackViolated = false;
     let callbackResultPromise: Promise<ContainedTurnKernelProviderObservation> | undefined;
     let consumeSettled = false;
+    const callbackConflict = (): boolean => callbackCount !== 1 || callbackViolated;
     try {
       const resolverResult = await this.#options.privateExecutions.consume({
         attemptId: input.attemptId,
@@ -288,7 +289,7 @@ export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelPr
         return indeterminate(input, "private-projection-absent");
       }
       const callbackResult = await callbackResultPromise;
-      if (callbackCount !== 1 || callbackViolated) {
+      if (callbackConflict()) {
         return indeterminate(input, "private-projection-callback-conflict");
       }
       return resolverResult === callbackResult
@@ -378,7 +379,8 @@ export class ClaudeAgentSdkCurrentKernelAdapter implements ContainedTurnKernelPr
     if (startObservation.kind !== "execution_started") {
       return indeterminate(input, `host-start-${startObservation.kind}`);
     }
-    if (startObservation.proof.kind !== "provider_process_start") {
+    const proofKind: unknown = startObservation.proof.kind;
+    if (proofKind !== "provider_process_start") {
       return indeterminate(input, "host-start-proof-conflict");
     }
     const binding = startObservation.proof.binding;
