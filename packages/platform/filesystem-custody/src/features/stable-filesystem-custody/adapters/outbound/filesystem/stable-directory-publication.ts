@@ -1,6 +1,6 @@
 import type { StableDirectoryPublicationOutcome } from "../../../contracts/stable-filesystem-custody.js";
 import type { FileHandle } from "node:fs/promises";
-import { stableFilesystemNativeArtifactPath } from "../native/stable-filesystem-native-artifact.js";
+import { loadStableFilesystemNativeExports } from "../native/stable-filesystem-native-artifact.js";
 
 export class StableDirectoryPublicationUnsupportedError extends Error {
   public constructor(message: string) {
@@ -36,23 +36,26 @@ const assertEntryName = (name: string): void => {
   }
 };
 
+const isNativePublicationBinding = (candidate: unknown): candidate is NativePublicationBinding =>
+  typeof candidate === "object" && candidate !== null &&
+  "publishNoReplace" in candidate && typeof candidate.publishNoReplace === "function";
+
 const loadNativeBinding = (): NativePublicationBinding => {
   if (nativeBinding !== undefined) {return nativeBinding;}
-  const loaded = { exports: {} } as NodeModule;
+  let candidate: unknown;
   try {
-    process.dlopen(loaded, stableFilesystemNativeArtifactPath());
+    candidate = loadStableFilesystemNativeExports();
   } catch {
     throw new StableDirectoryPublicationUnsupportedError(
       "the qualified stable directory publication binding is unavailable",
     );
   }
-  const candidate = loaded.exports as Partial<NativePublicationBinding>;
-  if (typeof candidate.publishNoReplace !== "function") {
+  if (!isNativePublicationBinding(candidate)) {
     throw new StableDirectoryPublicationUnsupportedError(
       "the qualified stable directory publication binding is invalid",
     );
   }
-  nativeBinding = candidate as NativePublicationBinding;
+  nativeBinding = candidate;
   return nativeBinding;
 };
 

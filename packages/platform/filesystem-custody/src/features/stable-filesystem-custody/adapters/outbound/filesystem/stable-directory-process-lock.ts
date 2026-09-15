@@ -1,5 +1,5 @@
 import type { FileHandle } from "node:fs/promises";
-import { stableFilesystemNativeArtifactPath } from "../native/stable-filesystem-native-artifact.js";
+import { loadStableFilesystemNativeExports } from "../native/stable-filesystem-native-artifact.js";
 
 interface NativeProcessLockBinding {
   tryLockDirectory(directory: number): boolean;
@@ -10,22 +10,23 @@ let nativeBinding: NativeProcessLockBinding | undefined;
 
 const waitForRetry = (): Promise<void> => new Promise(resolve => {setTimeout(resolve, 10);});
 
+const isNativeProcessLockBinding = (candidate: unknown): candidate is NativeProcessLockBinding =>
+  typeof candidate === "object" && candidate !== null &&
+  "tryLockDirectory" in candidate && typeof candidate.tryLockDirectory === "function" &&
+  "unlockDirectory" in candidate && typeof candidate.unlockDirectory === "function";
+
 const loadNativeBinding = (): NativeProcessLockBinding => {
   if (nativeBinding !== undefined) {return nativeBinding;}
-  const loaded = { exports: {} } as NodeModule;
+  let candidate: unknown;
   try {
-    process.dlopen(loaded, stableFilesystemNativeArtifactPath());
+    candidate = loadStableFilesystemNativeExports();
   } catch {
     throw new Error("the qualified stable directory process lock binding is unavailable");
   }
-  const candidate = loaded.exports as Partial<NativeProcessLockBinding>;
-  if (
-    typeof candidate.tryLockDirectory !== "function" ||
-    typeof candidate.unlockDirectory !== "function"
-  ) {
+  if (!isNativeProcessLockBinding(candidate)) {
     throw new Error("the qualified stable directory process lock binding is invalid");
   }
-  nativeBinding = candidate as NativeProcessLockBinding;
+  nativeBinding = candidate;
   return nativeBinding;
 };
 

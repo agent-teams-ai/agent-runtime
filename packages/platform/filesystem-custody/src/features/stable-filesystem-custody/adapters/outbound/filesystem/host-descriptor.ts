@@ -1,6 +1,6 @@
 import { StableDirectoryPublicationUnsupportedError, StableDirectoryPublicationAmbiguousResidueError } from "./stable-directory-publication.js";
 import type { BigIntStats } from "node:fs";
-import { stableFilesystemNativeArtifactPath } from "../native/stable-filesystem-native-artifact.js";
+import { loadStableFilesystemNativeExports } from "../native/stable-filesystem-native-artifact.js";
 
 export type StableFilesystemStats = Pick<BigIntStats,
   "dev" | "ino" | "mode" | "uid" | "nlink" | "size" | "ctimeNs" | "mtimeNs" |
@@ -38,23 +38,27 @@ interface HostBinding {
   hostMount(handle: object): string;
 }
 let binding: HostBinding | undefined;
+const hostBindingKeys: readonly (keyof HostBinding)[] = ["initializeDarwinHostAcquisitionGuard", "isDarwinHostAcquisitionGuardInstalled", "hostRoot", "hostOpen", "hostClose", "hostFd",
+  "hostDuplicate", "hostStat", "hostNames", "hostRead", "hostWrite", "hostSync",
+  "hostChmod", "hostMkdir", "hostUnlink", "hostPath", "hostMount", "hostQuarantine"];
+const isUnknownRecord = (candidate: unknown): candidate is Readonly<Record<PropertyKey, unknown>> =>
+  typeof candidate === "object" && candidate !== null;
+const isHostBinding = (candidate: unknown): candidate is HostBinding =>
+  isUnknownRecord(candidate) &&
+  hostBindingKeys.every(key => typeof candidate[key] === "function");
+
 const load = (): HostBinding => {
   if (binding !== undefined) {return binding;}
-  const module = { exports: {} } as NodeModule;
-  process.dlopen(module, stableFilesystemNativeArtifactPath());
-  const candidate = module.exports as Partial<HostBinding>;
-  const keys: readonly (keyof HostBinding)[] = ["initializeDarwinHostAcquisitionGuard", "isDarwinHostAcquisitionGuardInstalled", "hostRoot", "hostOpen", "hostClose", "hostFd",
-    "hostDuplicate", "hostStat", "hostNames", "hostRead", "hostWrite", "hostSync",
-    "hostChmod", "hostMkdir", "hostUnlink", "hostPath", "hostMount", "hostQuarantine"];
-  if (keys.some(key => typeof candidate[key] !== "function")) {
+  const candidate = loadStableFilesystemNativeExports();
+  if (!isHostBinding(candidate)) {
     throw new Error("the actual Darwin Host descriptor binding is unavailable");
   }
-  binding = candidate as HostBinding;
+  binding = candidate;
   return binding;
 };
 export const hasDarwinHostDescriptors = (): boolean => {
   if (process.platform !== "darwin") {return false;}
-  try {return load().isDarwinHostAcquisitionGuardInstalled() === true;} catch {return false;}
+  try {return load().isDarwinHostAcquisitionGuardInstalled();} catch {return false;}
 };
 /** Only the fresh owned full Host child bootstrap may call this, before acquisition.
  * Failure requires child termination; this never runs during module loading. */
