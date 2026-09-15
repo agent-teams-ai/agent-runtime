@@ -1,17 +1,17 @@
-import { isRuntimeProxy } from "../provider-access-data.js";
+import { intrinsicGetter, intrinsicMethod, isRuntimeProxy } from "../provider-access-data.js";
 import { exactCredentialData } from "./credential-rendering-bytes.js";
 import type { CredentialRecipe, PrivateCredentialField } from "./credential-rendering-contracts.js";
 
 const nativeBytes = Uint8Array;
 const typedArray = Object.getPrototypeOf(Uint8Array.prototype) as object;
-const byteLength = Object.getOwnPropertyDescriptor(typedArray, "byteLength")!.get!;
-const byteBuffer = Object.getOwnPropertyDescriptor(typedArray, "buffer")!.get!;
-const byteTag = Object.getOwnPropertyDescriptor(typedArray, Symbol.toStringTag)!.get!;
-const bufferLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "byteLength")!.get!;
-const resizable = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "resizable")!.get!;
-const transfer = ArrayBuffer.prototype.transferToFixedLength;
-const fill = Uint8Array.prototype.fill;
-const set = Uint8Array.prototype.set;
+const byteLength = intrinsicGetter(typedArray, "byteLength")!;
+const byteBuffer = intrinsicGetter(typedArray, "buffer")!;
+const byteTag = intrinsicGetter(typedArray, Symbol.toStringTag)!;
+const bufferLength = intrinsicGetter(ArrayBuffer.prototype, "byteLength")!;
+const resizable = intrinsicGetter(ArrayBuffer.prototype, "resizable")!;
+const transfer = intrinsicMethod(ArrayBuffer.prototype, "transferToFixedLength");
+const fill = intrinsicMethod(Uint8Array.prototype, "fill");
+const set = intrinsicMethod(Uint8Array.prototype, "set");
 const invalid = (): never => {throw new TypeError("invalid operation credential material");};
 
 interface MaterialBuffer {
@@ -28,7 +28,7 @@ const inspectField = (value: unknown, name: PrivateCredentialField["name"]): Mat
   const buffer = Reflect.apply(byteBuffer, bytes, []) as ArrayBuffer;
   // ArrayBuffer's intrinsic rejects shared storage. Equal lengths imply zero offset.
   if (length < 1 || length > (name === "accountId" ? 256 : 8192) ||
-    Reflect.apply(bufferLength, buffer, []) !== length || Reflect.apply(resizable, buffer, [])) {return invalid();}
+    Reflect.apply(bufferLength, buffer, []) !== length || Boolean(Reflect.apply(resizable, buffer, []))) {return invalid();}
   for (let index = 0; index < length; index += 1) {
     const byte = (bytes as Uint8Array)[index] as number;
     if (byte < 0x21 || byte > 0x7e) {return invalid();}
@@ -66,7 +66,7 @@ export const transferOperationMaterial = (fields: readonly MaterialBuffer[]): re
   const owned: ArrayBuffer[] = [];
   try {
     const result = fields.map(field => {
-      const buffer = Reflect.apply(transfer, field.buffer, []) as ArrayBuffer;
+      const buffer = Reflect.apply(transfer, field.buffer, []);
       owned.push(buffer);
       return Object.freeze({name: field.name, valueBytes: new Uint8Array(buffer)});
     });

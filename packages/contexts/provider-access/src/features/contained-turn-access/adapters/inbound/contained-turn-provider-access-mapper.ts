@@ -111,7 +111,7 @@ export const resolveCommandFromContract = (input: {
 };
 
 export const resolveResultToContract = async (
-  result: ResolveProviderAccessResult,
+  result: unknown,
 ): Promise<ResolveContainedTurnProviderAccessOutcome> => {
   const kindDescriptor = result !== null && typeof result === "object"
     ? Object.getOwnPropertyDescriptor(result, "kind") : undefined;
@@ -151,7 +151,7 @@ export const revalidateCommandFromContract = (input: {
 };
 
 export const revalidateResultToContract = async (
-  result: RevalidateProviderAccessResult,
+  result: unknown,
 ): Promise<RevalidateContainedTurnProviderAccessOutcome> => {
   const kindDescriptor = result !== null && typeof result === "object"
     ? Object.getOwnPropertyDescriptor(result, "kind") : undefined;

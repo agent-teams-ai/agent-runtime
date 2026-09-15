@@ -85,7 +85,7 @@ export const createDispatchPostgresControl = (transactions: MaterializationPostg
         if (result.headVersion !== command.expectedHeadVersion + 1 || result.materializationHeadVersion !== command.expectedMaterializationHeadVersion + 1) {
           throw new Error("PA publication result mismatch");
         }
-        return Object.freeze({headVersion: result.headVersion as number, materializationHeadVersion: result.materializationHeadVersion as number});
+        return Object.freeze({headVersion: result.headVersion, materializationHeadVersion: result.materializationHeadVersion});
       }
       if (current.version !== command.expectedHeadVersion) {throw new Error("PA dispatch head CAS conflict");}
       validateDispatchHeadAdvance(current.head, head);

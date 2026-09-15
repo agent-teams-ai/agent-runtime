@@ -73,11 +73,11 @@ export const snapshotProviderAccessScope = (scope: ProviderAccessScopeValue): Pr
 export const snapshotProviderAccessBinding = (
   record: ProviderAccessBindingRecord,
 ): ProviderAccessBindingRecord => {
-  const availability = record.availability;
+  const availability: unknown = record.availability;
   if (availability !== "available" && availability !== "unavailable") {
     throw new TypeError("availability is invalid");
   }
-  const revocation = record.revocation;
+  const revocation: unknown = record.revocation;
   if (revocation !== "active" && revocation !== "revoked") {
     throw new TypeError("revocation is invalid");
   }

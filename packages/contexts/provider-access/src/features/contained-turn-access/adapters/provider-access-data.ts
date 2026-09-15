@@ -100,3 +100,16 @@ export const canonicalProviderAccessObservation = (value: unknown): ProviderAcce
   if (kindRecord.kind !== "found") { throw new TypeError("binding observation kind is invalid"); }
   return Object.freeze({ kind: "found", record: canonicalProviderAccessBinding(kindRecord.record) });
 };
+
+/** Capture native methods for explicit-receiver calls without binding a producer object. */
+export const intrinsicMethod = <T extends object, K extends keyof T>(owner: T, key: K): T[K] => {
+  const value: unknown = Reflect.get(owner, key);
+  if (typeof value !== "function") {throw new TypeError("Native method is unavailable");}
+  return value as T[K];
+};
+
+/** Intrinsic accessors operate only on the receiver supplied to Reflect.apply. */
+export const intrinsicGetter = (owner: object, key: PropertyKey): ((this: unknown) => unknown) | undefined => {
+  const descriptor: { readonly get?: (this: unknown) => unknown } | undefined = Object.getOwnPropertyDescriptor(owner, key);
+  return descriptor?.get;
+};

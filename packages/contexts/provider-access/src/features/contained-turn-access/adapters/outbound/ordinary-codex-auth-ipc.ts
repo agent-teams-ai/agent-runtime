@@ -1,3 +1,4 @@
+import { intrinsicMethod } from "../provider-access-data.js";
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { types } from 'node:util';
 import { parseAuthFrame, authRecord } from './ordinary-codex-auth-json.js';
@@ -18,7 +19,7 @@ const reasonOf = (error: unknown): OrdinaryCodexAuthReason => error instanceof O
     ORDINARY_AUTH_REFUSAL_REASONS.includes(error.reason) ? error.reason : 'validation';
 const pause = (milliseconds: number) => new Promise<void>(resolve => { setTimeout(resolve, Math.max(0, milliseconds)); });
 function groupGone(pid: number | undefined): boolean {
-  if (!pid || pid <= 1) { return false; }
+  if (pid === undefined || pid === 0 || pid <= 1) { return false; }
   try { process.kill(-pid, 0); return false; }
   catch (error) { return error instanceof Error && 'code' in error && error.code === 'ESRCH'; }
 }
@@ -44,39 +45,41 @@ export async function captureAuthHelper(input: AuthHelperSession): Promise<Captu
   const { child, signal } = input;
   const frame = Buffer.alloc(65_536);
   let remoteStatusObserved = false;
-  let used = 0, total = 0, sequence = 0, exited = false, closed = false, failed = false;
-  let exitCode: number | null = null, exitSignal: NodeJS.Signals | null = null;
+  let used = 0, total = 0, sequence = 0;
+  const processState: { exited: boolean; closed: boolean; failed: boolean; exitCode: number | null; exitSignal: NodeJS.Signals | null } = {
+    exited: false, closed: false, failed: false, exitCode: null, exitSignal: null,
+  };
   let pending: { id: number; resolve(value: Record<string, unknown>): void; reject(error: Error): void } | undefined;
   let held: CapturedAuthBytes | undefined;
   let stage: OrdinaryCodexAuthStage = 'startup';
   let diagnostic: {stage: OrdinaryCodexAuthStage; reason: OrdinaryCodexAuthReason} | undefined;
   const diagnose = (reason: OrdinaryCodexAuthReason) => { diagnostic ??= {stage, reason}; };
   const observation = (outcome: OrdinaryCodexAuthObservation['outcome']): OrdinaryCodexAuthObservation => Object.freeze({
-    captureRef: input.captureRef, outcome, exitObserved: exited, closeObserved: closed, processGroupGone: groupGone(child.pid),
+    captureRef: input.captureRef, outcome, exitObserved: processState.exited, closeObserved: processState.closed, processGroupGone: groupGone(child.pid),
     ...(diagnostic ? diagnostic : {stage}),
   });
   const persist = (outcome: OrdinaryCodexAuthObservation['outcome']) => {
     let result: unknown;
-    try { result = input.record(observation(outcome)); } catch { diagnose('journal_failure'); throw refusal('journal_failure'); }
+    try { const record: (this: AuthHelperSession, value: OrdinaryCodexAuthObservation) => unknown = input.record; result = record.call(input, observation(outcome)); } catch { diagnose('journal_failure'); throw refusal('journal_failure'); }
     if (types.isPromise(result) && Object.getPrototypeOf(result) === Promise.prototype &&
         Object.getOwnPropertyDescriptor(result, 'constructor') === undefined) {
-      Promise.prototype.then.call(result, () => {}, () => {});
+      void intrinsicMethod(Promise.prototype, "then").call(result, () => {}, () => {});
     }
     if (result !== undefined) { diagnose('journal_failure'); throw refusal('journal_failure'); }
   };
-  const fail = (reason: OrdinaryCodexAuthReason = 'io_error') => { diagnose(reason); failed = true; pending?.reject(refusal(reason)); pending = undefined; };
-  const onError = () => fail('io_error');
-  const onAbort = () => fail('aborted');
+  const fail = (reason: OrdinaryCodexAuthReason = 'io_error') => { diagnose(reason); processState.failed = true; pending?.reject(refusal(reason)); pending = undefined; };
+  const onError = () => {fail('io_error');};
+  const onAbort = () => {fail('aborted');};
   const onExit = (code: number | null, exit: NodeJS.Signals | null) => {
-    exited = true; exitCode = code; exitSignal = exit;
+    processState.exited = true; processState.exitCode = code; processState.exitSignal = exit;
     if (pending || code !== 0 || exit !== null) { fail('process_exit'); }
   };
-  const onClose = () => { closed = true; if (pending || used !== 0) { fail('stream_closed'); } };
+  const onClose = () => { processState.closed = true; if (pending || used !== 0) { fail('stream_closed'); } };
   const onStderr = (chunk: Buffer) => { total += chunk.length; chunk.fill(0); if (total > 262_144) { fail('output_limit'); } };
   const onStdout = (chunk: Buffer) => {
     try {
       total += chunk.length;
-      if (failed) { return; }
+      if (processState.failed) { return; }
       if (total > 262_144) { throw refusal('output_limit'); }
       for (const byte of chunk) {
         if (byte !== 10) { if (used === frame.length) { throw refusal('output_limit'); } frame[used++] = byte; continue; }
@@ -102,11 +105,11 @@ export async function captureAuthHelper(input: AuthHelperSession): Promise<Captu
   signal.addEventListener('abort', onAbort, { once: true });
   // Reserve the final second for TERM/KILL/closure, inside the same helper deadline.
   const rpcDeadline = input.deadline - 1000;
-  const timer = setTimeout(() => fail('timeout'), Math.max(1, rpcDeadline - performance.now()));
+  const timer = setTimeout(() => {fail('timeout');}, Math.max(1, rpcDeadline - performance.now()));
   const check = () => {
     if (signal.aborted) { fail('aborted'); }
     if (performance.now() >= rpcDeadline) { fail('timeout'); }
-    if (failed || closed) { throw refusal(diagnostic?.reason ?? 'stream_closed'); }
+    if (processState.failed || processState.closed) { throw refusal(diagnostic?.reason ?? 'stream_closed'); }
   };
   const request = (method: AuthMethod, params: object): Promise<Record<string, unknown>> => {
     stage = method; check(); if (pending) { throw refusal(); }
@@ -115,7 +118,7 @@ export async function captureAuthHelper(input: AuthHelperSession): Promise<Captu
       child.stdin.write(JSON.stringify({ id, method, params }) + '\n', error => { if (error) { fail('io_error'); } });
     });
   };
-  const boundaryClosed = () => exited && closed && groupGone(child.pid);
+  const boundaryClosed = () => processState.exited && processState.closed && groupGone(child.pid);
   const awaitClosure = async (deadline: number) => {
     while (performance.now() < deadline && !boundaryClosed()) {
       await pause(Math.min(20, Math.max(0, deadline - performance.now())));
@@ -123,27 +126,27 @@ export async function captureAuthHelper(input: AuthHelperSession): Promise<Captu
   };
   const signalOwned = (killSignal: NodeJS.Signals) => {
     // No signalling after observing leader exit: a bare numeric group is insufficient new ownership proof.
-    if (!exited && child.pid && child.pid > 1) {
+    if (!processState.exited && child.pid !== undefined && child.pid > 1) {
       try { process.kill(-child.pid, killSignal); } catch { /* closure readback decides */ }
     }
   };
-  let success = false, cleanupFailure = false;
+  const completion = { success: false, cleanupFailure: false };
   const finishSession = async () => {
     clearTimeout(timer); signal.removeEventListener('abort', onAbort);
-    if (!exited || !closed || !groupGone(child.pid)) {
+    if (!processState.exited || !processState.closed || !groupGone(child.pid)) {
       signalOwned('SIGTERM'); await awaitClosure(Math.min(input.deadline - 500, performance.now() + 300));
-      if (!exited || !closed || !groupGone(child.pid)) { signalOwned('SIGKILL'); await awaitClosure(input.deadline); }
+      if (!processState.exited || !processState.closed || !groupGone(child.pid)) { signalOwned('SIGKILL'); await awaitClosure(input.deadline); }
     }
-    cleanupFailure = !exited || !closed || !groupGone(child.pid);
-    if (cleanupFailure) { diagnose('cleanup_uncertain'); }
+    completion.cleanupFailure = !processState.exited || !processState.closed || !groupGone(child.pid);
+    if (completion.cleanupFailure) { diagnose('cleanup_uncertain'); }
     frame.fill(0);
-    try { persist(cleanupFailure ? 'cleanup-indeterminate' : success ? 'closed' : 'refused'); } catch { success = false; }
+    try { persist(completion.cleanupFailure ? 'cleanup-indeterminate' : completion.success ? 'closed' : 'refused'); } catch { completion.success = false; }
     child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy();
     child.off('exit', onExit); child.off('close', onClose); child.off('error', onError);
     child.stdin.off('error', onError); child.stdout.off('error', onError); child.stderr.off('error', onError);
     child.stdout.off('data', onStdout); child.stderr.off('data', onStderr);
-    if (failed || signal.aborted || performance.now() >= input.deadline) { success = false; }
-    if (!success || cleanupFailure) { held?.token.fill(0); held?.accountId.fill(0); }
+    if (processState.failed || signal.aborted || performance.now() >= input.deadline) { completion.success = false; }
+    if (!completion.success || completion.cleanupFailure) { held?.token.fill(0); held?.accountId.fill(0); }
   };
   try {
     check(); persist('started');
@@ -152,15 +155,15 @@ export async function captureAuthHelper(input: AuthHelperSession): Promise<Captu
     } }, input.home, input.source);
     stage = 'closure'; check(); child.stdin.end();
     await awaitClosure(rpcDeadline);
-    if (failed || signal.aborted || performance.now() >= rpcDeadline) {
+    if (processState.failed || signal.aborted || performance.now() >= rpcDeadline) {
       throw refusal(diagnostic?.reason ?? (signal.aborted ? 'aborted' : 'timeout'));
     }
-    success = exited && closed && groupGone(child.pid) && exitCode === 0 && exitSignal === null && used === 0;
-  } catch (error) { diagnose(reasonOf(error)); success = false; }
+    completion.success = processState.exited && processState.closed && groupGone(child.pid) && processState.exitCode === 0 && processState.exitSignal === null && used === 0;
+  } catch (error) { diagnose(reasonOf(error)); completion.success = false; }
   finally {
     await finishSession();
   }
-  if (cleanupFailure) { throw new OrdinaryCodexAuthCleanupIndeterminate(observation('cleanup-indeterminate')); }
-  if (!success || !held) { throw refusal(diagnostic?.reason); }
+  if (completion.cleanupFailure) { throw new OrdinaryCodexAuthCleanupIndeterminate(observation('cleanup-indeterminate')); }
+  if (!completion.success || !held) { throw refusal(diagnostic?.reason); }
   return held;
 }

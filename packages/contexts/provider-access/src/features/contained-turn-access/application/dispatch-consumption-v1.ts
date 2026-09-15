@@ -93,7 +93,9 @@ const decideNewConsumption = async (
   const expectedClaim = await verifiedDigest(dependencies.digest, claimBindingDigestPayload(command));
   if (expectedClaim !== command.claimBindingDigest) {return prevented(command, "claim_binding_mismatch", now, head.opaqueOwnerEvidenceRef);}
   const receipt = await receiptFor(command, head, now, dependencies.digest);
-  if (await transaction.markBindingConsumed(receipt) !== undefined) {throw new TypeError("repository write acknowledgement is invalid");}
+  const pendingAcknowledgement: Promise<unknown> = transaction.markBindingConsumed(receipt);
+  const acknowledgement = await pendingAcknowledgement;
+  if (acknowledgement !== undefined) {throw new TypeError("repository write acknowledgement is invalid");}
   return consumed(receipt);
 };
 
@@ -116,7 +118,9 @@ const consumeInTransaction = async (
   const entry: DispatchConsumptionJournalEntry = Object.freeze({
     ...unsignedEntry, journalDigest: await verifiedDigest(dependencies.digest, journalDigestPayload(unsignedEntry)),
   });
-  if (await transaction.saveGrantRequest(entry) !== undefined) {throw new TypeError("repository write acknowledgement is invalid");}
+  const pendingAcknowledgement: Promise<unknown> = transaction.saveGrantRequest(entry);
+  const acknowledgement = await pendingAcknowledgement;
+  if (acknowledgement !== undefined) {throw new TypeError("repository write acknowledgement is invalid");}
   return outcome;
 };
 
@@ -156,7 +160,9 @@ const settleInTransaction = async (
   const outcome = Object.freeze({ kind: "settled" as const, receipt: Object.freeze({
     ...unsigned, settlementDigest: await verifiedDigest(dependencies.digest, canonicalJson(unsigned)),
   }) });
-  if (await transaction.saveSettlement(outcome) !== undefined) {throw new TypeError("repository write acknowledgement is invalid");}
+  const pendingAcknowledgement: Promise<unknown> = transaction.saveSettlement(outcome);
+  const acknowledgement = await pendingAcknowledgement;
+  if (acknowledgement !== undefined) {throw new TypeError("repository write acknowledgement is invalid");}
   return outcome;
 };
 

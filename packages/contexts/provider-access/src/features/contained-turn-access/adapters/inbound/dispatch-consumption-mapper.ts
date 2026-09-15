@@ -7,7 +7,7 @@ import type {
 import type { DispatchConsumptionUseCases } from "../../application/dispatch-consumption-v1.js";
 import {
   snapshotDispatchDigest, snapshotDispatchExpectation, snapshotDispatchId, snapshotDispatchScope,
-  type DispatchConsumeCommand, type DispatchConsumedReceipt, type DispatchDisposition,
+  type DispatchConsumeCommand, type DispatchConsumedReceipt,
   type DispatchExpectationValue, type DispatchPrevention, type DispatchScopeValue, type DispatchSettlementReceipt,
 } from "../../domain/dispatch-consumption.js";
 import { exactDispatchDataRecord } from "../dispatch-consumption-data.js";
@@ -79,7 +79,7 @@ export const settlementInputFromContract = (value: SettleDispatchConsumptionInpu
   ]);
   return Object.freeze({
     consumptionDigest: snapshotDispatchDigest("consumptionDigest", input.consumptionDigest),
-    disposition: input.disposition as DispatchDisposition,
+    disposition: input.disposition,
     expectedBinding: snapshotDispatchExpectation(expectedBinding),
     operationId: snapshotDispatchId("operationId", input.operationId), provider: input.provider,
     scope: scopeFrom(input.scope),

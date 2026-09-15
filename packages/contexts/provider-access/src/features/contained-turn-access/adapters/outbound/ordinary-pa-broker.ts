@@ -1,3 +1,4 @@
+import { intrinsicMethod } from "../provider-access-data.js";
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { Socket } from 'node:net';
 import { createHash, timingSafeEqual } from 'node:crypto';
@@ -38,7 +39,7 @@ const replyFailure = (response: ServerResponse) => {
 };
 async function closeWithin(work: Promise<void>): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  try { await Promise.race([work, new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(refused()), 5000); })]); }
+  try { await Promise.race([work, new Promise<never>((_resolve, reject) => { timer = setTimeout(() => {reject(refused()); }, 5000); })]); }
   finally { clearTimeout(timer); }
 }
 function authenticate(request: IncomingMessage, capability: Buffer): void {
@@ -97,14 +98,14 @@ export async function createOrdinaryPaBroker(input: OrdinaryPaBrokerOptions) {
   const semantic = new Map<string, string>();
   let active: Promise<void> | undefined;
   const sockets = new Set<Socket>(), lifetime = new AbortController();
-  const signal = AbortSignal.any([lifetime.signal, input.selection.operationAbortSignal]);
+  const signal = intrinsicMethod(AbortSignal, "any")([lifetime.signal, input.selection.operationAbortSignal]);
   const check = () => { if (closed || failed || signal.aborted || performance.now() >= input.selection.deadline) { throw refused(); } };
   const handle = async (request: IncomingMessage, response: ServerResponse) => {
     let body: Buffer | undefined, output: Buffer | undefined, sequence: number | undefined;
     let upstream: Awaited<ReturnType<OrdinaryPaUpstream['request']>> | undefined;
     let rendered: Awaited<ReturnType<CredentialRenderingOwner['rendering']['render']>> | undefined;
     const local = new AbortController();
-    const aborted = () => local.abort();
+    const aborted = () => {local.abort(); };
     request.on('aborted', aborted); response.on('close', aborted);
     try {
       check(); authenticate(request, input.capability); const headers = presentation(request);
@@ -124,7 +125,7 @@ export async function createOrdinaryPaBroker(input: OrdinaryPaBrokerOptions) {
         headers[field.name.toLowerCase()] = new TextDecoder('utf-8', { fatal: true }).decode(field.valueBytes);
       }
       check();
-      upstream = await input.upstream.request(body, headers, AbortSignal.any([signal, local.signal]));
+      upstream = await input.upstream.request(body, headers, intrinsicMethod(AbortSignal, "any")([signal, local.signal]));
       if (upstream.status < 200 || upstream.status >= 300) { throw refused(); }
       output = await boundedBytes(upstream.body, 2_097_152);
       totalResponseBytes += output.length;
@@ -164,7 +165,7 @@ export async function createOrdinaryPaBroker(input: OrdinaryPaBrokerOptions) {
       const listen = () => { server.off('error', error); resolve(); };
       server.once('error', error); server.once('listening', listen); server.listen(0, '127.0.0.1');
     });
-    const address = server.address(); if (!address || typeof address === 'string') { throw refused(); }
+    const address = server.address(); if (address === null || typeof address === 'string') { throw refused(); }
     let closing: Promise<void> | undefined;
     let closureWork: Promise<void> | undefined;
     const close = (): Promise<void> => {
@@ -176,7 +177,7 @@ export async function createOrdinaryPaBroker(input: OrdinaryPaBrokerOptions) {
         if (sockets.size !== 0 || server.listening) { throw refused(); }
       })();
       // A bounded observation timeout does not restart destructive server cleanup.
-      closing = closeWithin(closureWork).catch(error => {closing = undefined; throw error;}); return closing;
+      closing = closeWithin(closureWork).catch((error: unknown) => {closing = undefined; throw error;}); return closing;
     };
     return Object.freeze({ endpoint: `http://127.0.0.1:${address.port}/v1`, close });
   } catch {

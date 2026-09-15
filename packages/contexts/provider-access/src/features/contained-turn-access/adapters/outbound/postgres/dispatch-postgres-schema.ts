@@ -41,7 +41,7 @@ export const dispatchPostgresSchemaDigest = async () => (await createSha256Dispa
 const query = "SELECT version, digest FROM provider_access.dispatch_schema WHERE component = 'pa-dispatch-v1'";
 export const assertDispatchSchema = async (client: MaterializationPostgresClient): Promise<void> => {
   const {rows} = await client.query(query);
-  if (rows.length !== 1 || rows[0]?.version !== 1 || rows[0]?.digest !== await dispatchPostgresSchemaDigest()) {
+  if (rows.length !== 1 || rows[0]?.version !== 1 || rows[0].digest !== await dispatchPostgresSchemaDigest()) {
     throw new Error("PA dispatch schema revision mismatch");
   }
 };

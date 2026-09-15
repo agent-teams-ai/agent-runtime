@@ -16,7 +16,7 @@ const keys = ['operationId', 'attemptId', 'tenantId', 'projectId', 'executionPro
 export function snapshotOrdinaryPaBinding(input: unknown): OrdinaryPaBinding {
   if (input === null || typeof input !== 'object' || Object.getPrototypeOf(input) !== Object.prototype) { throw new OrdinaryPaBindingInvalid(); }
   const fields = Object.getOwnPropertyDescriptors(input);
-  if (Reflect.ownKeys(fields).length !== keys.length || keys.some(key => !fields[key] || !('value' in fields[key]!))) { throw new OrdinaryPaBindingInvalid(); }
+  if (Reflect.ownKeys(fields).length !== keys.length || keys.some(key => !fields[key] || !('value' in fields[key]))) { throw new OrdinaryPaBindingInvalid(); }
   const get = (key: typeof keys[number]) => {
     const value: unknown = fields[key]?.value;
     if (typeof value !== 'string' || value.length < 1 || value.length > 512 || Array.from(value).some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) { throw new OrdinaryPaBindingInvalid(); }

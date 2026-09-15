@@ -48,7 +48,7 @@ FOR EACH ROW EXECUTE FUNCTION provider_access.ordinary_request_identity_immutabl
 export const ordinaryPaSchemaDigest = createHash('sha256').update(ddl).digest('hex');
 export async function assertOrdinaryPaSchema(client: MaterializationPostgresClient): Promise<void> {
   const result = await client.query("SELECT version,digest FROM provider_access.materialization_schema WHERE component='ordinary-pa-v1'");
-  if (result.rows.length !== 1 || result.rows[0]?.version !== 1 || result.rows[0]?.digest !== ordinaryPaSchemaDigest) { throw new OrdinaryPaUnavailable(); }
+  if (result.rows.length !== 1 || result.rows[0]?.version !== 1 || result.rows[0].digest !== ordinaryPaSchemaDigest) { throw new OrdinaryPaUnavailable(); }
 }
 export async function migrateOrdinaryPaSchema(transactions: MaterializationPostgresTransactions): Promise<void> {
   await transactions.write(async client => {

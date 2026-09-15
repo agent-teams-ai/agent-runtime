@@ -11,7 +11,7 @@ import { MaterializationPostgresTransactions, type MaterializationPostgresPool, 
   type MaterializationPostgresClient } from "./materialization-postgres-transactions.js";
 
 const digest = createSha256DispatchConsumptionDigest();
-const read = async (client: MaterializationPostgresClient, sql: string, values: unknown[]): Promise<unknown | undefined> => {
+const read = async (client: MaterializationPostgresClient, sql: string, values: unknown[]): Promise<unknown> => {
   const {rows} = await client.query(sql, values);
   if (!rows.length) {return;}
   if (rows.length !== 1) {throw new Error("Invalid PA dispatch row count");}

@@ -1,14 +1,14 @@
-import { isNativePromise, isRuntimeProxy } from "../provider-access-data.js";
+import { intrinsicGetter, intrinsicMethod, isNativePromise, isRuntimeProxy } from "../provider-access-data.js";
 import { eraseGeneration, renderGeneration } from "./credential-rendering-bytes.js";
 import type { CredentialGenerationRequest, RenderedCredentialFields } from "./credential-rendering-contracts.js";
 
-const aborted = Object.getOwnPropertyDescriptor(AbortSignal.prototype, "aborted")?.get;
-const addListener = EventTarget.prototype.addEventListener;
-const removeListener = EventTarget.prototype.removeEventListener;
-const dependentSignal = AbortSignal.any;
-const then = Promise.prototype.then;
+const aborted = intrinsicGetter(AbortSignal.prototype, "aborted");
+const addListener = intrinsicMethod(EventTarget.prototype, "addEventListener");
+const removeListener = intrinsicMethod(EventTarget.prototype, "removeEventListener");
+const dependentSignal = intrinsicMethod(AbortSignal, "any");
+const then = intrinsicMethod(Promise.prototype, "then");
 const closed = (): never => {throw new TypeError("credential rendering unavailable");};
-export const signalAborted = (signal: AbortSignal): boolean => {
+export const signalAborted = (signal: unknown): boolean => {
   if (!aborted || signal === null || typeof signal !== "object" || isRuntimeProxy(signal) ||
     Object.getPrototypeOf(signal) !== AbortSignal.prototype || Object.hasOwn(signal, "aborted") || Object.hasOwn(signal, "reason")) {return closed();}
   // Node's signal getter reads symbol-backed state. Reject shadows before it runs.
@@ -36,7 +36,7 @@ export class CredentialRenderingLifetime {
     this.#signal = signal;
     // A private dependent signal cannot lose cancellation to a source listener
     // that stops propagation. Keep the original signal for authority checks.
-    this.#cancellationSignal = Reflect.apply(dependentSignal, AbortSignal, [[signal]]) as AbortSignal;
+    this.#cancellationSignal = Reflect.apply(dependentSignal, AbortSignal, [[signal]]);
     this.#deadline = deadline;
     this.#cancelled = new Promise<never>((_resolve, reject) => {this.#reject = reject;});
     // Keep cancellation handled even when it precedes the first wait.
@@ -67,7 +67,7 @@ export class CredentialRenderingLifetime {
     if (isRuntimeProxy(pending) || !isNativePromise(pending) || Object.getPrototypeOf(pending) !== Promise.prototype ||
       Object.hasOwn(pending, "constructor")) {return closed();}
     const received = new Promise<RenderedCredentialFields | undefined>((resolve, reject) => {
-      Reflect.apply(then, pending, [
+      void Reflect.apply(then, pending, [
         (value: unknown) => {
           let credentials: RenderedCredentialFields | undefined;
           try {

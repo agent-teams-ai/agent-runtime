@@ -1,3 +1,4 @@
+import { intrinsicMethod } from "../provider-access-data.js";
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { types } from 'node:util';
@@ -16,7 +17,7 @@ export function createOrdinaryCodexAuthCapture(options: OrdinaryCodexAuthCapture
       input.deadline <= startedAt || input.deadline > startedAt + 60_000 || !input.operationRef ||
       input.operationRef.length > 512 || typeof input.record !== 'function' || types.isAsyncFunction(input.record)) { throw new OrdinaryCodexAuthRefused(); }
   const lifetime = new AbortController();
-  const signal = AbortSignal.any([input.signal, lifetime.signal]);
+  const signal = intrinsicMethod(AbortSignal, "any")([input.signal, lifetime.signal]);
   let attempted = false, disposed = false, held: CapturedAuthBytes | undefined, metadata: OrdinaryCodexAuthMetadata | undefined;
   let settle!: () => void;
   const settled = new Promise<void>(resolve => { settle = resolve; });
@@ -63,14 +64,14 @@ export function createOrdinaryCodexAuthCapture(options: OrdinaryCodexAuthCapture
       const forgetHelper = () => {child.off('exit', onExit); child.off('close', onClose); retryHelperClosure = undefined;};
       retryHelperClosure = () => {
         let gone = false;
-        if (child.pid && child.pid > 1) {
+        if (child.pid !== undefined && child.pid > 1) {
           try {process.kill(-child.pid, 0);} catch (error) {gone = error instanceof Error && 'code' in error && error.code === 'ESRCH';}
         }
         const observation = Object.freeze({captureRef, outcome: 'cleanup-indeterminate' as const,
           exitObserved: exited, closeObserved: closed, processGroupGone: gone, ...(files ? {retainedDirectory: files.home} : {})});
         if (!exited || !closed || !gone) {
           // Never signal a numeric group after its leader exit has been observed.
-          if (!exited && child.pid && child.pid > 1) {try {process.kill(-child.pid, 'SIGKILL');} catch { /* readback on retry decides */ }}
+          if (!exited && child.pid !== undefined && child.pid > 1) {try {process.kill(-child.pid, 'SIGKILL');} catch { /* readback on retry decides */ }}
           throw new OrdinaryCodexAuthCleanupIndeterminate(observation);
         }
         input.record(Object.freeze({...observation, outcome: 'closed'}));
@@ -129,7 +130,7 @@ export function createOrdinaryCodexAuthCapture(options: OrdinaryCodexAuthCapture
         const result: unknown = consume(Object.freeze([material.token.toString('ascii'), material.accountId.toString('ascii')]));
         if (types.isPromise(result) && Object.getPrototypeOf(result) === Promise.prototype &&
             Object.getOwnPropertyDescriptor(result, 'constructor') === undefined) {
-          Promise.prototype.then.call(result, () => {}, () => {});
+          void intrinsicMethod(Promise.prototype, "then").call(result, () => {}, () => {});
         }
         if (result !== true) { throw new OrdinaryCodexAuthRefused(); }
         check(); if (held !== material) { throw new OrdinaryCodexAuthRefused(); }

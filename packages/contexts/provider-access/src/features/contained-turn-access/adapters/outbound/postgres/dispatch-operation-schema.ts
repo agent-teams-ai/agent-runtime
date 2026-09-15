@@ -22,7 +22,7 @@ export const dispatchOperationSchemaDigest = async () => (await createSha256Disp
 const query = "SELECT version,digest FROM provider_access.dispatch_operation_schema WHERE component='pa-operation-dispatch-v2'";
 export const assertDispatchOperationSchema = async (client: MaterializationPostgresClient): Promise<void> => {
   const result = await client.query(query);
-  if (result.rows.length !== 1 || result.rows[0]?.version !== 2 || result.rows[0]?.digest !== await dispatchOperationSchemaDigest()) {
+  if (result.rows.length !== 1 || result.rows[0]?.version !== 2 || result.rows[0].digest !== await dispatchOperationSchemaDigest()) {
     throw new Error("PA operation dispatch schema mismatch");
   }
 };

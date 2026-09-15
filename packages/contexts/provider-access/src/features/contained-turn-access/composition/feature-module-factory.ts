@@ -4,6 +4,7 @@ import type { ProviderAccessBindingRepository } from "../application/ports/outbo
 import type { ContainedTurnProviderAccessFeatureApi } from "../contracts/contained-turn-provider-access.js";
 import { createContainedTurnProviderAccessAdapter } from "../adapters/inbound/contained-turn-provider-access-mapper.js";
 import {
+  intrinsicMethod,
   canonicalProviderAccessObservation,
   isNativePromise,
   isRuntimeProxy,
@@ -16,7 +17,7 @@ interface ContainedTurnProviderAccessDependencies {
 const indeterminateObservation = () => Object.freeze({ kind: "indeterminate" as const });
 
 type Callable = (...args: never[]) => unknown;
-const intrinsicFunctionToString = Function.prototype.toString;
+const intrinsicFunctionToString = intrinsicMethod(Function.prototype, "toString");
 const nativeCallableSource = /\{\s*\[native code\]\s*\}\s*$/u;
 
 const isCapturableMethod = (value: unknown): value is Callable => {
@@ -52,16 +53,16 @@ const exactOwnDataDescriptors = (
       throw new TypeError(`${name} cannot contain accessors`);
     }
   }
-  return descriptors as Readonly<Record<string, PropertyDescriptor>>;
+  return descriptors;
 };
 
 const snapshotRepository = (
   dependencies: ContainedTurnProviderAccessDependencies,
 ): ProviderAccessBindingRepository => {
   const dependencyDescriptors = exactOwnDataDescriptors("dependencies", dependencies, ["bindingRepository"]);
-  const repository = dependencyDescriptors.bindingRepository?.value;
+  const repository: unknown = dependencyDescriptors.bindingRepository?.value;
   const repositoryDescriptors = exactOwnDataDescriptors("bindingRepository", repository, ["observeExact"]);
-  const observeExact = repositoryDescriptors.observeExact?.value;
+  const observeExact: unknown = repositoryDescriptors.observeExact?.value;
   if (!isCapturableMethod(observeExact)) {
     throw new TypeError("bindingRepository.observeExact must be a stable method");
   }
