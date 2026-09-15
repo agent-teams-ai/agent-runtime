@@ -22,7 +22,12 @@ export function identity(root, sourceRevision = git(root, "rev-parse", "HEAD")) 
   // native recipes, authority and rejecting tests); only the new output is excluded.
   const pathspec = [".", `:(exclude)${v2ReportPath}`];
   assert.equal(git(root, "status", "--porcelain=v1", "--untracked-files=all", "--", ...pathspec), "", "capture inputs must be committed and clean");
-  assert.equal(git(root, "diff", sourceRevision, "--", ...pathspec), "", "source/input mismatch");
+  try {
+    git(root, "diff", "--quiet", sourceRevision, "--", ...pathspec);
+  } catch (error) {
+    if (error.status !== 1) {throw error;}
+    assert.fail("source/input mismatch");
+  }
   const entries = git(root, "ls-tree", "-r", sourceRevision).split("\n")
     .filter(entry => entry.split("\t")[1] !== v2ReportPath);
   const inputs = entries.map(entry => {
