@@ -17,11 +17,11 @@ interface DiagnosticOperation {
 const compareOperationIds = (left: string, right: string): number => {
   const leftPoints = left[Symbol.iterator]();
   const rightPoints = right[Symbol.iterator]();
-  while (true) {
+  for (;;) {
     const leftPoint = leftPoints.next();
     const rightPoint = rightPoints.next();
-    if (leftPoint.done || rightPoint.done) {
-      return leftPoint.done === rightPoint.done ? 0 : leftPoint.done ? -1 : 1;
+    if (leftPoint.done === true || rightPoint.done === true) {
+      return leftPoint.done === rightPoint.done ? 0 : leftPoint.done === true ? -1 : 1;
     }
     const difference = leftPoint.value.codePointAt(0)! - rightPoint.value.codePointAt(0)!;
     if (difference !== 0) {

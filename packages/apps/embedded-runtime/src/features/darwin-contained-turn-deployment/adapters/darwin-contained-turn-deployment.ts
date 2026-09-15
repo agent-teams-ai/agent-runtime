@@ -46,7 +46,8 @@ export const createDarwinContainedTurnDeployment = (raw: DarwinContainedTurnDepl
   bindStore: ReturnType<typeof createDarwinContainedTurnAuthority>["bindStore"];
   dispose: ReturnType<typeof createDarwinContainedTurnAuthority>["dispose"];
 }> => {
-  if (raw === null || typeof raw !== "object" || types.isProxy(raw)) {
+  const candidate: unknown = raw;
+  if (candidate === null || typeof candidate !== "object" || types.isProxy(candidate)) {
     throw new TypeError("Invalid Darwin deployment input");
   }
   const required = ["owner", "preparation", "qualificationTarget", "runtimeSecurity", "providerAccess",
@@ -103,7 +104,7 @@ export const createDarwinContainedTurnDeployment = (raw: DarwinContainedTurnDepl
           acceptedDispatch: acknowledged.acceptedDispatch,
           operation: {scope, providerId: 'codex', authorityGeneration: acknowledged.acceptedDispatch.authority!.authorityGeneration,
             claimBindingDigest: subject.runtimeSecurityRequest.claimBindingDigest}});
-        retained.push(current.dispose);
+        retained.push(current.dispose.bind(current));
         const signer = createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate({...input.signer,
           authorityOwner: current, scope, hostReservationId: subject.custodyId});
         retained.push(signer.dispose);
@@ -143,6 +144,6 @@ export const createDarwinContainedTurnDeployment = (raw: DarwinContainedTurnDepl
   try {
     const routeEnforcement = createDarwinCodexRouteEnforcement({owner: input.owner,
       preparation: input.preparation, qualificationTarget: input.qualificationTarget, sessionOwner});
-    return Object.freeze({routeEnforcement, bindAuthority: bridge.bind, bindStore: bridge.bindStore, dispose});
+    return Object.freeze({routeEnforcement, bindAuthority: bridge.bind.bind(bridge), bindStore: bridge.bindStore.bind(bridge), dispose});
   } catch (error) {dispose(); throw error;}
 };

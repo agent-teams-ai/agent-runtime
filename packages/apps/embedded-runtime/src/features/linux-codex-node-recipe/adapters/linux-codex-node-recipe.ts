@@ -48,14 +48,16 @@ export const createLinuxCodexNodeRecipe = (options: Readonly<{
   const hostInstanceId = options.hostInstanceId;
   const retained = new Map<string, NodeOwner | undefined>();
   let closed = false;
+  const isClosed = (): boolean => closed;
   const recipe: Recipe = input => {
-    if (closed || retained.has(input.kernel.custodyId) || retained.size >= 64) {
+    if (isClosed() || retained.has(input.kernel.custodyId) || retained.size >= 64) {
       throw new TypeError("Linux Codex Node recipe reservation unavailable");
     }
     retained.set(input.kernel.custodyId, undefined);
     const selected = select(input);
-    if (closed) {throw new TypeError("Linux Codex Node recipe admission closed during selection");}
-    if (selected.nativeFileOptions === undefined) {
+    if (isClosed()) {throw new TypeError("Linux Codex Node recipe admission closed during selection");}
+    const nativeFileOptions: unknown = selected.nativeFileOptions;
+    if (nativeFileOptions === undefined) {
       throw new TypeError("Linux Codex Node recipe requires native-file installation options");
     }
     const kernel = input.kernel;

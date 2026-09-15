@@ -62,8 +62,9 @@ export class LinuxCodexCompositionInputUnavailableError extends TypeError {
 }
 const missing = (boundary: string): never => {throw new LinuxCodexCompositionInputUnavailableError(boundary);};
 const data = <T extends object>(value: T, boundary: string): T => {
-  if (value === null || typeof value !== "object" || types.isProxy(value) ||
-      ![Object.prototype, null].includes(Object.getPrototypeOf(value))) {return missing(boundary);}
+  const candidate: unknown = value;
+  if (candidate === null || typeof candidate !== "object" || types.isProxy(candidate) ||
+      (Object.getPrototypeOf(candidate) !== Object.prototype && Object.getPrototypeOf(candidate) !== null)) {return missing(boundary);}
   const descriptors = Object.getOwnPropertyDescriptors(value);
   if (Reflect.ownKeys(value).some(key => typeof key !== "string") ||
       Object.values(descriptors).some(descriptor => !("value" in descriptor))) {return missing(boundary);}
@@ -99,7 +100,7 @@ const joinedHttpResources = (
     async accept(...[socket, signal]: Parameters<Accept>) {
       if (address === undefined || hostHttpAbortOperations.aborted(signal)) {throw new TypeError("Docker HTTP listener unavailable");}
       const cutoff = new AbortController();
-      const subscription = hostHttpAbortOperations.subscribe(signal, () => hostHttpAbortOperations.abort(cutoff));
+      const subscription = hostHttpAbortOperations.subscribe(signal, () => { hostHttpAbortOperations.abort(cutoff); });
       try {
         const expectedRequest = Object.freeze({requestId: randomUUID(), method: "POST",
           path: "/backend-api/codex/responses", host: address});
@@ -145,24 +146,24 @@ const validateOperationSelection = (
   const httpResources = data(preparation.resources, "http-resources");
   const route = data(selected.route, "route-admission");
   const files = data(selected.nativeFiles, "native-finalizer");
-  if ([files.install, files.bindRoot, files.cutoff, files.quiesce, files.snapshot].some(method => typeof method !== "function")) {return missing("native-finalizer");}
+  if (["install", "bindRoot", "cutoff", "quiesce", "snapshot"].some(key => typeof Object.getOwnPropertyDescriptor(files, key)?.value !== "function")) {return missing("native-finalizer");}
   // Validate the complete selection before entering any resource recipe.
   if (typeof preparation.engineIdentity !== "function" || typeof preparation.openLifecycle !== "function" ||
-      typeof preparation.openResourceJournal !== "function" || typeof httpResources.consumption?.prepare !== "function") {
+      typeof preparation.openResourceJournal !== "function" || typeof (httpResources.consumption as {prepare?: unknown} | undefined)?.prepare !== "function") {
     return missing("resource-owners");
   }
   const broker = data(selected.broker, "broker-ports");
   const connection = data(selected.connection, "connection");
   const currentInput = data(selected.currentAuthority, "current-authority");
   const binding = data(route.binding, "route-binding");
-  if (typeof route.engine?.inspect !== "function" || route.nsenter === undefined || route.nft === undefined ||
+  if (typeof (route.engine as {inspect?: unknown} | undefined)?.inspect !== "function" || (route.nsenter as unknown) === undefined || (route.nft as unknown) === undefined ||
       binding.operationId !== kernel.operationId || binding.attemptId !== kernel.attemptId ||
       binding.custodyId !== kernel.custodyId || binding.authorityVectorDigest !== kernel.authorityVectorDigest) {
     return missing("route-admission-binding");
   }
   if (currentInput.operation.scope.operationId !== kernel.operationId ||
       currentInput.operation.providerId !== "codex" ||
-      currentInput.operation.scope.scopeDigest !== `sha256:${preparation.subjectFacts?.scopeSha256}`) {
+      currentInput.operation.scope.scopeDigest !== `sha256:${(preparation.subjectFacts as {scopeSha256?: string} | undefined)?.scopeSha256}`) {
     return missing("current-authority-binding");
   }
   for (const key of ["ids", "resolver", "evidence"] as const) {
@@ -181,8 +182,8 @@ export const createLinuxCodexContainedTurnOwner = (
   supplied: LinuxCodexContainedTurnResources | undefined,
 ): CodexCurrentKernelOwner => {
   const resources = data(supplied!, "trusted-resources");
-  if (resources.imageInitLock === undefined) {return missing("image-init-lock");}
-  if (typeof resources.select !== "function" || types.isProxy(resources.select)) {return missing("resource-selection");}
+  if ((resources.imageInitLock as unknown) === undefined) {return missing("image-init-lock");}
+  if (typeof resources.select !== "function" || types.isProxy(Object.getOwnPropertyDescriptor(resources, "select")?.value)) {return missing("resource-selection");}
   if (!Number.isSafeInteger(resources.cleanupMilliseconds) || resources.cleanupMilliseconds <= 0) {
     return missing("cleanup-deadline");
   }
@@ -223,7 +224,7 @@ export const createLinuxCodexContainedTurnOwner = (
         return Object.freeze({...preparation, nativeFiles: selected.nativeFiles, routeAdmission: finalizer.routeAdmission,
           resources: http.resources});
       } catch (error) {
-        disposeAll([() => selection.nativeFiles?.cutoff(), () => authorities?.dispose(),
+        disposeAll([() => { (selection.nativeFiles as Partial<OperationSelection>["nativeFiles"])?.cutoff(); }, () => authorities?.dispose(),
           () => signer?.dispose(), () => current?.dispose(), () => selection.dispose?.()]);
         throw error;
       }

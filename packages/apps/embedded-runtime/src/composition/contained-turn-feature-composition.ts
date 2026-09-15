@@ -39,8 +39,7 @@ import {
 export type ContainedTurnOuterCompositionDependencies =
   Omit<ContainedTurnFeatureDependencies, "providerAccess" | "security"> & ContainedTurnAuthorityDependencies;
 
-type HostCustodyAuthority = CreateCodexCurrentKernelOwnerOptions["hostCustody"] &
-  CreateClaudeCurrentKernelOwnerOptions["hostCustody"];
+type HostCustodyAuthority = CreateCodexCurrentKernelOwnerOptions["hostCustody"];
 
 export type ContainedTurnHostProviderSelection =
   | Readonly<{
@@ -122,7 +121,7 @@ export class ProviderRouteEnforcementUnsupportedError extends Error {
 }
 
 const trustedApply = Reflect.apply;
-const trustedBind = Function.prototype.bind;
+const trustedBind = Object.getOwnPropertyDescriptor(Function.prototype, "bind")!.value as typeof Function.prototype.bind;
 const trustedFreeze = Object.freeze;
 const trustedGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
 const trustedGetOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
@@ -207,7 +206,8 @@ const createSelectedProviderOwner = (
       // Inspect owner data before spreading so accessors/proxies cannot run.
       let options: CreateCodexCurrentKernelOwnerOptions;
       if (target?.platform === "darwin-arm64") {
-        if (trustedIsProxy(selection.owner) || selection.owner === null || typeof selection.owner !== "object") {throw invalidProviderOwner();}
+        const candidate: unknown = selection.owner;
+        if (trustedIsProxy(candidate) || candidate === null || typeof candidate !== "object") {throw invalidProviderOwner();}
         const fields = trustedGetOwnPropertyDescriptors(selection.owner);
         if (trustedOwnKeys(fields).some(key => !("value" in fields[key as string]!)) || Object.hasOwn(fields, "hostCustody")) {throw invalidProviderOwner();}
         options = bindDarwinCodexRouteEnforcement(routeEnforcement, {...selection.owner, hostCustody});
@@ -276,7 +276,7 @@ export const composeHostCustodiedContainedTurn = (
       provider: owner.provider,
     }));
   } catch (error) {
-    return disposeAfterContainedTurnConstructionFailure(error, () => owner.dispose());
+    return disposeAfterContainedTurnConstructionFailure(error, () => { owner.dispose(); });
   }
   let disposed = false;
   return Object.freeze({
@@ -319,7 +319,8 @@ const observedPlatformTarget = (): string => `${process.platform}-${process.arch
 const requireRouteEnforcementTarget = (
   dependencies: HostCustodiedContainedTurnDependencies,
 ): ContainedTurnRouteQualificationTarget => {
-  if (dependencies === null || typeof dependencies !== "object" || trustedIsProxy(dependencies)) {
+  const candidate: unknown = dependencies;
+  if (candidate === null || typeof candidate !== "object" || trustedIsProxy(candidate)) {
     throw new ProviderRouteEnforcementUnsupportedError();
   }
   const descriptor = trustedGetOwnPropertyDescriptor(dependencies, "routeEnforcement");
@@ -358,7 +359,8 @@ const requireRouteEnforcementTarget = (
  * without reading it, exactly as they did before this check existed.
  */
 const selectsClaudeProvider = (dependencies: HostCustodiedContainedTurnDependencies): boolean => {
-  if (dependencies === null || typeof dependencies !== "object" || trustedIsProxy(dependencies)) {
+  const candidate: unknown = dependencies;
+  if (candidate === null || typeof candidate !== "object" || trustedIsProxy(candidate)) {
     return false;
   }
   try {
@@ -430,7 +432,7 @@ const createLinuxCodexDeployment = (
     }) satisfies ContainedTurnFeatureDependencies);
   }, PRODUCT_QUALIFICATION_REGISTRY);
   } catch (error) {deployment.dispose(); throw error;}
-  return Object.freeze({feature: composition.feature, sealAdmission: composition.sealAdmission, dispose(): void {
+  return Object.freeze({feature: composition.feature, sealAdmission: composition.sealAdmission.bind(composition), dispose(): void {
     try {composition.dispose();} finally {deployment.dispose();}
   }});
 };
@@ -446,7 +448,8 @@ const createLinuxCodexDeployment = (
 export const createHostCustodiedContainedTurn = (
   dependencies: HostCustodiedContainedTurnDependencies,
 ): HostCustodiedContainedTurnComposition => {
-  const deployment = dependencies !== null && typeof dependencies === "object" && !trustedIsProxy(dependencies)
+  const candidate: unknown = dependencies;
+  const deployment = candidate !== null && typeof candidate === "object" && !trustedIsProxy(candidate)
     ? trustedGetOwnPropertyDescriptor(dependencies, "linuxCodexDeployment") : undefined;
   if (deployment !== undefined) {
     if (!("value" in deployment) || trustedGetOwnPropertyDescriptor(dependencies, "linuxCodex") !== undefined) {
@@ -454,7 +457,7 @@ export const createHostCustodiedContainedTurn = (
     }
     const {selection} = snapshotContainedTurnAuthority(dependencies);
     if (selection.authority !== "current") {throw new TypeError("Linux Codex deployment requires current authority");}
-    return createLinuxCodexDeployment(dependencies as Extract<HostCustodiedContainedTurnDependencies, {authority: "current"}>, deployment.value);
+    return createLinuxCodexDeployment(dependencies as Extract<HostCustodiedContainedTurnDependencies, {authority: "current"}>, deployment.value as LinuxCodexDeploymentInfrastructure);
   }
   return composeQualifiedHostCustodiedContainedTurn(
     dependencies,

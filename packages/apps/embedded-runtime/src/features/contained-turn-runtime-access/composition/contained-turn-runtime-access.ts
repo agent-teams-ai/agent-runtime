@@ -143,7 +143,7 @@ class ContainedTurnSubmissionCompletion {
     }
     const operation = Object.freeze({
       operationId,
-      scope: Object.freeze({ ...this.#dependencies.scope! }),
+      scope: Object.freeze({ ...this.#dependencies.scope }),
     });
     this.#dependencies.onAccepted(operation, this.#ownerCall);
     this.#dependencies.onObserved(operationId, "contract_violation");
@@ -160,7 +160,7 @@ class ContainedTurnSubmissionCompletion {
   ): string => {
     const operation = copyAcceptedOperation(
       rawOperation,
-      this.#dependencies.scope!,
+      this.#dependencies.scope,
       onOperationId,
     );
     if (this.#acceptedOperationId !== undefined &&
@@ -225,8 +225,8 @@ class ContainedTurnSubmissionCompletion {
     if (this.#acceptanceContractViolated) {
       const operation = copyAcceptedOperation(Object.freeze({
         operationId: copied.observation.operationId,
-        scope: this.#dependencies.scope!,
-      }), this.#dependencies.scope!);
+        scope: this.#dependencies.scope,
+      }), this.#dependencies.scope);
       this.#dependencies.onAccepted(operation, this.#ownerCall);
       this.#dependencies.onObserved(operation.operationId, "contract_violation");
       return;
@@ -238,7 +238,7 @@ class ContainedTurnSubmissionCompletion {
     }
     const operationId = this.#trackAcceptedOperation(Object.freeze({
       operationId: copied.observation.operationId,
-      scope: this.#dependencies.scope!,
+      scope: this.#dependencies.scope,
     }), copied.observation.status);
     if (this.#acceptedOperationId === undefined) {
       this.#resolveAcceptance(operationId);
@@ -295,9 +295,9 @@ class ContainedTurnSubmissionCompletion {
     let completion: Promise<unknown>;
     try {
       completion = this.#dependencies.executeCall(() =>
-        this.#dependencies.capability!.submit.execute({
+        this.#dependencies.capability.submit.execute({
           ...input,
-          scope: this.#dependencies.scope!,
+          scope: this.#dependencies.scope,
           authority: this.#dependencies.scope,
         }, { onAccepted: this.#accepted, signal: this.#dependencies.hostSignal }));
     } catch {
@@ -406,7 +406,7 @@ export const createContainedTurnRuntimeAccess = (
     }
     let outcome: ObserveRuntimeContainedTurnOutcome;
     try {
-      outcome = copyObservation(unwrapContainedTurnAuthorityOutcome(completion.outcome, dependencies.scope!), operationId);
+      outcome = copyObservation(unwrapContainedTurnAuthorityOutcome(completion.outcome, dependencies.scope), operationId);
     } catch (error) {
       dependencies.onObserved(operationId, "contract_violation");
       throw error;
@@ -442,7 +442,7 @@ export const createContainedTurnRuntimeAccess = (
     }
     let outcome: ObserveRuntimeContainedTurnOutcome;
     try {
-      outcome = copyObservation(unwrapContainedTurnAuthorityOutcome(completion.outcome, dependencies.scope!), operationId);
+      outcome = copyObservation(unwrapContainedTurnAuthorityOutcome(completion.outcome, dependencies.scope), operationId);
     } catch (error) {
       dependencies.onObserved(operationId, "contract_violation");
       throw error;

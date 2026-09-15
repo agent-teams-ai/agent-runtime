@@ -294,7 +294,7 @@ export const copyInput = (
     const expectedProvider = copyProviderIdentity(input.expectedProvider);
     const intent = input.intent;
     const prompt = copyPrompt(intent.prompt);
-    const mode = intent.mode;
+    const mode: unknown = intent.mode;
     if (commandId === undefined || expectedProvider === undefined || prompt === undefined ||
       (mode !== "analysis" && mode !== "workspace-write")) {
       return;
@@ -322,7 +322,7 @@ export const copyAcceptedOperation = <Scope extends ContainedTurnCompositionScop
   try {
     const operationId = operation.operationId;
     onOperationId?.(operationId);
-    const rawScope = operation.scope;
+    const rawScope: unknown = operation.scope;
     if (typeof rawScope !== "object" || rawScope === null) {
       return contractViolation("malformed_owner_outcome");
     }

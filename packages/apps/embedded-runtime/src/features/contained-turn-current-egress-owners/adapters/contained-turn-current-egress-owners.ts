@@ -24,17 +24,17 @@ const invalid = (): never => {throw new TypeError("Invalid current egress owner 
 
 // Only the repository's optional-head envelope is translated here. RS's existing
 // validator owns the authority schema; the current owner validates the CAS version.
-const projectHead = (value: AcceptedHead): CurrentEgressDispatchHead => {
+const projectHead = (value: unknown): CurrentEgressDispatchHead => {
   if (value === null || typeof value !== "object" || types.isProxy(value)) {return invalid();}
-  const prototype = Object.getPrototypeOf(value);
+  const prototype: unknown = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) {return invalid();}
-  const fields = Object.getOwnPropertyDescriptors(value);
+  const fields: Record<string, PropertyDescriptor | undefined> = Object.getOwnPropertyDescriptors(value);
   const keys = Reflect.ownKeys(fields);
-  if (!fields.headVersion || !("value" in fields.headVersion) ||
+  if (fields.headVersion === undefined || !("value" in fields.headVersion) ||
       keys.some(key => key !== "headVersion" && key !== "authority") ||
-      (fields.authority && !("value" in fields.authority))) {return invalid();}
+      (fields.authority !== undefined && !("value" in fields.authority))) {return invalid();}
   const raw: unknown = fields.authority?.value;
-  if (raw === undefined) {return { headVersion: fields.headVersion.value, authority: null };}
+  if (raw === undefined) {return { headVersion: fields.headVersion.value as AcceptedHead["headVersion"], authority: null };}
   if (raw === null || typeof raw !== "object" || types.isProxy(raw)) {return invalid();}
   // The domain snapshot uses own-data reflection. Reject proxy scope before that
   // reflection too, without invoking a getter on the supplied head.
@@ -42,7 +42,7 @@ const projectHead = (value: AcceptedHead): CurrentEgressDispatchHead => {
   if (!scope || !("value" in scope) || types.isProxy(scope.value)) {return invalid();}
   const head = snapshotDispatchAuthorityHead(raw) ?? invalid();
   return {
-    headVersion: fields.headVersion.value,
+    headVersion: fields.headVersion.value as AcceptedHead["headVersion"],
     authority: {
       operation: {
         scope: { ...head.scope, operationId: head.operationId },

@@ -32,7 +32,7 @@ export const copyContainedTurnAccessAuthority = (
     if (typeof value !== "object" || value === null || types.isProxy(value)) {
       return;
     }
-    const prototype = Object.getPrototypeOf(value);
+    const prototype: unknown = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) {
       return;
     }

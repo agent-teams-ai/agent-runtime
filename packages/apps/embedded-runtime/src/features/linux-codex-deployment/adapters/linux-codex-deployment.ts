@@ -51,21 +51,23 @@ export interface LinuxCodexDeploymentInfrastructure {
 }
 
 const captureInfrastructure = (value: LinuxCodexDeploymentInfrastructure): LinuxCodexDeploymentInfrastructure => {
-  if (value === null || typeof value !== "object" || types.isProxy(value) ||
-      ![Object.prototype, null].includes(Object.getPrototypeOf(value))) {
+  const candidate: unknown = value;
+  if (candidate === null || typeof candidate !== "object" || types.isProxy(candidate) ||
+      (Object.getPrototypeOf(candidate) !== Object.prototype && Object.getPrototypeOf(candidate) !== null)) {
     throw new TypeError("Linux Codex deployment infrastructure unavailable");
   }
-  const fields = Object.getOwnPropertyDescriptors(value);
-  if (Object.values(fields).some(field => !("value" in field))) {
+  const fields: Record<string, PropertyDescriptor | undefined> = Object.getOwnPropertyDescriptors(value);
+  if (Object.values(fields).some(field => field !== undefined && !("value" in field))) {
     throw new TypeError("Linux Codex deployment infrastructure accessor unavailable");
   }
   const current = fields.currentAuthority?.value as LinuxCodexDeploymentInfrastructure["currentAuthority"];
-  if (current === null || typeof current !== "object" || types.isProxy(current)) {
+  const currentCandidate: unknown = current;
+  if (currentCandidate === null || typeof currentCandidate !== "object" || types.isProxy(currentCandidate)) {
     throw new TypeError("Linux Codex deployment current authority unavailable");
   }
-  const readers = Object.getOwnPropertyDescriptors(current);
-  if (!readers.runtimeSecurity || !("value" in readers.runtimeSecurity) ||
-      !readers.providerAccess || !("value" in readers.providerAccess)) {
+  const readers: Record<string, PropertyDescriptor | undefined> = Object.getOwnPropertyDescriptors(current);
+  if (readers.runtimeSecurity === undefined || !("value" in readers.runtimeSecurity) ||
+      readers.providerAccess === undefined || !("value" in readers.providerAccess)) {
     throw new TypeError("Linux Codex deployment current authority accessor unavailable");
   }
   return captureLinuxCodexDeploymentData({...value,
@@ -112,7 +114,8 @@ export const createLinuxCodexDeploymentResources = (infrastructure: LinuxCodexDe
       bindContainedTurnRouteEnforcement(routeEnforcement, acknowledged.binding);
       const policy = infrastructure.currentPolicy(acknowledged);
       const suppliedRecipe = infrastructure.recipe(input);
-      if (suppliedRecipe === null || typeof suppliedRecipe !== "object" || types.isProxy(suppliedRecipe)) {
+      const candidate: unknown = suppliedRecipe;
+      if (candidate === null || typeof candidate !== "object" || types.isProxy(candidate)) {
         throw new TypeError("Linux Codex deployment recipe unavailable");
       }
       const recipeFields = Object.getOwnPropertyDescriptors(suppliedRecipe);
@@ -161,5 +164,5 @@ export const createLinuxCodexDeploymentResources = (infrastructure: LinuxCodexDe
       } catch (error) {dispose(); throw error;}
     },
   });
-  return Object.freeze({resources, bindAuthority: authority.bind, bindOperationStore: authority.bindStore, dispose: authority.dispose});
+  return Object.freeze({resources, bindAuthority: authority.bind.bind(authority), bindOperationStore: authority.bindStore.bind(authority), dispose: authority.dispose.bind(authority)});
 };

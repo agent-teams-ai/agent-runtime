@@ -39,27 +39,29 @@ export const captureDarwinDeploymentData = <T>(value: T, depth = 0): T => {
   // Deployment TLS trust may be bytes. Copy through intrinsics, never a caller's
   // iterator/valueOf; the private captured bytes are not returned to that caller.
   if (types.isUint8Array(value)) {
-    const length = Reflect.apply(Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), "byteLength")!.get!, value, []);
+    const byteLength = Reflect.get(Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype) as object, "byteLength")!, "get") as (this: Uint8Array) => number;
+    const length = Reflect.apply(byteLength, value, []);
     if (length > 1024 * 1024) {return unavailable();}
     const bytes = new Uint8Array(length);
-    Reflect.apply(Uint8Array.prototype.set, bytes, [value]);
+    Reflect.apply(Reflect.get(Uint8Array.prototype, "set"), bytes, [value]);
     return bytes as T;
   }
-  const prototype = Object.getPrototypeOf(value);
-  if (![Object.prototype, Array.prototype, null].includes(prototype)) {return unavailable();}
+  const prototype: unknown = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== Array.prototype && prototype !== null) {return unavailable();}
   const result: Record<string, unknown> | unknown[] = Array.isArray(value) ? [] : {};
   for (const key of Reflect.ownKeys(value)) {
     if (Array.isArray(value) && key === "length") {continue;}
     const field = Object.getOwnPropertyDescriptor(value, key);
     if (typeof key !== "string" || field === undefined || !("value" in field)) {return unavailable();}
-    const captured = typeof field.value === "function" ? deploymentMethod(field.value, value)
+    const captured: unknown = typeof field.value === "function" ? deploymentMethod(field.value, value)
       : captureDarwinDeploymentData(field.value, depth + 1);
     Object.defineProperty(result, key, {value: captured, enumerable: field.enumerable === true});
   }
   return Object.freeze(result) as T;
 };
 export const captureDarwinDeploymentPort = <T extends object, K extends keyof T>(owner: T, keys: readonly K[]): Pick<T, K> => {
-  if (owner === null || typeof owner !== "object" || types.isProxy(owner)) {return unavailable();}
+  const candidate: unknown = owner;
+  if (candidate === null || typeof candidate !== "object" || types.isProxy(candidate)) {return unavailable();}
   for (const key of Reflect.ownKeys(owner)) {
     const field = Object.getOwnPropertyDescriptor(owner, key)!;
     if (!("value" in field)) {return unavailable();}
@@ -71,7 +73,7 @@ export const captureDarwinDeploymentPort = <T extends object, K extends keyof T>
     while (prototype !== null && field === undefined) {
       if (types.isProxy(prototype)) {return unavailable();}
       field = Object.getOwnPropertyDescriptor(prototype, key);
-      prototype = Object.getPrototypeOf(prototype);
+      prototype = Object.getPrototypeOf(prototype) as object | null;
     }
     if (field === undefined || !("value" in field)) {return unavailable();}
     result[key] = deploymentMethod(field.value, owner) as T[K];
@@ -87,13 +89,13 @@ const captureDarwinOperationStore = (store: Store): Store => {
     while (prototype !== null && field === undefined) {
       if (types.isProxy(prototype)) {return unavailable();}
       field = Object.getOwnPropertyDescriptor(prototype, key);
-      prototype = Object.getPrototypeOf(prototype);
+      prototype = Object.getPrototypeOf(prototype) as object | null;
     }
     if (field === undefined) {continue;}
     if (!("value" in field)) {return unavailable();}
     optional[key] = deploymentMethod(field.value, store) as never;
   }
-  return Object.freeze({...required, ...optional}) as Store;
+  return Object.freeze({...required, ...optional});
 };
 
 /** Direct private Darwin join between the actual durable operation store and
@@ -105,8 +107,8 @@ export const bindDarwinNativeAttemptAuthority = (
 ): Store => {
   const captured = captureDarwinOperationStore(store);
   const authority = captureDarwinDeploymentPort(attemptAuthority, ["bindPreparedAttempt", "confirmCommittedClaim"]);
-  const prepare = captured.prepareDispatch;
-  const claim = captured.claimPreparedDispatch;
+  const prepare = captured.prepareDispatch.bind(captured);
+  const claim = captured.claimPreparedDispatch.bind(captured);
   return Object.freeze({...captured,
     async prepareDispatch(input: Parameters<Store["prepareDispatch"]>[0]): ReturnType<Store["prepareDispatch"]> {
       const result = await prepare(input);
@@ -151,9 +153,9 @@ const validateConsumedPair = (pa: PaReceipt, rs: RsReceipt, subject: Input["subj
         pa.authorityFacts.acceptedAuthorityDigest !== accepted.acceptedAuthorityVectorDigest) {return unavailable();}
 };
 
-const validatePublishedHead = (head: ReturnType<typeof snapshotDispatchAuthorityHead>, key: {scope: PaReceipt["scope"]; operationId: string; providerId: string}, rs: RsReceipt): void => {
-    if (head === undefined || head === null || head.decision !== "accepted" || head.revoked ||
-        head.purpose !== rs.purpose || head.ownerEvidenceRef !== rs.ownerEvidenceRef || head.operationId !== key.operationId || head.providerId !== key.providerId ||
+const validatePublishedHead = (head: ReturnType<typeof snapshotDispatchAuthorityHead> | null, key: {scope: PaReceipt["scope"]; operationId: string; providerId: string}, rs: RsReceipt): void => {
+    if (head === undefined || head === null || (head.decision as unknown) !== "accepted" || head.revoked ||
+        (head.purpose as unknown) !== rs.purpose || head.ownerEvidenceRef !== rs.ownerEvidenceRef || head.operationId !== key.operationId || head.providerId !== key.providerId ||
         !isDeepStrictEqual(head.scope, key.scope) || head.claimBindingDigest !== rs.claimBindingDigest ||
         head.requestDigest !== rs.requestDigest || head.claimBeforeControlTime !== rs.claimBeforeControlTime ||
         head.authorityHeadDigest !== rs.authorityFacts.authorityHeadDigest ||
@@ -206,10 +208,11 @@ export const createDarwinContainedTurnAuthority = (readers: Readers): DarwinCont
           [subject.providerAccessRequest.grantRequestId, subject.runtimeSecurityRequest.grantRequestId].includes(receipt.grantRequestId)) {release(key);}
     }
   };
-  if (readers === null || typeof readers !== "object" || types.isProxy(readers)) {return unavailable();}
-  const readerFields = Object.getOwnPropertyDescriptors(readers);
-  if ( !readerFields.runtimeSecurity || !("value" in readerFields.runtimeSecurity) ||
-      !readerFields.providerAccess || !("value" in readerFields.providerAccess)) {return unavailable();}
+  const candidate: unknown = readers;
+  if (candidate === null || typeof candidate !== "object" || types.isProxy(candidate)) {return unavailable();}
+  const readerFields: Record<string, PropertyDescriptor | undefined> = Object.getOwnPropertyDescriptors(readers);
+  if ( readerFields.runtimeSecurity === undefined || !("value" in readerFields.runtimeSecurity) ||
+      readerFields.providerAccess === undefined || !("value" in readerFields.providerAccess)) {return unavailable();}
   const rsRead = captureDarwinDeploymentPort(readerFields.runtimeSecurity.value as Readers["runtimeSecurity"], ["readAuthority"]).readAuthority;
   const paRead = captureDarwinDeploymentPort(readerFields.providerAccess.value as Readers["providerAccess"], ["readCurrent"]).readCurrent;
   const entry = (input: Input): Retained => {
@@ -217,7 +220,7 @@ export const createDarwinContainedTurnAuthority = (readers: Readers): DarwinCont
     const key = input.subject.custodyId;
     const previous = retained.get(key);
     if (previous !== undefined) {
-      if (!isDeepStrictEqual(previous.input, input) || previous.selected) {return unavailable();}
+      if (!isDeepStrictEqual(previous.input, input) || previous.selected === true) {return unavailable();}
       return previous;
     }
     if (retained.size >= 64) {return unavailable();}
@@ -243,7 +246,7 @@ export const createDarwinContainedTurnAuthority = (readers: Readers): DarwinCont
     const binding = route.binding;
     validatePublishedRoute(binding, key.scope, pa);
     const upstream = await createContainedTurnHttpEgressRoute({current: route, provider: "codex"});
-    if (disposed || retained.get(subject.custodyId) !== value || value.generation !== generation || value.selected) {return unavailable();}
+    if (disposed || retained.get(subject.custodyId) !== value || value.generation !== generation || value.selected === true) {return unavailable();}
     value.upstream = upstream;
     value.head = structuredClone(after); value.route = route;
   };
@@ -254,8 +257,8 @@ export const createDarwinContainedTurnAuthority = (readers: Readers): DarwinCont
     },
     bindStore(store: Store): Store {
       const captured = captureDarwinOperationStore(store);
-      const claim = captured.claimPreparedDispatch;
-      const retire = captured.retireDispatchPreparation;
+      const claim = captured.claimPreparedDispatch.bind(captured);
+      const retire = captured.retireDispatchPreparation.bind(captured);
       return Object.freeze({...captured,
         async claimPreparedDispatch(input: Parameters<Store["claimPreparedDispatch"]>[0]): ReturnType<Store["claimPreparedDispatch"]> {
           const value = retained.get(input.subject.custodyId);
@@ -319,7 +322,7 @@ export const createDarwinContainedTurnAuthority = (readers: Readers): DarwinCont
       const value = retained.get(proof.custodyId);
       // Entire fresh acknowledged proof must match. Mismatch also consumes the local selection.
       release(proof.custodyId);
-      if (disposed || value === undefined || !value.claimed || value.head === undefined || value.route === undefined ||
+      if (disposed || value === undefined || value.claimed !== true || value.head === undefined || value.route === undefined ||
           !isDeepStrictEqual(value.proof, proof)) {return unavailable();}
       const {subject, accepted} = value.input;
       if (proof.operationId !== subject.operationId || proof.attemptId !== subject.attemptId ||

@@ -25,15 +25,15 @@ const CAMPAIGN_KEYS = ["operationId", "attemptId", "custodyId", "hostBootId", "e
   "authorityVectorDigest", "sourceRevision", "adapterRevision", "binaryRevision", "capabilityManifestRevision"] as const;
 const invalid = (): TypeError => new TypeError("Invalid contained turn Linux route binding");
 
-const campaignFacts = (value: ContainedTurnLinuxRouteCampaign): ContainedTurnLinuxRouteCampaign => {
+const campaignFacts = (value: unknown): ContainedTurnLinuxRouteCampaign => {
   if (value === null || typeof value !== "object" || types.isProxy(value) ||
       Object.getPrototypeOf(value) !== Object.prototype ||
       Reflect.ownKeys(value).length !== CAMPAIGN_KEYS.length) {throw invalid();}
   const fields = Object.getOwnPropertyDescriptors(value);
-  const facts: Record<string, string> = Object.create(null);
+  const facts = Object.create(null) as Record<string, string>;
   for (const key of CAMPAIGN_KEYS) {
     const field = fields[key];
-    if (field === undefined || !("value" in field) || !field.enumerable ||
+    if (field === undefined || !("value" in field) || field.enumerable !== true ||
         typeof field.value !== "string" || field.value.length < 1 || field.value.length > 256 ||
         /[\p{Cc}\s]/u.test(field.value)) {throw invalid();}
     facts[key] = field.value;

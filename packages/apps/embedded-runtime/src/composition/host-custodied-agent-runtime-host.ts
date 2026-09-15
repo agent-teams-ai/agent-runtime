@@ -37,7 +37,7 @@ export const composeHostCustodiedAgentRuntimeHost = (
       containedTurn: bindContainedTurnCapabilityAuthority(containedTurn.feature, dependencies.authorityRevision),
     }));
   } catch (error) {
-    return disposeAfterContainedTurnConstructionFailure(error, containedTurn.dispose);
+    return disposeAfterContainedTurnConstructionFailure(error, () => { containedTurn.dispose(); });
   }
   const dispose = async (): Promise<void> => {
     // Fence preparation and delegated creators synchronously, before durable
