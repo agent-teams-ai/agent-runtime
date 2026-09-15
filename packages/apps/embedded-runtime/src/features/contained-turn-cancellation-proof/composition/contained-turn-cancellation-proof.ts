@@ -87,27 +87,15 @@ type CancellationTurnStatus =
   | "accepted" | "cancelled" | "failed"
   | "reconcile_required" | "running" | "succeeded";
 
-// oxlint-disable-next-line complexity -- terminal proof validates the complete detached owner DTO.
-const validateCancellationTurn = (
-  turn: CancellationTurnSnapshot,
-): Readonly<{ operationId: string; status: CancellationTurnStatus }> | undefined => {
-  const {
-    artifactManifestRef, commandId, effectId, operationId, output, provider, resultRef, revision,
-    status,
-  } = turn;
-  if (!isBoundedIdentity(operationId) || !isBoundedIdentity(commandId) ||
-    !isBoundedIdentity(effectId) || copyProviderIdentity(provider) === undefined || output === undefined ||
-    (artifactManifestRef !== undefined && !isBoundedIdentity(artifactManifestRef)) ||
-    (resultRef !== undefined && !isBoundedIdentity(resultRef)) ||
-    typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0 ||
-    (status !== "accepted" && status !== "cancelled" && status !== "failed" &&
-      status !== "reconcile_required" && status !== "running" && status !== "succeeded")) {
-    return;
-  }
-  if (isTerminalTurnStatus(status) &&
-    (artifactManifestRef === undefined || resultRef === undefined)) {
-    return;
-  }
+const copyCancellationTurnStatus = (value: unknown): CancellationTurnStatus | undefined =>
+  value === "accepted" || value === "cancelled" || value === "failed" ||
+  value === "reconcile_required" || value === "running" || value === "succeeded"
+    ? value
+    : undefined;
+
+const hasValidCancellationOutput = (
+  output: readonly (CancellationOutputChunkSnapshot | undefined)[],
+): boolean => {
   let previousCursor = -1;
   for (const chunk of output) {
     const cursor = chunk?.cursor;
@@ -116,10 +104,33 @@ const validateCancellationTurn = (
     if (typeof cursor !== "number" || !Number.isSafeInteger(cursor) || cursor <= previousCursor ||
       (kind !== "assistant" && kind !== "diagnostic" && kind !== "progress") ||
       typeof text !== "string" || text.length > MAX_OUTPUT_TEXT_LENGTH || !text.isWellFormed()) {
-      return;
+      return false;
     }
     previousCursor = cursor;
   }
+  return true;
+};
+
+const validateCancellationTurn = (
+  turn: CancellationTurnSnapshot,
+): Readonly<{ operationId: string; status: CancellationTurnStatus }> | undefined => {
+  const {
+    artifactManifestRef, commandId, effectId, operationId, output, provider, resultRef, revision,
+    status: rawStatus,
+  } = turn;
+  const status = copyCancellationTurnStatus(rawStatus);
+  if (!isBoundedIdentity(operationId) || !isBoundedIdentity(commandId) ||
+    !isBoundedIdentity(effectId) || copyProviderIdentity(provider) === undefined || output === undefined ||
+    (artifactManifestRef !== undefined && !isBoundedIdentity(artifactManifestRef)) ||
+    (resultRef !== undefined && !isBoundedIdentity(resultRef)) ||
+    typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0 || status === undefined) {
+    return;
+  }
+  if (isTerminalTurnStatus(status) &&
+    (artifactManifestRef === undefined || resultRef === undefined)) {
+    return;
+  }
+  if (!hasValidCancellationOutput(output)) {return;}
   return Object.freeze({ operationId, status });
 };
 

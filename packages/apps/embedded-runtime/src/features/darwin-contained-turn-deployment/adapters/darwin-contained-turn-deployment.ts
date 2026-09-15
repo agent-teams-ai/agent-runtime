@@ -13,6 +13,9 @@ import {types} from "node:util";
 type Signer = Parameters<typeof createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate>[0];
 type SessionOwner = DarwinCodexRouteEnforcementInput["sessionOwner"];
 type Session = ReturnType<SessionOwner["acquire"]>;
+const throwAcquisitionCleanupFailure = (error: unknown, cleanupFailures: readonly unknown[]): never => {
+  throw new AggregateError([error, ...cleanupFailures], "Darwin acquisition and cleanup failed");
+};
 export interface DarwinContainedTurnDeploymentInput extends Omit<DarwinCodexRouteEnforcementInput, "sessionOwner"> {
   readonly runtimeSecurity: ContainedTurnCurrentEgressOwnersInput["runtimeSecurity"];
   readonly providerAccess: ContainedTurnCurrentEgressOwnersInput["providerAccess"];
@@ -132,8 +135,7 @@ export const createDarwinContainedTurnDeployment = (raw: DarwinContainedTurnDepl
     } catch (error) {
       drain(start);
       if (cleanupFailures.length > 0) {
-        // oxlint-disable-next-line eslint/preserve-caught-error -- original error is retained in errors; preserve the existing cause/redaction surface
-        throw new AggregateError([error, ...cleanupFailures], "Darwin acquisition and cleanup failed");
+        return throwAcquisitionCleanupFailure(error, cleanupFailures);
       }
       throw error;
     }

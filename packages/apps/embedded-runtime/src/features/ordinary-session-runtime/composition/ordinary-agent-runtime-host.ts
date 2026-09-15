@@ -26,6 +26,9 @@ export interface OrdinaryAgentRuntimeHostOptions {
   readonly scope: {readonly tenantId: string; readonly projectId: string};
   readonly signal?: AbortSignal;
 }
+const throwCreationCleanupFailure = (error: unknown, cleanupError: unknown): never => {
+  throw new AggregateError([error, cleanupError], "ordinary_host_creation_cleanup_incomplete", {cause: error});
+};
 function exact(value: unknown, keys: readonly string[]): asserts value is Record<string, unknown> {
   if (value === null || typeof value !== "object" || types.isProxy(value) || Object.getPrototypeOf(value) !== Object.prototype || Reflect.ownKeys(value).some(key => typeof key !== "string" || !keys.includes(key)) || keys.some(key => !Object.hasOwn(value, key))) {throw new TypeError("ordinary_host_options_invalid");}
   for (const key of keys) {const d = Object.getOwnPropertyDescriptor(value, key); if (d === undefined || !("value" in d)) {throw new TypeError("ordinary_host_options_invalid");}}
@@ -104,8 +107,7 @@ export async function createOrdinaryAgentRuntimeHost(input: OrdinaryAgentRuntime
   } catch (error) {
     const [result] = await Promise.allSettled([cleanup()]);
     if (result.status === "rejected") {
-      // oxlint-disable-next-line eslint/preserve-caught-error -- AggregateError retains the primary error in both errors and cause.
-      throw new AggregateError([error, result.reason], "ordinary_host_creation_cleanup_incomplete", {cause: error});
+      return throwCreationCleanupFailure(error, result.reason);
     }
     throw error;
   }

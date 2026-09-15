@@ -30,10 +30,17 @@ const MAX_OWNER_IDENTITY_LENGTH = 512;
 export const MAX_OUTPUT_CHUNKS = 10_000;
 export const MAX_OUTPUT_TEXT_LENGTH = 1_000_000;
 
+const hasControlCharacter = (value: string): boolean => {
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) {return true;}
+  }
+  return false;
+};
+
 export const isBoundedIdentity = (value: unknown): value is string =>
   typeof value === "string" && !isContainedTurnAccessAuthorityIdentity(value) && value.length > 0 && value.length <= MAX_OWNER_IDENTITY_LENGTH &&
-  // oxlint-disable-next-line no-control-regex -- the owner identity contract excludes exact C0/C1 ranges.
-  value.isWellFormed() && !/\s/u.test(value) && !/[\u0000-\u001f\u007f-\u009f]/u.test(value);
+  value.isWellFormed() && !/\s/u.test(value) && !hasControlCharacter(value);
 
 const isTurnStatus = (value: unknown): value is OwnerTurnObservation["status"] =>
   value === "accepted" || value === "cancelled" || value === "failed" ||
@@ -45,8 +52,7 @@ export const contractViolation = (
 
 export const copyProviderIdentity = (value: unknown): string | undefined =>
   typeof value === "string" && !isContainedTurnAccessAuthorityIdentity(value) && value.length > 0 && value.length <= MAX_PROVIDER_IDENTITY_LENGTH &&
-    // oxlint-disable-next-line no-control-regex -- the owner identity contract excludes exact C0/C1 ranges.
-    value.isWellFormed() && !/[\u0000-\u001f\u007f-\u009f]/u.test(value)
+    value.isWellFormed() && !hasControlCharacter(value)
     ? value
     : undefined;
 
@@ -170,39 +176,39 @@ export const isTerminalTurnStatus = (
 ): status is "cancelled" | "failed" | "succeeded" =>
   status === "cancelled" || status === "failed" || status === "succeeded";
 
-// oxlint-disable-next-line complexity -- this anti-corruption boundary validates every detached DTO field.
-const mapContainedTurnView = (
+type OwnerTurnWithValidRevisionAndRefs = OwnerTurnSnapshot & Readonly<{
+  artifactManifestRef: string | undefined;
+  resultRef: string | undefined;
+  revision: number;
+}>;
+
+const hasValidOwnerTurnRevisionAndRefs = (
   turn: OwnerTurnSnapshot,
-  expectedOperationId?: string,
-): RuntimeContainedTurnView | undefined => {
-  const {
-    artifactManifestRef, commandId, effectId, operationId, output: ownerOutput,
-    provider: ownerProvider, resultRef, revision, status,
-  } = turn;
-  if (!isBoundedIdentity(operationId)) {
-    return contractViolation("invalid_operation_id");
-  }
-  if (!isBoundedIdentity(commandId) || !isBoundedIdentity(effectId)) {
-    return;
-  }
-  if (expectedOperationId !== undefined && operationId !== expectedOperationId) {
-    return contractViolation("operation_id_mismatch");
-  }
-  const provider = copyProviderIdentity(ownerProvider);
-  if (provider === undefined || !isTurnStatus(status) || ownerOutput === undefined ||
-    typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0) {
-    return;
-  }
-  if ((artifactManifestRef !== undefined && !isBoundedIdentity(artifactManifestRef)) ||
-    (resultRef !== undefined && !isBoundedIdentity(resultRef))) {
-    return;
-  }
-  const ordinary = turn.executionProfile !== undefined || turn.effectClass !== undefined || turn.capabilityManifestRevision !== undefined;
-  if (ordinary && (turn.executionProfile !== "user-session-v1" || turn.effectClass !== "ordinary_user_session_effect" || turn.capabilityManifestRevision !== "ordinary-codex-macos-arm64-0.153.4-v1")) {return;}
-  if ((ordinary ? status === "succeeded" : isTerminalTurnStatus(status)) &&
-    (artifactManifestRef === undefined || resultRef === undefined)) {
-    return;
-  }
+): turn is OwnerTurnWithValidRevisionAndRefs =>
+  typeof turn.revision === "number" && Number.isSafeInteger(turn.revision) && turn.revision >= 0 &&
+  (turn.artifactManifestRef === undefined || isBoundedIdentity(turn.artifactManifestRef)) &&
+  (turn.resultRef === undefined || isBoundedIdentity(turn.resultRef));
+
+const isOrdinaryOwnerTurn = (turn: OwnerTurnSnapshot): boolean =>
+  turn.executionProfile !== undefined || turn.effectClass !== undefined ||
+  turn.capabilityManifestRevision !== undefined;
+
+const hasValidOrdinaryProfile = (turn: OwnerTurnSnapshot): boolean =>
+  turn.executionProfile === "user-session-v1" &&
+  turn.effectClass === "ordinary_user_session_effect" &&
+  turn.capabilityManifestRevision === "ordinary-codex-macos-arm64-0.153.4-v1";
+
+const hasRequiredTerminalRefs = (
+  turn: OwnerTurnSnapshot,
+  status: OwnerTurnObservation["status"],
+  ordinary: boolean,
+): boolean =>
+  (!(ordinary ? status === "succeeded" : isTerminalTurnStatus(status))) ||
+  (turn.artifactManifestRef !== undefined && turn.resultRef !== undefined);
+
+const copyOwnerOutput = (
+  ownerOutput: readonly (OwnerOutputChunkSnapshot | undefined)[],
+): RuntimeContainedTurnView["output"] | undefined => {
   const output: RuntimeContainedTurnView["output"][number][] = [];
   let previousCursor = -1;
   for (const chunk of ownerOutput) {
@@ -217,13 +223,43 @@ const mapContainedTurnView = (
     previousCursor = cursor;
     output.push(Object.freeze({ cursor, kind, text }));
   }
+  return Object.freeze(output);
+};
+
+const mapContainedTurnView = (
+  turn: OwnerTurnSnapshot,
+  expectedOperationId?: string,
+): RuntimeContainedTurnView | undefined => {
+  const {
+    commandId, effectId, operationId, output: ownerOutput, provider: ownerProvider, status,
+  } = turn;
+  if (!isBoundedIdentity(operationId)) {
+    return contractViolation("invalid_operation_id");
+  }
+  if (!isBoundedIdentity(commandId) || !isBoundedIdentity(effectId)) {
+    return;
+  }
+  if (expectedOperationId !== undefined && operationId !== expectedOperationId) {
+    return contractViolation("operation_id_mismatch");
+  }
+  const provider = copyProviderIdentity(ownerProvider);
+  if (provider === undefined || !isTurnStatus(status) || ownerOutput === undefined ||
+    !hasValidOwnerTurnRevisionAndRefs(turn)) {
+    return;
+  }
+  const {artifactManifestRef, resultRef} = turn;
+  const ordinary = isOrdinaryOwnerTurn(turn);
+  if ((ordinary && !hasValidOrdinaryProfile(turn)) ||
+    !hasRequiredTerminalRefs(turn, status, ordinary)) {return;}
+  const output = copyOwnerOutput(ownerOutput);
+  if (output === undefined) {return;}
   return Object.freeze({
     ...(ordinary ? {executionProfile: "user-session-v1" as const, effectClass: "ordinary_user_session_effect" as const, capabilityManifestRevision: "ordinary-codex-macos-arm64-0.153.4-v1" as const} : {}),
     ...(artifactManifestRef === undefined ? {} : { artifactManifestRef }),
     commandId,
     effectId,
     operationId,
-    output: Object.freeze(output),
+    output,
     provider,
     ...(resultRef === undefined ? {} : { resultRef }),
     status,
