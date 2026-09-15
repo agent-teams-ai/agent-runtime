@@ -7,13 +7,13 @@ import { assertMaterializationSchema } from "./materialization-postgres-schema.j
 import type { MaterializationPostgresClient } from "./materialization-postgres-transactions.js";
 
 export interface DispatchPostgresOwner { readonly provider: DispatchProvider; readonly scope: DispatchScopeValue }
-export const ownerSnapshot = (input: DispatchPostgresOwner): DispatchPostgresOwner => {
+export const ownerSnapshot = (input: unknown): DispatchPostgresOwner => {
   const data = exactDispatchDataRecord("dispatch owner", input, ["provider", "scope"]);
   if (data.provider !== "codex" && data.provider !== "claude") {throw new TypeError("Invalid dispatch provider");}
   return Object.freeze({provider: data.provider, scope: snapshotDispatchScope(data.scope)});
 };
 export const selectorSnapshot = (input: DispatchConsumptionTransactionSelector): DispatchConsumptionTransactionSelector => {
-  const raw = detachedDispatchData("dispatch selector", input) as DispatchConsumptionTransactionSelector;
+  const raw = detachedDispatchData("dispatch selector", input) as Readonly<Record<string, unknown>>;
   const keys = raw.kind === "consume" ? ["kind", "provider", "scope", "grantRequestId"] :
     ["kind", "provider", "scope", "consumptionDigest", "expectedAuthorityHeadDigest", "operationId", "settlementRequestId"];
   exactDispatchDataRecord("dispatch selector", raw, keys);

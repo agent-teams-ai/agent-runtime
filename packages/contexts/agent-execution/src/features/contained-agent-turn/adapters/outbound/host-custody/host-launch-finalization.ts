@@ -1,3 +1,4 @@
+import {isLiveCustodyLaunchOpen} from "./host-custody-live-state-readback.js";
 import { hostLaunchFinalizationRecipe, type HostLaunchFinalizationRecipe } from "./host-custody-finalizable-plan.js";
 import type { ExecutableObservation, LaunchCandidate } from "./host-custody-launch.js";
 import type { LiveCustody } from "./node-provider-process-custody-state.js";
@@ -74,7 +75,7 @@ export class HostLaunchBinding {
         live.httpReservation.assertActive();
       }
       live.httpReservation.darwinRoute?.assertLaunch(this.#final);
-      return !live.sealed && !live.abortRequested;
+      return isLiveCustodyLaunchOpen(live);
     } catch {return false;}
   }
 

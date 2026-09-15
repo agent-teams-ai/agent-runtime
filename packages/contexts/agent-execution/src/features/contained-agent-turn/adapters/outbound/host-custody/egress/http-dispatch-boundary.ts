@@ -17,13 +17,13 @@ export const createHttpDispatchBoundary = (
   let requested = false;
   let consumed = false;
   return Object.freeze({
-    consume: () => {
-      if (!open || requested) {return;}
+    consume: (): Uint8Array | undefined => {
+      if (!open || requested) {return undefined;}
       requested = true;
       try {
-        if (!validate()) {return;}
+        if (!validate()) {return undefined;}
       } catch {
-        return;
+        return undefined;
       }
       consumed = true;
       return custody.wireBytes;

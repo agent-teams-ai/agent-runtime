@@ -124,7 +124,8 @@ export const createClaudeCodeConfigurationSemanticClassifierV2 =
     contract: claudeCodeConfigurationSemanticClassifierContract,
     revision: "claude-code-settings-2026-08-28-semantic-classifier/2",
     classify(dialect, data, options) {
-      if (dialect !== CLAUDE_CODE_SETTINGS_DIALECT) {
+      const requestedDialect: string = dialect;
+      if (requestedDialect !== CLAUDE_CODE_SETTINGS_DIALECT) {
         return { definitions: [], deferredObservations: [], diagnostics: [], definedPortableKeys: [], taintedPortableKeys: [] };
       }
       const definitions: PortableClaudeCodeDefinition[] = [];

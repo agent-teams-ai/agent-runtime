@@ -14,7 +14,7 @@ const sameDescriptor = (left: PropertyDescriptor, right: PropertyDescriptor): bo
 
 const ownDataDescriptor = (value: object, key: PropertyKey): PropertyDescriptor => {
   const descriptor = Object.getOwnPropertyDescriptor(value, key);
-  if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+  if (descriptor === undefined || !("value" in descriptor) || descriptor.enumerable !== true) {
     throw invalidSelection();
   }
   return descriptor;
@@ -23,7 +23,7 @@ const ownDataDescriptor = (value: object, key: PropertyKey): PropertyDescriptor 
 const assertExactSelectionKeys = (selection: object): void => {
   const keys = Reflect.ownKeys(selection);
   if (keys.length !== 2 || keys.some(key => typeof key !== "string") ||
-      keys.toSorted().join("\0") !== "kind\0owner") {
+      (!keys.includes("kind") || !keys.includes("owner"))) {
     throw invalidSelection();
   }
 };
@@ -38,11 +38,11 @@ export const snapshotContainedTurnProviderSelection = (
   try {
     if (typeof dependencies !== "object" || dependencies === null || types.isProxy(dependencies)) {throw invalidSelection();}
     const selectionDescriptor = ownDataDescriptor(dependencies, "selectedProvider");
-    const selection = selectionDescriptor.value;
+    const selection: unknown = selectionDescriptor.value;
     if (typeof selection !== "object" || selection === null || types.isProxy(selection) || Array.isArray(selection)) {
       throw invalidSelection();
     }
-    const prototype = Object.getPrototypeOf(selection);
+    const prototype: unknown = Object.getPrototypeOf(selection);
     if (prototype !== Object.prototype && prototype !== null) {throw invalidSelection();}
     assertExactSelectionKeys(selection);
     const kindDescriptor = ownDataDescriptor(selection, "kind");
@@ -66,9 +66,11 @@ export const snapshotContainedTurnProviderSelection = (
       }
     };
     assertStable();
+    const kind: unknown = kindDescriptor.value;
+    const owner: unknown = ownerDescriptor.value;
     return Object.freeze({
       assertStable,
-      selection: Object.freeze({kind: kindDescriptor.value, owner: ownerDescriptor.value}) as
+      selection: Object.freeze({kind, owner}) as
         ContainedTurnHostProviderSelection,
     });
   } catch {

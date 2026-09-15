@@ -8,13 +8,13 @@ export interface DarwinOwnedImage {
 export const captureDarwinOwnedImage = (value: unknown, pid: number, parent: number,
   target: DarwinExecutablePin): DarwinOwnedImage => {
   if (typeof value !== "object" || value === null) {throw new TypeError("Darwin owned image missing");}
-  const data = value as DarwinOwnedImage;
+  const data = value as Omit<DarwinOwnedImage, "protocol"> & {readonly protocol: unknown};
   if (Object.keys(data).toSorted().join() !== "birthMicros,birthSeconds,dev,ino,pgid,pid,ppid,protocol" ||
       data.protocol !== "ae-darwin-owned-image/v1" || data.pid !== pid || data.ppid !== parent ||
       !Number.isSafeInteger(data.pgid) || data.pgid < 1 || data.dev !== target.dev || data.ino !== target.ino ||
       !/^[1-9][0-9]{0,19}$/u.test(data.birthSeconds) || !/^[0-9]{1,6}$/u.test(data.birthMicros) ||
       Number(data.birthMicros) > 999999) {throw new TypeError("Darwin owned image conflicts");}
-  return Object.freeze({...data});
+  return Object.freeze({...data, protocol: data.protocol});
 };
 /** The caller supplies only the retained guardian child, never recovery PIDs. */
 export const observeDarwinGuardian = (child: {readonly pid?: number | undefined; readonly exitCode: number | null;

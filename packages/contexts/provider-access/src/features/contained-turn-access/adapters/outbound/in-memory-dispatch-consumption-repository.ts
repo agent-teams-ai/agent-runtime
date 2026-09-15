@@ -8,7 +8,7 @@ import type {
 } from "../../application/ports/outbound/materialization-authorization-repository.js";
 import {
   canonicalJson, snapshotDispatchBindingHead, snapshotDispatchConsumedReceipt, snapshotDispatchSettlementOutcome,
-  type DispatchBindingHead, type DispatchConsumedReceipt, type DispatchDisposition, type DispatchScopeValue, type DispatchSettlementOutcome,
+  type DispatchBindingHead, type DispatchConsumedReceipt, type DispatchScopeValue, type DispatchSettlementOutcome,
 } from "../../domain/dispatch-consumption.js";
 import { snapshotAuthorizationRecord, type AuthorizationRecord } from "../../domain/materialization-authorization.js";
 import { canonicalDispatchJournalEntry, detachedDispatchData } from "../dispatch-consumption-data.js";
@@ -44,7 +44,7 @@ export interface InMemoryDispatchConsumptionControl {
 
 const putCanonicalHead = (state: State, head: DispatchBindingHead): void => {
   const key = scopeKey(head);
-  const scoped = state.slots.get(key) ?? new Map();
+  const scoped = state.slots.get(key) ?? new Map<DispatchBindingHead["provider"], BindingSlot>();
   state.slots.set(key, scoped);
   scoped.set(head.provider, { head, state: "absent" });
 };
@@ -114,7 +114,7 @@ const commit = (state: State, selector: DispatchConsumptionTransactionSelector, 
     if (pendingSettlement.kind === "settled") {
       state.settlementsByConsumption.set(selector.consumptionDigest, pendingSettlement);
       const owner = state.consumptions.get(selector.consumptionDigest);
-      if (owner !== undefined) {owner.slot.state = pendingSettlement.receipt.disposition as DispatchDisposition; state.historicalOwnerState.set(selector.consumptionDigest, owner.slot.state);}
+      if (owner !== undefined) {owner.slot.state = pendingSettlement.receipt.disposition; state.historicalOwnerState.set(selector.consumptionDigest, owner.slot.state);}
     }
   }
 };
@@ -140,7 +140,7 @@ export const createInMemoryDispatchConsumptionRepository = (
   if (!Array.isArray(detachedHeads)) {throw new TypeError("initial binding heads must be an array");}
   for (const rawHead of detachedHeads) {
     const head = snapshotDispatchBindingHead(rawHead as DispatchBindingHead);
-    if (state.slots.get(scopeKey(head))?.has(head.provider)) {throw new Error("duplicate exact dispatch binding head");}
+    if (state.slots.get(scopeKey(head))?.has(head.provider) === true) {throw new Error("duplicate exact dispatch binding head");}
     putCanonicalHead(state, head);
   }
   let tail = Promise.resolve();

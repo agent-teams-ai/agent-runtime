@@ -53,12 +53,13 @@ const validScalar = (value: unknown): boolean => value === null || typeof value 
 
 const validArray = (value: unknown, itemShape: string): boolean => {
   if (!Array.isArray(value) || utilTypes.isProxy(value) || Object.getPrototypeOf(value) !== Array.prototype) {return false;}
-  const descriptors = Object.getOwnPropertyDescriptors(value) as unknown as Record<PropertyKey, PropertyDescriptor>;
+  const array: object = value;
+  const descriptors = Object.getOwnPropertyDescriptors(array);
   const lengthDescriptor = descriptors["length"];
-  const length = lengthDescriptor !== undefined && "value" in lengthDescriptor ? lengthDescriptor.value : undefined;
-  if (!Number.isSafeInteger(length) || (length as number) < 0
-    || (length as number) > 128 || Reflect.ownKeys(descriptors).length !== (length as number) + 1) {return false;}
-  for (let index = 0; index < (length as number); index += 1) {const descriptor = descriptors[String(index)];
+  const length: unknown = lengthDescriptor !== undefined && "value" in lengthDescriptor ? lengthDescriptor.value : undefined;
+  if (typeof length !== "number" || !Number.isSafeInteger(length) || length < 0
+    || length > 128 || Reflect.ownKeys(descriptors).length !== length + 1) {return false;}
+  for (let index = 0; index < length; index += 1) {const descriptor = descriptors[String(index)];
     if (descriptor === undefined || !("value" in descriptor) || !validObject(descriptor.value, itemShape)) {return false;}}
   return true;
 };

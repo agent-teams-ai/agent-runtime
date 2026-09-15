@@ -55,13 +55,13 @@ function toml(record: Readonly<Record<string, unknown>>, prefix: readonly string
 /** Pin verification is read-only and precedes dispatch. Source auth is never part of this process. */
 export async function verifyOrdinaryCodexExecutable(executable: string): Promise<void> {
   const uid = process.getuid?.();
-  if (!uid || process.platform !== "darwin" || process.arch !== "arm64" || await realpath(executable) !== executable) {ordinaryCodexRefusal();}
+  if ((uid === undefined || uid === 0) || process.platform !== "darwin" || process.arch !== "arm64" || await realpath(executable) !== executable) {ordinaryCodexRefusal();}
   const handle = await open(executable, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const before = await handle.stat();
     if (!before.isFile() || before.nlink !== 1 || before.uid !== uid || (before.mode & 0o022) || !(before.mode & 0o111)) {ordinaryCodexRefusal();}
     const hash = createHash("sha256");
-    for await (const bytes of handle.createReadStream({autoClose: false})) {hash.update(bytes);}
+    for await (const bytes of handle.createReadStream({autoClose: false}) as AsyncIterable<Buffer>) {hash.update(bytes);}
     const after = await handle.stat(); const path = await lstat(executable);
     if (hash.digest("hex") !== ORDINARY_CODEX_BINARY_SHA256 ||
         [after, path].some(stat => stat.dev !== before.dev || stat.ino !== before.ino || stat.size !== before.size ||

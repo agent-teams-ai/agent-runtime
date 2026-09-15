@@ -398,7 +398,7 @@ export const createAgentRuntimeHostDisposalLifecycle = (
   const containedTurns = new ContainedTurnOwnershipLedger(containedTurn, calls.execute);
   const disposal = new HostDisposalOrchestrator(calls, containedTurns, disposeOrdinaryOwner);
   return Object.freeze({
-    assertActive: () => disposal.assertActive(),
+    assertActive: () => { disposal.assertActive(); },
     dispose: disposal.dispose,
     executeCall: calls.execute,
     isDisposed: () => disposal.isDisposed(),

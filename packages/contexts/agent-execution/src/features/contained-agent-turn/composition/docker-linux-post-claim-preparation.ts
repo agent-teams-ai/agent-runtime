@@ -135,14 +135,15 @@ const finishInitReadiness = async (ready: Promise<Readonly<{kind: string}>>, aft
 };
 
 export const createDockerLinuxPostClaimOwner = <Io extends DockerLinuxPreparedProviderIo>(
-  dependencies: DockerLinuxPostClaimDependencies, join: DockerLinuxClaimedJoin<Io>,
+  dependencies: DockerLinuxPostClaimDependencies, join: DockerLinuxClaimedJoin<Io> | undefined,
 ): DockerLinuxPostClaimOwner<Io> => {
-  if (typeof join?.prepareProviderIo !== "function" || typeof join?.finishClaimed !== "function") {
+  if (typeof join?.prepareProviderIo !== "function" || typeof join.finishClaimed !== "function") {
     throw new TypeError("Docker joined preparation requires IO and finalization owners");
   }
+  const owners: {resources?: {listenerFor?: unknown; consumption?: {prepare?: unknown}}} = dependencies;
   if (typeof dependencies.engineIdentity !== "function" || typeof dependencies.openLifecycle !== "function" ||
-    typeof dependencies.openResourceJournal !== "function" || typeof dependencies.resources?.listenerFor !== "function" ||
-    typeof dependencies.resources?.consumption?.prepare !== "function") {
+    typeof dependencies.openResourceJournal !== "function" || typeof owners.resources?.listenerFor !== "function" ||
+    typeof owners.resources.consumption?.prepare !== "function") {
     throw new TypeError("Docker joined preparation requires resource owners");
   }
   return createPreparationOwner(dependencies, Object.freeze({
@@ -424,6 +425,12 @@ const publishPreparedPlan = <T>(plan: object, assertOpen: () => void, publish: (
   } catch (error) {recordNativeStart(plan, "fail"); throw error;}
 };
 
+function assertPreparedRoute(kind: unknown, firstWrite: DockerLinuxOperationRouteFirstWrite | undefined): asserts firstWrite is DockerLinuxOperationRouteFirstWrite {
+  if (kind !== "prepared" || firstWrite === undefined) {
+    throw new TypeError("Host HTTP consumption preparation is unproven");
+  }
+}
+
 const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
   dependencies: DockerLinuxPostClaimDependencies, join?: DockerLinuxClaimedJoin<Io>,
 ): DockerLinuxPostClaimOwner<Io> => {
@@ -453,7 +460,7 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
     // A missing authority owner must be refused before allocation, so this is
     // read before the first Engine call and before the ledger is opened.
     const routeAdmission = dependencies.routeAdmission;
-    if (typeof routeAdmission?.admit !== "function" || typeof routeAdmission?.releaseAfterContainerRemoval !== "function" ||
+    if (typeof routeAdmission?.admit !== "function" || typeof routeAdmission.releaseAfterContainerRemoval !== "function" ||
       cut || input.signal.aborted) {return unsupported("owner");}
 
     const {call, cleanupCall} = createPreparationCalls(input, admissionAbort,
@@ -469,7 +476,7 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
 
     // Irreversible caller cutoff is honored between every step, so a cut signal
     // can never let the next resource effect start.
-    const assertOpen = (): void => assertPreparationOpen(cut, input.signal, admissionDeadline);
+    const assertOpen = (): void => {assertPreparationOpen(cut, input.signal, admissionDeadline);};
     const hostPreparation = createHostLaunchPreparation(dependencies, join, assertOpen);
     try {
       const proof = input.committedDispatchProof;
@@ -571,9 +578,7 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
         stage = "listener";
         return references;
       });
-      if (listener.kind !== "prepared" || routeFirstWrite === undefined) {
-        throw new TypeError("Host HTTP consumption preparation is unproven");
-      }
+      assertPreparedRoute(listener.kind, routeFirstWrite);
       // Publication is after ready consumption as well as observed route installation.
       assertOpen();
       if (join !== undefined) {
@@ -601,8 +606,8 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
     takePrepared(claimed: Claimed) {
       if (cut || taken || execution === undefined || claimed !== retainedClaim ||
         claimed.committedDispatchProof !== claimBinding?.committedDispatchProof ||
-        claimed.underlyingCustodyRef !== claimBinding?.underlyingCustodyRef ||
-        claimed.signal !== claimBinding?.signal || claimed.signal.aborted) {
+        claimed.underlyingCustodyRef !== claimBinding.underlyingCustodyRef ||
+        claimed.signal !== claimBinding.signal || claimed.signal.aborted) {
         throw new TypeError("Docker prepared handoff unavailable or conflicts");
       }
       taken = true;

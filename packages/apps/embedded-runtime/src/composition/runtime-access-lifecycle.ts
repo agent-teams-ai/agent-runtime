@@ -10,9 +10,9 @@ export const raceWithAbort = <T>(operation: Promise<T>, signal: AbortSignal): Pr
       callback();
     };
     const abort = (): void => {
-      settle(() => reject(
-        signal.reason ?? new DOMException("Agent Runtime operation was cancelled", "AbortError"),
-      ));
+      settle(() => {
+        reject(signal.reason ?? new DOMException("Agent Runtime operation was cancelled", "AbortError"));
+      });
     };
 
     if (signal.aborted) {
@@ -21,7 +21,12 @@ export const raceWithAbort = <T>(operation: Promise<T>, signal: AbortSignal): Pr
     }
     signal.addEventListener("abort", abort, { once: true });
     operation.then(
-      value => settle(() => resolve(value)),
-      error => settle(() => reject(error)),
+      value => {
+        settle(() => { resolve(value); });
+        return;
+      },
+      (error: unknown) => {
+        settle(() => { reject(error); });
+      },
     );
   });

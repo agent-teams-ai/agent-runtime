@@ -11,7 +11,7 @@ const beforeDeadline = async <T>(promise: Promise<T>, deadline: number, message:
   if (remaining <= 0) {throw new Error(message);}
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => reject(new Error(message)), remaining);
+    timer = setTimeout(() => {reject(new Error(message));}, remaining);
   });
   try {return await Promise.race([promise, timeout]);}
   finally {if (timer !== undefined) {clearTimeout(timer);}}

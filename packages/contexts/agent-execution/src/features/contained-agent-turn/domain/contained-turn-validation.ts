@@ -196,18 +196,16 @@ const validateTerminal = (operation: ContainedTurnOutputValidatedOperation): voi
   invariant(operation.admissionFence.kind === "fenced", "terminal truth requires fenced admission");
   invariant(operation.effect.kind === "resolved", "terminal truth requires exact effect resolution");
   invariant(operation.providerExecution.kind === "closed", "terminal truth requires exact execution closure");
-  if (operation.providerExecution.kind === "closed") {
-    invariant(operation.providerExecution.outcome === operation.terminal.outcome, "terminal truth must match execution outcome");
-  }
+  invariant(operation.providerExecution.outcome === operation.terminal.outcome, "terminal truth must match execution outcome");
   invariant(operation.providerAcceptance.kind === "accepted" || operation.providerAcceptance.kind === "not_accepted", "terminal truth requires exact provider acceptance");
   if (operation.terminal.outcome === "succeeded") {
     invariant(operation.providerAcceptance.kind === "accepted", "successful terminal truth requires proved provider acceptance");
     invariant(
-      operation.effect.kind === "resolved" && operation.effect.disposition === "committed",
+      operation.effect.disposition === "committed",
       "successful terminal truth requires proved effect commitment",
     );
     invariant(
-      operation.output.fence.kind === "fenced" && operation.output.fence.proofId !== undefined &&
+      operation.output.fence.proofId !== undefined &&
         operation.proofs.some(proof => proof.kind === "output_drain" &&
           operation.output.fence.kind === "fenced" && proof.proofId === operation.output.fence.proofId),
       "successful terminal truth requires exact output-drain evidence",
@@ -359,7 +357,7 @@ const validateCancellation = (candidate: ContainedTurnOutputValidatedOperation):
        (candidate.operationCutoff.reason === "prevention" && candidate.dispatch.kind === "prevented")),
     "durable cancellation requires the current monotonic operation cutoff",
   );
-  if (candidate.operationCutoff.kind === "closed" && candidate.operationCutoff.reason === "cancellation") {
+  if (candidate.operationCutoff.reason === "cancellation") {
     const cutoffProof = requireContainedTurnProof(candidate, candidate.operationCutoff.proofId, "cutoff");
     invariant(
       cutoffProof.kind === "cutoff" &&
@@ -478,7 +476,7 @@ function validateCurrentOperation(candidate: unknown): asserts candidate is Cont
   validateContainedTurnProofs(candidate);
   const firstProof = candidate.proofs[0];
   invariant(firstProof !== undefined, "command acceptance requires its own exact proof");
-  if (firstProof !== undefined) {requireContainedTurnProof(candidate, firstProof.proofId, "acceptance");}
+  requireContainedTurnProof(candidate, firstProof.proofId, "acceptance");
   validateContainedTurnAxisProofs(candidate);
   validateContainedTurnOutput(candidate);
   validateExecutionAxes(candidate);

@@ -9,94 +9,24 @@ import {
   encodeDockerCustodyFrame,
   parseDockerCustodyIdentity,
   parseDockerCustodyProtocolMessage,
-  type DockerCustodyChildSignal,
   type DockerCustodyHostSignal,
   type DockerCustodyIdentity,
   type DockerCustodyInitMessage,
   type DockerCustodyProviderExecRequest,
 } from "./docker-custody-init-protocol.js";
 
-export interface DockerCustodyInitHostAuthority {
-  readonly expectedIdentity: DockerCustodyIdentity;
-  readonly generation: string;
-  readonly launchFingerprintSha256: string;
-  readonly operationNonce: string;
-}
-
-export interface DockerCustodyInitHostExec {
-  readonly argv: readonly string[];
-  readonly environment: readonly {readonly name: string; readonly value: string}[];
-  readonly executableSha256: string;
-  readonly gid: number;
-  readonly requestId: string;
-  readonly uid: number;
-  readonly wallDeadlineUnixMs: number;
-}
-
-export interface DockerCustodyInitHostOptions {
-  readonly acknowledgementTimeoutMs: number;
-  readonly authority: DockerCustodyInitHostAuthority;
-  readonly channel: DockerCustodyDuplexChannel;
-  readonly isCurrentGeneration: (generation: string) => boolean;
-  readonly isObservationActive?: () => boolean;
-  readonly maximumStderrBytes: number;
-  readonly maximumStdoutBytes: number;
-  readonly monotonicNow?: () => number;
-  readonly onDrainComplete?: (drain: DockerCustodyInitHostClosedEvidence["drain"]) => void | Promise<void>;
-  readonly onOutput?: (chunk: DockerCustodyInitHostOutput) => void | Promise<void>;
-  readonly onRootExit?: (exit: DockerCustodyInitHostRootExit) => void | Promise<void>;
-  readonly readyTimeoutMs: number;
-  readonly signal?: AbortSignal;
-}
-
-export interface DockerCustodyInitHostOutput {
-  readonly bytes: Uint8Array;
-  readonly stream: "stderr" | "stdout";
-}
-
-export interface DockerCustodyInitHostRootExit {
-  readonly exitCode: number | null;
-  readonly signal: DockerCustodyChildSignal | null;
-}
-
-export interface DockerCustodyInitHostClosedEvidence {
-  readonly acknowledgement: "started";
-  readonly drain: {readonly outerContainmentClaim: "unproven"; readonly rootExit: "observed"; readonly stderr: "eof"; readonly stdout: "eof"};
-  readonly generation: string;
-  readonly kind: "closed";
-  readonly rootExit: DockerCustodyInitHostRootExit;
-  readonly stderrBytes: number;
-  readonly stdoutBytes: number;
-}
-
-export type DockerCustodyInitHostResult = DockerCustodyInitHostClosedEvidence | {
-  readonly generation: string;
-  readonly kind: "failed";
-  readonly reason: "cancelled" | "channel-ended" | "init-not-ready" | "not-started" | "output-limit" | "protocol-violation" | "transport-failed";
-} | {
-  readonly generation: string;
-  readonly kind: "unknown";
-  readonly reason: "acknowledgement-conflict" | "acknowledgement-lost" | "exec-write-unknown";
-};
-
-export type DockerCustodyInitHostReady =
-  | {readonly generation: string; readonly kind: "ready"}
-  | Exclude<DockerCustodyInitHostResult, {kind: "closed"}>;
-export type DockerCustodyInitHostStart =
-  | {readonly generation: string; readonly kind: "started"}
-  | Exclude<DockerCustodyInitHostResult, {kind: "closed"}>;
-
-export type DockerCustodyInitHostWriteResult =
-  | {readonly committedBytes: number; readonly kind: "committed"}
-  | {readonly committedBytes: "unknown"; readonly kind: "unknown"}
-  | {readonly committedBytes: 0; readonly kind: "closed"};
+export type {DockerCustodyInitHostAuthority, DockerCustodyInitHostExec, DockerCustodyInitHostOptions, DockerCustodyInitHostOutput, DockerCustodyInitHostRootExit, DockerCustodyInitHostClosedEvidence, DockerCustodyInitHostResult, DockerCustodyInitHostReady, DockerCustodyInitHostStart, DockerCustodyInitHostWriteResult} from "./docker-custody-init-runtime-types.js";
+import type {
+  DockerCustodyInitHostAuthority, DockerCustodyInitHostExec, DockerCustodyInitHostOptions, DockerCustodyInitHostOutput, DockerCustodyInitHostRootExit, DockerCustodyInitHostClosedEvidence, DockerCustodyInitHostResult, DockerCustodyInitHostReady, DockerCustodyInitHostStart, DockerCustodyInitHostWriteResult
+} from "./docker-custody-init-runtime-types.js";
 
 class HostSessionFailure extends Error {
   public constructor(public readonly result: Exclude<DockerCustodyInitHostResult, {kind: "closed"}>) {super(result.reason);}
 }
 class HostAdmissionClosed extends Error {}
 
-const exactIdentity = (left: DockerCustodyIdentity, right: DockerCustodyIdentity): boolean =>
+type IdentityComparison = Readonly<Record<keyof DockerCustodyIdentity, string>>;
+const exactIdentity = (left: IdentityComparison, right: IdentityComparison): boolean =>
   left.protocol === right.protocol && left.containerImageSha256 === right.containerImageSha256 &&
   left.initBinarySha256 === right.initBinarySha256 && left.privateRootIdentity === right.privateRootIdentity &&
   left.securityProfileIdentity === right.securityProfileIdentity && left.workspaceIdentity === right.workspaceIdentity;
@@ -139,8 +69,8 @@ export class DockerCustodyInitHostSession {
   #resolveWake!: () => void;
   #resolveCompletion!: (result: DockerCustodyInitHostCompletion) => void;
   #ready: Promise<DockerCustodyInitHostReady> | undefined;
-  #resolveReady!: (result: DockerCustodyInitHostReady) => void;
-  #resolveStart!: (result: DockerCustodyInitHostStart) => void;
+  #resolveReady: ((result: DockerCustodyInitHostReady) => void) | undefined;
+  #resolveStart: ((result: DockerCustodyInitHostStart) => void) | undefined;
   #resolveExecute!: () => void;
   #executeGate: Promise<void> | undefined;
   #readyAccepted = false;
@@ -157,7 +87,7 @@ export class DockerCustodyInitHostSession {
   #writeTail: Promise<unknown> = Promise.resolve(null);
   public readonly completion: Promise<DockerCustodyInitHostCompletion>;
   public get observation(): DockerCustodyHostObservation {return this.#observation.snapshot(this.#rootExit,
-    this.#isCurrentGeneration(this.#authority.generation) && this.#isObservationActive() && !this.#signal?.aborted);}
+    this.#isCurrentGeneration(this.#authority.generation) && this.#isObservationActive() && this.#signal?.aborted !== true);}
 
   public get cleanupComplete(): boolean {return this.#cleanupComplete;}
 
@@ -250,7 +180,7 @@ export class DockerCustodyInitHostSession {
       if (await this.#rejectStaleWrite()) {return {committedBytes: 0, kind: "closed"};}
       try {
         this.#assertAdmission();
-        await this.#channel.write(encodeDockerCustodyFrame(message), () => this.#assertAdmission());
+        await this.#channel.write(encodeDockerCustodyFrame(message), () => {this.#assertAdmission();});
         return {committedBytes, kind: "committed"};
       } catch (error) {
         if (error instanceof HostAdmissionClosed) {return {committedBytes: 0, kind: "closed"};}
@@ -301,9 +231,9 @@ export class DockerCustodyInitHostSession {
         }
         return value;
       });
-      void this.#pendingRead.catch(error => {void this.#settle(this.#failure(error));});
+      void this.#pendingRead.catch((error: unknown) => {void this.#settle(this.#failure(error));});
       this.#readyAccepted = true;
-      this.#resolveReady(Object.freeze({generation: this.#authority.generation, kind: "ready"}));
+      this.#resolveReady?.(Object.freeze({generation: this.#authority.generation, kind: "ready"}));
       await Promise.race([this.#executeGate, this.#wake]);
       this.#assertAdmission();
       if (Date.now() >= this.#exec.wallDeadlineUnixMs) {throw new HostSessionFailure(this.#failed("cancelled"));}
@@ -314,8 +244,8 @@ export class DockerCustodyInitHostSession {
       const acknowledgement = await this.#next(this.#timeouts.acknowledgement, "acknowledgement-lost");
       this.#assertActive();
       this.#acceptAcknowledgement(acknowledgement);
-      this.#resolveStart(Object.freeze({generation: this.#authority.generation, kind: "started"}));
-      while (true) {
+      this.#resolveStart?.(Object.freeze({generation: this.#authority.generation, kind: "started"}));
+      for (;;) {
         const message = await this.#next(undefined, "channel-ended");
         const closed = await this.#acceptRuntimeMessage(message);
         if (closed !== undefined) {
@@ -333,7 +263,8 @@ export class DockerCustodyInitHostSession {
 
   #acceptReady(message: DockerCustodyInitMessage): void {
     this.#assertActive();
-    if (message.kind !== "init-ready" || message.protocol !== DOCKER_CUSTODY_INIT_PROTOCOL ||
+    const protocol: unknown = "protocol" in message ? message.protocol : undefined;
+    if (message.kind !== "init-ready" || protocol !== DOCKER_CUSTODY_INIT_PROTOCOL ||
       message.nonce !== this.#authority.operationNonce || message.launchFingerprintSha256 !== this.#authority.launchFingerprintSha256 ||
       !exactIdentity(message.observedIdentity, this.#authority.expectedIdentity)) {
       throw new DockerCustodyProtocolError("init ready does not match frozen authority");
@@ -397,7 +328,8 @@ export class DockerCustodyInitHostSession {
 
   async #next(timeoutMs: number | undefined, timeoutReason: "acknowledgement-lost" | "channel-ended" | "init-not-ready"): Promise<DockerCustodyInitMessage> {
     this.#assertActive(); this.#assertOpen();
-    if (this.#queued.length !== 0) {return this.#queued.shift() as DockerCustodyInitMessage;}
+    const hasQueued = (): boolean => this.#queued.length !== 0;
+    if (hasQueued()) {return this.#queued.shift() as DockerCustodyInitMessage;}
     if (this.#signal?.aborted === true) {
       throw new HostSessionFailure(this.#cancellationResult());
     }
@@ -406,7 +338,7 @@ export class DockerCustodyInitHostSession {
       ? this.#unknown(timeoutReason) : this.#failed(timeoutReason));
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      while (this.#queued.length === 0) {
+      do {
         const read = this.#pendingRead ?? this.#outputIterator!.next();
         this.#pendingRead = undefined;
         const timeout = deadline === undefined ? undefined : new Promise<never>((_resolve, reject) => {
@@ -421,7 +353,7 @@ export class DockerCustodyInitHostSession {
         if (deadline !== undefined && this.#monotonicNow() >= deadline) {
           throw failure();
         }
-        if (selected.done) {this.#channelEnded();}
+        if (selected.done === true) {this.#channelEnded();}
         this.#observeDecoderBytes(selected.value);
         const messages = this.#decoder.push(selected.value);
         for (const item of messages) {
@@ -431,7 +363,7 @@ export class DockerCustodyInitHostSession {
           }
           this.#queued.push(item);
         }
-      }
+      } while (!hasQueued());
       return this.#queued.shift() as DockerCustodyInitMessage;
     } finally {
       if (timer !== undefined) {clearTimeout(timer);}
@@ -455,7 +387,7 @@ export class DockerCustodyInitHostSession {
         })]);
         clearTimeout(timer); timer = undefined;
         this.#assertActive();
-        if (selected.done) {this.#decoder.finish(); this.#observation.channelEnded(); return;}
+        if (selected.done === true) {this.#decoder.finish(); this.#observation.channelEnded(); return;}
         this.#observeDecoderBytes(selected.value);
         const messages = this.#decoder.push(selected.value);
         if (messages.length !== 0) {throw new DockerCustodyProtocolError("frames followed drain completion");}
@@ -550,7 +482,7 @@ export class DockerCustodyInitHostSession {
       (async () => this.#outputIterator?.return?.())(),
     ]).then(results => {
       this.#cleanupComplete = results.every(observation => observation.status === "fulfilled");
-      return cleanup.resolve();
+      cleanup.resolve(); return;
     });
     await this.#cleanup;
     return this.#settled;
@@ -573,7 +505,7 @@ export class DockerCustodyInitHostSession {
     const failure = () => new HostSessionFailure(reason === "init-not-ready" ? this.#failed(reason) : this.#unknown(reason));
     try {
       this.#assertAdmission();
-      await Promise.race([this.#channel.write(bytes, () => this.#assertAdmission()), this.#wake, new Promise<never>((_resolve, reject) => {
+      await Promise.race([this.#channel.write(bytes, () => {this.#assertAdmission();}), this.#wake, new Promise<never>((_resolve, reject) => {
         timer = setTimeout(() => {reject(failure());}, timeoutMs);
       })]);
       this.#assertActive(); this.#assertOpen();

@@ -7,7 +7,7 @@ import { captureCurrentEgressEndorsement, captureCurrentEgressHead, captureCurre
   captureCurrentEgressRead, captureCurrentEgressResolve, currentEgressDigest,
   matchesCurrentEgressRequest, requireCurrentEgress, sameCurrentEgress } from "./current-egress-validation.js";
 
-const nativeThen = Promise.prototype.then;
+const nativeThen = Object.getOwnPropertyDescriptor(Promise.prototype, "then")!.value as typeof Promise.prototype.then;
 const nativeApply = Reflect.apply;
 
 type Context = { readonly generation: number; readonly authorityRef: string;
@@ -78,8 +78,8 @@ export const createCurrentEgressOwner = (value: CurrentEgressOwnerInput):
         settled = true; clearTimeout(timer); cancelRead = undefined;
         if (error !== undefined) {reject(error);} else {resolve(result!);}
       };
-      const timer = setTimeout(() => finish(new Error("current read deadline")), readDeadline - started);
-      cancelRead = () => finish(new Error("current read closed"));
+      const timer = setTimeout(() => {finish(new Error("current read deadline"));}, readDeadline - started);
+      cancelRead = () => {finish(new Error("current read closed"));};
       try {
         const pending = callback(input.operation);
         // Native async trusted readers return an intrinsic outer promise. Attach
@@ -104,14 +104,14 @@ export const createCurrentEgressOwner = (value: CurrentEgressOwnerInput):
       const second = await read(input.readRsHead, captureCurrentEgressHead, selected);
       requireCurrentEgress(sameCurrentEgress(first, second));
       requireCurrentEgress(pa !== null && pa.available && !pa.revoked && pa.bindingRevision >= 1);
-      requireCurrentEgress(sameCurrentEgress(pa!.operation, input.operation) &&
-        sameCurrentEgress(pa!.route, input.rule.route));
+      requireCurrentEgress(sameCurrentEgress(pa.operation, input.operation) &&
+        sameCurrentEgress(pa.route, input.rule.route));
       requireCurrentEgress(selected.request.headers.credentialFields.every(field =>
-        field.credentialBindingDigest === pa!.credentialBindingDigest));
+        field.credentialBindingDigest === pa.credentialBindingDigest));
       requireCurrentEgress(matchesCurrentEgressRequest(selected.request, input.rule.route) &&
         selected.request.body.byteLength <= input.rule.limits.requestBytes);
       assertContext(selected);
-      return deepFreezeEgress({ status: "current", authority: rebuild(input, selected, pa!, second) });
+      return deepFreezeEgress({ status: "current", authority: rebuild(input, selected, pa, second) });
     } catch { close(); return unavailable(); }
     finally { busy = false; }
   };
@@ -140,8 +140,8 @@ export const createCurrentEgressOwner = (value: CurrentEgressOwnerInput):
         const captured = captureCurrentEgressRead(raw);
         requireCurrentEgress(sameCurrentEgress(captured.scope, input.operation.scope) &&
           context !== undefined && captured.authorityRef === context.authorityRef);
-        assertContext(context!);
-        return await observe(context!);
+        assertContext(context);
+        return await observe(context);
       } catch { return denied(); }
     },
     dispose: close,

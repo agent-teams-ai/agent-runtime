@@ -130,7 +130,7 @@ function assertClosedPlainBundle(
   if (typeof value !== "object" || value === null || types.isProxy(value) || Array.isArray(value)) {
     throw new TypeError(`${bundleName} must be a plain capability bundle`);
   }
-  const prototype = Object.getPrototypeOf(value);
+  const prototype: unknown = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) {
     throw new TypeError(`${bundleName} must be a plain capability bundle`);
   }
@@ -143,12 +143,12 @@ function assertClosedPlainBundle(
   }
 }
 
-const snapshotCapabilityMethod = <Method>(
+const snapshotCapabilityMethod = (
   bundle: Record<string, unknown>,
   bundleName: string,
   bindingName: string,
   methodName: "execute" | "plan",
-): Method => {
+): ((...args: never[]) => unknown) => {
   const binding = bundle[bindingName];
   if ((typeof binding !== "object" && typeof binding !== "function") || binding === null) {
     throw new TypeError(`${bundleName}.${bindingName} must provide ${methodName}()`);
@@ -157,12 +157,12 @@ const snapshotCapabilityMethod = <Method>(
   if (typeof method !== "function") {
     throw new TypeError(`${bundleName}.${bindingName} must provide ${methodName}()`);
   }
-  return method.bind(binding) as Method;
+  return method.bind(binding) as (...args: never[]) => unknown;
 };
 
 const copyAuthorityRevision = (capability: Record<string, unknown>): string => {
   const descriptor = Object.getOwnPropertyDescriptor(capability, "authorityRevision");
-  const authorityRevision = descriptor !== undefined && "value" in descriptor ? descriptor.value : undefined;
+  const authorityRevision: unknown = descriptor !== undefined && "value" in descriptor ? descriptor.value : undefined;
   const copied = copyContainedTurnAccessAuthority({ authorityRevision, projectId: "probe", tenantId: "probe" });
   if (copied === undefined) { throw new TypeError("Contained-turn access authority is invalid"); }
   return copied.authorityRevision;
@@ -214,43 +214,43 @@ const snapshotAgentRuntimeHostDependencies = (
   return Object.freeze({
     claudeCodeSetup: Object.freeze({
       authorizeClaudeCodeSetupInspection: Object.freeze({
-        execute: snapshotCapabilityMethod<ClaudeCodeSetupCapabilityBundle["authorizeClaudeCodeSetupInspection"]["execute"]>(claudeCodeSetup, "Claude Code setup capability bundle", "authorizeClaudeCodeSetupInspection", "execute"),
+        execute: snapshotCapabilityMethod(claudeCodeSetup, "Claude Code setup capability bundle", "authorizeClaudeCodeSetupInspection", "execute") as ClaudeCodeSetupCapabilityBundle["authorizeClaudeCodeSetupInspection"]["execute"],
       }),
       discoverClaudeCodeInstallations: Object.freeze({
-        execute: snapshotCapabilityMethod<ClaudeCodeSetupCapabilityBundle["discoverClaudeCodeInstallations"]["execute"]>(claudeCodeSetup, "Claude Code setup capability bundle", "discoverClaudeCodeInstallations", "execute"),
+        execute: snapshotCapabilityMethod(claudeCodeSetup, "Claude Code setup capability bundle", "discoverClaudeCodeInstallations", "execute") as ClaudeCodeSetupCapabilityBundle["discoverClaudeCodeInstallations"]["execute"],
       }),
       inspectClaudeCodeConfiguration: Object.freeze({
-        execute: snapshotCapabilityMethod<ClaudeCodeSetupCapabilityBundle["inspectClaudeCodeConfiguration"]["execute"]>(claudeCodeSetup, "Claude Code setup capability bundle", "inspectClaudeCodeConfiguration", "execute"),
+        execute: snapshotCapabilityMethod(claudeCodeSetup, "Claude Code setup capability bundle", "inspectClaudeCodeConfiguration", "execute") as ClaudeCodeSetupCapabilityBundle["inspectClaudeCodeConfiguration"]["execute"],
       }),
       planClaudeCodeSetupInspection: Object.freeze({
-        plan: snapshotCapabilityMethod<ClaudeCodeSetupCapabilityBundle["planClaudeCodeSetupInspection"]["plan"]>(claudeCodeSetup, "Claude Code setup capability bundle", "planClaudeCodeSetupInspection", "plan"),
+        plan: snapshotCapabilityMethod(claudeCodeSetup, "Claude Code setup capability bundle", "planClaudeCodeSetupInspection", "plan") as ClaudeCodeSetupCapabilityBundle["planClaudeCodeSetupInspection"]["plan"],
       }),
     }),
     codexSetup: Object.freeze({
       authorizeSetupInspection: Object.freeze({
-        execute: snapshotCapabilityMethod<CodexSetupCapabilityBundle["authorizeSetupInspection"]["execute"]>(codexSetup, "Codex setup capability bundle", "authorizeSetupInspection", "execute"),
+        execute: snapshotCapabilityMethod(codexSetup, "Codex setup capability bundle", "authorizeSetupInspection", "execute") as CodexSetupCapabilityBundle["authorizeSetupInspection"]["execute"],
       }),
       discoverCodexInstallations: Object.freeze({
-        execute: snapshotCapabilityMethod<CodexSetupCapabilityBundle["discoverCodexInstallations"]["execute"]>(codexSetup, "Codex setup capability bundle", "discoverCodexInstallations", "execute"),
+        execute: snapshotCapabilityMethod(codexSetup, "Codex setup capability bundle", "discoverCodexInstallations", "execute") as CodexSetupCapabilityBundle["discoverCodexInstallations"]["execute"],
       }),
       inspectCodexConfiguration: Object.freeze({
-        execute: snapshotCapabilityMethod<CodexSetupCapabilityBundle["inspectCodexConfiguration"]["execute"]>(codexSetup, "Codex setup capability bundle", "inspectCodexConfiguration", "execute"),
+        execute: snapshotCapabilityMethod(codexSetup, "Codex setup capability bundle", "inspectCodexConfiguration", "execute") as CodexSetupCapabilityBundle["inspectCodexConfiguration"]["execute"],
       }),
       planCodexSetupInspection: Object.freeze({
-        plan: snapshotCapabilityMethod<CodexSetupCapabilityBundle["planCodexSetupInspection"]["plan"]>(codexSetup, "Codex setup capability bundle", "planCodexSetupInspection", "plan"),
+        plan: snapshotCapabilityMethod(codexSetup, "Codex setup capability bundle", "planCodexSetupInspection", "plan") as CodexSetupCapabilityBundle["planCodexSetupInspection"]["plan"],
       }),
     }),
     ...(containedTurn === undefined ? {} : {
       containedTurn: Object.freeze({
         authorityRevision: copyAuthorityRevision(containedTurn),
         cancel: Object.freeze({
-          execute: snapshotCapabilityMethod<AuthorityBoundContainedTurnCapability["cancel"]["execute"]>(containedTurn, "Contained turn capability bundle", "cancel", "execute"),
+          execute: snapshotCapabilityMethod(containedTurn, "Contained turn capability bundle", "cancel", "execute") as AuthorityBoundContainedTurnCapability["cancel"]["execute"],
         }),
         observe: Object.freeze({
-          execute: snapshotCapabilityMethod<AuthorityBoundContainedTurnCapability["observe"]["execute"]>(containedTurn, "Contained turn capability bundle", "observe", "execute"),
+          execute: snapshotCapabilityMethod(containedTurn, "Contained turn capability bundle", "observe", "execute") as AuthorityBoundContainedTurnCapability["observe"]["execute"],
         }),
         submit: Object.freeze({
-          execute: snapshotCapabilityMethod<AuthorityBoundContainedTurnCapability["submit"]["execute"]>(containedTurn, "Contained turn capability bundle", "submit", "execute"),
+          execute: snapshotCapabilityMethod(containedTurn, "Contained turn capability bundle", "submit", "execute") as AuthorityBoundContainedTurnCapability["submit"]["execute"],
         }),
       }),
     }),
@@ -280,11 +280,11 @@ export const createAgentRuntimeHost = (
     : createContainedTurnSubmissionCoordinator({
         capability: capabilityDependencies.containedTurn,
         hostSignal: lifecycle.signal,
-        isDisposed: lifecycle.isDisposed,
-        onAccepted: lifecycle.registerContainedTurn,
-        onObserved: lifecycle.recordContainedTurnStatus,
-        requestCancellation: lifecycle.requestContainedTurnCancellation,
-        executeCall: lifecycle.executeCall,
+        isDisposed: lifecycle.isDisposed.bind(lifecycle),
+        onAccepted: lifecycle.registerContainedTurn.bind(lifecycle),
+        onObserved: lifecycle.recordContainedTurnStatus.bind(lifecycle),
+        requestCancellation: lifecycle.requestContainedTurnCancellation.bind(lifecycle),
+        executeCall: lifecycle.executeCall.bind(lifecycle),
       });
 
   return Object.freeze({
@@ -345,13 +345,13 @@ export const createAgentRuntimeHost = (
           },
         }),
         containedTurn: createContainedTurnRuntimeAccess({
-          assertActive: lifecycle.assertActive,
+          assertActive: lifecycle.assertActive.bind(lifecycle),
           capability: capabilityDependencies.containedTurn,
           hostSignal: lifecycle.signal,
-          isDisposed: lifecycle.isDisposed,
-          onAccepted: lifecycle.registerContainedTurn,
-          onObserved: lifecycle.recordContainedTurnStatus,
-          requestCancellation: lifecycle.requestContainedTurnCancellation,
+          isDisposed: lifecycle.isDisposed.bind(lifecycle),
+          onAccepted: lifecycle.registerContainedTurn.bind(lifecycle),
+          onObserved: lifecycle.recordContainedTurnStatus.bind(lifecycle),
+          requestCancellation: lifecycle.requestContainedTurnCancellation.bind(lifecycle),
           scope: boundContainedTurnScope.status === "available"
             ? copyContainedTurnAccessAuthority({
                 ...boundContainedTurnScope.scope,
@@ -359,11 +359,11 @@ export const createAgentRuntimeHost = (
               })
             : undefined,
           submissionCoordinator: containedTurnSubmissionCoordinator,
-          executeCall: lifecycle.executeCall,
+          executeCall: lifecycle.executeCall.bind(lifecycle),
         }),
       });
     },
-    dispose: lifecycle.dispose,
-    [Symbol.asyncDispose]: lifecycle.dispose,
+    dispose: lifecycle.dispose.bind(lifecycle),
+    [Symbol.asyncDispose]: lifecycle.dispose.bind(lifecycle),
   });
 };

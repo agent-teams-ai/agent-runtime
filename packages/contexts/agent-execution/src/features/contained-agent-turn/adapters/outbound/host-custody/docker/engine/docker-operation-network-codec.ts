@@ -93,15 +93,18 @@ export const decodeOperationNetwork = (input: Readonly<{
 /** A cleanup deadline bounds observation of retained work, never its ownership.
  * Late work stays retained by its original slot and must be reobserved later. */
 export const awaitNetworkCleanupWork = async (work: Promise<unknown> | undefined, call: DockerEngineCall): Promise<void> => {
-  if (call.signal.aborted || Date.now() >= call.deadlineEpochMs) {throw networkFailure();}
+  const assertCurrent = (): void => {
+    if (call.signal.aborted || Date.now() >= call.deadlineEpochMs) {throw networkFailure();}
+  };
+  assertCurrent();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let abort: ReturnType<typeof addAbortListener> | undefined;
   try {
     await Promise.race([work, new Promise<never>((_resolve, reject) => {
-      const fail = () => reject(networkFailure());
+      const fail = (): void => {reject(networkFailure());};
       abort = addAbortListener(call.signal, fail);
       timer = setTimeout(fail, Math.min(call.deadlineEpochMs - Date.now(), 120_000));
     })]);
-    if (call.signal.aborted || Date.now() >= call.deadlineEpochMs) {throw networkFailure();}
+    assertCurrent();
   } finally {clearTimeout(timer); abort?.[Symbol.dispose]();}
 };

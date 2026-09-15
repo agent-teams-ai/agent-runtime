@@ -16,7 +16,7 @@ export async function readNodeOrdinaryArtifact(options: NodeOrdinaryArtifactsOpt
   const manifestBytes = await readStable(receipt.artifactManifestRef);
   if (digest(manifestBytes) !== receipt.artifactDigest) {throw new Error("ordinary_manifest_corrupt");}
   const manifest: unknown = JSON.parse(manifestBytes.toString("utf8"));
-  if (!manifest || typeof manifest !== "object" || !("sourceDigest" in manifest) || typeof manifest.sourceDigest !== "string" || !/^[a-f0-9]{64}$/.test(manifest.sourceDigest) || !("inventoryDigest" in manifest) || typeof manifest.inventoryDigest !== "string" || !/^[a-f0-9]{64}$/.test(manifest.inventoryDigest)) {throw new Error("ordinary_manifest_source_binding");}
+  if (manifest === null || typeof manifest !== "object" || !("sourceDigest" in manifest) || typeof manifest.sourceDigest !== "string" || !/^[a-f0-9]{64}$/.test(manifest.sourceDigest) || !("inventoryDigest" in manifest) || typeof manifest.inventoryDigest !== "string" || !/^[a-f0-9]{64}$/.test(manifest.inventoryDigest)) {throw new Error("ordinary_manifest_source_binding");}
   const bytes = await readStable(receipt.resultRef);
   const expected = manifestFor(options.sourceRevision, {...receipt, sourceDigest: manifest.sourceDigest, inventoryDigest: manifest.inventoryDigest}, digest(bytes), bytes.length);
   if (JSON.stringify(manifest) !== JSON.stringify(expected) || bytes.length !== receipt.byteLength || digest(bytes) !== receipt.snapshotDigest) {throw new Error("ordinary_artifact_corrupt_or_binding");}
@@ -30,7 +30,9 @@ export function createNodeOrdinaryArtifacts(options: NodeOrdinaryArtifactsOption
     await directory(options.artifactRoot, true);
     if (!options.sourceRevision) {throw new Error("ordinary_source_revision_missing");}
     const {receipt} = snapshot;
-    if (operation.effectClass !== ORDINARY_PROFILE.effectClass || receipt.operationId !== operation.operationId || receipt.attemptId !== operation.attemptId || receipt.executionProfile !== operation.executionProfile || receipt.capabilityManifestRevision !== operation.capabilityManifestRevision || !receipt.stable) {throw new Error("ordinary_snapshot_binding");}
+    const effectClass: unknown = operation.effectClass;
+    const receiptBinding: Readonly<Record<keyof typeof receipt, unknown>> = receipt;
+    if (effectClass !== ORDINARY_PROFILE.effectClass || receipt.operationId !== operation.operationId || receipt.attemptId !== operation.attemptId || receiptBinding.executionProfile !== operation.executionProfile || receiptBinding.capabilityManifestRevision !== operation.capabilityManifestRevision || receiptBinding.stable !== true) {throw new Error("ordinary_snapshot_binding");}
     const bytes = Uint8Array.from(snapshot.resultBytes), hash = digest(bytes);
     if (hash !== receipt.snapshotDigest) {throw new Error("ordinary_snapshot_corrupt");}
     const manifest = JSON.stringify(manifestFor(options.sourceRevision, receipt, hash, bytes.length));

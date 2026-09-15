@@ -6,6 +6,8 @@ import type { AgentRuntimeHost } from "./agent-runtime-host.js";
 import { AgentRuntimeHostCreationError, assemblyErrorCodes, projectDiagnostics, type AgentRuntimeHostCreationPhase } from "./agent-runtime-host-creation-error.js";
 import { bindRuntimeSetup, createRuntimeSetupFactories, runtimeSetupDeclarations, runtimeSetupProfile, runtimeOrdinarySetupDeclarations, runtimeOrdinarySetupProfile, type OrdinaryRuntimeAssemblyInput, type RuntimeSetupFactories, type RuntimeSetupRootCompletion } from "./runtime-setup-assembly.js";
 
+const errorCodes: Partial<typeof assemblyErrorCodes> = assemblyErrorCodes;
+
 export interface DefaultAgentRuntimeHostOptions { readonly signal?: AbortSignal; }
 
 // Internal fixed checkpoints, absent from the private package entrypoint.
@@ -37,7 +39,7 @@ export async function createRuntimeSetupAttempt(
     return failure;
   };
   const checkCancellation = () => {
-    if (signal?.aborted) { throw failureForAttempt("cancelled", phase, { cancellationObserved: true }); }
+    if (signal?.aborted === true) { throw failureForAttempt("cancelled", phase, { cancellationObserved: true }); }
   };
   try {
     signal = options?.signal;
@@ -53,7 +55,7 @@ export async function createRuntimeSetupAttempt(
     phase = "prepare";
     const preparation = await bindings.assembly.prepare({ composition, factories: bindings.factories, roots: bindings.roots });
     if (preparation.status === "failed") { throw failureForAttempt(
-      assemblyErrorCodes[preparation.error.code] ?? "invalid_composition", phase, { cancellationObserved: signal?.aborted,
+      errorCodes[preparation.error.code] ?? "invalid_composition", phase, { cancellationObserved: signal?.aborted,
       diagnostics: projectDiagnostics(preparation.diagnostics), cause: preparation.error.cause }); }
     checkCancellation();
     phase = "run";
@@ -90,7 +92,7 @@ function assertSuccessfulOutcome(
   failure: (...args: ConstructorParameters<typeof AgentRuntimeHostCreationError>) => AgentRuntimeHostCreationError,
 ): asserts outcome is Extract<RuntimeSetupOutcome, { status: "succeeded" }> {
   if (outcome.status === "failed") {
-    throw failure(assemblyErrorCodes[outcome.code] ?? "internal_failure", "run", {
+    throw failure(errorCodes[outcome.code] ?? "internal_failure", "run", {
       cancellationObserved: outcome.cancellation !== undefined || signal?.aborted === true,
       cause: outcome.cause,
       moduleId: runtimeOrdinarySetupDeclarations.find(({ implementationId }) => implementationId === outcome.implementationId)?.moduleId,

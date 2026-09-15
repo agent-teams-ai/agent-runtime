@@ -25,6 +25,7 @@ const copyBinding = (value: OrdinaryBinding): OrdinaryBinding => Object.freeze({
   operationId: value.operationId, attemptId: value.attemptId,
   executionProfile: value.executionProfile, capabilityManifestRevision: value.capabilityManifestRevision,
 });
+const isAborted = (signal: AbortSignal): boolean => signal.aborted;
 const refusal = () => new Error("ORDINARY_PROCESS_UNCONFIRMED");
 const groupExists = (pid: number): boolean => {
   try { process.kill(-pid, 0); return true; }
@@ -32,9 +33,24 @@ const groupExists = (pid: number): boolean => {
 };
 async function within(promise: Promise<void>, milliseconds: number): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  try { return await Promise.race([promise.then(() => true), new Promise<false>(resolve => { timer = setTimeout(() => resolve(false), milliseconds); })]); }
+  try { return await Promise.race([promise.then(() => true), new Promise<false>(resolve => { timer = setTimeout(() => {resolve(false);}, milliseconds); })]); }
   finally { clearTimeout(timer); }
 }
+const writeMessage = async (child: ChildProcessWithoutNullStreams, message: string): Promise<void> =>
+  new Promise((resolve, reject) => {
+    child.stdin.write(message, (error: Error | null | undefined) => {
+      if (error !== null && error !== undefined) {reject(refusal()); return;}
+      resolve();
+    });
+  });
+
+const assertClosure = (facts: Readonly<{
+  journalFailed: boolean; streamInvalid: boolean; closed: boolean; exited: boolean;
+  stdoutClosed: boolean; stderrClosed: boolean; unread: number; pid: number; finalSequence: number;
+}>): void => {
+  const {journalFailed, streamInvalid, closed, exited, stdoutClosed, stderrClosed, unread, pid, finalSequence} = facts;
+  if (journalFailed || streamInvalid || !closed || !exited || !stdoutClosed || !stderrClosed || unread !== 0 || groupExists(pid) || !Number.isSafeInteger(finalSequence) || finalSequence < 0) {throw refusal();}
+};
 
 /** Live ownership is retained only in this process. This adapter never recovers a persisted PID. */
 export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): OrdinaryProcessPort {
@@ -46,7 +62,7 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
     if (launch.cwd !== input.workspace.cwd || !launch.executable.startsWith("/") ||
         !Array.isArray(launch.arguments)) { throw refusal(); }
     const executable = launch.executable;
-    const processArguments = [...launch.arguments];
+    const processArguments = Array.from<string>(launch.arguments);
     const environment = {...launch.environment};
     const reservationId = randomUUID();
     const ownershipToken = randomUUID();
@@ -64,6 +80,7 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
     let spawnInvoked = false;
     let child: ChildProcessWithoutNullStreams | undefined;
     let exited = false;
+    const hasExited = (): boolean => exited;
     let closed = false;
     let stdoutClosed = false;
     let stderrClosed = false;
@@ -83,7 +100,7 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
     const interrupt = () => {
       fail();
       // An exited leader cannot justify signalling a possibly recycled process group.
-      if (child?.pid !== undefined && !exited) { try { process.kill(-child.pid, "SIGTERM"); } catch { /* Closure observation decides. */ } }
+      if (child?.pid !== undefined && !hasExited()) { try { process.kill(-child.pid, "SIGTERM"); } catch { /* Closure observation decides. */ } }
     };
     const onData = (bytes: Buffer) => {
       totalBytes += bytes.length;
@@ -115,22 +132,21 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
       }},
       async write(message: string) {
         if (failure !== undefined || child === undefined || closed || exited || Buffer.byteLength(message) > 262_144) { throw refusal(); }
-        await new Promise<void>((resolve, reject) => { child!.stdin.write(message, (error: Error | null | undefined) => error ? reject(refusal()) : resolve()); });
+        await writeMessage(child, message);
       },
       async closeInput() { child?.stdin.end(); },
     });
-    const assertClosure = (unread: number, pid: number, finalSequence: number): void => {
-      if (journalFailed || streamInvalid || !closed || !exited || !stdoutClosed || !stderrClosed || unread !== 0 || groupExists(pid) || !Number.isSafeInteger(finalSequence) || finalSequence < 0) {throw refusal();}
-    };
+
     return Object.freeze({
       reservationId,
       async start(claim: OrdinaryReceiptOf<"dispatch_claim">, signal: AbortSignal) {
         if (attempted || closing) { throw refusal(); }
         attempted = true;
-        if (claim.kind !== "dispatch_claim" || claim.reservationId !== reservationId ||
+        const claimBinding: Readonly<Record<keyof typeof claim, unknown>> = claim;
+        if (claimBinding.kind !== "dispatch_claim" || claim.reservationId !== reservationId ||
             claim.operationId !== binding.operationId || claim.attemptId !== binding.attemptId ||
-            claim.executionProfile !== binding.executionProfile || claim.capabilityManifestRevision !== binding.capabilityManifestRevision ||
-            signal.aborted || performance.now() >= input.deadline) { throw refusal(); }
+            claimBinding.executionProfile !== binding.executionProfile || claimBinding.capabilityManifestRevision !== binding.capabilityManifestRevision ||
+            isAborted(signal) || performance.now() >= input.deadline) { throw refusal(); }
         abortSignal = signal;
         record({...binding, reservationId, kind: "launch_requested"});
         spawnInvoked = true;
@@ -148,7 +164,7 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
         child.stderr.once("end", () => {try {stderrDecoder.decode();} catch {streamInvalid = true; fail();} stderrClosed = true;});
         signal.addEventListener("abort", interrupt, {once: true});
         deadlineTimer = setTimeout(interrupt, Math.max(1, input.deadline - performance.now()));
-        if (signal.aborted) { interrupt(); }
+        if (isAborted(signal)) { interrupt(); }
         if (child.pid !== undefined) {try {record({...binding, reservationId, kind: "started", pid: child.pid, processGroupId: child.pid});} catch {interrupt(); throw refusal();}}
         return transport;
       },
@@ -160,9 +176,9 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
           if (!spawnInvoked) {for (const key of Object.keys(environment)) {delete environment[key];} return Object.freeze({kind: "not_started" as const, reservationId}); }
           if (child === undefined || child.pid === undefined) { throw refusal(); }
           child.stdin.end();
-          if (!await within(closure, 1500) && !exited) {
+          if (!await within(closure, 1500) && !hasExited()) {
             try { process.kill(-child.pid, "SIGTERM"); } catch { /* Read observed closure. */ }
-            if (!await within(closure, 1000) && !exited) {
+            if (!await within(closure, 1000) && !hasExited()) {
               try { process.kill(-child.pid, "SIGKILL"); } catch { /* Read observed closure. */ }
               await within(closure, 1000);
             }
@@ -173,14 +189,14 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
           queue.length = 0;
           partial = "";
           for (const key of Object.keys(environment)) {delete environment[key];}
-          assertClosure(unread, child.pid, finalSequence);
+          assertClosure({journalFailed, streamInvalid, closed, exited, stdoutClosed, stderrClosed, unread, pid: child.pid, finalSequence});
           record({...binding, reservationId, kind: "closed", pid: child.pid, processGroupId: child.pid});
           return Object.freeze([
             Object.freeze({...binding, kind: "output_drain" as const, finalSequence, stdoutClosed: true as const, stderrClosed: true as const}),
             Object.freeze({...binding, kind: "process_group_closed" as const, reservationId, pid: child.pid, processGroupId: child.pid, ownershipToken,
               exitObserved: true as const, groupEmptyObserved: true as const}),
           ] as const);
-        })().catch(error => {
+        })().catch((error: unknown) => {
           closePromise = undefined;
           try {record({...binding, reservationId, kind: "unconfirmed", pid: child?.pid ?? null, processGroupId: child?.pid ?? null});} catch { /* The supplied journal already failed closed. */ }
           throw error;

@@ -68,7 +68,8 @@ const expandIpv6 = (address: string): readonly number[] | undefined => {
 };
 
 const isPublicIpv6 = (words: readonly number[]): boolean => {
-  const [first, second] = words as [number, number, ...number[]];
+  const [first, second] = words;
+  if (first === undefined || second === undefined) {return false;}
   // Strictly admit global-unicast 2000::/3, excluding documentation and reserved subranges.
   if ((first & 0xe000) !== 0x2000) {return false;}
   // 6to4 exposes an embedded IPv4 route that can bypass the IPv4 deny ranges.

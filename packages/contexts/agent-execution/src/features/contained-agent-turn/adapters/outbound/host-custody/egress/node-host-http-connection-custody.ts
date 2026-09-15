@@ -170,6 +170,8 @@ export class NodeHostHttpConnectionCustody {
     } finally {this.#pumping = false;}
   };
 
+  #hasFailure(): boolean {return this.#failure !== undefined;}
+
   #pump(): void {
     const socket = this.#socket!;
     do {
@@ -178,7 +180,7 @@ export class NodeHostHttpConnectionCustody {
       // Node readable-mode EOF needs a read even when the buffer is empty. read(0)
       // cannot allocate a payload result; it also keeps later-byte surveillance live.
       if (socket.read(0) !== null) {throw this.#frame!.error("malformed");}
-    } while (socket.readableLength > 0 && this.#failure === undefined);
+    } while (socket.readableLength > 0 && !this.#hasFailure());
   }
 
   #readBounded(): void {
@@ -192,7 +194,8 @@ export class NodeHostHttpConnectionCustody {
     }
     const bytes = socket.read(Math.min(socket.readableLength, this.#config.readHighWaterMark));
     try {
-      if (!intrinsicUint8ArrayLength(bytes)) {throw this.#frame!.error("malformed");}
+      const byteLength = intrinsicUint8ArrayLength(bytes);
+      if (byteLength === undefined || byteLength === 0) {throw this.#frame!.error("malformed");}
       this.#frame!.push(bytes);
       this.#live(deadline);
     } finally {zeroHttpBytes(bytes);}
@@ -292,7 +295,7 @@ export class NodeHostHttpConnectionCustody {
     }
     this.#closeMode ??= mode;
     if (completion !== undefined) {
-      void this.#closeOwned().then(completion.resolve, () => completion.resolve(receipt("unknown")));
+      void this.#closeOwned().then(completion.resolve, () => {completion.resolve(receipt("unknown"));});
     }
     return this.#closePromise!;
   }
@@ -307,7 +310,7 @@ export class NodeHostHttpConnectionCustody {
       // Start the close watchdog BEFORE waiting for a write callback or FIN.
       const observing = this.#clock.within(deadline, () => this.#closed.promise, this.#closeWatch.signal);
       void observing.catch(() => {});
-      void this.#finishWrites().catch(() => this.#fail(new NodeHostHttpConnectionError("write_failed")));
+      void this.#finishWrites().catch(() => {this.#fail(new NodeHostHttpConnectionError("write_failed"));});
       await observing;
     } catch {
       this.#fail(new NodeHostHttpConnectionError("deadline"));
@@ -320,12 +323,14 @@ export class NodeHostHttpConnectionCustody {
     return receipt(clean ? "closed" : "unknown");
   }
 
+  #completing(): boolean {return this.#closeMode === "complete";}
+
   async #finishWrites(): Promise<void> {
     if (this.#closeMode !== "complete" || this.#failure !== undefined || this.#actuallyClosed) {return;}
     if (!this.#eof) {this.#fail(this.#frame!.error("malformed")); return;}
     await this.#write?.completion;
     this.#readable();
-    if (this.#closeMode !== "complete" || !this.#live()) {return;}
+    if (!this.#completing() || !this.#live()) {return;}
     this.#endCalled = true;
     this.#operationWatch?.abort();
     try {this.#socket!.end();} catch {this.#fail(new NodeHostHttpConnectionError("closed"));}

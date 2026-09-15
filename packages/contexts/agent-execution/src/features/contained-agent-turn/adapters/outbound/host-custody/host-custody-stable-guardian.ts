@@ -20,8 +20,8 @@ type GuardianMessage =
   | { readonly pid: number; readonly type: "started"; readonly darwinImage?: unknown }
   | { readonly code?: unknown; readonly type: "start-error" }
   | { readonly code: number | null; readonly signal: NodeJS.Signals | null; readonly type: "provider-exit" }
-  | { readonly status: GuardianProviderStreamFinal; readonly stream: GuardianProviderStream; readonly type: "stream-final" }
-  | { readonly sent: boolean; readonly signal: "SIGKILL"; readonly type: "provider-signal-issued" }
+  | { readonly status: GuardianProviderStreamFinal; readonly stream: unknown; readonly type: "stream-final" }
+  | { readonly sent: unknown; readonly signal: unknown; readonly type: "provider-signal-issued" }
   | { readonly signal: NodeJS.Signals; readonly type: "signal-issued" };
 
 export type GuardianStartObservation =

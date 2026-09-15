@@ -64,7 +64,7 @@ interface TurnExecutionOptions {
 }
 
 interface QueryComposition {
-  loadQueryFactory(): ClaudeQueryFactory | PromiseLike<ClaudeQueryFactory>;
+  loadQueryFactory(this: void): ClaudeQueryFactory | PromiseLike<ClaudeQueryFactory>;
   resolveProjection(): ClaudeAgentSdkPrivateProjection | undefined;
   startQuery(
     factory: ClaudeQueryFactory,
@@ -170,7 +170,8 @@ export class ClaudeAgentSdkTurnExecution {
   }
 
   async #emit(kind: "assistant" | "diagnostic", text: string): Promise<void> {
-    if (!this.#admissionOpen) {
+    const admissionOpen = (): boolean => this.#admissionOpen;
+    if (!admissionOpen()) {
       throw new Error("CLAUDE_OUTPUT_ADMISSION_CLOSED");
     }
     const admittedCursor = this.#cursor;
@@ -179,7 +180,7 @@ export class ClaudeAgentSdkTurnExecution {
       this.#turnDeadline,
       this.#outputAbort.signal,
     );
-    if (emitted.kind !== "fulfilled" || !this.#admissionOpen || admittedCursor !== this.#cursor) {
+    if (emitted.kind !== "fulfilled" || !admissionOpen() || admittedCursor !== this.#cursor) {
       this.#outputWaitFailed = true;
       this.#control.timedOut ||= emitted.kind === "timed_out";
       this.#closeAdmission();
@@ -282,7 +283,7 @@ export class ClaudeAgentSdkTurnExecution {
       this.#control.interruptionFailed ||= phase.kind !== "stream" && !this.#control.interruptObserved;
       abortController.abort();
     }
-    const close = this.#clock.settleCall(() => query.close(), stopDeadline);
+    const close = this.#clock.settleCall(query.close.bind(query), stopDeadline);
     controlAbort.abort();
     const outcomes = await Promise.all([
       close,
@@ -317,7 +318,7 @@ export class ClaudeAgentSdkTurnExecution {
       this.#clock.deadlineAfter(this.#options.interruptGraceMs),
       this.#options.interruptGraceMs,
     );
-    const close = this.#clock.settleCall(() => query.close(), deadline);
+    const close = this.#clock.settleCall(query.close.bind(query), deadline);
     controlAbort.abort();
     const outcomes = await Promise.all([
       close,

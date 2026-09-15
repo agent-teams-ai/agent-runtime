@@ -16,7 +16,7 @@ const within = async <T>(pending: Promise<T>, milliseconds: number): Promise<T> 
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([pending, new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => reject(new Error("Provider Access database deadline exceeded")), milliseconds);
+      timer = setTimeout(() => {reject(new Error("Provider Access database deadline exceeded")); }, milliseconds);
     })]);
   } finally {if (timer !== undefined) {clearTimeout(timer);}}
 };

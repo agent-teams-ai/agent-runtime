@@ -19,13 +19,25 @@ export const snapshotHttpEgressLimits = (input: unknown): HttpEgressLimits => {
   }
   const descriptors = Object.getOwnPropertyDescriptors(input);
   if (Reflect.ownKeys(descriptors).length !== FIELDS.length
-    || Reflect.ownKeys(descriptors).some(key => typeof key !== "string" || !FIELDS.includes(key as typeof FIELDS[number]))
+    || Reflect.ownKeys(descriptors).some(key => typeof key !== "string" || !FIELDS.some(field => field === key))
     || FIELDS.some(name => descriptors[name] === undefined || !("value" in descriptors[name]))) {
     throw new HttpEgressLimitsError();
   }
-  const limits = Object.freeze(Object.fromEntries(
-    FIELDS.map(name => [name, descriptors[name]?.value]),
-  )) as unknown as HttpEgressLimits;
+  const read = (name: typeof FIELDS[number]): number => {
+    const value: unknown = descriptors[name]?.value;
+    if (typeof value !== "number") {throw new HttpEgressLimitsError();}
+    return value;
+  };
+  const limits: HttpEgressLimits = Object.freeze({
+    maxInboundHeaderBytes: read("maxInboundHeaderBytes"),
+    maxInboundBodyBytes: read("maxInboundBodyBytes"),
+    maxUpstreamHeaderBytes: read("maxUpstreamHeaderBytes"),
+    maxOutputBytes: read("maxOutputBytes"),
+    maxBufferedBytes: read("maxBufferedBytes"),
+    maxUpstreamWireBytes: read("maxUpstreamWireBytes"),
+    deadline: read("deadline"),
+    closureDeadline: read("closureDeadline"),
+  });
   const positive = [limits.maxInboundHeaderBytes, limits.maxUpstreamHeaderBytes,
     limits.maxBufferedBytes, limits.maxUpstreamWireBytes];
   const nonnegative = [limits.maxInboundBodyBytes, limits.maxOutputBytes];

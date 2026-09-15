@@ -71,12 +71,12 @@ export const retireAndCleanupContainedTurnPreparation = async (
     runtimeSecurityEvidenceId?: ContainedTurnEvidenceId;
   }> = {},
 ): Promise<RetireContainedTurnPreparationOutcome> => {
-  const retire = dependencies.operationStore.retireDispatchPreparation;
-  const record = dependencies.operationStore.recordDispatchPreparationCleanup;
+  const retire = dependencies.operationStore.retireDispatchPreparation.bind(dependencies.operationStore);
+  const record = dependencies.operationStore.recordDispatchPreparationCleanup.bind(dependencies.operationStore);
   const authority = containedTurnOwnerStoreAuthority(operation, trustedScope);
   let retirement: Awaited<ReturnType<typeof retire>>;
   try {
-    retirement = await retire.call(dependencies.operationStore, {
+    retirement = await retire({
       authority,
       consumedGrantRequestIds,
       consumptionEvidenceIds,
@@ -117,7 +117,7 @@ export const retireAndCleanupContainedTurnPreparation = async (
         outcome.kind !== "settled" && outcome.kind !== "already_settled") {
       if (outcome.evidenceId === undefined) {return;}
       try {
-        const recorded = await record.call(dependencies.operationStore, Object.freeze({
+        const recorded = await record(Object.freeze({
           authority, evidenceId: outcome.evidenceId, permit, target,
         }));
         if (isContainedTurnPreparationCleanupContinuation(current, recorded)) {current = recorded;}
@@ -125,7 +125,7 @@ export const retireAndCleanupContainedTurnPreparation = async (
       return;
     }
     try {
-      const recorded = await record.call(dependencies.operationStore, Object.freeze({ authority, permit, target }));
+      const recorded = await record(Object.freeze({ authority, permit, target }));
       if (isContainedTurnPreparationCleanupContinuation(current, recorded)) {current = recorded;}
     } catch {return;}
   };

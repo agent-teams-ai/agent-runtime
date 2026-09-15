@@ -170,7 +170,7 @@ export class ContainedTurnPostgresPreparationRecovery {
     const limit = input.limit ?? 100;
     const kinds = input.kinds ?? ["active", "cleanup_pending"] as const;
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000 ||
-        kinds.length === 0 || kinds.some(kind => kind !== "active" && kind !== "cleanup_pending")) {
+        kinds.length === 0 || kinds.some((kind: unknown) => kind !== "active" && kind !== "cleanup_pending")) {
       throw new TypeError("invalid dispatch preparation recovery query");
     }
     const recover = async (client: ContainedTurnPostgresClient, quarantine: boolean) => {
@@ -185,7 +185,7 @@ export class ContainedTurnPostgresPreparationRecovery {
       );
       let afterOperationId = "";
       let afterPreparationToken = "";
-      while (true) {
+      for (;;) {
         const metadata = await scanMetadata(afterOperationId, afterPreparationToken);
         assertMetadataWithinBudget(metadata.rows);
         const last = metadata.rows.at(-1);
@@ -236,7 +236,7 @@ export class ContainedTurnPostgresPreparationRecovery {
       let candidateBytes = 0;
       afterOperationId = "";
       afterPreparationToken = "";
-      while (true) {
+      for (;;) {
         const metadata = await scanMetadata(afterOperationId, afterPreparationToken);
         if (metadata.rows.length === 0) {break;}
         const states = await materialize(metadata.rows);

@@ -6,10 +6,12 @@ export const safeEqual = (left: string, right: string): boolean => {
   const leftBytes = Buffer.from(left, "utf8"); const rightBytes = Buffer.from(right, "utf8");
   return leftBytes.byteLength === rightBytes.byteLength && timingSafeEqual(leftBytes, rightBytes);
 };
-export const identityEqual = (left: DockerCustodyIdentity, right: DockerCustodyIdentity): boolean =>
-  left.protocol === right.protocol && safeEqual(left.containerImageSha256, right.containerImageSha256) &&
+export const identityEqual = (left: DockerCustodyIdentity, right: DockerCustodyIdentity): boolean => {
+  const protocol: unknown = left.protocol;
+  return protocol === right.protocol && safeEqual(left.containerImageSha256, right.containerImageSha256) &&
   safeEqual(left.initBinarySha256, right.initBinarySha256) && safeEqual(left.privateRootIdentity, right.privateRootIdentity) &&
   safeEqual(left.securityProfileIdentity, right.securityProfileIdentity) && safeEqual(left.workspaceIdentity, right.workspaceIdentity);
+};
 export const boundedInteger = (value: number, label: string): number => {
   if (!Number.isSafeInteger(value) || value <= 0) {throw new Error(`${label} must be a positive safe integer`);} return value;
 };

@@ -38,7 +38,10 @@ const hostBinding = (value: DockerImageInitHostBinding): DockerImageInitHostBind
   }
   return bound as unknown as DockerImageInitHostBinding;
 };
-const verify = NodeUnixSocketDockerEngine.prototype.verifyCreatedImageInit;
+const methods: {
+  verifyCreatedImageInit: (this: NodeUnixSocketDockerEngine, ...args: Parameters<NodeUnixSocketDockerEngine["verifyCreatedImageInit"]>) => ReturnType<NodeUnixSocketDockerEngine["verifyCreatedImageInit"]>;
+} = NodeUnixSocketDockerEngine.prototype;
+const verify = methods.verifyCreatedImageInit;
 const owners = new WeakSet<DockerImageInitOwner>();
 /** Recognize only the frozen capability issued here, without reading caller methods. */
 export const retainDockerImageInitOwner = (owner: DockerImageInitOwner): DockerImageInitOwner => {

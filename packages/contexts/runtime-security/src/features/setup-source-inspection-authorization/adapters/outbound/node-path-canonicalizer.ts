@@ -61,7 +61,7 @@ export const createNodePathCanonicalizer = (
         }),
         {
           custodyBoundary: options.custodyBoundary,
-          ...(options?.signal === undefined ? {} : { signal: options.signal }),
+          ...(options.signal === undefined ? {} : { signal: options.signal }),
         },
       );
     } catch (error) {

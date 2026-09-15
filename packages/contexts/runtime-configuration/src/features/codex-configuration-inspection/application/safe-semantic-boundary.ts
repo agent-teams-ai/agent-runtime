@@ -57,9 +57,12 @@ const isPlainRecord = (value: unknown): value is Record<string, unknown> => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
   }
-  const prototype = Object.getPrototypeOf(value);
+  const prototype = Object.getPrototypeOf(value) as unknown;
   return prototype === null || prototype === Object.prototype;
 };
+
+const nullRecord = (): Record<string, unknown> =>
+  Object.create(null) as Record<string, unknown>;
 
 const dataDescriptors = (
   value: Record<string, unknown>,
@@ -161,7 +164,7 @@ const normalizeDocumentRecord = (
   if (descriptors === undefined || keys.length > maximumObjectKeys) {
     throw new TypeError("unsafe object properties");
   }
-  const normalized: Record<string, unknown> = Object.create(null);
+  const normalized = nullRecord();
   for (const key of keys) {
     if (
       key.length === 0 ||
@@ -240,7 +243,7 @@ const exactDataRecord = (
   if (keys.some(key => !allowedKeys.has(key))) {
     return undefined;
   }
-  const record: Record<string, unknown> = Object.create(null);
+  const record = nullRecord();
   for (const key of keys) {
     record[key] = descriptors[key]?.value;
   }

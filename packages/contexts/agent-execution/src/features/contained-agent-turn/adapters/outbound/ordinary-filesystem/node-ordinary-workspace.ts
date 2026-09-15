@@ -69,7 +69,7 @@ export function createNodeOrdinaryWorkspace(options: NodeOrdinaryWorkspaceOption
       await directory(state.root, true);
       if (await identity(state.root) !== state.rootIdentity || await identity(handle.cwd) !== state.cwdIdentity) {throw new Error("ordinary_workspace_replaced");}
       await rm(state.root, {recursive: true});
-      const absent = await lstat(state.root).then(() => false, error => {if (error.code === "ENOENT") {return true;} throw error;});
+      const absent = await lstat(state.root).then(() => false, (error: unknown) => {if (error instanceof Error && "code" in error && error.code === "ENOENT") {return true;} throw error;});
       if (!absent) {throw new Error("ordinary_workspace_cleanup_unconfirmed");}
       const recorded: unknown = options.record?.({kind: "workspace_closed", operationId: state.operation.operationId, attemptId: state.operation.attemptId, workspaceId: handle.workspaceId, root: state.root, rootIdentity: state.rootIdentity});
       if (recorded !== undefined) {if (recorded instanceof Promise) {void recorded.catch(() => {});} throw new Error("ordinary_workspace_evidence_not_synchronous");}

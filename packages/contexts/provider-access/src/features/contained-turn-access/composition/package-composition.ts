@@ -15,7 +15,7 @@ import {
   claimBindingDigestPayload, requestDigestPayload, snapshotDispatchBindingHead, type DispatchBindingHead, type DispatchConsumeCommand,
 } from "../domain/dispatch-consumption.js";
 import {
-  AUTHORIZATION_COMMAND_KEYS, authorizationRequestPayload, snapshotAuthorizationCommand, type AuthorizationCommand,
+  AUTHORIZATION_COMMAND_KEYS, authorizationRequestPayload, snapshotAuthorizationCommand,
 } from "../domain/materialization-authorization.js";
 import { exactDispatchDataRecord } from "../adapters/dispatch-consumption-data.js";
 import { unsignedConsumeCommandFromContract } from "../adapters/inbound/dispatch-consumption-mapper.js";
@@ -120,7 +120,7 @@ export const createInMemoryContainedTurnDispatchConsumptionV1 = (input: {
         if (!Number.isSafeInteger(value) || value < 1) {throw new TypeError("control time must be a positive safe integer");}
         await control.advanceControlTime(value);
       },
-      observeOwnerState: control.observeOwnerState,
+      observeOwnerState: (selector: Parameters<typeof control.observeOwnerState>[0]) => control.observeOwnerState(selector),
       replaceBindingHead(seed: InMemoryDispatchBindingSeed) { return control.replaceBindingHead(seedToHead(seed)); },
     }),
   });
@@ -144,6 +144,6 @@ export const createCredentialMaterializationRequestDigest = async (
 ): Promise<string> => {
   const data = exactDispatchDataRecord("unsigned authorization command", input, AUTHORIZATION_COMMAND_KEYS.filter(key => key !== "requestDigest"));
   const command = snapshotAuthorizationCommand({ ...data, requestDigest: "pending" });
-  const { requestDigest: _requestDigest, ...unsigned } = command as AuthorizationCommand;
+  const { requestDigest: _requestDigest, ...unsigned } = command;
   return createSha256DispatchConsumptionDigest().digest(authorizationRequestPayload(unsigned));
 };

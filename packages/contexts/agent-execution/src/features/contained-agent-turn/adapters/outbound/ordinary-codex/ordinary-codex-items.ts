@@ -22,6 +22,11 @@ const itemKeys: Readonly<Record<string, readonly string[]>> = Object.freeze({
   fileChange: ["id", "type", "changes", "status"],
 });
 const extendsText = (prefix: unknown, full: unknown): boolean => typeof prefix === "string" && typeof full === "string" && full.startsWith(prefix);
+const outputText = (value: unknown): string => {
+  if (value === null || value === undefined) {return "";}
+  if (typeof value !== "string") {return refuse();}
+  return value;
+};
 const present = (value: unknown): boolean => value !== null && value !== undefined;
 const equal = (left: unknown, right: unknown): boolean => ordinaryJson(left) === ordinaryJson(right);
 const inside = (cwd: string, value: unknown): boolean => {
@@ -94,11 +99,11 @@ export class OrdinaryCodexItems {
     if (!item) {return refuse();}
     if (method === "item/agentMessage/delta" && item.type === "agentMessage" || method === "item/plan/delta" && item.type === "plan") {
       if (typeof params.delta !== "string" || typeof item.text !== "string") {refuse();}
-      item.text += String(params.delta); return;
+      item.text += params.delta; return;
     }
     if (method === "item/commandExecution/outputDelta" && item.type === "commandExecution") {
       if (typeof params.delta !== "string") {refuse();}
-      item.aggregatedOutput = String(item.aggregatedOutput ?? "") + String(params.delta); return;
+      item.aggregatedOutput = outputText(item.aggregatedOutput) + params.delta; return;
     }
     if (method === "item/fileChange/patchUpdated" && item.type === "fileChange") {
       const updated = ordinaryCodexItem({...item, changes: params.changes}, this.#cwd, this.#mark);
@@ -119,7 +124,7 @@ export class OrdinaryCodexItems {
         !Number.isSafeInteger(index) || Number(index) < 0 || Number(index) > values.length || typeof params.delta !== "string") {refuse();}
     if (Number(index) === values.length && values === content) {values.push("");}
     if (typeof values[Number(index)] !== "string") {refuse();}
-    values[Number(index)] = String(values[Number(index)]) + String(params.delta);
+    values[Number(index)] = String(values[Number(index)]) + params.delta;
   }
   public complete(value: unknown): void {
     const item = ordinaryCodexItem(value, this.#cwd, this.#mark); const id = String(item.id); const active = this.#active.get(id);
@@ -131,7 +136,7 @@ export class OrdinaryCodexItems {
     for (const key of keys) {
       if (mutable.includes(key)) {continue;}
       // Quick unified-exec commands may publish their entire output only in item/completed.
-      if (key === "aggregatedOutput" && item.type === "commandExecution") {this.#mark("item_complete_output"); if (!String(item[key] ?? "").startsWith(String(active[key] ?? ""))) {refuse();}}
+      if (key === "aggregatedOutput" && item.type === "commandExecution") {this.#mark("item_complete_output"); if (!outputText(item[key]).startsWith(outputText(active[key]))) {refuse();}}
       // Completion carries the full agent message snapshot; streamed text may be only a prefix.
       else if (key === "text" && item.type === "agentMessage") {
         this.#mark("complete_text");

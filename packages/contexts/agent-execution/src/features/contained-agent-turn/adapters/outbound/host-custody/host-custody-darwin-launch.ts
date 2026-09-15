@@ -30,7 +30,7 @@ const openDirectory = (path: string, retained = false): number => openSync(
   constants.O_RDONLY |
     // A retained /dev/fd descriptor is already validated by the reservation
     // binder; macOS rejects O_DIRECTORY when that descriptor is reopened.
-    (retained ? 0 : (constants.O_DIRECTORY ?? 0) | (constants.O_NOFOLLOW ?? 0)),
+    (retained ? 0 : constants.O_DIRECTORY | constants.O_NOFOLLOW),
 );
 
 /** Retains cooperative observations; exec, cwd, and private environment paths remain name-bound. */
@@ -53,7 +53,7 @@ export const acquireDarwinLaunchAuthority = (
   }
   const executableDescriptor = openSync(
     plan.executablePath,
-    constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+    constants.O_RDONLY | constants.O_NOFOLLOW,
   );
   let workspaceDescriptor: number | undefined;
   let privateRootDescriptor: number | undefined;

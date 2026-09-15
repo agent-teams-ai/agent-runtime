@@ -88,7 +88,7 @@ export class DarwinRouteDurableStorage {
       ready.resolve();
       await release.promise;
       this.assertIntact();
-    }, {onContention: () => reject()}).catch(error => {
+    }, {onContention: () => reject()}).catch((error: unknown) => {
       this.#failed = true; ready.reject(error);
     }).finally(() => {
       for (const file of this.#files.values()) {

@@ -1,5 +1,5 @@
 import { AUTHORIZATION_COMMAND_KEYS, snapshotAuthorizationRecord } from "../../domain/materialization-authorization.js";
-import { exactProviderAccessDataRecord } from "../provider-access-data.js";
+import { intrinsicMethod, exactProviderAccessDataRecord } from "../provider-access-data.js";
 import { exactCredentialData } from "./credential-rendering-bytes.js";
 import type {
   CredentialGenerationAcquisition, CredentialGenerationMaterialLifetime, CredentialGenerationOutcome,
@@ -13,9 +13,9 @@ import { snapshotCredentialRenderingSelection } from "./operation-credential-sel
 const unavailable = (): never => {throw new TypeError("operation credential material unavailable");};
 const admitted = Object.freeze({kind: "admitted" as const});
 const rejected = Object.freeze({kind: "rejected" as const});
-const addListener = EventTarget.prototype.addEventListener;
-const removeListener = EventTarget.prototype.removeEventListener;
-const dependentSignal = AbortSignal.any;
+const addListener = intrinsicMethod(EventTarget.prototype, "addEventListener");
+const removeListener = intrinsicMethod(EventTarget.prototype, "removeEventListener");
+const dependentSignal = intrinsicMethod(AbortSignal, "any");
 
 /** One seed, no discovery, refresh, retry, durable authority or cross-operation reuse. */
 class OperationCredentialGenerationAcquisition {
@@ -60,7 +60,7 @@ class OperationCredentialGenerationAcquisition {
     const remaining = this.#selection.deadline - performance.now();
     if (remaining <= 0 || remaining > 2_147_483_647) {unavailable();}
     // A private dependent signal cannot lose idle cleanup to stopImmediatePropagation.
-    this.#signal = Reflect.apply(dependentSignal, AbortSignal, [[this.#selection.operationAbortSignal]]) as AbortSignal;
+    this.#signal = Reflect.apply(dependentSignal, AbortSignal, [[this.#selection.operationAbortSignal]]);
     Reflect.apply(addListener, this.#signal, ["abort", this.#retire, {once: true}]);
     this.#timer = setTimeout(this.#retire, remaining);
     this.#check();

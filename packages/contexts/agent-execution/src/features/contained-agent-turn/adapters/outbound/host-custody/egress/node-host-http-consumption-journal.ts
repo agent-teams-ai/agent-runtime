@@ -135,7 +135,7 @@ export const createNodeHostHttpConsumptionJournal = (input: Readonly<{
     const release = Promise.withResolvers<void>();
     let storage: HostHttpConsumptionStorage | undefined;
     let tail: ConsumptionTail | undefined;
-    let contended = false;
+    const contention = {observed: false};
     let cleanupSucceeded = true;
     let cleanupComplete = false;
     let retirement: Promise<"retired" | "unknown"> | undefined;
@@ -168,11 +168,11 @@ export const createNodeHostHttpConsumptionJournal = (input: Readonly<{
             return retirement;
           } }));
           await release.promise;
-        }, { onContention: () => { contended = true; throw new Error("consumption lock busy"); } });
+        }, { onContention: () => { contention.observed = true; throw new Error("consumption lock busy"); } });
       } catch (error) {
         tail?.seal("quarantined");
         cleanupSucceeded = false;
-        ready.resolve({ kind: contended ? "busy" : unsupported(error) ? "unsupported" : "unknown" });
+        ready.resolve({ kind: contention.observed ? "busy" : unsupported(error) ? "unsupported" : "unknown" });
       } finally {
         try { await storage?.close(); } catch { cleanupSucceeded = false; }
         cleanupComplete = true;

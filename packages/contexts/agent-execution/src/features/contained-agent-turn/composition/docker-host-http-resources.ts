@@ -49,6 +49,8 @@ export const createDockerHostHttpResources = (input: Readonly<{
   }
   let entered = false;
   let cut = false;
+  const isCut = (): boolean => cut;
+  const signalsAborted = (signal: AbortSignal): boolean => signal.aborted || network.signal.aborted;
   let ready = false;
   let ingressEntered = false;
   let sessionEntered = false;
@@ -130,13 +132,14 @@ export const createDockerHostHttpResources = (input: Readonly<{
         const listener = Object.freeze({async open(...args: Parameters<typeof open>) {
           const opened = await open(...args);
           const address = Object.freeze({...opened.address});
-          if (address.address !== retained.gateway || address.family !== "IPv4" ||
+          const family: unknown = address.family;
+          if (address.address !== retained.gateway || family !== "IPv4" ||
               !Number.isInteger(address.port) || address.port < 1 || address.port > 65535 ||
-              cut || lifetime.signal.aborted || network.signal.aborted) {
+              isCut() || signalsAborted(lifetime.signal)) {
             throw new TypeError("Host listener preparation is unproven");
           }
           const observed = await afterListenerOpened(address);
-          if (cut || lifetime.signal.aborted || network.signal.aborted) {throw new TypeError("Host resource admission closed");}
+          if (isCut() || signalsAborted(lifetime.signal)) {throw new TypeError("Host resource admission closed");}
           references = Object.freeze({...observed,
             listenerIdentity: `listener:ipv4:${address.address}:${address.port}`});
           return opened;
@@ -159,11 +162,11 @@ export const createDockerHostHttpResources = (input: Readonly<{
           localCut: {...localCut, clock: Object.freeze({read: clock.read.bind(localCut.clock),
             within: clock.within.bind(localCut.clock)}), expectedClock: data(localCut.expectedClock)}};
         lifetimeAbort = addAbortListener(lifetime.signal, cutoff);
-        if (lifetime.signal.aborted || network.signal.aborted) {throw new TypeError("Host resource admission closed");}
+        if (signalsAborted(lifetime.signal)) {throw new TypeError("Host resource admission closed");}
         const result = await host.prepareResources(lifetime, {...fixedResources,
           listenerLifecycle: createV4HostHttpListenerLifecycle({v4: journal, subject})});
         if (result.kind !== "prepared" || result.address.address !== retained.gateway ||
-          lifetime.signal.aborted || network.signal.aborted) {
+          signalsAborted(lifetime.signal)) {
           throw new TypeError("Host listener preparation is unproven");
         }
         ready = true;

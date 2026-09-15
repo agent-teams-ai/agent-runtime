@@ -45,7 +45,7 @@ export const requestContainedTurnCancellation = async (
   });
   let cancellationBase = observed.operation;
   let current: ContainedTurnKernelOperation;
-  while (true) {
+  for (;;) {
     const next = mutateContainedTurnOperation(cancellationBase, {
       command: prepared.command,
       cutoffProof: prepared.cutoffProof,

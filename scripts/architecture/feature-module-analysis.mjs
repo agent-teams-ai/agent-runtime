@@ -21,7 +21,7 @@ import {
   repositoryPath,
   sameFilesystemIdentity,
 } from "./feature-module-paths.mjs";
-import { ACCEPTED_DECISIONS, LOCAL_MODULE_FILES, acceptedDecisionsFromRegistry, applyGovernedRecords, validateProfile } from "./feature-module-profile.mjs";
+import { ACCEPTED_DECISIONS, LOCAL_MODULE_FILES, acceptedDecisionsFromRegistry, applyGovernedRecords, isOptionalPublicEntrypoint, validateProfile } from "./feature-module-profile.mjs";
 import { curatedModuleImportIssues, detectCycles, recordObservedEdge, unusedEdgeIssues } from "./feature-module-edges.mjs";
 import { packagePolicyIssues } from "./feature-module-tests.mjs";
 import { activeGateIssues } from "./feature-module-root-gates.mjs";
@@ -146,6 +146,8 @@ const featureEntrypointIssues = async (feature, root) => {
   const issues = [];
   for (const [visibility, entrypoint] of Object.entries(feature.entrypoints ?? {})) {
     const inspected = await inspectRepositoryPath(root, entrypoint);
+    // The public path stays reserved; no contracts means no required public file.
+    if (inspected.missing && isOptionalPublicEntrypoint(feature, entrypoint)) {continue;}
     if (!inspected.ok) {issues.push(inspected.identity
       ? filesystemIdentityIssue(issue, entrypoint)
       : issue("FM_ENTRYPOINT_MISSING", entrypoint, 1, `${feature.id} ${visibility} entrypoint is missing`));}
@@ -360,7 +362,7 @@ const inspectImport = (context) => {
       const targetFeature = featureForPath(features, resolved.path);
       if (!targetFeature) {return outsideFeatureImportIssues({ ...context, targetPath: resolved.path, productionRoots, assemblyFiles });}
       const declaredEntrypoint = Object.values(targetFeature.entrypoints).includes(resolved.path);
-      if (declaredEntrypoint || identityCoversPath(identityPaths, resolved.path)) {return [];}
+      if (declaredEntrypoint && !isOptionalPublicEntrypoint(targetFeature, resolved.path) || identityCoversPath(identityPaths, resolved.path)) {return [];}
     }
     return [issue(FILESYSTEM_IDENTITY_CODE, path, imported.line, "import target must have one canonical, repository-contained identity")];
   }

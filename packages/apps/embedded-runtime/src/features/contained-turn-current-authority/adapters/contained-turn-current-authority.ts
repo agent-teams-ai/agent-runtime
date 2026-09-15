@@ -69,19 +69,20 @@ export const snapshotContainedTurnAuthority = (input: unknown): Readonly<{
   if (access === undefined || !("value" in access)) {
     throw new TypeError("Contained turn Provider Access dependency is invalid");
   }
+  const accessValue: unknown = access.value;
   // Preserve Route C validation before inspecting any downstream dependency.
   const providerAccess = selection?.value === "current"
-    ? createContainedTurnOperationProviderAccessPort(access.value as OuterContainedTurnProviderAccessOperation)
-    : createContainedTurnProviderAccessPort(access.value as OuterContainedTurnProviderAccess);
+    ? createContainedTurnOperationProviderAccessPort(accessValue as OuterContainedTurnProviderAccessOperation)
+    : createContainedTurnProviderAccessPort(accessValue as OuterContainedTurnProviderAccess);
   const security = data(input, "security");
   if (selection?.value !== "current") {
     if (security !== null && typeof security === "object" &&
         (isProxy(security) || descriptor(security, "acceptance") !== undefined || descriptor(security, "profile") !== undefined)) {
       throw invalid();
     }
-    return freeze({selection: freeze({providerAccess: access.value, security}) as ContainedTurnAuthorityDependencies, providerAccess});
+    return freeze({selection: freeze({providerAccess: accessValue, security}) as ContainedTurnAuthorityDependencies, providerAccess});
   }
-  return freeze({providerAccess, selection: freeze({authority: "current", providerAccess: access.value,
+  return freeze({providerAccess, selection: freeze({authority: "current", providerAccess: accessValue,
     security: captureCurrentSecurity(security),
   }) as ContainedTurnAuthorityDependencies});
 };

@@ -177,7 +177,7 @@ const configuredMountFacts = (value: unknown, policy: DockerEnginePolicy): Mount
       throw new DockerEngineError("authority-conflict");
     }
   }
-  if (workspace === undefined || privateRoot === undefined || omittedFalse(privateRoot, "ReadOnly") !== false) {
+  if (workspace === undefined || privateRoot === undefined || omittedFalse(privateRoot, "ReadOnly")) {
     throw new DockerEngineError("authority-conflict");
   }
   const workspaceSource = string(workspace.Source);
@@ -212,7 +212,7 @@ const resourceFacts = (
   hostConfig: Record<string, unknown>,
   observedMounts: unknown,
   policy: DockerEnginePolicy,
-): DockerContainerResourceFacts => {
+): Omit<DockerContainerResourceFacts, "readOnlyRoot"> & {readonly readOnlyRoot: boolean} => {
   versionedObject(hostConfig, HOST_CONFIG_FIELDS, CREATE_HOST_FIELDS, "authority-conflict");
   const storage = exactObject(hostConfig.StorageOpt, ["size"]);
   const tmpfs = exactObject(hostConfig.Tmpfs, ["/tmp"]);
@@ -271,7 +271,7 @@ const resourceFacts = (
     pidNamespaceMode: "private",
     pidsLimit: number(hostConfig.PidsLimit),
     privateRootSourceSha256: mounts.privateRootSourceSha256,
-    readOnlyRoot: boolean(hostConfig.ReadonlyRootfs) as true,
+    readOnlyRoot: boolean(hostConfig.ReadonlyRootfs),
     restart: "disabled",
     seccompProfileSha256: policy.seccompProfileSha256,
     tmpfsBytes: Number(tmpfsSize),
@@ -373,7 +373,7 @@ export const decodeInspection = (
     cgroupTree: "unobserved",
     engine,
     existence: "present",
-    resources,
+    resources: {...resources, readOnlyRoot: resources.readOnlyRoot},
     state: decodeDockerContainerState(inspect.State),
   };
 };

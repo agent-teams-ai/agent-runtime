@@ -1,3 +1,5 @@
+import type {DeadlineAwait} from "./host-custody-containment-deadline.js";
+import {DEADLINE_EXCEEDED, FINALITY_FAILED, PHASE_TIMEOUT, deadlineOpen, awaitWithDeadline, invokeFinalityWithDeadline} from "./host-custody-containment-deadline.js";
 import { createHash } from "node:crypto";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 
@@ -209,65 +211,6 @@ interface ContainmentOptions {
   readonly monotonicNow: () => number;
   readonly terminateAfterMs: number;
 }
-
-const DEADLINE_EXCEEDED = Symbol("host-custody-deadline-exceeded");
-const FINALITY_FAILED = Symbol("host-custody-finality-failed");
-const PHASE_TIMEOUT = Symbol("host-custody-phase-timeout");
-
-type DeadlineAwait<Value> = Value | typeof DEADLINE_EXCEEDED | typeof PHASE_TIMEOUT;
-type FinalityAwait<Value> = DeadlineAwait<Value> | typeof FINALITY_FAILED;
-
-const deadlineOpen = (deadline: number, options: ContainmentOptions): boolean =>
-  deadline - options.monotonicNow() > 0;
-
-const awaitWithDeadline = async <Value>(
-  promise: (maximumMs: number) => Promise<Value>,
-  deadline: number,
-  options: ContainmentOptions,
-  phaseMaximumMs = Number.POSITIVE_INFINITY,
-): Promise<DeadlineAwait<Value>> => {
-  const remainingBefore = deadline - options.monotonicNow();
-  if (remainingBefore <= 0) {return DEADLINE_EXCEEDED;}
-  const maximumMs = Math.min(remainingBefore, phaseMaximumMs);
-  const timeout = Symbol("host-custody-phase-timeout");
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let result: { readonly kind: "value"; readonly value: Value } | typeof timeout;
-  try {
-    result = await Promise.race([
-      promise(maximumMs).then(
-        value => ({ kind: "value" as const, value }),
-        error => {throw error;},
-      ),
-      new Promise<typeof timeout>(resolve => {timer = setTimeout(() => resolve(timeout), maximumMs);}),
-    ]);
-  } finally {
-    if (timer !== undefined) {clearTimeout(timer);}
-  }
-  if (deadline - options.monotonicNow() <= 0) {return DEADLINE_EXCEEDED;}
-  return result === timeout ? PHASE_TIMEOUT : result.value;
-};
-
-const invokeFinalityWithDeadline = async <Value>(
-  promise: () => Promise<Value>,
-  deadline: number,
-  options: ContainmentOptions,
-  phaseMaximumMs = Number.POSITIVE_INFINITY,
-): Promise<FinalityAwait<Value>> => {
-  let invoked: Promise<Value>;
-  try {
-    invoked = promise();
-  } catch {
-    return FINALITY_FAILED;
-  }
-  const observed = invoked.then<Value, typeof FINALITY_FAILED>(
-    value => value,
-    () => FINALITY_FAILED,
-  );
-  if (!deadlineOpen(deadline, options)) {
-    return DEADLINE_EXCEEDED;
-  }
-  return awaitWithDeadline(() => observed, deadline, options, phaseMaximumMs);
-};
 
 type ClosureAttempt =
   | { readonly kind: "closed"; readonly observation: "cooperative-darwin-posix-process-group" | "never-started" | "strict-linux-cgroup-v2" }

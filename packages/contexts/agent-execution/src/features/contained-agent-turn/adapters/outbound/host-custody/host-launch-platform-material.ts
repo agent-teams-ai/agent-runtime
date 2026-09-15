@@ -33,7 +33,7 @@ export const finalHostExecutionMaterialSha256 = (
       ]),
     }]));
   }
-  if (plan.containmentProfile !== "strict-linux-cgroup-v2") {
+  if (!isLinuxProfile(plan.containmentProfile)) {
     throw new TypeError("Host launch execution material profile unavailable");
   }
   // Preserve the Linux descriptor projection and its exact digest preimage.
@@ -46,3 +46,5 @@ export const finalHostExecutionMaterialSha256 = (
   return sha256(canonicalJson([materialSha256, "/proc/self/fd/4", "/proc/self/fd/5",
     `/proc/self/fd/${6 + privateDescriptors.size}`, environmentProjection]));
 };
+
+const isLinuxProfile = (value: unknown): boolean => value === "strict-linux-cgroup-v2";

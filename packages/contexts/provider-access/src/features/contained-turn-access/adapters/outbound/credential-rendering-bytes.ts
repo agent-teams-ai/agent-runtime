@@ -1,20 +1,22 @@
-import { isRuntimeProxy } from "../provider-access-data.js";
+import { intrinsicGetter, intrinsicMethod, isRuntimeProxy } from "../provider-access-data.js";
 import type {
   CredentialGenerationRequest, CredentialRecipe, RenderedCredentialField, RenderedCredentialFields,
 } from "./credential-rendering-contracts.js";
 
 const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype) as object;
-const bytesLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, "byteLength")?.get;
-const bytesBuffer = Object.getOwnPropertyDescriptor(typedArrayPrototype, "buffer")?.get;
-const bytesTag = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symbol.toStringTag)?.get;
-const bufferLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "byteLength")?.get;
-const bufferResizable = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "resizable")?.get;
-const fill = Uint8Array.prototype.fill;
-const set = Uint8Array.prototype.set;
+const bytesLength = intrinsicGetter(typedArrayPrototype, "byteLength");
+const bytesBuffer = intrinsicGetter(typedArrayPrototype, "buffer");
+const bytesTag = intrinsicGetter(typedArrayPrototype, Symbol.toStringTag);
+const bufferLength = intrinsicGetter(ArrayBuffer.prototype, "byteLength");
+const bufferResizable = intrinsicGetter(ArrayBuffer.prototype, "resizable");
+const fill = intrinsicMethod(Uint8Array.prototype, "fill");
+const set = intrinsicMethod(Uint8Array.prototype, "set");
+type CredentialDataDescriptor = Omit<PropertyDescriptor, "value"> & { readonly value?: unknown };
+
 const invalid = (): never => {throw new TypeError("invalid credential material");};
 
 /** Shallow, non-trapping data inspection; never invokes value getters or toJSON. */
-export const credentialData = (value: unknown): Record<string, PropertyDescriptor> => {
+export const credentialData = (value: unknown): Record<string, CredentialDataDescriptor> => {
   if (value === null || typeof value !== "object" || isRuntimeProxy(value)) {return invalid();}
   const prototype = Object.getPrototypeOf(value) as unknown;
   if (prototype !== Object.prototype && prototype !== null) {return invalid();}
@@ -24,7 +26,7 @@ export const credentialData = (value: unknown): Record<string, PropertyDescripto
   if (Object.values(descriptors).some(descriptor => !("value" in descriptor))) {return invalid();}
   return descriptors;
 };
-export const exactCredentialData = (value: unknown, keys: readonly string[]): Record<string, PropertyDescriptor> => {
+export const exactCredentialData = (value: unknown, keys: readonly string[]): Record<string, CredentialDataDescriptor> => {
   const data = credentialData(value);
   if (Object.keys(data).toSorted().join("\0") !== [...keys].toSorted().join("\0")) {return invalid();}
   return data;
@@ -36,9 +38,9 @@ const lengthOf = (value: unknown): number => {
     return invalid();
   }
   const length = Reflect.apply(bytesLength, value, []) as number;
-  const buffer = Reflect.apply(bytesBuffer, value, []) as unknown;
+  const buffer = Reflect.apply(bytesBuffer, value, []);
   // ArrayBuffer intrinsic rejects SharedArrayBuffer. Require dedicated, fixed storage.
-  if (Reflect.apply(bufferLength, buffer, []) !== length || Reflect.apply(bufferResizable, buffer, [])) {return invalid();}
+  if (Reflect.apply(bufferLength, buffer, []) !== length || Boolean(Reflect.apply(bufferResizable, buffer, []))) {return invalid();}
   return length;
 };
 const erase = (value: unknown): void => {
@@ -66,12 +68,12 @@ export const eraseGeneration = (value: unknown): void => {
 const fieldSlots = (value: unknown, count: number): unknown[] => {
   if (isRuntimeProxy(value) || !Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) {return invalid();}
   if (Object.getOwnPropertyDescriptor(value, "length")?.value !== count) {return invalid();}
-  const descriptors = Object.getOwnPropertyDescriptors(value) as Record<string, PropertyDescriptor>;
+  const descriptors = Object.getOwnPropertyDescriptors(value) as Record<string, CredentialDataDescriptor>;
   if (descriptors.length?.value !== count || Reflect.ownKeys(descriptors).length !== count + 1) {return invalid();}
   return Array.from({length: count}, (_, index) => {
     const slot = descriptors[String(index)];
     if (!slot || !("value" in slot)) {return invalid();}
-    return slot.value as unknown;
+    return slot.value;
   });
 };
 const recipeFields = (recipe: CredentialRecipe): readonly string[] =>

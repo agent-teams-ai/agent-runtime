@@ -26,7 +26,7 @@ const validSeccompProfile = (policy: DockerEnginePolicy): boolean => {
   ].some(Boolean)) {return false;}
   try {
     const profile = JSON.parse(policy.seccompProfileJson) as unknown;
-    const defaultAction = typeof profile === "object" && profile !== null && !Array.isArray(profile)
+    const defaultAction: unknown = typeof profile === "object" && profile !== null && !Array.isArray(profile)
       ? Reflect.get(profile, "defaultAction")
       : undefined;
     return typeof defaultAction === "string" && SECCOMP_DENY_ACTIONS.has(defaultAction);

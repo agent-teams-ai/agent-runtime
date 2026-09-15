@@ -28,6 +28,7 @@ class CooperativeProcessGroupAuthority implements OperationResidueAuthority {
   #guardian: CooperativeGroupGuardian | undefined;
   #pgid: number | undefined;
   #retired = false;
+  #isRetired(): boolean {return this.#retired;}
   readonly #observer: PosixProcessGroupObserver;
 
   public constructor(observer: PosixProcessGroupObserver) {this.#observer = observer;}
@@ -63,9 +64,9 @@ class CooperativeProcessGroupAuthority implements OperationResidueAuthority {
     const pgid = this.#pgid;
     if (pgid === undefined || this.#retired) {return "empty";}
     while (monotonicNow() < deadline) {
-      if (this.#retired) {return "empty";}
+      if (this.#isRetired()) {return "empty";}
       const observed = await this.#observer.observe(pgid);
-      if (this.#retired) {return "empty";}
+      if (this.#isRetired()) {return "empty";}
       if (observed !== "residue") {
         // Retire this exact group permanently, even though escaped descendants
         // still prevent a physical containment proof on cooperative Darwin.
@@ -74,7 +75,7 @@ class CooperativeProcessGroupAuthority implements OperationResidueAuthority {
       }
       await new Promise(resolve => {setTimeout(resolve, Math.min(5, Math.max(1, deadline - monotonicNow())));});
     }
-    return this.#retired ? "empty" : "unproven";
+    return this.#isRetired() ? "empty" : "unproven";
   }
 }
 

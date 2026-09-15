@@ -80,7 +80,7 @@ export const closeContainedTurnArtifactHandles = async (
   for (const handle of handles.toReversed()) {
     try {await handle.close();} catch (error) {failure ??= error;}
   }
-  if (failure !== undefined) {throw failure;}
+  if (failure !== undefined) {throw failure instanceof Error ? failure : new Error("Filesystem handle cleanup failed", {cause: failure});}
 };
 
 const bindPrivateRoots = async <Paths extends Readonly<Record<string, string>>>(

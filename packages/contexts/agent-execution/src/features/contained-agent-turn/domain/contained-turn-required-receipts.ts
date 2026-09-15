@@ -89,29 +89,41 @@ export function validateContainedTurnRequiredReceiptSnapshot(
   }
 }
 
+const RECEIPT_BY_PROOF_KIND = Object.freeze({
+  acceptance: "command_acceptance",
+  dispatch_claim: "dispatch_claim_or_proved_no_dispatch",
+  no_dispatch: "dispatch_claim_or_proved_no_dispatch",
+  execution_closure: "provider_execution_closure_or_proved_no_start",
+  no_start: "provider_execution_closure_or_proved_no_start",
+  provider_terminal_observation: "provider_terminal_observation_or_proved_no_start",
+  provider_not_started: "provider_terminal_observation_or_proved_no_start",
+  output_drain: "output_drain_and_fence_closure",
+  output_no_start_drain: "output_drain_and_fence_closure",
+  host_custody: "host_custody",
+  host_custody_no_start: "host_custody",
+  workspace_closure: "workspace_closure",
+  artifact_manifest_seal: "artifact_manifest_seal",
+  effect_resolution: "coarse_effect_resolution_or_reconciliation_debt",
+  effect_no_start: "coarse_effect_resolution_or_reconciliation_debt",
+  containment: "containment_execution",
+  containment_not_required: "containment_execution",
+  result_publication: "canonical_result_publication",
+  cutoff: "cutoff_enforcement_when_applicable",
+  cancellation: undefined,
+  physical_containment: undefined,
+  provider_acceptance: undefined,
+  provider_access_acceptance: undefined,
+  provider_access_dispatch: undefined,
+  provider_process_no_start: undefined,
+  provider_process_start: undefined,
+  runtime_security_acceptance: undefined,
+  runtime_security_dispatch: undefined,
+  terminal_truth: undefined,
+} satisfies Record<ContainedTurnProof["kind"], ContainedTurnRequiredReceipt | undefined>);
+
 const receiptForProof = (proof: ContainedTurnProof): ContainedTurnRequiredReceipt | undefined => {
-  switch (proof.kind) {
-    case "acceptance": return "command_acceptance";
-    case "dispatch_claim":
-    case "no_dispatch": return "dispatch_claim_or_proved_no_dispatch";
-    case "execution_closure":
-    case "no_start": return "provider_execution_closure_or_proved_no_start";
-    case "provider_terminal_observation":
-    case "provider_not_started": return "provider_terminal_observation_or_proved_no_start";
-    case "output_drain":
-    case "output_no_start_drain": return "output_drain_and_fence_closure";
-    case "host_custody":
-    case "host_custody_no_start": return "host_custody";
-    case "workspace_closure": return "workspace_closure";
-    case "artifact_manifest_seal": return "artifact_manifest_seal";
-    case "effect_resolution":
-    case "effect_no_start": return "coarse_effect_resolution_or_reconciliation_debt";
-    case "containment":
-    case "containment_not_required": return "containment_execution";
-    case "result_publication": return "canonical_result_publication";
-    case "cutoff": return "cutoff_enforcement_when_applicable";
-    default: return undefined;
-  }
+  const kind = proof.kind;
+  return Object.hasOwn(RECEIPT_BY_PROOF_KIND, kind) ? RECEIPT_BY_PROOF_KIND[kind] : undefined;
 };
 
 export const containedTurnRequiredReceiptsSatisfied = (

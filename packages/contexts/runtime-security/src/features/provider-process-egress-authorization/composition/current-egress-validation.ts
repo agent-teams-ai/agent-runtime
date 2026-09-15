@@ -11,7 +11,7 @@ import type { CurrentEgressDispatchHead, CurrentEgressEndorsement, CurrentEgress
 import type { TrustedHostRequestProjectionV2 } from
   "../contracts/provider-process-egress-authorization-v2.js";
 
-export function requireCurrentEgress(condition: unknown): asserts condition {
+export function requireCurrentEgress(condition: boolean): asserts condition {
   if (!condition) {throw new TypeError("invalid current egress binding");}
 }
 export const sameCurrentEgress = (left: unknown, right: unknown): boolean =>
@@ -33,7 +33,7 @@ const capture = (value: unknown, shape: Shape): unknown => {
   return Object.fromEntries(Object.entries(shape).map(([key, member]) => {
     const property = descriptors[key];
     requireCurrentEgress(property !== undefined && "value" in property && property.enumerable === true);
-    return [key, capture(property!.value, member)];
+    return [key, capture(property.value, member)];
   }));
 };
 const check = (predicate: (value: unknown) => boolean) => (value: unknown): unknown => {
@@ -74,7 +74,7 @@ const slots = (value: unknown) => {
   return Array.from({ length }, (_, index) => {
     const item = descriptors[String(index)];
     requireCurrentEgress(item !== undefined && "value" in item && item.enumerable === true);
-    return check(name => typeof name === "string" && /^[a-z][a-z0-9-]{0,127}$/.test(name))(item!.value);
+    return check(name => typeof name === "string" && /^[a-z][a-z0-9-]{0,127}$/.test(name))(item.value);
   });
 };
 const route = { method: check(value => typeof value === "string" &&
@@ -116,8 +116,8 @@ export const captureCurrentEgressInput = (value: unknown): CurrentEgressOwnerInp
     monotonicNow: callback, readRsHead: readCallback, readPaEndorsement: readCallback }) as CurrentEgressOwnerInput;
   const accepted = result.acceptedDispatch.authority;
   requireCurrentEgress(accepted !== null && !accepted.revoked && result.acceptedDispatch.headVersion !== "0");
-  requireCurrentEgress(sameCurrentEgress(accepted!.operation, result.operation) &&
-    result.rule.expectedAcceptedConstraintsDigest === accepted!.constraintsDigest &&
+  requireCurrentEgress(sameCurrentEgress(accepted.operation, result.operation) &&
+    result.rule.expectedAcceptedConstraintsDigest === accepted.constraintsDigest &&
     result.approval.ruleRevision === result.rule.revision);
   requireCurrentEgress(result.approval.bindingDigest === currentEgressDigest({
     domain: "rs-current-egress-rule/v1", operation: result.operation,

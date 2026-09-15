@@ -43,13 +43,13 @@ const supportedLinuxCandidate = (binding: LinuxExclusiveRouteBinding): boolean =
     binding.adapterRevision === "claude-agent-sdk-contained-turn:0.3.251" &&
     binding.capabilityManifestRevision === "claude-contained-turn-v1@1");
 
-const snapshotBinding = (input: LinuxExclusiveRouteBinding): LinuxExclusiveRouteBinding => {
+const snapshotBinding = (input: unknown): LinuxExclusiveRouteBinding => {
   if (input === null || typeof input !== "object" || types.isProxy(input) ||
       Reflect.ownKeys(input).length !== BINDING_KEYS.length) {throw new TypeError("invalid exact route binding");}
   const fields = Object.getOwnPropertyDescriptors(input);
   for (const key of BINDING_KEYS) {
     const field = fields[key];
-    if (field === undefined || !("value" in field) || !field.enumerable) {throw new TypeError("invalid exact route binding");}
+    if (field === undefined || !("value" in field) || field.enumerable !== true) {throw new TypeError("invalid exact route binding");}
     if (key === "credentialGeneration" || key === "bindingRevision") {
       if (typeof field.value !== "number" || !Number.isSafeInteger(field.value) || field.value < 1) {
         throw new TypeError("invalid credential generation");
@@ -57,7 +57,7 @@ const snapshotBinding = (input: LinuxExclusiveRouteBinding): LinuxExclusiveRoute
     } else if (typeof field.value !== "string" || field.value.length < 1 || field.value.length > 256 ||
         /[\p{Cc}\s]/u.test(field.value)) {throw new TypeError("invalid exact route binding");}
   }
-  const binding = Object.freeze(Object.fromEntries(BINDING_KEYS.map(key => [key, fields[key]!.value]))) as unknown as LinuxExclusiveRouteBinding;
+  const binding = Object.freeze(Object.fromEntries(BINDING_KEYS.map(key => [key, fields[key]!.value]))) as LinuxExclusiveRouteBinding;
   if (!/^[a-f0-9]{40}$/u.test(binding.sourceRevision) ||
       !supportedLinuxCandidate(binding)) {
     throw new TypeError("exclusive route requires an exact supported Linux candidate and source revision");
@@ -88,6 +88,13 @@ export interface LinuxExclusiveRouteOwner {
   releaseAfterContainerRemoval(): Promise<"closed" | "quarantined">;
 }
 
+const routeLifetime = (lifetimeMs: number): number => {
+  if (!Number.isSafeInteger(lifetimeMs) || lifetimeMs < LINUX_ROUTE_MIN_LIFETIME_MS || lifetimeMs > LINUX_ROUTE_MAX_LIFETIME_MS) {
+    throw new TypeError("route lease requires 4000..120000 integer milliseconds");
+  }
+  return lifetimeMs;
+};
+
 /**
  * Internal deterministic seam for adapter tests. The production constructor
  * opens the namespace and pinned tools itself. This function is not exported by
@@ -111,10 +118,7 @@ export const installLinuxExclusiveRoute = (input: Readonly<{
   const binding = snapshotBinding(input.binding);
   const endpoint = Object.freeze({address: input.endpoint.address, port: input.endpoint.port});
   validateLinuxExclusiveRouteEndpoint(endpoint);
-  const lifetimeMs = input.lifetimeMs;
-  if (!Number.isSafeInteger(lifetimeMs) || lifetimeMs < LINUX_ROUTE_MIN_LIFETIME_MS || lifetimeMs > LINUX_ROUTE_MAX_LIFETIME_MS) {
-    throw new TypeError("route lease requires 4000..120000 integer milliseconds");
-  }
+  const lifetimeMs = routeLifetime(input.lifetimeMs);
   const kernel = input.kernel; const now = input.monotonicNow; const schedule = input.scheduleCutoff;
   if (typeof schedule !== "function") {throw new TypeError("autonomous route cutoff scheduler required");}
   const startedAt = input.startedAtMs; let highWater = startedAt;
@@ -219,6 +223,7 @@ export const installLinuxExclusiveRoute = (input: Readonly<{
     // reduces authority; preserve the original failure and always attempt it.
     installed = true; revoke(); throw error;
   }
+  const isCurrent = (): boolean => !revoked && !released;
   return Object.freeze({
     cutoff: cutoff.promise,
     reserveFirstWrite(expected: LinuxExclusiveRouteBinding, requestId: string): LinuxExclusiveFirstWrite {
@@ -238,7 +243,7 @@ export const installLinuxExclusiveRoute = (input: Readonly<{
           // Kernel inspection may take time; expiry must be checked after it.
           const finishedAt = readTime();
           if (finishedAt >= liveUntilMs) {throw new TypeError("kernel route readback expired");}
-          return !revoked && !released && finishedAt - issuedAt < 1_000;
+          return isCurrent() && finishedAt - issuedAt < 1_000;
         } catch {revoke(); return false;}
       }});
     },

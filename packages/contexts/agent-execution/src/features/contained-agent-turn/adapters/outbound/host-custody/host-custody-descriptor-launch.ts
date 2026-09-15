@@ -61,7 +61,7 @@ const verifyExecutableImmediatelyBeforeSpawn = (
   assertCanonicalAncestors(plan.executablePath);
   const before = lstatSync(plan.executablePath, { bigint: true });
   assertExecutableMode(before);
-  const descriptor = openSync(plan.executablePath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  const descriptor = openSync(plan.executablePath, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const openedBefore = fstatSync(descriptor, { bigint: true });
     assertExecutableMode(openedBefore);
@@ -181,7 +181,7 @@ const sealExecutableDescriptor = (
   try {
     writableDescriptor = operations.open(
       sealedPath,
-      constants.O_CREAT | constants.O_EXCL | constants.O_RDWR | (constants.O_NOFOLLOW ?? 0),
+      constants.O_CREAT | constants.O_EXCL | constants.O_RDWR | constants.O_NOFOLLOW,
       0o500,
     );
     const createdDescriptorIdentity = operations.fstat(writableDescriptor);
@@ -243,7 +243,7 @@ const openPrivateDescriptors = (
         keys: [key],
         parentDescriptor: operations.open(
           observation.path,
-          constants.O_RDONLY | (constants.O_DIRECTORY ?? 0) | (constants.O_NOFOLLOW ?? 0),
+          constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
         ),
       };
       descriptors.push(descriptor);
@@ -267,7 +267,7 @@ const assertPrivateDescriptorIdentities = (
     const expected = privatePaths.byEnvironmentKey[descriptor.keys[0] ?? ""];
     const observed = fstatSync(descriptor.parentDescriptor, { bigint: true });
     const matches = expected?.path === privatePaths.root.path
-      ? expected !== undefined && directoryObjectMatches(observed, expected)
+      ? directoryObjectMatches(observed, expected)
       : expected !== undefined && directoryIdentityMatches(observed, expected);
     if (
       !matches ||
@@ -330,7 +330,7 @@ export const acquireVerifiedLaunchDescriptors = (
   for (const [key, observation] of Object.entries(privatePaths.byEnvironmentKey)) {
     verifyDirectoryImmediatelyBeforeSpawn(observation.path, observation, `private ${key}`);
   }
-  const sourceDescriptor = openSync(plan.executablePath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  const sourceDescriptor = openSync(plan.executablePath, constants.O_RDONLY | constants.O_NOFOLLOW);
   const sealedPath = join(privatePaths.root.path, `.host-executable-${sha256(`${process.pid}:${Date.now()}`)}`);
   let executableDescriptor: number | undefined;
   let sealedExecutable: ExecutableObservation | undefined;
@@ -343,12 +343,12 @@ export const acquireVerifiedLaunchDescriptors = (
     sealedExecutable = sealed.observation;
     workspaceDescriptor = openSync(
       retainedWorkspaceDescriptorPath ?? workspaceRef,
-      constants.O_RDONLY | (constants.O_DIRECTORY ?? 0) |
-        (retainedWorkspaceDescriptorPath === undefined ? (constants.O_NOFOLLOW ?? 0) : 0),
+      constants.O_RDONLY | constants.O_DIRECTORY |
+        (retainedWorkspaceDescriptorPath === undefined ? constants.O_NOFOLLOW : 0),
     );
     privateRootDescriptor = openSync(
       privatePaths.root.path,
-      constants.O_RDONLY | (constants.O_DIRECTORY ?? 0) | (constants.O_NOFOLLOW ?? 0),
+      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
     );
     privateDescriptors = openPrivateDescriptors(privatePaths);
     if (!executableIdentityMatches(fstatSync(sourceDescriptor, { bigint: true }), executable)) {
@@ -364,7 +364,7 @@ export const acquireVerifiedLaunchDescriptors = (
     }
     const acquiredPrivatePaths = assertPrivateDescriptorIdentities(privateDescriptors, privatePaths);
     assertDistinctDescriptorObjects([acquiredWorkspace, acquiredPrivateRoot, ...acquiredPrivatePaths]);
-    if (sealedExecutable === undefined) {throw new Error("Host Custody sealed executable observation is missing");}
+    assertSealedExecutable(sealedExecutable);
     let closed = false;
     return Object.freeze({
       close() {
@@ -414,3 +414,7 @@ export const descriptorBoundArguments = (
   childWorkspaceDescriptor: number,
 ): readonly string[] => Object.freeze(arguments_.map(argument =>
   argument.split(workspaceRef).join(`/proc/self/fd/${childWorkspaceDescriptor}`)));
+
+const assertSealedExecutable = (observation: ExecutableObservation | undefined): void => {
+  if (observation === undefined) {throw new Error("Host Custody sealed executable observation is missing");}
+};

@@ -39,7 +39,7 @@ export interface ContainedTurnPreventionReceipt {
 }
 
 // Check primitive type/length before UTF-8 encoding or canonicalization.
-const guardText = (value: string, maximumBytes = 512): void => {
+const guardText = (value: unknown, maximumBytes = 512): void => {
   if (typeof value !== "string" || value.length > maximumBytes) {throw new TypeError("invalid intent guard text");}
   validateContainedTurnText("intent guard text", value, { encoding: "ascii", maximumBytes });
 };
@@ -92,7 +92,8 @@ export const validateContainedTurnPreventionCommand = (command: ContainedTurnPre
     guardText(command.targetIntentCorrelation);
   }
   const { preventionDigest, ...preimage } = command;
-  if (command.version !== 1 || containedTurnPreventionDigest(preimage) !== preventionDigest) {
+  const version: unknown = command.version;
+  if (version !== 1 || containedTurnPreventionDigest(preimage) !== preventionDigest) {
     throw new TypeError("prevention command digest or version mismatch");
   }
 };
@@ -106,7 +107,8 @@ export const validateContainedTurnPreventionReceipt = (receipt: ContainedTurnPre
   if (receipt.receiptId !== `proof:intent-receipt:${receipt.command.preventionDigest}`) {
     throw new TypeError("intent receipt identity mismatch");
   }
-  if (receipt.version !== 1 || !["intent_guarded", "operation_fenced", "cutoff_requested", "already_terminal"].includes(receipt.disposition)) {
+  const version: unknown = receipt.version;
+  if (version !== 1 || !["intent_guarded", "operation_fenced", "cutoff_requested", "already_terminal"].includes(receipt.disposition)) {
     throw new TypeError("invalid prevention receipt disposition");
   }
   if (receipt.disposition === "intent_guarded") {

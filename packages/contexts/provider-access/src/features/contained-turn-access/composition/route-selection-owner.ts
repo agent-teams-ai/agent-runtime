@@ -9,7 +9,7 @@ const snapshotTimeouts = (input: Partial<MaterializationPostgresTimeouts> | unde
   if (input === undefined) {return {};}
   const data = credentialData(input);
   if (Object.keys(data).some(key => !["connectionMs", "statementMs", "transactionMs"].includes(key))) {throw new TypeError("Invalid PA route timeouts");}
-  return Object.freeze(Object.fromEntries(Object.entries(data).map(([key, value]) => [key, value.value]))) as Partial<MaterializationPostgresTimeouts>;
+  return Object.freeze(Object.fromEntries(Object.entries(data).map(([key, value]) => [key, value.value])));
 };
 
 export type RouteSelectionInput = RouteSelectionFacts & Readonly<{deadline: number; operationAbortSignal: AbortSignal}>;

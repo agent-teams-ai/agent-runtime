@@ -80,7 +80,7 @@ const ownData = (record: object, name: string): unknown => {
 const plainRecord = (value: unknown, name: string): object => {
   if (typeof value !== "object" || value === null) {throw new TypeError(`${name} must be a record`);}
   if (utilTypes.isProxy(value)) {throw new TypeError(`${name} must not be a Proxy`);}
-  const prototype = Object.getPrototypeOf(value);
+  const prototype: unknown = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) {throw new TypeError(`${name} must be a plain record`);}
   return value;
 };
@@ -92,7 +92,7 @@ const exactDataSnapshot = (value: unknown, name: string, keys: readonly string[]
   if (actualKeys.length !== keys.length || actualKeys.some(key => typeof key !== "string" || !keys.includes(key))) {
     throw new TypeError(`${name} has missing or unknown keys`);
   }
-  const snapshot: Record<string, unknown> = Object.create(null);
+  const snapshot = Object.create(null) as Record<string, unknown>;
   for (const key of keys) {
     const descriptor = descriptors[key];
     if (descriptor === undefined || !("value" in descriptor) || descriptor.enumerable !== true) {
@@ -125,10 +125,11 @@ const exactModeArray = (value: unknown): readonly ("analysis" | "workspace-write
     if (descriptor === undefined || !("value" in descriptor) || descriptor.enumerable !== true) {
       throw new TypeError(`Codex supported modes[${index}] must be an enumerable own data property`);
     }
-    if (descriptor.value !== "analysis" && descriptor.value !== "workspace-write") {
+    const mode: unknown = descriptor.value;
+    if (mode !== "analysis" && mode !== "workspace-write") {
       throw new TypeError("Codex capability manifest contains an invalid mode");
     }
-    modes.push(descriptor.value);
+    modes.push(mode);
   }
   if (new Set(modes).size !== modes.length) {throw new TypeError("Codex supported modes must not contain duplicates");}
   return Object.freeze(modes);

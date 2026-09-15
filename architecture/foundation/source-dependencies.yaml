@@ -194,15 +194,18 @@ boundaries:
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-execution-attestation.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-open-attempts.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-projections.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-reservation-projection.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-start-admission.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-state.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-bridge.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-events.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-final-launch.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-io.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-protocol-definitions.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-protocol.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-selection.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-workspace-tree.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-workspace-entrypoint.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-cooperative-process-custody.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-route-durable-storage.ts
@@ -258,10 +261,13 @@ boundaries:
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-egress-broker.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-request.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-response.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-abort-intrinsics.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-cgroup-v2.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-containment-deadline.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-darwin-launch.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-descriptor-launch.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-evidence.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-executable-verification.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-finalizable-plan.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-guardian-program.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-http-resource-lifetime.ts
@@ -269,6 +275,7 @@ boundaries:
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-launch-failure.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-launch-plan-snapshot.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-launch.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-live-state-readback.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-posix-process-group.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-private-root.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-process-tree.ts
@@ -293,6 +300,7 @@ boundaries:
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-open.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-replay.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-spawn-acknowledgement.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-spawn.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-start-admission.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-state.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts
@@ -961,6 +969,37 @@ boundaries:
     - node:events
     - node:tls
     runtimeReferences: []
+- id: tooling.foundation-quality
+  dependencyMode: development
+  roots:
+  - scripts/foundation/check-native-quality.mjs
+  - scripts/foundation/check-quality-adoption.mjs
+  entrypoints:
+  - scripts/foundation/check-quality-adoption.mjs
+  allow:
+    boundaries: []
+    packages:
+    - yaml
+    builtins:
+    - node:assert/strict
+    - node:child_process
+    - node:fs/promises
+    - node:path
+    - node:url
+    runtimeReferences: []
+- id: tooling.foundation-quality-tests
+  dependencyMode: development
+  roots:
+  - scripts/foundation/check-quality-adoption.test.mjs
+  entrypoints: []
+  allow:
+    boundaries:
+    - tooling.foundation-quality
+    packages: []
+    builtins:
+    - node:assert/strict
+    - node:test
+    runtimeReferences: []
 - id: adapter.agent-execution.codex-data
   dependencyMode: runtime
   roots:
@@ -1084,7 +1123,6 @@ boundaries:
   - packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-provider-selection.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-provider-selection/adapters/contained-turn-provider-selection.ts
-  - packages/apps/embedded-runtime/src/features/contained-turn-provider-selection/index.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-provider-selection/internal.ts
   entrypoints:
   - packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts
@@ -1109,7 +1147,6 @@ boundaries:
   - packages/apps/embedded-runtime/src/features/contained-turn-access-authority/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-authority-capability.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/adapters/contained-turn-authority-capability.ts
-  - packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/index.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-cancellation-proof.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-cancellation-proof/composition/contained-turn-cancellation-proof.ts
@@ -1135,7 +1172,6 @@ boundaries:
   - packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-runtime-validation.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/composition/contained-turn-runtime-validation.ts
-  - packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/index.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation/internal.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/composition/contained-turn-runtime-access.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/internal.ts
@@ -1168,54 +1204,42 @@ boundaries:
   roots:
   - packages/apps/embedded-runtime/src/composition/contained-turn-current-authority.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-current-authority/adapters/contained-turn-current-authority.ts
-  - packages/apps/embedded-runtime/src/features/contained-turn-current-authority/index.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-current-authority/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-current-egress-owners.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-current-egress-owners/adapters/contained-turn-current-egress-owners.ts
-  - packages/apps/embedded-runtime/src/features/contained-turn-current-egress-owners/index.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-current-egress-owners/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-authorities.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-http-egress-authorities/adapters/contained-turn-http-egress-authorities.ts
-  - packages/apps/embedded-runtime/src/features/contained-turn-http-egress-authorities/index.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-http-egress-authorities/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-http-egress-upstream.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-http-egress-upstream/adapters/contained-turn-http-egress-upstream.ts
-  - packages/apps/embedded-runtime/src/features/contained-turn-http-egress-upstream/index.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-http-egress-upstream/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-http-provider-access.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-http-provider-access/adapters/contained-turn-http-provider-access.ts
-  - packages/apps/embedded-runtime/src/features/contained-turn-http-provider-access/index.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-http-provider-access/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-http-runtime-security.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-http-runtime-security/adapters/contained-turn-http-runtime-security.ts
-  - packages/apps/embedded-runtime/src/features/contained-turn-http-runtime-security/index.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-http-runtime-security/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-linux-route-binding.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-linux-route-binding/adapters/contained-turn-linux-route-binding.ts
-  - packages/apps/embedded-runtime/src/features/contained-turn-linux-route-binding/index.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-linux-route-binding/internal.ts
   - packages/apps/embedded-runtime/src/composition/contained-turn-route-qualification.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/adapters/contained-turn-route-qualification.ts
-  - packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/index.ts
   - packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/internal.ts
   - packages/apps/embedded-runtime/src/composition/darwin-contained-turn-authority.ts
   - packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/adapters/darwin-contained-turn-authority.ts
-  - packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/index.ts
   - packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority/internal.ts
   - packages/apps/embedded-runtime/src/composition/darwin-contained-turn-deployment.ts
   - packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/adapters/darwin-contained-turn-deployment.ts
-  - packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/index.ts
   - packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment/internal.ts
   - packages/apps/embedded-runtime/src/composition/linux-codex-contained-turn-owner.ts
   - packages/apps/embedded-runtime/src/features/linux-codex-deployment/adapters/linux-codex-contained-turn-owner.ts
-  - packages/apps/embedded-runtime/src/features/linux-codex-deployment/index.ts
   - packages/apps/embedded-runtime/src/features/linux-codex-deployment/internal.ts
   - packages/apps/embedded-runtime/src/features/linux-codex-deployment/adapters/linux-codex-deployment-authority.ts
   - packages/apps/embedded-runtime/src/features/linux-codex-deployment/adapters/linux-codex-deployment.ts
   - packages/apps/embedded-runtime/src/composition/linux-codex-deployment-authority.ts
   - packages/apps/embedded-runtime/src/composition/linux-codex-deployment.ts
   - packages/apps/embedded-runtime/src/composition/linux-codex-node-recipe-consumption.ts
-  - packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/index.ts
   - packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/internal.ts
   - packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/adapters/linux-codex-node-recipe-consumption.ts
   - packages/apps/embedded-runtime/src/features/linux-codex-node-recipe/adapters/linux-codex-node-recipe.ts

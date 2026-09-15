@@ -5,7 +5,9 @@ import type {
 
 // A drift between the contract union and the runtime's own platform union would
 // otherwise surface as a silently widened or narrowed published declaration.
-type Equals<Left, Right> = (<T>() => T extends Left ? 1 : 2) extends (<T>() => T extends Right ? 1 : 2) ? true : false;
+type Equals<Left, Right> = [Left] extends [Right]
+  ? [Right] extends [Left] ? true : false
+  : false;
 type Expect<T extends true> = T;
 export type CustodyPlatformUnionMatchesRuntime = Expect<Equals<NodeJS.Platform, StableCustodyPlatform>>;
 import { constants } from "node:fs";

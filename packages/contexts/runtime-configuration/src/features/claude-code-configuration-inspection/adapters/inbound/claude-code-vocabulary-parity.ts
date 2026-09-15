@@ -25,7 +25,9 @@ import {
  * import, so a value both need is declared twice. This adapter is the only file
  * that sees both declarations, and it is where the duplication is paid for. */
 
-type Equals<Left, Right> = (<T>() => T extends Left ? 1 : 2) extends (<T>() => T extends Right ? 1 : 2) ? true : false;
+type Equals<Left, Right> = [Left] extends [Right]
+  ? [Right] extends [Left] ? true : false
+  : false;
 type Expect<T extends true> = T;
 
 // Compile-time: the published unions and the application vocabulary describe the
@@ -81,7 +83,10 @@ export const assertClaudeCodeVocabularyParity = (
   const publishedBudgets = Object.entries(published.budgets).toSorted(([left], [right]) => left < right ? -1 : 1);
   const appliedBudgets = Object.entries(applied.budgets).toSorted(([left], [right]) => left < right ? -1 : 1);
   if (publishedBudgets.length !== appliedBudgets.length
-    || publishedBudgets.some(([key, value], index) => appliedBudgets[index]?.[0] !== key || appliedBudgets[index]?.[1] !== value)) {
+    || publishedBudgets.some(([key, value], index) => {
+      const appliedBudget = appliedBudgets[index];
+      return appliedBudget === undefined || appliedBudget[0] !== key || appliedBudget[1] !== value;
+    })) {
     throw new TypeError("published Claude Code budgets and enforced budgets disagree");
   }
 };

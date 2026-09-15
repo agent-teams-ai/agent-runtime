@@ -134,7 +134,8 @@ const assertBinding = (options: CreateDockerCodexCurrentKernelOwnerOptions): voi
     || boundary.codexHomeIdentity.device !== plan.codexHomeIdentity.device || boundary.codexHomeIdentity.inode !== plan.codexHomeIdentity.inode) {
     throw new TypeError("Docker Codex permission boundary does not match the issued plan");
   }
-  if (options.effectCustody === undefined) {throw new TypeError("Docker Codex requires effect custody");}
+  const effectCustody: unknown = options.effectCustody;
+  if (effectCustody === undefined) {throw new TypeError("Docker Codex requires effect custody");}
 };
 
 /** One explicitly selected, operation-scoped Docker connection to the existing
@@ -207,7 +208,7 @@ export const createDockerCodexCurrentKernelOwner = (
           assertOpen();
           if (await isCancellationRequested()) {throw new TypeError("Docker Codex start is cancelled");}
           assertOpen();
-          nativeStartStep(diagnosticKey, "plan-root-validation", () => validateCodexAppServerLaunchPlanRoots(plan));
+          nativeStartStep(diagnosticKey, "plan-root-validation", () => {validateCodexAppServerLaunchPlanRoots(plan);});
           } catch (error) {recordNativeStart(diagnosticKey, "fail"); throw error;}
           recordNativeStart(diagnosticKey, "begin", "bridge-open");
           let opened: Awaited<ReturnType<typeof registry.open>>;

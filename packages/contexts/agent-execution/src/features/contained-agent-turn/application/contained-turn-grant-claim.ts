@@ -107,15 +107,15 @@ export const claimContainedTurnWithConsumedGrants = async (
       consumedGrantRequestIds: Object.freeze({}), consumptionEvidenceIds: Object.freeze({}),
     });
   }
-  const providerAccessConsume = dependencies.providerAccess.consumeForDispatch;
-  const runtimeSecurityConsume = dependencies.security.consumeForDispatch;
-  const claim = dependencies.operationStore.claimPreparedDispatch;
+  const providerAccessConsume = dependencies.providerAccess.consumeForDispatch.bind(dependencies.providerAccess);
+  const runtimeSecurityConsume = dependencies.security.consumeForDispatch.bind(dependencies.security);
+  const claim = dependencies.operationStore.claimPreparedDispatch.bind(dependencies.operationStore);
   const providerAccessGrantRequestId = containedTurnDispatchGrantRequestId(
     "provider_access", subject,
   );
   const [providerAccessResult, runtimeSecurityResult] = await Promise.allSettled([
-    providerAccessConsume.call(dependencies.providerAccess, { accepted, grantRequestId: providerAccessGrantRequestId, subject }),
-    runtimeSecurityConsume.call(dependencies.security, { accepted, subject }),
+    providerAccessConsume({ accepted, grantRequestId: providerAccessGrantRequestId, subject }),
+    runtimeSecurityConsume({ accepted, subject }),
   ]);
   const providerAccess = providerAccessResult.status === "fulfilled"
     ? providerAccessResult.value : undefined;
@@ -168,7 +168,7 @@ export const claimContainedTurnWithConsumedGrants = async (
   ]);
   try {
     const authority = containedTurnOwnerStoreAuthority(operation, trustedScope);
-    const outcome = await claim.call(dependencies.operationStore, {
+    const outcome = await claim({
       authority,
       consumedGrantReceipts: receipts,
       expectedOperationRevision: operation.revision,

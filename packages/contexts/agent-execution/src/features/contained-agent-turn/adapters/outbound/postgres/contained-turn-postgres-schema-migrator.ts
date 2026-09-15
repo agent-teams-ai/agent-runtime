@@ -85,14 +85,14 @@ const connectForMigration = async (pool: ContainedTurnPostgresPool): Promise<Con
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(
-      () => reject(new Error("contained turn PostgreSQL migration pool acquisition timed out")),
+      () => {reject(new Error("contained turn PostgreSQL migration pool acquisition timed out"));},
       CONTAINED_TURN_POSTGRES_MIGRATION_TIMEOUTS.connectionTimeoutMs,
     );
   });
   try {
     return await Promise.race([pending, timeout]);
   } catch (error) {
-    void pending.then(client => client.release(true)).catch(() => {});
+    void pending.then(client => {client.release(true); return;}).catch(() => {});
     throw error;
   } finally {
     if (timer !== undefined) {clearTimeout(timer);}
@@ -168,7 +168,7 @@ const validateV5RuntimeFenceCatalog = async (
   client: ContainedTurnPostgresClient,
   triggerDefinition: string | undefined,
 ): Promise<void> => {
-  const quarantine = await client.query<{ relforcerowsecurity: boolean; relrowsecurity: boolean }>(
+  const quarantine = await client.query<{ relforcerowsecurity: unknown; relrowsecurity: unknown }>(
     `SELECT relforcerowsecurity, relrowsecurity
        FROM pg_class
       WHERE oid = 'agent_execution.contained_turn_dispatch_preparation_quarantine_v1'::regclass`,
@@ -201,7 +201,7 @@ const validateV5RuntimeFenceCatalog = async (
   );
   if (triggerDefinition === undefined || !triggerDefinition.includes("tenant_id") ||
       quarantine.rows[0]?.relrowsecurity !== true ||
-      quarantine.rows[0]?.relforcerowsecurity !== true || fencedTables.rowCount !== 5 ||
+      quarantine.rows[0].relforcerowsecurity !== true || fencedTables.rowCount !== 5 ||
       writeFences.rowCount !== 5) {
     throw new Error("contained turn PostgreSQL v5 runtime fence drift detected");
   }
@@ -306,7 +306,7 @@ export const backfillContainedTurnPreparationDigests = async (client: ContainedT
   let afterOperationId = "";
   let afterPreparationToken = "";
   let totalBytes = 0;
-  while (true) {
+  for (;;) {
     const rows = await client.query<{
       operation_id: string;
       preparation_token: string;
@@ -353,7 +353,7 @@ export const validateContainedTurnLegacyOperationDigests = async (client: Contai
   );
   let afterOperationId = "";
   let totalBytes = 0;
-  while (true) {
+  for (;;) {
     const rows = await client.query<{
       operation_id: string;
       state: unknown;

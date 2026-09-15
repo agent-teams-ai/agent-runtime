@@ -107,7 +107,7 @@ const mapConfigurationSource = (
 });
 
 const mapAuthorizationDiagnostics = (
-  diagnostics: readonly SetupAuthorizationDiagnostic[],
+  diagnostics: readonly (Omit<SetupAuthorizationDiagnostic, "subject"> & { readonly subject?: SetupAuthorizationDiagnostic["subject"] })[],
 ): readonly CodexSetupDiagnostic[] => diagnostics.map(diagnostic => ({
   code: diagnostic.code,
   ...(diagnostic.subject === undefined ? {} : { subject: diagnostic.subject }),

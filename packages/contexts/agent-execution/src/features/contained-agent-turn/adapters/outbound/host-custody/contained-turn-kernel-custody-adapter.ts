@@ -1,3 +1,4 @@
+import {hasPreparationCallback, isSupportedIntent, startWasCutOff, kernelIndeterminate, readKernelReservation, createKernelReservation, kernelOpenOutcome, sealProviderCompletion} from "./contained-turn-kernel-custody-reservation-projection.js";
 import { types } from "node:util";
 import { isNativeHostCustodyWorkspaceAuthority, inspectNativeHostCustodyWorkspaceAuthority } from "./native-host-custody-workspace-authority.js";
 import { KernelOpenAttempts, type KernelOpenAttempt } from "./contained-turn-kernel-custody-open-attempts.js";
@@ -8,7 +9,6 @@ import type {
   ContainedTurnKernelProviderObservation,
 } from "../../../application/ports/outbound/contained-turn-ports.js";
 import type {
-  HostCustodyEvidence,
   HostCustodyLaunchPlan,
   HostCustodyReservationInput,
   ProviderProcessCustodyPort,
@@ -36,10 +36,8 @@ import {
   physicalEvidenceIsClosed,
   positiveInteger,
   projectProviderBinding,
-  projectProviderObservation,
   proofId,
   reservationIdentity,
-  type SealedProviderCompletion,
 } from "./contained-turn-kernel-custody-projections.js";
 import {
   type ContainedTurnKernelCustodyLaunchAuthority,
@@ -90,7 +88,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     options: ContainedTurnKernelCustodyAdapterOptions,
   ) {
     const preparation = options.postClaimPreparation;
-    if (preparation !== "current-owner" && typeof preparation?.prepareClaimed !== "function") {
+    if (preparation !== "current-owner" && !hasPreparationCallback(preparation)) {
       throw new TypeError("Host post-claim preparation owner is unavailable");
     }
     this.#preparation = preparation === "current-owner" ? preparation
@@ -140,7 +138,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
         workspaceAuthority.descriptorPath.length === 0 || workspaceAuthority.identity.mountId.length === 0) {
       throw new TypeError("Host Custody scoped workspace authority is unavailable");
     }
-    if (input.intentMode !== "analysis" && input.intentMode !== "workspace-write") {
+    if (!isSupportedIntent(input.intentMode)) {
       throw new TypeError("Host Custody scoped workspace authority is unavailable");
     }
     const providerBinding = projectProviderBinding(input);
@@ -189,76 +187,25 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
       throw error;
     }
   }
-  #recordReservation(
-    input: KernelOpenInput,
-    authority: ContainedTurnKernelCustodyLaunchAuthority,
-    identityDigest: ReturnType<typeof openIdentity>,
-    custodyRef: string,
-  ): Awaited<ReturnType<ContainedTurnKernelCustodyPort["open"]>> {
-    const reservation: KernelReservation = {
-      attemptId: input.attemptId,
-      authorityVectorDigest: input.authorityVectorDigest,
-      commandId: input.commandId,
-      custodyId: input.custodyId,
-      effectId: input.effectId,
-      executionBoundaryOpened: false,
-      intentMode: authority.intentMode,
-      kernelOpenIdentityDigest: openIdentity(input, {
-        intentMode: input.intentMode,
-        workspaceRef: "owner-private-workspace-not-reconsumed",
-      }),
-      openIdentityDigest: identityDigest,
-      operationId: input.operationId,
-      operationCutoffRevision: input.operationCutoffRevision,
-      operationRevision: input.operationRevision,
-      preparationToken: input.preparationToken,
-      projectId: input.providerAccessSnapshot.projectId,
-      processStartProved: false,
-      providerCompletionState: "pending",
-      provider: input.adapterSnapshot.provider,
-      released: false,
-      startBoundaryCutoff: false,
-      started: false,
-      tenantId: input.providerAccessSnapshot.tenantId,
-      underlyingCustodyRef: custodyRef,
-      workspaceId: input.workspaceId,
-    };
+  #recordReservation(input: KernelOpenInput, authority: ContainedTurnKernelCustodyLaunchAuthority,
+    identityDigest: ReturnType<typeof openIdentity>, custodyRef: string): Awaited<ReturnType<ContainedTurnKernelCustodyPort["open"]>> {
+    const reservation = createKernelReservation(input, authority, identityDigest, custodyRef);
     this.#reservations.set(input.custodyId, reservation);
     return this.#openOutcome(reservation);
   }
-  #openOutcome(
-    reservation: KernelReservation,
-  ): Awaited<ReturnType<ContainedTurnKernelCustodyPort["open"]>> {
-    return Object.freeze({
-      custodyId: reservation.custodyId,
-      hostBootId: this.#hostBootId,
-      hostCustodyProof: Object.freeze({
-        binding: Object.freeze({
-          attemptId: reservation.attemptId,
-          authorityVectorDigest: reservation.authorityVectorDigest,
-          custodyId: reservation.custodyId,
-          effectId: reservation.effectId,
-          operationId: reservation.operationId,
-        }),
-        kind: "host_custody",
-        proofId: proofId("reservation", Object.freeze({
-          openIdentityDigest: reservation.openIdentityDigest,
-          underlyingCustodyRefDigest: canonicalDigest(reservation.underlyingCustodyRef),
-        })),
-      }),
-      hostInstanceId: this.#hostInstanceId,
-    });
+  #openOutcome(reservation: KernelReservation): Awaited<ReturnType<ContainedTurnKernelCustodyPort["open"]>> {
+    return kernelOpenOutcome(reservation, {hostBootId: this.#hostBootId, hostInstanceId: this.#hostInstanceId});
   }
   public completionBoundary(
     input: Parameters<ContainedTurnKernelCustodyPort["completionBoundary"]>[0],
   ): ReturnType<ContainedTurnKernelCustodyPort["completionBoundary"]> {
-    const boundary = openKernelCompletionBoundary(input, this.#reservation(input), this.#completionAfterMs);
+    const boundary = openKernelCompletionBoundary(input, readKernelReservation(this.#reservations, input), this.#completionAfterMs);
     if (input.phase === "start") {void boundary.expiration.then(() => {this.#preparing.get(input.custodyId)?.abort(); return null;});}
     return boundary;
   }
   public async start(input: StartInput): ReturnType<ContainedTurnKernelCustodyPort["start"]> {
     if (this.#admissionClosed) {throw new TypeError("Host Custody admission is unavailable");}
-    const reservation = this.#reservation(input);
+    const reservation = readKernelReservation(this.#reservations, input);
     const hostCustodyProof = this.#openOutcome(reservation).hostCustodyProof;
     admitCommittedDispatchStart(input, reservation, {
       hostBootId: this.#hostBootId,
@@ -274,10 +221,10 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
           signal: preparation.signal, underlyingCustodyRef: reservation.underlyingCustodyRef});
         if (result.kind !== "prepared") {throw new TypeError("Host post-claim preparation is unavailable");}
       }
-      if (preparation.signal.aborted || reservation.startBoundaryCutoff) {throw new TypeError("Host preparation was cut off");}
+      if (preparation.signal.aborted || startWasCutOff(reservation)) {throw new TypeError("Host preparation was cut off");}
     } catch {
       await this.#contain(reservation, true);
-      return this.#indeterminate("post-claim-preparation", reservation);
+      return kernelIndeterminate("post-claim-preparation", reservation);
     }
     let creatorCalled = false;
     let executionSettled = false;
@@ -300,7 +247,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     void execution.then(
       value => {
         executionSettled = true;
-        return this.#sealProviderCompletion(reservation, value);
+        sealProviderCompletion(reservation, value); return;
       },
       () => {
         executionSettled = true;
@@ -348,33 +295,15 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     }
     return start;
   }
-  #sealProviderCompletion(reservation: KernelReservation, value: unknown): void {
-    if (reservation.providerCompletionState !== "pending") {return;}
-    const projected = projectProviderObservation(value);
-    if (projected.kind !== "completed") {
-      reservation.providerCompletionState = "ambiguous";
-      return;
-    }
-    const completion: SealedProviderCompletion = Object.freeze({
-      digest: canonicalDigest(Object.freeze({
-        ...reservationIdentity(reservation),
-        outcome: projected.outcome,
-        proofDigest: reservation.proofDigest ?? null,
-      })),
-      outcome: projected.outcome,
-    });
-    reservation.providerCompletion = completion;
-    reservation.providerCompletionState = "sealed";
-  }
   public async attestExecutionClosure(
     input: Parameters<ContainedTurnKernelCustodyPort["attestExecutionClosure"]>[0],
   ): ReturnType<ContainedTurnKernelCustodyPort["attestExecutionClosure"]> {
-    const reservation = this.#reservation(input);
+    const reservation = readKernelReservation(this.#reservations, input);
     const prior = reservation.executionAttestation;
     if (prior !== undefined) {
       return prior.finalCursor === input.finalCursor
         ? prior.result
-        : this.#indeterminate("execution-cursor-conflict", reservation);
+        : kernelIndeterminate("execution-cursor-conflict", reservation);
     }
     const contained = await this.#contain(reservation, true);
     const observed = this.#hostCustody.evidence(reservation.underlyingCustodyRef);
@@ -383,7 +312,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
         (contained === undefined && observed.closure.profile !== "cooperative-darwin-posix-process-group") ||
         reservation.providerCompletionState !== "sealed" || !reservation.processStartProved ||
         !executionEvidenceIsClosed(observed)) {
-      return this.#indeterminate("execution-closure", reservation, observed);
+      return kernelIndeterminate("execution-closure", reservation, observed);
     }
     const result = createExecutionAttestation(reservation, observed, completion, contained, input.finalCursor);
     reservation.executionAttestation = Object.freeze({ finalCursor: input.finalCursor, result });
@@ -403,9 +332,9 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     input: PhysicalInput,
     initiate: boolean,
   ): ReturnType<ContainedTurnKernelCustodyPort["ensurePhysicalContainment"]> {
-    const reservation = this.#reservation(input);
+    const reservation = readKernelReservation(this.#reservations, input);
     const proof = await this.#physicalProof(reservation, initiate);
-    if (proof === undefined) {return this.#indeterminate("physical-containment", reservation);}
+    if (proof === undefined) {return kernelIndeterminate("physical-containment", reservation);}
     return Object.freeze({
       kind: "proved",
       proof,
@@ -427,7 +356,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     input: ContainmentInput,
     initiate: boolean,
   ): ReturnType<ContainedTurnKernelCustodyPort["attestContainment"]> {
-    const reservation = this.#reservation(input);
+    const reservation = readKernelReservation(this.#reservations, input);
     const contained = await this.#contain(reservation, initiate);
     const observed = this.#hostCustody.evidence(reservation.underlyingCustodyRef);
     if (contained === undefined || observed === undefined || !physicalEvidenceIsClosed(observed) ||
@@ -490,7 +419,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     input: Parameters<ContainedTurnKernelCustodyPort["releaseReservation"]>[0],
   ): Promise<void> {
     if (this.#openAttempts.failedBeforeAcquisition(input) !== undefined) {return;}
-    const reservation = this.#reservation(input);
+    const reservation = readKernelReservation(this.#reservations, input);
     if (reservation.workspaceId !== input.workspaceId) {
       throw new TypeError("Host Custody reservation workspace identity conflict");
     }
@@ -545,16 +474,16 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
       });
       return Object.freeze({ kind: "released" });
     } catch {
-      return this.#indeterminate("retired-reservation-release", reservation);
+      return kernelIndeterminate("retired-reservation-release", reservation);
     }
   }
   public async requestPhysicalContainment(
     input: Parameters<ContainedTurnKernelCustodyPort["requestPhysicalContainment"]>[0],
   ): ReturnType<ContainedTurnKernelCustodyPort["requestPhysicalContainment"]> {
-    const reservation = this.#reservation(input);
+    const reservation = readKernelReservation(this.#reservations, input);
     const proof = await this.#physicalProof(reservation, true);
     return proof === undefined
-      ? this.#indeterminate("physical-containment", reservation)
+      ? kernelIndeterminate("physical-containment", reservation)
       : Object.freeze({ kind: "contained", proof });
   }
   async #physicalProof(
@@ -572,35 +501,8 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
   public async requestContainment(
     input: Parameters<ContainedTurnKernelCustodyPort["requestContainment"]>[0],
   ): ReturnType<ContainedTurnKernelCustodyPort["requestContainment"]> {
-    const reservation = this.#reservation(input);
+    const reservation = readKernelReservation(this.#reservations, input);
     await this.#contain(reservation, true);
-    return this.#indeterminate("composite-binding-required", reservation);
-  }
-  #indeterminate(
-    source: string,
-    reservation: KernelReservation,
-    evidence?: HostCustodyEvidence,
-  ): {
-    readonly evidenceId: ReturnType<typeof evidenceId>;
-    readonly kind: "indeterminate";
-  } {
-    return Object.freeze({
-      evidenceId: evidenceId(source, Object.freeze({
-        evidence: evidence === undefined ? null : hostEvidenceProjection(evidence),
-        proofDigest: reservation.proofDigest ?? null,
-        providerCompletionState: reservation.providerCompletionState,
-        reservation: reservationIdentity(reservation),
-      })),
-      kind: "indeterminate",
-    });
-  }
-  #reservation(
-    input: Readonly<{ readonly attemptId: string; readonly custodyId: string; readonly operationId: string }>,
-  ): KernelReservation {
-    const reservation = this.#reservations.get(input.custodyId);
-    if (reservation === undefined || !sameReservation(reservation, input)) {
-      throw new TypeError("Host Custody kernel reservation is unavailable");
-    }
-    return reservation;
+    return kernelIndeterminate("composite-binding-required", reservation);
   }
 }

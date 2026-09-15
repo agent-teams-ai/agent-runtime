@@ -228,10 +228,11 @@ export const validateContainedTurnConsumedGrantReceipts = (
     const validThroughOperationCutoffRevision = containedTurnOperationCutoffRevision(receipt.validThroughOperationCutoffRevision);
     const expectedRequest = receipt.owner === "provider_access" ? subject.providerAccessRequest : subject.runtimeSecurityRequest;
     const expectedFacts = receipt.owner === "provider_access" ? subject.providerAccessExpectation : subject.runtimeSecurityExpectation;
+    const purpose: unknown = receipt.purpose;
     if (receipt.grantRequestId !== "grant-request:" + grantRequestDigest ||
         receipt.grantRequestId !== expectedRequest.grantRequestId || requestDigest !== expectedRequest.requestDigest ||
         claimBindingDigest !== expectedRequest.claimBindingDigest || receipt.operationId !== subject.operationId ||
-        receipt.provider !== subject.provider || receipt.purpose !== CONTAINED_TURN_OWNER_DISPATCH_PURPOSE ||
+        receipt.provider !== subject.provider || purpose !== CONTAINED_TURN_OWNER_DISPATCH_PURPOSE ||
         receipt.scope.tenantId !== subject.scope.tenantId || receipt.scope.projectId !== subject.scope.projectId ||
         receipt.scope.scopeDigest !== subject.scopeDigest || !sameFacts(receipt.authorityFacts, expectedFacts) ||
         validThroughOperationCutoffRevision < subject.operationCutoffRevision ||

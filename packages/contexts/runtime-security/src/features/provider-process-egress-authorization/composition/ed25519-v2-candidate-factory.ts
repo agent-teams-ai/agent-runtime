@@ -79,10 +79,11 @@ const snapshotFunction = (owner: unknown, name: string): ((...input: never[]) =>
   if (descriptor === undefined || !("value" in descriptor) || typeof descriptor.value !== "function") {
     throw new TypeError("invalid dependency operation");
   }
-  return descriptor.value.bind(owner) as (...input: never[]) => unknown;
+  const operation = descriptor.value as (...input: never[]) => unknown;
+  return operation.bind(owner);
 };
 
-const snapshotDependencies = (input: ProviderProcessEgressAuthorizationV2CandidateDependencies) => {
+const snapshotDependencies = (input: unknown) => {
   if (input === null || typeof input !== "object" || isNodeProxy(input) ||
     Object.getPrototypeOf(input) !== Object.prototype) {throw new TypeError("invalid dependencies");}
   const descriptors = Object.getOwnPropertyDescriptors(input);
@@ -92,7 +93,7 @@ const snapshotDependencies = (input: ProviderProcessEgressAuthorizationV2Candida
   if (keys.some(key => typeof key === "symbol") || keys.length !== expected.length ||
     (keys as string[]).toSorted().some((key, index) => key !== expected[index]) ||
     (keys as string[]).some(key => descriptors[key] === undefined ||
-      !("value" in descriptors[key]!))) {throw new TypeError("inexact dependencies");}
+      !("value" in descriptors[key]))) {throw new TypeError("inexact dependencies");}
   const values = Object.fromEntries(expected.map(key => [key, descriptors[key]!.value]));
   for (const name of ["hostReservationId", "keyGeneration", "keyRef", "signerRevision"] as const) {
     if (typeof values[name] !== "string") {throw new TypeError("invalid candidate binding");}

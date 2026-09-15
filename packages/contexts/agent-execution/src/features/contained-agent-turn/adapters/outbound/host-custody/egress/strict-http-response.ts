@@ -1,3 +1,4 @@
+import { httpSignalAborted } from "./http-ingress-validation.js";
 import type { HttpEgressConnection, HttpEgressLimits } from "./http-egress-contracts.js";
 import type { HttpEgressClock } from "./http-egress-ports.js";
 import { intrinsicUint8ArrayLength, zeroHttpBytes } from "./http-byte-intrinsics.js";
@@ -47,16 +48,17 @@ class DeadlineByteReader {
   }
 
   private async pull(deadline = this.limits.deadline): Promise<void> {
-    if (this.signal?.aborted) {throw new StrictHttpResponseError("cancelled", this.bytesRead, 0);}
+    if (httpSignalAborted(this.signal)) {throw new StrictHttpResponseError("cancelled", this.bytesRead, 0);}
     const now = this.clock.now();
     if (!Number.isSafeInteger(now) || now >= deadline) {throw new StrictHttpResponseError("stalled", this.bytesRead, 0);}
     let next: IteratorResult<Uint8Array>;
     try {
       next = await this.clock.within(deadline, () => this.iterator.next(), this.signal);
     } catch {
-      throw new StrictHttpResponseError(this.signal?.aborted ? "cancelled" : "stalled", this.bytesRead, 0);
+      throw new StrictHttpResponseError(httpSignalAborted(this.signal) ? "cancelled" : "stalled", this.bytesRead, 0);
     }
-    if (next.done) {
+    const done = Boolean(next.done);
+    if (done) {
       this.ended = true;
       return;
     }
@@ -77,7 +79,7 @@ class DeadlineByteReader {
   }
 
   public async through(separator: Uint8Array, maximum: number): Promise<Uint8Array> {
-    while (true) {
+    for (;;) {
       const index = find(this.buffered, separator);
       if (index >= 0) {
         if (index + separator.byteLength > maximum) {
@@ -107,7 +109,7 @@ class DeadlineByteReader {
   }
 
   public requireFramedEnd(): void {
-    if (this.signal?.aborted) {throw new StrictHttpResponseError("cancelled", this.bytesRead, 0);}
+    if (httpSignalAborted(this.signal)) {throw new StrictHttpResponseError("cancelled", this.bytesRead, 0);}
     const now = this.clock.now();
     if (!Number.isSafeInteger(now) || now >= this.limits.deadline) {throw new StrictHttpResponseError("stalled", this.bytesRead, 0);}
     // Framing permits Host Custody to close the persistent transport. Surplus
@@ -116,7 +118,7 @@ class DeadlineByteReader {
   }
 
   private assertSourceObservation(deadline: number, signal: AbortSignal | undefined): void {
-    if (signal?.aborted) {throw new StrictHttpResponseError("cancelled", this.bytesRead, 0);}
+    if (httpSignalAborted(signal)) {throw new StrictHttpResponseError("cancelled", this.bytesRead, 0);}
     const now = this.clock.now();
     if (!Number.isSafeInteger(now) || now >= deadline) {throw new StrictHttpResponseError("stalled", this.bytesRead, 0);}
   }
@@ -137,7 +139,7 @@ class DeadlineByteReader {
           return {done: next.done === true, size};
         }, signal);
       } catch {
-        throw new StrictHttpResponseError(signal?.aborted ? "cancelled" : "stalled", this.bytesRead, 0);
+        throw new StrictHttpResponseError(httpSignalAborted(signal) ? "cancelled" : "stalled", this.bytesRead, 0);
       }
       if (!observed.done && observed.size !== undefined) {
         this.bytesRead = addObservedBytes(this.bytesRead, observed.size);
@@ -275,7 +277,7 @@ const write = async (
     await context.clock.within(context.limits.deadline, () => context.connection.write(bytes), context.signal);
     return outboundBytes + bytes.byteLength;
   } catch {
-    throw new StrictHttpResponseError(context.signal?.aborted ? "cancelled" : "backpressure", upstreamBytes, outboundBytes, true);
+    throw new StrictHttpResponseError(httpSignalAborted(context.signal) ? "cancelled" : "backpressure", upstreamBytes, outboundBytes, true);
   }
 };
 
@@ -310,7 +312,7 @@ const forwardFramedBody = async (
     return;
   }
   let bodyBytes = 0;
-  while (true) {
+  for (;;) {
     const lineBytes = await reader.through(CRLF, 34);
     let line: string;
     try {
@@ -405,10 +407,11 @@ export const forwardStrictHttpResponse = async (
       // Unknown closure is reconciled by the Host without waiting for peer EOF.
       if (onFramedEnd === undefined) {
         await reader.requireSourceEnd(false);
-      } else if (await onFramedEnd() === true) {
+      } else {
+        const closureAcknowledged: unknown = await onFramedEnd();
         // Only positively acknowledged Host closure releases this observation
         // from execution cancellation. Framing and every write stay fenced.
-        await reader.requireSourceEnd(true);
+        if (closureAcknowledged === true) {await reader.requireSourceEnd(true);}
       }
     } catch (error) {
       if (!(error instanceof StrictHttpResponseError)) {

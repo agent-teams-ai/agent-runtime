@@ -1,3 +1,4 @@
+import type {FakeContainer, FakeLogPlan} from "./fake-docker-engine-state.js";
 import { createHash } from "node:crypto";
 
 import { validateAuthorityShape } from "./docker-engine-codec.js";
@@ -14,7 +15,6 @@ import type {
   DockerContainerCreate,
   DockerContainerObservation,
   DockerContainerResourceFacts,
-  DockerContainerStateFacts,
   DockerEngineCall,
   DockerEngineIdentity,
   DockerEnginePolicy,
@@ -26,18 +26,6 @@ import { DOCKER_LOG_MAX_FRAME_BYTES, DOCKER_LOG_MAX_FRAMES, DOCKER_LOG_MAX_STREA
 export type FakeCreateOutcome = "acknowledged" | "daemon-disconnect" | "lost-acknowledgement" | "malformed-response";
 export type FakeDockerOperation = "attach" | "create" | "inspect" | "kill" | "logs" | "remove" | "start" | "stop" | "wait";
 export type FakeMutationOperation = "kill" | "remove" | "start" | "stop";
-
-interface FakeContainer {
-  readonly authority: DockerContainerAuthority;
-  input: DockerContainerCreate;
-  removed: boolean;
-  state: DockerContainerStateFacts;
-}
-
-interface FakeLogPlan {
-  readonly delayed: boolean;
-  readonly frames: readonly DockerLogFrame[];
-}
 
 const hash = (value: string): string => createHash("sha256").update(value).digest("hex");
 
@@ -269,7 +257,7 @@ export class FakeDockerEngine implements DockerEnginePort {
     return this.#attachCustody.open({
       authority: authoritySnapshot,
       call: callSnapshot,
-      checkContinuation: () => this.#checkContinuation(authoritySnapshot, callSnapshot),
+      checkContinuation: () => {this.#checkContinuation(authoritySnapshot, callSnapshot);},
       endpointCustodyLost: () => this.#endpointCustodyLost,
       openRecord: () => this.#record("attach", authoritySnapshot, callSnapshot),
       recordEvent: () => {this.#events.push("attach:id");},

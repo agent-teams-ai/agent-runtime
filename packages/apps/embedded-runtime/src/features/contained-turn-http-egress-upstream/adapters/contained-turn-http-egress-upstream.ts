@@ -49,7 +49,7 @@ export const createContainedTurnHttpEgressRoute = async (input: Readonly<{
   const profile = nativeHttpRequestProfile(descriptor.id);
   if (profile === undefined || profile.provider !== descriptor.provider
     || profile.credentialMode !== descriptor.credentialMode || profile.originHost !== descriptor.originHost
-    || profile.originPort !== descriptor.originPort || profile.upstreamMethod !== descriptor.upstreamMethod
+    || profile.originPort !== (descriptor.originPort as unknown) || profile.upstreamMethod !== (descriptor.upstreamMethod as unknown)
     || profile.upstreamPath !== descriptor.upstreamPath
     || !sameNames(profile.credentialFieldNames, descriptor.credentialFieldNames)
     || descriptor.forwardedRequestHeaderNames.some(name =>

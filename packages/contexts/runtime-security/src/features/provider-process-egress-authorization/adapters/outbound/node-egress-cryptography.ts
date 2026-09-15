@@ -16,8 +16,8 @@ export const createNodeHmacEgressDecisionSeal = (input: {
   readonly keyRef: string;
   readonly secret: string;
 }): EgressDecisionSigner & EgressDecisionVerifier => {
-  const keyRef = `${input.keyRef}`;
-  const secret = `${input.secret}`;
+  const keyRef = input.keyRef;
+  const secret = input.secret;
   const calculate = (digest: string, generation: string): string =>
     createHmac("sha256", secret).update(`${generation}\0${digest}`, "utf8").digest("hex");
   return Object.freeze({

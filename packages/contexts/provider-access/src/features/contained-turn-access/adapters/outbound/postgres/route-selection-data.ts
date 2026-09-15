@@ -47,7 +47,7 @@ const descriptorSnapshot = (input: unknown, provider: string, recipe: unknown): 
   const required = headers(data.requiredHeaderNames);
   if (!required.includes("content-type") || required.some(name => !forwarded.includes(name))) {throw new TypeError("Invalid PA route required headers");}
   const values = data.exactValues;
-  if (!values || typeof values !== "object" || Array.isArray(values)) {throw new TypeError("Invalid PA route exact values");}
+  if (values === null || typeof values !== "object" || Array.isArray(values)) {throw new TypeError("Invalid PA route exact values");}
   const exact = values as Record<string, unknown>;
   if (exact["content-type"] !== "application/json" || Object.entries(exact).some(([name, value]) =>
     !required.includes(name) || typeof value !== "string" || !/^[\x20-\x7e]{1,512}$/u.test(value) || value.trim() !== value)) {

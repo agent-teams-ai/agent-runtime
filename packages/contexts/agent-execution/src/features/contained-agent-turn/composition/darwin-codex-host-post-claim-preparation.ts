@@ -1,3 +1,4 @@
+const isAborted = (signal: AbortSignal): boolean => signal.aborted;
 import {isDarwinCodexEffectCustodyOwner, type DarwinCodexEffectCustodyOwner} from "./darwin-codex-effect-custody-owner.js";
 import { createDarwinNativeCodexPermissionBoundary, codexDarwinNativeLaunchObservation,
   type CodexAppServerPermissionBoundary, type CodexContainedTurnMode } from "../adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
@@ -107,7 +108,7 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
         return Object.freeze({kind: "unsupported" as const, reason: "owner" as const});
       }
       const preparation = NodeProviderProcessCustodyCore.httpPreparation(options.hostCustody);
-      if (preparation === undefined || process.platform !== "darwin" || claimed.signal.aborted ||
+      if (preparation === undefined || process.platform !== "darwin" || isAborted(claimed.signal) ||
           options.limits.deadline !== options.localCut.operationDeadline || options.limits.closureDeadline <= options.limits.deadline) {
         return Object.freeze({kind: "unsupported" as const, reason: "owner" as const});
       }
@@ -130,7 +131,7 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
         if (options.localCut.hostShutdownSignal !== undefined) {
           options.effectCustody!.observeAbort(options.localCut.hostShutdownSignal);
         }
-        if (claimed.signal.aborted) {options.effectCustody!.cutoff(); throw new Error("Darwin effect custody claim aborted");}
+        if (isAborted(claimed.signal)) {options.effectCustody!.cutoff(); throw new Error("Darwin effect custody claim aborted");}
       }
       const locator = darwinDigest(JSON.stringify(["darwin-operation-locator/v1", proof.tenantId, proof.projectId, proof.operationId]));
       const storage = new DarwinRouteDurableStorage(options.durableRoot, locator);
@@ -144,12 +145,12 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
           }});
       const owner = route;
       if (nativeLease === undefined) {
-        files = new DarwinCodexNativeFiles(options.boundary, options.catalogSource, journal, () => owner.assertActive());
+        files = new DarwinCodexNativeFiles(options.boundary, options.catalogSource, journal, () => {owner.assertActive();});
       }
       preparation.retainDarwinRoute(lifetime, owner);
       owner.assertWritableTmp(options.tmpDir);
       if (options.localCut.hostShutdownSignal !== undefined) {
-        routeShutdownSubscription = hostHttpAbortOperations.subscribe(options.localCut.hostShutdownSignal, () => owner.cutoff());
+        routeShutdownSubscription = hostHttpAbortOperations.subscribe(options.localCut.hostShutdownSignal, () => {owner.cutoff();});
       }
       return await owner.run(async () => {
         await journal.prepare(); owner.assertActive();
@@ -184,7 +185,7 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
           }}),
           accept: async (socket, signal) => {
             let connection: ReturnType<ReturnType<typeof createNodeHostHttpConnection>["bindAcceptedSocket"]> | undefined;
-            const controller = new AbortController(); const abort = () => controller.abort();
+            const controller = new AbortController(); const abort = () => {controller.abort();};
             const subscription = hostHttpAbortOperations.subscribe(signal, abort);
             try {
               // Even TLS/resolver work is refused before installed admission.

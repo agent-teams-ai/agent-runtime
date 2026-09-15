@@ -373,7 +373,7 @@ export const closeContainedTurnExecution = async (
         evidenceId: outcome.evidenceId,
         kind: "record_ambiguity",
       });
-    } else if (outcome.kind === "completed") {
+    } else if ((outcome.kind as unknown) === "completed") {
       assertContainedTurnExactRecord("provider completion observation", outcome, ["kind", "outcome"]);
       const attestation = await attestContainedTurnExecution(dependencies, current, trustedScope, outcome);
       if (attestation.kind === "indeterminate") {

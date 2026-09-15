@@ -130,7 +130,7 @@ const portableCollisionKey = (name: string): string =>
   name.normalize("NFKC").toUpperCase().toLowerCase().normalize("NFKC");
 
 const containsControlCharacter = (value: string): boolean =>
-  [...value].some(character => {
+  Array.from(value).some(character => {
     const codePoint = character.codePointAt(0);
     return codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f);
   });
@@ -420,7 +420,7 @@ export const scanContainedTurnWorkspace = async (
     if (cleanupErrors.length > 0) {
       throw new AggregateError([primary, ...cleanupErrors], "contained turn scan and cleanup failed");
     }
-    throw primary;
+    throw primary instanceof Error ? primary : new Error("Workspace scan failed", {cause: primary});
   }
   if (cleanupErrors.length > 0) {
     throw new AggregateError(cleanupErrors, "contained turn scan cleanup failed");
@@ -479,7 +479,7 @@ export const scanContainedTurnWorkspaceHandle = async (
     if (cleanupErrors.length > 0) {
       throw new AggregateError([primary, ...cleanupErrors], "contained turn scan and cleanup failed");
     }
-    throw primary;
+    throw primary instanceof Error ? primary : new Error("Workspace scan failed", {cause: primary});
   }
   if (cleanupErrors.length > 0) {
     throw new AggregateError(cleanupErrors, "contained turn scan cleanup failed");

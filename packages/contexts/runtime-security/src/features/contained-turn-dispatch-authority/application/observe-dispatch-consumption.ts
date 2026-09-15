@@ -37,7 +37,7 @@ const closedObservation = (
   const scope = Object.freeze({ tenantId: scopeFields.tenantId as string,
     projectId: scopeFields.projectId as string, scopeDigest: scopeFields.scopeDigest as string });
   const outcome = mapConsumeResultToV1(fields.outcome as DispatchConsumeResult,
-    operations.digestCanonical) as DispatchConsumeResult;
+    operations.digestCanonical);
   if (outcome.status === "conflict" || outcome.status === "indeterminate") {
     throw new TypeError("invalid persisted outcome");
   }
@@ -81,14 +81,16 @@ export type DispatchObservationResult =
 const receiptBindsObservation = (
   observed: Awaited<ReturnType<DispatchAuthorityOperations["observe"]>> & object,
   query: DispatchObservationQuery,
-): boolean => observed.outcome.status === "consumed" &&
+): boolean => {
+  const candidate: {readonly purpose: unknown} = query;
+  return observed.outcome.status === "consumed" &&
   validConsumptionReceipt(observed.outcome.receipt) &&
   sameScope(observed.outcome.receipt.scope, query.scope) &&
   observed.outcome.receipt.operationId === observed.operationId &&
   observed.outcome.receipt.grantRequestId === observed.grantRequestId &&
   observed.outcome.receipt.requestDigest === observed.requestDigest &&
   observed.outcome.receipt.operationId === query.operationId &&
-  observed.outcome.receipt.purpose === query.purpose &&
+  observed.outcome.receipt.purpose === candidate.purpose &&
   observed.outcome.receipt.requestDigest === query.requestDigest &&
   observed.outcome.receipt.providerId === query.providerId &&
   observed.outcome.receipt.authorityGeneration === query.authorityGeneration &&
@@ -99,6 +101,7 @@ const receiptBindsObservation = (
   observed.outcome.receipt.authorityRevision === query.expectedAuthorityRevision &&
   observed.outcome.receipt.constraintsDigest === query.expectedConstraintsDigest &&
   observed.outcome.receipt.containmentPolicyDigest === query.expectedContainmentPolicyDigest;
+};
 
 const lifecycleBindsReceipt = (
   consumption: NonNullable<
@@ -110,8 +113,9 @@ const lifecycleBindsReceipt = (
     return consumption.settlement === undefined;
   }
   const settlement = consumption.settlement;
+  const candidate: {readonly contractVersion: unknown} | undefined = settlement;
   return settlement !== undefined &&
-    settlement.contractVersion === "contained-turn-dispatch-settlement/v1" &&
+    candidate?.contractVersion === "contained-turn-dispatch-settlement/v1" &&
     isBoundedDispatchIdentifier(settlement.settlementRequestId) &&
     settlement.providerId === consumption.receipt.providerId &&
     settlement.authorityGeneration === consumption.receipt.authorityGeneration &&

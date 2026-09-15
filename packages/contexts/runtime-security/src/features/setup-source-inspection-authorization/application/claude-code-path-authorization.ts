@@ -28,7 +28,7 @@ const rootLabels: Readonly<Record<ClaudeCodeRootKind, string>> = {
 };
 
 const safePathSegment = (value: string): string =>
-  [...value]
+  Array.from(value)
     .map(character =>
       /^[A-Za-z0-9._-]$/u.test(character)
         ? character
@@ -48,20 +48,18 @@ export type VerifiedClaudeCodePath =
 export const compareClaudeCodeText = (left: string, right: string): number =>
   left === right ? 0 : left < right ? -1 : 1;
 
-export const rethrowClaudeCodeCancellation = (
-  error: unknown,
-  signal?: AbortSignal,
-): void => {
+
+const isCancellation = (error: unknown): boolean =>
+  typeof error === "object" && error !== null &&
+  "name" in error && error.name === "AbortError";
+
+export const rethrowClaudeCodeCancellation = (error: unknown, signal?: AbortSignal): void => {
   signal?.throwIfAborted();
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "name" in error &&
-    error.name === "AbortError"
-  ) {
+  if (isCancellation(error)) {
     throw error;
   }
 };
+
 
 export const invalidExistingClaudeCodePath = (
   observation: CanonicalPathObservation,

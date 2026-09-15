@@ -27,6 +27,7 @@ export const createDeferredCodexNativeBrokerFiles = (
     catalogSource: Buffer.from(input.catalogSource)};
   let binding: "unbound" | "binding" | "bound" | "failed" = "unbound";
   let closed = false;
+  const isClosed = (): boolean => closed;
   let installer: CodexNativeBrokerFileInstaller | undefined;
   let joining: Promise<void> | undefined;
   const cutoff = () => {
@@ -44,7 +45,7 @@ export const createDeferredCodexNativeBrokerFiles = (
       try {
         if (retainedHostPrivateRootBinding(rootOwner) === undefined) {throw new TypeError("Native files require captured root");}
         installer = createCodexNativeBrokerFileInstaller({...options, rootOwner});
-        if (closed) {cutoff(); throw new TypeError("Native file binding closed");}
+        if (isClosed()) {cutoff(); throw new TypeError("Native file binding closed");}
         binding = "bound";
       } catch (error) {binding = "failed"; throw error;}
     },

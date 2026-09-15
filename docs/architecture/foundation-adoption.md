@@ -28,13 +28,13 @@ capability below has an AR-owned configuration and executes in `pnpm check`.
 | `repository.agent-workflow` | enabled | Canonical `AGENTS.md`, agent pointers, changed/fast/full checks |
 | `quality.gate-runner` | enabled for advisory CI diagnostics | AR-owned `ci-diagnostics` profile containing only the existing root `lint` and no-emit `typecheck` scripts; canonical JSON is emitted in the Ubuntu `check` job after the independent complete gate |
 | `workspace.dependency-declarations` | enabled | Exact pnpm catalog and workspace protocol policy |
-| `architecture.source-dependencies` | enabled for current TypeScript evidence code | All current TypeScript experiment roots form one explicitly non-production boundary; production package boundaries are added when scaffolded |
+| `architecture.source-dependencies` | enabled with explicit source owners | Production, test and development roots have consumer-owned boundaries; native roots retain their existing semantic owners |
 | `quality.executable-specifications` | enabled for synthetic architecture evidence | The ADR-0006 JSON oracle, ADR-0010 disposition, independent evaluator, property/mutation checks, and XState path evidence support accepted ADR-0009 and ADR-0010 authority; they do not bind or implement a production runtime or establish implementation/deployment qualification |
 | `documentation.local-references` | enabled | Local links and GitHub anchors under `docs`; the root README only points into that governed tree |
 | `governance.architecture-decisions` | enabled | Stable ADR frontmatter, lifecycle index, and immutable accepted baseline |
 | unified documentation protocol | stable23 installed | Portable profile v3, strict frozen-document sidecar, executable portable Skill and byte-preservation gate; published Foundation 1.3.3 / Docs 0.6.0 / managed adapter 0.2.8 are pinned in the manifest and registry lockfile |
 | `quality.suppression-governance` | enabled | Inline suppressions require exact, expiring AR-owned waivers; security and access-control suppressions are non-waivable |
-| `quality.source-coverage` and canonical type-aware lint | pending | The first installed run found existing protected-rule debt; Foundation rejects baselines and production overrides for those rules, so activation moves to a focused remediation PR |
+| `quality.source-coverage` and canonical type-aware lint | enabled | The public Foundation route checks exact production selection, compiler coverage, protected rules, suppression governance and native gate reachability without a baseline or weakened production override |
 | TypeScript and Oxlint base presets | enabled | Existing Node correctness and consumer-owned production/test maintainability budgets remain blocking |
 | deterministic scaffolding | configured and consumer-qualified | Four exact bounded-context package identities are owned by immutable ADR-0005; synthetic Plan, Apply, and generated-package checks are blocking |
 | `package.public-api-compatibility` | gated | Enable when an independently consumed TypeScript package has release-owned API evidence |
@@ -75,20 +75,16 @@ forbidden.
 
 ## Type-aware quality activation
 
-The exact `oxlint-tsgolint` toolchain is installed, but Agent Runtime does not
-claim active `quality.source-coverage` adoption in this checkpoint. The first
-full installed route on commit `a2294ea81f82e5fd18eab8c5bac53551366efa1b`
-reported 1,384 existing protected-rule diagnostics in the Ubuntu `check` job.
-Engineering Foundation correctly requires its typed and maintainability rules
-at error severity and rejects production overrides that weaken them. Its public
-route also requires direct execution, so an advisory wrapper or mutable debt
-baseline cannot be presented as active adoption.
+Agent Runtime activates the published `quality.source-coverage` capability
+through `quality:coverage:scope` in the fast gate and `lint:typed` in the full
+gate. The profile uses the six existing production package tsconfigs, the
+consumer-owned source and feature-module authorities, and the existing native
+quality terminal. The protected Foundation presets remain unchanged.
 
-The follow-up must remediate coherent owner-local slices until the unmodified
-public route passes. Each slice keeps the existing product contract and focused
-tests, and no production root may be excluded. Until then, the current blocking
-base lint, typecheck, source-dependency checks, suppression governance, product
-tests and platform jobs remain authoritative.
+The route rejects missing production sources, compiler gaps, stale or unknown
+suppressions, weakened protected rules and no-op or indirect command wiring.
+A baseline cannot satisfy the route. Existing product, architecture, typecheck,
+test and applicable platform gates remain independently required.
 
 ## Bounded-context scaffolding
 

@@ -34,7 +34,7 @@ export const replayCustody = async (
   }
   await existing.opening;
   const candidate = await resolveCandidate();
-  if ((existing.launchBinding?.reservation?.fingerprint ?? existing.fingerprint)?.fingerprintSha256 !== candidate.fingerprint.fingerprintSha256) {
+  if ((existing.launchBinding.reservation?.fingerprint ?? existing.fingerprint)?.fingerprintSha256 !== candidate.fingerprint.fingerprintSha256) {
     throw new HostCustodyFingerprintConflictError("Host Custody attempt fingerprint conflict");
   }
   return Object.freeze({ custodyRef: existing.custodyRef });

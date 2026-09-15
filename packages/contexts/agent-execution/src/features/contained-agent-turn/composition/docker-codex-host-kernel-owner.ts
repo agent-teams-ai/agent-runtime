@@ -107,7 +107,7 @@ const captureNativeFiles = (filesOwner: DeferredCodexNativeBrokerFiles): Deferre
   for (const key of ["bindRoot", "install", "cutoff", "quiesce", "snapshot"] as const) {
     const method = methods[key];
     if (!isHostCustodyDataCallback(method)) {throw new TypeError("Docker native file owner unavailable");}
-    Object.defineProperty(captured, key, {value: (...args: unknown[]) => apply(method, filesOwner, args), enumerable: true});
+    Object.defineProperty(captured, key, {value: (...args: unknown[]): unknown => apply(method, filesOwner, args), enumerable: true});
   }
   return Object.freeze(captured);
 };
@@ -133,9 +133,10 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
   const records = new Map<string, Retained>();
   const raw = new DockerKernelHostCustody(options.cleanupMilliseconds);
   let disposed = false;
+  const isDisposed = (): boolean => disposed;
   const attemptOwner: ContainedTurnKernelCustodyAttemptOwner = Object.freeze({
     async prepare(input: Prepare) {
-      if (disposed || records.has(input.kernel.custodyId) || records.size >= 64) {throw new TypeError("Docker attempt unavailable");}
+      if (isDisposed() || records.has(input.kernel.custodyId) || records.size >= 64) {throw new TypeError("Docker attempt unavailable");}
       const kernel = Object.freeze({...input.kernel, adapterSnapshot: Object.freeze({...input.kernel.adapterSnapshot}),
         providerAccessSnapshot: Object.freeze({...input.kernel.providerAccessSnapshot})});
       const record = await options.launchRecords.resolve({attemptId: kernel.attemptId, authorityVectorDigest: kernel.authorityVectorDigest,
@@ -143,7 +144,7 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
         credentialGeneration: kernel.providerAccessSnapshot.credentialGeneration, effectId: kernel.effectId,
         intentMode: kernel.intentMode, operationId: kernel.operationId, providerBinding: input.providerBinding,
         workspaceAuthority: input.workspaceAuthority, workspaceId: kernel.workspaceId});
-      if (disposed || records.has(kernel.custodyId) || record === undefined || record.boundary.workspaceRef !== input.workspaceAuthority.canonicalPath) {
+      if (isDisposed() || records.has(kernel.custodyId) || record === undefined || record.boundary.workspaceRef !== input.workspaceAuthority.canonicalPath) {
         throw new TypeError("Docker launch record unavailable");
       }
       const plan = createCodexAppServerFinalizableLaunchPlan({boundary: record.boundary, executablePath: record.executablePath,
@@ -168,7 +169,7 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
   });
   const preparation = Object.freeze({async prepareClaimed(claimed: DockerLinuxClaimedPreparation) {
     const retained = [...records.values()].find(record => record.ref === claimed.underlyingCustodyRef);
-    if (disposed || retained === undefined || retained.claimed !== undefined || finishClaimed === undefined || imageInitLock === undefined) {
+    if (isDisposed() || retained === undefined || retained.claimed !== undefined || finishClaimed === undefined || imageInitLock === undefined) {
       return Object.freeze({kind: "unsupported" as const, reason: "broker" as const});
     }
     retained.claimed = claimed; // One-use before calling resource selection.
@@ -187,8 +188,8 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
         linkNativeStartDiagnostic(nativeFiles, filesOwner);
         retained.nativeFiles = nativeFiles;
         const subscription = hostHttpAbortOperations.subscribe(claimed.signal, () => {retained.effectOwner?.cutoff(); nativeFiles.cutoff();});
-        retained.removeAbort = () => hostHttpAbortOperations.remove(subscription);
-        if (disposed || hostHttpAbortOperations.aborted(claimed.signal)) {throw new TypeError("Docker selection closed");}
+        retained.removeAbort = () => {hostHttpAbortOperations.remove(subscription);};
+        if (isDisposed() || hostHttpAbortOperations.aborted(claimed.signal)) {throw new TypeError("Docker selection closed");}
         const {nativeFiles: _nativeFiles, workspaceBackingTreeOwnership: _ownership, ...dependencies} = selected;
         const deadlineEpochMs = Date.now() + dependencies.deadlines.routeLifetimeMs;
         const hostOwners = createDockerHostReservationOwners({roots, raw, custodyRef: claimed.underlyingCustodyRef,
@@ -211,7 +212,7 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
             const binding = await hostOwners.capturedRoot();
             const proof = await captureDockerWorkspaceCustody(lifecycle, launch, {signal: claimed.signal, deadlineEpochMs});
             await hostOwners.capturedRoot();
-            if (disposed || claimed.signal.aborted) {throw new TypeError("Docker workspace capture closed");}
+            if (isDisposed() || claimed.signal.aborted) {throw new TypeError("Docker workspace capture closed");}
             retained.effectOwner = createDockerCodexEffectCustodyOwner({proof, launch,
               root: roots.get(claimed.underlyingCustodyRef)!, reservationCustodyRef: claimed.underlyingCustodyRef,
               hostLifecycleGenerationSha256: binding.hostLifecycleGenerationSha256,
@@ -245,19 +246,19 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
             const actual = nativeStartStep(nativeFiles, "process-input-projection", () =>
               captureDockerCodexProcessInput(process, result.plan, paths, claimed.signal, () => !disposed));
             nativeStartStep(nativeFiles, "reservation-evidence-finalize", () =>
-              raw.reservation(claimed.underlyingCustodyRef).evidence.finalize(result.plan, actual.exec));
+              {raw.reservation(claimed.underlyingCustodyRef).evidence.finalize(result.plan, actual.exec);});
             return result;
           },
         });
         retained.owner = owner;
         return {owner, hostOwners};
       });
-      nativeStartStep(filesOwner, "host-attach", () => constructed.hostOwners.attach(constructed.owner));
+      nativeStartStep(filesOwner, "host-attach", () => {constructed.hostOwners.attach(constructed.owner);});
       const flight = constructed.owner.preparation.prepareClaimed(claimed);
       raw.reservation(claimed.underlyingCustodyRef).evidence.trackPreparation(flight);
       return await flight;
     } catch (error) {
-      try {retained.nativeFiles?.cutoff();} finally {retained.removeAbort?.(); delete retained.removeAbort;}
+      try {retained.nativeFiles.cutoff();} finally {retained.removeAbort?.(); delete retained.removeAbort;}
       throw error;
     }
   }});
@@ -273,6 +274,7 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
 
 function disposeDockerCustodyRecords(records: ReadonlyMap<string, Retained>, raw: DockerKernelHostCustody): void {
   let failed = false;
+  const hasFailed = (): boolean => failed;
   let failure: unknown;
   const close = (action: () => void) => {try {action();} catch (error) {failed = true; failure ??= error;}};
   for (const record of records.values()) {
@@ -283,6 +285,6 @@ function disposeDockerCustodyRecords(records: ReadonlyMap<string, Retained>, raw
     close(() => record.removeAbort?.());
     delete record.removeAbort;
   }
-  close(() => raw.dispose());
-  if (failed) {throw failure;}
+  close(() => {raw.dispose();});
+  if (hasFailed()) {throw failure;}
 }

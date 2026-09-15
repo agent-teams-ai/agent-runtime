@@ -21,6 +21,7 @@ import type {
 import type {
   ConsumeTransactionDecision,
   ConsumeTransactionSnapshot,
+  PersistedConsumption,
 } from "./ports/outbound/dispatch-consumption-repository.js";
 import {
   snapshotExactDispatchRecord, snapshotExactDispatchVariant,
@@ -28,7 +29,61 @@ import {
 import { mapConsumeResultToV1, mapSettlementResultToV1 } from
   "./contained-turn-dispatch-authority-v1-result-mappers.js";
 
-// oxlint-disable-next-line eslint/complexity -- closed projection enumerates persisted variants.
+type PersistedConsumeRequest = NonNullable<ConsumeTransactionSnapshot["priorRequest"]>;
+
+const closePriorConsumeRequest = (
+  value: unknown,
+  operations: DispatchAuthorityOperations,
+): PersistedConsumeRequest => {
+  const prior = snapshotExactDispatchRecord(value,
+    ["scope", "providerId", "authorityGeneration", "operationId", "grantRequestId",
+      "requestDigest", "requestFingerprint", "outcome"]);
+  const scope = prior === undefined ? undefined : snapshotExactDispatchRecord(prior.scope,
+    ["tenantId", "projectId", "scopeDigest"]);
+  if (prior === undefined || scope === undefined ||
+      ![scope.tenantId, scope.projectId, scope.scopeDigest, prior.providerId,
+        prior.authorityGeneration, prior.operationId, prior.grantRequestId,
+        prior.requestDigest, prior.requestFingerprint].every(isBoundedDispatchIdentifier)) {
+    throw new TypeError("invalid prior consume request");
+  }
+  const outcome = mapConsumeResultToV1(prior.outcome as DispatchConsumeResult,
+    operations.digestCanonical);
+  if (outcome.status === "conflict" || outcome.status === "indeterminate") {
+    throw new TypeError("invalid persisted consume outcome");
+  }
+  return Object.freeze({ scope: Object.freeze({ tenantId: scope.tenantId as string,
+    projectId: scope.projectId as string, scopeDigest: scope.scopeDigest as string }),
+  providerId: prior.providerId as string, authorityGeneration: prior.authorityGeneration as string,
+  operationId: prior.operationId as string, grantRequestId: prior.grantRequestId as string,
+  requestDigest: prior.requestDigest as string,
+  requestFingerprint: prior.requestFingerprint as string, outcome });
+};
+
+const closePersistedConsumption = (
+  value: unknown,
+  operations: DispatchAuthorityOperations,
+): PersistedConsumption => {
+  const record = snapshotExactDispatchVariant(value,
+    [["receipt", "lifecycleState"], ["receipt", "lifecycleState", "settlement"]]);
+  if (record === undefined || (record.lifecycleState !== "consumed_pending" &&
+      record.lifecycleState !== "claim_committed" &&
+      record.lifecycleState !== "abandoned_without_claim")) {
+    throw new TypeError("invalid persisted consumption");
+  }
+  const consumed = mapConsumeResultToV1(
+    { status: "consumed", receipt: record.receipt } as DispatchConsumeResult,
+    operations.digestCanonical);
+  if (consumed.status !== "consumed") {throw new TypeError("invalid persisted receipt");}
+  if (!("settlement" in record)) {
+    return Object.freeze({ receipt: consumed.receipt, lifecycleState: record.lifecycleState });
+  }
+  const settled = mapSettlementResultToV1(
+    { status: "settled", receipt: record.settlement } as never);
+  if (settled.status !== "settled") {throw new TypeError("invalid settlement");}
+  return Object.freeze({ receipt: consumed.receipt,
+    lifecycleState: record.lifecycleState, settlement: settled.receipt });
+};
+
 const closeConsumeSnapshot = (
   value: unknown,
   operations: DispatchAuthorityOperations,
@@ -38,59 +93,17 @@ const closeConsumeSnapshot = (
     ["authority", "consumption"], ["priorRequest", "authority", "consumption"]] as const;
   const fields = snapshotExactDispatchVariant(value, variants);
   if (fields === undefined) {throw new TypeError("invalid consume snapshot");}
-  let priorRequest;
-  if ("priorRequest" in fields) {
-    const prior = snapshotExactDispatchRecord(fields.priorRequest,
-      ["scope", "providerId", "authorityGeneration", "operationId", "grantRequestId",
-        "requestDigest", "requestFingerprint", "outcome"]);
-    const scope = prior === undefined ? undefined : snapshotExactDispatchRecord(prior.scope,
-      ["tenantId", "projectId", "scopeDigest"]);
-    if (prior === undefined || scope === undefined ||
-        ![scope.tenantId, scope.projectId, scope.scopeDigest, prior.providerId,
-          prior.authorityGeneration, prior.operationId, prior.grantRequestId,
-          prior.requestDigest, prior.requestFingerprint].every(isBoundedDispatchIdentifier)) {
-      throw new TypeError("invalid prior consume request");
-    }
-    const outcome = mapConsumeResultToV1(prior.outcome as DispatchConsumeResult,
-      operations.digestCanonical);
-    if (outcome.status === "conflict" || outcome.status === "indeterminate") {
-      throw new TypeError("invalid persisted consume outcome");
-    }
-    priorRequest = Object.freeze({ scope: Object.freeze({ tenantId: scope.tenantId as string,
-      projectId: scope.projectId as string, scopeDigest: scope.scopeDigest as string }),
-    providerId: prior.providerId as string, authorityGeneration: prior.authorityGeneration as string,
-    operationId: prior.operationId as string, grantRequestId: prior.grantRequestId as string,
-    requestDigest: prior.requestDigest as string,
-    requestFingerprint: prior.requestFingerprint as string, outcome });
-  }
+  const priorRequest = "priorRequest" in fields
+    ? closePriorConsumeRequest(fields.priorRequest, operations)
+    : undefined;
   const authority = "authority" in fields ? snapshotDispatchAuthorityHead(fields.authority) : undefined;
   if ("authority" in fields && authority === undefined) {
     return Object.freeze({ ...(priorRequest === undefined ? {} : { priorRequest }),
       authority: Object.freeze({}) as DispatchAuthorityHead });
   }
-  let consumption;
-  if ("consumption" in fields) {
-    const record = snapshotExactDispatchVariant(fields.consumption,
-      [["receipt", "lifecycleState"], ["receipt", "lifecycleState", "settlement"]]);
-    if (record === undefined || (record.lifecycleState !== "consumed_pending" &&
-        record.lifecycleState !== "claim_committed" &&
-        record.lifecycleState !== "abandoned_without_claim")) {
-      throw new TypeError("invalid persisted consumption");
-    }
-    const consumed = mapConsumeResultToV1(
-      { status: "consumed", receipt: record.receipt } as DispatchConsumeResult,
-      operations.digestCanonical);
-    if (consumed.status !== "consumed") {throw new TypeError("invalid persisted receipt");}
-    if ("settlement" in record) {
-      const settled = mapSettlementResultToV1(
-        { status: "settled", receipt: record.settlement } as never);
-      if (settled.status !== "settled") {throw new TypeError("invalid settlement");}
-      consumption = Object.freeze({ receipt: consumed.receipt,
-        lifecycleState: record.lifecycleState, settlement: settled.receipt });
-    } else {
-      consumption = Object.freeze({ receipt: consumed.receipt, lifecycleState: record.lifecycleState });
-    }
-  }
+  const consumption = "consumption" in fields
+    ? closePersistedConsumption(fields.consumption, operations)
+    : undefined;
   return Object.freeze({ ...(priorRequest === undefined ? {} : { priorRequest }),
     ...(authority === undefined ? {} : { authority }),
     ...(consumption === undefined ? {} : { consumption }) });

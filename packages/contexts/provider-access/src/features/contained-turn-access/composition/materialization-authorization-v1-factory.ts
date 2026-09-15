@@ -6,7 +6,7 @@ import type {
 } from "../application/ports/outbound/materialization-authorization-repository.js";
 import { createCredentialMaterializationAuthorizationAdapter } from "../adapters/inbound/materialization-authorization-mapper.js";
 import { detachedDispatchData } from "../adapters/dispatch-consumption-data.js";
-import { exactProviderAccessDataRecord, isNativePromise, isRuntimeProxy } from "../adapters/provider-access-data.js";
+import { intrinsicMethod, exactProviderAccessDataRecord, isNativePromise, isRuntimeProxy } from "../adapters/provider-access-data.js";
 import { snapshotAuthorizationRecord, type AuthorizationRecord } from "../domain/materialization-authorization.js";
 
 export interface MaterializationAuthorizationV1Dependencies {
@@ -15,8 +15,8 @@ export interface MaterializationAuthorizationV1Dependencies {
 }
 
 type Callable = (...args: never[]) => unknown;
-const intrinsicBind = Function.prototype.bind;
-const intrinsicFunctionToString = Function.prototype.toString;
+const intrinsicBind = intrinsicMethod(Function.prototype, "bind");
+const intrinsicFunctionToString = intrinsicMethod(Function.prototype, "toString");
 const nativeCallableSource = /\{\s*\[native code\]\s*\}\s*$/u;
 
 const isCapturableMethod = (value: unknown): value is Callable => {
@@ -109,7 +109,7 @@ const transactionFacade = (value: unknown, isOpen: () => boolean): Materializati
   });
 };
 
-const snapshotDependencies = (value: MaterializationAuthorizationV1Dependencies): MaterializationAuthorizationV1Dependencies => {
+const snapshotDependencies = (value: unknown): MaterializationAuthorizationV1Dependencies => {
   if (value === null || typeof value !== "object" || Array.isArray(value) || isRuntimeProxy(value)) {
     throw new TypeError("dependencies must be a plain data record");
   }
@@ -140,18 +140,17 @@ const snapshotDependencies = (value: MaterializationAuthorizationV1Dependencies)
       const detachedSelector = detachedDispatchData("authorization transaction selector", selector);
       let callbackUsed = false;
       let callbackOpen = true;
-      let callbackRejectedReplay = false;
-      let callbackCompleted = false;
+      const completion = { rejectedReplay: false, completed: false };
       let callbackResult: T | undefined;
       const acknowledgement = Object.freeze({});
       const callback = async (rawTransaction: unknown): Promise<typeof acknowledgement> => {
         if (callbackUsed || !callbackOpen) {
-          callbackRejectedReplay = true;
+          completion.rejectedReplay = true;
           throw new TypeError("repository transaction callback is closed");
         }
         callbackUsed = true;
         callbackResult = await work(transactionFacade(rawTransaction, () => callbackOpen));
-        callbackCompleted = true;
+        completion.completed = true;
         return acknowledgement;
       };
       let returned: unknown;
@@ -160,7 +159,7 @@ const snapshotDependencies = (value: MaterializationAuthorizationV1Dependencies)
       } finally {
         callbackOpen = false;
       }
-      if (callbackRejectedReplay || !callbackCompleted || returned !== acknowledgement) {throw new TypeError("repository substituted the transaction result");}
+      if (completion.rejectedReplay || !completion.completed || returned !== acknowledgement) {throw new TypeError("repository substituted the transaction result");}
       return callbackResult as T;
     },
   });

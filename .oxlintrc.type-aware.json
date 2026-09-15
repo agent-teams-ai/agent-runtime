@@ -1,0 +1,15 @@
+{
+  "extends": [
+    "./node_modules/@agent-teams/engineering-foundation/presets/oxlint/type-aware.json",
+    "./node_modules/@agent-teams/engineering-foundation/presets/oxlint/maintainability.json"
+  ],
+  "options": {
+    "respectEslintDisableDirectives": false,
+    "reportUnusedDisableDirectives": "error"
+  },
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/node_modules/**",
+    "**/target/**"
+  ]
+}

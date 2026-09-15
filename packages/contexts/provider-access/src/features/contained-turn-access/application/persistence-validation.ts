@@ -20,7 +20,7 @@ export const verifiedDigest = async (digest: DispatchConsumptionDigest, payload:
 export const verifiedBindingHead = (
   value: unknown, selector: { readonly provider: DispatchProvider; readonly scope: DispatchScopeValue },
 ): DispatchBindingHead => {
-  const head = snapshotDispatchBindingHead(value as DispatchBindingHead);
+  const head = snapshotDispatchBindingHead(value);
   if (head.provider !== selector.provider || !sameScope(head, selector.scope)) {throw new TypeError("binding head is foreign to the selector");}
   return head;
 };
@@ -37,10 +37,12 @@ export const verifiedConsumption = async (
   return receipt;
 };
 
-const receiptIdentityMatches = (receipt: DispatchConsumedReceipt, entry: DispatchConsumptionJournalEntry): boolean =>
-  receipt.grantRequestId === entry.grantRequestId && receipt.operationId === entry.operationId && receipt.provider === entry.provider &&
-  receipt.purpose === entry.purpose && receipt.claimBindingDigest === entry.claimBindingDigest && receipt.requestDigest === entry.requestDigest &&
+const receiptIdentityMatches = (receipt: DispatchConsumedReceipt, entry: DispatchConsumptionJournalEntry): boolean => {
+  const purpose: unknown = receipt.purpose;
+  return receipt.grantRequestId === entry.grantRequestId && receipt.operationId === entry.operationId && receipt.provider === entry.provider &&
+  purpose === entry.purpose && receipt.claimBindingDigest === entry.claimBindingDigest && receipt.requestDigest === entry.requestDigest &&
   sameScope(receipt.scope, entry.scope);
+};
 
 const receiptBindingMatches = (receipt: DispatchConsumedReceipt, entry: DispatchConsumptionJournalEntry): boolean =>
   receipt.acceptedAuthorityDigest === entry.binding.acceptedAuthorityDigest && receipt.accessRef === entry.binding.accessRef &&
@@ -89,10 +91,12 @@ export const verifiedJournalEntry = async (
   return entry;
 };
 
-export const journalMatchesCommand = (entry: DispatchConsumptionJournalEntry, command: DispatchConsumeCommand): boolean =>
-  entry.grantRequestId === command.grantRequestId && entry.operationId === command.operationId && entry.provider === command.provider &&
-  entry.purpose === command.purpose && entry.claimBindingDigest === command.claimBindingDigest && sameScope(entry.scope, command.scope) &&
+export const journalMatchesCommand = (entry: DispatchConsumptionJournalEntry, command: DispatchConsumeCommand): boolean => {
+  const purpose: unknown = entry.purpose;
+  return entry.grantRequestId === command.grantRequestId && entry.operationId === command.operationId && entry.provider === command.provider &&
+  purpose === command.purpose && entry.claimBindingDigest === command.claimBindingDigest && sameScope(entry.scope, command.scope) &&
   JSON.stringify(entry.binding) === JSON.stringify(command.binding);
+};
 
 export const verifiedSettlement = async (
   value: unknown, selector: Extract<DispatchConsumptionTransactionSelector, { readonly kind: "settle" }>, digest: DispatchConsumptionDigest,

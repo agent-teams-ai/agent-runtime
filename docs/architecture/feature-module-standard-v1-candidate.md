@@ -267,6 +267,13 @@ declared dynamic runtime reference. Feature tests, production sources,
 nonliteral loaders without that exact literal, helpers outside `tests/package/`,
 and relative paths that canonicalize outside that directory still fail closed.
 Public feature entrypoints may expose only their own contracts.
+The profile reserves exact `index.ts` and `internal.ts` paths for every feature.
+A feature without a declared `contracts` role may omit its public `index.ts` file;
+it must retain its curated `internal.ts` for composition. Declaring `contracts`
+requires the public file. A present public file still exposes only owned contracts,
+and imports of an absent public file still fail resolution. This conditional file
+requirement does not change feature scope, roles, edges, or package exports and
+requires no placeholder API, empty export, or lint suppression.
 Public, internal, and package assembly entrypoints reject wildcard re-exports.
 Declared feature edges must connect declared features and must correspond to
 observed imports; unused edge declarations are rejected as future-state

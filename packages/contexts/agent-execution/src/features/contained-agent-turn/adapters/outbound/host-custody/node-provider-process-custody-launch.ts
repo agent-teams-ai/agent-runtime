@@ -96,7 +96,7 @@ export const launchGuardedProvider = (options: GuardedProviderLaunchOptions): Gu
     failure.name = descriptorFailureClass(error);
     throw failure;
   }
-  if (authority === undefined) {throw new DescriptorAuthorityAcquisitionError();}
+  assertDescriptorAuthority(authority);
   let guardian: StableProcessGroupGuardian;
   try {
     const cooperative = live.plan?.containmentProfile === "cooperative-darwin-posix-process-group";
@@ -118,7 +118,7 @@ export const launchGuardedProvider = (options: GuardedProviderLaunchOptions): Gu
         return attached && (route === undefined || route.beforeLaunch());
       },
       ...(cooperative ? { canonicalLaunch: {
-        command: live.plan!.executablePath,
+        command: live.plan.executablePath,
         cwd: live.workspaceRef,
         executableDev: live.executable!.dev.toString(),
         executableIno: live.executable!.ino.toString(),
@@ -189,4 +189,8 @@ export const launchGuardedProvider = (options: GuardedProviderLaunchOptions): Gu
     return true;
   });
   return Object.freeze({ authority, child, exit, guardian, process, sdkProcess, stderr, stdout });
+};
+
+const assertDescriptorAuthority = (authority: VerifiedLaunchDescriptors | undefined): void => {
+  if (authority === undefined) {throw new DescriptorAuthorityAcquisitionError();}
 };

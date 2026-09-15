@@ -18,7 +18,7 @@ export const observeCall = <T>(call: () => T | PromiseLike<T>): Promise<Observed
   }
   return Promise.resolve(started).then<ObservedSettlement<T>, ObservedSettlement<T>>(
     value => ({ kind: "fulfilled", value }),
-    error => ({ error, kind: "rejected" }),
+    (error: unknown) => ({ error, kind: "rejected" }),
   );
 };
 export class OperationDeadlineClock {
@@ -40,15 +40,16 @@ export class OperationDeadlineClock {
     return this.#latest;
   }
   public async pauseUntil(deadline: number, signal: AbortSignal): Promise<"abandoned" | "elapsed"> {
-    if (signal.aborted) {
+    const abandoned = (): boolean => signal.aborted;
+    if (abandoned()) {
       return "abandoned";
     }
     try {
       await this.#waitUntil(deadline, signal);
     } catch {
-      return signal.aborted ? "abandoned" : "elapsed";
+      return abandoned() ? "abandoned" : "elapsed";
     }
-    return signal.aborted ? "abandoned" : "elapsed";
+    return abandoned() ? "abandoned" : "elapsed";
   }
   public async settle<T>(
     observed: Promise<ObservedSettlement<T>>,
@@ -97,7 +98,7 @@ export class OperationDeadlineClock {
     }
     let listener: (() => void) | undefined;
     const promise = new Promise<BoundedSettlement<never>>(resolve => {
-      listener = () => resolve({ kind: "abandoned" });
+      listener = () => { resolve({ kind: "abandoned" }); };
       signal.addEventListener("abort", listener, { once: true });
     });
     return {

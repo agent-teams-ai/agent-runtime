@@ -62,10 +62,11 @@ export const detachAndFreezeContainedTurnValue = <Value>(value: Value): Value =>
     invariant(!hasContainedTurnLoneSurrogate(value), "contained-turn text must not contain lone surrogates");
     return value;
   }
-  invariant(typeof value === "object" && value !== undefined, "contained-turn values must be canonical data");
+  invariant(typeof value === "object", "contained-turn values must be canonical data");
   if (Array.isArray(value)) {
     assertContainedTurnCanonicalArray(value);
-    return Object.freeze(value.map(item => detachAndFreezeContainedTurnValue(item))) as Value;
+    const items: readonly unknown[] = value;
+    return Object.freeze(items.map(item => detachAndFreezeContainedTurnValue(item))) as Value;
   }
   assertContainedTurnExactRecord("contained-turn value", value, Object.keys(value));
   const detached = Object.fromEntries(

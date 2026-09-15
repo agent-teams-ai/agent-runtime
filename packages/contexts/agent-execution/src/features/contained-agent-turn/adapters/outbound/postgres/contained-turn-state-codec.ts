@@ -116,7 +116,8 @@ const deepFreeze = <Value>(value: Value): Value => {
     const candidate = pending.pop();
     if (candidate === null || typeof candidate !== "object" || visited.has(candidate)) {continue;}
     visited.add(candidate);
-    pending.push(...Object.values(candidate));
+    const children: unknown[] = Object.values(candidate);
+    pending.push(...children);
   }
   for (const candidate of [...visited].toReversed()) {Object.freeze(candidate);}
   return value;
@@ -182,8 +183,7 @@ export const decodeContainedTurnState = (
 ): ContainedTurnKernelOperation => {
   assertContainedTurnDataRecord("persisted state envelope", state);
   const inferredVersion = persistedCodecVersion ??
-    (state !== null && typeof state === "object" && !Array.isArray(state) &&
-      "codecVersion" in state ? Number(state.codecVersion) : 1);
+    ("codecVersion" in state ? Number(state.codecVersion) : 1);
   if (!Number.isSafeInteger(inferredVersion) || inferredVersion < 1) {
     throw new ContainedTurnStateQuarantineError(inferredVersion, "malformed");
   }

@@ -268,7 +268,7 @@ export const settleInMemory = (
       outcome: result,
     });
   }
-  const settlement = result.status === "settled" && persistence?.settle
+  const settlement = result.status === "settled" && persistence?.settle === true
     ? result.receipt
     : undefined;
   if (settlement !== undefined && consumption !== undefined &&

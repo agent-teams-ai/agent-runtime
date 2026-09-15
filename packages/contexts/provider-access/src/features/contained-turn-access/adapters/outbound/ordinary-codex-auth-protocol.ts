@@ -12,7 +12,7 @@ function refuse(reason: OrdinaryCodexAuthReason = 'validation'): never { throw n
 const absent = (value: unknown) => value === null || value === undefined;
 const canonical = (value: unknown): string => {
   if (Array.isArray(value)) { return '[' + value.map(canonical).join(',') + ']'; }
-  if (value && typeof value === 'object') {
+  if (value !== null && typeof value === 'object') {
     const record = authRecord(value);
     return '{' + Object.keys(record).toSorted().map(key => JSON.stringify(key) + ':' + canonical(record[key])).join(',') + '}';
   }
@@ -40,7 +40,7 @@ export function verifyAuthConfig(result: Record<string, unknown>, home: string, 
   if (text.includes(source) || config.model !== ORDINARY_CODEX_AUTH_MODEL ||
       config.cli_auth_credentials_store !== 'file' || config.project_doc_max_bytes !== 0 ||
       config.allow_login_shell !== false || config.web_search !== 'disabled' ||
-      !absent(config.model_catalog_json) || config.mcp_servers && Object.keys(authRecord(config.mcp_servers)).length > 0) { refuse('config_policy'); }
+      !absent(config.model_catalog_json) || Boolean(config.mcp_servers) && Object.keys(authRecord(config.mcp_servers)).length > 0) { refuse('config_policy'); }
   const features = authRecord(config.features);
   if (AUTH_DISABLED_FEATURES.some(feature => features[feature] !== false)) { refuse('config_features'); }
   if (config.chatgpt_base_url !== 'https://chatgpt.com/backend-api/') { refuse('config_endpoint'); }

@@ -16,13 +16,13 @@ const copyBoundedIdentifier = (value: string, limit: number): string | undefined
     ? value
     : undefined;
 
-const copyContainedTurnReference = (value: string, limit: number): string | undefined =>
+const copyContainedTurnReference = (value: unknown, limit: number): string | undefined =>
   typeof value === "string" && !isContainedTurnAccessAuthorityIdentity(value) && value.length > 0 && value.length <= limit && !value.includes("\u0000")
     ? value
     : undefined;
 
 export const copyTrustedContainedTurnScope = (
-  scope: ContainedTurnCompositionScope,
+  scope: unknown,
 ): ContainedTurnCompositionScope | undefined => {
   try {
     if (scope === null || typeof scope !== "object" || types.isProxy(scope)) { return; }

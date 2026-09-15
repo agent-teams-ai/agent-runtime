@@ -1,5 +1,7 @@
 import type {
   DockerContainerAuthority,
+  DockerContainerCreate,
+  DockerLogFrame,
   DockerContainerStateFacts,
   DockerEngineIdentity,
 } from "./docker-engine-port.js";
@@ -74,3 +76,15 @@ export const sameFakeAuthority = (
   left.launchFingerprintSha256 === right.launchFingerprintSha256 &&
   left.operationNonceSha256 === right.operationNonceSha256 &&
   left.ownerIdentitySha256 === right.ownerIdentitySha256;
+
+export interface FakeContainer {
+  readonly authority: DockerContainerAuthority;
+  input: DockerContainerCreate;
+  removed: boolean;
+  state: DockerContainerStateFacts;
+}
+
+export interface FakeLogPlan {
+  readonly delayed: boolean;
+  readonly frames: readonly DockerLogFrame[];
+}

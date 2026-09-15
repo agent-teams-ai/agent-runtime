@@ -7,7 +7,7 @@ export const DOCKER_EGRESS_RESOURCE_KINDS = Object.freeze([
 ] as const);
 export type DockerEgressResourceKind = typeof DOCKER_EGRESS_RESOURCE_KINDS[number];
 export const DOCKER_EGRESS_CLEANUP_ORDER = Object.freeze(
-  DOCKER_EGRESS_RESOURCE_KINDS.toReversed() as DockerEgressResourceKind[],
+  DOCKER_EGRESS_RESOURCE_KINDS.toReversed(),
 );
 
 /** Canonical identities are adapter-issued prefix + 256 random/digest bits. */

@@ -1,4 +1,4 @@
-import {createHash} from "node:crypto";
+import {snapshotStreamEvidence, newStreamEvidence, streamTerminal, type MutableStreamEvidence} from "./docker-custody-init-observation.js";
 
 import {
   DOCKER_CUSTODY_CHILD_SIGNALS,
@@ -22,26 +22,12 @@ import {
 import type {
   DockerCustodyInitRuntimeOptions, DockerCustodyInitSnapshot, DockerCustodyInitSyscalls, DockerCustodyOutputStream,
   DockerCustodyOutputWriteResult, DockerCustodyProviderOutputHandle, DockerCustodyProviderRootExit,
-  DockerCustodyProviderRootHandle, DockerCustodyStreamEvidence,
+  DockerCustodyProviderGeneration as ProviderGeneration,
 } from "./docker-custody-init-runtime-types.js";
 import {DockerCustodyControlWriter} from "./docker-custody-init-control-writer.js";
 import {DockerCustodyProviderInputWriter} from "./docker-custody-init-input.js";
 import {boundedInteger, identityEqual, monotonicNow, opaqueHandle, safeEqual, safeMonotonicDeadline} from "./docker-custody-init-guards.js";
 export type * from "./docker-custody-init-runtime-types.js";
-interface MutableStreamEvidence {
-  bytes: number; eof: boolean; eofPending: boolean; hash: ReturnType<typeof createHash>; pendingBytes: Uint8Array | null;
-  pendingCursor: number; status: DockerCustodyStreamEvidence["status"];
-}
-interface ProviderGeneration {
-  readonly pid: number;
-  readonly rootHandle: DockerCustodyProviderRootHandle; readonly stderr: DockerCustodyProviderOutputHandle; readonly stdout: DockerCustodyProviderOutputHandle;
-}
-const EMPTY_SHA256 = createHash("sha256").digest("hex");
-const newStreamEvidence = (): MutableStreamEvidence => ({
-  bytes: 0, eof: false, eofPending: false, hash: createHash("sha256"), pendingBytes: null, pendingCursor: 0, status: "open",
-});
-const streamTerminal = (stream: MutableStreamEvidence): boolean =>
-  stream.eof || stream.status === "failed" || stream.status === "overflow";
 
 export class DockerCustodyInitRuntime {
   readonly #allowedEnvironmentNames: ReadonlySet<string>;
@@ -70,10 +56,10 @@ export class DockerCustodyInitRuntime {
   readonly #shutdownGraceMs: number;
   readonly #signalEvidence: DockerCustodySignalObservation[] = [];
   #startFenced = false;
-  #stderr = newStreamEvidence();
+  readonly #stderr = newStreamEvidence();
   readonly #stdin: DockerCustodyProviderInputWriter;
   #stopDeadlineMonotonicMs: number | undefined; #stopReason: DockerCustodyContainmentRequest["reason"] | undefined;
-  #stdout = newStreamEvidence();
+  readonly #stdout = newStreamEvidence();
   readonly #syscalls: DockerCustodyInitSyscalls;
   readonly #writeControl: (message: DockerCustodyInitMessage) => "accepted" | "blocked";
   public readonly maximumStdinBytes: number;
@@ -120,6 +106,9 @@ export class DockerCustodyInitRuntime {
         switch (message.kind) {
           case "host-handshake": case "host-signal": case "provider-exec": case "provider-input": case "provider-input-eof":
             this.receive(message); break;
+          case "container-containment-request": case "init-ready": case "provider-drain-complete": case "provider-drain-failed":
+          case "provider-exec-ack": case "provider-instance": case "provider-observation": case "provider-output":
+          case "provider-signal-observation":
           default: throw new Error("Host control channel carried an init-only message");
         }
       }
@@ -158,7 +147,7 @@ export class DockerCustodyInitRuntime {
     try {
       const child = this.#syscalls.spawnProvider(Object.freeze({argv: Object.freeze([...message.argv]), clearSupplementaryGroups: true,
         environment: Object.freeze(environment), executablePath: this.#executablePath, executableSha256: this.#executableSha256, gid: message.gid,
-        inheritedDescriptors: Object.freeze([0, 1, 2]) as readonly [0, 1, 2], noNewPrivileges: true, shell: false, uid: message.uid}));
+        inheritedDescriptors: Object.freeze([0, 1, 2] as const), noNewPrivileges: true, shell: false, uid: message.uid}));
       if (child.kind === "not-started") {this.#rejectExec(); return;}
       const rootHandle = child.handle as object; const stderrHandle = child.stderr as object; const stdoutHandle = child.stdout as object;
       if (!Number.isSafeInteger(child.pid) || child.pid <= 1 || !opaqueHandle(child.handle) || !opaqueHandle(child.stderr) ||
@@ -260,7 +249,8 @@ export class DockerCustodyInitRuntime {
     let result: DockerCustodyOutputWriteResult;
     try {
       result = this.#syscalls.writeProviderOutput(stream, offered);
-      if ((result.status !== "accepted" && result.status !== "blocked") || !Number.isSafeInteger(result.committedBytes) ||
+      const status: unknown = result.status;
+      if ((status !== "accepted" && status !== "blocked") || !Number.isSafeInteger(result.committedBytes) ||
         result.committedBytes < 0 || result.committedBytes > offered.byteLength ||
         result.status === "accepted" && result.committedBytes !== offered.byteLength ||
         result.status === "blocked" && result.committedBytes === offered.byteLength) {
@@ -339,7 +329,7 @@ export class DockerCustodyInitRuntime {
     const generation = this.#generation;
     if (generation !== undefined && this.#providerRootTracked) {
       try {
-        const observation = this.#syscalls.signalProviderRoot(generation.rootHandle, signal);
+        const observation: unknown = this.#syscalls.signalProviderRoot(generation.rootHandle, signal);
         if (observation !== "absent" && observation !== "sent") {this.#poison(); return;}
         result = observation;
       } catch {result = "failed";}
@@ -495,12 +485,12 @@ export class DockerCustodyInitRuntime {
     const evidence = this.#containmentEvidence;
     if (evidence === undefined || !this.#integrityFailed) {return;}
     try {
-      const result = this.#writeControl(evidence);
+      const result: unknown = this.#writeControl(evidence);
       if (result === "accepted") {this.#containmentEvidence = undefined; this.#containmentRequested = true;
         this.#pendingContainmentReason = undefined; return;}
       if (result === "blocked") {return;}
-    } catch {this.#containmentEvidence = undefined; if (!this.#integrityFailed) {this.#poison();} return;}
-    this.#containmentEvidence = undefined; if (!this.#integrityFailed) {this.#poison();}
+    } catch {this.#containmentEvidence = undefined; return;}
+    this.#containmentEvidence = undefined;
   }
   #writeProviderObservation(
     observation: DockerCustodyProviderObservation["observation"], exitCode: number | null, signal: DockerCustodyChildSignal | null,
@@ -512,12 +502,10 @@ export class DockerCustodyInitRuntime {
       signal, treeEmptyClaim: "not-claimed"}), generation, onAccepted);
   }
   public snapshot(): DockerCustodyInitSnapshot {
-    const stream = (value: MutableStreamEvidence): DockerCustodyStreamEvidence => Object.freeze({bytes: value.bytes, eof: value.eof,
-      sha256: value.bytes === 0 ? EMPTY_SHA256 : value.hash.copy().digest("hex"), status: value.status});
     return Object.freeze({acknowledgement: this.#acknowledgement, closure: this.#closure, containmentRequested: this.#containmentRequested,
       failureCleanupComplete: this.#failureCleanupComplete,
       phase: this.#phase, providerRootTracked: this.#providerRootTracked,
       requestId: this.#request?.requestId ?? null, signalEvidence: Object.freeze([...this.#signalEvidence]), startFenced: this.#startFenced,
-      stderr: stream(this.#stderr), stdinBytes: this.#stdin.bytes, stdinStatus: this.#stdin.status, stdout: stream(this.#stdout)});
+      stderr: snapshotStreamEvidence(this.#stderr), stdinBytes: this.#stdin.bytes, stdinStatus: this.#stdin.status, stdout: snapshotStreamEvidence(this.#stdout)});
   }
 }

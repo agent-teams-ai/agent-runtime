@@ -117,7 +117,7 @@ export const decodeCodexResponseEnvelope = (message: CodexJsonRecord): CodexResp
 export const codexResponseResult = (
   message: CodexJsonRecord,
   requestId: string,
-): unknown | typeof CODEX_APP_SERVER_TIMEOUT => {
+): unknown => {
   const response = decodeCodexResponseEnvelope(message);
   if (response.id !== requestId) {return CODEX_APP_SERVER_TIMEOUT;}
   if (response.kind === "error") {
@@ -148,7 +148,7 @@ export class BoundedCodexJsonLineReader {
     if (remaining <= 0) {return CODEX_APP_SERVER_TIMEOUT;}
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<typeof CODEX_APP_SERVER_TIMEOUT>(resolve => {
-      timer = setTimeout(() => resolve(CODEX_APP_SERVER_TIMEOUT), remaining);
+      timer = setTimeout(() => {resolve(CODEX_APP_SERVER_TIMEOUT);}, remaining);
     });
     const result = await Promise.race([this.#pending, timeout]);
     if (timer !== undefined) {clearTimeout(timer);}
@@ -216,7 +216,7 @@ export class BoundedCodexJsonLineReader {
   }
 
   public async read(deadline: number): Promise<CodexReadOutcome> {
-    while (true) {
+    for (;;) {
       const line = this.#takeLineFromChunk();
       if (line !== undefined) {
         const decoded = this.#decodeLine(line);
@@ -229,7 +229,7 @@ export class BoundedCodexJsonLineReader {
       }
       const next = await this.#nextChunk(deadline);
       if (next === CODEX_APP_SERVER_TIMEOUT) {return CODEX_APP_SERVER_TIMEOUT;}
-      if (next.done) {
+      if (next.done === true) {
         this.#ended = true;
       } else {
         this.#chunk = Buffer.from(next.value);

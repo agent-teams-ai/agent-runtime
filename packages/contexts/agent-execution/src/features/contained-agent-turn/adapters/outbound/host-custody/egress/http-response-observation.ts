@@ -9,7 +9,7 @@ const responseErrorCode = (error: StrictHttpResponseError): HttpEgressAnomalyCod
   cancelled: "inbound_cancelled", stalled: "upstream_stalled", malformed: "upstream_malformed",
   truncated: "upstream_truncated", oversized: "output_oversized", backpressure: "output_backpressure_failed",
   redirect: "redirect_rejected",
-})[error.kind] as HttpEgressAnomalyCode;
+} satisfies Record<typeof error.kind, HttpEgressAnomalyCode>)[error.kind];
 
 const responseAnomaly = (status: number): HttpEgressAnomalyCode => {
   if (status === 401 || status === 403) {return "upstream_auth_rejected";}

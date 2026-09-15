@@ -111,7 +111,7 @@ const assertProductionTuple = (options: CreateClaudeCurrentKernelOwnerOptions) =
     options.platformTarget.platform, options.platformTarget.architecture,
   );
   const snapshot = options.adapterSnapshot;
-  const manifest = options.manifest;
+  const manifest: Readonly<Record<keyof typeof options.manifest, unknown>> = options.manifest;
   if (
     snapshot.provider !== "claude" ||
     snapshot.adapterRevision !== tuple.adapterRevision ||
@@ -126,8 +126,8 @@ const assertProductionTuple = (options: CreateClaudeCurrentKernelOwnerOptions) =
     manifest.effectCardinality !== "one_coarse_effect_per_operation" ||
     manifest.providerAttemptCardinality !== "at_most_one" ||
     manifest.unknownCapabilityPolicy !== "fail_closed" ||
-    !exactStringArray(manifest.supportedModes, ["analysis", "workspace-write"]) ||
-    !exactStringArray(manifest.requiredProofKinds, CONTAINED_TURN_REQUIRED_PROOF_KINDS)
+    !exactStringArray(options.manifest.supportedModes, ["analysis", "workspace-write"]) ||
+    !exactStringArray(options.manifest.requiredProofKinds, CONTAINED_TURN_REQUIRED_PROOF_KINDS)
   ) {
     throw new TypeError(
       `Claude production composition requires SDK ${tuple.sdkVersion}, bundled CLI ${tuple.bundledCliVersion}, and its exact ADR-0010 tuple`,

@@ -163,8 +163,8 @@ async function exercise(mode: "normal" | "refused" | "foreign" | "material" | "m
         return next(specifier.slice(0, -3) + `.ts?${mode}`, context);
       }
       if (context.parentURL?.includes("/host-custody/darwin-attempt-owner-") &&
-          ["./darwin-attempt-owner-bridge.js", "./darwin-attempt-owner-final-launch.js",
-            "./darwin-attempt-owner-io.js", "./darwin-attempt-owner-protocol-definitions.js", "./darwin-attempt-owner-protocol.js"].includes(specifier)) {
+          ["./darwin-attempt-owner-bridge.js", "./darwin-attempt-owner-events.js", "./darwin-attempt-owner-final-launch.js",
+            "./darwin-attempt-owner-io.js", "./darwin-attempt-owner-protocol-definitions.js", "./darwin-attempt-owner-protocol.js", "./darwin-attempt-owner-workspace-tree.js"].includes(specifier)) {
         return next(specifier.slice(0, -3) + ".ts", context);
       }
       return next(specifier, context);

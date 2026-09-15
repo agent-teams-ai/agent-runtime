@@ -8,7 +8,7 @@ import { createDispatchConsumptionAdapter } from "../adapters/inbound/dispatch-c
 import {
   canonicalDispatchJournalEntry, detachedDispatchData,
 } from "../adapters/dispatch-consumption-data.js";
-import { isNativePromise, isRuntimeProxy } from "../adapters/provider-access-data.js";
+import { intrinsicMethod, isNativePromise, isRuntimeProxy } from "../adapters/provider-access-data.js";
 import {
   snapshotDispatchBindingHead, snapshotDispatchConsumedReceipt, snapshotDispatchSettlementOutcome,
   type DispatchConsumedReceipt, type DispatchSettlementOutcome,
@@ -19,8 +19,8 @@ export interface DispatchConsumptionV1Dependencies {
 }
 
 type Callable = (...args: never[]) => unknown;
-const intrinsicBind = Function.prototype.bind;
-const intrinsicFunctionToString = Function.prototype.toString;
+const intrinsicBind = intrinsicMethod(Function.prototype, "bind");
+const intrinsicFunctionToString = intrinsicMethod(Function.prototype, "toString");
 const nativeCallableSource = /\{\s*\[native code\]\s*\}\s*$/u;
 
 const isCapturableMethod = (value: unknown): value is Callable => {
@@ -106,7 +106,7 @@ const transactionFacade = (value: unknown): DispatchConsumptionTransaction => {
   });
 };
 
-const snapshotDependencies = (value: DispatchConsumptionV1Dependencies): DispatchConsumptionV1Dependencies => {
+const snapshotDependencies = (value: unknown): DispatchConsumptionV1Dependencies => {
   if (value === null || typeof value !== "object" || isRuntimeProxy(value) || Array.isArray(value)) {
     throw new TypeError("dependencies must be a plain data record");
   }
@@ -138,14 +138,13 @@ const snapshotDependencies = (value: DispatchConsumptionV1Dependencies): Dispatc
     async transact<T>(selector: Parameters<DispatchConsumptionRepository["transact"]>[0], work: (transaction: DispatchConsumptionTransaction) => Promise<T>) {
       type CallbackState = "open" | "active" | "succeeded" | "failed" | "closed";
       let callbackState: CallbackState = "open";
-      let callbackCompleted = false;
-      let callbackRejectedReplay = false;
+      const completion = { completed: false, rejectedReplay: false };
       let callbackResult: T | undefined;
       const transactionAcknowledgement = Object.freeze({});
       const detachedSelector = detachedDispatchData("repository transaction selector", selector);
       const callback = (transaction: unknown): Promise<typeof transactionAcknowledgement> => {
         if (callbackState !== "open") {
-          callbackRejectedReplay = true;
+          completion.rejectedReplay = true;
           throw new TypeError("repository transaction callback is closed");
         }
         callbackState = "active";
@@ -155,7 +154,7 @@ const snapshotDependencies = (value: DispatchConsumptionV1Dependencies): Dispatc
         return (async () => {
           try {
             callbackResult = await work(facade);
-            callbackCompleted = true;
+            completion.completed = true;
             callbackState = "succeeded";
             return transactionAcknowledgement;
           } catch (error) {
@@ -171,7 +170,7 @@ const snapshotDependencies = (value: DispatchConsumptionV1Dependencies): Dispatc
       } finally {
         callbackState = "closed";
       }
-      if (callbackRejectedReplay || !callbackCompleted || returned !== transactionAcknowledgement) {
+      if (completion.rejectedReplay || !completion.completed || returned !== transactionAcknowledgement) {
         throw new TypeError("repository substituted the transaction result");
       }
       return callbackResult as T;

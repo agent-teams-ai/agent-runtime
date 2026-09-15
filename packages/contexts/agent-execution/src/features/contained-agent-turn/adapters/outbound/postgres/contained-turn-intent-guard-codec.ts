@@ -24,7 +24,8 @@ export const encodeContainedTurnIntentGuard = (receipt: ContainedTurnPreventionR
 };
 
 export const decodeContainedTurnIntentGuard = (row: ContainedTurnGuardRow): ContainedTurnPreventionReceipt => {
-  if (row.state_within_budget !== true || row.state_codec_version !== 1) {
+  const withinBudget: unknown = row.state_within_budget;
+  if (withinBudget !== true || row.state_codec_version !== 1) {
     throw new TypeError("intent guard budget or codec version rejected");
   }
   // Validate closed, shallow structure and bounded scalar fields before serializing/hash work.

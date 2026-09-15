@@ -14,15 +14,16 @@ export class EgressOneShotLifecycle {
   #acquiring = false;
   #flight: Promise<ContainedTurnEgressResult> | undefined;
   #cancel!: () => void;
-  #cancelled = new Promise<void>(resolve => {this.#cancel = resolve;});
-  #owners = new Set<Promise<unknown>>();
+  readonly #cancelled = new Promise<void>(resolve => {this.#cancel = resolve;});
+  readonly #owners = new Set<Promise<unknown>>();
 
   public activate(): boolean {
     if (this.#state !== "open") {return false;}
     this.#state = "active"; return true;
   }
   public get active(): boolean {return this.#state === "active";}
-  public get quarantined(): boolean {return this.#state === "quarantined";}
+  private isQuarantined(): boolean {return this.#state === "quarantined";}
+  public get quarantined(): boolean {return this.isQuarantined();}
   public get transport(): EgressTransportV1 | undefined {return this.#transport;}
   public get writeExact(): ((input: unknown) => unknown) | undefined {return this.#writeExact;}
 
@@ -64,7 +65,7 @@ export class EgressOneShotLifecycle {
 
   public async dispose(): Promise<"closed" | "quarantined"> {
     if (this.#state === "closed") {return "closed";}
-    if (this.quarantined) {return "quarantined";}
+    if (this.isQuarantined()) {return "quarantined";}
     // Acquisition and close callbacks may themselves await disposal. Their unsettled resource
     // custody cannot be called closed; quarantine breaks the cycle and late settlement still cleans up.
     if (this.#acquiring || this.#closing) {
@@ -74,7 +75,7 @@ export class EgressOneShotLifecycle {
     this.#cancel();
     if (this.#flight !== undefined) {await this.#flight;}
     if (this.#owners.size > 0) {this.quarantine(); return "quarantined";}
-    if (this.quarantined || !await this.closeTransport()) {return "quarantined";}
+    if (this.isQuarantined() || !await this.closeTransport()) {return "quarantined";}
     this.releaseTransport(); this.#state = "closed"; return "closed";
   }
 }

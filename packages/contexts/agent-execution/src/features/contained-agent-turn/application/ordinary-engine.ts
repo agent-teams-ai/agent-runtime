@@ -62,13 +62,13 @@ const executeOrdinaryOperation = async (dependencies: OrdinaryTurnDependencies, 
     try {provider = await dependencies.providerAccess.resolveAndConsume(operation, controller.signal);}
     catch (error) {uncertainty = true; throw error;}
     const expiresAt = validateAuthorityDeadline(security, provider);
-    timers.push(setTimeout(() => controller.abort(), Math.max(1, expiresAt - Date.now() - 10000)));
+    timers.push(setTimeout(() => {controller.abort();}, Math.max(1, expiresAt - Date.now() - 10000)));
     await observeCancellation();
     // A rejected preparation may retain an allocated workspace, even on cancellation.
     try {workspace = await dependencies.workspace.prepare(operation, controller.signal);}
     catch (error) {uncertainty = true; throw error;}
     const materializeController = new AbortController();
-    const materializeTimeout = setTimeout(() => materializeController.abort(), Math.min(15000, expiresAt - Date.now() - 10000));
+    const materializeTimeout = setTimeout(() => {materializeController.abort();}, Math.min(15000, expiresAt - Date.now() - 10000));
     let credential: OrdinaryCredentialMaterial;
     try {credential = await provider.materialize(workspace, AbortSignal.any([controller.signal, materializeController.signal]));}
     finally {clearTimeout(materializeTimeout);}
@@ -135,7 +135,8 @@ const executeOrdinaryOperation = async (dependencies: OrdinaryTurnDependencies, 
       const close = async (): Promise<void> => {
         const closed = await owned.close(operation.output.length);
         if ("kind" in closed) {
-          if (launched || closed.kind !== "not_started" || closed.reservationId !== owned.reservationId) {throw new Error("ordinary closure mismatch");}
+          const closureKind: unknown = closed.kind;
+          if (launched || closureKind !== "not_started" || closed.reservationId !== owned.reservationId) {throw new Error("ordinary closure mismatch");}
         } else {
           for (const receipt of closed) {validateOrdinaryReceipt(receipt, operation);}
           if (!closed.some(receipt => receipt.kind === "process_group_closed" && receipt.reservationId === owned.reservationId)) {throw new Error("ordinary termination unproven");}
@@ -202,7 +203,7 @@ const submitOwnedOperation = async (dependencies: OrdinaryTurnDependencies, oper
   let failure: {error: unknown} | undefined;
   let cancellationFailed = false;
   try {
-    if (isDisposed() || options?.signal?.aborted) {await dependencies.operationStore.cancel(reference(operation)); controller.abort();}
+    if (isDisposed() || options?.signal?.aborted === true) {await dependencies.operationStore.cancel(reference(operation)); controller.abort();}
     try {options?.onAccepted?.(reference(operation));} catch {await dependencies.operationStore.cancel(reference(operation)); controller.abort();}
     result = {status: "observed", turn: view(await executeOrdinaryOperation(dependencies, operation, controller, flight))};
   } catch (error) {failure = {error};} finally {
@@ -263,8 +264,8 @@ export const createOrdinaryEngine = (dependencies: OrdinaryTurnDependencies): Or
       const cleaned = await Promise.allSettled([...flights.entries()].map(async ([id, flight]) => {
         await flight.cleanup?.(); flights.delete(id);
       }));
-      const errors = [...cancelled, ...completed, ...cleaned].flatMap(result => result.status === "rejected" ? [result.reason] : []);
+      const errors = [...cancelled, ...completed, ...cleaned].flatMap((result): unknown[] => result.status === "rejected" ? [result.reason] : []);
       if (errors.length > 0) {throw new AggregateError(errors, "ordinary disposal incomplete", {cause: errors[0]});}
-    })().catch(error => {disposal = undefined; throw error;}),
+    })().catch((error: unknown) => {disposal = undefined; throw error;}),
   };
 };

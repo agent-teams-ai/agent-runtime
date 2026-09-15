@@ -134,7 +134,7 @@ const portableRelativePath = (value: unknown, label: string): string => {
   }
   const components = value.split("/");
   for (const component of components) {
-    const containsForbiddenCharacter = [...component].some(character => {
+    const containsForbiddenCharacter = Array.from(component).some(character => {
       const codePoint = character.codePointAt(0);
       return codePoint === undefined || codePoint <= 0x1f || codePoint === 0x7f ||
         WINDOWS_FORBIDDEN_CHARACTERS.includes(character);

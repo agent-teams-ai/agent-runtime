@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { spawnSync } from 'node:child_process';
 import { isAbsolute, join } from 'node:path';
 import { existsSync } from 'node:fs';

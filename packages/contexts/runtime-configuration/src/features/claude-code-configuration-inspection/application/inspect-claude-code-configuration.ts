@@ -20,6 +20,7 @@ import {
   normalizeParsedClaudeCodeDocument, validateClaudeCodeJsonParseResult,
   validateClaudeCodeSemanticClassification,
 } from "./safe-semantic-boundary.js";
+import { copyBoundedUint8Array } from "./bounded-byte-copy.js";
 
 interface Dependencies {
   readonly digest: ConfigurationDigest;
@@ -46,12 +47,6 @@ const selectionBases = new Set([
   "home-default", "claude-config-dir", "session-primary-working-directory", "repository-root",
   "main-worktree-root", "legacy-starting-directory", "caller-explicit", "static-preview",
 ]);
-const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype) as object;
-const typedArrayByteLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, "byteLength")
-  ?.get as (this: Uint8Array) => number;
-const typedArrayName = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symbol.toStringTag)
-  ?.get as (this: Uint8Array) => string | undefined;
-const uint8ArraySet = Uint8Array.prototype.set;
 const exactObjectKeys = (value: unknown, allowed: readonly string[], required = allowed): boolean =>
   typeof value === "object" && value !== null && !Array.isArray(value) &&
   Object.getOwnPropertySymbols(value).length === 0 &&
@@ -59,6 +54,9 @@ const exactObjectKeys = (value: unknown, allowed: readonly string[], required = 
 
 const hmac = (digest: ConfigurationDigest, key: Uint8Array, domain: string, value: unknown): string =>
   `${domain}:hmac-sha256:${digest.hmacSha256Hex(key, JSON.stringify(value))}`;
+
+const descriptorValue = (descriptors: Readonly<Record<string, PropertyDescriptor>>, key: string): unknown =>
+  descriptors[key]?.value as unknown;
 
 const collectorPreimage = (plan: ClaudeCodeObservedSourcePlan) => ({
   bundleId: plan.collector.bundleId, id: plan.collector.id,
@@ -101,7 +99,8 @@ const validateCollector = (collector: ClaudeCodeObservedSourcePlan["collector"])
   if (!exactObjectKeys(collector, ["bundleId", "id", "observationEpoch", "platform", "version"])) {
     return "source_plan_invalid";
   }
-  if (collector.platform !== "darwin") {return "source_plan_invalid";}
+  const platform: string = collector.platform;
+  if (platform !== "darwin") {return "source_plan_invalid";}
   const identifiers = [collector.id, collector.version, collector.observationEpoch, collector.bundleId];
   return identifiers.every(value => identifier.test(value)) ? undefined : "source_plan_invalid";
 };
@@ -143,9 +142,10 @@ const validateSourceEvidence = (
   if (source.locationClaims !== undefined && !Array.isArray(source.locationClaims)) {return "source_plan_invalid";}
   if (!identifier.test(source.sourceId) || sourceIds.has(source.sourceId)) {return "source_plan_invalid";}
   if (source.observationEpoch !== observationEpoch) {return "source_plan_invalid";}
-  const claims = source.locationClaims ?? [];
+  const claims: readonly unknown[] = source.locationClaims ?? [];
   if (claims.length > CLAUDE_CODE_BUDGETS.locationClaimsPerSource) {return "source_plan_invalid";}
-  if (new Set(claims).size !== claims.length || claims.some(claim => !identifier.test(claim))) {
+  if (new Set(claims).size !== claims.length ||
+      claims.some(claim => typeof claim !== "string" || !identifier.test(claim))) {
     return "source_plan_invalid";
   }
   sourceIds.add(source.sourceId);
@@ -182,8 +182,8 @@ const validateAuthorizedSource = (
   }
   if (!pathWithin(source.custodyRoot.canonicalPath, source.canonicalPath)) {return "source_plan_invalid";}
   const root = plan.roots.find(item => item.rootId === source.custodyRoot.rootId);
-  if (source.custodyRoot.absolutePath !== root?.absolutePath ||
-      source.custodyRoot.canonicalPath !== root?.canonicalPath) {
+  if (root === undefined || source.custodyRoot.absolutePath !== root.absolutePath ||
+      source.custodyRoot.canonicalPath !== root.canonicalPath) {
     return "source_plan_invalid";
   }
   if (canonicalSources.has(source.canonicalPath)) {return "source_plan_invalid";}
@@ -213,10 +213,10 @@ const validateSources = (
 };
 
 const validatePlan = (plan: ClaudeCodeObservedSourcePlan): PlanDiagnostic | undefined => {
-  if (typeof plan !== "object" || plan === null || Array.isArray(plan)) {return "source_plan_unsupported";}
-  if (plan.contract !== CLAUDE_CODE_SOURCE_PLAN_CONTRACT || plan.claim !== "observed-files-only") {
-    return "source_plan_unsupported";
-  }
+  const candidate: unknown = plan;
+  if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) {return "source_plan_unsupported";}
+  const contract: string = plan.contract, claim: string = plan.claim;
+  if (contract !== CLAUDE_CODE_SOURCE_PLAN_CONTRACT || claim !== "observed-files-only") {return "source_plan_unsupported";}
   if (!exactObjectKeys(plan, ["claim", "collector", "contract", "roots", "sources"])) {
     return "source_plan_invalid";
   }
@@ -238,9 +238,11 @@ const semanticDigest = (
   dialect: string,
   classifier: ClaudeCodeConfigurationSemanticClassifier,
 ): string => {
-  const settings = definitions.map(definition => definition.key === "model"
-    ? [definition.key, definition.selection]
-    : [definition.key, definition.value]).toSorted(([left], [right]) => compareText(String(left), String(right)));
+  const settings = definitions.map<readonly [string, unknown]>(definition =>
+    definition.key === "model"
+      ? [definition.key, definition.selection]
+      : [definition.key, definition.value]
+  ).toSorted((left, right) => compareText(left[0], right[0]));
   const preimage = {
     classifierContract: classifier.contract, classifierRevision: classifier.revision,
     deferredObservations: deferredObservations.map(item => ({ form: item.form, key: item.key, status: item.status })),
@@ -256,19 +258,15 @@ const normalizeReadResult = (value: unknown):
   if (typeof value !== "object" || value === null || Array.isArray(value) ||
       Object.getOwnPropertySymbols(value).length > 0) {return undefined;}
   const descriptors = Object.getOwnPropertyDescriptors(value);
-  if (!Object.values(descriptors).every(item => item.enumerable && "value" in item && !item.get && !item.set)) {return undefined;}
-  const status = descriptors["status"]?.value;
+  if (!Object.values(descriptors).every(item => item.enumerable === true &&
+      "value" in item && item.get === undefined && item.set === undefined)) {return undefined;}
+  const status = descriptorValue(descriptors, "status");
   if (status === "read" && Object.keys(descriptors).length === 2) {
-    const sourceBytes: unknown = descriptors["bytes"]?.value;
-    let byteLength: number;
-    try {
-      if (Reflect.apply(typedArrayName, sourceBytes, []) !== "Uint8Array") {return undefined;}
-      byteLength = Reflect.apply(typedArrayByteLength, sourceBytes, []);
-    } catch {return undefined;}
-    if (byteLength > CLAUDE_CODE_BUDGETS.bytesPerSource) {return { status: "too-large" };}
-    const bytes = new Uint8Array(byteLength);
-    try {Reflect.apply(uint8ArraySet, bytes, [sourceBytes]);}
-    catch {return undefined;}
+    const bytes = copyBoundedUint8Array(
+      descriptorValue(descriptors, "bytes"), CLAUDE_CODE_BUDGETS.bytesPerSource,
+    );
+    if (bytes === "too-large") {return { status: "too-large" };}
+    if (bytes === undefined) {return undefined;}
     return { bytes, status };
   }
   if (Object.keys(descriptors).length === 1 &&
@@ -468,8 +466,10 @@ const evaluateSources = async (
 };
 
 export const createInspectClaudeCodeConfiguration = (dependencies: Dependencies): InspectClaudeCodeConfigurationUseCase => {
-  if (dependencies.semanticClassifier.contract !== claudeCodeConfigurationSemanticClassifierContract ||
-      !identifier.test(dependencies.semanticClassifier.revision)) {
+  const classifierContract: string = dependencies.semanticClassifier.contract;
+  if (classifierContract !== claudeCodeConfigurationSemanticClassifierContract || !identifier.test(
+    dependencies.semanticClassifier.revision,
+  )) {
     throw new TypeError("semanticClassifier must implement the versioned contract");
   }
   if (dependencies.sourceIdentityKey.byteLength < 32) {throw new TypeError("sourceIdentityKey must contain at least 32 bytes");}
@@ -495,7 +495,10 @@ export const createInspectClaudeCodeConfiguration = (dependencies: Dependencies)
         ...source,
         sourceRef: hmac(dependencies.digest, key, "claude-code-source/v2", [input.identityScope, topologyRef, source.sourceId]),
       })).toSorted((a, b) => compareText(a.sourceId, b.sourceId));
-      if (input.dialect !== CLAUDE_CODE_DIALECT || !dependencies.semanticClassifier.supportsDialect(input.dialect)) {
+      const requestedDialect: string = input.dialect;
+      if (requestedDialect !== CLAUDE_CODE_DIALECT || !dependencies.semanticClassifier.supportsDialect(
+        input.dialect,
+      )) {
         return buildResult({
           classifierRevision: dependencies.semanticClassifier.revision, collectorRef,
           diagnostics: [{ code: "configuration_dialect_unsupported" }],

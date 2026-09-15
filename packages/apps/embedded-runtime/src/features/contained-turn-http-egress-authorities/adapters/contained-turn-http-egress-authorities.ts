@@ -70,7 +70,8 @@ export const composeContainedTurnHttpEgressSession = (
   authorities: ContainedTurnHttpEgressAuthorities,
   ports: ContainedTurnHttpEgressBrokerPorts,
 ): HostHttpEgressSessionDependencies => {
-  if (ports === null || typeof ports !== "object" || types.isProxy(ports) ||
+  const candidate: unknown = ports;
+  if (candidate === null || typeof candidate !== "object" || types.isProxy(candidate) ||
       Object.getPrototypeOf(ports) !== Object.prototype) {throw invalid();}
   const supplied = Reflect.ownKeys(ports);
   const expected: readonly string[] = ["identity", "ids", "providerAccessSnapshot", "route",
@@ -80,9 +81,10 @@ export const composeContainedTurnHttpEgressSession = (
       expected.some(key => !Object.hasOwn(ports, key)) ||
       supplied.some(key => typeof key !== "string" || !expected.includes(key) && !optional.includes(key)) ||
       Object.values(Object.getOwnPropertyDescriptors(ports))
-        .some(descriptor => !("value" in descriptor) || !descriptor.enumerable)) {throw invalid();}
+        .some(descriptor => !("value" in descriptor) || descriptor.enumerable !== true)) {throw invalid();}
   for (const key of AUTHORITY_KEYS) {
-    if (typeof authorities[key] !== "object" || authorities[key] === null) {throw invalid();}
+    const authority: unknown = authorities[key];
+    if (typeof authority !== "object" || authority === null) {throw invalid();}
   }
   return Object.freeze({...ports, providerAccess: authorities.providerAccess,
     materializer: authorities.materializer, runtimeSecurity: authorities.runtimeSecurity,

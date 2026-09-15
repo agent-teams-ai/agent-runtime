@@ -87,7 +87,7 @@ export const createDockerHostReservationOwners = (input: Readonly<{
     let preparationFlight: ReturnType<typeof preparation.cleanup> | undefined;
     const cutoff = () => {
       cut = true;
-      for (const close of [cutoffProvider, () => input.nativeFiles.cutoff(), () => preparation.cutoff()]) {
+      for (const close of [cutoffProvider, () => {input.nativeFiles.cutoff();}, () => {preparation.cutoff();}]) {
         try {close();} catch {cutoffFailed = true;}
       }
     };

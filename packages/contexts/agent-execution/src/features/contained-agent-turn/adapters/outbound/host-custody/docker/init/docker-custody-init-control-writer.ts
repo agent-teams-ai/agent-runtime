@@ -30,7 +30,7 @@ export class DockerCustodyControlWriter<Generation> {
         const pending = this.#evidence[0];
         if (pending === undefined) {break;}
         if (pending.generation !== null && pending.generation !== current) {this.#fail(); break;}
-        let result: "accepted" | "blocked";
+        let result: unknown;
         try {result = this.#write(pending.message);} catch {this.#fail(); break;}
         if (result === "blocked") {break;}
         if (result !== "accepted") {this.#fail(); break;}

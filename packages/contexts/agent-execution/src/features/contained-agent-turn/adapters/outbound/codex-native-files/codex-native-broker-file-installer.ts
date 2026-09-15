@@ -69,9 +69,7 @@ export class NodeCodexNativeBrokerFileInstaller {
   public install(recipe: CodexNativeBrokerRecipe): Promise<void> {
     if (this.#flight !== undefined || this.#closing) {return Promise.reject(rejected());}
     this.#installing = true;
-    this.#flight = Promise.resolve().then(() => this.run(recipe)).finally(async () => {
-      try {await this.closeAll();} finally {this.#installing = false;}
-    });
+    this.#flight = Promise.resolve().then(() => this.run(recipe));
     return this.#flight;
   }
   private validateRecipe(recipe: CodexNativeBrokerRecipe): Buffer {
@@ -129,14 +127,18 @@ export class NodeCodexNativeBrokerFileInstaller {
     this.active();
   }
   private async run(recipe: CodexNativeBrokerRecipe): Promise<void> {
-    const config = this.validateRecipe(recipe);
-    const home = await this.home();
-    await this.write(home, "config.toml", config);
-    await this.write(home, "models.json", this.options.catalogSource);
-    validateCodexDirectoryIdentity("codexHome", this.options.boundary.codexHomeIdentity);
-    await this.options.revalidate();
-    await this.close(home);
-    this.active();
-    this.#installed = true;
+    try {
+      const config = this.validateRecipe(recipe);
+      const home = await this.home();
+      await this.write(home, "config.toml", config);
+      await this.write(home, "models.json", this.options.catalogSource);
+      validateCodexDirectoryIdentity("codexHome", this.options.boundary.codexHomeIdentity);
+      await this.options.revalidate();
+      await this.close(home);
+      this.active();
+      this.#installed = true;
+    } finally {
+      try {await this.closeAll();} finally {this.#installing = false;}
+    }
   }
 }

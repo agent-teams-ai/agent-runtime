@@ -24,7 +24,8 @@ const validateAcceptanceProof = (accepted: ContainedTurnAcceptedAuthorityHandoff
   assertContainedTurnExactRecord("acceptance binding", proof.binding, ["authorityVectorDigest", "operationId", "commandId", "commandFingerprint"]);
   validateContainedTurnIdentity("proof", proof.proofId);
   validateContainedTurnIdentity("command", proof.binding.commandId);
-  if (proof.kind !== "acceptance" || proof.binding.operationId !== accepted.operationId ||
+  const kind: unknown = proof.kind;
+  if (kind !== "acceptance" || proof.binding.operationId !== accepted.operationId ||
       proof.binding.authorityVectorDigest !== accepted.acceptedAuthorityVectorDigest ||
       proof.binding.commandFingerprint !== containedTurnCommandFingerprint({intent: accepted.intent, provider, scope: accepted.scope})) {
     throw new TypeError("accepted proof identity mismatch");

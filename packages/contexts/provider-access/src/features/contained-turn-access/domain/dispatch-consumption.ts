@@ -143,7 +143,7 @@ export const snapshotDispatchBindingHead = (value: unknown): DispatchBindingHead
     opaqueOwnerEvidenceRef: primitive("opaqueOwnerEvidenceRef", data.opaqueOwnerEvidenceRef), provider: data.provider,
     providerAccountRef: primitive("providerAccountRef", data.providerAccountRef),
     providerRouteRef: primitive("providerRouteRef", data.providerRouteRef), revocation: data.revocation, expiresAtControlTime,
-    ...snapshotDispatchScope({ projectId: data.projectId, scopeDigest: data.scopeDigest, tenantId: data.tenantId } as DispatchScopeValue),
+    ...snapshotDispatchScope({ projectId: data.projectId, scopeDigest: data.scopeDigest, tenantId: data.tenantId }),
   });
 };
 export const snapshotDispatchExpectation = (value: unknown): DispatchExpectationValue => {
@@ -280,16 +280,16 @@ export const canonicalJson = (value: unknown): string => {
     return String(value);
   }
   if (typeof value === "string") {
-    const encoded = JSON.stringify(value);
-    if (encoded === undefined) {throw new TypeError("canonical string is invalid");}
+    const encoded: unknown = JSON.stringify(value);
+    if (typeof encoded !== "string") {throw new TypeError("canonical string is invalid");}
     return encoded;
   }
   if (Array.isArray(value)) {return `[${value.map(canonicalJson).join(",")}]`;}
   if (typeof value !== "object") {throw new TypeError("canonical value is invalid");}
   const object = value as Readonly<Record<string, unknown>>;
   return `{${Object.keys(object).toSorted().map(key => {
-    const encodedKey = JSON.stringify(key);
-    if (encodedKey === undefined) {throw new TypeError("canonical key is invalid");}
+    const encodedKey: unknown = JSON.stringify(key);
+    if (typeof encodedKey !== "string") {throw new TypeError("canonical key is invalid");}
     return `${encodedKey}:${canonicalJson(object[key])}`;
   }).join(",")}}`;
 };

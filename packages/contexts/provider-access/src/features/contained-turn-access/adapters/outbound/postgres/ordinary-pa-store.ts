@@ -8,7 +8,7 @@ export const ordinaryPaDigest = (value: unknown): string => 'sha256:' + createHa
 const operationKey = (binding: OrdinaryPaBinding): string => ordinaryPaDigest([binding.tenantId, binding.projectId, binding.operationId]).slice(7);
 const fail = (): never => { throw new OrdinaryPaUnavailable(); };
 const record = (value: unknown): Record<string, unknown> => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) { return fail(); }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) { return fail(); }
   return value as Record<string, unknown>;
 };
 const text = (value: unknown): string => { if (typeof value !== 'string' || value.length < 1 || value.length > 512) { return fail(); } return value; };
@@ -61,7 +61,7 @@ export function createOrdinaryPaStore(pool: MaterializationPostgresPool) {
   });
   return Object.freeze({
     migrate: () => migrateOrdinaryPaSchema(transactions),
-    dispose: () => transactions.dispose(),
+    dispose: () => {transactions.dispose(); },
     observe: (input: OrdinaryPaBinding) => { const binding = snapshotOrdinaryPaBinding(input); return transaction(client => select(client, binding)); },
     async consume(input: OrdinaryPaBinding, selected: { generation: number; accountId: string; expiresAt: number }): Promise<OrdinaryPaSnapshot> {
       const binding = snapshotOrdinaryPaBinding(input);
@@ -89,7 +89,7 @@ export function createOrdinaryPaStore(pool: MaterializationPostgresPool) {
     },
     async settle(input: OrdinaryPaBinding, disposition: 'claim_committed' | 'abandoned_without_claim'): Promise<OrdinaryPaSnapshot> {
       const binding = snapshotOrdinaryPaBinding(input);
-      if (disposition !== 'claim_committed' && disposition !== 'abandoned_without_claim') { return fail(); }
+      if (readDisposition(disposition) === null) { return fail(); }
       return transaction(async client => {
         const current = await select(client, binding, true); if (!current || current.retiredAt === null) { return fail(); }
         if (current.disposition !== null && current.disposition !== disposition) { return fail(); }

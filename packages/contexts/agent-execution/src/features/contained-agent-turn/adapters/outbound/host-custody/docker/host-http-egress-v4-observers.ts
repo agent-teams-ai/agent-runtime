@@ -9,8 +9,14 @@ import type { LinuxExclusiveRouteEndpoint } from "./linux-exclusive-route-policy
 import type { HostHttpEgressV4Intent, HostHttpEgressV4Observation,
   HostHttpEgressV4ObservationOwner, HostHttpEgressV4Observed, HostHttpEgressV4Subject } from "./journal/host-http-egress-v4-types.js";
 
+const isObservationOwner = (value: unknown): value is object =>
+  value !== null && typeof value === "object" && !types.isProxy(value);
 const rejected = (): Error => new Error("Host HTTP egress V4 observation is unproven");
-const {evidence, recordIntent, recordObservation, target} = HostHttpEgressV4Journal.prototype;
+const hostHttpEgressV4JournalMethods: {
+  [Key in "evidence" | "recordIntent" | "recordObservation" | "target"]: (this: HostHttpEgressV4Journal,
+    ...args: Parameters<HostHttpEgressV4Journal[Key]>) => ReturnType<HostHttpEgressV4Journal[Key]>;
+} = HostHttpEgressV4Journal.prototype;
+const {evidence, recordIntent, recordObservation, target} = hostHttpEgressV4JournalMethods;
 
 /**
  * Joins the retained physical observation owners of one subject into the single
@@ -24,8 +30,8 @@ export const joinHostHttpEgressV4Observers = (
 ): HostHttpEgressV4ObservationOwner => {
   if (!Array.isArray(members) || members.length < 1 || members.length > 8 ||
     new Set(members).size !== members.length) {throw rejected();}
-  const readers = members.map(member => {
-    if (member === null || typeof member !== "object" || types.isProxy(member) ||
+  const readers = (members as readonly HostHttpEgressV4ObservationOwner[]).map(member => {
+    if (!isObservationOwner(member) ||
       typeof member.readObservation !== "function") {throw rejected();}
     return member.readObservation.bind(member);
   });
@@ -55,9 +61,9 @@ const READBACK_KEYS = ["scope", "openState", "listenerState", "admissionSealed",
 const SOCKET_KEYS = ["observed", "closeEvents", "awaitingClose", "droppedWithoutSocket"] as const;
 type Readback = Readonly<Record<typeof READBACK_KEYS[number], unknown>>;
 const readback = (listener: DockerHttpListenerReadback): Readback => {
-  if (listener === null || typeof listener !== "object" || types.isProxy(listener) ||
+  if (!isObservationOwner(listener) ||
     typeof listener.observe !== "function") {throw rejected();}
-  const observed: unknown = Reflect.apply(listener.observe, listener, []);
+  const observed: unknown = listener.observe();
   v4Exact(observed, [...READBACK_KEYS]);
   v4Exact(observed.sockets, [...SOCKET_KEYS]);
   if (observed.scope !== "retained-node-server-and-delivered-sockets" || !Array.isArray(observed.uncertainty) ||
@@ -95,7 +101,7 @@ export const createDockerHostHttpEgressObservers = (input: DockerHostHttpEgressO
   v4Exact(input, ["subject", "removal"]);
   const subject = v4Subject(input.subject);
   const removal = input.removal;
-  if (removal === null || typeof removal !== "object" || types.isProxy(removal) ||
+  if (!isObservationOwner(removal) ||
     typeof removal.readObservation !== "function") {throw rejected();}
   const readRemoval = removal.readObservation.bind(removal);
   if (removal.readNoCreationObservation !== undefined && typeof removal.readNoCreationObservation !== "function") {
@@ -177,8 +183,7 @@ export const createDockerHostHttpEgressObservers = (input: DockerHostHttpEgressO
           journalChecksumSha256: v4Digest(noCreation.journalChecksumSha256)}, noCreation);
         return;
       }
-      if (proof === undefined ||
-        canonicalDockerCustodyJson(validateDockerCustodyAttemptKey(proof.attemptKey)) !== canonicalDockerCustodyJson(subject.attempt) ||
+      if (canonicalDockerCustodyJson(validateDockerCustodyAttemptKey(proof.attemptKey)) !== canonicalDockerCustodyJson(subject.attempt) ||
         proof.authority.imageDigest !== subject.imageDigest) {throw rejected();}
       const authority: DockerContainerAuthority = Object.freeze({...proof.authority});
       await publish("container_absent", {container: dockerCustodyAuthoritySha256(authority),
@@ -204,7 +209,7 @@ export const createDockerHostHttpEgressObservers = (input: DockerHostHttpEgressO
      * `openNodeLinuxExclusiveRoute` supplies the lease. A lease alone still mints
      * nothing: a fresh acknowledged `route_intent` must already be recorded. */
     async observeRouteInstalled(owner: LinuxExclusiveRouteOwner, endpoint: LinuxExclusiveRouteEndpoint): Promise<void> {
-      if (!routeIntent || owner === null || typeof owner !== "object" || types.isProxy(owner) ||
+      if (!routeIntent || !isObservationOwner(owner) ||
         !Object.isFrozen(owner) || typeof owner.reserveFirstWrite !== "function" ||
         typeof owner.revoke !== "function" || typeof owner.releaseAfterContainerRemoval !== "function" ||
         !(owner.cutoff instanceof Promise)) {throw rejected();}

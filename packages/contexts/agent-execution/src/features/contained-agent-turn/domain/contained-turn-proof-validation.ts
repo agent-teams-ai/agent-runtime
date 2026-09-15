@@ -184,10 +184,8 @@ export function validateContainedTurnProofBinding(
       break;
     case "cancellation":
       invariant(operation.cancellation.kind === "requested", "cancellation proof requires a cancellation command");
-      if (operation.cancellation.kind === "requested") {
-        invariant(proof.binding.cancellationCommandId === operation.cancellation.command.cancellationCommandId, "cancellation proof command binding mismatch");
-        invariant(proof.binding.cancellationFingerprint === operation.cancellation.command.fingerprint, "cancellation proof fingerprint mismatch");
-      }
+      invariant(proof.binding.cancellationCommandId === operation.cancellation.command.cancellationCommandId, "cancellation proof command binding mismatch");
+      invariant(proof.binding.cancellationFingerprint === operation.cancellation.command.fingerprint, "cancellation proof fingerprint mismatch");
       break;
     case "containment":
       invariant(proof.binding.adapterRevision === operation.adapterSnapshot.adapterRevision, "containment proof adapter binding mismatch");
@@ -291,28 +289,24 @@ export function validateContainedTurnProofBinding(
       break;
     case "terminal_truth":
       invariant(operation.terminal.kind === "final", "terminal proof requires final terminal truth");
-      if (operation.terminal.kind === "final") {
-        invariant(proof.binding.terminalOutcome === operation.terminal.outcome, "terminal proof outcome mismatch");
-        invariant(proof.binding.satisfactionDigest === operation.terminal.satisfactionDigest, "terminal proof satisfaction mismatch");
-        invariant(proof.binding.requiredReceiptSetDigest === operation.requiredReceiptSetDigest, "terminal proof receipt-set digest mismatch");
-        invariant(proof.binding.requiredReceiptSetVersion === operation.requiredReceiptSet.setVersion, "terminal proof receipt-set version mismatch");
-      }
+      invariant(proof.binding.terminalOutcome === operation.terminal.outcome, "terminal proof outcome mismatch");
+      invariant(proof.binding.satisfactionDigest === operation.terminal.satisfactionDigest, "terminal proof satisfaction mismatch");
+      invariant(proof.binding.requiredReceiptSetDigest === operation.requiredReceiptSetDigest, "terminal proof receipt-set digest mismatch");
+      invariant(proof.binding.requiredReceiptSetVersion === operation.requiredReceiptSet.setVersion, "terminal proof receipt-set version mismatch");
       break;
     case "workspace_closure":
       invariant(proof.binding.workspaceId === operation.workspaceId, "workspace proof binding mismatch");
       break;
     case "dispatch_claim":
       invariant(operation.dispatch.kind === "claimed", "dispatch proof requires claimed dispatch");
-      if (operation.dispatch.kind === "claimed") {
-        invariant(
-          proof.binding.preparationToken === operation.dispatch.preparationToken &&
-            proof.binding.providerAccessDispatchProofId === operation.dispatch.providerAccessDispatchProofId &&
-            proof.binding.runtimeSecurityDispatchProofId === operation.dispatch.runtimeSecurityDispatchProofId,
-          "dispatch claim must bind the exact preparation token and current authority evidence",
-        );
-        requireContainedTurnProof(operation, proof.binding.providerAccessDispatchProofId, "provider_access_dispatch");
-        requireContainedTurnProof(operation, proof.binding.runtimeSecurityDispatchProofId, "runtime_security_dispatch");
-      }
+      invariant(
+        proof.binding.preparationToken === operation.dispatch.preparationToken &&
+          proof.binding.providerAccessDispatchProofId === operation.dispatch.providerAccessDispatchProofId &&
+          proof.binding.runtimeSecurityDispatchProofId === operation.dispatch.runtimeSecurityDispatchProofId,
+        "dispatch claim must bind the exact preparation token and current authority evidence",
+      );
+      requireContainedTurnProof(operation, proof.binding.providerAccessDispatchProofId, "provider_access_dispatch");
+      requireContainedTurnProof(operation, proof.binding.runtimeSecurityDispatchProofId, "runtime_security_dispatch");
       invariant(proof.binding.effectId === operation.effectId, `${proof.kind} proof effect binding mismatch`);
       break;
     case "containment_not_required":

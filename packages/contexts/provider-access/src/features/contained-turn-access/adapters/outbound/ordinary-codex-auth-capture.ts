@@ -1,3 +1,4 @@
+import { intrinsicMethod } from "../provider-access-data.js";
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { types } from 'node:util';
@@ -16,7 +17,7 @@ export function createOrdinaryCodexAuthCapture(options: OrdinaryCodexAuthCapture
       input.deadline <= startedAt || input.deadline > startedAt + 60_000 || !input.operationRef ||
       input.operationRef.length > 512 || typeof input.record !== 'function' || types.isAsyncFunction(input.record)) { throw new OrdinaryCodexAuthRefused(); }
   const lifetime = new AbortController();
-  const signal = AbortSignal.any([input.signal, lifetime.signal]);
+  const signal = intrinsicMethod(AbortSignal, "any")([input.signal, lifetime.signal]);
   let attempted = false, disposed = false, held: CapturedAuthBytes | undefined, metadata: OrdinaryCodexAuthMetadata | undefined;
   let settle!: () => void;
   const settled = new Promise<void>(resolve => { settle = resolve; });
@@ -42,6 +43,8 @@ export function createOrdinaryCodexAuthCapture(options: OrdinaryCodexAuthCapture
     let files: Awaited<ReturnType<typeof prepareAuthFiles>> | undefined;
     let captured: CapturedAuthBytes | undefined;
     let retain = false, helperSpawned = false;
+    let outcome: { kind: 'captured'; metadata: OrdinaryCodexAuthMetadata } |
+      { kind: 'refused'; error: OrdinaryCodexAuthRefused | OrdinaryCodexAuthCleanupIndeterminate };
     try {
       check(); files = await prepareAuthFiles({ source: input.sourceDirectory, privateRoot: input.privateRoot, executable: input.executable, check });
       await files.check(); check();
@@ -61,14 +64,14 @@ export function createOrdinaryCodexAuthCapture(options: OrdinaryCodexAuthCapture
       const forgetHelper = () => {child.off('exit', onExit); child.off('close', onClose); retryHelperClosure = undefined;};
       retryHelperClosure = () => {
         let gone = false;
-        if (child.pid && child.pid > 1) {
+        if (child.pid !== undefined && child.pid > 1) {
           try {process.kill(-child.pid, 0);} catch (error) {gone = error instanceof Error && 'code' in error && error.code === 'ESRCH';}
         }
         const observation = Object.freeze({captureRef, outcome: 'cleanup-indeterminate' as const,
           exitObserved: exited, closeObserved: closed, processGroupGone: gone, ...(files ? {retainedDirectory: files.home} : {})});
         if (!exited || !closed || !gone) {
           // Never signal a numeric group after its leader exit has been observed.
-          if (!exited && child.pid && child.pid > 1) {try {process.kill(-child.pid, 'SIGKILL');} catch { /* readback on retry decides */ }}
+          if (!exited && child.pid !== undefined && child.pid > 1) {try {process.kill(-child.pid, 'SIGKILL');} catch { /* readback on retry decides */ }}
           throw new OrdinaryCodexAuthCleanupIndeterminate(observation);
         }
         input.record(Object.freeze({...observation, outcome: 'closed'}));
@@ -83,7 +86,7 @@ export function createOrdinaryCodexAuthCapture(options: OrdinaryCodexAuthCapture
       await files.cleanup(); files = undefined; check();
       held = captured; captured = undefined;
       clearTimeout(expiry); expiry = setTimeout(revoke, Math.max(1, effectiveDeadline - performance.now())); expiry.unref();
-      return metadata;
+      outcome = { kind: 'captured', metadata };
     } catch (error) {
       revoke();
       if (!helperSpawned) {
@@ -97,22 +100,26 @@ export function createOrdinaryCodexAuthCapture(options: OrdinaryCodexAuthCapture
         retain = true;
         const observation = Object.freeze({ ...error.observation, ...(files ? { retainedDirectory: files.home } : {}) });
         try { input.record(observation); } catch { /* cleanup indeterminate still takes precedence */ }
-        throw new OrdinaryCodexAuthCleanupIndeterminate(observation);
+        outcome = { kind: 'refused', error: new OrdinaryCodexAuthCleanupIndeterminate(observation) };
+      } else {
+        outcome = { kind: 'refused', error: new OrdinaryCodexAuthRefused() };
       }
-      throw new OrdinaryCodexAuthRefused();
-    } finally {
-      captured?.token.fill(0); captured?.accountId.fill(0);
-      try {
-        if (files) { if (retain) { await files.retain(); } else { await files.cleanup(); } }
-      } catch {
-        revoke();
-        // Only non-secret, observed facts are supplied to the host sink.
-        try { input.record(Object.freeze({ captureRef, outcome: 'refused', exitObserved: false, closeObserved: false, processGroupGone: false, ...(files ? { retainedDirectory: files.home } : {}) })); } catch { /* refusal remains */ }
-        // A cleanup refusal must override a would-be returned capture.
-        // oxlint-disable-next-line no-unsafe-finally -- no credential authority escapes failed resource cleanup
-        throw new OrdinaryCodexAuthRefused();
-      } finally { settle(); }
     }
+    captured?.token.fill(0); captured?.accountId.fill(0);
+    let cleanupRefused = false;
+    try {
+      if (files) { if (retain) { await files.retain(); } else { await files.cleanup(); } }
+    } catch {
+      cleanupRefused = true;
+      revoke();
+      // Only non-secret, observed facts are supplied to the host sink.
+      try { input.record(Object.freeze({ captureRef, outcome: 'refused', exitObserved: false, closeObserved: false, processGroupGone: false, ...(files ? { retainedDirectory: files.home } : {}) })); } catch { /* refusal remains */ }
+    }
+    settle();
+    // No credential authority may escape failed resource cleanup.
+    if (cleanupRefused) { throw new OrdinaryCodexAuthRefused(); }
+    if (outcome.kind === 'refused') { throw outcome.error; }
+    return outcome.metadata;
   };
   return Object.freeze<OrdinaryCodexAuthCapture>({ capture, settled, dispose,
     withCredentialOutputTokens(operationRef, consume) {
@@ -123,7 +130,7 @@ export function createOrdinaryCodexAuthCapture(options: OrdinaryCodexAuthCapture
         const result: unknown = consume(Object.freeze([material.token.toString('ascii'), material.accountId.toString('ascii')]));
         if (types.isPromise(result) && Object.getPrototypeOf(result) === Promise.prototype &&
             Object.getOwnPropertyDescriptor(result, 'constructor') === undefined) {
-          Promise.prototype.then.call(result, () => {}, () => {});
+          void intrinsicMethod(Promise.prototype, "then").call(result, () => {}, () => {});
         }
         if (result !== true) { throw new OrdinaryCodexAuthRefused(); }
         check(); if (held !== material) { throw new OrdinaryCodexAuthRefused(); }

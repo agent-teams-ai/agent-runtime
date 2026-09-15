@@ -26,6 +26,9 @@ export interface OrdinaryAgentRuntimeHostOptions {
   readonly scope: {readonly tenantId: string; readonly projectId: string};
   readonly signal?: AbortSignal;
 }
+const throwCreationCleanupFailure = (error: unknown, cleanupError: unknown): never => {
+  throw new AggregateError([error, cleanupError], "ordinary_host_creation_cleanup_incomplete", {cause: error});
+};
 function exact(value: unknown, keys: readonly string[]): asserts value is Record<string, unknown> {
   if (value === null || typeof value !== "object" || types.isProxy(value) || Object.getPrototypeOf(value) !== Object.prototype || Reflect.ownKeys(value).some(key => typeof key !== "string" || !keys.includes(key)) || keys.some(key => !Object.hasOwn(value, key))) {throw new TypeError("ordinary_host_options_invalid");}
   for (const key of keys) {const d = Object.getOwnPropertyDescriptor(value, key); if (d === undefined || !("value" in d)) {throw new TypeError("ordinary_host_options_invalid");}}
@@ -35,25 +38,27 @@ function captureOptions(value: OrdinaryAgentRuntimeHostOptions): OrdinaryAgentRu
   exact(value.execution, ["provider", "executablePath", "authSourceDirectory", "privateRoot", "evidenceRoot", "sourceDirectory", "workspaceRoot", "artifactRoot", "sourceRevision"]);
   exact(value.storage, ["pool"]); exact(value.scope, ["tenantId", "projectId"]);
   const e = value.execution;
-  if (e.provider !== "codex" || typeof e.sourceRevision !== "string" || e.sourceRevision.length === 0 || e.sourceRevision.length > 256 || [e.executablePath, e.authSourceDirectory, e.privateRoot, e.evidenceRoot, e.sourceDirectory, e.workspaceRoot, e.artifactRoot].some(path => typeof path !== "string" || !isAbsolute(path)) || [value.scope.tenantId, value.scope.projectId].some(id => typeof id !== "string" || !/^[A-Za-z0-9:._-]{1,128}$/.test(id)) || typeof value.storage.pool?.connect !== "function") {throw new TypeError("ordinary_host_options_invalid");}
+  const provider: unknown = e.provider;
+  const pool = value.storage.pool as {connect?: unknown} | null | undefined;
+  if (provider !== "codex" || typeof e.sourceRevision !== "string" || e.sourceRevision.length === 0 || e.sourceRevision.length > 256 || [e.executablePath, e.authSourceDirectory, e.privateRoot, e.evidenceRoot, e.sourceDirectory, e.workspaceRoot, e.artifactRoot].some(path => typeof path !== "string" || !isAbsolute(path)) || [value.scope.tenantId, value.scope.projectId].some(id => typeof id !== "string" || !/^[A-Za-z0-9:._-]{1,128}$/.test(id)) || typeof pool?.connect !== "function") {throw new TypeError("ordinary_host_options_invalid");}
   return Object.freeze({execution: Object.freeze({...e}), storage: Object.freeze({pool: value.storage.pool}), scope: Object.freeze({...value.scope}), ...(value.signal === undefined ? {} : {signal: value.signal})});
 }
 /** One Assembly root constructs passive setup and active ordinary execution. Auth remains lazy until submit. */
 export async function createOrdinaryAgentRuntimeHost(input: OrdinaryAgentRuntimeHostOptions, construct: (signal: AbortSignal | undefined, ordinary: OrdinaryRuntimeAssemblyInput) => Promise<AgentRuntimeHost>): Promise<AgentRuntimeHost> {
   const options = captureOptions(input); options.signal?.throwIfAborted();
   const journal = createOrdinaryObservationJournal(options.execution.evidenceRoot);
-  const cleanups: (() => void | Promise<void>)[] = [() => journal.close()];
+  const cleanups: (() => void | Promise<void>)[] = [() => { journal.close(); }];
   let cleanupPromise: Promise<void> | undefined;
   const cleanup = (): Promise<void> => cleanupPromise ??= (async () => {
     const errors: unknown[] = [];
     for (const dispose of cleanups.toReversed()) {try {await dispose(); cleanups.splice(cleanups.indexOf(dispose), 1);} catch (error) {errors.push(error); break;}}
     if (errors.length > 0) {throw new AggregateError(errors, "ordinary_host_cleanup_incomplete", {cause: errors[0]});}
-  })().catch(error => {cleanupPromise = undefined; throw error;});
+  })().catch((error: unknown) => {cleanupPromise = undefined; throw error;});
   let codex: ReturnType<typeof createOrdinaryCodexAdapter> | undefined;
   const getCodex = () => {
     if (codex === undefined) {
-      codex = createOrdinaryCodexAdapter({executable: options.execution.executablePath, record: event => journal.record({...event})});
-      const owned = codex; cleanups.push(() => owned.dispose());
+      codex = createOrdinaryCodexAdapter({executable: options.execution.executablePath, record: event => { journal.record({...event}); }});
+      const owned = codex; cleanups.push(() => { owned.dispose(); });
     }
     return codex;
   };
@@ -69,11 +74,11 @@ export async function createOrdinaryAgentRuntimeHost(input: OrdinaryAgentRuntime
         async providerAccess(registerSecrets) {
           const owner = createPostgresOrdinaryProviderAccessOwner({pool: options.storage.pool, registerSecrets});
           cleanups.push(() => owner.dispose()); await owner.migrate();
-          return bindOrdinaryProviderAccessOwner(owner, {executable: options.execution.executablePath, sourceDirectory: options.execution.authSourceDirectory, privateRoot: options.execution.privateRoot, record: observation => journal.record({kind: "auth_capture", ...observation})});
+          return bindOrdinaryProviderAccessOwner(owner, {executable: options.execution.executablePath, sourceDirectory: options.execution.authSourceDirectory, privateRoot: options.execution.privateRoot, record: observation => { journal.record({kind: "auth_capture", ...observation}); }});
         },
-        async workspace() {return createNodeOrdinaryWorkspace({sourceDirectory: options.execution.sourceDirectory, workspaceRoot: options.execution.workspaceRoot, sourceRevision: options.execution.sourceRevision, record: observation => journal.record({...observation})});},
-        async artifacts() {return createNodeOrdinaryArtifacts({artifactRoot: options.execution.artifactRoot, sourceRevision: options.execution.sourceRevision, record: event => journal.record({...event})});},
-        async process(prepareLaunch) {return createNodeOrdinaryProcess({prepareLaunch, record: event => journal.record({...event})});},
+        async workspace() {return createNodeOrdinaryWorkspace({sourceDirectory: options.execution.sourceDirectory, workspaceRoot: options.execution.workspaceRoot, sourceRevision: options.execution.sourceRevision, record: observation => { journal.record({...observation}); }});},
+        async artifacts() {return createNodeOrdinaryArtifacts({artifactRoot: options.execution.artifactRoot, sourceRevision: options.execution.sourceRevision, record: event => { journal.record({...event}); }});},
+        async process(prepareLaunch) {return createNodeOrdinaryProcess({prepareLaunch, record: event => { journal.record({...event}); }});},
         async provider() {return getCodex();},
       },
       decorateHost(host, feature) {
@@ -89,9 +94,10 @@ export async function createOrdinaryAgentRuntimeHost(input: OrdinaryAgentRuntime
           for (const result of results) {if (result.status === "rejected") {errors.push(result.reason);}}
           if (hostDisposed && featureDisposed) {try {await cleanup();} catch (error) {errors.push(error);}}
           if (errors.length > 0) {throw new AggregateError(errors, "ordinary_host_disposal_incomplete", {cause: errors[0]});}
-        })().catch(error => {disposal = undefined; throw error;});
+        })().catch((error: unknown) => {disposal = undefined; throw error;});
         return Object.freeze({bindAccess(scope: TrustedRuntimeAccessScope) {
-          if (scope === null || typeof scope !== "object" || types.isProxy(scope)) {throw new Error("ordinary_host_scope_mismatch");}
+          const candidate: unknown = scope;
+          if (candidate === null || typeof candidate !== "object" || types.isProxy(candidate)) {throw new Error("ordinary_host_scope_mismatch");}
           const descriptor = Object.getOwnPropertyDescriptor(scope, "containedTurn");
           if (descriptor === undefined) {return host.bindAccess(scope);}
           if (!("value" in descriptor)) {throw new Error("ordinary_host_scope_mismatch");}
@@ -104,8 +110,7 @@ export async function createOrdinaryAgentRuntimeHost(input: OrdinaryAgentRuntime
   } catch (error) {
     const [result] = await Promise.allSettled([cleanup()]);
     if (result.status === "rejected") {
-      // oxlint-disable-next-line eslint/preserve-caught-error -- AggregateError retains the primary error in both errors and cause.
-      throw new AggregateError([error, result.reason], "ordinary_host_creation_cleanup_incomplete", {cause: error});
+      return throwCreationCleanupFailure(error, result.reason);
     }
     throw error;
   }

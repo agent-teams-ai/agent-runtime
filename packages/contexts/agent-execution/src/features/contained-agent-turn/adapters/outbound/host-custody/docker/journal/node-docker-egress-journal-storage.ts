@@ -17,6 +17,7 @@ import {
 } from "./docker-egress-journal-types.js";
 import { validateDockerEgressTrustedIdentity } from "./docker-egress-journal-codec.js";
 
+const platformFlags: Partial<Pick<typeof constants, "O_DIRECTORY" | "O_NOFOLLOW">> = constants;
 const LOCATOR = /^[a-f0-9]{64}$/u;
 const V3_PREFIX = "docker-egress-custody-v3-";
 const JOURNAL_SUFFIX = ".journal";
@@ -115,7 +116,7 @@ export class NodeDockerEgressJournalStorage implements DockerEgressJournalStorag
       let handle: FileHandle | undefined;
       try {
         const canonical = await port.realpath(path); const named = await port.lstat(path);
-        handle = await port.open(path, constants.O_RDONLY | (constants.O_DIRECTORY ?? 0) | (constants.O_NOFOLLOW ?? 0));
+        handle = await port.open(path, constants.O_RDONLY | (platformFlags.O_DIRECTORY ?? 0) | (platformFlags.O_NOFOLLOW ?? 0));
         const held = await handle.stat({ bigint: true }); const uid = typeof process.getuid === "function" ? BigInt(process.getuid()) : named.uid;
         if (canonical !== path || !privateDirectory(named, uid) || !privateDirectory(held, uid) || !same(named, held)) {
           throw new DockerEgressJournalCorruptionError("unsafe root");
@@ -172,7 +173,7 @@ export class NodeDockerEgressJournalStorage implements DockerEgressJournalStorag
     let handle: FileHandle | undefined;
     try {
       const path = this.path(root, name); const named = await this.port.lstat(path); privateFile(named, root.stats.uid);
-      handle = await this.port.open(path, (writable ? constants.O_RDWR | constants.O_APPEND : constants.O_RDONLY) | (constants.O_NOFOLLOW ?? 0));
+      handle = await this.port.open(path, (writable ? constants.O_RDWR | constants.O_APPEND : constants.O_RDONLY) | (platformFlags.O_NOFOLLOW ?? 0));
       const held = await handle.stat({ bigint: true }); privateFile(held, root.stats.uid);
       if (!same(named, held) || held.size > BigInt(Number.MAX_SAFE_INTEGER)) { throw new DockerEgressJournalCorruptionError("unsafe entry"); }
       return new NodeEgressFile(path, handle, root.stats.uid, this.port, {writable, byteLength: Number(held.size)});
@@ -184,7 +185,7 @@ export class NodeDockerEgressJournalStorage implements DockerEgressJournalStorag
     try {
       try {
         handle = await this.port.open(this.path(this.v3, name),
-          constants.O_CREAT | constants.O_EXCL | constants.O_RDWR | constants.O_APPEND | (constants.O_NOFOLLOW ?? 0), 0o600);
+          constants.O_CREAT | constants.O_EXCL | constants.O_RDWR | constants.O_APPEND | (platformFlags.O_NOFOLLOW ?? 0), 0o600);
       } catch (error) {
         if (code(error) !== "EEXIST") { throw error; }
         const existing = await this.openNamed(this.v3, name, true);
@@ -252,7 +253,7 @@ export class NodeDockerEgressJournalStorage implements DockerEgressJournalStorag
     try {
       try {
         const handle = await this.port.open(this.path(this.v3, name), constants.O_CREAT | constants.O_EXCL | constants.O_RDWR |
-          constants.O_APPEND | (constants.O_NOFOLLOW ?? 0), 0o600);
+          constants.O_APPEND | (platformFlags.O_NOFOLLOW ?? 0), 0o600);
         file = new NodeEgressFile(this.path(this.v3, name), handle, this.v3.stats.uid, this.port, {writable: true, byteLength: 0}); await file.append(0, bytes);
       } catch (error) {
         if (code(error) !== "EEXIST") { throw error; }

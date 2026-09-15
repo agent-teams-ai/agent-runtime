@@ -230,9 +230,6 @@ const assertPrivateObservation = (observation: ContainedTurnFilesystemObservatio
   }
 };
 
-const pathComponents = (path: string): readonly string[] =>
-  path.split(sep).filter(component => component.length > 0);
-
 const assertDescriptorAnchor = async (handle: FileHandle): Promise<void> => {
   if (isNativeHostDescriptor(handle)) {
     const retained = duplicateNativeHostDescriptor(handle);
@@ -276,11 +273,14 @@ const createPrivateDirectoryEntry = async (
   return openDirectoryEntry(parent, component);
 };
 
-const directoryTraversalCleanupFailure = (
-  error: unknown,
-  cleanupError: unknown,
-  message: string,
-): AggregateError => new AggregateError([error, cleanupError], message, { cause: error });
+const traversalCleanupFailure = (error: unknown, cleanupError: unknown, message: string): AggregateError =>
+  new AggregateError([error, cleanupError], message, {cause: error});
+
+const closeAfterTraversalFailure = async (handle: FileHandle, error: unknown, message: string): Promise<void> => {
+  try {await handle.close();} catch (cleanupError) {
+    throw traversalCleanupFailure(error, cleanupError, message);
+  }
+};
 
 const openDirectoryNoFollow = async (
   path: string,
@@ -292,7 +292,7 @@ const openDirectoryNoFollow = async (
   try {
     await assertDescriptorAnchor(current);
     assertSafeAncestor(await observationFromHandle(current));
-    for (const component of pathComponents(path)) {
+    for (const component of path.split(sep).filter(part => part.length > 0)) {
       let next: FileHandle;
       try {
         next = await openDirectoryEntry(current, component, true);
@@ -304,29 +304,20 @@ const openDirectoryNoFollow = async (
         assertSafeAncestor(await observationFromHandle(next));
         await current.close();
       } catch (error) {
-        try {await next.close();} catch (cleanupError) {
-          throw directoryTraversalCleanupFailure(
-            error,
-            cleanupError,
-            "contained turn directory capture and cleanup failed",
-          );
-        }
+        await closeAfterTraversalFailure(next, error, "contained turn directory capture and cleanup failed");
         throw error;
       }
       current = next;
     }
     return current;
   } catch (error) {
-    try {await current.close();} catch (cleanupError) {
-      throw directoryTraversalCleanupFailure(
-        error,
-        cleanupError,
-        "contained turn directory traversal and cleanup failed",
-      );
-    }
+    await closeAfterTraversalFailure(current, error, "contained turn directory traversal and cleanup failed");
     throw error;
   }
 };
+
+const capturedRoot = (path: string, identity: BoundContainedTurnRoot["identity"], requirePrivate: boolean): BoundContainedTurnRoot =>
+  Object.freeze({absolutePath: path, canonicalPath: path, identity: Object.freeze({...identity}), private: requirePrivate});
 
 const bindExistingRoot = async (
   path: string,
@@ -341,17 +332,9 @@ const bindExistingRoot = async (
     if (canonicalPath !== path) {
       throw new Error("contained turn filesystem root is a symlink or non-canonical alias");
     }
-    return Object.freeze({
-      absolutePath: path,
-      canonicalPath,
-      identity: Object.freeze({
-        dev: observation.dev,
-        ino: observation.ino,
-        mode: observation.mode,
-        mountId,
-      }),
-      private: requirePrivate,
-    });
+    return capturedRoot(path, {
+      dev: observation.dev, ino: observation.ino, mode: observation.mode, mountId,
+    }, requirePrivate);
   } finally {
     await handle.close();
   }
@@ -383,15 +366,10 @@ export const bindContainedTurnDirectoryEntry = async (
       if (canonicalPath !== `${parentRoot.canonicalPath}${sep}${name}`) {
         throw new Error("contained turn filesystem child is a non-canonical alias");
       }
-      return Object.freeze({
-        absolutePath: canonicalPath,
-        canonicalPath,
-        identity: Object.freeze({
-          dev: observation.dev, ino: observation.ino, mode: observation.mode,
-          mountId: await readFilesystemMountIdentity(child),
-        }),
-        private: options.private === true,
-      });
+      return capturedRoot(canonicalPath, {
+        dev: observation.dev, ino: observation.ino, mode: observation.mode,
+        mountId: await readFilesystemMountIdentity(child),
+      }, options.private === true);
     } finally {await child.close();}
   } finally {await parent.close();}
 };
@@ -506,11 +484,8 @@ export const revalidateBoundRoots = async (
 ): Promise<void> => {
   for (const root of roots) {
     const handle = await openBoundDirectory(root);
-    try {
-      // Retaining the descriptor until this point proves the captured root is openable.
-    } finally {
-      await handle.close();
-    }
+    // Opening and closing the descriptor revalidates the captured root.
+    await handle.close();
   }
 };
 

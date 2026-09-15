@@ -64,7 +64,8 @@ const snapshotFunction = (owner: unknown, name: string): ((...input: never[]) =>
   if (descriptor === undefined || !("value" in descriptor) || typeof descriptor.value !== "function") {
     throw new TypeError("invalid dependency operation");
   }
-  return descriptor.value.bind(owner) as (...input: never[]) => unknown;
+  const operation = descriptor.value as (...input: never[]) => unknown;
+  return operation.bind(owner);
 };
 
 const requestFromDto = (request: TrustedHostRequestProjectionV1): TrustedHostRequestProjection => ({
@@ -209,7 +210,7 @@ const ownerUnavailable = () => deepFreezeEgress({ status: "indeterminate" as con
 const ownerMalformed = () => deepFreezeEgress({ status: "indeterminate" as const,
   reason: "owner_malformed" as const });
 
-const snapshotDependencies = (input: ProviderProcessEgressAuthorizationDependencies) => {
+const snapshotDependencies = (input: unknown) => {
   if (input === null || typeof input !== "object" || isNodeProxy(input) ||
     Object.getPrototypeOf(input) !== Object.prototype) {throw new TypeError("invalid dependencies");}
   const descriptors = Object.getOwnPropertyDescriptors(input);
@@ -218,19 +219,20 @@ const snapshotDependencies = (input: ProviderProcessEgressAuthorizationDependenc
   if (ownKeys.some(key => typeof key === "symbol")) {throw new TypeError("inexact dependencies");}
   const keys = (ownKeys as string[]).toSorted();
   if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index]) ||
-    keys.some(key => descriptors[key] === undefined || !("value" in descriptors[key]!))) {
+    keys.some(key => descriptors[key] === undefined || !("value" in descriptors[key]))) {
     throw new TypeError("inexact dependencies");
   }
-  const scope = deepFreezeEgress(detachEgressScope(input.scope) as TrustedEgressCompositionScopeV1);
-  const resolvePolicy = snapshotFunction(input.authorityOwner, "resolvePolicy") as
+  const values = input as Readonly<Record<string, unknown>>;
+  const scope = deepFreezeEgress(detachEgressScope(values.scope) as TrustedEgressCompositionScopeV1);
+  const resolvePolicy = snapshotFunction(values.authorityOwner, "resolvePolicy") as
     EgressAuthorityOwnerReadPort["resolvePolicy"];
-  const readCurrent = snapshotFunction(input.authorityOwner, "readCurrent") as
+  const readCurrent = snapshotFunction(values.authorityOwner, "readCurrent") as
     EgressAuthorityOwnerReadPort["readCurrent"];
-  const clockRead = snapshotFunction(input.clock, "read") as () => EgressControlTimeV1;
-  const digest = snapshotFunction(input.digest, "digest") as (value: string) => string;
-  const sign = snapshotFunction(input.signer, "sign") as EgressDecisionSigner["sign"];
-  const verify = snapshotFunction(input.verifier, "verify") as
-    (value: string, signature: EgressDecisionSignature) => boolean;
+  const clockRead = snapshotFunction(values.clock, "read") as () => EgressControlTimeV1;
+  const digest = snapshotFunction(values.digest, "digest") as (value: string) => string;
+  const sign = snapshotFunction(values.signer, "sign") as EgressDecisionSigner["sign"];
+  const verify = snapshotFunction(values.verifier, "verify") as
+    (value: string, signature: EgressDecisionSignature) => unknown;
   const callOwner = async (operation: (...args: never[]) => unknown, ownerInput: unknown) => {
     let returned: unknown;
     try { returned = await operation(ownerInput as never); } catch { return ownerUnavailable(); }

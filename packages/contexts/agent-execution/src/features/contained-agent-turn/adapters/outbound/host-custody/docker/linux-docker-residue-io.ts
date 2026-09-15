@@ -38,7 +38,8 @@ export class NodeLinuxDockerResidueIo implements DockerResidueIo {
   }
   /** The only followed magic links are rooted at an already pinned proc PID. */
   public async procObject(process: ResidueFile, name: "root" | "ns/mnt"): Promise<FileHandle> {
-    if (name !== "root" && name !== "ns/mnt") {throw residueFault();}
+    const objectName: unknown = name;
+    if (objectName !== "root" && objectName !== "ns/mnt") {throw residueFault();}
     return open(`${this.path(process)}/${name}`, constants.O_RDONLY | constants.O_NONBLOCK |
       (name === "root" ? constants.O_DIRECTORY : 0));
   }
@@ -165,7 +166,7 @@ export const boundResidueWork = async <T>(work: Promise<T>, call: DockerEngineCa
     const timer = setTimeout(fail, Math.max(1, remaining));
     const cleanup = (): void => {clearTimeout(timer); call.signal.removeEventListener("abort", fail);};
     call.signal.addEventListener("abort", fail, {once: true});
-    void work.then(value => {cleanup(); resolve(value); return;}, error => {cleanup(); reject(error);});
+    void work.then(value => {cleanup(); resolve(value); return;}, (error: unknown) => {cleanup(); reject(error);});
     if (call.signal.aborted || !Number.isSafeInteger(call.deadlineEpochMs) || remaining <= 0) {fail();}
   });
 };

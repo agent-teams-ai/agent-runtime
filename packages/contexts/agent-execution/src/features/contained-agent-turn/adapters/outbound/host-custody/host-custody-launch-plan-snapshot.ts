@@ -23,7 +23,7 @@ type ImmutableLaunchPlan<Plan extends HostCustodyLaunchPlan> = {
 /** Check descriptors before reading executable data, including its envelopes. */
 export const assertInertHostLaunchData = (value: unknown): void => {
   if (typeof value !== "object" || value === null || types.isProxy(value)) {throw rejected();}
-  const prototype = Object.getPrototypeOf(value);
+  const prototype: unknown = Object.getPrototypeOf(value);
   if (prototype !== (Array.isArray(value) ? Array.prototype : Object.prototype) && prototype !== null) {
     throw rejected();
   }
@@ -39,7 +39,7 @@ const snapshotStrings = (value: readonly string[]): readonly string[] => {
   if (Object.keys(descriptors).some(key => key !== "length" && !/^(0|[1-9]\d*)$/u.test(key))) {throw rejected();}
   const result: string[] = [];
   for (let index = 0; index < value.length; index += 1) {
-    const item = descriptors[String(index)]?.value;
+    const item: unknown = descriptors[String(index)]?.value;
     if (typeof item !== "string") {throw rejected();}
     result.push(item);
   }

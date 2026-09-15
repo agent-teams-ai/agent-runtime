@@ -262,6 +262,7 @@ export const createContainedTurnWorkspace = async (
   const directories = await openCreationDirectories(context);
   let created = false;
   let creationCommitted = false;
+  const requiresQuarantine = (): boolean => created && !creationCommitted;
   let identity: DirectoryIdentity | undefined;
   try {
     const quarantineEntries = await readDirectoryNamesBounded(directories.quarantine, 4_096);
@@ -279,7 +280,7 @@ export const createContainedTurnWorkspace = async (
     created = false;
     return { workspaceRef: join(context.roots.active.canonicalPath, name) };
   } catch (error) {
-    if (created && !creationCommitted) {
+    if (requiresQuarantine()) {
       return quarantineFailedCreation({ context, directories, identity, name, primaryError: error });
     }
     throw error;

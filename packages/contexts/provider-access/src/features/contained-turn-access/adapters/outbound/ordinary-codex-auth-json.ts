@@ -27,7 +27,7 @@ export function parseAuthFrame(bytes: Uint8Array): Record<string, unknown> {
 export function conservativeTokenExpiry(token: Buffer, now: number): number {
   // JWT payload is used ONLY to shorten expiry; neither identity nor signature is inferred.
   const encoded = token.toString('ascii').split('.');
-  if (encoded.length !== 3 || !encoded[1] || !/^[A-Za-z0-9_-]+$/.test(encoded[1])) { throw new OrdinaryCodexAuthRefused(); }
+  if (encoded.length !== 3 || encoded[1] === undefined || encoded[1] === '' || !/^[A-Za-z0-9_-]+$/.test(encoded[1])) { throw new OrdinaryCodexAuthRefused(); }
   const payload = Buffer.from(encoded[1], 'base64url');
   try {
     const exp = parseAuthFrame(payload).exp;

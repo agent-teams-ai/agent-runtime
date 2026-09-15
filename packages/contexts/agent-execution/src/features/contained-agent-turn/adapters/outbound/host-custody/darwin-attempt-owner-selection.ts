@@ -37,7 +37,7 @@ const selections = new WeakMap<DarwinNativeWorkspaceSelection, SelectionRecord>(
 type NativeBorrow = {issued: SelectionRecord; active: boolean};
 const borrows = new WeakMap<DarwinNativeWorkspaceSelection, NativeBorrow>();
 function assertOwnerCurrent(issued: SelectionRecord, borrow?: NativeBorrow): void {
-  if (issued.revoked || (borrow && !borrow.active)) {throw new Error("native admission revoked or borrow expired");}
+  if (issued.revoked === true || (borrow && !borrow.active)) {throw new Error("native admission revoked or borrow expired");}
 }
 function selectionAuthority(selection: DarwinNativeWorkspaceSelection): {issued: SelectionRecord; borrow?: NativeBorrow} {
   const borrow = borrows.get(selection), issued = selections.get(selection) ?? borrow?.issued;
@@ -51,7 +51,7 @@ export async function withDarwinNativeWorkspaceSelection<Result>(
   consume: (borrow: DarwinNativeWorkspaceSelection) => Promise<Result>,
 ): Promise<Result> {
   const {issued} = selectionAuthority(selection), prepared = issued.prepared;
-  if (!prepared || issued.borrowConsumed || issued.claimStarted || typeof consume !== "function" ||
+  if (!prepared || issued.borrowConsumed === true || issued.claimStarted || typeof consume !== "function" ||
       ids.operationId !== prepared.operationId || ids.workspaceId !== prepared.workspaceId || ids.attemptId !== prepared.attemptId) {
     throw new Error("native workspace borrow unavailable or prepared tuple differs");
   }
@@ -111,7 +111,7 @@ const retainAttemptAuthority = (issued: SelectionRecord): RetainedNativeAttemptA
               (typeof field.value !== "string" && typeof field.value !== "number"))) {
           throw new Error("committed claim must be the retained immutable data record");
         }
-        if (!bound || !bytes || proof.purpose !== "contained_turn_committed_dispatch_v1" || proof.version !== 1 ||
+        if (!bound || !bytes || !isCommittedProofHeader(proof) ||
             proof.operationId !== bound.operationId || proof.attemptId !== bound.attemptId || proof.custodyId !== bound.custodyId ||
             proof.executionGenerationId !== bound.executionGenerationId || proof.workspaceId !== bound.workspaceId ||
             proof.preparationToken !== bound.preparationToken || proof.tenantId !== bound.scope.tenantId || proof.projectId !== bound.scope.projectId) {
@@ -150,7 +150,7 @@ export async function captureRootDarwinAttemptWorkspace(
     // Fixed trusted dependency in the pinned Host closure, never a caller path
     // or validator callback. It observes Darwin FD8 credentials and actual
     // creator/child birth-image state, consuming root challenge FD11 once.
-    const peerModule = {exports: {} as {verifyRootPeer(packet: Buffer): boolean}};
+    const peerModule = {exports: {} as {verifyRootPeer(packet: Buffer): unknown}};
     process.dlopen(peerModule, join(import.meta.dirname, "native", "darwin-attempt-owner-peer.node"));
     if (peerModule.exports.verifyRootPeer(bridge.capturedPeerPacket()) !== true) {
       throw new Error("native root peer verifier did not admit this owner");
@@ -336,7 +336,7 @@ export function assertDarwinNativeExecutionClaim(
   assertDarwinNativeExecutionLeaseCurrent(lease);
   const actual = retained.issued.claim;
   if (!actual) {throw new Error("native execution has no retained actual committed claim");}
-  if (!proof || typeof proof !== "object" || Object.getPrototypeOf(proof) !== Object.prototype) {
+  if (!isProofObject(proof) || Object.getPrototypeOf(proof) !== Object.prototype) {
     throw new Error("native claim must be inert detached proof data");
   }
   const expected = Object.getOwnPropertyDescriptors(actual), observed = Object.getOwnPropertyDescriptors(proof);
@@ -407,11 +407,14 @@ export interface RetainedNativeHttpLaunchAuthority {
     material: DarwinNativeCodexMaterial, preparedListenerPort: number,
   ): Promise<void>;
 }
+const isCommittedProofHeader = (proof: {purpose: unknown; version: unknown}): boolean =>
+  proof.purpose === "contained_turn_committed_dispatch_v1" && proof.version === 1;
+const isProofObject = (proof: unknown): boolean => Boolean(proof) && typeof proof === "object";
 function assertActualFinalBinding(bindingClass: typeof HostLaunchBinding, binding: HostLaunchBinding, launch: FinalHostLaunch): void {
   // Invoke the real class's private-field accessors directly. A duck-typed view,
   // subclass override or caller-supplied assertStart cannot establish authority.
-  const current = Object.getOwnPropertyDescriptor(bindingClass.prototype, "current")!.get!;
-  const material = Object.getOwnPropertyDescriptor(bindingClass.prototype, "materialSha256")!.get!;
+  const current = (Object.getOwnPropertyDescriptor(bindingClass.prototype, "current") as {get: (this: HostLaunchBinding) => HostLaunchBinding["current"]}).get;
+  const material = (Object.getOwnPropertyDescriptor(bindingClass.prototype, "materialSha256") as {get: (this: HostLaunchBinding) => HostLaunchBinding["materialSha256"]}).get;
   if (current.call(binding) !== launch || material.call(binding) !== launch.materialSha256 ||
       material.call(binding) === undefined) {throw new Error("final launch is not the actual committed Host binding");}
   bindingClass.prototype.assertStart.call(binding, launch);
@@ -470,7 +473,7 @@ function retainHttpLaunchAuthority(issued: SelectionRecord): RetainedNativeHttpL
       binding: HostLaunchBinding, material: DarwinNativeCodexMaterial, port: number): Promise<void> {
       const retained = leases.get(lease);
       if (!retained || retained.issued !== issued) {throw new Error("foreign native HTTP execution lease");}
-      if (issued.finalConsumed) {throw new Error("native HTTP final launch already consumed");}
+      if (issued.finalConsumed === true) {throw new Error("native HTTP final launch already consumed");}
       issued.finalConsumed = true;
       try {
         assertDarwinNativeExecutionLeaseCurrent(lease);
@@ -518,7 +521,7 @@ export async function startDarwinNativeExecution(lease: DarwinNativeExecutionLea
   const retained = leases.get(lease);
   if (!retained) {throw new Error("foreign native execution lease");}
   const issued = retained.issued, final = issued.final;
-  if (!final || issued.started) {throw new Error("native final launch unavailable or already started");}
+  if (!final || issued.started === true) {throw new Error("native final launch unavailable or already started");}
   issued.started = true;
   assertDarwinNativeExecutionLeaseCurrent(lease);
   assertDarwinNativeCodexMaterialCurrent(final.material);

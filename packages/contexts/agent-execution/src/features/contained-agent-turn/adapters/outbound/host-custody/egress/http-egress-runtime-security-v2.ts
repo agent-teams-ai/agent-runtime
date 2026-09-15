@@ -35,7 +35,7 @@ export const signedHttpDispatchDeadline = (grant: HostHttpGrant, operationDeadli
   if (![authorizedAtControlTime, operationDeadline, requestBytes, responseBytes, totalMilliseconds]
     .every(Number.isSafeInteger) || authorizedAtControlTime < 0 || operationDeadline < 0
     || requestBytes < 0 || responseBytes < 0 || totalMilliseconds < 1
-    || totalMilliseconds > Number.MAX_SAFE_INTEGER - authorizedAtControlTime) {return;}
+    || totalMilliseconds > Number.MAX_SAFE_INTEGER - authorizedAtControlTime) {return undefined;}
   // V2 signs the stream-specific authorizedAtControlTime in the final grant.
   // expiresAtControlTime is inherited provisional decision freshness, checked at
   // emission separately. Neither receipt time nor consumption restarts duration.
@@ -43,16 +43,16 @@ export const signedHttpDispatchDeadline = (grant: HostHttpGrant, operationDeadli
 };
 
 const readCut = (ports: HttpEgressBrokerPorts) => {
-  const value = ports.localAuthorityCut.read();
+  const value: unknown = ports.localAuthorityCut.read();
   if (typeof value !== "object" || value === null || utilTypes.isProxy(value)
     || Object.getPrototypeOf(value) !== Object.prototype) {return null;}
   const descriptors = Object.getOwnPropertyDescriptors(value); const keys = Reflect.ownKeys(descriptors);
   if (keys.length !== 4 || keys.some(key => typeof key !== "string"
     || !["status", "authorityId", "epoch", "controlTime"].includes(key))) {return null;}
   if (["status", "authorityId", "epoch", "controlTime"].some(key => descriptors[key] === undefined
-    || !("value" in descriptors[key]!))) {return null;}
-  const status = descriptors.status?.value; const authorityId = descriptors.authorityId?.value;
-  const epoch = descriptors.epoch?.value; const controlTime = descriptors.controlTime?.value;
+    || !("value" in descriptors[key]))) {return null;}
+  const status: unknown = descriptors.status?.value; const authorityId: unknown = descriptors.authorityId?.value;
+  const epoch: unknown = descriptors.epoch?.value; const controlTime: unknown = descriptors.controlTime?.value;
   if ((status !== "current" && status !== "revoked" && status !== "unknown")
     || typeof authorityId !== "string" || typeof epoch !== "string" || !validTime(controlTime)) {return null;}
   return Object.freeze({status, authorityId, epoch, controlTime});
@@ -72,17 +72,17 @@ const readBracketedCut = (ports: HttpEgressBrokerPorts) => {
   now: final?.controlTime ?? Number.NaN};
 };
 
-const sameKey = (left: HostHttpSigningKey, right: HostHttpSigningKey): boolean =>
+const sameKey = (left: UnverifiedProof<HostHttpSigningKey>, right: HostHttpSigningKey): boolean =>
   left.algorithm === "ed25519" && left.signatureEncoding === "hex-lower"
   && left.keyRef === right.keyRef && left.publicKeyDigest === right.publicKeyDigest
   && left.keyGeneration === right.keyGeneration && left.signerRevision === right.signerRevision
   && left.hostReservationId === right.hostReservationId;
 
-const sameProjection = (left: HostHttpRequestProjection, right: HostHttpRequestProjection): boolean =>
+const sameProjection = (left: UnverifiedProof<HostHttpRequestProjection>, right: HostHttpRequestProjection): boolean =>
   JSON.stringify(left) === JSON.stringify(right);
 
 const providerAccessMatches = (
-  value: HostHttpProvisionalDecision["providerAccess"],
+  value: UnverifiedProof<HostHttpProvisionalDecision["providerAccess"]>,
   receipt: HostHttpMaterializationReceipt,
 ): boolean => value.accessRef === receipt.accessRef && value.providerRef === receipt.provider
   && value.accountRef === receipt.providerAccountRef && value.routeRef === receipt.providerRouteRef
@@ -96,11 +96,11 @@ export const verifiedProvisional = (input: Readonly<{
   ports: HttpEgressBrokerPorts; authorizationRequestId: string; request: HostHttpRequestProjection;
   receipt: HostHttpMaterializationReceipt;
 }>): boolean => {
-  const {decision, ports} = input;
+  const {decision: candidate, ports} = input;
   const {cut, now} = readBracketedCut(ports);
-  return validHostHttpProvisionalDecision(decision)
-    && decision.contractVersion === "provider-process-egress-provisional-decision/v2"
-    && input.verifier.verifyProvisionalDecision(decision)
+  if (!validHostHttpProvisionalDecision(candidate)) {return false;} const decision: UnverifiedProof<HostHttpProvisionalDecision> = candidate;
+  return decision.contractVersion === "provider-process-egress-provisional-decision/v2"
+    && input.verifier.verifyProvisionalDecision(candidate)
     && sameKey(input.verifier.signingKey, input.expectedKey) && sameKey(decision.signingKey, input.expectedKey)
     && sameKey(decision.signature, input.expectedKey)
     && decision.authorizationRequestId === input.authorizationRequestId
@@ -129,13 +129,14 @@ export const verifiedGrant = (input: Readonly<{
     resolutionCount: 1; addresses: readonly Readonly<{family: "ipv4" | "ipv6"; address: string;
       classification: "public"}>[]}>; selectedAddress: string;
 }>): boolean => {
-  const {grant, ports} = input;
-  if (!validHostHttpGrant(grant)) {return false;}
+  const {grant: candidate, ports} = input;
+  if (!validHostHttpGrant(candidate)) {return false;}
+  const grant: UnverifiedProof<HostHttpGrant> = candidate;
   const payload = grant.payload;
   const now = ports.clock.now();
   return payload.contractVersion === "provider-process-first-application-byte-grant/v2"
     && grant.evidence.contractVersion === "provider-process-egress-grant-evidence/v2"
-    && input.verifier.verifyGrant(grant) && sameKey(input.verifier.signingKey, input.expectedKey)
+    && input.verifier.verifyGrant(candidate) && sameKey(input.verifier.signingKey, input.expectedKey)
     && sameKey(grant.signature, input.expectedKey) && sameKey(grant.evidence.signingKey, input.expectedKey)
     && payload.scope.operationId === ports.identity.operationId
     && payload.scope.tenantId === ports.providerAccessSnapshot.tenantId
@@ -160,7 +161,7 @@ export const verifiedGrant = (input: Readonly<{
     && JSON.stringify(payload.resolver.normalizedAddresses) === JSON.stringify(input.resolver.addresses)
     && payload.selectedPeer.address === input.selectedAddress
     && payload.selectedPeer.address === normalizePublicAddress(input.tls.peerAddress) && payload.selectedPeer.port === input.tls.peerPort
-    && payload.tls.sniHostname === input.tls.requestedSni && payload.tls.certificateValidated === true
+    && payload.tls.sniHostname === input.tls.requestedSni && validCertificateObservation(payload.tls.certificateValidated)
     && payload.tls.dnsIdentity === input.tls.dnsIdentity
     && payload.tls.certificateDigest === input.tls.certificateDigest
     && payload.tls.tlsPolicyDigest === input.tls.tlsPolicyDigest && payload.tls.alpn === input.tls.alpn
@@ -182,3 +183,11 @@ export const dispatchGrantIsCurrent = (ports: HttpEgressBrokerPorts, grant: Host
     && now < grant.payload.time.expiresAtControlTime && now < deadline
     && ports.guard.snapshot().state === "active";
 };
+
+// A structurally valid proof still carries unverified protocol literals. This
+// view preserves live property reads across verifier calls and authority cuts.
+type UnverifiedProof<Value> = [Value] extends [string] ? string : [Value] extends [number] ? number
+  : boolean extends Value ? Value : [Value] extends [boolean] ? unknown : Value extends object
+    ? {[Key in keyof Value]: UnverifiedProof<Value[Key]>} : Value;
+
+const validCertificateObservation = (value: unknown): value is true => value === true;

@@ -73,7 +73,7 @@ const snapshotTarget = (value: unknown): ContainedTurnRouteQualificationTarget =
     }
     snapshot[dimension] = token;
   }
-  return Object.freeze(snapshot) as ContainedTurnRouteQualificationTarget;
+  return Object.freeze(snapshot);
 };
 
 /**
@@ -158,7 +158,7 @@ export function bindContainedTurnRouteEnforcement(
       }
       return result;
     },
-    releaseAfterContainerRemoval: admission.releaseAfterContainerRemoval,
+    releaseAfterContainerRemoval: (...args: Parameters<DockerLinuxOperationRouteAdmission["releaseAfterContainerRemoval"]>) => admission.releaseAfterContainerRemoval(...args),
   }));
   return route;
 }

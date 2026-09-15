@@ -89,6 +89,7 @@ export class NodeHostPrivateRootOwner implements HostPrivateRootOwner {
   #status: HostCustodyPrivateRootClosureEvidence["status"] = "unproven";
   #identity = "";
   #debt = false;
+  private hasDebt(): boolean {return this.#debt;}
   #capture: Promise<HostPrivateRootBinding> | undefined;
   #retained: Capture | undefined;
   #cleanup: Promise<HostPrivateRootReadback> | undefined;
@@ -103,8 +104,8 @@ export class NodeHostPrivateRootOwner implements HostPrivateRootOwner {
       history: Object.freeze([...this.#history]), debt: this.#debt, retainedHandles: this.#handles.size });
   }
 
-  private retain = <Handle extends StableFilesystemHandle>(handle: Handle): Handle => {this.#handles.set(handle, undefined); return handle;};
-  private close = async (handle: StableFilesystemHandle): Promise<void> => {
+  private readonly retain = <Handle extends StableFilesystemHandle>(handle: Handle): Handle => {this.#handles.set(handle, undefined); return handle;};
+  private readonly close = async (handle: StableFilesystemHandle): Promise<void> => {
     // A rejected close is retained and never attempted again: its FD may have
     // been released and reused even though the acknowledgement failed.
     let closing = this.#handles.get(handle);
@@ -116,7 +117,7 @@ export class NodeHostPrivateRootOwner implements HostPrivateRootOwner {
     await closing;
     this.#handles.delete(handle);
   };
-  private check = (): void => {
+  private readonly check = (): void => {
     if (performance.now() >= this.#deadline) {throw new Error("Private root deadline exceeded");}
   };
   private budget(forbiddenDirectoryIdentities: ReadonlySet<string> = new Set(), directoryIdentities = new Set<string>()): PrivateRootTraversal {
@@ -156,7 +157,7 @@ export class NodeHostPrivateRootOwner implements HostPrivateRootOwner {
     if (this.#capture !== undefined) {return this.#capture;}
     if (this.#closing) {return Promise.reject(new Error("Private root capture closed"));}
     this.#deadline = performance.now() + this.options.maximumMilliseconds;
-    this.#capture = Promise.resolve().then(() => this.captureDirectories()).catch(async error => {
+    this.#capture = Promise.resolve().then(() => this.captureDirectories()).catch(async (error: unknown) => {
       this.fail("capture-unproven");
       await this.closeAll();
       throw error;
@@ -248,7 +249,7 @@ export class NodeHostPrivateRootOwner implements HostPrivateRootOwner {
         await this.#reads;
         this.#deadline = monotonicDeadline;
         this.check();
-        if (this.#debt || this.#retained === undefined) {throw new Error("Private root is not captured");}
+        if (this.hasDebt() || this.#retained === undefined) {throw new Error("Private root is not captured");}
         await this.options.awaitQuiescence(Object.freeze({ deadlineEpochMs: input.deadlineEpochMs }));
         this.check();
         this.#history.push("private-owner-quiescence");
@@ -258,7 +259,7 @@ export class NodeHostPrivateRootOwner implements HostPrivateRootOwner {
         this.#history.push("deletion-observations-sealed");
         await this.closeAll();
         this.check();
-        if (this.#debt || this.#handles.size !== 0) {throw new Error("Private root descriptor release unproven");}
+        if (this.hasDebt() || this.#handles.size !== 0) {throw new Error("Private root descriptor release unproven");}
         this.#status = "deleted";
         this.#history.push("deleted");
       } catch {this.fail("cleanup-unproven");}
@@ -278,7 +279,7 @@ export class NodeHostPrivateRootOwner implements HostPrivateRootOwner {
     });
     // The operation and all capabilities remain retained after a bounded wait.
     // Late continuations check the same deadline/debt before another mutation.
-    return Promise.race([work, expired]).finally(() => clearTimeout(timer));
+    return Promise.race([work, expired]).finally(() => {clearTimeout(timer);});
   }
 
   private async removeCapturedRoot(): Promise<void> {

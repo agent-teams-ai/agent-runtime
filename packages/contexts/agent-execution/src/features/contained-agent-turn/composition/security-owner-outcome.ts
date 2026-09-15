@@ -9,14 +9,15 @@ export const securityConsumeOutcome = async (pending: ReturnType<Owner["consumeF
   if (outcome.status === "consumed") {
     exact("RS consumption", outcome, Object.hasOwn(outcome, "lifecycleState") ? ["status", "receipt", "lifecycleState"] : ["status", "receipt"]);
     exact("RS receipt", outcome.receipt, ["contractVersion", "purpose", "operationId", "scope", "grantRequestId", "requestDigest", "providerId", "authorityGeneration", "providerBindingDigest", "claimBindingDigest", "acceptedAuthorityDigest", "authorityHeadDigestAtConsumption", "authorityRevision", "constraintsDigest", "containmentPolicyDigest", "consumptionDigest", "claimBeforeControlTime", "consumedAtControlTime", "ownerEvidenceRef"]);
-    if (outcome.receipt.contractVersion !== "contained-turn-dispatch-consumption/v1") {throw new TypeError("RS receipt version mismatch");}
+    const version: unknown = outcome.receipt.contractVersion;
+    if (version !== "contained-turn-dispatch-consumption/v1") {throw new TypeError("RS receipt version mismatch");}
   } else if (outcome.status === "prevented") {
     exact("RS prevention outcome", outcome, ["status", "evidence"]);
     const evidence = outcome.evidence as Record<string, unknown>;
     exact("RS prevention", evidence, ["contractVersion", "purpose", "operationId", "scope", "grantRequestId", "requestDigest", "reason", "preventedAtControlTime", ...(Object.hasOwn(evidence, "ownerEvidenceRef") ? ["ownerEvidenceRef"] : [])]);
     if (evidence.contractVersion !== "contained-turn-dispatch-prevention/v1" || evidence.operationId !== request.operationId ||
         evidence.purpose !== request.purpose || evidence.grantRequestId !== request.grantRequestId || evidence.requestDigest !== request.requestDigest ||
-        hash(evidence.scope as never) !== hash(request.scope as never) || !(["accepted_authority_changed", "already_consumed", "authority_revision_stale", "claim_binding_mismatch", "constraints_drift", "containment_policy_drift", "expired", "invalid_request", "provider_binding_mismatch", "request_digest_mismatch", "revoked"] as unknown[]).includes(evidence.reason) ||
+        hash(evidence.scope as never) !== hash(request.scope) || typeof evidence.reason !== "string" || !["accepted_authority_changed", "already_consumed", "authority_revision_stale", "claim_binding_mismatch", "constraints_drift", "containment_policy_drift", "expired", "invalid_request", "provider_binding_mismatch", "request_digest_mismatch", "revoked"].includes(evidence.reason) ||
         !Number.isSafeInteger(evidence.preventedAtControlTime)) {throw new TypeError("RS prevention request mismatch");}
   }
   return outcome;

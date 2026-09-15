@@ -190,7 +190,7 @@ const exactUserInput = (value: unknown): boolean => {
     const allowed = CODEX_CONSUMED_THREAD_ITEM_NESTED_AUTHORITY.userInputKeys[kind];
     return optionalKeys(value, [location, "type"], allowed.filter(key => ![location, "type"].includes(key)))
       && typeof value[location] === "string"
-      && (value.detail === undefined || ["auto", "high", "low", "original"].includes(String(value.detail)));
+      && (value.detail === undefined || typeof value.detail === "string" && ["auto", "high", "low", "original"].includes(value.detail));
   }
   if (value.type === "audio") {return exactKeys(value,
     CODEX_CONSUMED_THREAD_ITEM_NESTED_AUTHORITY.userInputKeys.audio) && typeof value.url === "string";}
@@ -381,7 +381,7 @@ const validateCodexThreadItemAdmission = (
   if (!isRecord(value) || typeof value.type !== "string") {
     throw new CodexAppServerProtocolError("Codex item did not match the 0.153.4 item union", true);
   }
-  const normalized = validateAndNormalizeCodexThreadItem(value) as JsonRecord | undefined;
+  const normalized = validateAndNormalizeCodexThreadItem(value);
   if (normalized === undefined) {
     throw new CodexAppServerProtocolError("Codex item did not match the complete generated 0.153.4 item schema", true);
   }

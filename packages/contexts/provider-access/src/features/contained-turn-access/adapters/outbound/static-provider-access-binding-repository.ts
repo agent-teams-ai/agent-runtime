@@ -61,7 +61,7 @@ export const createStaticProviderAccessBindingRepository = (
     if (descriptor === undefined || !("value" in descriptor)) {
       throw new TypeError("authorities cannot contain holes or accessors");
     }
-    const authority = descriptor.value;
+    const authority: unknown = descriptor.value;
     if (authority === null || typeof authority !== "object" || isRuntimeProxy(authority)) {
       throw new TypeError("authority must be a plain data record");
     }
@@ -91,8 +91,8 @@ export const createStaticProviderAccessBindingRepository = (
     const scope = kind === "binding"
       ? canonicalProviderAccessScope({ projectId: authority.projectId, tenantId: authority.tenantId })
       : canonicalProviderAccessScope(authority.scope);
-    const providerObservations = observations.get(provider) ?? new Map();
-    const tenantObservations = providerObservations.get(scope.tenantId) ?? new Map();
+    const providerObservations = observations.get(provider) ?? new Map<string, Map<string, ProviderAccessBindingObservation>>();
+    const tenantObservations = providerObservations.get(scope.tenantId) ?? new Map<string, ProviderAccessBindingObservation>();
     if (tenantObservations.has(scope.projectId)) {
       throw new Error("duplicate exact-scope Provider Access authority");
     }

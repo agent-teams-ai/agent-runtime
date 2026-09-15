@@ -23,13 +23,13 @@ const unavailable = (): HostOutcome => Object.freeze({kind: "indeterminate"});
 const dataRecord = (value: unknown): Record<string, unknown> => {
   if (value === null || typeof value !== "object" || types.isProxy(value) ||
       Object.getPrototypeOf(value) !== Object.prototype) {throw invalidOwner();}
-  const result: Record<string, unknown> = Object.create(null);
+  const result = Object.create(null) as Record<string, unknown>;
   const keys = Reflect.ownKeys(value);
   if (keys.length > 19) {throw invalidOwner();}
   for (const key of keys) {
     if (typeof key !== "string") {throw invalidOwner();}
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
-    if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {throw invalidOwner();}
+    if (descriptor === undefined || !("value" in descriptor) || descriptor.enumerable !== true) {throw invalidOwner();}
     result[key] = descriptor.value;
   }
   return result;
@@ -40,12 +40,12 @@ const exact = (value: Record<string, unknown>, keys: readonly string[]): void =>
   if (actual.length !== keys.length || actual.some(key => !keys.includes(key))) {throw invalidOwner();}
 };
 
-const method = <T extends (...args: never[]) => unknown>(value: unknown): T => {
+const method = (value: unknown): ((...args: never[]) => Promise<unknown>) => {
   // Validate before invocation: discarding an unsupported returned Promise can
   // leave its rejection unhandled. A native async call creates its own Promise,
   // so the boundary never has to inspect a caller-supplied then/constructor.
   if (types.isProxy(value) || !types.isAsyncFunction(value) || types.isGeneratorFunction(value)) {throw invalidOwner();}
-  return value as T;
+  return value as (...args: never[]) => Promise<unknown>;
 };
 
 const commandKeys = ["accessRef", "authorizationRequestId", "availability", "bindingRevision", "credentialBindingDigest",
@@ -140,7 +140,7 @@ const inputSnapshot = <T extends object>(value: T, keys: readonly string[]): T =
 const invoke = <T>(capability: (...args: never[]) => unknown, input: object, project: (value: unknown) => T): Promise<T> => {
   const pending: unknown = Reflect.apply(capability, undefined, [input]);
   return new Promise<T>((resolve, reject) => {
-    Reflect.apply(Promise.prototype.then, pending, [(value: unknown) => {
+    void Reflect.apply(Reflect.get(Promise.prototype, "then"), pending, [(value: unknown) => {
       try {resolve(project(value));} catch (error) {reject(error);}
     }, reject]);
   });
@@ -157,9 +157,9 @@ const projectAuthorization = (
 ): HostAuthorization => {
   const outer = dataRecord(owner); exact(outer, ["authorization", "createRequestDigest"]);
   const authorization = dataRecord(outer.authorization); exact(authorization, ["authorize", "observe"]);
-  const authorize = method<ContainedTurnHttpProviderAccessOwner["authorization"]["authorize"]>(authorization.authorize);
-  const observe = method<ContainedTurnHttpProviderAccessOwner["authorization"]["observe"]>(authorization.observe);
-  const digest = method<ContainedTurnHttpProviderAccessOwner["createRequestDigest"]>(outer.createRequestDigest);
+  const authorize = method(authorization.authorize);
+  const observe = method(authorization.observe);
+  const digest = method(outer.createRequestDigest);
   return Object.freeze<HostAuthorization>({
     async createRequestDigest(input) {
       try {
@@ -196,8 +196,8 @@ interface CredentialRenderingOwner {
 }
 type CredentialPair = Pick<HostHttpEgressSessionDependencies, "providerAccess" | "materializer"> & Readonly<{dispose(): void}>;
 const renderUnavailable = (): TypeError => new TypeError("HTTP Provider Access credential rendering unavailable");
-const fill = Uint8Array.prototype.fill;
-const set = Uint8Array.prototype.set;
+const fill = Reflect.get(Uint8Array.prototype, "fill");
+const set = Reflect.get(Uint8Array.prototype, "set");
 
 /**
  * Private, inert pairing for an exclusively owned, trusted PA rendering-factory
@@ -212,41 +212,42 @@ export const createContainedTurnHttpCredentialMaterialization = (
 ): CredentialPair => {
   const outer = dataRecord(owner); exact(outer, ["authorization", "rendering", "dispose"]);
   const rendering = dataRecord(outer.rendering); exact(rendering, ["render"]);
-  const render = method<CredentialRenderingOwner["rendering"]["render"]>(rendering.render);
+  const render = method(rendering.render) as CredentialRenderingOwner["rendering"]["render"];
   const disposeOwner = outer.dispose;
   if (typeof disposeOwner !== "function" || types.isProxy(disposeOwner)) {throw invalidOwner();}
   let closed = false;
+  const isClosed = (): boolean => closed;
   let disposal: "open" | "disposing" | "disposed" | "failed" = "open";
   let disposalFailure: unknown;
   let fresh = new WeakMap<HostReceipt, object>();
   const authorization = projectAuthorization({authorization: outer.authorization as CredentialRenderingOwner["authorization"],
     createRequestDigest}, (original, detached) => {
-    if (closed) {throw renderUnavailable();}
+    if (isClosed()) {throw renderUnavailable();}
     fresh.set(detached, original);
   });
   return Object.freeze({
     providerAccess: Object.freeze<HostAuthorization>({
       async createRequestDigest(input) {
-        if (closed) {throw new TypeError("HTTP Provider Access request digest unavailable");}
+        if (isClosed()) {throw new TypeError("HTTP Provider Access request digest unavailable");}
         const digest = await authorization.createRequestDigest(input);
-        if (closed) {throw new TypeError("HTTP Provider Access request digest unavailable");}
+        if (isClosed()) {throw new TypeError("HTTP Provider Access request digest unavailable");}
         return digest;
       },
       async authorize(input) {
-        if (closed) {return unavailable();}
+        if (isClosed()) {return unavailable();}
         const result = await authorization.authorize(input);
-        return closed ? unavailable() : result;
+        return isClosed() ? unavailable() : result;
       },
       async observe(input) {
-        if (closed) {return unavailable();}
+        if (isClosed()) {return unavailable();}
         const result = await authorization.observe(input);
-        return closed ? unavailable() : result;
+        return isClosed() ? unavailable() : result;
       },
     }),
     materializer: Object.freeze<CredentialPair["materializer"]>({
       async render(detached) {
         const original = fresh.get(detached);
-        if (closed || original === undefined) {throw renderUnavailable();}
+        if (isClosed() || original === undefined) {throw renderUnavailable();}
         fresh.delete(detached); // Consume identity before the first await, including failure.
         const copies: Uint8Array[] = [];
         try {
@@ -254,11 +255,12 @@ export const createContainedTurnHttpCredentialMaterialization = (
           if (result.kind !== "rendered") {throw renderUnavailable();}
           let fields: Awaited<ReturnType<CredentialPair["materializer"]["render"]>>;
           try {
-            if (closed || result.credentials.fields.length < 1 || result.credentials.fields.length > 2) {throw renderUnavailable();}
+            if (isClosed() || result.credentials.fields.length < 1 || result.credentials.fields.length > 2) {throw renderUnavailable();}
             const names = new Set<string>();
             fields = Object.freeze(result.credentials.fields.map(field => {
-              const name = field.name === "Authorization" ? "authorization" :
-                field.name === "ChatGPT-Account-ID" ? "chatgpt-account-id" : field.name === "x-api-key" ? "x-api-key" : undefined;
+              const rawName: unknown = field.name;
+              const name = rawName === "Authorization" ? "authorization" :
+                rawName === "ChatGPT-Account-ID" ? "chatgpt-account-id" : rawName === "x-api-key" ? "x-api-key" : undefined;
               const maximum = name === "chatgpt-account-id" ? 256 : name === "authorization" ? 8199 : 8192;
               if (name === undefined || names.has(name) || field.valueBytes.byteLength < 1 || field.valueBytes.byteLength > maximum) {
                 throw renderUnavailable();
@@ -271,7 +273,7 @@ export const createContainedTurnHttpCredentialMaterialization = (
               return Object.freeze({name, valueBytes: bytes});
             }));
           } finally {result.credentials.release();}
-          if (closed) {throw renderUnavailable();}
+          if (isClosed()) {throw renderUnavailable();}
           // Host owns these dedicated copies, including a late completion after its cutoff.
           return fields;
         } catch {

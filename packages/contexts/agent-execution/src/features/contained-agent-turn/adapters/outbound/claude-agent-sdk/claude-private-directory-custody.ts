@@ -6,10 +6,11 @@ import type {
 export const captureClaudePrivateDirectoryCustody = (
   custody: PrivateDirectoryCustodyPort,
 ): PrivateDirectoryCustodyPort => {
-  if (typeof custody !== "object" || custody === null) {
+  const candidate: unknown = custody;
+  if (typeof candidate !== "object" || candidate === null) {
     throw new TypeError("Claude private-directory custody must be an object");
   }
-  const verifier = custody.assertPrivateDirectory;
+  const verifier = (candidate as Readonly<Record<string, unknown>>).assertPrivateDirectory;
   if (typeof verifier !== "function") {
     throw new TypeError("Claude private-directory custody requires a verifier");
   }

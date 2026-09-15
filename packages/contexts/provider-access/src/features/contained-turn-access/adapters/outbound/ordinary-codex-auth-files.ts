@@ -29,7 +29,7 @@ export async function stableAuthPath(path: string, directory: boolean, uid: numb
 
 export async function prepareAuthFiles(input: { source: string; privateRoot: string; executable: string; check(): void }) {
   const uid = process.getuid?.();
-  if (!uid || uid <= 0 || process.platform !== 'darwin' || process.arch !== 'arm64') { return refused(); }
+  if (uid === undefined || uid <= 0 || process.platform !== 'darwin' || process.arch !== 'arm64') { return refused(); }
   const owned: FileHandle[] = [];
   let home: string | undefined;
   try {
@@ -41,7 +41,8 @@ export async function prepareAuthFiles(input: { source: string; privateRoot: str
     const binary = await stableAuthPath(input.executable, false, uid, false); owned.push(binary.handle);
     if (binary.identity.size > 536_870_912 || !(binary.identity.mode & 0o111)) { refused(); }
     const hash = createHash('sha256');
-    for await (const bytes of binary.handle.createReadStream({ autoClose: false })) { input.check(); hash.update(bytes); }
+    const stream = binary.handle.createReadStream({ autoClose: false }) as AsyncIterable<Buffer>;
+    for await (const bytes of stream) { input.check(); hash.update(bytes); }
     if (hash.digest('hex') !== ORDINARY_CODEX_AUTH_BINARY_SHA256) { refused(); }
     await binary.check(); await source.check(); await auth.check(); input.check();
     home = await mkdtemp(join(input.privateRoot, 'ordinary-codex-auth-'));
@@ -78,7 +79,7 @@ export async function prepareAuthFiles(input: { source: string; privateRoot: str
   } catch (error) {
     await Promise.all(owned.map(handle => handle.close()));
     // No material returns on partial setup; remove only the freshly created private path.
-    if (home) { await rm(home, { recursive: true, force: true }); }
+    if (home !== undefined && home !== '') { await rm(home, { recursive: true, force: true }); }
     throw error;
   }
 }

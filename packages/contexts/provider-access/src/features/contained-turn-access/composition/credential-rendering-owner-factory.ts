@@ -2,7 +2,7 @@ import { createContainedTurnCredentialMaterializationAuthorizationV1, type Mater
 import { createCredentialRenderingAdapter } from "../adapters/outbound/credential-rendering-owner.js";
 import { exactCredentialData } from "../adapters/outbound/credential-rendering-bytes.js";
 import type { CredentialGenerationAcquisition, CredentialGenerationRequest, CredentialRenderingOwner, CredentialRenderingSelection } from "../adapters/outbound/credential-rendering-contracts.js";
-import { isRuntimeProxy } from "../adapters/provider-access-data.js";
+import { intrinsicMethod, isRuntimeProxy } from "../adapters/provider-access-data.js";
 import { snapshotCredentialRenderingSelection } from "../adapters/outbound/operation-credential-selection.js";
 import { createOperationCredentialGenerationAcquisition } from "../adapters/outbound/operation-credential-generation-acquisition.js";
 
@@ -14,11 +14,11 @@ const captureAcquisition = (value: CredentialGenerationAcquisition | undefined):
   // Best-effort shape heuristic, not security proof of the function's behavior
   // or provenance: arrow wrappers pass and legitimate bound methods are rejected.
   // PA authorization and current binding rereads remain independently required.
-  const source = Reflect.apply(Function.prototype.toString, method, []) as string;
+  const source = Reflect.apply(intrinsicMethod(Function.prototype, "toString"), method, []);
   if (/\{\s*\[native code\]\s*\}\s*$/u.test(source) || source.trimStart().startsWith("class")) {
     throw new TypeError("invalid credential acquisition capability");
   }
-  return Object.freeze({acquire(request: CredentialGenerationRequest, signal: AbortSignal) {return Reflect.apply(method, undefined, [request, signal]);}});
+  return Object.freeze({acquire(request: CredentialGenerationRequest, signal: AbortSignal) {return Reflect.apply(method as CredentialGenerationAcquisition["acquire"], undefined, [request, signal]);}});
 };
 
 /**

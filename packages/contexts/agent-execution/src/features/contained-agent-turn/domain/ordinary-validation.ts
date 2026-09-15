@@ -11,7 +11,7 @@ function record(value: unknown, keys: readonly string[]): asserts value is Recor
 }
 const text = (value: unknown, limit: import("./contained-turn-limits.js").ContainedTurnTextLimit = CONTAINED_TURN_LIMITS.text.identifier): void => {
   requireFact(typeof value === "string");
-  validateContainedTurnText("ordinary field", value as string, limit);
+  validateContainedTurnText("ordinary field", value, limit);
 };
 const integer = (value: unknown, minimum = 0): void => {requireFact(typeof value === "number" && Number.isSafeInteger(value) && value >= minimum);};
 const digest = (value: unknown): void => {requireFact(typeof value === "string" && /^(?:sha256:)?[a-f0-9]{64}$/u.test(value));};
@@ -34,11 +34,11 @@ export function validateOrdinaryInput(value: unknown): asserts value is Ordinary
   record(value.scope, ["projectId", "tenantId"]); text(value.scope.projectId); text(value.scope.tenantId);
   record(value.intent, ["mode", "prompt"]); requireFact(value.intent.mode === "workspace-write");
   requireFact(typeof value.intent.prompt === "string");
-  validateContainedTurnText("prompt", value.intent.prompt as string, CONTAINED_TURN_LIMITS.text.prompt);
+  validateContainedTurnText("prompt", value.intent.prompt, CONTAINED_TURN_LIMITS.text.prompt);
 }
 export function validateOrdinaryReceipt(value: unknown, binding: OrdinaryBinding): asserts value is OrdinaryReceipt {
   requireFact(value !== null && typeof value === "object");
-  const descriptor = Object.getOwnPropertyDescriptor(value as object, "kind");
+  const descriptor = Object.getOwnPropertyDescriptor(value, "kind");
   requireFact(descriptor !== undefined && descriptor.enumerable === true && "value" in descriptor);
   const kind: unknown = descriptor?.value;
   requireFact(typeof kind === "string" && Object.hasOwn(receiptFields, kind));
@@ -74,8 +74,8 @@ export function validateOrdinaryOperation(value: unknown): asserts value is Ordi
     record(item, ["cursor", "kind", "text"]); requireFact(item.cursor === index + 1);
     requireFact(item.kind === "assistant" || item.kind === "diagnostic" || item.kind === "progress");
     requireFact(typeof item.text === "string");
-    validateContainedTurnText("output", item.text as string, CONTAINED_TURN_LIMITS.text.outputChunk);
-    totalBytes += utf8ByteLength(item.text as string);
+    validateContainedTurnText("output", item.text, CONTAINED_TURN_LIMITS.text.outputChunk);
+    totalBytes += utf8ByteLength(item.text);
   });
   requireFact(totalBytes <= CONTAINED_TURN_LIMITS.text.outputTotal.maximumBytes);
   const binding: OrdinaryBinding = {operationId: value.operationId as string, attemptId: value.attemptId as string, ...ORDINARY_PROFILE};

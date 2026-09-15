@@ -1,3 +1,4 @@
+import { v2InputPolicy, v2Inputs } from "./runtime-setup-l0-evidence-v2-inputs.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -268,7 +269,7 @@ async function deliveryFixture(t, caller = process.cwd(), env = process.env) {
   runGit(root, "clone", "--quiet", "--no-local", caller, producer);
   // Exercise this implementation even when the caller's changes are uncommitted.
   for (const path of ["scripts/architecture/runtime-setup-l0-evidence-v2-capture.mjs",
-    "scripts/architecture/runtime-setup-l0-evidence-v2.test.mjs", "docs/architecture/get-modular-adoption.md"]) {
+    "scripts/architecture/runtime-setup-l0-evidence-v2.test.mjs", "scripts/architecture/runtime-setup-l0-evidence-v2-inputs.mjs", "docs/architecture/get-modular-adoption.md"]) {
     fs.copyFileSync(resolve(path), resolve(producer, path));
   }
   rmSync(resolve(producer, v2ReportPath), {force: true});
@@ -344,17 +345,26 @@ async function deliveryFixture(t, caller = process.cwd(), env = process.env) {
     writeFileSync(delivered, json(report));
   });}
   for (const [name, mutate] of [
-    ["tracked byte change", () => fs.appendFileSync(resolve(consumer, "README.md"), "\nchanged\n")],
-    ["tracked addition", () => writeFileSync(resolve(consumer, "extra-input.txt"), "extra")],
-    ["tracked removal", () => rmSync(resolve(consumer, "README.md"))],
-    ["tracked path change", () => fs.renameSync(resolve(consumer, "README.md"), resolve(consumer, "RENAMED.md"))],
-    ["tracked mode change", () => {runGit(consumer, "config", "core.fileMode", "true"); fs.chmodSync(resolve(consumer, "README.md"), 0o755);}],
+    ["tracked byte change", () => fs.appendFileSync(resolve(consumer, "packages/apps/embedded-runtime/package.json"), "\nchanged\n")],
+    ["tracked addition", () => writeFileSync(resolve(consumer, "packages/apps/embedded-runtime/extra-input.txt"), "extra")],
+    ["tracked removal", () => rmSync(resolve(consumer, "packages/apps/embedded-runtime/package.json"))],
+    ["tracked path change", () => fs.renameSync(resolve(consumer, "packages/apps/embedded-runtime/package.json"), resolve(consumer, "packages/apps/embedded-runtime/renamed.json"))],
+    ["tracked mode change", () => {runGit(consumer, "config", "core.fileMode", "true"); fs.chmodSync(resolve(consumer, "packages/apps/embedded-runtime/package.json"), 0o755);}],
   ]) {await t.test(`rejects ${name} even when committed`, () => {
     mutate(); runGit(consumer, "add", "-A"); commit(consumer);
     assert.equal(runGit(consumer, "status", "--porcelain"), "");
     assert.throws(() => deliveredCheck(consumer, delivered), /source\/input mismatch/);
     runGit(consumer, "reset", "--hard", delivery);
   });}
+  await t.test("unrelated tracked and untracked edits and commits preserve identity", () => {
+    fs.appendFileSync(resolve(consumer, "README.md"), "\nunrelated\n");
+    writeFileSync(resolve(consumer, "unrelated.txt"), "unrelated");
+    deliveredCheck(consumer, delivered);
+    runGit(consumer, "add", "README.md", "unrelated.txt"); commit(consumer);
+    assert.deepEqual(getIdentity(consumer, current.sourceRevision), current);
+    deliveredCheck(consumer, delivered);
+    runGit(consumer, "reset", "--hard", delivery);
+  });
   deliveredCheck(consumer, delivered);
 }
 
@@ -396,4 +406,186 @@ test("Darwin PostgreSQL custody skip requires the successful Linux integration p
   assert.throws(() => validateCoverage(pair));
   pair[1].events = [pass]; pair[0].events[0].skip = true;
   assert.throws(() => validateCoverage(pair), /unknown skip reason/);
+});
+
+test("bounded inventory rejects missing inputs, links and gitlinks and preserves Git errors", t => {
+  const root = mkdtempSync(resolve(tmpdir(), "v2-input-policy-"));
+  t.after(() => rmSync(root, {recursive: true, force: true}));
+  const identity = callerIdentity(process.cwd());
+  const runGit = gitWithEnv({...process.env, ...identity});
+  runGit(root, "init", "--quiet");
+  const directories = new Set([...v2InputPolicy.roots, ...v2InputPolicy.requiredRoots]);
+  for (const path of directories) {
+    fs.mkdirSync(resolve(root, path), {recursive: true});
+    writeFileSync(resolve(root, path, "fixture.txt"), "fixture");
+  }
+  for (const path of [...v2InputPolicy.files, ...v2InputPolicy.required]) {
+    fs.mkdirSync(resolve(root, path, ".."), {recursive: true}); writeFileSync(resolve(root, path), "fixture");
+  }
+  const commit = () => {runGit(root, "add", "-A"); runGit(root, "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "synthetic policy"); return runGit(root, "rev-parse", "HEAD");};
+  const revision = commit(), baseline = v2Inputs(root, revision);
+  assert.equal(baseline.inputPolicy, v2InputPolicy.version);
+  assert.deepEqual(baseline.inputs.map(i => i.path), baseline.inputs.map(i => i.path).toSorted());
+  for (const path of [...v2InputPolicy.roots, ...v2InputPolicy.requiredRoots, ...v2InputPolicy.files, ...v2InputPolicy.required]) {
+    rmSync(resolve(root, path), {recursive: true, force: true});
+    const removed = commit();
+    assert.throws(() => v2Inputs(root, removed), /missing required input/);
+    runGit(root, "reset", "--hard", revision);
+  }
+  // Exercise all input classes without depending on historical clone availability.
+  for (const {path} of baseline.inputs) {
+    fs.appendFileSync(resolve(root, path), "changed");
+    assert.throws(() => v2Inputs(root, revision), /committed and clean/);
+    commit();
+    assert.throws(() => v2Inputs(root, revision), /source\/input mismatch/);
+    runGit(root, "reset", "--hard", revision);
+  }
+  writeFileSync(resolve(root, "README.md"), "unrelated");
+  fs.mkdirSync(resolve(root, "docs/spikes"), {recursive: true});
+  writeFileSync(resolve(root, v2ReportPath), "report");
+  assert.deepEqual(v2Inputs(root, revision), baseline);
+  commit();
+  assert.deepEqual(v2Inputs(root, revision), baseline);
+  runGit(root, "reset", "--hard", revision);
+  for (const mutate of [
+    () => fs.renameSync(resolve(root, "package.json"), resolve(root, "renamed.json")),
+    () => {runGit(root, "config", "core.fileMode", "true"); fs.chmodSync(resolve(root, "package.json"), 0o755);},
+  ]) {
+    mutate(); commit();
+    assert.throws(() => v2Inputs(root, revision), /source\/input mismatch/);
+    runGit(root, "reset", "--hard", revision);
+  }
+  runGit(root, "config", "core.fileMode", "false");
+  fs.chmodSync(resolve(root, "package.json"), 0o755);
+  assert.throws(() => v2Inputs(root, revision), /input mode mismatch/);
+  fs.chmodSync(resolve(root, "package.json"), 0o644);
+  runGit(root, "config", "core.fileMode", "true");
+  for (const mutate of [
+    id => {delete id.inputPolicy;},
+    id => {id.inputPolicy = "runtime-setup-v2-inputs/0";},
+    id => {id.inputs.pop();},
+    id => {id.inputs.push({path: "README.md", mode: "100644", sha256: "a".repeat(64)});},
+  ]) {
+    const f = fixture(); Object.assign(f.identity, structuredClone(baseline));
+    f.validate();
+    f.receipt.identity = structuredClone(f.identity); mutate(f.receipt.identity);
+    assert.throws(f.validate, /identity mismatch/);
+  }
+  const odd = "packages/apps/embedded-runtime/tab\tnewline\n[lit]*.txt";
+  writeFileSync(resolve(root, odd), "literal");
+  assert.throws(() => v2Inputs(root, revision), /committed and clean/);
+  const added = commit();
+  assert.ok(v2Inputs(root, added).inputs.some(input => input.path === odd && input.sha256 === sha256("literal")));
+  assert.throws(() => v2Inputs(root, revision), /source\/input mismatch/);
+  runGit(root, "reset", "--hard", revision);
+  fs.symlinkSync("fixture.txt", resolve(root, "packages/apps/embedded-runtime/link"));
+  const linked = commit();
+  assert.throws(() => v2Inputs(root, linked), /non-regular input/);
+  runGit(root, "reset", "--hard", revision);
+  fs.mkdirSync(resolve(root, "packages/apps/embedded-runtime/submodule"));
+  runGit(root, "update-index", "--add", "--cacheinfo", `160000,${revision},packages/apps/embedded-runtime/submodule`);
+  runGit(root, "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "synthetic gitlink");
+  assert.throws(() => v2Inputs(root, runGit(root, "rev-parse", "HEAD")), /non-regular input/);
+  runGit(root, "reset", "--hard", revision);
+  assert.throws(() => v2Inputs(root, "0".repeat(40)), error => error.status === 128 && !/source\/input mismatch/u.test(error.message));
+  const outside = mkdtempSync(resolve(tmpdir(), "v2-no-git-"));
+  t.after(() => rmSync(outside, {recursive: true, force: true}));
+  assert.throws(() => v2Inputs(outside, revision), error => error.status === 128);
+});
+
+test("bounded real-source merge/check accepts unrelated and report-only delivery", async t => {
+  const root = mkdtempSync(resolve(tmpdir(), "v2-bounded-delivery-"));
+  t.after(() => rmSync(root, {recursive: true, force: true}));
+  const source = resolve(root, "source"), captures = resolve(root, "captures");
+  fs.mkdirSync(source); fs.mkdirSync(captures);
+  const pathspec = [...v2InputPolicy.roots, ...v2InputPolicy.files].map(path => `:(top,literal)${path}`);
+  const paths = execFileSync("git", ["ls-files", "-z", "--", ...pathspec], {encoding: "utf8"}).split("\0").filter(Boolean);
+  paths.push("scripts/architecture/runtime-setup-l0-evidence-v2-inputs.mjs");
+  for (const path of new Set(paths)) {
+    fs.mkdirSync(resolve(source, path, ".."), {recursive: true}); fs.copyFileSync(resolve(path), resolve(source, path));
+  }
+  writeFileSync(resolve(source, "README.md"), "unrelated tracked file");
+  const runGit = gitWithEnv({...process.env, ...callerIdentity(process.cwd())});
+  const commit = () => {runGit(source, "add", "-A"); runGit(source, "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "synthetic bounded delivery");};
+  runGit(source, "init", "--quiet"); commit();
+  const current = getIdentity(source);
+  const receipts = targets.map(target => {
+    const f = fixture(); f.receipt.identity = current; f.receipt.target = target;
+    [f.receipt.platform, f.receipt.architecture] = target.split("-");
+    f.receipt.postgres = {required: target === "linux-x64", configured: target === "linux-x64"};
+    f.receipt.artifactDirectory = `${target}.artifacts`;
+    fs.mkdirSync(resolve(captures, f.receipt.artifactDirectory));
+    for (const [name, bytes] of Object.entries(f.artifacts)) {
+      writeFileSync(resolve(captures, f.receipt.artifactDirectory, name), bytes);
+      f.receipt.artifacts[name] = sha256(bytes);
+    }
+    const path = resolve(captures, `${target}.json`); writeFileSync(path, json(f.receipt)); return path;
+  });
+  const output = resolve(source, v2ReportPath);
+  const report = mergeReceipts(source, receipts, output); checkV2(source, output);
+  commit(); rmSync(captures, {recursive: true});
+  fs.appendFileSync(resolve(source, "README.md"), "changed");
+  assert.deepEqual(getIdentity(source, current.sourceRevision), current);
+  checkV2(source, output); commit(); checkV2(source, output);
+  for (const path of ["scripts/architecture/unrelated-checker.mjs", "docs/decisions/unrelated-decision.md"]) {
+    fs.mkdirSync(resolve(source, path, ".."), {recursive: true});
+    writeFileSync(resolve(source, path), "unrelated tracked fixture");
+  }
+  commit();
+  const deliveryRevision = runGit(source, "rev-parse", "HEAD");
+  for (const path of ["scripts/architecture/unrelated-checker.mjs", "docs/decisions/unrelated-decision.md"]) {
+    await t.test(`unrelated sibling edit preserves identity: ${path}`, () => {
+      fs.appendFileSync(resolve(source, path), "changed");
+      assert.deepEqual(getIdentity(source, current.sourceRevision), current);
+      checkV2(source, output); commit();
+      checkV2(source, output);
+      runGit(source, "reset", "--hard", deliveryRevision);
+    });
+  }
+  await t.test("adoption checker reciprocal-link document is protected independently of policy", () => {
+    const path = "docs/architecture/get-modular-adoption.md";
+    assert.ok(current.inputs.some(input => input.path === path));
+    fs.appendFileSync(resolve(source, path), "\nchanged\n");
+    assert.throws(() => checkV2(source, output), /committed and clean/);
+    commit();
+    assert.throws(() => checkV2(source, output), /source\/input mismatch/);
+    runGit(source, "reset", "--hard", deliveryRevision);
+  });
+  // Every declared required input, plus source/test/build/native representatives
+  // in each package, is tested against the real delivered checker.
+  const protectedPaths = new Set([...v2InputPolicy.files,
+    ...v2InputPolicy.roots, ...v2InputPolicy.requiredRoots, ...v2InputPolicy.required].map(path =>
+    current.inputs.find(input => input.path === path || input.path.startsWith(`${path}/`))?.path));
+  for (const input of current.inputs) {
+    if (/\/(scripts|native)\//u.test(input.path)) {protectedPaths.add(input.path);}
+  }
+  assert.ok(!protectedPaths.has(undefined), "policy input missing from inventory");
+  for (const path of protectedPaths) {await t.test(`input bytes protected: ${path}`, () => {
+    fs.appendFileSync(resolve(source, path), "\nchanged\n");
+    assert.throws(() => checkV2(source, output), /committed and clean/);
+    runGit(source, "add", path); commit();
+    assert.throws(() => checkV2(source, output), /source\/input mismatch/);
+    runGit(source, "reset", "--hard", deliveryRevision);
+  });}
+  for (const [name, mutate] of [
+    ["obsolete policy", id => {delete id.inputPolicy;}],
+    ["mixed policy", id => {id.inputPolicy = "runtime-setup-v2-inputs/0";}],
+    ["omitted input", id => {id.inputs.pop();}],
+    ["extra input", id => {id.inputs.push({path: "README.md", mode: "100644", sha256: "a".repeat(64)});}],
+  ]) {await t.test(`rejects receipt ${name}`, () => {
+    const changed = structuredClone(report), ref = changed.receipts[0];
+    const receipt = JSON.parse(Buffer.from(ref.receiptBase64, "base64"));
+    mutate(receipt.identity);
+    const bytes = Buffer.from(json(receipt));
+    ref.receiptBase64 = bytes.toString("base64"); ref.sha256 = sha256(bytes);
+    writeFileSync(output, json(changed));
+    assert.throws(() => checkV2(source, output), /identity mismatch/);
+    writeFileSync(output, json(report));
+  });}
+  const consumer = resolve(root, "consumer");
+  runGit(root, "clone", "--quiet", "--no-local", source, consumer);
+  checkV2(consumer, resolve(consumer, v2ReportPath));
+  const old = JSON.parse(readFileSync(resolve(v2ReportPath)));
+  const oldReceipt = JSON.parse(Buffer.from(old.receipts[0].receiptBase64, "base64"));
+  assert.throws(() => validateReceipt(oldReceipt, current, () => assert.fail("stale identity must reject before artifacts")), /identity mismatch/);
 });

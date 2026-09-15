@@ -34,13 +34,13 @@ const snapshotPort = <T extends object>(value: T, keys: readonly string[]): T =>
     while (owner !== null && field === undefined) {
       if (types.isProxy(owner)) {throw new TypeError("Docker recipe port unavailable");}
       field = Object.getOwnPropertyDescriptor(owner, key);
-      owner = Object.getPrototypeOf(owner);
+      owner = Object.getPrototypeOf(owner) as object | null;
     }
     if (field === undefined && key === "hijack") {continue;}
     if (field === undefined || !("value" in field) || typeof field.value !== "function" || types.isProxy(field.value)) {
       throw new TypeError("Docker recipe port unavailable");
     }
-    const method = field.value;
+    const method = field.value as (this: T, ...args: unknown[]) => unknown;
     result[key] = (...args: unknown[]) => Reflect.apply(method, value, args);
   }
   return Object.freeze(result) as T;
@@ -56,7 +56,9 @@ const snapshot = <T>(value: T, path = "", depth = 0): T => {
   const keys = Object.hasOwn(portKeys, path) ? portKeys[path] : undefined;
   if (keys !== undefined) {return snapshotPort(value, keys);}
   const data = custodyDataRecord(value);
-  if (![Object.prototype, Array.prototype, null].includes(Object.getPrototypeOf(value))) {
+  const prototype: unknown = Object.getPrototypeOf(value);
+  const dataPrototypes: readonly unknown[] = [Object.prototype, Array.prototype, null];
+  if (!dataPrototypes.includes(prototype)) {
     throw new TypeError("Docker recipe facts unavailable");
   }
   const result = Array.isArray(value) ? [] : {};

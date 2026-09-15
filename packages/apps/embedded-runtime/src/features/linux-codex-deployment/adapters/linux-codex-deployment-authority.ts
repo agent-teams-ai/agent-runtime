@@ -31,21 +31,22 @@ export const captureLinuxCodexDeploymentData = <T>(value: T, depth = 0): T => {
     if (typeof value === "function") {return unavailable();}
     return value;
   }
-  const prototype = Object.getPrototypeOf(value);
-  if (![Object.prototype, Array.prototype, null].includes(prototype)) {return unavailable();}
+  const prototype: unknown = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== Array.prototype && prototype !== null) {return unavailable();}
   const result: Record<string, unknown> | unknown[] = Array.isArray(value) ? [] : {};
   for (const key of Reflect.ownKeys(value)) {
     if (Array.isArray(value) && key === "length") {continue;}
     const field = Object.getOwnPropertyDescriptor(value, key);
     if (typeof key !== "string" || field === undefined || !("value" in field)) {return unavailable();}
-    const captured = typeof field.value === "function" ? deploymentMethod(field.value, value)
+    const captured: unknown = typeof field.value === "function" ? deploymentMethod(field.value, value)
       : captureLinuxCodexDeploymentData(field.value, depth + 1);
     Object.defineProperty(result, key, {value: captured, enumerable: field.enumerable === true});
   }
   return Object.freeze(result) as T;
 };
 export const captureLinuxCodexDeploymentPort = <T extends object, K extends keyof T>(owner: T, keys: readonly K[]): Pick<T, K> => {
-  if (owner === null || typeof owner !== "object" || types.isProxy(owner)) {return unavailable();}
+  const candidate: unknown = owner;
+  if (candidate === null || typeof candidate !== "object" || types.isProxy(candidate)) {return unavailable();}
   const result = {} as Pick<T, K>;
   for (const key of keys) {
     let prototype: object | null = owner;
@@ -53,7 +54,7 @@ export const captureLinuxCodexDeploymentPort = <T extends object, K extends keyo
     while (prototype !== null && field === undefined) {
       if (types.isProxy(prototype)) {return unavailable();}
       field = Object.getOwnPropertyDescriptor(prototype, key);
-      prototype = Object.getPrototypeOf(prototype);
+      prototype = Object.getPrototypeOf(prototype) as object | null;
     }
     if (field === undefined || !("value" in field)) {return unavailable();}
     result[key] = deploymentMethod(field.value, owner) as T[K];
@@ -75,9 +76,9 @@ const validateConsumedPair = (pa: PaReceipt, rs: RsReceipt, subject: Input["subj
         pa.authorityFacts.acceptedAuthorityDigest !== accepted.acceptedAuthorityVectorDigest) {return unavailable();}
 };
 
-const validatePublishedHead = (head: ReturnType<typeof snapshotDispatchAuthorityHead>, key: {scope: PaReceipt["scope"]; operationId: string; providerId: string}, rs: RsReceipt): void => {
-    if (head === undefined || head === null || head.decision !== "accepted" || head.revoked ||
-        head.purpose !== rs.purpose || head.ownerEvidenceRef !== rs.ownerEvidenceRef || head.operationId !== key.operationId || head.providerId !== key.providerId ||
+const validatePublishedHead = (head: ReturnType<typeof snapshotDispatchAuthorityHead> | null, key: {scope: PaReceipt["scope"]; operationId: string; providerId: string}, rs: RsReceipt): void => {
+    if (head === undefined || head === null || (head.decision as unknown) !== "accepted" || head.revoked ||
+        (head.purpose as unknown) !== rs.purpose || head.ownerEvidenceRef !== rs.ownerEvidenceRef || head.operationId !== key.operationId || head.providerId !== key.providerId ||
         !isDeepStrictEqual(head.scope, key.scope) || head.claimBindingDigest !== rs.claimBindingDigest ||
         head.requestDigest !== rs.requestDigest || head.claimBeforeControlTime !== rs.claimBeforeControlTime ||
         head.authorityHeadDigest !== rs.authorityFacts.authorityHeadDigest ||
@@ -130,10 +131,11 @@ export const createLinuxCodexDeploymentAuthority = (readers: Readers, sourceRevi
           [subject.providerAccessRequest.grantRequestId, subject.runtimeSecurityRequest.grantRequestId].includes(receipt.grantRequestId)) {release(key);}
     }
   };
-  if (readers === null || typeof readers !== "object" || types.isProxy(readers)) {return unavailable();}
-  const readerFields = Object.getOwnPropertyDescriptors(readers);
-  if ( !readerFields.runtimeSecurity || !("value" in readerFields.runtimeSecurity) ||
-      !readerFields.providerAccess || !("value" in readerFields.providerAccess)) {return unavailable();}
+  const candidate: unknown = readers;
+  if (candidate === null || typeof candidate !== "object" || types.isProxy(candidate)) {return unavailable();}
+  const readerFields: Record<string, PropertyDescriptor | undefined> = Object.getOwnPropertyDescriptors(readers);
+  if ( readerFields.runtimeSecurity === undefined || !("value" in readerFields.runtimeSecurity) ||
+      readerFields.providerAccess === undefined || !("value" in readerFields.providerAccess)) {return unavailable();}
   const rsRead = captureLinuxCodexDeploymentPort(readerFields.runtimeSecurity.value as Readers["runtimeSecurity"], ["readAuthority"]).readAuthority;
   const paRead = captureLinuxCodexDeploymentPort(readerFields.providerAccess.value as Readers["providerAccess"], ["readCurrent"]).readCurrent;
   const entry = (input: Input): Retained => {
@@ -141,7 +143,7 @@ export const createLinuxCodexDeploymentAuthority = (readers: Readers, sourceRevi
     const key = input.subject.custodyId;
     const previous = retained.get(key);
     if (previous !== undefined) {
-      if (!isDeepStrictEqual(previous.input, input) || previous.selected) {return unavailable();}
+      if (!isDeepStrictEqual(previous.input, input) || previous.selected === true) {return unavailable();}
       return previous;
     }
     if (retained.size >= 64) {return unavailable();}
@@ -175,7 +177,7 @@ export const createLinuxCodexDeploymentAuthority = (readers: Readers, sourceRevi
       binaryRevision: accepted.acceptedAuthorityVector.adapterSnapshot.binaryRevision,
       capabilityManifestRevision: accepted.acceptedAuthorityVector.adapterSnapshot.capabilityManifestRevision,
     }});
-    if (disposed || retained.get(subject.custodyId) !== value || value.generation !== generation || value.selected) {return unavailable();}
+    if (disposed || retained.get(subject.custodyId) !== value || value.generation !== generation || value.selected === true) {return unavailable();}
     value.upstream = upstream; value.binding = bindingProjection;
     value.head = structuredClone(after); value.route = route;
   };
@@ -247,7 +249,7 @@ export const createLinuxCodexDeploymentAuthority = (readers: Readers, sourceRevi
     },
     take(kernel: Parameters<LinuxCodexContainedTurnResources["select"]>[0]["kernel"]) {
       const value = retained.get(kernel.custodyId);
-      if (disposed || value === undefined || !value.claimed || value.selected || value.head === undefined || value.route === undefined) {return unavailable();}
+      if (disposed || value === undefined || value.claimed !== true || value.selected === true || value.head === undefined || value.route === undefined) {return unavailable();}
       const {subject, accepted} = value.input;
       if (kernel.authorityVectorDigest !== accepted.acceptedAuthorityVectorDigest ||
           (["operationId", "attemptId", "custodyId", "effectId", "workspaceId", "preparationToken"] as const)

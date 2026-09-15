@@ -24,9 +24,9 @@ export class PostgresHttpEvidenceTransactions {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       return await Promise.race([pending, new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error("HTTP evidence acquisition timeout")), TIMEOUT_MS);
+        timer = setTimeout(() => {reject(new Error("HTTP evidence acquisition timeout"));}, TIMEOUT_MS);
       })]);
-    } catch (error) {void pending.then(client => client.release(true), () => {}); throw error;}
+    } catch (error) {void pending.then((client): undefined => {client.release(true); return undefined;}, () => {}); throw error;}
     finally {clearTimeout(timer);}
   }
   public async run<T>(work: (client: ContainedTurnPostgresClient, query: (sql: string, values?: unknown[]) => Promise<ContainedTurnPostgresQueryResult>) => Promise<T>): Promise<T> {

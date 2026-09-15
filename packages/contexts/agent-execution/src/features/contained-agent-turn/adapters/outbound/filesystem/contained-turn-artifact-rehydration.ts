@@ -421,7 +421,7 @@ const quarantineFailedRehydration = async (input: {
   readonly state: RehydrationAttemptState;
 }): Promise<void> => {
   const { context, manifestDigest, primaryError, quarantine, staging, state } = input;
-  if (state.stagingName === undefined || state.identity === undefined || state.intentCommitted) {return;}
+  if (state.stagingName === undefined || state.identity === undefined || state.intentCommitted === true) {return;}
   try {
     requireDirectoryPublication(await moveDirectoryNoReplace({
       checkpoint: "artifact.rehydrate.failure-quarantine",
@@ -479,11 +479,9 @@ export const rehydrateContainedTurnArtifact = async (
             throw error;
           }
         }
-        if (recovered === undefined) {
-          recovered = await publishRehydration({
-            context, finalPath, manifestDigest, results, staging, state, verified,
-          });
-        }
+        recovered = await publishRehydration({
+          context, finalPath, manifestDigest, results, staging, state, verified,
+        });
       } catch (error) {
         await quarantineFailedRehydration({ context, manifestDigest, primaryError: error,
           quarantine, staging, state });

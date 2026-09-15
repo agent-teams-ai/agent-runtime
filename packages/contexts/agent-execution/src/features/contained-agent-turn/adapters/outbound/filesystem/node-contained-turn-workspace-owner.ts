@@ -92,7 +92,7 @@ export const readNodeContainedTurnNativeWorkspaceClosure = (
   owner: NodeContainedTurnWorkspaceOwner, input: ClosureInput,
 ): ReturnType<SelectedNativeWorkspaceBackend["readClosed"]> => {
   const facts = issuedOwners.get(owner);
-  if (!facts?.native) {throw new Error("contained turn native workspace owner is not issued");}
+  if (facts?.native !== true) {throw new Error("contained turn native workspace owner is not issued");}
   return facts.readNativeClosure(input);
 };
 
@@ -102,7 +102,7 @@ export const readNodeContainedTurnNativeWorkspaceReceipts = (
   owner: NodeContainedTurnWorkspaceOwner, input: ClosureInput,
 ): ReturnType<SelectedNativeWorkspaceBackend["readReceipts"]> => {
   const facts = issuedOwners.get(owner);
-  if (!facts?.native) {throw new Error("contained turn native workspace owner is not issued");}
+  if (facts?.native !== true) {throw new Error("contained turn native workspace owner is not issued");}
   return facts.readNativeReceipts(Object.freeze({...input}));
 };
 
@@ -359,7 +359,7 @@ export const createNodeContainedTurnWorkspaceOwner = async (
       const completed = launches.length === 0 || await Promise.race([
         Promise.allSettled(launches).then(() => true),
         new Promise<false>(resolve => {
-          timeout = setTimeout(() => resolve(false), OWNER_DISPOSAL_COMPLETION_BOUND_MS);
+          timeout = setTimeout(() => {resolve(false);}, OWNER_DISPOSAL_COMPLETION_BOUND_MS);
         }),
       ]);
       if (timeout !== undefined) {clearTimeout(timeout);}

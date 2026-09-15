@@ -56,7 +56,7 @@ export const snapshotDockerImageInitLock = (value: DockerImageInitLock): DockerI
       lock.loadingPolicy !== "closed-bundle-node-builtins-only-v1" ||
       (reference.kind === "image-id" && reference.reference !== config.reference)) {return fail();}
   return Object.freeze({imageReference: reference.reference, imageConfigId: config.reference,
-    architecture: lock.architecture as "amd64" | "arm64", os: "linux", variant: lock.variant as string,
+    architecture: lock.architecture as "amd64" | "arm64", os: "linux", variant: lock.variant,
     loadingPolicy: "closed-bundle-node-builtins-only-v1",
     interpreter: file(lock.interpreter, DOCKER_CUSTODY_NODE_PATH, 0o555),
     bootstrap: file(lock.bootstrap, DOCKER_CUSTODY_BOOTSTRAP_PATH, 0o444)});

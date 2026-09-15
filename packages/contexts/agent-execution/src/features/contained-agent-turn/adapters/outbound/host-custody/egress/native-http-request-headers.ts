@@ -14,7 +14,7 @@ const data = (value: unknown, names: readonly string[]): Record<string, Property
     || Object.getPrototypeOf(value) !== Object.prototype) {return invalid();}
   const descriptors = Object.getOwnPropertyDescriptors(value);
   if (Reflect.ownKeys(descriptors).length !== names.length
-    || names.some(name => descriptors[name] === undefined || !("value" in descriptors[name]!))) {return invalid();}
+    || names.some(name => descriptors[name] === undefined || !("value" in descriptors[name]))) {return invalid();}
   return descriptors;
 };
 
@@ -76,7 +76,7 @@ export const selectHttpPresentationFields = (request: unknown, allowed: readonly
     } else if (profile !== undefined && !nativeIgnoredHeader(profile, name, value)) {return invalid();}
     names.add(name);
   }
-  if (profile?.requiredHeaderNames.some(name => !names.has(name))) {return invalid();}
+  if (profile?.requiredHeaderNames.some(name => !names.has(name)) === true) {return invalid();}
   const fields = Object.freeze(selected.toSorted((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   return profile === undefined ? fields : Object.freeze({requestProfile: profile.id, fields});
 };

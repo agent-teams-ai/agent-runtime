@@ -28,7 +28,8 @@ export const createDockerProviderProcessLaunchIssuer = () => {
       const entry = issued.get(launch);
       if (entry === undefined) {throw new TypeError("Docker provider process requires an unused actual lifecycle launch");}
       entry.assertActive();
-      const {authority, custodyRef, workspaceAuthorityPath, mountFacts, openInitSession} = entry.process;
+      const {authority, custodyRef, workspaceAuthorityPath, mountFacts} = entry.process;
+      const openInitSession = entry.process.openInitSession.bind(entry.process);
       return Object.freeze({authority, custodyRef, workspaceAuthorityPath, mountFacts, openInitSession});
     },
     /** Read-only facts of an unused actual launch; this does not consume IO custody. */

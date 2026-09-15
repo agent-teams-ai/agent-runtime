@@ -80,7 +80,7 @@ export const snapshotCodexDataRecord = (input: unknown): Record<string, unknown>
   if (actual.some(key => typeof key !== "string")) {throw rejected();}
   return Object.fromEntries((actual as string[]).map(key => {
     const descriptor = descriptors[key];
-    if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {throw rejected();}
+    if (descriptor === undefined || !("value" in descriptor) || descriptor.enumerable !== true) {throw rejected();}
     return [key, descriptor.value];
   }));
 };
@@ -141,7 +141,7 @@ export const createDarwinCodexNativeBrokerRecipe = (input: Omit<Parameters<typeo
   const data = snapshotCodexNativeInput(input, ["boundary", "endpoint", "profile", "tmpDir"]);
   const tmpDir = data.tmpDir;
   if (typeof tmpDir !== "string" || resolve(tmpDir) !== tmpDir || tmpDir === "/" ||
-      [...tmpDir].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) {throw rejected();}
+      Array.from(tmpDir).some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) {throw rejected();}
   const observation = codexDarwinNativeLaunchObservation(input.boundary);
   if (observation !== undefined && inspectDarwinNativeLaunchObservation(observation).tmpDir.path !== tmpDir) {throw rejected();}
   const recipe = createRecipe({boundary: input.boundary, endpoint: input.endpoint, profile: input.profile}, true);
