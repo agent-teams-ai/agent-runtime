@@ -117,8 +117,9 @@ export class HostHttpConsumptionStorage {
   }
 
   public static async open(pin: HostHttpConsumptionDirectory, maxBytes: number): Promise<HostHttpConsumptionStorage> {
+    const noFollow: unknown = fs.constants.O_NOFOLLOW; const directoryFlag: unknown = fs.constants.O_DIRECTORY;
     if (process.platform !== "linux" || typeof process.getuid !== "function" ||
-        fs.constants.O_NOFOLLOW === undefined || fs.constants.O_DIRECTORY === undefined) {
+        noFollow === undefined || directoryFlag === undefined) {
       throw new Error("consumption platform unsupported");
     }
     const uid = BigInt(process.getuid());
@@ -159,7 +160,7 @@ export class HostHttpConsumptionStorage {
     if (mountFrom(info) !== this.mount) { throw new Error("consumption mount changed"); }
     if (locked) {
       const locks = [...info.matchAll(/^lock:\s*\d+: FLOCK\s+ADVISORY\s+WRITE\s+(\d+)\s+[0-9a-f]+:[0-9a-f]+:(\d+)\s+0 EOF$/gmu)];
-      if (locks.length !== 1 || locks[0]?.[1] !== String(process.pid) || locks[0]?.[2] !== String(held.ino)) {
+      if (locks.length !== 1 || locks[0]?.[1] !== String(process.pid) || locks[0][2] !== String(held.ino)) {
         throw new Error("consumption directory lock lost");
       }
     }

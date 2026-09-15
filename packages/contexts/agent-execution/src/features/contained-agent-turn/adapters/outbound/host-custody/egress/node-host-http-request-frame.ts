@@ -1,3 +1,4 @@
+import { types as utilTypes } from "node:util";
 import { intrinsicUint8ArrayLength, zeroHttpBytes } from "./http-byte-intrinsics.js";
 import type { FixedNodeHostHttpConnectionConfig } from "./node-host-http-connection-config.js";
 import { parseBoundedRequestHead, StrictHttpRequestError } from "./strict-http-request.js";
@@ -19,7 +20,8 @@ export class NodeHostHttpRequestFrame {
   #released = false;
 
   public constructor(config: FixedNodeHostHttpConnectionConfig) {this.#config = config;}
-  public get headComplete(): boolean {return this.#headEnd !== 0;}
+  #hasHead(): boolean {return this.#headEnd !== 0;}
+  public get headComplete(): boolean {return this.#hasHead();}
   public get complete(): boolean {return this.#complete;}
   public get observedBytes(): number {return this.#observed;}
   public get bytes(): Uint8Array | undefined {return this.#frame;}
@@ -34,17 +36,17 @@ export class NodeHostHttpRequestFrame {
 
   public push(chunk: unknown): void {
     const length = intrinsicUint8ArrayLength(chunk);
-    if (length === undefined) {throw this.error("malformed");}
+    if (length === undefined || !utilTypes.isUint8Array(chunk)) {throw this.error("malformed");}
     this.#observed = Math.min(Number.MAX_SAFE_INTEGER, this.#observed + length);
     if (length === 0) {return;}
     if (this.#complete || this.#released) {throw this.error("smuggling");}
     // Check the entire chunk before any allocation/copy, even on the unit seam.
     if (length > this.#config.readHighWaterMark) {throw this.error("body_oversized");}
-    const bytes = chunk as Uint8Array;
+    const bytes = chunk;
     let offset = 0;
-    if (this.#headEnd === 0) {
+    if (!this.#hasHead()) {
       offset = this.#scanHead(bytes, length);
-      if (this.#headEnd === 0) {return;}
+      if (!this.#hasHead()) {return;}
     }
     const frame = this.#frame!;
     if (length - offset > frame.byteLength - this.#used) {throw this.error("smuggling");}

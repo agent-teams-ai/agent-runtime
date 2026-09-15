@@ -1,3 +1,4 @@
+import { httpSignalAborted } from "./http-ingress-validation.js";
 import type { X509Certificate } from "node:crypto";
 import type { LookupFunction } from "node:net";
 import type { ConnectionOptions, PeerCertificate } from "node:tls";
@@ -80,18 +81,19 @@ const boundedResponse = (
     const abort = (): void => {socket.destroy(canonicalConnectFailure());};
     try {
       const iterator = socket.iterator({ destroyOnReturn: false });
-      while (true) {
+      for (;;) {
         let next: IteratorResult<unknown>;
         try {
-          if (signal?.aborted) {abort();}
+          if (httpSignalAborted(signal)) {abort();}
           else {signal?.addEventListener("abort", abort, { once: true });}
           next = await nextResponseChunk(socket, iterator, closedByHost());
         } finally {
           // A framed response may leave this generator suspended at yield.
           signal?.removeEventListener("abort", abort);
         }
-        if (next.done) {return;}
-        const value = next.value;
+        const done = Boolean(next.done);
+        if (done) {return;}
+        const value: unknown = next.value;
         if (!(value instanceof Uint8Array)) {throw canonicalConnectFailure();}
         yield value;
       }
@@ -127,18 +129,20 @@ class NodeTlsHttpEgressSession implements HttpEgressTransportSession {
     consumeAuthorizedRequest: () => Uint8Array | undefined,
     signal?: AbortSignal,
   ): Promise<HttpEgressDispatch> {
-    if (this.#dispatched || !this.#isUsable() || signal?.aborted) {return failedBeforeConsumption();}
+    if (this.#dispatched || !this.#isUsable() || httpSignalAborted(signal)) {return failedBeforeConsumption();}
     this.#dispatched = true;
 
     return await new Promise<HttpEgressDispatch>(resolve => {
-      let settled = false;
-      let consumed = false;
-      let acceptedLength = 0;
-      let writeCompleted = false;
-      let writeReturned = false;
-      let writeCallbackSucceeded = false;
-      let responseReadable = false;
-      let failedDisposition = false;
+      const progress = {
+        settled: false,
+        consumed: false,
+        acceptedLength: 0,
+        writeCompleted: false,
+        writeReturned: false,
+        writeCallbackSucceeded: false,
+        responseReadable: false,
+        failedDisposition: false,
+      };
 
       const cleanup = (): void => {
         this.#socket.off("readable", readable);
@@ -149,26 +153,26 @@ class NodeTlsHttpEgressSession implements HttpEgressTransportSession {
         signal?.removeEventListener("abort", aborted);
       };
       const settle = (result: HttpEgressDispatch): void => {
-        if (settled) {return;}
-        settled = true;
+        if (progress.settled) {return;}
+        progress.settled = true;
         cleanup();
         resolve(result);
       };
       const failed = (): void => {
-        if (settled || failedDisposition) {return;}
-        failedDisposition = true;
+        if (progress.settled || progress.failedDisposition) {return;}
+        progress.failedDisposition = true;
         this.#socket.destroy();
-        settle(consumed ? failedAfterConsumption() : failedBeforeConsumption());
+        settle(progress.consumed ? failedAfterConsumption() : failedBeforeConsumption());
       };
       const aborted = (): void => {failed();};
       const readable = (): void => {
-        if (!consumed || acceptedLength === 0 || this.#socket.readableLength === 0) {return;}
-        responseReadable = true;
-        if (!writeCompleted || settled) {return;}
-        if (failedDisposition || signal?.aborted || !this.#isUsable()) {failed(); return;}
+        if (!progress.consumed || progress.acceptedLength === 0 || this.#socket.readableLength === 0) {return;}
+        progress.responseReadable = true;
+        if (!progress.writeCompleted || progress.settled) {return;}
+        if (progress.failedDisposition || httpSignalAborted(signal) || !this.#isUsable()) {failed(); return;}
         settle(Object.freeze({
           status: "response",
-          acceptedRequestBytes: acceptedLength,
+          acceptedRequestBytes: progress.acceptedLength,
           acknowledgement: "acknowledged",
           response: boundedResponse(this.#socket, signal, this.#closedByHost),
         }));
@@ -181,35 +185,35 @@ class NodeTlsHttpEgressSession implements HttpEgressTransportSession {
       this.#socket.once("timeout", failed);
       signal?.addEventListener("abort", aborted, { once: true });
 
-      if (!this.#isUsable() || signal?.aborted) {failed(); return;}
+      if (!this.#isUsable() || httpSignalAborted(signal)) {failed(); return;}
       try {
         const bytes = consumeAuthorizedRequest();
         const byteLength = intrinsicUint8ArrayLength(bytes);
-        if (byteLength === undefined || byteLength === 0) {
+        if (bytes === undefined || byteLength === undefined || byteLength === 0) {
           settle(failedBeforeConsumption());
           return;
         }
         // Borrowed from the Host dispatch boundary; its prepared custody owns zeroization.
-        const authorizedBytes = bytes as Uint8Array;
-        consumed = true;
-        acceptedLength = byteLength;
+        const authorizedBytes = bytes;
+        progress.consumed = true;
+        progress.acceptedLength = byteLength;
         // Consumption may synchronously revoke custody or close this attempt.
         // Recheck before borrowing bytes for the socket, without an async gap.
-        if (settled || failedDisposition) {return;}
-        if (!this.#isUsable() || signal?.aborted) {failed(); return;}
+        if (progress.settled || progress.failedDisposition) {return;}
+        if (!this.#isUsable() || httpSignalAborted(signal)) {failed(); return;}
         // Deliberately no await or promise boundary between authority consumption and this write.
         this.#socket.write(authorizedBytes, error => {
           if (error !== undefined && error !== null) {failed();}
           else {
-            writeCallbackSucceeded = true;
-            if (writeReturned) {
-              writeCompleted = true;
-              if (responseReadable || this.#socket.readableLength > 0) {readable();}
+            progress.writeCallbackSucceeded = true;
+            if (progress.writeReturned) {
+              progress.writeCompleted = true;
+              if (progress.responseReadable || this.#socket.readableLength > 0) {readable();}
             }
           }
         });
-        writeReturned = true;
-        if (writeCallbackSucceeded) {writeCompleted = true;}
+        progress.writeReturned = true;
+        if (progress.writeCallbackSucceeded) {progress.writeCompleted = true;}
         if (this.#socket.readableLength > 0) {readable();}
       } catch {
         failed();
@@ -232,11 +236,11 @@ export class NodeTlsHttpEgressAttempt implements HttpEgressTransportAttempt {
   readonly #input: NodeTlsAttemptInput;
   readonly #readyPromise: Promise<HttpEgressTransportSession>;
   readonly #closedPromise: Promise<void>;
-  #socket: OwnedNodeTlsSocket | undefined;
+  readonly #socket: OwnedNodeTlsSocket | undefined;
   #session: NodeTlsHttpEgressSession | undefined;
   #state: "connecting" | "ready" | "closing" | "closed" | "failed" = "connecting";
   #closePromise: Promise<CloseReceipt> | undefined;
-  #connectTimer: ReturnType<typeof setTimeout> | undefined;
+  readonly #connectTimer: ReturnType<typeof setTimeout> | undefined;
 
   public constructor(input: NodeTlsAttemptInput) {
     this.#input = input;

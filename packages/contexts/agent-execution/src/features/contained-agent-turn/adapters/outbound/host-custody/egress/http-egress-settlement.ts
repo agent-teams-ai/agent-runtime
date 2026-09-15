@@ -1,3 +1,4 @@
+import { httpSignalAborted } from "./http-ingress-validation.js";
 import type {HttpEgressAnomalyCode, HttpEgressClosureState, HttpEgressOperation, HttpEgressOutcome,
   HttpEgressReceipt} from "./http-egress-contracts.js";
 import type {HostHttpAdmissionLease} from "./host-http-admission-guard.js";
@@ -53,9 +54,9 @@ const beginHttpClosure = (ports: HttpEgressBrokerPorts, operation: HttpEgressOpe
   state: HttpEgressMutableState, attempt?: HttpEgressTransportAttempt) => {
   const responseObserved = Promise.withResolvers<void>();
   const upstream = attempt === undefined ? undefined : initiateHttpClosure(() => attempt.close());
-  const acknowledge = async (pending: ReturnType<typeof initiateHttpClosure>) => {
+  const acknowledge = async (pending: ReturnType<typeof initiateHttpClosure>): Promise<ReturnType<typeof snapshotHttpClosureDecision>> => {
     try {return snapshotHttpClosureDecision(await ports.clock.within(operation.limits.closureDeadline, () => pending));}
-    catch {return;}
+    catch {return undefined;}
   };
   const upstreamAcknowledged = Promise.resolve(upstream === undefined ? undefined : acknowledge(upstream));
   const inbound = upstreamAcknowledged.then(async value => {
@@ -65,7 +66,7 @@ const beginHttpClosure = (ports: HttpEgressBrokerPorts, operation: HttpEgressOpe
   });
   // Arm both acknowledgement budgets now, but defer inbound completion until
   // upstream closure and the parser's final byte evidence have been observed.
-  return {upstream: upstreamAcknowledged, inbound: acknowledge(inbound), releaseInbound: () => responseObserved.resolve()};
+  return {upstream: upstreamAcknowledged, inbound: acknowledge(inbound), releaseInbound: () => {responseObserved.resolve();}};
 };
 
 export const closeAndRecordHttpEgress = async (ports: HttpEgressBrokerPorts, operation: HttpEgressOperation,
@@ -90,6 +91,10 @@ export const closeAndRecordHttpEgress = async (ports: HttpEgressBrokerPorts, ope
     && state.inboundClosure === "closed" && state.upstreamClosure === "closed"});
 };
 
+const isFirstWriteReservation = (value: unknown): value is HttpEgressRouteFirstWriteReservation =>
+  value !== null && (typeof value === "object" || typeof value === "function")
+    && typeof Reflect.get(value, "consume") === "function";
+
 const retryAnomaly = (status: number): HttpEgressAnomalyCode | undefined => status === 401 || status === 403
   ? "upstream_auth_rejected" : status === 429 ? "upstream_rate_limited" : status >= 500
     ? "upstream_server_error" : status >= 300 && status <= 399 ? "redirect_rejected" : undefined;
@@ -110,13 +115,13 @@ export const settleHttpEgressDispatch = async (input: Readonly<{ports: HttpEgres
     return closeAndRecordHttpEgress(ports, operation, state, attempt);
   }
   const current = (): boolean => {
-    if (operation.signal?.aborted) {boundaryAnomaly = "inbound_cancelled"; return false;}
+    if (httpSignalAborted(operation.signal)) {boundaryAnomaly = "inbound_cancelled"; return false;}
     if (session.binding !== tls) {boundaryAnomaly = "transport_binding_drift"; return false;}
     if (ports.guard.snapshot().state !== "active" || !dispatchGrantIsCurrent(ports, grant, deadline)) {
       boundaryAnomaly = "provider_generation_drift"; return false;}
     return true;
   };
-  if (!current()) {state.outcome = operation.signal?.aborted ? "cancelled" : "denied"; state.anomalyCode = boundaryAnomaly;
+  if (!current()) {state.outcome = httpSignalAborted(operation.signal) ? "cancelled" : "denied"; state.anomalyCode = boundaryAnomaly;
     return closeAndRecordHttpEgress(ports, operation, state, attempt);}
   // Reserved immediately before the boundary, because the lease itself bounds how
   // long a reservation stays usable. A refusal denies the attempt outright: a
@@ -124,7 +129,7 @@ export const settleHttpEgressDispatch = async (input: Readonly<{ports: HttpEgres
   let routeFirstWrite: HttpEgressRouteFirstWriteReservation | undefined;
   if (ports.routeFirstWrite !== undefined) {
     try {const reserved = ports.routeFirstWrite.reserve(operation.expectedRequest.requestId);
-      if (typeof reserved?.consume === "function") {routeFirstWrite = reserved;}} catch { /* refused below */ }
+      if (isFirstWriteReservation(reserved)) {routeFirstWrite = reserved;}} catch { /* refused below */ }
     if (routeFirstWrite === undefined) {state.outcome = "denied"; state.anomalyCode = "final_denied";
       return closeAndRecordHttpEgress(ports, operation, state, attempt);}
   }

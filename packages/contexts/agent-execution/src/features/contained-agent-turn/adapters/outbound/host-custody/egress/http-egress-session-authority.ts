@@ -5,12 +5,12 @@ import type { HostHttpMaterializationAuthorizationRequest, HostHttpMaterializati
 import type { PreparedHttpRequestCustodyV1 } from "./prepared-http-request-v1.js";
 import type { StrictHttpRequest } from "./strict-http-request.js";
 import { zeroHttpBytes } from "./http-byte-intrinsics.js";
-import { isHttpCredentialCollision, nativeHttpRequestProfile, type NativeHttpRequestProfile } from "./native-http-request-profile.js";
+import { isHttpCredentialCollision, nativeHttpRequestProfile, type NativeHttpRequestProfile, type HttpPresentationHeaderName } from "./native-http-request-profile.js";
 import { selectHttpPresentationFields } from "./native-http-request-headers.js";
 
 const encoder = new TextEncoder();
 const TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
-const PRESENTATION = new Set(["accept", "content-type"]);
+const PRESENTATION = new Set<HttpPresentationHeaderName>(["accept", "content-type"]);
 const ROUTE_FIELDS = ["routeReceiptDigest", "originHost", "originPort", "upstreamMethod", "upstreamPath",
   "forwardedRequestHeaderNames", "credentialFieldNames"] as const;
 
@@ -23,8 +23,8 @@ const exactArray = (value: unknown, maximumItems: number): readonly string[] | u
   }
   const descriptors = Object.getOwnPropertyDescriptors(value);
   const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
-  const length = lengthDescriptor !== undefined && "value" in lengthDescriptor ? lengthDescriptor.value : undefined;
-  if (!Number.isSafeInteger(length) || length < 0 || length > maximumItems
+  const length: unknown = lengthDescriptor !== undefined && "value" in lengthDescriptor ? lengthDescriptor.value : undefined;
+  if (typeof length !== "number" || !Number.isSafeInteger(length) || length < 0 || length > maximumItems
     || Reflect.ownKeys(descriptors).length !== length + 1) {return undefined;}
   const output: string[] = [];
   for (let index = 0; index < length; index += 1) {const descriptor = descriptors[String(index)];
@@ -39,20 +39,23 @@ const snapshotRouteDescriptors = (value: unknown): PropertyDescriptorMap | undef
   const descriptors = Object.getOwnPropertyDescriptors(value); const keys = Reflect.ownKeys(descriptors);
   const fields: readonly string[] = Object.hasOwn(descriptors, "requestProfile") ? [...ROUTE_FIELDS, "requestProfile"] : ROUTE_FIELDS;
   if (keys.length !== fields.length || keys.some(key => typeof key !== "string" || !fields.includes(key))
-    || fields.some(name => descriptors[name] === undefined || !("value" in descriptors[name]!))
-    || ROUTE_FIELDS.some(name => descriptors[name] === undefined || !("value" in descriptors[name]!))) {return undefined;}
+    || fields.some(name => descriptors[name] === undefined || !("value" in descriptors[name]))
+    || ROUTE_FIELDS.some(name => descriptors[name] === undefined || !("value" in descriptors[name]))) {return undefined;}
   return descriptors;
 };
 
 const validRoutePath = (value: unknown): value is string => bounded(value, 16_384)
   && value.startsWith("/") && !value.startsWith("//") && !/[^\x21-\x7e]|#/.test(value);
 
+const validRoutePort = (value: unknown): value is number => typeof value === "number"
+  && Number.isSafeInteger(value) && value >= 1 && value <= 65_535;
+
 const validRouteOriginHost = (value: unknown): value is string => bounded(value, 512) && /^[A-Za-z0-9.-]+$/.test(value);
 
 const validRouteHeaderNames = (forwarded: readonly string[], credentials: readonly string[],
-  allowed: readonly string[]): boolean =>
+  allowed: readonly HttpPresentationHeaderName[]): forwarded is readonly HttpPresentationHeaderName[] =>
   new Set(forwarded).size === forwarded.length
-  && !forwarded.some(name => name !== name.toLowerCase() || !TOKEN.test(name) || !allowed.includes(name))
+  && !forwarded.some(name => name !== name.toLowerCase() || !TOKEN.test(name) || !allowed.some(allowedName => allowedName === name))
   && credentials.length !== 0 && new Set(credentials).size === credentials.length
   && !credentials.some(name => name !== name.toLowerCase() || !TOKEN.test(name) || isHttpCredentialCollision(name));
 
@@ -64,13 +67,17 @@ const validProfileInput = (value: unknown, descriptors: PropertyDescriptorMap,
   || profile !== undefined && Object.isFrozen(value) && Object.isFrozen(descriptors.forwardedRequestHeaderNames?.value)
     && Object.isFrozen(descriptors.credentialFieldNames?.value);
 
-const profileMatchesRoute = (profile: NativeHttpRequestProfile | undefined, route: HttpEgressRoute): boolean =>
+// The data validator preserves generic HTTP token methods; the public trusted
+// route contract remains narrower. Keep that distinction in this private snapshot.
+type ValidatedHttpRoute = Omit<HttpEgressRoute, "upstreamMethod"> & Readonly<{upstreamMethod: string}>;
+
+const profileMatchesRoute = (profile: NativeHttpRequestProfile | undefined, route: ValidatedHttpRoute): boolean =>
   profile === undefined || route.originHost === profile.originHost && route.originPort === profile.originPort
     && route.upstreamMethod === profile.upstreamMethod && route.upstreamPath === profile.upstreamPath
     && sameNames(route.forwardedRequestHeaderNames, profile.forwardedRequestHeaderNames)
     && sameNames(route.credentialFieldNames, profile.credentialFieldNames);
 
-export const snapshotHostHttpRoute = (value: unknown): HttpEgressRoute | undefined => {
+export const snapshotHostHttpRoute = (value: unknown): ValidatedHttpRoute | undefined => {
   const descriptors = snapshotRouteDescriptors(value);
   if (descriptors === undefined) {return undefined;}
   const read = (name: typeof ROUTE_FIELDS[number]): unknown => descriptors[name]?.value;
@@ -83,14 +90,14 @@ export const snapshotHostHttpRoute = (value: unknown): HttpEgressRoute | undefin
   const profile = nativeHttpRequestProfile(descriptors.requestProfile?.value);
   if (!validProfileInput(value, descriptors, profile)) {return undefined;}
   if (!bounded(receipt, 512) || !validRouteOriginHost(originHost)
-    || !Number.isSafeInteger(originPort) || (originPort as number) < 1 || (originPort as number) > 65_535
+    || !validRoutePort(originPort)
     || !bounded(method, 128) || !TOKEN.test(method) || method === "CONNECT"
     || !validRoutePath(path)
     || !validRouteHeaderNames(forwarded, credentials, profile?.forwardedRequestHeaderNames ?? [...PRESENTATION])) {return undefined;}
-  const route = Object.freeze({routeReceiptDigest: receipt, originHost, originPort: originPort as number,
+  const route = Object.freeze({routeReceiptDigest: receipt, originHost, originPort,
     ...(profile === undefined ? {} : {requestProfile: profile.id}),
-    upstreamMethod: method as HttpEgressRoute["upstreamMethod"], upstreamPath: path,
-    forwardedRequestHeaderNames: forwarded as HttpEgressRoute["forwardedRequestHeaderNames"],
+    upstreamMethod: method, upstreamPath: path,
+    forwardedRequestHeaderNames: forwarded,
     credentialFieldNames: credentials});
   return profileMatchesRoute(profile, route) ? route : undefined;
 };
@@ -104,10 +111,10 @@ const validReceipt = (value: unknown): value is HostHttpMaterializationReceipt =
     || Object.getPrototypeOf(value) !== Object.prototype) {return false;}
   const descriptors = Object.getOwnPropertyDescriptors(value); const keys = Reflect.ownKeys(descriptors);
   if (keys.length !== receiptFields.length || keys.some(key => typeof key !== "string"
-    || !receiptFields.includes(key as keyof HostHttpMaterializationReceipt))) {return false;}
+    || !receiptFields.some(field => field === key))) {return false;}
   for (const name of receiptFields) {const descriptor = descriptors[name];
     if (descriptor === undefined || !("value" in descriptor)) {return false;}
-    const item = descriptor.value;
+    const item: unknown = descriptor.value;
     if (typeof item === "string" && (item.length === 0 || item.length > 512 || !item.isWellFormed()
       || /\p{Cc}|\p{Cs}/u.test(item)) || typeof item === "number" && !Number.isSafeInteger(item)
       || item !== null && typeof item !== "string" && typeof item !== "number") {return false;}}
@@ -120,9 +127,13 @@ const receiptProviderMatchesSnapshot = (receipt: HostHttpMaterializationReceipt,
   routeMatchesProvider(ports) && receipt.provider === ports.providerAccessSnapshot.provider;
 
 export const receiptMatchesSnapshot = (receipt: HostHttpMaterializationReceipt, ports: HttpEgressBrokerPorts,
-  authorizationRequestId: string, requestDigest: string): boolean => validReceipt(receipt) && receipt.schemaVersion === 1
+  authorizationRequestId: string, requestDigest: string): boolean => {
+  if (!validReceipt(receipt)) {return false;}
+  const observed: Omit<HostHttpMaterializationReceipt, "schemaVersion" | "purpose">
+    & Readonly<{schemaVersion: unknown; purpose: unknown}> = receipt;
+  return observed.schemaVersion === 1
   && receiptProviderMatchesSnapshot(receipt, ports)
-  && receipt.purpose === "contained-turn.credential-materialization-authorization/v1" && receipt.decision === "authorized"
+  && observed.purpose === "contained-turn.credential-materialization-authorization/v1" && receipt.decision === "authorized"
   && receipt.rejectionReason === null && receipt.authorizationRequestId === authorizationRequestId
   && receipt.requestDigest === requestDigest && receipt.accessRef === ports.providerAccessSnapshot.accessRef
   && receipt.providerAccountRef === ports.providerAccessSnapshot.providerAccountRef
@@ -134,6 +145,7 @@ export const receiptMatchesSnapshot = (receipt: HostHttpMaterializationReceipt, 
   && receipt.scopeDigest === ports.providerAccessSnapshot.scopeDigest
   && receipt.tenantId === ports.providerAccessSnapshot.tenantId && receipt.projectId === ports.providerAccessSnapshot.projectId
   && receipt.availability === "available" && receipt.revocation === "active";
+};
 
 export const observeMaterializationReceipt = async (ports: HttpEgressBrokerPorts,
   receipt: HostHttpMaterializationReceipt): Promise<boolean> => {

@@ -4,7 +4,7 @@ import { isIP, SocketAddress } from "node:net";
 import { createSecureContext, type PeerCertificate, type SecureContext } from "node:tls";
 
 import type { HttpEgressTransportBinding } from "./http-egress-ports.js";
-import { intrinsicUint8ArrayLength } from "./http-byte-intrinsics.js";
+import { captureHttpByteIntrinsic, intrinsicUint8ArrayLength } from "./http-byte-intrinsics.js";
 
 export type NodeTlsHttpEgressErrorCode =
   | "invalid_configuration"
@@ -37,7 +37,7 @@ export type FixedNodeTlsTrust = Readonly<{
 }>;
 
 const MAXIMUM_TRUST_BYTES = 1_048_576;
-const uint8ArraySet = Uint8Array.prototype.set;
+const uint8ArraySet = captureHttpByteIntrinsic(Uint8Array.prototype, "set");
 
 const invalidConfiguration = (): NodeTlsHttpEgressError => new NodeTlsHttpEgressError("invalid_configuration");
 
@@ -47,12 +47,12 @@ const validBoundedInteger = (value: number, minimum: number, maximum: number): b
 const copyTrustInputs = (authorities: readonly NodeTlsTrustInput[]): Array<string | Buffer> => {
   if (!Array.isArray(authorities)) {throw invalidConfiguration();}
   const count: unknown = Object.getOwnPropertyDescriptor(authorities, "length")?.value;
-  if (!Number.isSafeInteger(count) || (count as number) < 1 || (count as number) > 32) {
+  if (typeof count !== "number" || !Number.isSafeInteger(count) || count < 1 || count > 32) {
     throw invalidConfiguration();
   }
   const copied: Array<string | Buffer> = [];
   let aggregateByteLength = 0;
-  for (let index = 0; index < (count as number); index += 1) {
+  for (let index = 0; index < count; index += 1) {
     const descriptor = Object.getOwnPropertyDescriptor(authorities, String(index));
     if (descriptor === undefined || !("value" in descriptor)) {throw invalidConfiguration();}
     const authority: unknown = descriptor.value;
@@ -70,7 +70,7 @@ const copyTrustInputs = (authorities: readonly NodeTlsTrustInput[]): Array<strin
       throw invalidConfiguration();
     }
     const snapshot = Buffer.allocUnsafe(byteLength);
-    Reflect.apply(uint8ArraySet, snapshot, [authority]);
+    uint8ArraySet(snapshot, [authority]);
     aggregateByteLength += byteLength;
     copied[index] = snapshot;
   }

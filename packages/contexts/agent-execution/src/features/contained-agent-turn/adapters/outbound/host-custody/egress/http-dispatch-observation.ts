@@ -14,11 +14,13 @@ const invalidWrite = (): DispatchObservation => Object.freeze({ kind: "failed", 
   upstreamRequestBytes: 0, firstByteState: "uncertain", outcome: "reconcile_required", anomalyCode: "upstream_write_failed",
 }) });
 
+const validDispatchEnvelope = (value: unknown): boolean => value !== null && typeof value === "object"
+  && (Reflect.get(value, "status") === "response" || Reflect.get(value, "status") === "failed")
+  && (Reflect.get(value, "acknowledgement") === "acknowledged" || Reflect.get(value, "acknowledgement") === "lost");
+
 /** Transport evidence normalization only, not operation state or retry policy. */
 export const observeHttpDispatch = (dispatch: HttpEgressDispatch, expectedBytes: number): DispatchObservation => {
-  if (dispatch === null || typeof dispatch !== "object"
-    || (dispatch.status !== "response" && dispatch.status !== "failed")
-    || (dispatch.acknowledgement !== "acknowledged" && dispatch.acknowledgement !== "lost")) {
+  if (!validDispatchEnvelope(dispatch)) {
     return invalidWrite();
   }
   const accepted = dispatch.acceptedRequestBytes;

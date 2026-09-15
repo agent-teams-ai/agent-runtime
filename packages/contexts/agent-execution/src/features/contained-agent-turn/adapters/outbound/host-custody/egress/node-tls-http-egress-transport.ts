@@ -38,6 +38,8 @@ const productionConnector: NodeTlsHttpEgressConnector = (options: ConnectionOpti
  * intentionally has no DNS, retry, redirect, pooling, proxy, HTTP/2, HTTP/3 or
  * session-resumption facility.
  */
+const validAlpn = (value: unknown): boolean => value === "http/1.1";
+
 export class NodeTlsHttpEgressTransport implements HttpEgressUpstreamTransport {
   readonly #trust;
   readonly #limits;
@@ -69,7 +71,7 @@ export class NodeTlsHttpEgressTransport implements HttpEgressUpstreamTransport {
     const sni = canonicalSni(input.sni);
     if (selectedAddress === undefined || sni === undefined
       || !Number.isSafeInteger(input.originPort) || input.originPort < 1 || input.originPort > 65_535
-      || input.alpn !== "http/1.1") {
+      || !validAlpn(input.alpn)) {
       throw new NodeTlsHttpEgressError("invalid_target");
     }
     return new NodeTlsHttpEgressAttempt({

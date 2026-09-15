@@ -75,11 +75,11 @@ const hasDataDescriptors = (
   descriptors: Readonly<Record<string, PropertyDescriptor | undefined>>,
   fields: readonly string[],
 ): boolean => fields.every(field => descriptors[field] !== undefined
-  && "value" in (descriptors[field] as PropertyDescriptor));
+  && "value" in descriptors[field]);
 
 const isPlainRecordWithDataFields = (value: unknown, fields: readonly string[]): value is Record<string, unknown> => {
   if (typeof value !== "object" || value === null || utilTypes.isProxy(value)) {return false;}
-  const prototype = Object.getPrototypeOf(value);
+  const prototype: unknown = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) {return false;}
   const descriptors = Object.getOwnPropertyDescriptors(value);
   const keys = Reflect.ownKeys(descriptors);
@@ -115,14 +115,16 @@ const isHexByte = (byte: number | undefined): boolean => byte !== undefined
 const validateMethod = (bytes: Uint8Array): void => {
   if (bytes.byteLength === 0 || bytesMatchAscii(bytes, "CONNECT")) {throw new PreparedHttpRequestV1Error();}
   for (let index = 0; index < bytes.byteLength; index += 1) {
-    if (!isTokenByte(bytes[index] as number)) {throw new PreparedHttpRequestV1Error();}
+    const byte = bytes[index];
+    if (byte === undefined || !isTokenByte(byte)) {throw new PreparedHttpRequestV1Error();}
   }
 };
 
 const validateTarget = (bytes: Uint8Array): void => {
   if (bytes.byteLength === 0 || bytes[0] !== 47 || bytes[1] === 47) {throw new PreparedHttpRequestV1Error();}
   for (let index = 0; index < bytes.byteLength; index += 1) {
-    const byte = bytes[index] as number;
+    const byte = bytes[index];
+    if (byte === undefined) {throw new PreparedHttpRequestV1Error();}
     if (isTargetLiteralByte(byte)) {continue;}
     if (byte === 37 && isHexByte(bytes[index + 1]) && isHexByte(bytes[index + 2])) {index += 2; continue;}
     throw new PreparedHttpRequestV1Error();
@@ -135,7 +137,8 @@ const isHostCharacter = (byte: number): boolean =>
 const parsePort = (bytes: Uint8Array, colon: number): number => {
   let port = 0;
   for (let index = colon + 1; index < bytes.byteLength; index += 1) {
-    const byte = bytes[index] as number;
+    const byte = bytes[index];
+    if (byte === undefined) {throw new PreparedHttpRequestV1Error();}
     if (byte < 48 || byte > 57) {throw new PreparedHttpRequestV1Error();}
     port = (port * 10) + byte - 48;
   }
@@ -146,7 +149,8 @@ const validateHost = (bytes: Uint8Array): void => {
   if (bytes.byteLength === 0) {throw new PreparedHttpRequestV1Error();}
   let colon = -1;
   for (let index = 0; index < bytes.byteLength; index += 1) {
-    const byte = bytes[index] as number;
+    const byte = bytes[index];
+    if (byte === undefined) {throw new PreparedHttpRequestV1Error();}
     if (isHostCharacter(byte)) {continue;}
     if (byte === 58 && colon < 0 && index > 0 && index < bytes.byteLength - 1) {colon = index; continue;}
     throw new PreparedHttpRequestV1Error();
@@ -161,7 +165,8 @@ const validateHost = (bytes: Uint8Array): void => {
 const validateValue = (bytes: Uint8Array): void => {
   if (bytes.byteLength === 0) {throw new PreparedHttpRequestV1Error();}
   for (let index = 0; index < bytes.byteLength; index += 1) {
-    const byte = bytes[index] as number;
+    const byte = bytes[index];
+    if (byte === undefined) {throw new PreparedHttpRequestV1Error();}
     if (byte !== 9 && (byte < 32 || byte > 126)) {throw new PreparedHttpRequestV1Error();}
   }
 };
@@ -187,7 +192,8 @@ const exactArrayValues = (value: unknown, maximum: number): readonly unknown[] =
 
 const insertSorted = (fields: ValidatedPreparedHttpFieldV1[], field: ValidatedPreparedHttpFieldV1): void => {
   let index = 0;
-  while (index < fields.length && (fields[index] as ValidatedPreparedHttpFieldV1).normalizedName < field.normalizedName) {
+  for (const existing of fields) {
+    if (existing.normalizedName >= field.normalizedName) {break;}
     index += 1;
   }
   fields.splice(index, 0, field);

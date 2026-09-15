@@ -26,8 +26,9 @@ export type HostHttpLocalCutInput = Readonly<{
 }>;
 
 const data = <T extends object>(value: T): T => {
-  if (typeof value !== "object" || value === null || utilTypes.isProxy(value)
-    || Object.getPrototypeOf(value) !== Object.prototype
+  const candidate: unknown = value;
+  if (typeof candidate !== "object" || candidate === null || utilTypes.isProxy(candidate)
+    || Object.getPrototypeOf(candidate) !== Object.prototype
     || Reflect.ownKeys(value).some(key => !("value" in Object.getOwnPropertyDescriptor(value, key)!))) {
     throw new TypeError("invalid Host HTTP local cut data");
   }
@@ -44,14 +45,15 @@ const snapshotInput = (value: HostHttpLocalCutInput) => {
   const proof = validateCommittedDispatchProofV1(data(claimed.committedDispatchProof));
   const identity = data(input.identity); const expectedClock = data(input.expectedClock);
   const clock = data(input.clock);
+  const processIdentity: unknown = identity.liveProcessSessionIdentity;
   if (identity.operationId !== proof.operationId || identity.attemptId !== proof.attemptId
     || identity.custodyId !== proof.custodyId || identity.hostBootId !== proof.hostBootId
-    || typeof identity.liveProcessSessionIdentity !== "object" || identity.liveProcessSessionIdentity === null
+    || typeof processIdentity !== "object" || processIdentity === null
     || !boundedHttpOpaque(claimed.underlyingCustodyRef) || !validSignal(claimed.signal)
     || (input.hostShutdownSignal !== undefined && !validSignal(input.hostShutdownSignal))
     || !boundedHttpOpaque(expectedClock.authorityId) || !boundedHttpOpaque(expectedClock.epoch)
     || !validTime(input.operationDeadline) || input.operationDeadline === 0
-    || typeof clock?.read !== "function" || typeof clock.within !== "function") {
+    || typeof clock.read !== "function" || typeof clock.within !== "function") {
     throw new TypeError("invalid Host HTTP local cut binding");
   }
   return Object.freeze({...input, claimed: Object.freeze({...claimed, committedDispatchProof: proof}),
@@ -175,5 +177,6 @@ export const createHostHttpLocalCutOwner = (value: HostHttpLocalCutInput) => {
       },
     });
   };
-  return Object.freeze({cut, signal: controller.signal as AbortSignal, bindSession, close: cancel, dispose: cancel});
+  const custodySignal: AbortSignal = controller.signal;
+  return Object.freeze({cut, signal: custodySignal, bindSession, close: cancel, dispose: cancel});
 };

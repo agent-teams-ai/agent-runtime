@@ -32,8 +32,9 @@ const bounded = (value: number, minimum: number, maximum: number): boolean =>
   Number.isSafeInteger(value) && value >= minimum && value <= maximum;
 
 const supportedBodyPolicy = (expected: HttpEgressExpectedRequest, limits: HttpEgressLimits): boolean => {
-  if (expected.bodyMode === undefined) {return expected.method === "POST";}
-  return expected.bodyMode === "forbidden" && expected.method === "HEAD"
+  const bodyMode: unknown = expected.bodyMode;
+  if (bodyMode === undefined) {return expected.method === "POST";}
+  return bodyMode === "forbidden" && expected.method === "HEAD"
     && limits.maxInboundBodyBytes === 0;
 };
 

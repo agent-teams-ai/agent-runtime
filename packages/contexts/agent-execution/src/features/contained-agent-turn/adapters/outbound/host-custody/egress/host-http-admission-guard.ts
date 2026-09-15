@@ -6,6 +6,10 @@ export type HostHttpAdmissionLease = Readonly<{
   [hostHttpAdmissionLeaseBrand]: "host-http-admission-lease";
 }>;
 
+class AdmissionLease implements HostHttpAdmissionLease {
+  declare readonly [hostHttpAdmissionLeaseBrand]: "host-http-admission-lease";
+}
+
 export type HostHttpReservationIdentity = Readonly<{
   operationId: string;
   attemptId: string;
@@ -40,9 +44,9 @@ type DataRecord = Readonly<Record<string, PropertyDescriptor>>;
 const descriptorsOf = (value: unknown): DataRecord | undefined => {
   if ((typeof value !== "object" || value === null) && typeof value !== "function") {return undefined;}
   try {
-    const prototype = Object.getPrototypeOf(value);
+    const prototype: unknown = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) {return undefined;}
-    return Object.getOwnPropertyDescriptors(value) as DataRecord;
+    return Object.getOwnPropertyDescriptors(value);
   } catch {
     return undefined;
   }
@@ -58,7 +62,8 @@ const exactData = (
   if (keys.length !== fields.length || keys.some((key) => typeof key !== "string" || !fields.includes(key))) {
     return undefined;
   }
-  const snapshot: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+  const snapshot: Record<string, unknown> = {};
+  Object.setPrototypeOf(snapshot, null);
   for (const field of fields) {
     const descriptor = descriptors[field];
     if (descriptor === undefined || !("value" in descriptor)) {return undefined;}
@@ -120,18 +125,22 @@ export const createHostHttpAdmissionGuard = (identity: unknown): HostHttpAdmissi
     return "closed";
   };
 
+  const ownsActiveLease = (lease: unknown): boolean => state === "active" && lease === activeLease;
+
   return Object.freeze({
     acquire: (): HostHttpAdmissionLease | undefined => {
       // Retain the exact immutable Host binding for the guard's entire lifetime.
       void reservation;
       if (state !== "available") {return undefined;}
-      const lease = Object.freeze(Object.create(null)) as HostHttpAdmissionLease;
+      const lease = new AdmissionLease();
+      Object.setPrototypeOf(lease, null);
+      Object.freeze(lease);
       activeLease = lease;
       state = "active";
       return lease;
     },
     finish: (lease: unknown, disposition: unknown): "available" | "closed" | "rejected" => {
-      if (state !== "active" || lease !== activeLease) {
+      if (!ownsActiveLease(lease)) {
         sealWithoutDisplacingActive();
         return "rejected";
       }
@@ -139,7 +148,7 @@ export const createHostHttpAdmissionGuard = (identity: unknown): HostHttpAdmissi
       // Reflecting over a hostile disposition may synchronously reenter this guard.
       // Treat that validation as an authority boundary and revalidate the exact lease
       // before changing any state established by a nested call.
-      if (state !== "active" || lease !== activeLease) {
+      if (!ownsActiveLease(lease)) {
         sealWithoutDisplacingActive();
         return "rejected";
       }

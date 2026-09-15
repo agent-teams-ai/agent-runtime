@@ -1,25 +1,31 @@
 import { types as utilTypes } from "node:util";
 
-const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype) as object;
+export const typedArrayPrototype = Reflect.getPrototypeOf(Uint8Array.prototype);
+if (typedArrayPrototype === null) {throw new TypeError("missing typed-array prototype");}
 
-const intrinsicGetter = (name: "buffer" | "byteLength" | typeof Symbol.toStringTag): ((this: unknown) => unknown) => {
-  const getter = Object.getOwnPropertyDescriptor(typedArrayPrototype, name)?.get;
-  if (getter === undefined) {throw new TypeError("missing typed-array intrinsic");}
-  return getter;
+/** Capture a builtin once and always supply its receiver explicitly. */
+export const captureHttpByteIntrinsic = (prototype: object, name: PropertyKey,
+  slot: "value" | "get" = "value"): ((receiver: unknown, args?: readonly unknown[]) => unknown) => {
+  const descriptor = Object.getOwnPropertyDescriptor(prototype, name);
+  const callable: unknown = slot === "value" ? Reflect.get(prototype, name)
+    : descriptor === undefined ? undefined : Reflect.get(descriptor, slot);
+  if (typeof callable !== "function") {throw new TypeError("missing byte intrinsic");}
+  return (receiver, args = []): unknown => Reflect.apply(callable, receiver, args);
 };
 
-const typedArrayByteLength = intrinsicGetter("byteLength");
-const typedArrayBuffer = intrinsicGetter("buffer");
-const typedArrayTag = intrinsicGetter(Symbol.toStringTag);
-const arrayBufferResizable = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "resizable")?.get;
-const uint8ArrayFill = Uint8Array.prototype.fill;
-const uint8ArraySet = Uint8Array.prototype.set;
+const typedArrayByteLength = captureHttpByteIntrinsic(typedArrayPrototype, "byteLength", "get");
+const typedArrayBuffer = captureHttpByteIntrinsic(typedArrayPrototype, "buffer", "get");
+const typedArrayTag = captureHttpByteIntrinsic(typedArrayPrototype, Symbol.toStringTag, "get");
+const arrayBufferResizable = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "resizable") === undefined
+  ? undefined : captureHttpByteIntrinsic(ArrayBuffer.prototype, "resizable", "get");
+const uint8ArrayFill = captureHttpByteIntrinsic(Uint8Array.prototype, "fill");
+const uint8ArraySet = captureHttpByteIntrinsic(Uint8Array.prototype, "set");
 const emptyBytes = new Uint8Array();
 
 export const intrinsicUint8ArrayLength = (value: unknown): number | undefined => {
   try {
-    if (Reflect.apply(typedArrayTag, value, []) !== "Uint8Array") {return undefined;}
-    const byteLength = Reflect.apply(typedArrayByteLength, value, []);
+    if (typedArrayTag(value) !== "Uint8Array") {return undefined;}
+    const byteLength = typedArrayByteLength(value);
     return typeof byteLength === "number" ? byteLength : undefined;
   } catch {
     return undefined;
@@ -28,9 +34,9 @@ export const intrinsicUint8ArrayLength = (value: unknown): number | undefined =>
 
 const hasFixedArrayBufferBacking = (value: unknown): boolean => {
   try {
-    const buffer = Reflect.apply(typedArrayBuffer, value, []);
+    const buffer = typedArrayBuffer(value);
     return utilTypes.isArrayBuffer(buffer) && arrayBufferResizable !== undefined
-      && Reflect.apply(arrayBufferResizable, buffer, []) === false;
+      && arrayBufferResizable(buffer) === false;
   } catch {
     return false;
   }
@@ -43,7 +49,7 @@ export const snapshotHttpBytes = (value: unknown, maximumByteLength: number): Ui
   if (byteLength === undefined || byteLength > maximumByteLength) {return undefined;}
   const snapshot = new Uint8Array(byteLength);
   try {
-    Reflect.apply(uint8ArraySet, snapshot, [value]);
+    uint8ArraySet(snapshot, [value]);
     return snapshot;
   } catch {
     return undefined;
@@ -55,15 +61,15 @@ export const zeroHttpBytes = (value: unknown): void => {
   if (intrinsicUint8ArrayLength(value) === undefined) {return;}
   try {
     // Unlike the byte-length getter, set validates that an empty view is live.
-    Reflect.apply(uint8ArraySet, value, [emptyBytes]);
+    uint8ArraySet(value, [emptyBytes]);
   } catch {
     // Detached/invalid views have no accessible bytes to clear.
     return;
   }
   // A failure for a validated live view is a real cleanup failure, not a
   // detached-view condition. Do not convert it into successful cleanup.
-  Reflect.apply(uint8ArrayFill, value, [0]);
+  uint8ArrayFill(value, [0]);
 };
 
 export const zeroLateHttpBytes = (pending: Promise<Uint8Array> | undefined): void =>
-  void pending?.then(value => zeroHttpBytes(value), () => {});
+  void pending?.then((value): undefined => {zeroHttpBytes(value); return undefined;}, () => {});

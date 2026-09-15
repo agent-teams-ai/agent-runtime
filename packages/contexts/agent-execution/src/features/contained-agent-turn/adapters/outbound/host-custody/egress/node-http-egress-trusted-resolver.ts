@@ -57,7 +57,7 @@ export class NodeHttpEgressTrustedResolver implements HttpEgressTrustedResolver 
             throw new Error("dns_incomplete", {cause: error});
           }
           // Validate each complete family before combining; never truncate or filter.
-          const selected = Array.isArray(values) && !utilTypes.isProxy(values)
+          const selected: unknown = Array.isArray(values) && !utilTypes.isProxy(values)
             ? Object.getOwnPropertyDescriptor(values, "0")?.value : undefined;
           const normalized = normalizeHttpEgressResolution(values, selected);
           if (normalized === undefined || normalized.addresses.some(address => address.includes(":") !== ipv6)) {

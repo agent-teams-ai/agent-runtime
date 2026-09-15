@@ -53,13 +53,15 @@ const exact = (value: unknown, fields: readonly string[]): Record<string, unknow
   if (keys.length !== fields.length || keys.some(key => typeof key !== "string" || !fields.includes(key))) {
     throw new Error("invalid consumption fields");
   }
+  const snapshot: Record<string, unknown> = {};
   for (const key of fields) {
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
-    if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+    if (descriptor === undefined || !("value" in descriptor) || descriptor.enumerable !== true) {
       throw new Error("invalid consumption data");
     }
+    snapshot[key] = descriptor.value;
   }
-  return value as Record<string, unknown>;
+  return snapshot;
 };
 
 const opaque = (value: unknown): string => {
@@ -81,10 +83,25 @@ export const consumptionFingerprint = (value: unknown): string => {
 
 export const captureConsumptionEnvelope = (input: HostHttpConsumptionEnvelope): HostHttpConsumptionEnvelope => {
   const value = exact(input, ENVELOPE_FIELDS);
-  const snapshot = Object.fromEntries(ENVELOPE_FIELDS.map(key => [key, opaque(value[key])]));
+  const snapshot: HostHttpConsumptionEnvelope = {
+    tenantId: opaque(value.tenantId),
+    projectId: opaque(value.projectId),
+    operationId: opaque(value.operationId),
+    scopeDigest: opaque(value.scopeDigest),
+    attemptId: opaque(value.attemptId),
+    custodyId: opaque(value.custodyId),
+    hostInstanceId: opaque(value.hostInstanceId),
+    hostBootId: opaque(value.hostBootId),
+    executionGenerationId: opaque(value.executionGenerationId),
+    selectedDockerAuthorityDigest: opaque(value.selectedDockerAuthorityDigest),
+    networkNamespaceIdentity: opaque(value.networkNamespaceIdentity),
+    cgroupIdentity: opaque(value.cgroupIdentity),
+    listenerIdentity: opaque(value.listenerIdentity),
+    signerIdentity: opaque(value.signerIdentity),
+  };
   consumptionFingerprint(snapshot.scopeDigest);
   consumptionFingerprint(snapshot.selectedDockerAuthorityDigest);
-  return Object.freeze(snapshot) as unknown as HostHttpConsumptionEnvelope;
+  return Object.freeze(snapshot);
 };
 
 export const captureConsumptionKey = (input: ConsumptionKey): ConsumptionKey => {
@@ -101,10 +118,10 @@ export const captureConsumptionLimits = (input?: HostHttpConsumptionLimits): Hos
   const value = input === undefined ? { maxBoundaryUses: 256, maxJournalBytes: 1_048_576 } :
     exact(input, ["maxBoundaryUses", "maxJournalBytes"]);
   const { maxBoundaryUses, maxJournalBytes } = value;
-  if (!Number.isSafeInteger(maxBoundaryUses) || (maxBoundaryUses as number) < 1 || (maxBoundaryUses as number) > 256 ||
-      !Number.isSafeInteger(maxJournalBytes) || (maxJournalBytes as number) < MAX_FRAME_BYTES + MAX_CONSUMPTION_BYTES ||
-      (maxJournalBytes as number) > 1_048_576) { throw new Error("invalid consumption capacity"); }
-  return Object.freeze({ maxBoundaryUses, maxJournalBytes }) as HostHttpConsumptionLimits;
+  if (typeof maxBoundaryUses !== "number" || !Number.isSafeInteger(maxBoundaryUses) || maxBoundaryUses < 1 || maxBoundaryUses > 256 ||
+      typeof maxJournalBytes !== "number" || !Number.isSafeInteger(maxJournalBytes) || maxJournalBytes < MAX_FRAME_BYTES + MAX_CONSUMPTION_BYTES ||
+      maxJournalBytes > 1_048_576) { throw new Error("invalid consumption capacity"); }
+  return Object.freeze({ maxBoundaryUses, maxJournalBytes });
 };
 
 const frame = (value: object, maxBytes: number): Buffer => {

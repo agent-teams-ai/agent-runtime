@@ -71,7 +71,9 @@ const lineLength = (field: EmittedField): number => checkedAdd(
 
 const writeBytes = (target: Uint8Array, offset: number, source: Uint8Array): number => {
   for (let index = 0; index < source.byteLength; index += 1) {
-    target[offset + index] = source[index] as number;
+    const byte = source[index];
+    if (byte === undefined) {throw new PreparedHttpRequestV1Error();}
+    target[offset + index] = byte;
   }
   return offset + source.byteLength;
 };
@@ -101,7 +103,9 @@ const createHeaderProjection = (
   for (const span of spans) {
     offset = writeU32be(projection, offset, span.length);
     for (let index = 0; index < span.length; index += 1) {
-      projection[offset + index] = wireBytes[span.offset + index] as number;
+      const byte = wireBytes[span.offset + index];
+      if (byte === undefined) {throw new PreparedHttpRequestV1Error();}
+      projection[offset + index] = byte;
     }
     offset += span.length;
   }

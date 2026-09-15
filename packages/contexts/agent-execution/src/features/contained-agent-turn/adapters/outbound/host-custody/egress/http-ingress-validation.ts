@@ -2,6 +2,9 @@ import { types as utilTypes } from "node:util";
 import type { HttpEgressLimits, HttpEgressOperation } from "./http-egress-contracts.js";
 import { snapshotHttpEgressLimits } from "./http-egress-limits.js";
 
+/** Read cancellation afresh after callbacks, awaits, and custody transitions. */
+export const httpSignalAborted = (signal: AbortSignal | undefined): boolean => Boolean(signal?.aborted);
+
 export const boundedHttpOpaque = (value: unknown): value is string => typeof value === "string"
   && value.length > 0 && value.length <= 512 && !/\p{Cc}|\p{Cs}/u.test(value);
 const exact = (value: unknown, names: readonly string[]): Record<string, unknown> | undefined => {
@@ -14,11 +17,12 @@ const exact = (value: unknown, names: readonly string[]): Record<string, unknown
     if (descriptor === undefined || !("value" in descriptor)) {return undefined;} result[name] = descriptor.value;}
   return result;
 };
-const validateBodyPolicy = (expected: Record<string, unknown>, limits: HttpEgressLimits): void => {
+const validateBodyPolicy = (expected: Record<string, unknown>, limits: HttpEgressLimits): "forbidden" | undefined => {
   if (Object.hasOwn(expected, "bodyMode") && (expected.bodyMode !== "forbidden"
     || expected.method !== "HEAD" || limits.maxInboundBodyBytes !== 0)) {
     throw new TypeError("invalid HTTP egress body policy");
   }
+  return expected.bodyMode === "forbidden" ? "forbidden" : undefined;
 };
 export const snapshotHttpEgressOperation = (value: unknown): HttpEgressOperation => {
   const base = exact(value, ["operationId", "attemptId", "expectedRequest", "connection", "limits"])
@@ -38,10 +42,11 @@ export const snapshotHttpEgressOperation = (value: unknown): HttpEgressOperation
     throw new TypeError("invalid HTTP egress operation");
   }
   const fixedLimits: HttpEgressLimits = snapshotHttpEgressLimits(base.limits);
-  validateBodyPolicy(expected, fixedLimits);
+  const bodyMode = validateBodyPolicy(expected, fixedLimits);
   return Object.freeze({operationId: base.operationId, attemptId: base.attemptId,
-    expectedRequest: Object.freeze(expected) as HttpEgressOperation["expectedRequest"],
+    expectedRequest: Object.freeze({requestId: expected.requestId, method: expected.method,
+      path: expected.path, host: expected.host, ...(bodyMode === undefined ? {} : {bodyMode})}),
     connection: Object.freeze({request: connection.request, write: connection.write.bind(connection),
       close: connection.close.bind(connection)}), limits: fixedLimits,
-    ...(base.signal === undefined ? {} : {signal: base.signal as AbortSignal})});
+    ...(base.signal === undefined ? {} : {signal: base.signal})});
 };

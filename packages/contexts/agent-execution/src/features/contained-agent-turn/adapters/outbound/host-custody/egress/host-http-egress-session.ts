@@ -27,13 +27,13 @@ const identityFields = ["operationId", "attemptId", "custodyId", "hostBootId", "
 // getter/proxy that closes or reenters the one-use binding while it is checked.
 const snapshotData = (value: unknown): Readonly<Record<string, unknown>> => {
   if (typeof value !== "object" || value === null || utilTypes.isProxy(value)) {throw rejected();}
-  const prototype = Object.getPrototypeOf(value);
+  const prototype: unknown = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) {throw rejected();}
   const descriptors = Object.getOwnPropertyDescriptors(value);
   return Object.freeze(Object.fromEntries(Reflect.ownKeys(descriptors).map(key => {
     if (typeof key !== "string") {throw rejected();}
     const descriptor = descriptors[key];
-    if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {throw rejected();}
+    if (descriptor === undefined || !("value" in descriptor) || descriptor.enumerable !== true) {throw rejected();}
     return [key, descriptor.value];
   })));
 };
@@ -52,7 +52,7 @@ const snapshotIdentity = (value: unknown): SessionIdentity => {
 
 const snapshotDependencies = (value: HostHttpEgressSessionDependencies): HostHttpEgressSessionDependencies => {
   const data = snapshotData(value);
-  return Object.freeze({...data, identity: snapshotIdentity(data.identity)}) as HostHttpEgressSessionDependencies;
+  return Object.freeze({...value, identity: snapshotIdentity(data.identity)});
 };
 
 /**
@@ -97,6 +97,7 @@ export const prepareAuthenticatedHostHttpEgressSession = (input: SessionIdentity
     closed = true;
     try {session?.close();} finally {ingress.close();}
   };
+  const isClosed = (): boolean => closed;
   const prepared: PreparedAuthenticatedSession = Object.freeze({
     nativeBearerToken: ingress.nativeBearerToken,
     bind(this: PreparedAuthenticatedSession, dependencies: HostHttpEgressSessionDependencies): AuthenticatedSession {
@@ -107,7 +108,7 @@ export const prepareAuthenticatedHostHttpEgressSession = (input: SessionIdentity
         if (identityFields.some(field => fixed.identity[field] !== identity[field])) {throw rejected();}
         const bound = createSession(Object.freeze({...fixed, identity}), ingress.authenticate);
         session = bound;
-        if (closed) {throw rejected();}
+        if (isClosed()) {throw rejected();}
         return Object.freeze({
           nativeBearerToken: ingress.nativeBearerToken,
           async execute(operation: HttpEgressOperation): Promise<HttpEgressReceipt> {

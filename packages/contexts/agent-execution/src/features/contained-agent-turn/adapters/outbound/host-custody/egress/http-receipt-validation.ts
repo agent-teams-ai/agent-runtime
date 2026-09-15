@@ -10,6 +10,8 @@ export const snapshotHttpClosureDecision = (value: unknown): Readonly<{
   if (keys.length !== 2 || !keys.every(key => key === "state" || key === "receiptDigest")) {return undefined;}
   const state = descriptors.state; const receipt = descriptors.receiptDigest;
   if (state === undefined || receipt === undefined || !("value" in state) || !("value" in receipt)
-    || (state.value !== "closed" && state.value !== "unknown") || !boundedHttpOpaque(receipt.value)) {return undefined;}
-  return Object.freeze({state: state.value, receiptDigest: receipt.value});
+    ) {return undefined;}
+  const stateValue: unknown = state.value; const receiptValue: unknown = receipt.value;
+  if ((stateValue !== "closed" && stateValue !== "unknown") || !boundedHttpOpaque(receiptValue)) {return undefined;}
+  return Object.freeze({state: stateValue, receiptDigest: receiptValue});
 };

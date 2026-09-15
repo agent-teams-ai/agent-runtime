@@ -1,3 +1,4 @@
+import { httpSignalAborted } from "./http-ingress-validation.js";
 import type {
   HttpEgressExpectedRequest,
   HttpEgressLimits,
@@ -77,7 +78,8 @@ const parseRequestLine = (
   if (requestParts.length !== 3 || requestParts.some(part => part.length === 0)) {
     throw new StrictHttpRequestError("malformed");
   }
-  const [method, path, version] = requestParts as [string, string, string];
+  const [method, path, version] = requestParts;
+  if (method === undefined || path === undefined) {throw new StrictHttpRequestError("malformed");}
   if (!TOKEN.test(method) || version !== "HTTP/1.1") {throw new StrictHttpRequestError("malformed");}
   const unsafeTarget = method === "CONNECT" || !path.startsWith("/") || path.startsWith("//")
     || path.includes("#");
@@ -160,12 +162,12 @@ const nextWithDeadline = async (
   limits: HttpEgressLimits,
   signal?: AbortSignal,
 ): Promise<IteratorResult<Uint8Array>> => {
-  if (signal?.aborted) {throw new StrictHttpRequestError("cancelled");}
+  if (httpSignalAborted(signal)) {throw new StrictHttpRequestError("cancelled");}
   if (clock.now() >= limits.deadline) {throw new StrictHttpRequestError("deadline");}
   try {
     return await clock.within(limits.deadline, () => iterator.next(), signal);
   } catch {
-    if (signal?.aborted) {throw new StrictHttpRequestError("cancelled");}
+    if (httpSignalAborted(signal)) {throw new StrictHttpRequestError("cancelled");}
     throw new StrictHttpRequestError("deadline");
   }
 };
@@ -177,7 +179,8 @@ export const parseBoundedRequestHead = (
   expected: HttpEgressExpectedRequest,
   limits: HttpEgressLimits,
 ): ParsedRequestHead => {
-  if (expected.bodyMode !== undefined && (expected.bodyMode !== "forbidden"
+  const bodyMode: unknown = expected.bodyMode;
+  if (bodyMode !== undefined && (bodyMode !== "forbidden"
     || expected.method !== "HEAD" || limits.maxInboundBodyBytes !== 0)) {
     throw new StrictHttpRequestError("malformed");
   }
@@ -208,9 +211,10 @@ export const readStrictHttpRequest = async (
   let headerEnd = -1;
   let parsed: ReturnType<typeof parseHeaders> | undefined;
   try {
-    while (true) {
+    for (;;) {
       const next = await nextWithDeadline(iterator, clock, limits, signal);
-      if (next.done) {break;}
+      const done = Boolean(next.done);
+      if (done) {break;}
       if (!(next.value instanceof Uint8Array) || next.value.byteLength === 0) {continue;}
       observedBytes = addObservedBytes(observedBytes, next.value.byteLength);
       if (next.value.byteLength > limits.maxInboundHeaderBytes + limits.maxInboundBodyBytes
