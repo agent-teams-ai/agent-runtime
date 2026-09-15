@@ -750,6 +750,11 @@
           "mode": "type-only"
         },
         {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/init/docker-custody-init-runtime-types.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.ts",
+          "mode": "type-only"
+        },
+        {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/docker-custody-journal-codec.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.ts",
           "mode": "type-only"
@@ -893,15 +898,18 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-execution-attestation.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-open-attempts.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-projections.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-reservation-projection.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-start-admission.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-state.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-bridge.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-events.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-final-launch.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-io.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-protocol-definitions.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-protocol.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-selection.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-workspace-tree.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-workspace-entrypoint.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-cooperative-process-custody.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-route-durable-storage.ts",
@@ -957,10 +965,13 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-egress-broker.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-request.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-response.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-abort-intrinsics.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-cgroup-v2.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-containment-deadline.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-darwin-launch.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-descriptor-launch.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-evidence.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-executable-verification.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-finalizable-plan.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-guardian-program.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-http-resource-lifetime.ts",
@@ -968,6 +979,7 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-launch-failure.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-launch-plan-snapshot.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-launch.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-live-state-readback.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-posix-process-group.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-private-root.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-process-tree.ts",
@@ -992,6 +1004,7 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-open.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-replay.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-spawn-acknowledgement.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-spawn.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-start-admission.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-state.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts",
@@ -1099,6 +1112,11 @@
           "mode": "type-only"
         },
         {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-reservation-projection.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
+          "mode": "type-only"
+        },
+        {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-start-admission.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts",
           "mode": "type-only"
@@ -1169,13 +1187,13 @@
           "mode": "runtime"
         },
         {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-http-resource-lifetime.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/committed-dispatch-proof-v1.ts",
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-executable-verification.ts",
+          "to": "@agent-teams/filesystem-custody/composition",
           "mode": "runtime"
         },
         {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-launch.ts",
-          "to": "@agent-teams/filesystem-custody/composition",
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-http-resource-lifetime.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/committed-dispatch-proof-v1.ts",
           "mode": "runtime"
         },
         {
@@ -1744,6 +1762,21 @@
         {
           "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/operation-credential-selection.ts",
           "to": "packages/contexts/provider-access/src/features/contained-turn-access/domain/materialization-authorization.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-capture.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-ipc.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-broker.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
           "mode": "runtime"
         },
         {
@@ -3563,6 +3596,11 @@
         {
           "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
           "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-store.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts",
           "mode": "runtime"
         },
         {

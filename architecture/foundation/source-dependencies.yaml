@@ -194,15 +194,18 @@ boundaries:
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-execution-attestation.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-open-attempts.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-projections.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-reservation-projection.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-start-admission.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-state.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-bridge.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-events.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-final-launch.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-io.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-protocol-definitions.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-protocol.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-selection.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-workspace-tree.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-workspace-entrypoint.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-cooperative-process-custody.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-route-durable-storage.ts
@@ -258,10 +261,13 @@ boundaries:
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-egress-broker.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-request.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-response.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-abort-intrinsics.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-cgroup-v2.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-containment-deadline.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-darwin-launch.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-descriptor-launch.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-evidence.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-executable-verification.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-finalizable-plan.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-guardian-program.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-http-resource-lifetime.ts
@@ -269,6 +275,7 @@ boundaries:
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-launch-failure.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-launch-plan-snapshot.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-launch.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-live-state-readback.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-posix-process-group.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-private-root.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-process-tree.ts
@@ -293,6 +300,7 @@ boundaries:
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-open.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-replay.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-spawn-acknowledgement.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-spawn.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-start-admission.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-state.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts
