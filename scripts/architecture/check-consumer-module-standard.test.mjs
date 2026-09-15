@@ -115,6 +115,25 @@ test("rejects removed, reordered, and no-op gate commands", async () => {
   assert.throws(() => validateConsumerModuleStandard(noOpTopology), /reviewed command/u);
 });
 
+test("rejects omitted, duplicated, reordered, and bypassed quality adoption commands", async () => {
+  const inputs = await fresh();
+  const command = inputs.packageManifest.scripts["foundation:check"];
+  const adoption = "pnpm quality:adoption";
+  for (const mutated of [
+    command.replace(` && ${adoption}`, ""),
+    `${command} && ${adoption}`,
+    command.replace(`pnpm foundation:assert-registry && ${adoption}`,
+      `${adoption} && pnpm foundation:assert-registry`),
+    `${command} || true`,
+    command.replace(adoption, `${adoption} --allow-diagnostics`),
+  ]) {
+    assert.notEqual(mutated, command, "fixture must mutate the activated command");
+    inputs.packageManifest.scripts["foundation:check"] = mutated;
+    assert.throws(() => validateConsumerModuleStandard(inputs),
+      /foundation:check must execute the reviewed command/u);
+  }
+});
+
 test("rejects slot drift and an unknown production factory caller", async () => {
   const slotDrift = await fresh();
   const declarationPath = slotDrift.profile.legacyBoundaries[0].declarationPath;
