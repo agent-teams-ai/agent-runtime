@@ -15,7 +15,7 @@ const completeTarget = async (
   preparation: Extract<ContainedTurnDispatchPreparation, { readonly kind: "cleanup_pending" }>,
   target: "custody" | "provider_access" | "runtime_security",
 ): Promise<void> => {
-  const record = dependencies.operationStore.recordDispatchPreparationCleanup;
+  const record = dependencies.operationStore.recordDispatchPreparationCleanup.bind(dependencies.operationStore);
   let outcome: { readonly evidenceId?: ContainedTurnEvidenceId; readonly kind: string };
   try {
     if (target === "custody") {
@@ -44,7 +44,7 @@ const completeTarget = async (
     .includes(outcome.kind);
   if (!succeeded && outcome.evidenceId === undefined) {return;}
   try {
-    await record.call(dependencies.operationStore, {
+    await record({
       authority: containedTurnOwnerStoreAuthority(operation, operation.scope),
       ...(succeeded ? {} : { evidenceId: outcome.evidenceId }),
       permit: preparation.cleanupPermit,
@@ -114,7 +114,7 @@ export const recoverContainedTurnCommittedGrantSettlements = async (
       ),
     }),
   ]);
-  if (results.some(result => result.status === "rejected" || (result.status === "fulfilled" && (result.value as { readonly kind?: string }).kind !== "settled" && (result.value as { readonly kind?: string }).kind !== "already_settled"))) {
+  if (results.some(result => result.status === "rejected" || ((result.value as { readonly kind?: string }).kind !== "settled" && (result.value as { readonly kind?: string }).kind !== "already_settled"))) {
     await recordContainedTurnRejectedDebt(dependencies, operation, operation.scope, "grant_settlement_rejected", "dispatch_authority");
   }
   return Object.freeze({ attempted: 2 });

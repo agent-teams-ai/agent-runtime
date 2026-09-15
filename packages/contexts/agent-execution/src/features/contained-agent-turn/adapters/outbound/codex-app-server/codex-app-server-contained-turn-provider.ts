@@ -127,7 +127,7 @@ const beforeDeadline = async <T>(promise: Promise<T>, deadline: number, message:
   if (remaining <= 0) {throw new Error(message);}
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => reject(new Error(message)), remaining);
+    timer = setTimeout(() => {reject(new Error(message));}, remaining);
   });
   try {return await Promise.race([promise, timeout]);}
   finally {if (timer !== undefined) {clearTimeout(timer);}}
@@ -222,7 +222,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
     await beforeDeadline(process.write(encode(request)), deadline, "Codex App Server write timed out").catch(() => {
       throw new CodexAppServerProtocolError("Codex App Server request write failed", afterTurnRequest);
     });
-    while (true) {
+    for (;;) {
       const message = await reader.read(deadline);
       if (message === TIMEOUT || message === undefined) {
         throw new CodexAppServerProtocolError("Codex App Server closed or timed out before a response", afterTurnRequest);
@@ -279,7 +279,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
     const deadline = deadlineAfter(this.#turnTimeoutMs);
     let nextCancellationCheck = performance.now();
     const buffered = [...active.buffered];
-    try {while (true) {
+    try {for (;;) {
       if (progress.interruptRequestId === undefined && performance.now() >= nextCancellationCheck) {
         const cancellationDeadline = Math.min(deadline, deadlineAfter(this.#requestTimeoutMs));
         if (await beforeDeadline(input.isCancellationRequested(), cancellationDeadline, "Codex cancellation check timed out")) {

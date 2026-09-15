@@ -71,7 +71,7 @@ const validateObject = (
     if (!Object.hasOwn(value, key) && applyDefaults && isRecord(property) && Object.hasOwn(property, "default")) {
       value[key] = structuredClone(property.default);
     }
-    if (Object.hasOwn(value, key) && !validate(value[key], property as Schema, applyDefaults)) {return false;}
+    if (Object.hasOwn(value, key) && !validate(value[key], property, applyDefaults)) {return false;}
   }
   return true;
 };

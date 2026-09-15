@@ -368,7 +368,7 @@ export const createCodexAppServerFinalizableLaunchPlan = (
         final.containmentProfile,
       ])).digest("hex");
       return Object.freeze({plan: final, materialSha256,
-        validate: () => validateCodexAppServerLaunchPlanRoots(final)});
+        validate: () => {validateCodexAppServerLaunchPlanRoots(final);}});
     },
   });
   if (codexDarwinNativeLaunchObservation(options.boundary) !== undefined) {

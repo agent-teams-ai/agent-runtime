@@ -93,12 +93,6 @@ export const containedTurnOutputWriteAuthority = (
       operation.operationCutoff.revision === operation.dispatch.operationCutoffRevision,
     "canonical output authority exists only for the single claimed V1 execution",
   );
-  if (operation.dispatch.kind !== "claimed" || operation.custodyId === undefined ||
-      operation.hostBootId === undefined || operation.hostInstanceId === undefined ||
-      operation.operationCutoff.kind !== "open" ||
-      operation.operationCutoff.revision !== operation.dispatch.operationCutoffRevision) {
-    throw new TypeError("canonical output authority is unavailable");
-  }
   return Object.freeze({
     acceptedAuthorityVectorDigest: operation.acceptedAuthorityVectorDigest,
     adapterRevision: operation.adapterSnapshot.adapterRevision,

@@ -99,7 +99,7 @@ export const exactStableDataRecord = (value: unknown, keys: readonly string[]): 
     if (prototype !== trustedObjectPrototype && prototype !== null) {
       throw new ProviderAccessRouteCOwnerError("invalid_prototype");
     }
-    descriptors = trustedGetOwnPropertyDescriptors(value) as Record<PropertyKey, PropertyDescriptor>;
+    descriptors = trustedGetOwnPropertyDescriptors(value);
     if (trustedIsExtensible(value)) {
       throw new ProviderAccessRouteCOwnerError("mutable_shape");
     }
@@ -256,11 +256,11 @@ const snapshotBoundPrevention = (
     throw new TypeError("Provider Access prevention is not bound to the request");
   }
   return trustedFreeze({
-    grantRequestId: data.grantRequestId as string,
+    grantRequestId: data.grantRequestId,
     observedAtControlTime: data.observedAtControlTime as number,
     opaqueOwnerEvidenceRef: data.opaqueOwnerEvidenceRef,
     reason: data.reason,
-    requestDigest: data.requestDigest as string,
+    requestDigest: data.requestDigest,
     scope: request.scope,
   });
 };

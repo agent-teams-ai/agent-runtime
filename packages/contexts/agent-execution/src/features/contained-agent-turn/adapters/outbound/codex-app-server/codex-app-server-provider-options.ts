@@ -103,7 +103,7 @@ const snapshotBoundary = (value: unknown): CodexAppServerPermissionBoundary => {
   const detachedEntries = entries.map((entry, index) => {
     const record = snapshotRecord(entry, `Codex permission file-system entry ${index}`, ["access", "path"]);
     if (record.access !== "deny" && record.access !== "read") {throw new TypeError("Codex permission boundary contains an invalid filesystem access");}
-    return Object.freeze({ access: record.access as "deny" | "read", path: boundedString(record.path, "Codex permission path") });
+    return Object.freeze({ access: record.access, path: boundedString(record.path, "Codex permission path") });
   });
   const network = snapshotRecord(profile.network, "Codex permission network profile", ["enabled"]);
   const intentMode = boundary.intentMode;
@@ -127,7 +127,7 @@ const snapshotBoundary = (value: unknown): CodexAppServerPermissionBoundary => {
     throw new TypeError("Codex permission boundary identities do not match its exact roots");
   }
   const permissionProfile = Object.freeze({
-    extends: (intentMode === "analysis" ? ":read-only" : ":workspace") as ":read-only" | ":workspace",
+    extends: (intentMode === "analysis" ? ":read-only" : ":workspace"),
     file_system: Object.freeze({ entries: Object.freeze(detachedEntries) }),
     network: Object.freeze({ enabled: false as const }),
   });
@@ -152,7 +152,7 @@ const snapshotBoundary = (value: unknown): CodexAppServerPermissionBoundary => {
     workspaceRef,
     workspaceIdentity,
   });
-  return detached as CodexAppServerPermissionBoundary;
+  return detached;
 };
 
 const snapshotArray = (value: unknown, name: string, maximumLength: number): readonly unknown[] => {

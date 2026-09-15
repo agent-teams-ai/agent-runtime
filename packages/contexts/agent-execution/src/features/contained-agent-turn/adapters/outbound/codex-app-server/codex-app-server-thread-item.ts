@@ -381,7 +381,7 @@ const validateCodexThreadItemAdmission = (
   if (!isRecord(value) || typeof value.type !== "string") {
     throw new CodexAppServerProtocolError("Codex item did not match the 0.153.4 item union", true);
   }
-  const normalized = validateAndNormalizeCodexThreadItem(value) as JsonRecord | undefined;
+  const normalized = validateAndNormalizeCodexThreadItem(value);
   if (normalized === undefined) {
     throw new CodexAppServerProtocolError("Codex item did not match the complete generated 0.153.4 item schema", true);
   }

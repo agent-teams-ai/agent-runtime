@@ -39,7 +39,7 @@ const boundedClient = (client: OrdinaryPostgresClient): OrdinaryPostgresClient =
 const acquire = (pool: OrdinaryPostgresPool): Promise<OrdinaryPostgresClient> => new Promise((resolve, reject) => {
   let expired = false;
   const timer = setTimeout(() => {expired = true; reject(new Error("ordinary database acquisition timed out"));}, 5000);
-  void pool.connect().then(client => {clearTimeout(timer); if (expired) {client.release();} else {resolve(boundedClient(client));} return;}, error => {clearTimeout(timer); if (!expired) {reject(error);}});
+  void pool.connect().then(client => {clearTimeout(timer); if (expired) {client.release();} else {resolve(boundedClient(client));} return;}, (error: unknown) => {clearTimeout(timer); if (!expired) {reject(error);}});
 });
 const withClient = async <T>(pool: OrdinaryPostgresPool, body: (client: OrdinaryPostgresClient) => Promise<T>): Promise<T> => {
   const client = await acquire(pool); let broken = false;

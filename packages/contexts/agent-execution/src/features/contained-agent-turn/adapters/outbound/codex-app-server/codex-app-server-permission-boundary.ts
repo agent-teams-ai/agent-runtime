@@ -227,7 +227,7 @@ const issuePermissionBoundary = (
     throw new TypeError("intentMode must be analysis or workspace-write");
   }
   const permissionProfile = Object.freeze({
-    extends: (intentMode === "analysis" ? ":read-only" : ":workspace") as ":read-only" | ":workspace",
+    extends: (intentMode === "analysis" ? ":read-only" : ":workspace"),
     file_system: Object.freeze({
       entries: Object.freeze([
         Object.freeze({ access: "deny" as const, path: codexHome }),

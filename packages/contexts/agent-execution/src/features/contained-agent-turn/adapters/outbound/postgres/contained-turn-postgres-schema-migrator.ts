@@ -85,14 +85,14 @@ const connectForMigration = async (pool: ContainedTurnPostgresPool): Promise<Con
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(
-      () => reject(new Error("contained turn PostgreSQL migration pool acquisition timed out")),
+      () => {reject(new Error("contained turn PostgreSQL migration pool acquisition timed out"));},
       CONTAINED_TURN_POSTGRES_MIGRATION_TIMEOUTS.connectionTimeoutMs,
     );
   });
   try {
     return await Promise.race([pending, timeout]);
   } catch (error) {
-    void pending.then(client => client.release(true)).catch(() => {});
+    void pending.then(client => {client.release(true); return;}).catch(() => {});
     throw error;
   } finally {
     if (timer !== undefined) {clearTimeout(timer);}
@@ -306,7 +306,7 @@ export const backfillContainedTurnPreparationDigests = async (client: ContainedT
   let afterOperationId = "";
   let afterPreparationToken = "";
   let totalBytes = 0;
-  while (true) {
+  for (;;) {
     const rows = await client.query<{
       operation_id: string;
       preparation_token: string;
@@ -353,7 +353,7 @@ export const validateContainedTurnLegacyOperationDigests = async (client: Contai
   );
   let afterOperationId = "";
   let totalBytes = 0;
-  while (true) {
+  for (;;) {
     const rows = await client.query<{
       operation_id: string;
       state: unknown;

@@ -154,7 +154,8 @@ const unsupportedSubmission = (
   if (dependencies.provider.adapterSnapshot.provider !== input.expectedProvider) {
     return { code: "provider_mismatch", status: "unsupported" };
   }
-  if (dependencies.provider.manifest.effectClass !== "contained_unmediated_effect") {
+  const effectClass: unknown = dependencies.provider.manifest.effectClass;
+  if (effectClass !== "contained_unmediated_effect") {
     return { code: "provider_unsupported", status: "unsupported" };
   }
   if (!dependencies.provider.manifest.supportedModes.includes(input.intent.mode)) {

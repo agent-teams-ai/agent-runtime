@@ -73,10 +73,11 @@ const validatePreparationReceipts = (preparation: ContainedTurnDispatchPreparati
         if (!Number.isSafeInteger(value) || Number(value) < 0) {throw new TypeError("invalid consumption authority revision");}
       } else {validateContainedTurnText("consumption authority", value as string, CONTAINED_TURN_LIMITS.text.identifier);}
     }
+    const purpose: unknown = receipt.purpose;
     if (receipt.owner !== owner || receipt.operationId !== preparation.operationId ||
         receipt.grantRequestId !== requestId || receipt.grantRequestId !== `grant-request:${receipt.grantRequestDigest}` ||
         receipt.scope.scopeDigest !== containedTurnScopeDigest(receipt.scope) ||
-        receipt.purpose !== "contained-turn.provider-dispatch/v1" ||
+        purpose !== "contained-turn.provider-dispatch/v1" ||
         containedTurnOperationCutoffRevision(receipt.validThroughOperationCutoffRevision) < preparation.operationCutoffRevision ||
         !validConsumptionWindow(receipt)) {
       throw new TypeError("preparation consumption receipt identity mismatch");
@@ -124,15 +125,15 @@ export const snapshotContainedTurnCleanupPermit = (
   requireOrdinaryRecord("cleanup permit", permit, PERMIT_KEYS);
   const descriptors = Object.getOwnPropertyDescriptors(permit);
   const snapshot = Object.freeze({
-    attemptId: descriptors.attemptId?.value as ContainedTurnCleanupPermit["attemptId"],
-    custodyId: descriptors.custodyId?.value as ContainedTurnCleanupPermit["custodyId"],
-    operationCutoffRevision: descriptors.operationCutoffRevision?.value as ContainedTurnCleanupPermit["operationCutoffRevision"],
-    operationId: descriptors.operationId?.value as ContainedTurnCleanupPermit["operationId"],
-    permitDigest: descriptors.permitDigest?.value as ContainedTurnCleanupPermit["permitDigest"],
-    permitId: descriptors.permitId?.value as ContainedTurnCleanupPermit["permitId"],
-    preparationToken: descriptors.preparationToken?.value as ContainedTurnCleanupPermit["preparationToken"],
-    preparedOperationRevision: descriptors.preparedOperationRevision?.value as ContainedTurnCleanupPermit["preparedOperationRevision"],
-    workspaceId: descriptors.workspaceId?.value as ContainedTurnCleanupPermit["workspaceId"],
+    attemptId: descriptors.attemptId.value as ContainedTurnCleanupPermit["attemptId"],
+    custodyId: descriptors.custodyId.value as ContainedTurnCleanupPermit["custodyId"],
+    operationCutoffRevision: descriptors.operationCutoffRevision.value as ContainedTurnCleanupPermit["operationCutoffRevision"],
+    operationId: descriptors.operationId.value as ContainedTurnCleanupPermit["operationId"],
+    permitDigest: descriptors.permitDigest.value as ContainedTurnCleanupPermit["permitDigest"],
+    permitId: descriptors.permitId.value as ContainedTurnCleanupPermit["permitId"],
+    preparationToken: descriptors.preparationToken.value as ContainedTurnCleanupPermit["preparationToken"],
+    preparedOperationRevision: descriptors.preparedOperationRevision.value as ContainedTurnCleanupPermit["preparedOperationRevision"],
+    workspaceId: descriptors.workspaceId.value as ContainedTurnCleanupPermit["workspaceId"],
   });
   validateContainedTurnIdentity("attempt", snapshot.attemptId);
   validateContainedTurnIdentity("custody", snapshot.custodyId);
@@ -156,17 +157,17 @@ const preparationBase = (
 ): Omit<ContainedTurnDispatchPreparation, "kind"> => {
   const descriptors = Object.getOwnPropertyDescriptors(preparation);
   const base = {
-    attemptId: descriptors.attemptId?.value as ContainedTurnDispatchPreparation["attemptId"],
-    custodyId: descriptors.custodyId?.value as ContainedTurnDispatchPreparation["custodyId"],
-    operationCutoffRevision: descriptors.operationCutoffRevision?.value as ContainedTurnDispatchPreparation["operationCutoffRevision"],
-    operationId: descriptors.operationId?.value as ContainedTurnDispatchPreparation["operationId"],
-    preparationToken: descriptors.preparationToken?.value as ContainedTurnDispatchPreparation["preparationToken"],
-    preparedOperationRevision: descriptors.preparedOperationRevision?.value as ContainedTurnDispatchPreparation["preparedOperationRevision"],
+    attemptId: descriptors.attemptId.value as ContainedTurnDispatchPreparation["attemptId"],
+    custodyId: descriptors.custodyId.value as ContainedTurnDispatchPreparation["custodyId"],
+    operationCutoffRevision: descriptors.operationCutoffRevision.value as ContainedTurnDispatchPreparation["operationCutoffRevision"],
+    operationId: descriptors.operationId.value as ContainedTurnDispatchPreparation["operationId"],
+    preparationToken: descriptors.preparationToken.value as ContainedTurnDispatchPreparation["preparationToken"],
+    preparedOperationRevision: descriptors.preparedOperationRevision.value as ContainedTurnDispatchPreparation["preparedOperationRevision"],
     ...(descriptors.providerAccessConsumptionReceipt === undefined ? {} : { providerAccessConsumptionReceipt: detachAndFreezeContainedTurnValue(descriptors.providerAccessConsumptionReceipt.value) }),
-    providerAccessGrantRequestId: descriptors.providerAccessGrantRequestId?.value as string | null,
+    providerAccessGrantRequestId: descriptors.providerAccessGrantRequestId.value as string | null,
     ...(descriptors.runtimeSecurityConsumptionReceipt === undefined ? {} : { runtimeSecurityConsumptionReceipt: detachAndFreezeContainedTurnValue(descriptors.runtimeSecurityConsumptionReceipt.value) }),
-    runtimeSecurityGrantRequestId: descriptors.runtimeSecurityGrantRequestId?.value as string | null,
-    workspaceId: descriptors.workspaceId?.value as ContainedTurnDispatchPreparation["workspaceId"],
+    runtimeSecurityGrantRequestId: descriptors.runtimeSecurityGrantRequestId.value as string | null,
+    workspaceId: descriptors.workspaceId.value as ContainedTurnDispatchPreparation["workspaceId"],
   };
   validatePreparationIdentity(base as ContainedTurnDispatchPreparation);
   return base;
@@ -302,7 +303,7 @@ export const snapshotContainedTurnDispatchPreparation = (
   preparation: ContainedTurnDispatchPreparation,
 ): ContainedTurnDispatchPreparation => {
   requireOrdinaryRecord("dispatch preparation envelope", preparation, Object.keys(preparation));
-  const kind = preparation.kind;
+  const kind: unknown = preparation.kind;
   if (kind === "active" || kind === "claimed") {
     return snapshotSimplePreparation(preparation, kind);
   }

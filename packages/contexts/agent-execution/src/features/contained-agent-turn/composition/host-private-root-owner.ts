@@ -74,7 +74,7 @@ export const createHostPrivateRootOwnerFactory = (input: Readonly<{
       }
       const cutoffMethod = quiescence.cutoff;
       const cleanupMethod = quiescence.cleanup;
-      const cutoff: DockerKernelReservationCleanup["cutoff"] = () => apply(cutoffMethod, quiescenceOwner, []);
+      const cutoff: DockerKernelReservationCleanup["cutoff"] = () => {apply(cutoffMethod, quiescenceOwner, []);};
       const cleanup: DockerKernelReservationCleanup["cleanup"] = call => apply(cleanupMethod, quiescenceOwner, [call]);
       const owner = new NodeHostPrivateRootOwner(Object.freeze({
         rootPath: identity(reservation.rootPath), workspacePath: identity(reservation.workspacePath),

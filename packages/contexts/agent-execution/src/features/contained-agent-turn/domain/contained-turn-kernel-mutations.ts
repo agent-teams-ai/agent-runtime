@@ -113,7 +113,7 @@ export const validateContainedTurnKernelMutationShape = (
     seal_artifact: ["artifactManifestRef", "kind", "proof"],
   };
   const kindDescriptor = Object.getOwnPropertyDescriptor(mutation, "kind");
-  const kind = kindDescriptor?.value;
+  const kind: unknown = kindDescriptor?.value;
   invariant(
     kindDescriptor?.enumerable === true &&
       typeof kind === "string" &&

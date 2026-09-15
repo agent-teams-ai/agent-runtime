@@ -31,7 +31,7 @@ export class DockerCustodyHttpReservation {
   static readonly #reserved = new WeakSet<LaunchedDockerCustody>();
   readonly #controller = new AbortController();
   readonly #signal = this.#controller.signal;
-  readonly #resources = new NodeCustodyHttpResources(Object.freeze({cutoff: () => this.#cutoff()}), this.#controller);
+  readonly #resources = new NodeCustodyHttpResources(Object.freeze({cutoff: () => {this.#cutoff();}}), this.#controller);
   readonly #identity: object = Object.freeze(Object.create(null));
   readonly #input: DockerCustodyHttpReservationInput;
   readonly #observed: ReturnType<DockerHostCustodyLifecycle["observeLaunch"]>;
@@ -39,7 +39,7 @@ export class DockerCustodyHttpReservation {
   #lifetime: HostCustodyHttpResourceLifetime | undefined;
   #cut = false;
   readonly #subscriptions: ReturnType<typeof hostHttpAbortOperations.subscribe>[] = [];
-  readonly #abort = () => this.#cutoff();
+  readonly #abort = () => {this.#cutoff();};
 
   public constructor(input: DockerCustodyHttpReservationInput) {
     input = custodyDataRecord(input);

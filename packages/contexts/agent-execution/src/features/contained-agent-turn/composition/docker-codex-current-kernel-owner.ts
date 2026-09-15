@@ -207,7 +207,7 @@ export const createDockerCodexCurrentKernelOwner = (
           assertOpen();
           if (await isCancellationRequested()) {throw new TypeError("Docker Codex start is cancelled");}
           assertOpen();
-          nativeStartStep(diagnosticKey, "plan-root-validation", () => validateCodexAppServerLaunchPlanRoots(plan));
+          nativeStartStep(diagnosticKey, "plan-root-validation", () => {validateCodexAppServerLaunchPlanRoots(plan);});
           } catch (error) {recordNativeStart(diagnosticKey, "fail"); throw error;}
           recordNativeStart(diagnosticKey, "begin", "bridge-open");
           let opened: Awaited<ReturnType<typeof registry.open>>;

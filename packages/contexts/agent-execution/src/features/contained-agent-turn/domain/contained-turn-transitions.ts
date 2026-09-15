@@ -34,7 +34,6 @@ const requireMatchingClosureRequest = (
   stage: ContainedTurnClosureStage,
 ): void => {
   invariant(operation.closureRecovery.kind === "required", "closure completion requires durable stage debt");
-  if (operation.closureRecovery.kind !== "required") {return;}
   invariant(
     operation.closureRecovery.stage === stage &&
       operation.closureRecovery.debtId === request.debtId &&
@@ -70,10 +69,10 @@ const noteClosureStageUnknown: MutationHandler<"note_closure_stage_unknown"> = (
   invariant(operation.closureRecovery.kind === "required", "unknown closure outcome retains exact debt");
   return {
     ...operation,
-    closureRecovery: operation.closureRecovery.kind === "required" ? {
+    closureRecovery: {
       ...operation.closureRecovery,
       evidenceIds: [...new Set([...operation.closureRecovery.evidenceIds, mutation.evidenceId])],
-    } : operation.closureRecovery,
+    },
     revision: operation.revision + 1,
   };
 };
@@ -267,11 +266,12 @@ const recordPhysicalContainmentUnknown: MutationHandler<"record_physical_contain
 const finalize: MutationHandler<"finalize"> = (operation, mutation) => {
   invariant(operation.terminal.kind === "open" && operation.providerExecution.kind === "closed", "terminal truth closes once after execution closure");
   const digest = containedTurnSatisfactionDigest(operation);
+  const receiptSetVersion: unknown = mutation.proof.binding.requiredReceiptSetVersion;
   invariant(
     mutation.proof.binding.satisfactionDigest === digest &&
       mutation.proof.binding.terminalOutcome === operation.providerExecution.outcome &&
       mutation.proof.binding.requiredReceiptSetDigest === operation.requiredReceiptSetDigest &&
-      mutation.proof.binding.requiredReceiptSetVersion === operation.requiredReceiptSet.setVersion,
+      receiptSetVersion === operation.requiredReceiptSet.setVersion,
     "terminal proof must bind the recomputed satisfaction and frozen receipt-set authority",
   );
   return { ...operation, proofs: [...operation.proofs, mutation.proof], revision: operation.revision + 1, terminal: { kind: "final", outcome: operation.providerExecution.outcome, satisfactionDigest: digest, terminalProofId: mutation.proof.proofId } };

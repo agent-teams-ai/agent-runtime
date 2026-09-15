@@ -156,7 +156,7 @@ export class NodeHostPrivateRootOwner implements HostPrivateRootOwner {
     if (this.#capture !== undefined) {return this.#capture;}
     if (this.#closing) {return Promise.reject(new Error("Private root capture closed"));}
     this.#deadline = performance.now() + this.options.maximumMilliseconds;
-    this.#capture = Promise.resolve().then(() => this.captureDirectories()).catch(async error => {
+    this.#capture = Promise.resolve().then(() => this.captureDirectories()).catch(async (error: unknown) => {
       this.fail("capture-unproven");
       await this.closeAll();
       throw error;
@@ -278,7 +278,7 @@ export class NodeHostPrivateRootOwner implements HostPrivateRootOwner {
     });
     // The operation and all capabilities remain retained after a bounded wait.
     // Late continuations check the same deadline/debt before another mutation.
-    return Promise.race([work, expired]).finally(() => clearTimeout(timer));
+    return Promise.race([work, expired]).finally(() => {clearTimeout(timer);});
   }
 
   private async removeCapturedRoot(): Promise<void> {

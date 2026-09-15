@@ -82,7 +82,7 @@ export const digestCommittedDispatchProofV1 = (
 ): ContainedTurnCanonicalDigest => digestContainedTurnCanonicalValue({
   domain: { purpose: COMMITTED_DISPATCH_PROOF_V1_PURPOSE, version: 1 },
   fields: proofFields(proof),
-} as never);
+});
 
 const validateText = (name: string, value: string): string => {
   validateContainedTurnText(name, value, CONTAINED_TURN_LIMITS.text.identifier);
@@ -96,7 +96,9 @@ export const validateCommittedDispatchProofV1 = (value: unknown): CommittedDispa
   }
   assertContainedTurnExactRecord("committed dispatch proof", value, KEYS);
   const proof = value as CommittedDispatchProofV1;
-  if (proof.version !== 1 || proof.purpose !== COMMITTED_DISPATCH_PROOF_V1_PURPOSE ||
+  const version: unknown = proof.version;
+  const purpose: unknown = proof.purpose;
+  if (version !== 1 || purpose !== COMMITTED_DISPATCH_PROOF_V1_PURPOSE ||
       !Number.isSafeInteger(proof.committedOperationRevision) ||
       Object.is(proof.committedOperationRevision, -0) || proof.committedOperationRevision < 1) {
     throw new TypeError("committed dispatch proof domain or committed operation revision is invalid");

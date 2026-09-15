@@ -185,7 +185,7 @@ export class ContainedTurnPostgresPreparationRecovery {
       );
       let afterOperationId = "";
       let afterPreparationToken = "";
-      while (true) {
+      for (;;) {
         const metadata = await scanMetadata(afterOperationId, afterPreparationToken);
         assertMetadataWithinBudget(metadata.rows);
         const last = metadata.rows.at(-1);
@@ -236,7 +236,7 @@ export class ContainedTurnPostgresPreparationRecovery {
       let candidateBytes = 0;
       afterOperationId = "";
       afterPreparationToken = "";
-      while (true) {
+      for (;;) {
         const metadata = await scanMetadata(afterOperationId, afterPreparationToken);
         if (metadata.rows.length === 0) {break;}
         const states = await materialize(metadata.rows);

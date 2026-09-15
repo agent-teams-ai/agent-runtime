@@ -73,7 +73,7 @@ const snapshotTarget = (value: unknown): ContainedTurnRouteQualificationTarget =
     }
     snapshot[dimension] = token;
   }
-  return Object.freeze(snapshot) as ContainedTurnRouteQualificationTarget;
+  return Object.freeze(snapshot);
 };
 
 /**

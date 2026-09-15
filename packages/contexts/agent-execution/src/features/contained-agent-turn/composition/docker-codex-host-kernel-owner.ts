@@ -187,7 +187,7 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
         linkNativeStartDiagnostic(nativeFiles, filesOwner);
         retained.nativeFiles = nativeFiles;
         const subscription = hostHttpAbortOperations.subscribe(claimed.signal, () => {retained.effectOwner?.cutoff(); nativeFiles.cutoff();});
-        retained.removeAbort = () => hostHttpAbortOperations.remove(subscription);
+        retained.removeAbort = () => {hostHttpAbortOperations.remove(subscription);};
         if (disposed || hostHttpAbortOperations.aborted(claimed.signal)) {throw new TypeError("Docker selection closed");}
         const {nativeFiles: _nativeFiles, workspaceBackingTreeOwnership: _ownership, ...dependencies} = selected;
         const deadlineEpochMs = Date.now() + dependencies.deadlines.routeLifetimeMs;
@@ -245,14 +245,14 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
             const actual = nativeStartStep(nativeFiles, "process-input-projection", () =>
               captureDockerCodexProcessInput(process, result.plan, paths, claimed.signal, () => !disposed));
             nativeStartStep(nativeFiles, "reservation-evidence-finalize", () =>
-              raw.reservation(claimed.underlyingCustodyRef).evidence.finalize(result.plan, actual.exec));
+              {raw.reservation(claimed.underlyingCustodyRef).evidence.finalize(result.plan, actual.exec);});
             return result;
           },
         });
         retained.owner = owner;
         return {owner, hostOwners};
       });
-      nativeStartStep(filesOwner, "host-attach", () => constructed.hostOwners.attach(constructed.owner));
+      nativeStartStep(filesOwner, "host-attach", () => {constructed.hostOwners.attach(constructed.owner);});
       const flight = constructed.owner.preparation.prepareClaimed(claimed);
       raw.reservation(claimed.underlyingCustodyRef).evidence.trackPreparation(flight);
       return await flight;
@@ -283,6 +283,6 @@ function disposeDockerCustodyRecords(records: ReadonlyMap<string, Retained>, raw
     close(() => record.removeAbort?.());
     delete record.removeAbort;
   }
-  close(() => raw.dispose());
+  close(() => {raw.dispose();});
   if (failed) {throw failure;}
 }

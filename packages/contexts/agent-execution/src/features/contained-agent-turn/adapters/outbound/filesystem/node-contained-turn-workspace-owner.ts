@@ -359,7 +359,7 @@ export const createNodeContainedTurnWorkspaceOwner = async (
       const completed = launches.length === 0 || await Promise.race([
         Promise.allSettled(launches).then(() => true),
         new Promise<false>(resolve => {
-          timeout = setTimeout(() => resolve(false), OWNER_DISPOSAL_COMPLETION_BOUND_MS);
+          timeout = setTimeout(() => {resolve(false);}, OWNER_DISPOSAL_COMPLETION_BOUND_MS);
         }),
       ]);
       if (timeout !== undefined) {clearTimeout(timeout);}

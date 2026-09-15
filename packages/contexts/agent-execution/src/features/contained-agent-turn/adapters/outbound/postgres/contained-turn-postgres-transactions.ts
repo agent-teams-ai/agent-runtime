@@ -62,14 +62,14 @@ export class ContainedTurnPostgresTransactions {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(
-        () => reject(new Error("contained turn PostgreSQL pool acquisition timed out")),
+        () => {reject(new Error("contained turn PostgreSQL pool acquisition timed out"));},
         this.#timeouts.connectionTimeoutMs,
       );
     });
     try {
       return await Promise.race([pending, timeout]);
     } catch (error) {
-      void pending.then(client => client.release(true), () => {});
+      void pending.then(client => {client.release(true); return;}, () => {});
       throw error;
     } finally {
       if (timer !== undefined) {clearTimeout(timer);}

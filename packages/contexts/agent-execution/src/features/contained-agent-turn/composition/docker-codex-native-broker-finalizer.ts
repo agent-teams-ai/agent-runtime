@@ -46,7 +46,7 @@ export const createDockerCodexNativeBrokerFinalizer = (value: DockerCodexNativeB
   const input = custodyDataRecord(value);
   const cutoffMethod = input.cutoffNativeFiles;
   if (!isHostCustodyDataCallback(cutoffMethod)) {throw rejected();}
-  const cutoffNativeFiles = () => apply(cutoffMethod, value, []);
+  const cutoffNativeFiles = () => {apply(cutoffMethod, value, []);};
   const files = custodyDataRecord(input.nativeFiles);
   if (typeof files.install !== "function") {throw rejected();}
   const installMethod = files.install;

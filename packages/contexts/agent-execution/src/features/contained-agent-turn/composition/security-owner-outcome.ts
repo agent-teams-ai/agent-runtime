@@ -16,7 +16,7 @@ export const securityConsumeOutcome = async (pending: ReturnType<Owner["consumeF
     exact("RS prevention", evidence, ["contractVersion", "purpose", "operationId", "scope", "grantRequestId", "requestDigest", "reason", "preventedAtControlTime", ...(Object.hasOwn(evidence, "ownerEvidenceRef") ? ["ownerEvidenceRef"] : [])]);
     if (evidence.contractVersion !== "contained-turn-dispatch-prevention/v1" || evidence.operationId !== request.operationId ||
         evidence.purpose !== request.purpose || evidence.grantRequestId !== request.grantRequestId || evidence.requestDigest !== request.requestDigest ||
-        hash(evidence.scope as never) !== hash(request.scope as never) || !(["accepted_authority_changed", "already_consumed", "authority_revision_stale", "claim_binding_mismatch", "constraints_drift", "containment_policy_drift", "expired", "invalid_request", "provider_binding_mismatch", "request_digest_mismatch", "revoked"] as unknown[]).includes(evidence.reason) ||
+        hash(evidence.scope as never) !== hash(request.scope as never) || !["accepted_authority_changed", "already_consumed", "authority_revision_stale", "claim_binding_mismatch", "constraints_drift", "containment_policy_drift", "expired", "invalid_request", "provider_binding_mismatch", "request_digest_mismatch", "revoked"].includes(evidence.reason) ||
         !Number.isSafeInteger(evidence.preventedAtControlTime)) {throw new TypeError("RS prevention request mismatch");}
   }
   return outcome;

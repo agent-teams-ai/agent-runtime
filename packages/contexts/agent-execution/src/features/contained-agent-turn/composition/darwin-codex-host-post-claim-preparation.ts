@@ -144,12 +144,12 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
           }});
       const owner = route;
       if (nativeLease === undefined) {
-        files = new DarwinCodexNativeFiles(options.boundary, options.catalogSource, journal, () => owner.assertActive());
+        files = new DarwinCodexNativeFiles(options.boundary, options.catalogSource, journal, () => {owner.assertActive();});
       }
       preparation.retainDarwinRoute(lifetime, owner);
       owner.assertWritableTmp(options.tmpDir);
       if (options.localCut.hostShutdownSignal !== undefined) {
-        routeShutdownSubscription = hostHttpAbortOperations.subscribe(options.localCut.hostShutdownSignal, () => owner.cutoff());
+        routeShutdownSubscription = hostHttpAbortOperations.subscribe(options.localCut.hostShutdownSignal, () => {owner.cutoff();});
       }
       return await owner.run(async () => {
         await journal.prepare(); owner.assertActive();
@@ -184,7 +184,7 @@ export const createDarwinCodexHostPostClaimPreparation = (input: DarwinCodexHost
           }}),
           accept: async (socket, signal) => {
             let connection: ReturnType<ReturnType<typeof createNodeHostHttpConnection>["bindAcceptedSocket"]> | undefined;
-            const controller = new AbortController(); const abort = () => controller.abort();
+            const controller = new AbortController(); const abort = () => {controller.abort();};
             const subscription = hostHttpAbortOperations.subscribe(signal, abort);
             try {
               // Even TLS/resolver work is refused before installed admission.

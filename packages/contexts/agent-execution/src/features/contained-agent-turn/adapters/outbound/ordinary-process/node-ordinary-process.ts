@@ -32,7 +32,7 @@ const groupExists = (pid: number): boolean => {
 };
 async function within(promise: Promise<void>, milliseconds: number): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  try { return await Promise.race([promise.then(() => true), new Promise<false>(resolve => { timer = setTimeout(() => resolve(false), milliseconds); })]); }
+  try { return await Promise.race([promise.then(() => true), new Promise<false>(resolve => { timer = setTimeout(() => {resolve(false);}, milliseconds); })]); }
   finally { clearTimeout(timer); }
 }
 const writeMessage = async (child: ChildProcessWithoutNullStreams, message: string): Promise<void> =>
@@ -187,7 +187,7 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
             Object.freeze({...binding, kind: "process_group_closed" as const, reservationId, pid: child.pid, processGroupId: child.pid, ownershipToken,
               exitObserved: true as const, groupEmptyObserved: true as const}),
           ] as const);
-        })().catch(error => {
+        })().catch((error: unknown) => {
           closePromise = undefined;
           try {record({...binding, reservationId, kind: "unconfirmed", pid: child?.pid ?? null, processGroupId: child?.pid ?? null});} catch { /* The supplied journal already failed closed. */ }
           throw error;

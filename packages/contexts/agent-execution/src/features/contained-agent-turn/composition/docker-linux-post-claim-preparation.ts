@@ -469,7 +469,7 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
 
     // Irreversible caller cutoff is honored between every step, so a cut signal
     // can never let the next resource effect start.
-    const assertOpen = (): void => assertPreparationOpen(cut, input.signal, admissionDeadline);
+    const assertOpen = (): void => {assertPreparationOpen(cut, input.signal, admissionDeadline);};
     const hostPreparation = createHostLaunchPreparation(dependencies, join, assertOpen);
     try {
       const proof = input.committedDispatchProof;

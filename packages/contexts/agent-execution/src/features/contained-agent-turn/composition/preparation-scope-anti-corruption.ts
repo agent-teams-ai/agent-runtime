@@ -56,7 +56,7 @@ const readBoundedContainedTurnDescriptors = (
     const descriptor = trustedGetOwnPropertyDescriptor(candidate, key);
     if (descriptor === undefined) {throw new TypeError("owner port property changed during projection");}
     return [key, descriptor];
-  })) as PropertyDescriptorMap;
+  }));
 };
 
 const cloneContainedTurnPortArray = (
@@ -106,7 +106,7 @@ const cloneContainedTurnPortRecord = (
     }
     entries.push([key, cloneContainedTurnPortEntry(descriptor.value, depth + 1, state)]);
   }
-  return trustedFromEntries(entries) as { readonly [key: string]: PortValue };
+  return trustedFromEntries(entries);
 };
 
 const cloneContainedTurnPortEntry = (
@@ -341,7 +341,7 @@ const snapshotBoundaryPort = <Port extends object>(name: string, port: Port): Po
 const overrideBoundaryPort = <Port extends object>(
   port: Port,
   overrides: Readonly<Record<string, unknown>>,
-): Port => trustedFreeze({ ...port, ...overrides }) as Port;
+): Port => trustedFreeze({ ...port, ...overrides });
 
 /**
  * The production preparation ACL. It preserves the seven-port authority while
@@ -362,7 +362,7 @@ export const createContainedTurnPreparationScopeDependencies = (
     if (member === undefined || !("value" in member) || typeof member.value !== "object" || member.value === null) {
       throw new TypeError(`contained-turn composition dependency ${key} must be an object data property`);
     }
-    return member.value as object;
+    return member.value;
   };
   const rawOperationStore = snapshotBoundaryPort("operation store", raw("operationStore")) as ContainedTurnKernelDependencies["operationStore"];
   const rawProviderAccess = snapshotBoundaryPort("Provider Access", raw("providerAccess")) as ContainedTurnKernelDependencies["providerAccess"];
