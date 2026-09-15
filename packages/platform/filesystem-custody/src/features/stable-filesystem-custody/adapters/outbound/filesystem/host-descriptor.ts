@@ -126,10 +126,12 @@ export const duplicateNativeHostDescriptor = (handle: StableFilesystemHandle): S
   wrap(load().hostDuplicate(token(handle)));
 export const nativeHostPath = (handle: StableFilesystemHandle): string => load().hostPath(token(handle));
 export const nativeHostMount = (handle: StableFilesystemHandle): string => load().hostMount(token(handle));
-export const nativeHostMkdir = (handle: StableFilesystemHandle, name: string): void =>
+export const nativeHostMkdir = (handle: StableFilesystemHandle, name: string): void => {
   load().hostMkdir(token(handle), name);
-export const nativeHostUnlink = (handle: StableFilesystemHandle, name: string): void =>
+};
+export const nativeHostUnlink = (handle: StableFilesystemHandle, name: string): void => {
   load().hostUnlink(token(handle), name);
+};
 export const nativeHostNames = (handle: StableFilesystemHandle, maximum: number): readonly string[] => {
   const names = load().hostNames(token(handle), maximum);
   return decodeHostNameBytes(names);
