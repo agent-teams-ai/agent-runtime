@@ -6,12 +6,17 @@ import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
 
 export const base = 'c0dc683ecb14760c75a69283ad7ec312f6246a63';
+export const delivery = '510882870c1a7c628187dd91d7dff05225068bdb';
 export const planHash = 'e025978dcf3cfac12b7795fa3aafc96f06838620e124df4cc091ebee45352864';
 export const artifact = 'architecture/c0/ar-owned-lifetime/contract.json';
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const read = path => readFileSync(resolve(root, path));
-const git = (...args) => execFileSync('git', args, {cwd: root, encoding: 'utf8'}).trim();
+export const createGit = cwd => (...args) => {
+  const output = execFileSync('git', args, {cwd, encoding: 'utf8'});
+  return args.includes('-z') ? output : output.trim();
+};
+const git = createGit(root);
 const json = path => JSON.parse(read(path));
 const requireText = (value, label) => assert.ok(typeof value === 'string' && value.trim().length > 0, `missing ${label}`);
 
@@ -175,6 +180,29 @@ const allowedChanges = [
   "architecture/c0/ar-owned-lifetime/evidence/cms-delta.diff",
   "architecture/c0/ar-owned-lifetime/evidence/common-assembly-ac49bb33.md"
 ];
+
+const lines = value => value.split('\n').filter(Boolean);
+const pathLines = value => value.split('\0').filter(Boolean);
+
+const requireCommit = (runGit, revision, label) => {
+  assert.match(revision, /^[0-9a-f]{40}$/u, `invalid C0 ${label} SHA`);
+  let resolved;
+  try {resolved = runGit('rev-parse', '--verify', `${revision}^{commit}`);}
+  catch {assert.fail(`missing C0 ${label} commit: ${revision}`);}
+  assert.equal(resolved, revision, `C0 ${label} did not resolve to its fixed commit`);
+};
+
+export function validateDeliveryRange({runGit = git, baseCommit = base, deliveryCommit = delivery, allowedPaths = allowedChanges} = {}) {
+  requireCommit(runGit, baseCommit, 'base');
+  requireCommit(runGit, deliveryCommit, 'delivery');
+  try {runGit('merge-base', '--is-ancestor', baseCommit, deliveryCommit);}
+  catch {assert.fail('C0 delivery is not a descendant of its base');}
+  const commits = lines(runGit('rev-list', '--reverse', '--topo-order', `${baseCommit}..${deliveryCommit}`));
+  assert.ok(commits.includes(deliveryCommit), 'C0 delivery range is empty or incomplete');
+  const changed = commits.flatMap(commit => pathLines(runGit('diff-tree', '--root', '--no-commit-id', '--name-only', '-r', '--no-renames', '-m', '-z', commit)));
+  for (const path of changed) {assert.ok(allowedPaths.includes(path), `forbidden C0 edit: ${path}`);}
+  return changed;
+}
 
 // This deliberately validates retained C0 evidence, never executes runtime code.
 // Expected admissions are independently derived from the rebased c0dc683 review.
@@ -371,8 +399,9 @@ export function validateWorkspaceEvidence() {
   const manifests = git('ls-tree','-r','--name-only',base).split('\n').filter(p => p === 'package.json' || /^packages\/[^/]+\/[^/]+\/package\.json$/u.test(p));
   assert.deepEqual(c.inventory.packages.map(p => p.manifest), manifests);
   for (const p of c.inventory.packages) {assert.equal(p.sha256,sha256(execFileSync('git',['show',`${base}:${p.manifest}`],{cwd:root})), 'base manifest identity drift');}
-  const changed = [...git('diff','--name-only',base).split('\n'), ...git('ls-files','--others','--exclude-standard').split('\n')].filter(Boolean);
-  for (const path of changed) {assert.ok(allowedChanges.includes(path), `forbidden C0 edit: ${path}`);}
+  // The immutable delivery range proves the reviewed C0 scope. Later checkout
+  // changes are governed by their own checks and cannot rewrite this history.
+  validateDeliveryRange();
   const original = JSON.parse(execFileSync('git',['show',`${base}:package.json`],{cwd:root})), current = json('package.json');
   for (const name of ['check','check:fast']) {
     assert.ok(original.scripts[name].startsWith('pnpm lint && '), 'retained gate no longer starts with lint');
@@ -382,7 +411,7 @@ export function validateWorkspaceEvidence() {
   assert.equal(current.scripts['test:ar-c0'],'node scripts/architecture/validate-ar-c0.mjs && node --test scripts/architecture/validate-ar-c0.test.mjs');
   delete current.scripts['test:ar-c0'];
   assert.deepEqual(current,original,'package changes exceed C0 script wiring');
-  return {sourceBase:base, sourceTree:c.source.tree, candidateHead:git('rev-parse','HEAD'), candidateRef:git('rev-parse','--abbrev-ref','HEAD'), contractRevision:c.contractRevision,sha256:receipt.sha256,verdicts:c.verdicts};
+  return {sourceBase:base, sourceTree:c.source.tree, deliveryHead:delivery, candidateHead:git('rev-parse','HEAD'), candidateRef:git('rev-parse','--abbrev-ref','HEAD'), contractRevision:c.contractRevision,sha256:receipt.sha256,verdicts:c.verdicts};
 }
 
 // A passing C0 gate authenticates bounded facts and stop evidence, not activation.

@@ -1,18 +1,111 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
+import {mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import test from 'node:test';
-import {artifact, sha256, validateContract, validateSchema, validateWorkspace, validateWorkspaceEvidence} from './validate-ar-c0.mjs';
+import {artifact, createGit, sha256, validateContract, validateDeliveryRange, validateSchema, validateWorkspace, validateWorkspaceEvidence} from './validate-ar-c0.mjs';
 const read = p => readFileSync(new URL(`../../${p}`,import.meta.url));
 const original = JSON.parse(read(artifact));
 const receipt = JSON.parse(read('architecture/c0/ar-owned-lifetime/identity.json'));
 const schema = JSON.parse(read('architecture/c0/ar-owned-lifetime/contract.schema.json'));
 const validate = c => {validateSchema(c,schema); return validateContract(c,receipt);};
+const expectedBase = 'c0dc683ecb14760c75a69283ad7ec312f6246a63';
+const expectedDelivery = '510882870c1a7c628187dd91d7dff05225068bdb';
+
+const withRepository = callback => {
+  const cwd = mkdtempSync(join(tmpdir(), 'validate-ar-c0-'));
+  const runGit = createGit(cwd);
+  try {
+    runGit('init', '--quiet', '--initial-branch=main');
+    runGit('config', 'user.name', 'C0 Test');
+    runGit('config', 'user.email', 'c0-test@example.invalid');
+    const commit = message => {runGit('add', '-A'); runGit('commit', '--quiet', '-m', message); return runGit('rev-parse', 'HEAD');};
+    return callback({cwd, runGit, commit});
+  } finally {rmSync(cwd, {recursive:true, force:true});}
+};
 
 test('exact retained source, reviewed final plan and canonical stop evidence validate', () => {
   assert.equal(validate(original),true);
-  assert.equal(validateWorkspaceEvidence().contractRevision,'ar-c0-c0dc683e-r3');
+  const evidence = validateWorkspaceEvidence();
+  assert.equal(evidence.sourceBase,expectedBase);
+  assert.equal(evidence.deliveryHead,expectedDelivery);
+  assert.equal(evidence.contractRevision,'ar-c0-c0dc683e-r3');
   assert.equal(validateWorkspace().contractRevision,'ar-c0-c0dc683e-r3');
+});
+test('later unrelated README change is outside the fixed delivery range', () => {
+  withRepository(({cwd,runGit,commit}) => {
+    writeFileSync(join(cwd,'allowed.txt'),'base\n');
+    const baseCommit = commit('base');
+    writeFileSync(join(cwd,'allowed.txt'),'delivery\n');
+    const deliveryCommit = commit('delivery');
+    writeFileSync(join(cwd,'README.md'),'later\n');
+    commit('later unrelated change');
+    assert.deepEqual(validateDeliveryRange({runGit,baseCommit,deliveryCommit,allowedPaths:['allowed.txt']}), ['allowed.txt']);
+  });
+});
+test('rejects a transient forbidden edit restored inside the delivery range', () => {
+  withRepository(({cwd,runGit,commit}) => {
+    writeFileSync(join(cwd,'allowed.txt'),'base\n');
+    const baseCommit = commit('base');
+    writeFileSync(join(cwd,'README.md'),'temporary forbidden edit\n');
+    commit('forbidden edit');
+    rmSync(join(cwd,'README.md'));
+    const deliveryCommit = commit('restore tree');
+    assert.throws(() => validateDeliveryRange({runGit,baseCommit,deliveryCommit,allowedPaths:['allowed.txt']}), /forbidden C0 edit: README\.md/u);
+  });
+});
+test('rejects a forbidden source renamed to an allowed destination', () => {
+  withRepository(({cwd,runGit,commit}) => {
+    writeFileSync(join(cwd,'forbidden.txt'),'content\n');
+    const baseCommit = commit('base');
+    renameSync(join(cwd,'forbidden.txt'),join(cwd,'allowed.txt'));
+    const deliveryCommit = commit('rename');
+    assert.throws(() => validateDeliveryRange({runGit,baseCommit,deliveryCommit,allowedPaths:['allowed.txt']}), /forbidden C0 edit: forbidden\.txt/u);
+  });
+});
+test('rejects a leading-whitespace path rather than normalizing it to an allowed path', () => {
+  withRepository(({cwd,runGit,commit}) => {
+    writeFileSync(join(cwd,'seed.txt'),'base\n');
+    const baseCommit = commit('base');
+    writeFileSync(join(cwd,' forbidden.txt'),'forbidden\n');
+    const deliveryCommit = commit('leading-whitespace path');
+    assert.throws(() => validateDeliveryRange({runGit,baseCommit,deliveryCommit,allowedPaths:['forbidden.txt']}), /forbidden C0 edit:  forbidden\.txt/u);
+  });
+});
+test('rejects a forbidden path introduced only by the merge commit', () => {
+  withRepository(({cwd,runGit,commit}) => {
+    writeFileSync(join(cwd,'seed.txt'),'base\n');
+    const baseCommit = commit('base');
+    runGit('checkout', '--quiet', '-b', 'side');
+    writeFileSync(join(cwd,'allowed-side.txt'),'side\n');
+    commit('allowed side change');
+    runGit('checkout', '--quiet', 'main');
+    writeFileSync(join(cwd,'allowed-main.txt'),'main\n');
+    commit('allowed main change');
+    runGit('merge', '--quiet', '--no-ff', '--no-commit', 'side');
+    writeFileSync(join(cwd,'forbidden-merge.txt'),'merge only\n');
+    const deliveryCommit = commit('merge with forbidden path');
+    assert.throws(
+      () => validateDeliveryRange({runGit,baseCommit,deliveryCommit,allowedPaths:['allowed-main.txt','allowed-side.txt']}),
+      /forbidden C0 edit: forbidden-merge\.txt/u,
+    );
+  });
+});
+test('fails closed for invalid, missing, and non-descendant range commits', () => {
+  withRepository(({cwd,runGit,commit}) => {
+    writeFileSync(join(cwd,'base.txt'),'base\n');
+    const baseCommit = commit('base');
+    writeFileSync(join(cwd,'descendant.txt'),'descendant\n');
+    const descendant = commit('descendant');
+    runGit('checkout', '--quiet', '-b', 'sibling', baseCommit);
+    writeFileSync(join(cwd,'sibling.txt'),'sibling\n');
+    const sibling = commit('sibling');
+    const options = {runGit,allowedPaths:['base.txt','descendant.txt','sibling.txt']};
+    assert.throws(() => validateDeliveryRange({...options,baseCommit:'not-a-sha',deliveryCommit:descendant}), /invalid C0 base SHA/u);
+    assert.throws(() => validateDeliveryRange({...options,baseCommit,deliveryCommit:'f'.repeat(40)}), /missing C0 delivery commit/u);
+    assert.throws(() => validateDeliveryRange({...options,baseCommit:descendant,deliveryCommit:sibling}), /not a descendant/u);
+  });
 });
 const cases = [
   ['unsupported schema revision', c => {c.schemaVersion=2;}, /schema revision/],
