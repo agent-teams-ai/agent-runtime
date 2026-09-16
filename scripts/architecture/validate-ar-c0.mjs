@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
 
-export const base = 'be96f01ea54ec7d2ec0156774e3dfb75fac46803';
+export const base = 'c0dc683ecb14760c75a69283ad7ec312f6246a63';
 export const planHash = 'e025978dcf3cfac12b7795fa3aafc96f06838620e124df4cc091ebee45352864';
 export const artifact = 'architecture/c0/ar-owned-lifetime/contract.json';
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -51,7 +51,7 @@ const requiredEvidence = {
 const requiredProfiles = [
   {
     "path": "architecture/get-modular/consumer-profile.json",
-    "sha256": "2373779b480bd455978189e2ed3cee726346827d626bbc4545401e3f393c01e6",
+    "sha256": "87ab638571476971a32196220b3ca9b641d92e38c6814e538cda92e47b05debc",
     "status": "active"
   },
   {
@@ -106,15 +106,15 @@ const fixedIdentity = {
       "sha256": "d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f"
     },
     "deltaPath": "architecture/c0/ar-owned-lifetime/evidence/cms-delta.diff",
-    "deltaSha256": "d22d933840bf7826d74ecce20843986be22ea7e8eb325d9e63a1cb0061a53b09"
+    "deltaSha256": "9bcc228419f21a0fb88e3d2e13a667730831f8401821833e31d6187e45ba2990"
   },
   "lock": {
     "path": "pnpm-lock.yaml",
-    "sha256": "cd819da54703d785a9950a3369a4479aca774ba4b2b6396d699884dd1855c961"
+    "sha256": "36c76b697a31fa2d7b6f37a5fd4316f78a571c45b54b3833623e66cc4ddd8513"
   },
   "workspace": {
     "path": "pnpm-workspace.yaml",
-    "sha256": "c8ad241ff1190df95f3f9c1604252d9935c430b49b1e583370be54a1c56b4b71",
+    "sha256": "9142cd0a8df9ac3f3d73355b6441aba62a8b56e3021bd0d79aa0f5f7b1674a24",
     "packageRoots": [
       {
         "name": "@agent-teams/embedded-runtime",
@@ -177,7 +177,7 @@ const allowedChanges = [
 ];
 
 // This deliberately validates retained C0 evidence, never executes runtime code.
-// Expected admissions are independently derived from the frozen be96 review.
+// Expected admissions are independently derived from the rebased c0dc683 review.
 export function validateContract(c, receipt, {readBytes = read} = {}) {
   assert.equal(c.schemaVersion, 1, 'unsupported C0 schema revision');
   for (const key of ['planPath','qualityStandardPath','qualityStandardSha256']) {assert.equal(c.source[key], fixedIdentity[key], `fixed source identity: ${key}`);}
@@ -207,17 +207,17 @@ export function validateContract(c, receipt, {readBytes = read} = {}) {
   assert.deepEqual(c.inventory.profiles, requiredProfiles, 'required profile records');
   assert.deepEqual(c.inventory.archives, requiredArchives, 'required archive records');
 
-  assert.equal(c.source.detached, true, 'recorded source must be detached');
+  assert.equal(c.source.detached, false, 'rebased source is a branch checkpoint');
   assert.equal(c.source.repository, 'agent-teams-ai/agent-runtime');
   assert.equal(c.source.commit, base, 'stale source identity');
-  assert.equal(c.source.tree, '821135f9e4c4585db639e5139468829396e966de');
+  assert.equal(c.source.tree, '54a5f3755c4f93335e240a8ce8bdf1c55af5bb89');
   assert.equal(c.source.planSha256, planHash, 'stale plan identity');
   assert.equal(c.source.planReview.result, 'go');
   assert.equal(c.source.planReview.requiredBytesRead, true, 'final plan review missing');
   assert.equal(c.source.planReview.observedSha256, planHash, 'stale reviewed plan identity');
   assert.equal(sha256(readBytes(c.source.planPath)), c.source.planReview.observedSha256, 'stale observed plan bytes: re-review input');
   assert.equal(sha256(readBytes(c.source.qualityStandardPath)), c.source.qualityStandardSha256);
-  assert.equal(c.contractRevision, 'ar-c0-be96f01e-r2');
+  assert.equal(c.contractRevision, 'ar-c0-c0dc683e-r3');
   assert.equal(c.status, 'frozen-c0-only', 'active before code');
   assert.equal(c.delivery.newAdoptions, 'pending', 'active before code');
   assert.equal(receipt.contractRevision, c.contractRevision);
@@ -329,7 +329,7 @@ function validateContractBytes(c, readBytes) {
   assert.equal(cms.after.sha256, 'd5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f');
   assert.equal(cms.fullDocumentBytesEqual, false, 'false CMS byte no-op');
   assert.match(cms.normativeContractDelta, /^no-op:/u);
-  assert.match(cms.upstreamFreshness, /^unverified:/u, 'unproven live upstream claim');
+  assert.equal(cms.upstreamFreshness, "observed: upstream main 610e595fe1f2e893d01ee44ceecd6349b5a3c8ce on 2026-09-16; exact common-assembly.md SHA-256 d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f equals retained ac49bb33 bytes. Active 669a750d pin migration remains pending; no adoption activation.", 'unproven live upstream claim');
   assert.equal(sha256(readBytes(cms.deltaPath)), cms.deltaSha256);
   for (const item of [c.inventory.lock,c.inventory.workspace,...c.inventory.archives.map(a => ({path:a.archivePath,sha256:a.archiveSha256})),c.ci]) {assert.equal(sha256(readBytes(item.path ?? item.workflow)), item.sha256);}
   assert.equal(c.inventory.packages.length, 7, 'missing package');

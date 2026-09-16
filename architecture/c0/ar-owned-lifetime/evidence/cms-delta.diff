@@ -2,8 +2,7 @@ diff --git retained/architecture/get-modular/evidence/consumer-module-standard.m
 index 7bf511f..93e743d 100644
 --- retained/architecture/get-modular/evidence/consumer-module-standard.md
 +++ upstream/architecture/c0/ar-owned-lifetime/evidence/common-assembly-ac49bb33.md
-@@ -155,11 +155,16 @@ command, invoked by both fast and full gates, after `pnpm assembly:build`.
- Consumers must additionally link their own executable slice and independent
+@@ -156,10 +156,15 @@ Consumers must additionally link their own executable slice and independent
  binding oracle; copied Markdown examples do not count as evidence.
 
 -Agent Runtime is a planned consumer, not an adopted product claim here. Core

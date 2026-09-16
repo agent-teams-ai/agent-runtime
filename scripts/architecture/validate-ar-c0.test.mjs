@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {spawnSync} from 'node:child_process';
 import test from 'node:test';
 import {artifact, sha256, validateContract, validateSchema, validateWorkspace, validateWorkspaceEvidence} from './validate-ar-c0.mjs';
 const read = p => readFileSync(new URL(`../../${p}`,import.meta.url));
@@ -10,11 +11,14 @@ const validate = c => {validateSchema(c,schema); return validateContract(c,recei
 
 test('exact retained source, reviewed final plan and canonical stop evidence validate', () => {
   assert.equal(validate(original),true);
-  assert.equal(validateWorkspaceEvidence().contractRevision,'ar-c0-be96f01e-r2');
-  assert.equal(validateWorkspace().contractRevision,'ar-c0-be96f01e-r2');
+  assert.equal(validateWorkspaceEvidence().contractRevision,'ar-c0-c0dc683e-r3');
+  assert.equal(validateWorkspace().contractRevision,'ar-c0-c0dc683e-r3');
 });
 const cases = [
   ['unsupported schema revision', c => {c.schemaVersion=2;}, /schema revision/],
+  ['pre-rebase source', c => {c.source.commit = 'be96f01ea54ec7d2ec0156774e3dfb75fac46803';}, /stale source/],
+  ['pre-rebase tree', c => {c.source.tree = '821135f9e4c4585db639e5139468829396e966de';}, /54a5f375/],
+  ['pre-rebase profile digest', c => {c.inventory.profiles[0].sha256 = '2373779b480bd455978189e2ed3cee726346827d626bbc4545401e3f393c01e6';}, /profile/],
   ['source identity', c => {c.source.commit = '0'.repeat(40);}, /stale source/],
   ['superseded plan', c => {c.source.planSha256 = '05563ce2e4c5a723b34bf527e71109e33dac072be982e8c0535291b18f462ebc';}, /stale plan/],
   ['previous supplied plan accepted as final', c => {c.source.planSha256 = 'ef33621900ffb72ee87e55c607f7394ebd859b59fe9f72f219f5ca7fc1783bf6';}, /stale plan/],
@@ -171,3 +175,9 @@ for (const collection of ['packages','profiles','archives']) {
     assert.throws(() => validateContract(c,{...receipt,sha256:sha256(JSON.stringify(c,null,2)+'\n')}), /package|profile|archive/);
   });}
 }
+
+test('retained CMS delta is the exact complete-document comparison', () => {
+  const compared = spawnSync('git', ['diff', '--no-index', '--unified=2', '--src-prefix=retained/', '--dst-prefix=upstream/', original.cms.before.evidencePath, original.cms.after.evidencePath], {cwd:new URL('../../', import.meta.url)});
+  assert.equal(compared.status, 1, 'expected the reviewed reciprocal-reference delta');
+  assert.equal(compared.stdout.toString().replace(/^ +$/gmu, ''), read(original.cms.deltaPath).toString(), 'retained CMS diff differs from the pinned document comparison');
+});

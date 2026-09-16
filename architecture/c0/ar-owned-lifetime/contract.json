@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "contractRevision": "ar-c0-be96f01e-r2",
+  "contractRevision": "ar-c0-c0dc683e-r3",
   "status": "frozen-c0-only",
   "source": {
     "repository": "agent-teams-ai/agent-runtime",
-    "commit": "be96f01ea54ec7d2ec0156774e3dfb75fac46803",
-    "tree": "821135f9e4c4585db639e5139468829396e966de",
-    "detached": true,
+    "commit": "c0dc683ecb14760c75a69283ad7ec312f6246a63",
+    "tree": "54a5f3755c4f93335e240a8ce8bdf1c55af5bb89",
+    "detached": false,
     "planPath": "architecture/c0/ar-owned-lifetime/evidence/sdk-and-owned-lifetime-implementation-plan.md",
     "planSha256": "e025978dcf3cfac12b7795fa3aafc96f06838620e124df4cc091ebee45352864",
     "qualityStandardPath": "architecture/c0/ar-owned-lifetime/evidence/engineering-quality-standard.md",
@@ -37,7 +37,7 @@
     "GM": "ac49bb3374946330ec820591f8195a22d2c90900",
     "EF": "eadd117f98e8b93318426ab9d77d5890aab2e15e",
     "XF": "6379c8d3be3b9946f9ef1dc168cb8272dd726078",
-    "authority": "Other repository SHAs are exact plan inputs, not independently authenticated local integration bases. Their C0 artifacts remain separately authoritative; no copied API or SDK envelope."
+    "authority": "Exact historical plan inputs, not current integration bases. AR source.commit identifies the rebased source inventory; the retained plan remains byte-identical. Other repositories keep separately authoritative C0 artifacts; no copied API or SDK envelope."
   },
   "cms": {
     "activeProfile": "architecture/get-modular/consumer-profile.json",
@@ -57,18 +57,18 @@
       "sha256": "d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f"
     },
     "deltaPath": "architecture/c0/ar-owned-lifetime/evidence/cms-delta.diff",
-    "deltaSha256": "d22d933840bf7826d74ecce20843986be22ea7e8eb325d9e63a1cb0061a53b09",
+    "deltaSha256": "9bcc228419f21a0fb88e3d2e13a667730831f8401821833e31d6187e45ba2990",
     "fullDocumentBytesEqual": false,
     "normativeContractDelta": "no-op: only reciprocal AR PR 168 adoption reference replaces planned-consumer paragraph; requirements, API, ownership and rejecting gates unchanged",
-    "review": "Complete 358-line retained and 363-line supplied upstream documents read and compared, including execution/Promise, returned-product custody, and acceptance sections. No shared behavior changed in this C0. Historical ordinary-session-pin-review is not active authority.",
-    "upstreamFreshness": "unverified: resumed retained ac49bb33 snapshot matches supplied plan; fresh gh needs GH_TOKEN; sandbox denied api.github.com and raw.githubusercontent.com. Do not claim a new remote-main measurement.",
-    "migration": "pending for later owning adoption PR: authenticate current remote and reviewed exact bytes; migrate active pin/evidence and rejecting checks together. Existing active scoped adoption stays at 669a750d; no new ownership adoption."
+    "review": "Complete 358-line retained and 363-line supplied upstream documents read and compared, including execution/Promise, returned-product custody, and acceptance sections. No shared behavior changed in this C0. Historical ordinary-session-pin-review is not active authority. Rebased checkpoint 1d9a082 on c0dc683 rechecks the same complete-document pins and delta; active standard remains 669a750d. Source changes retain the C0 ownership, wait and recovery blockers.",
+    "upstreamFreshness": "observed: upstream main 610e595fe1f2e893d01ee44ceecd6349b5a3c8ce on 2026-09-16; exact common-assembly.md SHA-256 d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f equals retained ac49bb33 bytes. Active 669a750d pin migration remains pending; no adoption activation.",
+    "migration": "pending for later owning adoption PR: current upstream 610e595f complete-document bytes match reviewed ac49bb33 evidence; migrate active pin/evidence and rejecting checks together. Existing active scoped adoption stays at 669a750d; no new ownership adoption."
   },
   "inventory": {
     "packages": [
       {
         "manifest": "package.json",
-        "sha256": "42fe3cc72a9e09ca77528ed57dbb3d0a8c61d99e2b26528057bb4b6f0f709615",
+        "sha256": "fa9aebb0128662e461744e4617c65c9ee03f830abde54f4732584bb42868697d",
         "name": "@vioxen/agent-runtime",
         "version": "0.0.0",
         "private": true,
@@ -382,7 +382,7 @@
     "profiles": [
       {
         "path": "architecture/get-modular/consumer-profile.json",
-        "sha256": "2373779b480bd455978189e2ed3cee726346827d626bbc4545401e3f393c01e6",
+        "sha256": "87ab638571476971a32196220b3ca9b641d92e38c6814e538cda92e47b05debc",
         "status": "active"
       },
       {
@@ -403,7 +403,7 @@
     ],
     "lock": {
       "path": "pnpm-lock.yaml",
-      "sha256": "cd819da54703d785a9950a3369a4479aca774ba4b2b6396d699884dd1855c961"
+      "sha256": "36c76b697a31fa2d7b6f37a5fd4316f78a571c45b54b3833623e66cc4ddd8513"
     },
     "archives": [
       {
@@ -421,7 +421,7 @@
     ],
     "workspace": {
       "path": "pnpm-workspace.yaml",
-      "sha256": "c8ad241ff1190df95f3f9c1604252d9935c430b49b1e583370be54a1c56b4b71",
+      "sha256": "9142cd0a8df9ac3f3d73355b6441aba62a8b56e3021bd0d79aa0f5f7b1674a24",
       "packageRoots": [
         {
           "name": "@agent-teams/embedded-runtime",
@@ -852,7 +852,7 @@
         "futurePrimary": "retain primary product cause separately; never replace with timeout or cleanup failure",
         "futureSecondaryOrder": "stable actionId",
         "futureDuplicatePrimary": false,
-        "reason": "be96 outer AggregateError stores errors[0] both as cause and in errors. Plan 7.2 requires no duplicate raw outcome; changing this observable projection needs compatibility evidence alongside the new ordinary caller bound."
+        "reason": "Rebased outer AggregateError stores errors[0] both as cause and in errors. Plan 7.2 requires no duplicate raw outcome; changing this observable projection needs compatibility evidence alongside the new ordinary caller bound."
       }
     },
     "deadlines": [
@@ -1017,11 +1017,11 @@
     },
     "CMSComparison": {
       "result": "blocked",
-      "reason": "Retained full-document comparison completed: byte delta nonzero, normative requirements no-op. Current upstream authentication unavailable, so the requested full current-upstream comparison is blocked."
+      "reason": "Current upstream 610e595f complete-document bytes equal retained ac49bb33. Comparison with active 669a750d has only the reciprocal adoption-reference delta; normative requirements unchanged. Active pin migration remains pending in its owning adoption PR, so this C0 does not authorize adoption."
     },
     "C0Freeze": {
       "result": "go",
-      "reason": "Exact final plan reviewed and one byte-bound AR contract frozen for facts/stop evidence; blocked lanes and unverified current remote CMS remain explicitly blocked."
+      "reason": "Exact final plan reviewed and rebased byte-bound AR contract frozen for facts/stop evidence; blocked lanes and pending active CMS pin migration remain explicitly blocked."
     }
   },
   "delivery": {
@@ -1044,7 +1044,7 @@
   "evidence": {
     "attempt": {
       "path": "packages/apps/embedded-runtime/src/composition/default-agent-runtime-host.ts",
-      "sha256": "999a426602c19830fca5e230c58a467ccda717e157f05db61f4b3373e5a1d951"
+      "sha256": "f09d7d161e58e439ec4913938d38f36e65938a01a597abb51b092e07d7accfba"
     },
     "assembly": {
       "path": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
@@ -1052,11 +1052,11 @@
     },
     "host": {
       "path": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
-      "sha256": "d89f7df9a2f5ea586f34cc450dcf2908d84da9b67e106dbd9a2ac0f25a385f24"
+      "sha256": "1d48a31ebb2d719e1d08a60a77e3e1d78f6ef5a900f829ff50872d29e18b7a38"
     },
     "lifecycle": {
       "path": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-disposal.ts",
-      "sha256": "43336923bc197a5a98765adf34febeeb374dc826121e74902a34eea6ae0efacd"
+      "sha256": "c449d29427dea410d94d5c19eb743e4af92ed4b06ec3bb6139384e9ae2c0fd5e"
     },
     "creationError": {
       "path": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-creation-error.ts",
@@ -1064,7 +1064,7 @@
     },
     "ordinaryHost": {
       "path": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
-      "sha256": "0cb13268e0bafc2448b709639d0eeb6e091759aa5e4885b15383c859b9d8fec8"
+      "sha256": "dc0ad178c36be4bdfad9dc13ae8124deb472c4728e088c4c5d7856e251b3f8be"
     },
     "ordinaryAssembly": {
       "path": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
@@ -1080,19 +1080,19 @@
     },
     "engine": {
       "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-engine.ts",
-      "sha256": "e6d5c463daba7db7c4905d4ce0aaface3c6154e1e1313fd36680f26292daa3b1"
+      "sha256": "7bcbbf76b25ed0a96359fd10aae990ab43bf32edeebe7362b1198c60180b7ffd"
     },
     "process": {
       "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-process/node-ordinary-process.ts",
-      "sha256": "4d3f926e223838eb08d0905b010808748ff583c60bbf76bf5c7ec6c6f15ad11f"
+      "sha256": "6d98e2276d0abe16c2e56a449d82f129cb7e93866419c1ec0940a7d11fd13c82"
     },
     "workspace": {
       "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-workspace.ts",
-      "sha256": "769dc840564fbc2c18915fac944910e014b91569c187e64bbfc0645ea131930d"
+      "sha256": "a69c6caba5acb315eeaf72658f22ffec0a4fbec82e67d5fa7a48fc0d684815df"
     },
     "artifacts": {
       "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-filesystem/node-ordinary-artifacts.ts",
-      "sha256": "34680feee56e10565f15d43ace18989b64a5d6b8ab3238e40772720eaa7a4e64"
+      "sha256": "68c3e5be492924bb14e45d32fd3c12f47ef21ea1e9a826d5edd2d4d3f8285c5f"
     },
     "codex": {
       "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts",
@@ -1104,39 +1104,39 @@
     },
     "operationStore": {
       "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/ordinary-postgres-store.ts",
-      "sha256": "a0a4f07b39d3eb9dcaac9f09c96b9882cf0282e7c917944245c92198c2b5670c"
+      "sha256": "f4b0901997d48cbb1624c0f3149e5ca9f2c4fb6091d49b3b3511c05a3d88ecc1"
     },
     "pa": {
       "path": "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
-      "sha256": "a04008f343cabfc5ea0c3c8b69e0cae44f9217ef8a67341bb95349975e117f1d"
+      "sha256": "d03545fdaff51b66b144c65c92841bcaf04480a2c6cfed255cd971df71a3f3b6"
     },
     "broker": {
       "path": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-broker.ts",
-      "sha256": "cb5a0c18ce61f5665dbbc16bb42d2d58b4a38cbddece3ca6fe381834d02a5c9c"
+      "sha256": "782ef54b35547c2aa3acce617d1708880d7e8ce804022fe0a349fdf4b4beabd5"
     },
     "capture": {
       "path": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-capture.ts",
-      "sha256": "9b342af6519cd8ffbdf7bedd4e57d5abea4c4d4d72703f20b54132372eb52d10"
+      "sha256": "970d3775a5a96b5b91a9caa9e3f45117013af3cc2c8f662b583274c063fb76d8"
     },
     "ipc": {
       "path": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-ipc.ts",
-      "sha256": "d2675c93f02f831b3f65cbe2f9fdc99fcc0e367f5e3ea1948243cb753c23b8a6"
+      "sha256": "c967a476f4b105c2440124d6161caa37f9714143076b099e6ef5b61cba7d6e14"
     },
     "authFiles": {
       "path": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-files.ts",
-      "sha256": "6e97179207b7352cb25d5c4e4dfa1406f721b115469956b0bb3b84172d96a674"
+      "sha256": "25d0d66aca3bb087f949bba6c339fd7597e267e9131c8d4b31642301fab65c38"
     },
     "paTransactions": {
       "path": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/materialization-postgres-transactions.ts",
-      "sha256": "aa5e26a1f859bbbf9181fc476853eb228e1b94f4c17c47a675e7a220c1f34339"
+      "sha256": "0c488537a647324bd8dcf165d58cd626a0bdb4f8ec7d38456cc275fd2bf0ca6f"
     },
     "security": {
       "path": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-owner.ts",
-      "sha256": "41bdc853781d8c42f2534550dd021a8760d638c956c8022c6af6e0dd79206681"
+      "sha256": "65f9f685dee55b35c19b37d8de770614d14553f7f2a5876e92239e11e6bb4973"
     },
     "securityTransactions": {
       "path": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-transactions.ts",
-      "sha256": "1e49e6b66d1baeefe798f8ecdfba35fbca5b5d7910cbdef43a00910359c6fb7f"
+      "sha256": "b066c038881282f3ab4bc06798f5daa915ccae7515670ea9f2ae01faeaf8b35e"
     },
     "assemblyTests": {
       "path": "packages/apps/embedded-runtime/tests/package/runtime-setup-assembly.test.ts",
