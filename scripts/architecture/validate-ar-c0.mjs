@@ -4,11 +4,14 @@ import {execFileSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
+import {v2InputPolicy} from './runtime-setup-l0-evidence-v2-inputs.mjs';
 
 export const base = 'c0dc683ecb14760c75a69283ad7ec312f6246a63';
 export const delivery = '510882870c1a7c628187dd91d7dff05225068bdb';
 export const planHash = 'e025978dcf3cfac12b7795fa3aafc96f06838620e124df4cc091ebee45352864';
 export const artifact = 'architecture/c0/ar-owned-lifetime/contract.json';
+export const ciWorkflow = '.github/workflows/ar-c0.yml';
+export const ciWorkflowHash = '40b09599e6fab490d989ed7894b2a83be5c31ff1435db36d2554bd0071e07cad';
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const read = path => readFileSync(resolve(root, path));
@@ -202,6 +205,13 @@ export function validateDeliveryRange({runGit = git, baseCommit = base, delivery
   const changed = commits.flatMap(commit => pathLines(runGit('diff-tree', '--root', '--no-commit-id', '--name-only', '-r', '--no-renames', '-m', '-z', commit)));
   for (const path of changed) {assert.ok(allowedPaths.includes(path), `forbidden C0 edit: ${path}`);}
   return changed;
+}
+
+export function validateIndependentCi({readBytes = read, inputPolicy = v2InputPolicy} = {}) {
+  const protectedByRuntimeEvidence = inputPolicy.files.includes(ciWorkflow)
+    || inputPolicy.roots.some(path => ciWorkflow === path || ciWorkflow.startsWith(`${path}/`));
+  assert.equal(protectedByRuntimeEvidence, false, 'C0 CI workflow is a protected runtime evidence input');
+  assert.equal(sha256(readBytes(ciWorkflow)), ciWorkflowHash, 'C0 CI workflow bytes drift');
 }
 
 // This deliberately validates retained C0 evidence, never executes runtime code.
@@ -402,15 +412,17 @@ export function validateWorkspaceEvidence() {
   // The immutable delivery range proves the reviewed C0 scope. Later checkout
   // changes are governed by their own checks and cannot rewrite this history.
   validateDeliveryRange();
-  const original = JSON.parse(execFileSync('git',['show',`${base}:package.json`],{cwd:root})), current = json('package.json');
+  const original = JSON.parse(execFileSync('git',['show',`${base}:package.json`],{cwd:root}));
+  const delivered = JSON.parse(execFileSync('git',['show',`${delivery}:package.json`],{cwd:root}));
   for (const name of ['check','check:fast']) {
     assert.ok(original.scripts[name].startsWith('pnpm lint && '), 'retained gate no longer starts with lint');
-    assert.equal(current.scripts[name], original.scripts[name].replace('pnpm lint && ', 'pnpm lint && pnpm test:ar-c0 && '), 'C0 checker missing/no-op gate wiring');
-    current.scripts[name] = original.scripts[name];
+    assert.equal(delivered.scripts[name], original.scripts[name].replace('pnpm lint && ', 'pnpm lint && pnpm test:ar-c0 && '), 'C0 delivery checker wiring drift');
+    delivered.scripts[name] = original.scripts[name];
   }
-  assert.equal(current.scripts['test:ar-c0'],'node scripts/architecture/validate-ar-c0.mjs && node --test scripts/architecture/validate-ar-c0.test.mjs');
-  delete current.scripts['test:ar-c0'];
-  assert.deepEqual(current,original,'package changes exceed C0 script wiring');
+  assert.equal(delivered.scripts['test:ar-c0'],'node scripts/architecture/validate-ar-c0.mjs && node --test scripts/architecture/validate-ar-c0.test.mjs');
+  delete delivered.scripts['test:ar-c0'];
+  assert.deepEqual(delivered,original,'C0 delivery package changes exceed script wiring');
+  validateIndependentCi();
   return {sourceBase:base, sourceTree:c.source.tree, deliveryHead:delivery, candidateHead:git('rev-parse','HEAD'), candidateRef:git('rev-parse','--abbrev-ref','HEAD'), contractRevision:c.contractRevision,sha256:receipt.sha256,verdicts:c.verdicts};
 }
 

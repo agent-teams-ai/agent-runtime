@@ -4,7 +4,7 @@ import {mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync} from 'node
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
-import {artifact, createGit, sha256, validateContract, validateDeliveryRange, validateSchema, validateWorkspace, validateWorkspaceEvidence} from './validate-ar-c0.mjs';
+import {artifact, ciWorkflow, createGit, sha256, validateContract, validateDeliveryRange, validateIndependentCi, validateSchema, validateWorkspace, validateWorkspaceEvidence} from './validate-ar-c0.mjs';
 const read = p => readFileSync(new URL(`../../${p}`,import.meta.url));
 const original = JSON.parse(read(artifact));
 const receipt = JSON.parse(read('architecture/c0/ar-owned-lifetime/identity.json'));
@@ -106,6 +106,19 @@ test('fails closed for invalid, missing, and non-descendant range commits', () =
     assert.throws(() => validateDeliveryRange({...options,baseCommit,deliveryCommit:'f'.repeat(40)}), /missing C0 delivery commit/u);
     assert.throws(() => validateDeliveryRange({...options,baseCommit:descendant,deliveryCommit:sibling}), /not a descendant/u);
   });
+});
+test('independent C0 CI wiring stays outside protected runtime evidence identity', () => {
+  assert.doesNotThrow(() => validateIndependentCi());
+  assert.throws(
+    () => validateIndependentCi({inputPolicy:{roots:[],files:[ciWorkflow]}}),
+    /protected runtime evidence input/u,
+  );
+});
+test('rejects drift in the independent C0 CI workflow', () => {
+  assert.throws(
+    () => validateIndependentCi({readBytes:path => path === ciWorkflow ? Buffer.from('name: bypassed\n') : read(path)}),
+    /workflow bytes drift/u,
+  );
 });
 const cases = [
   ['unsupported schema revision', c => {c.schemaVersion=2;}, /schema revision/],
