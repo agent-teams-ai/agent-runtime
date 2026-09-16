@@ -270,7 +270,7 @@ for (const collection of ['packages','profiles','archives']) {
 }
 
 test('retained CMS delta is the exact complete-document comparison', () => {
-  const compared = spawnSync('git', ['diff', '--no-index', '--unified=2', '--src-prefix=retained/', '--dst-prefix=upstream/', original.cms.before.evidencePath, original.cms.after.evidencePath], {cwd:new URL('../../', import.meta.url)});
+  const compared = spawnSync('git', ['diff', '--no-index', '--abbrev=7', '--unified=2', '--src-prefix=retained/', '--dst-prefix=upstream/', original.cms.before.evidencePath, original.cms.after.evidencePath], {cwd:new URL('../../', import.meta.url)});
   assert.equal(compared.status, 1, 'expected the reviewed reciprocal-reference delta');
   assert.equal(compared.stdout.toString().replace(/^ +$/gmu, ''), read(original.cms.deltaPath).toString(), 'retained CMS diff differs from the pinned document comparison');
 });
