@@ -37,7 +37,9 @@ test("legacy retained provenance rejects replacement commit, tree and blob bytes
   const replacement = runGit("rev-parse", "HEAD");
   // Exercise the actual legacy Git helpers without executing the CLI's architecture gates.
   const source = readFileSync(new URL("./runtime-setup-l0-evidence.mjs", import.meta.url), "utf8");
-  const helpers = source.slice(source.indexOf("const provenanceGitEnvironment ="), source.indexOf("const pathExists ="));
+  const start = source.indexOf("const provenanceGitEnvironment ="), end = source.indexOf("const pathExists =");
+  assert.ok(start >= 0 && end > start, "legacy helper boundaries unavailable");
+  const helpers = source.slice(start, end);
   const { git, readRevisionFile } = runInNewContext(`${helpers}; ({ git, readRevisionFile });`, {
     process, execFileSync, repositoryRoot, GitCommandFailure,
   });

@@ -90,6 +90,21 @@ const git = (root, ...args) => execFileSync("git", args, {cwd: root, encoding: "
 const gitBytes = (root, ...args) => execFileSync("git", args, {cwd: root,
   maxBuffer: 32 * 1024 * 1024,
   env: {...process.env, GIT_NO_LAZY_FETCH: "1", GIT_NO_REPLACE_OBJECTS: "1", GIT_OPTIONAL_LOCKS: "0"}});
+function gitBlobBytes(root, objects) {
+  const input = Buffer.from(objects.map(({object}) => `${object}\n`).join());
+  const output = execFileSync("git", ["cat-file", "--batch"], {cwd: root, input,
+    maxBuffer: 64 * 1024 * 1024, env: {...process.env, GIT_NO_LAZY_FETCH: "1", GIT_NO_REPLACE_OBJECTS: "1", GIT_OPTIONAL_LOCKS: "0"}});
+  let offset = 0; const blobs = new Map();
+  for (const {object} of objects) {
+    const end = output.indexOf(0x0a, offset); assert.ok(end >= 0, "truncated git cat-file response");
+    const [actual, type, sizeText] = output.subarray(offset, end).toString().split(" ");
+    assert.equal(actual, object, "git cat-file object mismatch"); assert.equal(type, "blob", "input is not a blob");
+    const size = Number(sizeText); assert.ok(Number.isSafeInteger(size) && size >= 0, "invalid git blob size");
+    const start = end + 1, finish = start + size; assert.ok(finish <= output.length, "truncated git blob");
+    blobs.set(object, output.subarray(start, finish)); offset = finish + 1;
+  }
+  return blobs;
+}
 
 function checkedInputs(inputs) {
   inputs.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
@@ -115,8 +130,9 @@ function treeEntries(root, sourceRevision) {
 
 export function v2InputsAtRevision(root, sourceRevision) {
   assert.match(sourceRevision, /^[a-f0-9]{40}$/u);
-  return checkedInputs(treeEntries(root, sourceRevision).map(({path, mode, object}) => ({path, mode,
-    sha256: createHash("sha256").update(gitBytes(root, "cat-file", "blob", object)).digest("hex")})));
+  const entries = treeEntries(root, sourceRevision), blobs = gitBlobBytes(root, entries);
+  return checkedInputs(entries.map(({path, mode, object}) => ({path, mode,
+    sha256: createHash("sha256").update(blobs.get(object)).digest("hex")})));
 }
 
 export function v2Inputs(root, sourceRevision) {

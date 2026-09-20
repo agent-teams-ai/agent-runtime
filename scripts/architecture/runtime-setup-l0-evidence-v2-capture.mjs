@@ -60,7 +60,7 @@ const workspacePolicy = bytes => {
     const field = /^(minimumReleaseAge(?:Strict|Exclude)?):[ \t]*(.*?)[ \t]*$/u.exec(text);
     if (field) {
       assert.equal(Object.hasOwn(fields, field[1]), false, `duplicate workspace policy field: ${field[1]}`);
-      fields[field[1]] = field[2];
+      fields[field[1]] = field[2].replace(/[ \t]+#.*$/u, "").trimEnd();
       skipBlock = field[2] === "";
     } else if (skipBlock && (content.length === 0 || content[0] === 0x20 || content[0] === 0x09)) {
       continue;
