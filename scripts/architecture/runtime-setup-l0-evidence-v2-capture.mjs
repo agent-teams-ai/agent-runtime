@@ -5,7 +5,6 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { parse } from "yaml";
 import { checkCommand, testCommand } from "@agent-teams/embedded-runtime/scripts/run-package-tests.mjs";
 import { adoptionAuthority, adoptionConstruction, adoptionPaths, retainedHistoricalSha256 } from "./runtime-setup-l0-evidence-adoption.mjs";
 import { command, targets, tools, sha256, json, requirePostgres, validateReceipt, validateCoverage, validatePlatformSites } from "./runtime-setup-l0-evidence-v2.mjs";
@@ -37,10 +36,32 @@ function identityAtRevision(root, sourceRevision) {
     runner: {path: runner, sha256: sha256(revisionBytes(root, sourceRevision, runner))},
     reporter: {path: reporter, sha256: sha256(revisionBytes(root, sourceRevision, reporter))}};
 }
+// Keep this delivery checker self-contained. The workspace policy comparison only
+// needs its three release-age keys; retaining the other bytes makes the equality
+// check exact without requiring a parser in a clean consumer clone.
 const workspacePolicy = bytes => {
-  const policy = parse(bytes.toString("utf8"));
-  assert.ok(policy && typeof policy === "object" && !Array.isArray(policy), "pnpm-workspace policy must be a mapping");
-  return policy;
+  const source = bytes.toString("utf8");
+  assert.match(source, /(?:^|\n)\s*packages:\s*/u, "pnpm-workspace policy must be a mapping");
+  const fields = {}, retained = [];
+  let skipBlock = false;
+  for (const line of source.match(/.*(?:\r?\n|$)/gu).filter(Boolean)) {
+    const field = /^(minimumReleaseAge(?:Strict|Exclude)?):[ \t]*(.*?)[ \t]*(?:\r?\n)?$/u.exec(line);
+    if (field) {
+      assert.equal(Object.hasOwn(fields, field[1]), false, `duplicate workspace policy field: ${field[1]}`);
+      fields[field[1]] = field[2];
+      skipBlock = true;
+    } else if (skipBlock && /^[ \t]/u.test(line)) {
+      continue;
+    } else {
+      skipBlock = false;
+      retained.push(line);
+    }
+  }
+  if (Object.hasOwn(fields, "minimumReleaseAge")) {
+    assert.match(fields.minimumReleaseAge, /^\d+$/u, "minimumReleaseAge must be an unsigned integer");
+    fields.minimumReleaseAge = Number(fields.minimumReleaseAge);
+  }
+  return {...fields, source: retained.join("")};
 };
 export function validateRetainedReceiptCompatibility(root, retained, current) {
   assert.equal(retained.inputPolicy, current.inputPolicy, "receipt input policy mismatch");
