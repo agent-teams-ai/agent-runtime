@@ -1,9 +1,11 @@
-import { v2Inputs } from "./runtime-setup-l0-evidence-v2-inputs.mjs";
+import { v2Inputs, v2InputsAtRevision } from "./runtime-setup-l0-evidence-v2-inputs.mjs";
 import {historicalSpecRevision} from "./runtime-setup-l0-evidence-historical.mjs";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
+import { isDeepStrictEqual } from "node:util";
+import { parse } from "yaml";
 import { checkCommand, testCommand } from "@agent-teams/embedded-runtime/scripts/run-package-tests.mjs";
 import { adoptionAuthority, adoptionConstruction, adoptionPaths, retainedHistoricalSha256 } from "./runtime-setup-l0-evidence-adoption.mjs";
 import { command, targets, tools, sha256, json, requirePostgres, validateReceipt, validateCoverage, validatePlatformSites } from "./runtime-setup-l0-evidence-v2.mjs";
@@ -17,6 +19,8 @@ const runner = "packages/apps/embedded-runtime/scripts/run-package-tests.mjs";
 const reporter = "packages/apps/embedded-runtime/scripts/adoption-test-reporter.mjs";
 const git = (root, ...args) => execFileSync("git", args, {cwd: root, encoding: "utf8",
   env: {...process.env, GIT_NO_LAZY_FETCH: "1", GIT_OPTIONAL_LOCKS: "0"}}).trimEnd();
+const revisionBytes = (root, revision, path) => execFileSync("git", ["show", `${revision}:${path}`], {cwd: root,
+  env: {...process.env, GIT_NO_LAZY_FETCH: "1", GIT_OPTIONAL_LOCKS: "0"}});
 export function identity(root, sourceRevision = git(root, "rev-parse", "HEAD")) {
   assert.match(sourceRevision, /^[a-f0-9]{40}$/u);
   const {inputPolicy, inputs} = v2Inputs(root, sourceRevision);
@@ -26,6 +30,47 @@ export function identity(root, sourceRevision = git(root, "rev-parse", "HEAD")) 
   validatePlatformSites(root);
   return {sourceRevision, inputPolicy, inputs, runner: {path: runner, sha256: sha256(readFileSync(resolve(root, runner)))},
     reporter: {path: reporter, sha256: sha256(readFileSync(resolve(root, reporter)))}};
+}
+function identityAtRevision(root, sourceRevision) {
+  const {inputPolicy, inputs} = v2InputsAtRevision(root, sourceRevision);
+  return {sourceRevision, inputPolicy, inputs,
+    runner: {path: runner, sha256: sha256(revisionBytes(root, sourceRevision, runner))},
+    reporter: {path: reporter, sha256: sha256(revisionBytes(root, sourceRevision, reporter))}};
+}
+const workspacePolicy = bytes => {
+  const policy = parse(bytes.toString("utf8"));
+  assert.ok(policy && typeof policy === "object" && !Array.isArray(policy), "pnpm-workspace policy must be a mapping");
+  return policy;
+};
+export function validateRetainedReceiptCompatibility(root, retained, current) {
+  assert.equal(retained.inputPolicy, current.inputPolicy, "receipt input policy mismatch");
+  assert.deepEqual(retained.runner, current.runner, "receipt runner mismatch");
+  assert.deepEqual(retained.reporter, current.reporter, "receipt reporter mismatch");
+  assert.equal(retained.inputs.length, current.inputs.length, "receipt input inventory mismatch");
+  let workspaceChanged = false;
+  for (let index = 0; index < retained.inputs.length; index++) {
+    const before = retained.inputs[index], after = current.inputs[index];
+    assert.equal(before.path, after.path, "receipt input path mismatch");
+    assert.equal(before.mode, after.mode, `receipt input mode mismatch: ${before.path}`);
+    if (before.path === "pnpm-workspace.yaml") {
+      assert.notEqual(before.sha256, after.sha256, "release-age compatibility requires a workspace policy change");
+      workspaceChanged = true;
+    } else {
+      assert.equal(before.sha256, after.sha256, `receipt input digest mismatch: ${before.path}`);
+    }
+  }
+  assert.equal(workspaceChanged, true, "receipt input inventory is missing pnpm-workspace.yaml");
+  const before = workspacePolicy(revisionBytes(root, retained.sourceRevision, "pnpm-workspace.yaml"));
+  const after = workspacePolicy(revisionBytes(root, current.sourceRevision, "pnpm-workspace.yaml"));
+  assert.equal(after.minimumReleaseAge, 0, "current minimumReleaseAge must be 0");
+  assert.equal(Object.hasOwn(after, "minimumReleaseAgeStrict"), false, "current minimumReleaseAgeStrict must be absent");
+  assert.equal(Object.hasOwn(after, "minimumReleaseAgeExclude"), false, "current minimumReleaseAgeExclude must be absent");
+  assert.ok(before.minimumReleaseAge !== 0 || Object.hasOwn(before, "minimumReleaseAgeStrict") ||
+    Object.hasOwn(before, "minimumReleaseAgeExclude"), "receipt does not predate the release-age policy change");
+  for (const name of ["minimumReleaseAge", "minimumReleaseAgeStrict", "minimumReleaseAgeExclude"]) {
+    delete before[name]; delete after[name];
+  }
+  assert.deepEqual(before, after, "pnpm-workspace change is not limited to release-age policy");
 }
 function observedTools(root) {
   const observed = {node: process.version, pnpm: execFileSync("pnpm", ["--version"], {cwd: root, encoding: "utf8"}).trim()};
@@ -60,15 +105,17 @@ export function captureReceipt(root, output, runId) {
   validateReceipt(receipt, before, name => readFileSync(resolve(artifactRoot, name)));
   return receipt;
 }
-function loadReceipt(path, current) {
+function loadReceipt(root, path, current) {
   const bytes = readFileSync(path), receipt = JSON.parse(bytes);
   const artifacts = resolve(dirname(path), receipt.artifactDirectory);
   const artifactBytes = {};
-  const events = validateReceipt(receipt, current, name => {
+  const retained = identityAtRevision(root, receipt.identity.sourceRevision);
+  const events = validateReceipt(receipt, retained, name => {
     const value = readFileSync(resolve(artifacts, name));
     artifactBytes[name] = value.toString("base64");
     return value;
   });
+  if (!isDeepStrictEqual(receipt.identity, current)) {validateRetainedReceiptCompatibility(root, retained, current);}
   return {receipt, events, sha256: sha256(bytes), receiptBase64: bytes.toString("base64"), artifacts: artifactBytes};
 }
 function reportBody(root, current, references) {
@@ -87,7 +134,7 @@ function reportBody(root, current, references) {
 export function mergeReceipts(root, paths, output) {
   assert.equal(paths.length, 2, "exactly two receipts required");
   const current = identity(root);
-  const loaded = paths.map(path => loadReceipt(resolve(path), current));
+  const loaded = paths.map(path => loadReceipt(root, resolve(path), current));
   validateCoverage(loaded.map(({receipt, events}) => ({target: receipt.target, events})));
   const refs = loaded.map(({receipt, sha256: receiptSha256, receiptBase64, artifacts}, i) => ({target: receipt.target,
     path: relative(dirname(resolve(output)), resolve(paths[i])), sha256: receiptSha256, receiptBase64, artifacts})).toSorted((a, b) => a.target.localeCompare(b.target));
@@ -112,10 +159,12 @@ export function checkV2(root, path) {
     const receipt = JSON.parse(bytes);
     assert.equal(receipt.target, ref.target);
     assert.deepEqual(Object.keys(ref.artifacts).toSorted(), Object.keys(receipt.artifacts).toSorted(), "bundled artifact inventory mismatch");
-    const events = validateReceipt(receipt, current, name => {
+    const retained = identityAtRevision(root, receipt.identity.sourceRevision);
+    const events = validateReceipt(receipt, retained, name => {
       assert.ok(Object.hasOwn(ref.artifacts, name), `missing bundled artifact: ${name}`);
       return decodeBytes(ref.artifacts[name]);
     });
+    if (!isDeepStrictEqual(receipt.identity, current)) {validateRetainedReceiptCompatibility(root, retained, current);}
     return {target: ref.target, events};
   });
   validateCoverage(loaded);

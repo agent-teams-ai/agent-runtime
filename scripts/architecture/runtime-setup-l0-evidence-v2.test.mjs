@@ -1,4 +1,4 @@
-import { v2InputPolicy, v2Inputs } from "./runtime-setup-l0-evidence-v2-inputs.mjs";
+import { v2InputPolicy, v2Inputs, v2InputsAtRevision } from "./runtime-setup-l0-evidence-v2-inputs.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -10,7 +10,7 @@ import { testProcesses, packagePath, checkStages, reporterArg } from "@agent-tea
 import { targets, tools, command, sha256, json, validateStream, validateReceipt, validateCoverage, requirePostgres, validatePlatformSites } from "./runtime-setup-l0-evidence-v2.mjs";
 
 import {platformSites} from "./runtime-setup-l0-evidence-platform-sites.mjs";
-import {identity as getIdentity, mergeReceipts, checkV2, v2ReportPath} from "./runtime-setup-l0-evidence-v2-capture.mjs";
+import {identity as getIdentity, mergeReceipts, checkV2, validateRetainedReceiptCompatibility, v2ReportPath} from "./runtime-setup-l0-evidence-v2-capture.mjs";
 
 const counts = events => ({tests: events.length, failed: 0, passed: events.filter(e => e.status === "passed").length,
   cancelled: 0, skipped: events.filter(e => e.status === "skipped").length, todo: 0,
@@ -424,6 +424,7 @@ test("bounded inventory rejects missing inputs, links and gitlinks and preserves
   }
   const commit = () => {runGit(root, "add", "-A"); runGit(root, "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "synthetic policy"); return runGit(root, "rev-parse", "HEAD");};
   const revision = commit(), baseline = v2Inputs(root, revision);
+  assert.deepEqual(v2InputsAtRevision(root, revision), baseline);
   assert.equal(baseline.inputPolicy, v2InputPolicy.version);
   assert.deepEqual(baseline.inputs.map(i => i.path), baseline.inputs.map(i => i.path).toSorted());
   for (const path of [...v2InputPolicy.roots, ...v2InputPolicy.requiredRoots, ...v2InputPolicy.files, ...v2InputPolicy.required]) {
@@ -437,6 +438,7 @@ test("bounded inventory rejects missing inputs, links and gitlinks and preserves
     fs.appendFileSync(resolve(root, path), "changed");
     assert.throws(() => v2Inputs(root, revision), /committed and clean/);
     commit();
+    assert.deepEqual(v2InputsAtRevision(root, revision), baseline);
     assert.throws(() => v2Inputs(root, revision), /source\/input mismatch/);
     runGit(root, "reset", "--hard", revision);
   }
@@ -506,11 +508,16 @@ test("bounded real-source merge/check accepts unrelated and report-only delivery
   }
   writeFileSync(resolve(source, "README.md"), "unrelated tracked file");
   const runGit = gitWithEnv({...process.env, ...callerIdentity(process.cwd())});
-  const commit = () => {runGit(source, "add", "-A"); runGit(source, "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "synthetic bounded delivery");};
+  const commit = () => {runGit(source, "add", "-A"); runGit(source, "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "synthetic bounded delivery"); return runGit(source, "rev-parse", "HEAD");};
+  const workspacePath = resolve(source, "pnpm-workspace.yaml");
+  const currentWorkspace = readFileSync(workspacePath, "utf8");
+  assert.match(currentWorkspace, /^minimumReleaseAge: 0$/mu);
+  writeFileSync(workspacePath, currentWorkspace.replace(/^minimumReleaseAge: 0$/mu,
+    'minimumReleaseAgeExclude:\n  - "@agent-teams/engineering-foundation@1.3.3"'));
   runGit(source, "init", "--quiet"); commit();
-  const current = getIdentity(source);
+  const retained = getIdentity(source);
   const receipts = targets.map(target => {
-    const f = fixture(); f.receipt.identity = current; f.receipt.target = target;
+    const f = fixture(); f.receipt.identity = retained; f.receipt.target = target;
     [f.receipt.platform, f.receipt.architecture] = target.split("-");
     f.receipt.postgres = {required: target === "linux-x64", configured: target === "linux-x64"};
     f.receipt.artifactDirectory = `${target}.artifacts`;
@@ -520,6 +527,24 @@ test("bounded real-source merge/check accepts unrelated and report-only delivery
       f.receipt.artifacts[name] = sha256(bytes);
     }
     const path = resolve(captures, `${target}.json`); writeFileSync(path, json(f.receipt)); return path;
+  });
+  writeFileSync(workspacePath, currentWorkspace);
+  const currentRevision = commit(), current = getIdentity(source);
+  assert.doesNotThrow(() => validateRetainedReceiptCompatibility(source, retained, current));
+  for (const [name, mutate, reason] of [
+    ["nonzero current minimumReleaseAge", value => value.replace(/^minimumReleaseAge: 0$/mu, "minimumReleaseAge: 60"), /minimumReleaseAge must be 0/],
+    ["current minimumReleaseAgeStrict", value => `${value}minimumReleaseAgeStrict: true\n`, /minimumReleaseAgeStrict must be absent/],
+    ["current minimumReleaseAgeExclude", value => `${value}minimumReleaseAgeExclude:\n  - synthetic@1.0.0\n`, /minimumReleaseAgeExclude must be absent/],
+    ["other pnpm-workspace policy", value => `${value}sharedWorkspaceLockfile: false\n`, /not limited to release-age policy/],
+  ]) {await t.test(`compatibility rejects ${name}`, () => {
+    writeFileSync(workspacePath, mutate(currentWorkspace)); commit();
+    assert.throws(() => validateRetainedReceiptCompatibility(source, retained, getIdentity(source)), reason);
+    runGit(source, "reset", "--hard", currentRevision);
+  });}
+  await t.test("compatibility rejects every other input digest drift", () => {
+    fs.appendFileSync(resolve(source, ".npmrc"), "\nsynthetic=true\n"); commit();
+    assert.throws(() => validateRetainedReceiptCompatibility(source, retained, getIdentity(source)), /receipt input digest mismatch: \.npmrc/);
+    runGit(source, "reset", "--hard", currentRevision);
   });
   const output = resolve(source, v2ReportPath);
   const report = mergeReceipts(source, receipts, output); checkV2(source, output);
