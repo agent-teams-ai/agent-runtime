@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "evidenceKind": "runtime-setup-static-assembly-construction",
   "identity": {
-    "sourceRevision": "a93380cc2dc10f2fe93e6c54694764e9756029ab",
+    "sourceRevision": "11648356a30ded27f1eb71cda28db608cb0169bc",
     "inputPolicy": "runtime-setup-v2-inputs/1",
     "inputs": [
       {
@@ -8108,12 +8108,12 @@
       {
         "path": "scripts/architecture/runtime-setup-l0-evidence-v2-capture.mjs",
         "mode": "100644",
-        "sha256": "7c9d992f24c360d03099e5a0f3f94d26135b5762c085b2b3c52e65ac519d1c82"
+        "sha256": "a8ab1d0f1c5525e32aa94533a5ff5280f7f7281cdc084a4dd01debc3e172ec45"
       },
       {
         "path": "scripts/architecture/runtime-setup-l0-evidence-v2-inputs.mjs",
         "mode": "100644",
-        "sha256": "7c8cd4403b8b726f7ce4965dbbab52991f3dfdef81a39b7efc2ec74edc986a6a"
+        "sha256": "77ed87eb41125e649417736a370f4983e87ffab48da5935320a53719dd400324"
       },
       {
         "path": "scripts/architecture/runtime-setup-l0-evidence-v2.mjs",
@@ -8123,7 +8123,7 @@
       {
         "path": "scripts/architecture/runtime-setup-l0-evidence-v2.test.mjs",
         "mode": "100644",
-        "sha256": "39c83239b1bdc56876dc614147b324541a95e3b2e864b124d8ca705745e741a2"
+        "sha256": "20faf45ac038275cd7042c00baac7466a9d9f66207c63affb9aa30f8daecfb7a"
       },
       {
         "path": "scripts/architecture/runtime-setup-l0-evidence-validation.mjs",
@@ -8133,12 +8133,12 @@
       {
         "path": "scripts/architecture/runtime-setup-l0-evidence-validation.test.mjs",
         "mode": "100644",
-        "sha256": "07fbbd607c263e119a8891080dcc4439ca5e5fe5e31f26f2b06f1d891603fb7c"
+        "sha256": "94a9f2dee1700f9d8c6191d1a6050cc89e9f4d67df6b1ee6891d98b44d7159e3"
       },
       {
         "path": "scripts/architecture/runtime-setup-l0-evidence.mjs",
         "mode": "100644",
-        "sha256": "48c2966af9101f94cfef288be712e9d480c41b36bc41b1026f61dac134f3fd15"
+        "sha256": "e5768d44a97919ab77e0da4273939813a5df16474e8e50bff7212891bd1f3ba1"
       },
       {
         "path": "tsconfig.json",
