@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "evidenceKind": "runtime-setup-static-assembly-construction",
   "identity": {
-    "sourceRevision": "e08c1d64826c317c5a526436278e71c0c0cc0160",
+    "sourceRevision": "a93380cc2dc10f2fe93e6c54694764e9756029ab",
     "inputPolicy": "runtime-setup-v2-inputs/1",
     "inputs": [
       {
@@ -7958,7 +7958,7 @@
       {
         "path": "pnpm-workspace.yaml",
         "mode": "100644",
-        "sha256": "9142cd0a8df9ac3f3d73355b6441aba62a8b56e3021bd0d79aa0f5f7b1674a24"
+        "sha256": "6a34544c1956e2f9cafb6c8c761597e20e07a267f984845baab08d6742368819"
       },
       {
         "path": "scripts/architecture/ar2-evidence-custody.mjs",
