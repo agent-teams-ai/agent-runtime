@@ -13,7 +13,8 @@ cleanup() {
 }
 trap cleanup EXIT
 chmod 0777 "$socket_dir"
-docker run --detach --name "$container_name" --network none \
+# Preserve the CI user's socket-directory ownership so /tmp cleanup works without root.
+docker run --detach --name "$container_name" --network none --user postgres \
   --env POSTGRES_HOST_AUTH_METHOD=trust \
   --mount "type=bind,source=$socket_dir,target=/var/run/postgresql" \
   "$POSTGRES_TEST_IMAGE" -c listen_addresses= -c unix_socket_permissions=0777 >/dev/null
