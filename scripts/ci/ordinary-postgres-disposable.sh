@@ -8,7 +8,8 @@ cleanup() {
   status=$?
   trap - EXIT
   if ! docker rm --force --volumes "$container_name" >/dev/null; then status=1; fi
-  if ! rm -rf -- "$socket_dir"; then status=1; fi
+  if ! rm -f -- "$socket_dir/.s.PGSQL.5432" "$socket_dir/.s.PGSQL.5432.lock"; then status=1; fi
+  if ! rmdir -- "$socket_dir"; then status=1; fi
   exit "$status"
 }
 trap cleanup EXIT
