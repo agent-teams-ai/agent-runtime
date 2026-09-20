@@ -33,6 +33,13 @@ export const ordinaryPostgresEnvironment = (environment) => {
   return result;
 };
 
+const reportOutcome = (type, data, write) => {
+  write(`${type}: ${data.name}${data.skip ? " SKIP" : ""}${data.todo ? " TODO" : ""}\n`);
+  if (type === "test:fail") {write(`${String(data.details?.error ?? "test failed")}\n`);}
+};
+const completeSummary = data => data.success === true
+  && ["failed", "cancelled", "skipped", "todo"].every(key => data.counts[key] === 0);
+
 export const runOrdinaryPostgres = async ({environment = process.env, runTests = run,
   write = message => process.stdout.write(message)} = {}) => {
   const env = ordinaryPostgresEnvironment(environment);
@@ -47,12 +54,10 @@ export const runOrdinaryPostgres = async ({environment = process.env, runTests =
     if (type === "test:pass" || type === "test:fail") {
       const expected = requiredTests.find(test => test.file === data.file && test.name === data.name);
       if (expected && type === "test:pass" && !data.skip && !data.todo) {seen.add(expected.file);}
-      write(`${type}: ${data.name}${data.skip ? " SKIP" : ""}${data.todo ? " TODO" : ""}\n`);
-      if (type === "test:fail") {write(`${String(data.details?.error ?? "test failed")}\n`);}
+      reportOutcome(type, data, write);
     }
     if (type === "test:summary" && data.file === undefined) {
-      completed = data.success === true && data.counts.failed === 0
-        && data.counts.cancelled === 0 && data.counts.skipped === 0 && data.counts.todo === 0;
+      completed = completeSummary(data);
     }
   }
   if (failed || !completed || seen.size !== requiredTests.length) {
