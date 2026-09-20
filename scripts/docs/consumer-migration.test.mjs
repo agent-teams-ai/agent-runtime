@@ -28,7 +28,7 @@ test("portable v3 preserves strict Authoring v3 authority and both semantic vali
     ["index", "architecture", "adr", "evidence", "qualification-plan"]);
 });
 
-test("projected direct tooling pins and exact transitive age exceptions preserve the package manager", async () => {
+test("projected direct tooling pins and disabled release-age waiting preserve the package manager", async () => {
   const manifest = await json("package.json"), workspace = await yaml("pnpm-workspace.yaml");
   assert.equal(manifest.packageManager, "pnpm@11.18.0");
   assert.deepEqual(manifest.engines, { node: ">=24.18.0 <25", pnpm: "11.18.0" });
@@ -43,11 +43,9 @@ test("projected direct tooling pins and exact transitive age exceptions preserve
   for (const name of ["docs-protocol-mcp", "document-authoring", "repository-mutation"]) {
     assert.equal(Object.hasOwn(manifest.devDependencies, `@agent-teams/${name}`), false);
   }
-  assert.deepEqual(workspace.minimumReleaseAgeExclude.filter(value => value.startsWith("@agent-teams/")).toSorted(), [
-    "@agent-teams/docs-protocol-agent-teams@0.2.8",
-    "@agent-teams/docs-protocol@0.6.0", "@agent-teams/document-authoring@0.3.0",
-    "@agent-teams/engineering-foundation@1.3.3", "@agent-teams/repository-mutation@0.2.0",
-  ]);
+  assert.equal(workspace.minimumReleaseAge, 0);
+  assert.equal(Object.hasOwn(workspace, "minimumReleaseAgeStrict"), false);
+  assert.equal(Object.hasOwn(workspace, "minimumReleaseAgeExclude"), false);
   assert.match(await read("scripts/architecture/feature-module-config.mjs"), /const FOUNDATION_VERSION = "1\.3\.3";/u);
 });
 

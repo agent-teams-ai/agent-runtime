@@ -86,7 +86,51 @@ export const v2InputPolicy = Object.freeze({
 const pathspec = [...v2InputPolicy.roots, ...v2InputPolicy.files].map(path => `:(top,literal)${path}`);
 const git = (root, ...args) => execFileSync("git", args, {cwd: root, encoding: "utf8",
   maxBuffer: 32 * 1024 * 1024,
-  env: {...process.env, GIT_NO_LAZY_FETCH: "1", GIT_OPTIONAL_LOCKS: "0"}});
+  env: {...process.env, GIT_NO_LAZY_FETCH: "1", GIT_NO_REPLACE_OBJECTS: "1", GIT_OPTIONAL_LOCKS: "0"}});
+function gitBlobBytes(root, objects) {
+  const input = Buffer.from(objects.map(({object}) => `${object}\n`).join(""));
+  const output = execFileSync("git", ["cat-file", "--batch"], {cwd: root, input,
+    maxBuffer: 64 * 1024 * 1024, env: {...process.env, GIT_NO_LAZY_FETCH: "1", GIT_NO_REPLACE_OBJECTS: "1", GIT_OPTIONAL_LOCKS: "0"}});
+  let offset = 0; const blobs = new Map();
+  for (const {object} of objects) {
+    const end = output.indexOf(0x0a, offset); assert.ok(end >= 0, "truncated git cat-file response");
+    const [actual, type, sizeText] = output.subarray(offset, end).toString().split(" ");
+    assert.equal(actual, object, "git cat-file object mismatch"); assert.equal(type, "blob", "input is not a blob");
+    const size = Number(sizeText); assert.ok(Number.isSafeInteger(size) && size >= 0, "invalid git blob size");
+    const start = end + 1, finish = start + size; assert.ok(finish <= output.length, "truncated git blob");
+    blobs.set(object, output.subarray(start, finish)); offset = finish + 1;
+  }
+  return blobs;
+}
+
+function checkedInputs(inputs) {
+  inputs.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+  const paths = new Set(inputs.map(({path}) => path));
+  assert.equal(paths.size, inputs.length, "duplicate input");
+  for (const path of [...v2InputPolicy.roots, ...v2InputPolicy.requiredRoots]) {
+    assert.ok(inputs.some(input => input.path.startsWith(`${path}/`)), `missing required input: ${path}`);
+  }
+  for (const path of [...v2InputPolicy.files, ...v2InputPolicy.required]) {
+    assert.ok(paths.has(path), `missing required input: ${path}`);
+  }
+  return {inputPolicy: v2InputPolicy.version, inputs};
+}
+
+function treeEntries(root, sourceRevision) {
+  return git(root, "ls-tree", "-rz", sourceRevision, "--", ...pathspec).split("\0").filter(Boolean).map(entry => {
+    const tab = entry.indexOf("\t"), path = entry.slice(tab + 1);
+    const [mode, type, object] = entry.slice(0, tab).split(" ");
+    assert.ok(type === "blob" && ["100644", "100755"].includes(mode), `non-regular input: ${path}`);
+    return {path, mode, object};
+  });
+}
+
+export function v2InputsAtRevision(root, sourceRevision) {
+  assert.match(sourceRevision, /^[a-f0-9]{40}$/u);
+  const entries = treeEntries(root, sourceRevision), blobs = gitBlobBytes(root, entries);
+  return checkedInputs(entries.map(({path, mode, object}) => ({path, mode,
+    sha256: createHash("sha256").update(blobs.get(object)).digest("hex")})));
+}
 
 export function v2Inputs(root, sourceRevision) {
   assert.match(sourceRevision, /^[a-f0-9]{40}$/u);
@@ -98,11 +142,7 @@ export function v2Inputs(root, sourceRevision) {
     if (error.status !== 1) {throw error;}
     assert.fail("source/input mismatch");
   }
-  const entries = git(root, "ls-tree", "-rz", sourceRevision, "--", ...pathspec).split("\0").filter(Boolean);
-  const inputs = entries.map(entry => {
-    const tab = entry.indexOf("\t"), path = entry.slice(tab + 1);
-    const [mode, type] = entry.slice(0, tab).split(" ");
-    assert.ok(type === "blob" && ["100644", "100755"].includes(mode), `non-regular input: ${path}`);
+  const inputs = treeEntries(root, sourceRevision).map(({path, mode}) => {
     // Reject filesystem links too, including linked ancestors and core.symlinks=false.
     const parts = path.split("/");
     for (let i = 1; i <= parts.length; i++) {
@@ -111,14 +151,6 @@ export function v2Inputs(root, sourceRevision) {
       if (i === parts.length) {assert.equal(Boolean(stat.mode & 0o111), mode === "100755", `input mode mismatch: ${path}`);}
     }
     return {path, mode, sha256: createHash("sha256").update(readFileSync(resolve(root, path))).digest("hex")};
-  }).toSorted((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
-  const paths = new Set(inputs.map(({path}) => path));
-  assert.equal(paths.size, inputs.length, "duplicate input");
-  for (const path of [...v2InputPolicy.roots, ...v2InputPolicy.requiredRoots]) {
-    assert.ok(inputs.some(input => input.path.startsWith(`${path}/`)), `missing required input: ${path}`);
-  }
-  for (const path of [...v2InputPolicy.files, ...v2InputPolicy.required]) {
-    assert.ok(paths.has(path), `missing required input: ${path}`);
-  }
-  return {inputPolicy: v2InputPolicy.version, inputs};
+  });
+  return checkedInputs(inputs);
 }

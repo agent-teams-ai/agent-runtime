@@ -36,16 +36,19 @@ const benchmarkEnvelopePath = join(
   "docs/spikes/runtime-setup-l0-benchmark-envelopes.json",
 );
 
+const provenanceGitEnvironment = {
+  ...process.env,
+  GIT_NO_LAZY_FETCH: "1",
+  GIT_NO_REPLACE_OBJECTS: "1",
+  GIT_OPTIONAL_LOCKS: "0",
+};
+
 const git = (...args) => {
   try {
     return execFileSync("git", args, {
       cwd: repositoryRoot,
       encoding: "utf8",
-      env: {
-        ...process.env,
-        GIT_NO_LAZY_FETCH: "1",
-        GIT_OPTIONAL_LOCKS: "0",
-      },
+      env: provenanceGitEnvironment,
       stdio: ["ignore", "pipe", "pipe"],
     });
   } catch (error) {
@@ -54,7 +57,7 @@ const git = (...args) => {
 };
 
 const readRevisionFile = (revision, path) => execFileSync("git", ["show", `${revision}:${path}`], {
-  cwd: repositoryRoot, env: { ...process.env, GIT_NO_LAZY_FETCH: "1", GIT_OPTIONAL_LOCKS: "0" },
+  cwd: repositoryRoot, env: provenanceGitEnvironment,
   stdio: ["ignore", "pipe", "pipe"], maxBuffer: 20 * 1024 * 1024,
 });
 const pathExists = async path => {

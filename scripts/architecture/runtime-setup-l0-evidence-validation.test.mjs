@@ -1,5 +1,11 @@
 import { registerAdoptionEvidenceTests } from "./runtime-setup-l0-evidence-adoption.test.mjs";
 import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { runInNewContext } from "node:vm";
+import { createEvidenceInputs } from "./runtime-setup-l0-evidence-inputs.mjs";
 import test from "node:test";
 
 import {
@@ -10,6 +16,55 @@ import {
 } from "./runtime-setup-l0-evidence-validation.mjs";
 
 registerAdoptionEvidenceTests();
+
+test("legacy retained provenance rejects replacement commit, tree and blob bytes", async t => {
+  const repositoryRoot = mkdtempSync(join(tmpdir(), "legacy-provenance-"));
+  t.after(() => rmSync(repositoryRoot, { recursive: true, force: true }));
+  const replacementEnvironment = { ...process.env };
+  delete replacementEnvironment.GIT_NO_REPLACE_OBJECTS;
+  const runGit = (...args) => execFileSync("git", args, {
+    cwd: repositoryRoot, encoding: "utf8", env: replacementEnvironment,
+  }).trim();
+  runGit("init", "--quiet");
+  runGit("config", "core.hooksPath", "/dev/null");
+  runGit("config", "user.name", "Fixture");
+  runGit("config", "user.email", "fixture@example.invalid");
+  writeFileSync(join(repositoryRoot, "evidence"), "original\n");
+  runGit("add", "."); runGit("commit", "--quiet", "-m", "original");
+  const original = runGit("rev-parse", "HEAD");
+  writeFileSync(join(repositoryRoot, "evidence"), "substituted\n");
+  runGit("add", "."); runGit("commit", "--quiet", "-m", "substitute");
+  const replacement = runGit("rev-parse", "HEAD");
+  // Exercise the actual legacy Git helpers without executing the CLI's architecture gates.
+  const source = readFileSync(new URL("./runtime-setup-l0-evidence.mjs", import.meta.url), "utf8");
+  const start = source.indexOf("const provenanceGitEnvironment ="), end = source.indexOf("const pathExists =");
+  assert.ok(start >= 0 && end > start, "legacy helper boundaries unavailable");
+  const helpers = source.slice(start, end);
+  const { git, readRevisionFile } = runInNewContext(`${helpers}; ({ git, readRevisionFile });`, {
+    process, execFileSync, repositoryRoot, GitCommandFailure,
+  });
+  const inputs = createEvidenceInputs({ repositoryRoot, git, readRevisionFile,
+    roots: { fixtures: [], sources: [], tests: [] },
+    files: { fixtures: ["evidence"], sources: ["evidence"], tests: ["evidence"] },
+  });
+  const expected = await inputs.artifactDigestsAtRevision(original);
+  const substituted = await inputs.artifactDigestsAtRevision(replacement);
+  assert.notDeepEqual(expected, substituted);
+  for (const suffix of ["", "^{tree}", ":evidence"]) {
+    await t.test(`replacement of ${suffix || "commit"}`, async () => {
+      const object = runGit("rev-parse", `${original}${suffix}`);
+      const substitute = runGit("rev-parse", `${replacement}${suffix}`);
+      runGit("replace", object, substitute);
+      try {
+        assert.equal(runGit("show", `${original}:evidence`), "substituted");
+        assert.equal(readRevisionFile(original, "evidence").toString(), "original\n");
+        assert.equal(git("show", `${original}:evidence`), "original\n");
+        assert.deepEqual(await inputs.artifactDigestsAtRevision(original), expected);
+        assert.notDeepEqual(await inputs.artifactDigestsAtRevision(original), substituted);
+      } finally { runGit("replace", "-d", object); }
+    });
+  }
+});
 
 const changes = [{ id: "slice", revision: "a".repeat(40) }];
 const report = {
