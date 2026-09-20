@@ -38,3 +38,14 @@ The accepted contract is
 [ADR-0090](../../../../../../docs/decisions/0090-ordinary-user-session-codex-execution-profile.md).
 Synthetic construction, graph rejection, observation and packed-consumer tests
 establish integration evidence; they do not qualify a live provider campaign.
+
+## Durable integration evidence
+
+The required `postgres-durability` CI job invokes
+`scripts/ci/ordinary-postgres-disposable.sh` from the repository root. It creates
+one fresh socket-only PostgreSQL cluster and runs the ordinary Agent Execution,
+Runtime Security and Provider Access suites through
+`scripts/ci/run-ordinary-postgres.mjs`. The mandatory runner rejects missing or
+non-disposable configuration, skipped/TODO tests and an incomplete required
+suite. The generic package test command can still omit PostgreSQL locally.
+This database evidence does not qualify a live provider or containment target.

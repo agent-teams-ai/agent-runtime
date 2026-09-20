@@ -45,6 +45,20 @@ Assembly graph and scoped rejecting tests also run through the existing
 Get Modular test gate. See the [current adoption record](get-modular-adoption.md)
 for the eight owners and seven turn dependencies.
 
+## Test-only Docker engine ownership
+
+The deterministic `FakeDockerEngine` belongs to Agent Execution's
+`tests/features/contained-agent-turn/support/docker-engine` fixture. Agent
+Execution tests import it locally; Embedded Runtime tests reuse that same owner
+through the development-only `ae-docker-engine-fixture.mjs` loader. Production
+`src`, `dist` and curated `./composition` exports exclude the fake. No testing
+subpath is added to the production package.
+
+Foundation's rejecting dependency fixture prevents production Docker code from
+importing this development boundary. The packed-consumer test independently
+rejects the fake files and export, beyond comparing the package to its current
+local barrel. These checks run through the existing full quality gate.
+
 ## Purpose
 
 Agent Runtime actively conforms to a scoped profile of the immutable
