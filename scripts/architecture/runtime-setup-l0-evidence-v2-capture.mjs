@@ -86,7 +86,7 @@ export function validateRetainedReceiptCompatibility(root, retained, current) {
     assert.equal(before.path, after.path, "receipt input path mismatch");
     assert.equal(before.mode, after.mode, `receipt input mode mismatch: ${before.path}`);
     if (before.path === "pnpm-workspace.yaml") {
-      assert.notEqual(before.sha256, after.sha256, "release-age compatibility requires a workspace policy change");
+      assert.notEqual(before.sha256, after.sha256, "receipt identity mismatch: release-age compatibility requires a workspace policy change");
       workspaceChanged = true;
     } else {
       assert.equal(before.sha256, after.sha256, `receipt input digest mismatch: ${before.path}`);
