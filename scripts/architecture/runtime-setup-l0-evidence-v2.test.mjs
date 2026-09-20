@@ -546,6 +546,28 @@ test("bounded real-source merge/check accepts unrelated and report-only delivery
     assert.throws(() => validateRetainedReceiptCompatibility(source, retained, getIdentity(source)), /receipt input digest mismatch: \.npmrc/);
     runGit(source, "reset", "--hard", currentRevision);
   });
+  for (const [name, mutate, reason] of [
+    ["input path drift", current => {current.inputs[0].path = "renamed-input";}, /receipt input path mismatch/],
+    ["input mode drift", current => {current.inputs[0].mode = current.inputs[0].mode === "100644" ? "100755" : "100644";}, /receipt input mode mismatch/],
+    ["runner identity drift", current => {current.runner.sha256 = "f".repeat(64);}, /receipt runner mismatch/],
+    ["reporter identity drift", current => {current.reporter.path = "renamed-reporter";}, /receipt reporter mismatch/],
+  ]) {await t.test(`compatibility rejects ${name}`, () => {
+    const drifted = structuredClone(current); mutate(drifted);
+    assert.throws(() => validateRetainedReceiptCompatibility(source, retained, drifted), reason);
+  });}
+  await t.test("historical provenance ignores replacement refs", () => {
+    const original = v2InputsAtRevision(source, retained.sourceRevision);
+    fs.appendFileSync(resolve(source, ".npmrc"), "\nreplacement=true\n");
+    commit();
+    const replacement = runGit(source, "rev-parse", "HEAD");
+    runGit(source, "replace", retained.sourceRevision, replacement);
+    try {
+      assert.deepEqual(v2InputsAtRevision(source, retained.sourceRevision), original);
+    } finally {
+      runGit(source, "replace", "-d", retained.sourceRevision);
+      runGit(source, "reset", "--hard", currentRevision);
+    }
+  });
   const output = resolve(source, v2ReportPath);
   const report = mergeReceipts(source, receipts, output); checkV2(source, output);
   commit(); rmSync(captures, {recursive: true});

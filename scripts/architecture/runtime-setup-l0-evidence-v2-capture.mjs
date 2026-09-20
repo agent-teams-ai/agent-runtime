@@ -18,9 +18,9 @@ export const retainedV1 = Object.freeze({
 const runner = "packages/apps/embedded-runtime/scripts/run-package-tests.mjs";
 const reporter = "packages/apps/embedded-runtime/scripts/adoption-test-reporter.mjs";
 const git = (root, ...args) => execFileSync("git", args, {cwd: root, encoding: "utf8",
-  env: {...process.env, GIT_NO_LAZY_FETCH: "1", GIT_OPTIONAL_LOCKS: "0"}}).trimEnd();
+  env: {...process.env, GIT_NO_LAZY_FETCH: "1", GIT_NO_REPLACE_OBJECTS: "1", GIT_OPTIONAL_LOCKS: "0"}}).trimEnd();
 const revisionBytes = (root, revision, path) => execFileSync("git", ["show", `${revision}:${path}`], {cwd: root,
-  env: {...process.env, GIT_NO_LAZY_FETCH: "1", GIT_OPTIONAL_LOCKS: "0"}});
+  env: {...process.env, GIT_NO_LAZY_FETCH: "1", GIT_NO_REPLACE_OBJECTS: "1", GIT_OPTIONAL_LOCKS: "0"}});
 export function identity(root, sourceRevision = git(root, "rev-parse", "HEAD")) {
   assert.match(sourceRevision, /^[a-f0-9]{40}$/u);
   const {inputPolicy, inputs} = v2Inputs(root, sourceRevision);

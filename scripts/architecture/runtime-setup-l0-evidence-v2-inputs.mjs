@@ -86,10 +86,10 @@ export const v2InputPolicy = Object.freeze({
 const pathspec = [...v2InputPolicy.roots, ...v2InputPolicy.files].map(path => `:(top,literal)${path}`);
 const git = (root, ...args) => execFileSync("git", args, {cwd: root, encoding: "utf8",
   maxBuffer: 32 * 1024 * 1024,
-  env: {...process.env, GIT_NO_LAZY_FETCH: "1", GIT_OPTIONAL_LOCKS: "0"}});
+  env: {...process.env, GIT_NO_LAZY_FETCH: "1", GIT_NO_REPLACE_OBJECTS: "1", GIT_OPTIONAL_LOCKS: "0"}});
 const gitBytes = (root, ...args) => execFileSync("git", args, {cwd: root,
   maxBuffer: 32 * 1024 * 1024,
-  env: {...process.env, GIT_NO_LAZY_FETCH: "1", GIT_OPTIONAL_LOCKS: "0"}});
+  env: {...process.env, GIT_NO_LAZY_FETCH: "1", GIT_NO_REPLACE_OBJECTS: "1", GIT_OPTIONAL_LOCKS: "0"}});
 
 function checkedInputs(inputs) {
   inputs.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
