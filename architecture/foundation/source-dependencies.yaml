@@ -28,6 +28,7 @@ governedRoots:
 - packages/platform/filesystem-custody/src
 - packages/platform/filesystem-custody/tests
 - scripts/architecture
+- scripts/ci
 - scripts/docs
 - scripts/foundation
 - scripts/native-helper
