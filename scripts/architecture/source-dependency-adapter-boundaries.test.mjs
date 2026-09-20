@@ -149,7 +149,7 @@ const rules = diagnostics => diagnostics.map(diagnostic => diagnostic.ruleId);
 test("the named negative suite runs exactly once through every Foundation gate", () => {
   assert.equal(
     manifest.scripts["foundation:boundaries:negative"],
-    "node --test scripts/architecture/source-dependency-adapter-boundaries.test.mjs scripts/docs/runtime-builtin-permissions.test.mjs",
+    "node --test scripts/architecture/source-dependency-adapter-boundaries.test.mjs scripts/docs/runtime-builtin-permissions.test.mjs scripts/ci/run-ordinary-postgres.test.mjs",
   );
   assert.equal(
     manifest.scripts["foundation:check"].split("pnpm foundation:boundaries:negative").length - 1,
