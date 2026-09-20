@@ -3,7 +3,7 @@ import {rm} from "node:fs/promises";
 import test from "node:test";
 import {setTimeout as delay} from "node:timers/promises";
 import {createDockerHostCustodyLifecycle} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-host-custody-lifecycle.js";
-import {FakeDockerEngine} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.js";
+import {FakeDockerEngine} from "./support/docker-engine/fake-docker-engine.ts";
 import {DockerCustodyJournal} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/index.js";
 import {MemoryStorage, disposable, policy, createInput, engineCall, owner, digest} from "./support/docker-host-custody-lifecycle-fixture.ts";
 import {installSyntheticInit, initOptions, providerExec} from "./support/docker-claim-init-fixture.ts";

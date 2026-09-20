@@ -15,7 +15,7 @@ import {
 import { openBoundedUnixHijack } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/bounded-unix-hijack.js";
 import { createDockerCustodyChannel } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-custody-channel.js";
 import { DockerEngineError } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-error.js";
-import { FakeDockerEngine } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.js";
+import {FakeDockerEngine} from "./support/docker-engine/fake-docker-engine.ts";
 import { call as engineCall, createInput, disposable, policy } from "../../fixtures/docker-engine-test-fixture.ts";
 
 const call = (signal = new AbortController().signal, milliseconds = 2_000) => ({

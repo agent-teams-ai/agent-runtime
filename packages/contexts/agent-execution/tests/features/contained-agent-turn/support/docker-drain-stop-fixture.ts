@@ -4,7 +4,7 @@ import type {Socket} from "node:net";
 import {PassThrough, Writable} from "node:stream";
 import type {TestContext} from "node:test";
 import {createDockerHostCustodyLifecycle} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-host-custody-lifecycle.js";
-import {FakeDockerEngine} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.js";
+import {FakeDockerEngine} from "./docker-engine/fake-docker-engine.ts";
 import {createDockerCustodyChannel} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-custody-channel.js";
 import {DockerCustodyFrameDecoder, encodeDockerCustodyFrame, DOCKER_CUSTODY_INIT_PROTOCOL,
   type DockerCustodyProtocolMessage} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/init/docker-custody-init-protocol.js";

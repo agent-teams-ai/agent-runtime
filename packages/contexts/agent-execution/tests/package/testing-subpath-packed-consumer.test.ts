@@ -48,6 +48,9 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
     assert.ok(packedPaths.includes(protocolHeaderPath));
     assert.equal(packedPaths.some(path => /^dist\/(?:production|testing)(?:\.|\/)/u.test(path)), false);
     assert.equal(packedPaths.some(path => /(?:^|[-./_])test-support|-fixtures?\.|\.(?:test|spec)\./u.test(path)), false);
+    assert.equal(packedPaths.some(path => /(?:^|\/)tests?\//u.test(path)), false);
+    assert.equal(packedPaths.some(path => /fake-docker-(?:engine|engine-state|attach-custody)(?:\.|\/)/u.test(path)), false,
+      "Docker fault injection must not ship in any production artifact");
     const archive = join(temporaryRoot, packResult[0]?.filename ?? "missing.tgz");
     run("tar", ["-xzf", archive, "-C", temporaryRoot], packageRoot);
 
@@ -124,6 +127,8 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
     // Packed composition must match the built curated entry, not a stale key census.
     const localComposition = await import("../../dist/composition.js");
     assert.deepEqual(resolved.compositionKeys, Object.keys(localComposition).toSorted());
+    assert.equal(resolved.compositionKeys.includes("FakeDockerEngine"), false,
+      "local/packed export parity cannot authorize a test-only public capability");
     assert.deepEqual(resolved.contractKeys, []);
     assert.deepEqual(resolved.rejected, ["ERR_PACKAGE_PATH_NOT_EXPORTED", "ERR_PACKAGE_PATH_NOT_EXPORTED"]);
   } finally {

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {rm} from "node:fs/promises";
 import {test, type TestContext} from "node:test";
 import {createDockerHostCustodyLifecycle} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-host-custody-lifecycle.js";
-import {FakeDockerEngine} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.js";
+import {FakeDockerEngine} from "./support/docker-engine/fake-docker-engine.ts";
 import type {DockerContainerObservation} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.js";
 import {MemoryStorage, disposable, policy, createInput, engineCall, owner, digest} from "./support/docker-host-custody-lifecycle-fixture.ts";
 import {installSyntheticInit} from "./support/docker-claim-init-fixture.ts";

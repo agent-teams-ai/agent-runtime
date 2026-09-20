@@ -18,6 +18,5 @@ export {parseDockerImageReference} from "./docker-image-reference.js";
 export type {DockerImageReference} from "./docker-image-reference.js";
 export {snapshotDockerImageInitLock, DOCKER_CUSTODY_NODE_PATH, DOCKER_CUSTODY_BOOTSTRAP_PATH, DOCKER_CUSTODY_INIT_ARGUMENTS} from "./docker-image-init-lock.js";
 export type {DockerImageInitLock} from "./docker-image-init-lock.js";
-export {FakeDockerEngine} from "./fake-docker-engine.js";
 export {encodeCreateRequest} from "./docker-create-request.js";
 export {createSpecificationSha256} from "./docker-create-specification.js";

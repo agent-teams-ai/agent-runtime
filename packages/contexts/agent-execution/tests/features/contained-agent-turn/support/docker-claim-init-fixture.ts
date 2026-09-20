@@ -1,4 +1,4 @@
-import type {FakeDockerEngine} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.js";
+import type {FakeDockerEngine} from "./docker-engine/fake-docker-engine.ts";
 import type {DockerCustodyInitHostOptions} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/init/docker-custody-init-host-session.js";
 import {DOCKER_CUSTODY_INIT_PROTOCOL, DockerCustodyFrameDecoder, encodeDockerCustodyFrame,
   type DockerCustodyProtocolMessage} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/init/docker-custody-init-protocol.js";

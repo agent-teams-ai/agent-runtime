@@ -1,4 +1,5 @@
-import { linuxExclusiveRouteSeccomp, FakeDockerEngine, composeLinuxDockerResidueCustody, CGROUP2_SUPER_MAGIC, PROC_SUPER_MAGIC, type DockerResidueIo, type ResidueFile, type ResidueStat, residueParent, residueLeaf, type DockerContainerAuthority, type DockerContainerObservation, type DockerEngineCall, type DockerEngineIdentity, type DockerEnginePort } from "@agent-teams/agent-execution/composition";
+import {FakeDockerEngine} from "../../../../../ae-docker-engine-fixture.mjs";
+import { linuxExclusiveRouteSeccomp, composeLinuxDockerResidueCustody, CGROUP2_SUPER_MAGIC, PROC_SUPER_MAGIC, type DockerResidueIo, type ResidueFile, type ResidueStat, residueParent, residueLeaf, type DockerContainerAuthority, type DockerContainerObservation, type DockerEngineCall, type DockerEngineIdentity, type DockerEnginePort } from "@agent-teams/agent-execution/composition";
 import {rm} from "node:fs/promises";
 import type {TestContext} from "node:test";
 import {createInput, digest, disposable, engineCall, MemoryStorage, owner, policy} from "./docker-host-custody-lifecycle-fixture.ts";

@@ -180,7 +180,7 @@ test("real claim path orders acknowledgement before Host preparation; prevented,
 
 test("admitted claim bridges synthetic Docker launch/init-ready/owner preparation before journaled exec", async t => {
   const {rm} = await import("node:fs/promises");
-  const {FakeDockerEngine} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.js");
+  const {FakeDockerEngine} = await import("./support/docker-engine/fake-docker-engine.ts");
   const {createDockerHostCustodyLifecycle} = await import("../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-host-custody-lifecycle.js");
   const {MemoryStorage, disposable, policy, createInput, engineCall, owner} = await import("./support/docker-host-custody-lifecycle-fixture.ts");
   const {installSyntheticInit, initOptions, providerExec} = await import("./support/docker-claim-init-fixture.ts");

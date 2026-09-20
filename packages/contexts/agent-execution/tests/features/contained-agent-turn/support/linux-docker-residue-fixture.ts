@@ -1,7 +1,7 @@
 import {linuxExclusiveRouteSeccomp} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/linux-exclusive-route-policy.js";
 import {rm} from "node:fs/promises";
 import type {TestContext} from "node:test";
-import {FakeDockerEngine} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/fake-docker-engine.js";
+import {FakeDockerEngine} from "./docker-engine/fake-docker-engine.ts";
 import type {DockerContainerAuthority, DockerContainerObservation, DockerEngineCall, DockerEngineIdentity,
   DockerEnginePort} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.js";
 import {composeLinuxDockerResidueCustody} from "../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/node-linux-docker-residue-custody.js";

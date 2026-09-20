@@ -682,3 +682,15 @@ test("source v3 rejects includeRootPackage as an unknown public field", async ()
     await rm(root, { recursive: true, force: true });
   }
 });
+
+
+test("production Docker implementation cannot import its development-only fake", async () => {
+  const fake = "packages/contexts/agent-execution/tests/features/contained-agent-turn/support/docker-engine/fake-docker-engine.ts";
+  const relative = "../../../../../../../../tests/features/contained-agent-turn/support/docker-engine/fake-docker-engine.ts";
+  const diagnostics = await analyzeFixture({
+    [paths.dockerNode]: `import {FakeDockerEngine} from '${relative}';\nvoid FakeDockerEngine;\n`,
+    [fake]: "export class FakeDockerEngine {}\n",
+  });
+  assert.ok(rules(diagnostics).includes("architecture.source-dependencies.forbidden-boundary-dependency"),
+    JSON.stringify(diagnostics));
+});

@@ -140,7 +140,7 @@ export {
   DOCKER_CUSTODY_BOOTSTRAP_PATH, DOCKER_CUSTODY_INIT_ARGUMENTS, DOCKER_CUSTODY_INIT_PROTOCOL,
   DOCKER_CUSTODY_NODE_PATH, DockerConsumptionObservations, DockerCustodyFrameDecoder,
   DockerCustodyJournal, DockerCustodyJournalConflictError, DockerEngineError,
-  DockerHostCustodyLifecycle, DockerHttpNetworkResources, DockerOperationNetwork, FakeDockerEngine,
+  DockerHostCustodyLifecycle, DockerHttpNetworkResources, DockerOperationNetwork,
   HTTP_EVIDENCE_FENCE, HostHttpEgressV4Journal, HostHttpEgressV4NodeStorage,
   NodeDockerCustodyJournalStorage, NodeProviderProcessCustodyCore, NodeUnixSocketDockerEngine,
   PROC_SUPER_MAGIC, acceptedProviderPreparation, appendContainedTurnOutputForOwnerStore,

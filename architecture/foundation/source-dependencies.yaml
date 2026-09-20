@@ -2935,3 +2935,18 @@ boundaries:
     packages: []
     builtins: []
     runtimeReferences: []
+- id: tooling.ordinary-postgres-ci
+  dependencyMode: development
+  roots:
+  - scripts/ci
+  entrypoints: []
+  allow:
+    boundaries: []
+    packages: []
+    builtins:
+    - node:assert/strict
+    - node:fs/promises
+    - node:path
+    - node:test
+    - node:url
+    runtimeReferences: []
