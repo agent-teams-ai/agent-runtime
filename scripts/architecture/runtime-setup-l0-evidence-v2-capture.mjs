@@ -36,6 +36,12 @@ function identityAtRevision(root, sourceRevision) {
     runner: {path: runner, sha256: sha256(revisionBytes(root, sourceRevision, runner))},
     reporter: {path: reporter, sha256: sha256(revisionBytes(root, sourceRevision, reporter))}};
 }
+function lineBody(line) {
+  let end = line.length;
+  if (end > 0 && line[end - 1] === 0x0a) { end--; }
+  if (end > 0 && line[end - 1] === 0x0d) { end--; }
+  return line.subarray(0, end);
+}
 // Keep this delivery checker self-contained. The workspace policy comparison only
 // needs its three release-age keys; retaining the other bytes makes the equality
 // check exact without requiring a parser in a clean consumer clone.
@@ -45,18 +51,12 @@ const workspacePolicy = bytes => {
     const newline = bytes.indexOf(0x0a, start), end = newline === -1 ? bytes.length : newline + 1;
     lines.push(bytes.subarray(start, end)); start = end;
   }
-  const body = line => {
-    let end = line.length;
-    if (end > 0 && line[end - 1] === 0x0a) { end--; }
-    if (end > 0 && line[end - 1] === 0x0d) { end--; }
-    return line.subarray(0, end);
-  };
-  assert.ok(lines.some(line => /^packages:[ \t]*/u.test(body(line).toString("latin1"))),
+  assert.ok(lines.some(line => /^packages:[ \t]*/u.test(lineBody(line).toString("latin1"))),
     "pnpm-workspace policy must be a mapping");
   const fields = {}, retained = [];
   let skipBlock = false;
   for (const line of lines) {
-    const content = body(line), text = content.toString("latin1");
+    const content = lineBody(line), text = content.toString("latin1");
     const field = /^(minimumReleaseAge(?:Strict|Exclude)?):[ \t]*(.*?)[ \t]*$/u.exec(text);
     if (field) {
       assert.equal(Object.hasOwn(fields, field[1]), false, `duplicate workspace policy field: ${field[1]}`);
