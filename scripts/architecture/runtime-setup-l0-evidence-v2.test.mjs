@@ -547,10 +547,10 @@ test("bounded real-source merge/check accepts unrelated and report-only delivery
     runGit(source, "reset", "--hard", currentRevision);
   });
   for (const [name, mutate, reason] of [
-    ["input path drift", current => {current.inputs[0].path = "renamed-input";}, /receipt input path mismatch/],
-    ["input mode drift", current => {current.inputs[0].mode = current.inputs[0].mode === "100644" ? "100755" : "100644";}, /receipt input mode mismatch/],
-    ["runner identity drift", current => {current.runner.sha256 = "f".repeat(64);}, /receipt runner mismatch/],
-    ["reporter identity drift", current => {current.reporter.path = "renamed-reporter";}, /receipt reporter mismatch/],
+    ["input path drift", driftedIdentity => {driftedIdentity.inputs[0].path = "renamed-input";}, /receipt input path mismatch/],
+    ["input mode drift", driftedIdentity => {driftedIdentity.inputs[0].mode = driftedIdentity.inputs[0].mode === "100644" ? "100755" : "100644";}, /receipt input mode mismatch/],
+    ["runner identity drift", driftedIdentity => {driftedIdentity.runner.sha256 = "f".repeat(64);}, /receipt runner mismatch/],
+    ["reporter identity drift", driftedIdentity => {driftedIdentity.reporter.path = "renamed-reporter";}, /receipt reporter mismatch/],
   ]) {await t.test(`compatibility rejects ${name}`, () => {
     const drifted = structuredClone(current); mutate(drifted);
     assert.throws(() => validateRetainedReceiptCompatibility(source, retained, drifted), reason);
