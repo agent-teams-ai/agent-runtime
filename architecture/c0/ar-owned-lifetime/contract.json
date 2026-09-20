@@ -421,7 +421,7 @@
     ],
     "workspace": {
       "path": "pnpm-workspace.yaml",
-      "sha256": "9142cd0a8df9ac3f3d73355b6441aba62a8b56e3021bd0d79aa0f5f7b1674a24",
+      "sha256": "6a34544c1956e2f9cafb6c8c761597e20e07a267f984845baab08d6742368819",
       "packageRoots": [
         {
           "name": "@agent-teams/embedded-runtime",
