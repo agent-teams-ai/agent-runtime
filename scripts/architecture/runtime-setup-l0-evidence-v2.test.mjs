@@ -513,7 +513,7 @@ test("bounded real-source merge/check accepts unrelated and report-only delivery
   const currentWorkspace = readFileSync(workspacePath, "utf8");
   assert.match(currentWorkspace, /^minimumReleaseAge: 0$/mu);
   writeFileSync(workspacePath, currentWorkspace.replace(/^minimumReleaseAge: 0$/mu,
-    'minimumReleaseAgeExclude:\n  - "@agent-teams/engineering-foundation@1.3.3"'));
+    'minimumReleaseAgeExclude:\n  - "@agent-teams/engineering-foundation@1.3.3"\n\n  - "@agent-teams/docs-protocol-agent-teams@0.2.8"'));
   runGit(source, "init", "--quiet"); commit();
   const retained = getIdentity(source);
   const receipts = targets.map(target => {

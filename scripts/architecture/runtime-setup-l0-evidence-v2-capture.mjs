@@ -40,17 +40,29 @@ function identityAtRevision(root, sourceRevision) {
 // needs its three release-age keys; retaining the other bytes makes the equality
 // check exact without requiring a parser in a clean consumer clone.
 const workspacePolicy = bytes => {
-  const source = bytes.toString("utf8");
-  assert.match(source, /(?:^|\n)\s*packages:\s*/u, "pnpm-workspace policy must be a mapping");
+  const lines = [];
+  for (let start = 0; start < bytes.length;) {
+    const newline = bytes.indexOf(0x0a, start), end = newline === -1 ? bytes.length : newline + 1;
+    lines.push(bytes.subarray(start, end)); start = end;
+  }
+  const body = line => {
+    let end = line.length;
+    if (end > 0 && line[end - 1] === 0x0a) { end--; }
+    if (end > 0 && line[end - 1] === 0x0d) { end--; }
+    return line.subarray(0, end);
+  };
+  assert.ok(lines.some(line => /^packages:[ \t]*/u.test(body(line).toString("latin1"))),
+    "pnpm-workspace policy must be a mapping");
   const fields = {}, retained = [];
   let skipBlock = false;
-  for (const line of source.match(/.*(?:\r?\n|$)/gu).filter(Boolean)) {
-    const field = /^(minimumReleaseAge(?:Strict|Exclude)?):[ \t]*(.*?)[ \t]*(?:\r?\n)?$/u.exec(line);
+  for (const line of lines) {
+    const content = body(line), text = content.toString("latin1");
+    const field = /^(minimumReleaseAge(?:Strict|Exclude)?):[ \t]*(.*?)[ \t]*$/u.exec(text);
     if (field) {
       assert.equal(Object.hasOwn(fields, field[1]), false, `duplicate workspace policy field: ${field[1]}`);
       fields[field[1]] = field[2];
-      skipBlock = true;
-    } else if (skipBlock && /^[ \t]/u.test(line)) {
+      skipBlock = field[2] === "";
+    } else if (skipBlock && (content.length === 0 || content[0] === 0x20 || content[0] === 0x09)) {
       continue;
     } else {
       skipBlock = false;
@@ -61,7 +73,7 @@ const workspacePolicy = bytes => {
     assert.match(fields.minimumReleaseAge, /^\d+$/u, "minimumReleaseAge must be an unsigned integer");
     fields.minimumReleaseAge = Number(fields.minimumReleaseAge);
   }
-  return {...fields, source: retained.join("")};
+  return {...fields, source: Buffer.concat(retained)};
 };
 export function validateRetainedReceiptCompatibility(root, retained, current) {
   assert.equal(retained.inputPolicy, current.inputPolicy, "receipt input policy mismatch");
