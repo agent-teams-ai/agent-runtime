@@ -153,7 +153,7 @@ const fixedIdentity = {
   },
   "workflow": {
     "workflow": ".github/workflows/ci.yml",
-    "sha256": "d94dd969854f3ebcfecbcfbf6f3517f038fa955e7756bb3ce87f153877ec7c03"
+    "sha256": "79a3d062c473cdd4a3188cdc8da27e7de33d6b64e847e885047ba0dbcadfe9f4"
   }
 };
 // The immutable base, not candidate hashes or receipts, owns repository identities.
