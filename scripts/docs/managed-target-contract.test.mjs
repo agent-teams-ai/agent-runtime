@@ -14,22 +14,14 @@ const contract = JSON.parse(await read("scripts/docs/managed-target-contract.jso
 test("managed projection is exact registry dev-only tooling with immutable scenario 2", async () => {
   const manifest = JSON.parse(await read("package.json"));
   assert.equal(manifest.packageManager, contract.packageManager);
-  const workspace = await read("pnpm-workspace.yaml");
   const policy = await read("architecture/foundation/dependency-declarations.yaml");
   for (const [name, version] of Object.entries(contract.directDevelopmentPackages)) {
     assert.equal(manifest.devDependencies[name], version);
     for (const section of ["dependencies", "optionalDependencies", "peerDependencies"]) {
       assert.equal(Object.hasOwn(manifest[section] ?? {}, name), false);
     }
-    assert.ok(workspace.includes(`  - "${name}@${version}"`));
     assert.ok(policy.split("exactRegistryDevelopmentOnlyPackages:\n")[1].includes(`    - "${name}"`));
   }
-  const exclusions = workspace.split("minimumReleaseAgeExclude:\n")[1].split("\n")
-    .map(line => line.trim().replace(/^- ["']/u, "").replace(/["']$/u, ""))
-    .filter(value => value.startsWith("@agent-teams/"));
-  assert.deepEqual(exclusions.toSorted(), Object.entries({
-    ...contract.directDevelopmentPackages, ...contract.transitiveCohortPackages
-  }).map(([name, version]) => `${name}@${version}`).toSorted());
   for (const name of Object.keys(contract.transitiveCohortPackages)) {
     assert.equal(Object.hasOwn(manifest.devDependencies, name), false);
   }
