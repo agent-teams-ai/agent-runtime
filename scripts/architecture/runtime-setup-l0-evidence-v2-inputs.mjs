@@ -88,7 +88,7 @@ const git = (root, ...args) => execFileSync("git", args, {cwd: root, encoding: "
   maxBuffer: 32 * 1024 * 1024,
   env: {...process.env, GIT_NO_LAZY_FETCH: "1", GIT_NO_REPLACE_OBJECTS: "1", GIT_OPTIONAL_LOCKS: "0"}});
 function gitBlobBytes(root, objects) {
-  const input = Buffer.from(objects.map(({object}) => `${object}\n`).join());
+  const input = Buffer.from(objects.map(({object}) => `${object}\n`).join(""));
   const output = execFileSync("git", ["cat-file", "--batch"], {cwd: root, input,
     maxBuffer: 64 * 1024 * 1024, env: {...process.env, GIT_NO_LAZY_FETCH: "1", GIT_NO_REPLACE_OBJECTS: "1", GIT_OPTIONAL_LOCKS: "0"}});
   let offset = 0; const blobs = new Map();
