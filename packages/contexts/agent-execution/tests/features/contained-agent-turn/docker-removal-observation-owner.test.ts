@@ -137,7 +137,9 @@ test("the removal owner retains Engine and containment methods at construction",
   assert.ok(await f.lifecycle.removalObservation.containAndObserve(f.input()));
 });
 
-test("actual container absence cannot hide unsettled owned attach cleanup", async t => {
+test("actual container absence cannot hide unsettled owned attach cleanup", {timeout: 5000}, async t => {
+  // Hold the policy clock steady; real cleanup timers must still expire while the gate stays held.
+  t.mock.timers.enable({apis: ["Date"], now: Date.now()});
   const gate = Promise.withResolvers<void>(); t.after(() => gate.resolve());
   const f = await fixture(t, gate.promise);
   assert.equal(await f.lifecycle.removalObservation.containAndObserve({...f.input(),
