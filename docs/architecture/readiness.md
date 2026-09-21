@@ -526,11 +526,6 @@ Remaining:
   asymmetric partition, dynamic quota/workload policy and long-duration
   backpressure/fairness soak.
 
-The [capacity admission delivery plan](capacity-admission-delivery-plan.md)
-refines this remaining work into staged acceptance. It preserves the current
-contained-turn V1 scope and does not promote Stage K model evidence to
-production allocator qualification.
-
 ## Persistence, contracts, and service extraction
 
 Scoped qualified:

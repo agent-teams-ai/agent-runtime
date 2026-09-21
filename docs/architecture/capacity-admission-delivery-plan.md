@@ -15,10 +15,9 @@ bounded production follow-up. This plan is active planning guidance, not a
 claim that the allocator or its production qualification exists. It does not
 extend the current contained-turn V1 seven-port delivery or block PR #69.
 
-Owner priority recorded on 2026-09-21: earn an early product advantage through
-observable reliability and predictable behavior, even with fewer features.
-Demonstrate guarantees with acceptance tests; documentation alone is not proof
-of superiority over a reference product.
+Apply the organization-owned
+[early product advantage priority](https://github.com/agent-teams-ai/.github/blob/main/docs/engineering-quality-standard.md#early-product-advantage)
+through the capacity acceptance cases below.
 
 Authority remains [ADR-0001](../decisions/0001-runtime-profile-and-activation-boundaries.md).
 [Stage K](../spikes/stage-k-capacity-fairness-results.md) already covers bounded
@@ -60,13 +59,61 @@ and `reconcile_required`. Acknowledging admission does not mean execution began.
 Commands request state changes. Events report committed facts through existing
 outbox/inbox boundaries. A wake-up event is a delivery hint, not queue truth;
 after lost or duplicate notifications, bounded polling recovers durable work.
-Do not require event sourcing, a new broker or a microservice for this slice.
-NATS belongs to the appropriate consumer transport adapter, not the AR domain.
+This is the AR capacity admission store, not the system-wide integration bus.
+Orchestrator already selects NATS JetStream as its production event-bus adapter
+for its event-driven modular monolith. Its owner-local outbox commits with
+domain state; an adapter publishes to JetStream and consumers apply their own
+inbox/idempotency rules. This plan neither replaces that broker with PostgreSQL
+nor places NATS inside AR domain code. See the
+[Orchestrator eventing contract](https://github.com/agent-teams-ai/agent-teams-orchestrator/blob/42337ca2e427e2e3ec3282b02ecbe2b3046cb7a9/docs/architecture/eventing-and-reliability.md).
 
-An external broker or separate allocator is a later deployment choice justified
-by measured load, independent scaling or a separate failure boundary. It must
-preserve the same admission, fairness and reclaim contract. Broker depth limits
-alone do not bound ingress buffers, prevent starvation or make retries safe.
+Delivery and scheduling are separate responsibilities. A broker can durably
+route/redeliver a message; the capacity owner decides whether its intent is
+still authorized, eligible and admitted. Broker ACK does not mean the process
+started or its business effect completed. A redelivery cannot consume a second
+reservation, bypass a cancellation or increase priority.
+
+A separate allocator or broker-fed AR dispatcher is a later deployment choice
+justified by measured load, independent scaling or a separate failure boundary.
+It preserves the same admission, fairness and reclaim contract. Keep a bounded
+claim batch, suitable indexes and explicit storage/connection budgets; measure
+claim latency, lock contention, outbox lag and backlog before choosing extraction
+or partitioning. PostgreSQL is not an unlimited queue, and adding broker depth
+limits does not bound ingress buffers or establish tenant fairness.
+
+## Workload classification acceptance
+
+Keep product importance, scheduling class, resource cost and delivery durability
+separate. Run Orchestration owns the authorized product-to-technical mapping;
+Work Coordination owns Work priority and Agent Attention owns orientation intent.
+The product taxonomy candidate lives in
+[Orchestrator OD-033](https://github.com/agent-teams-ai/agent-teams-orchestrator/blob/53d658426110efafa7580db648c1dc2e63c5ff36/docs/open-decisions/OD-033-ooda-convergence-and-context-activation.md#workload-classification-acceptance).
+This link tracks a proposed decision, not a pinned runtime contract or an
+accepted shared enum. Before production, review the accepted mapping revision
+and update this consumer acceptance with it; do not copy business policy here.
+
+AR validates the requested technical class against authorized caller scope and
+its configured capacity policy. A cron trigger, agent-to-agent message,
+transport subject or UI label cannot grant a class. Control work such as cancel,
+renewal, authority cutoff and reclaim uses separate bounded capacity, not a
+user-selectable business priority.
+
+Exact replay/redelivery of the same accepted command preserves its identity,
+waiting age, class, policy snapshot and existing debit. A product retry or
+reauthorization creates the owner-required successor activation/attempt with a
+new admission identity and fresh classification/capacity/budget checks. Keep only
+explicitly stable business/effect correlation; do not erase the owner's consumed
+retry budget. Legitimate reclassification of queued work is an explicit owner
+command with applicable concurrency and authority checks; redelivery cannot
+mint capacity or reset waiting age.
+Delegation carries accountable correlation without multiplying tenant quota or
+blindly inheriting permissions. AR must qualify rejection of forged escalation,
+correct replay of an accepted policy snapshot, and restart-safe accounting.
+
+Conformance includes a parent awaiting an authorized child, a scheduled deadline
+with explicit expiry behavior, deferrable work under continuous interactive
+load, and saturated cancellation. Assert typed class, policy revision, queue
+reason and actual bounded-service behavior under the fairness assumptions below.
 
 ## Invariants
 
@@ -182,7 +229,7 @@ result delivery and parent continuation remain different owner facts.
 | --- | --- | --- |
 | C0: reconcile and specify | Review current production owners, pinned profiles, reusable persistence primitives and first pool/resource scope; settle policy knobs and grant-opportunity bound | Reviewed delta from Stage K; no duplicate lifecycle, eighth V1 port or empty production scaffold |
 | C1: durable admission | Owner-local port implementation, transaction/accounting, receipts and bounded pending storage | Concurrent limit/byte races, identity conflict/replay, expiry/cancel races, unknown commit and store restart |
-| C2: dispatch and lease | Fair allocator, bounded workers, isolated control budget and production cutoff/reclaim integration | Constant urgent arrivals with background progress, mixed vectors, cross-tenant isolation, concurrent schedulers, restart of fairness state, ambiguous renewal and stale host fencing |
+| C2: dispatch and lease | Fair allocator, bounded workers, isolated control budget and production cutoff/reclaim integration | Constant higher-preference arrivals with lower-preference progress, mixed vectors, cross-tenant isolation, concurrent schedulers, restart of fairness state, ambiguous renewal and stale host fencing |
 | C3: product and qualification | Typed observations, operator recovery and disposable hosted worker integration | Honest waiting/unknown status, stop under saturation/store outage, crash matrix and bounded soak with cleanup |
 
 Keep each coherent slice independently reviewable and reversible. Production
@@ -196,8 +243,8 @@ The conformance matrix must include:
 - replay of a previously accepted command when the queue is now full;
 - replay after expiry, payload pruning and restart, including both sides of
   the receipt GC boundary; retired identities never allocate again;
-- continuous foreground arrival plus persistent background demand and bounded
-  tenant rotation, with a strict-priority negative fixture that starves;
+- continuous higher-preference arrivals plus persistent lower-preference demand
+  and bounded tenant rotation, with a strict-priority negative fixture that starves;
 - large feasible resource requests amid small ones, impossible vectors,
   quota shrink without preemption, and scheduler lock contention;
 - crash before/after admission commit, grant commit, process start, renewal,
