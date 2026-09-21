@@ -43,6 +43,9 @@ Documents:
 - [Contained Agent Turn V1 delivery plan](contained-agent-turn-v1-delivery-plan.md):
   staged implementation, provider, module, custody, qualification, and hosted
   worker plan for the first contained execution turn.
+- [Capacity admission delivery plan](capacity-admission-delivery-plan.md):
+  follow-up bounded admission, fair scheduling, control-path isolation and
+  recovery acceptance; preserves the current seven-port V1 scope.
 - [Subscription-runtime port candidates](subscription-runtime-port-candidates.md):
   sibling product as a protocol encyclopedia, not a spawn template. Named
   anti-patterns [`SR-AP-1`](subscription-runtime-port-candidates.md#sr-ap-1-provider-owns-the-process)
