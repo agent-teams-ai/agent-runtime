@@ -28,6 +28,7 @@ governedRoots:
 - packages/platform/filesystem-custody/src
 - packages/platform/filesystem-custody/tests
 - scripts/architecture
+- scripts/ci
 - scripts/docs
 - scripts/foundation
 - scripts/native-helper
@@ -2934,4 +2935,19 @@ boundaries:
     - adapter.runtime-security.ordinary
     packages: []
     builtins: []
+    runtimeReferences: []
+- id: tooling.ordinary-postgres-ci
+  dependencyMode: development
+  roots:
+  - scripts/ci
+  entrypoints: []
+  allow:
+    boundaries: []
+    packages: []
+    builtins:
+    - node:assert/strict
+    - node:fs/promises
+    - node:path
+    - node:test
+    - node:url
     runtimeReferences: []

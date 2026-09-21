@@ -4,7 +4,7 @@ import type {
   DockerLogFrame,
   DockerContainerStateFacts,
   DockerEngineIdentity,
-} from "./docker-engine-port.js";
+} from "../../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.js";
 
 export const initialFakeContainerState = (): DockerContainerStateFacts => ({
   dead: false,

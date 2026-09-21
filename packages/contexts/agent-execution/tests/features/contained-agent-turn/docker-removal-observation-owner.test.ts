@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {rm} from "node:fs/promises";
 import {test, type TestContext} from "node:test";
 import {createDockerHostCustodyLifecycle} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-host-custody-lifecycle.js";
-import {FakeDockerEngine} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.js";
+import {FakeDockerEngine} from "./support/docker-engine/fake-docker-engine.ts";
 import type {DockerContainerObservation} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.js";
 import {MemoryStorage, disposable, policy, createInput, engineCall, owner, digest} from "./support/docker-host-custody-lifecycle-fixture.ts";
 import {installSyntheticInit} from "./support/docker-claim-init-fixture.ts";
@@ -137,7 +137,9 @@ test("the removal owner retains Engine and containment methods at construction",
   assert.ok(await f.lifecycle.removalObservation.containAndObserve(f.input()));
 });
 
-test("actual container absence cannot hide unsettled owned attach cleanup", async t => {
+test("actual container absence cannot hide unsettled owned attach cleanup", {timeout: 5000}, async t => {
+  // Hold the policy clock steady; real cleanup timers must still expire while the gate stays held.
+  t.mock.timers.enable({apis: ["Date"], now: Date.now()});
   const gate = Promise.withResolvers<void>(); t.after(() => gate.resolve());
   const f = await fixture(t, gate.promise);
   assert.equal(await f.lifecycle.removalObservation.containAndObserve({...f.input(),

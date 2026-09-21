@@ -5,10 +5,10 @@ import { Socket } from "node:net";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import {FakeDockerEngine} from "./support/docker-engine/fake-docker-engine.ts";
 import {
   DOCKER_LOG_MAX_STREAM_BYTES,
   DockerEngineError,
-  FakeDockerEngine,
   parseDockerMultiplexedStream,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.js";
 import { BoundedUnixHttpClient } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/bounded-unix-http.js";

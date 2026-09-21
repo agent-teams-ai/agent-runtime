@@ -212,7 +212,7 @@ export {
   CGROUP2_SUPER_MAGIC, DOCKER_CUSTODY_BOOTSTRAP_PATH, DOCKER_CUSTODY_INIT_ARGUMENTS,
   DOCKER_CUSTODY_INIT_PROTOCOL, DOCKER_CUSTODY_NODE_PATH, DockerCustodyFrameDecoder,
   DockerCustodyJournal, DockerCustodyJournalConflictError, DockerEngineError,
-  DockerHostCustodyLifecycle, DockerHttpNetworkResources, DockerOperationNetwork, FakeDockerEngine,
+  DockerHostCustodyLifecycle, DockerHttpNetworkResources, DockerOperationNetwork,
   HostHttpEgressV4Journal, HostHttpEgressV4NodeStorage, NodeDockerCustodyJournalStorage,
   NodeUnixSocketDockerEngine, PROC_SUPER_MAGIC, assertNetworkContainer, assertNetworkEngine,
   composeLinuxDockerResidueCustody, createDockerImageInitOwner, createSpecificationSha256,

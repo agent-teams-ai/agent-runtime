@@ -4,9 +4,9 @@ import { mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import {FakeDockerEngine} from "./support/docker-engine/fake-docker-engine.ts";
 import {
   DockerEngineError,
-  FakeDockerEngine,
   NodeUnixSocketDockerEngine,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.js";
 import { snapshotDockerEngineCall } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-boundary-snapshot.js";

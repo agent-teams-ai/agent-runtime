@@ -6,7 +6,7 @@ import {
   createDockerHostCustodyLifecycle,
   type DockerHostCustodyContainerCreate,
 } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-host-custody-lifecycle.js";
-import { FakeDockerEngine } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/index.js";
+import {FakeDockerEngine} from "./support/docker-engine/fake-docker-engine.ts";
 import {
   bindDockerCustodyAttemptKey,
   DOCKER_CUSTODY_STATES,

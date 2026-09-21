@@ -29,7 +29,7 @@ export {parseDockerImageReference} from "./engine/docker-engine-composition.js";
 
 export {
   NodeUnixSocketDockerEngine, snapshotDockerImageInitLock, snapshotDockerEnginePolicy,
-  DockerEngineError, DockerOperationNetwork, FakeDockerEngine, assertNetworkContainer,
+  DockerEngineError, DockerOperationNetwork, assertNetworkContainer,
   assertNetworkEngine, createSpecificationSha256, decodeEngineIdentity, decodeInspection,
   decodeOperationNetwork, encodeCreateRequest, networkBinding, networkDigest,
   operationNetworkLabels, operationNetworkName,

@@ -1,4 +1,4 @@
-import {type FakeDockerEngine,type DockerCustodyInitHostOptions,DOCKER_CUSTODY_INIT_PROTOCOL,DockerCustodyFrameDecoder,encodeDockerCustodyFrame,
+import {type DockerEnginePort,type DockerCustodyInitHostOptions,DOCKER_CUSTODY_INIT_PROTOCOL,DockerCustodyFrameDecoder,encodeDockerCustodyFrame,
   type DockerCustodyProtocolMessage} from "@agent-teams/agent-execution/composition";
 import {digest} from "./docker-host-custody-lifecycle-fixture.ts";
 
@@ -14,7 +14,7 @@ export const initOptions = (): Omit<DockerCustodyInitHostOptions, "channel"> => 
 });
 
 /** Fake Docker still owns create/attach/start identity; this in-memory channel supplies only synthetic init frames. */
-export const installSyntheticInit = (engine: FakeDockerEngine, events: string[] = [], acknowledge = true) => {
+export const installSyntheticInit = (engine: DockerEnginePort, events: string[] = [], acknowledge = true) => {
   const attach = engine.attachCustody.bind(engine);
   let pending: ((value: IteratorResult<Uint8Array>) => void) | undefined;
   const values: Uint8Array[] = []; let closed = false; let attaches = 0; let closes = 0;

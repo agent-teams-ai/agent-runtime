@@ -4,7 +4,9 @@
     "allowImportingTsExtensions": true,
     "erasableSyntaxOnly": true,
     "forceConsistentCasingInFileNames": true,
-    "lib": ["ES2024"],
+    "lib": [
+      "ES2024"
+    ],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "noEmit": true,
@@ -14,7 +16,9 @@
     "skipLibCheck": false,
     "strict": true,
     "target": "ES2024",
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "verbatimModuleSyntax": true
   },
   "include": [
@@ -24,7 +28,8 @@
     "packages/contexts/agent-execution/tests/features/contained-agent-turn/native-plan-provenance-types.ts",
     "packages/contexts/agent-execution/tests/features/contained-agent-turn/contained-turn-operation-validation.type-fixture.ts",
     "packages/contexts/agent-execution/tests/features/contained-agent-turn/claude-sdk-spawned-process-contract.ts",
-    "packages/contexts/agent-execution/tests/features/contained-agent-turn/darwin-cooperative-process-custody-test-support.ts"
+    "packages/contexts/agent-execution/tests/features/contained-agent-turn/darwin-cooperative-process-custody-test-support.ts",
+    "packages/contexts/agent-execution/tests/features/contained-agent-turn/support/docker-engine/**/*.ts"
   ],
   "exclude": [
     "experiments/runtime-profile-behavior/src/features/evidence/generate-runtime-operation-oracle.ts",

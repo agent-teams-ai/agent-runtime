@@ -149,7 +149,7 @@ const rules = diagnostics => diagnostics.map(diagnostic => diagnostic.ruleId);
 test("the named negative suite runs exactly once through every Foundation gate", () => {
   assert.equal(
     manifest.scripts["foundation:boundaries:negative"],
-    "node --test scripts/architecture/source-dependency-adapter-boundaries.test.mjs scripts/docs/runtime-builtin-permissions.test.mjs",
+    "node --test scripts/architecture/source-dependency-adapter-boundaries.test.mjs scripts/docs/runtime-builtin-permissions.test.mjs scripts/ci/run-ordinary-postgres.test.mjs",
   );
   assert.equal(
     manifest.scripts["foundation:check"].split("pnpm foundation:boundaries:negative").length - 1,
@@ -681,4 +681,16 @@ test("source v3 rejects includeRootPackage as an unknown public field", async ()
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+
+test("production Docker implementation cannot import its development-only fake", async () => {
+  const fake = "packages/contexts/agent-execution/tests/features/contained-agent-turn/support/docker-engine/fake-docker-engine.ts";
+  const relative = "../../../../../../../../tests/features/contained-agent-turn/support/docker-engine/fake-docker-engine.ts";
+  const diagnostics = await analyzeFixture({
+    [paths.dockerNode]: `import {FakeDockerEngine} from '${relative}';\nvoid FakeDockerEngine;\n`,
+    [fake]: "export class FakeDockerEngine {}\n",
+  });
+  assert.ok(rules(diagnostics).includes("architecture.source-dependencies.forbidden-boundary-dependency"),
+    JSON.stringify(diagnostics));
 });

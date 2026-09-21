@@ -1,10 +1,10 @@
-import { DockerEngineError } from "./docker-engine-error.js";
+import { DockerEngineError } from "../../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-error.js";
 import type {
   DockerContainerAuthority,
   DockerContainerStateFacts,
   DockerCustodyDuplexChannel,
   DockerEngineCall,
-} from "./docker-engine-port.js";
+} from "../../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.js";
 
 interface FakeAttachInput {
   readonly authority: DockerContainerAuthority;

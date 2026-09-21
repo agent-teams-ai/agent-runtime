@@ -204,6 +204,14 @@ jobs:
           RS_POSTGRES_DISPOSABLE_URL: postgresql://postgres:postgres@127.0.0.1:5434/ar69_rs_test_ci
         run: pnpm --filter @agent-teams/runtime-security test:postgres
 
+      - name: Run disposable ordinary PostgreSQL gate
+        shell: bash
+        env:
+          POSTGRES_SERVICE: ${{ job.services.postgres.id }}
+        run: |
+          export POSTGRES_TEST_IMAGE="$(docker inspect --format '{{.Config.Image}}' "$POSTGRES_SERVICE")"
+          bash scripts/ci/ordinary-postgres-disposable.sh
+
   runtime-macos:
     name: runtime-macos
     runs-on: macos-15

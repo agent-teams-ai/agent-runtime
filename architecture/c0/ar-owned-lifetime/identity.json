@@ -1,7 +1,7 @@
 {
   "contractRevision": "ar-c0-c0dc683e-r3",
   "artifact": "architecture/c0/ar-owned-lifetime/contract.json",
-  "sha256": "88d8e4fd8995126a6dbf570ca957663fb999c0af52e9631ff4f07356d3776a80",
+  "sha256": "4c88c378c6d54303fd4910f521480e6fe120743dfcdc618007efb1395a684c05",
   "sourceCommit": "c0dc683ecb14760c75a69283ad7ec312f6246a63",
   "planSha256": "e025978dcf3cfac12b7795fa3aafc96f06838620e124df4cc091ebee45352864",
   "encoding": "Exact UTF-8 LF bytes with final newline; no self digest; no JSON canonicalization library.",

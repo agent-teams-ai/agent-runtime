@@ -1,15 +1,15 @@
-import type {FakeContainer, FakeLogPlan} from "./fake-docker-engine-state.js";
+import type {FakeContainer, FakeLogPlan} from "./fake-docker-engine-state.ts";
 import { createHash } from "node:crypto";
 
-import { validateAuthorityShape } from "./docker-engine-codec.js";
-import { canonicalizeCreateMounts, containerName, encodeCreateRequest } from "./docker-create-request.js";
-import { createSpecificationSha256 } from "./docker-create-specification.js";
-import { snapshotDockerContainerCreate, snapshotDockerEngineCall, snapshotDockerEnginePolicy } from "./docker-boundary-snapshot.js";
-import { DockerEngineError } from "./docker-engine-error.js";
-import { isTerminalObservation, mutationPostconditionSatisfied } from "./docker-engine-semantics.js";
-import { FakeDockerAttachCustody } from "./fake-docker-attach-custody.js";
+import { validateAuthorityShape } from "../../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-codec.js";
+import { canonicalizeCreateMounts, containerName, encodeCreateRequest } from "../../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-create-request.js";
+import { createSpecificationSha256 } from "../../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-create-specification.js";
+import { snapshotDockerContainerCreate, snapshotDockerEngineCall, snapshotDockerEnginePolicy } from "../../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-boundary-snapshot.js";
+import { DockerEngineError } from "../../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-error.js";
+import { isTerminalObservation, mutationPostconditionSatisfied } from "../../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-semantics.js";
+import { FakeDockerAttachCustody } from "./fake-docker-attach-custody.ts";
 import { authorityBelongsToFakeEngine, exitedFakeContainerState, initialFakeContainerState, sameFakeAuthority,
-  sameFakeEngine, startedFakeContainerState } from "./fake-docker-engine-state.js";
+  sameFakeEngine, startedFakeContainerState } from "./fake-docker-engine-state.ts";
 import type {
   DockerContainerAuthority,
   DockerContainerCreate,
@@ -20,8 +20,8 @@ import type {
   DockerEnginePolicy,
   DockerEnginePort,
   DockerLogFrame,
-} from "./docker-engine-port.js";
-import { DOCKER_LOG_MAX_FRAME_BYTES, DOCKER_LOG_MAX_FRAMES, DOCKER_LOG_MAX_STREAM_BYTES } from "./docker-engine-port.js";
+} from "../../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.js";
+import { DOCKER_LOG_MAX_FRAME_BYTES, DOCKER_LOG_MAX_FRAMES, DOCKER_LOG_MAX_STREAM_BYTES } from "../../../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-engine-port.js";
 
 export type FakeCreateOutcome = "acknowledged" | "daemon-disconnect" | "lost-acknowledgement" | "malformed-response";
 export type FakeDockerOperation = "attach" | "create" | "inspect" | "kill" | "logs" | "remove" | "start" | "stop" | "wait";
