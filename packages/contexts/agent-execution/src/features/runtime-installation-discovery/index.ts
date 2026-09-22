@@ -13,6 +13,7 @@ export type {
   DiscoverCodexInstallationsResult,
   InstallationCandidate,
   InstallationCandidateSource,
+  InstallationAliasObservation,
   RuntimeInstallationDiagnostic,
   RuntimeInstallationObservation,
 } from "./contracts/runtime-installation-observation.js";

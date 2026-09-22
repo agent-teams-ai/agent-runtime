@@ -7,6 +7,7 @@ export type {
   ClaudeCodeSetupDiagnosticCode,
   ClaudeCodeSetupExpectedLimitations,
   ClaudeCodeSetupInstallationView,
+  ClaudeCodeSetupOutcomeBase,
   ClaudeCodeSetupSourceObservationView,
   CodexRuntimeSetupQueries,
   CodexSetupDiagnostic,

@@ -6,6 +6,7 @@ export {
   type OpenedStablePath,
   type PathCustodyBoundary,
   type PathLineage,
+  type StableCustodyPlatform,
   type StablePathComponentIdentity,
 } from "./features/stable-filesystem-custody/internal.js";
 export {

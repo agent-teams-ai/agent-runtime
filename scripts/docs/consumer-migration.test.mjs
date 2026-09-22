@@ -32,7 +32,7 @@ test("projected direct tooling pins and disabled release-age waiting preserve th
   const manifest = await json("package.json"), workspace = await yaml("pnpm-workspace.yaml");
   assert.equal(manifest.packageManager, "pnpm@11.18.0");
   assert.deepEqual(manifest.engines, { node: ">=24.18.0 <25", pnpm: "11.18.0" });
-  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.3.3");
+  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.5.1");
   assert.equal(manifest.devDependencies["@agent-teams/docs-protocol"], "0.6.0");
   assert.equal(manifest.devDependencies["@agent-teams/docs-protocol-agent-teams"], "0.2.8");
   for (const section of ["dependencies", "optionalDependencies", "peerDependencies"]) {
@@ -46,7 +46,7 @@ test("projected direct tooling pins and disabled release-age waiting preserve th
   assert.equal(workspace.minimumReleaseAge, 0);
   assert.equal(Object.hasOwn(workspace, "minimumReleaseAgeStrict"), false);
   assert.equal(Object.hasOwn(workspace, "minimumReleaseAgeExclude"), false);
-  assert.match(await read("scripts/architecture/feature-module-config.mjs"), /const FOUNDATION_VERSION = "1\.3\.3";/u);
+  assert.match(await read("scripts/architecture/feature-module-config.mjs"), /const FOUNDATION_VERSION = "1\.5\.1";/u);
 });
 
 test("managed Skill remains byte-exact with the selected installed Cohort", async () => {

@@ -26,6 +26,13 @@ changedChecks:
     extensions: [.rs, .toml, .lock]
     passPaths: false
 fullScanPaths:
+  - architecture/sdk-growth
+  - architecture/get-modular
+  - architecture/consumer-module-standard
+  - scripts/architecture/check-sdk-growth-profile.mjs
+  - scripts/architecture/check-sdk-growth-profile.test.mjs
+  - scripts/architecture/qualify-sdk-packages.mjs
+  - scripts/architecture/qualify-sdk-packages.test.mjs
   - .oxlintrc.json
   - .github/workflows
   - architecture/foundation

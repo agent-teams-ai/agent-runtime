@@ -586,3 +586,67 @@ was compared with the accepted pin. The canonical
 `docs/architecture/common-assembly.md` bytes are unchanged, so the reviewed
 `669a750d8db451e04f075cdeb36576c6606fba6e` pin and its retained evidence remain
 current; no pin migration is required.
+
+## A3 SDK growth enrollment qualification
+
+The [SDK profile](../../architecture/sdk-growth/profile.yaml) covers all six
+accepted private workspace packages, their twelve typed entrypoints and Embedded
+Runtime's exported test-runner module. The private root is classified separately
+as non-release metadata; it is not a seventh released package. The runner is now
+included in the package file list so its existing export can be imported from a
+packed artifact. No runtime contract, composition node or lifecycle owner changes.
+
+Both active and pending consumer profiles reference the same
+[activation record](../../architecture/sdk-growth/activation.json).
+`pnpm sdk-growth:profile` and `pnpm test:sdk-growth:profile` enforce the frozen
+consumer enrollment in fast/full gates. These checks reject scope and command
+changes but do not perform EF SDK comparison or grant trusted admission.
+SDK authority activation remains pending. The repository dependency and lock now
+use the exact published EF 1.5.1 artifact: tarball SHA-256
+`bd0c476d2940168ac1b020f42726107cce81580b7b1b014e74aceabbafa9e951`, npm
+integrity `sha512-29r5QUvMIFdvsPaJ5m0Yx1Uo6bL85J/teP1p1ThNg7jMEz54cVxyrEnsLx/DN5cc/2CAzq2i8iLnPKgZN1cT8A==`,
+and publication time `2026-09-22T08:23:18.839Z`. Dist metadata, provenance and
+the release tag resolve to the identities in the activation record. The public
+`sdk-growth-authority` export imports from those published bytes, and a frozen
+install succeeds in a fresh disposable project. No local dependency or
+published baseline is introduced.
+
+The [package qualification](../../architecture/sdk-growth/qualification.json)
+records six real packed archives and successful imports of all thirteen public
+subpaths in disposable Linux consumers. Two correct-toolchain pack runs produce
+the same six archive digests. This is not a Host E2E. `pnpm sdk-growth:pack`
+builds and packs the declared package files without executing package lifecycle
+scripts. Packed membership fixtures also reject reordered conditions, missing
+declarations, the omitted runner and source leaks. Foundation changed-file
+routing includes the SDK profiles and gate scripts.
+
+EF 1.5.1 resolves the prior pinned-library `AbortSignal` failure. Two rich
+API Extractor 7.58.12 / TypeScript 5.9.3 passes produce byte-identical models for
+all twelve typed entrypoints and report no error kind except
+`ae-forgotten-export`. Strict extraction passes every package-root entrypoint and
+both Filesystem Custody entrypoints, confirming the staged public-type fixes.
+The other five composition entrypoints still report 446 enforced
+`ae-forgotten-export` diagnostics: 31 Embedded Runtime, 311 Agent Execution, 37
+Provider Access, 13 Runtime Configuration and 54 Runtime Security. Those
+composition facades expose private implementation types. Publishing hundreds of
+those types or suppressing the extractor rule would exceed A3. Typed growth
+snapshots and SDK admission therefore remain fail closed. The external authority
+is uninvoked, and no baseline, trusted history, owner decision, grant, completion
+or receipt is fabricated for these initial-unreleased packages.
+
+The [A3 standard review](../../architecture/get-modular/evidence/sdk-growth-standard-review.json)
+compares the active `669a750d` pin against the supplied complete current document
+with SHA-256 `ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d`.
+The supplied bytes change executable-example paths and omit nine ownership and
+readiness guidance lines present in the accepted pin. They are not the
+reciprocal-ledger-only delta described by historical C0 evidence. A3 adds no
+shared composition behavior or new CMS requirement; the accepted pin and its
+stricter ownership guidance remain intact. The supplied snapshot carries no new
+exact upstream commit identity, so it cannot silently replace that pin.
+
+Initial-unreleased histories, exact initial surface decisions, packed custody,
+and external trusted enrollment must be qualified before SDK activation. A
+candidate-controlled workflow or passing profile fixture is not this authority.
+Linux portable checks do not establish Darwin qualification; existing paired
+Host evidence and its outstanding work remain separate. K1/A1/A2 and dynamic
+plugins are outside this delivery.

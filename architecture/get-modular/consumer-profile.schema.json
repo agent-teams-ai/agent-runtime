@@ -14,9 +14,11 @@
     "compositions",
     "exceptions",
     "packages",
-    "enforcement"
+    "enforcement",
+    "sdkGrowth"
   ],
   "properties": {
+    "sdkGrowth": {"type": "object", "additionalProperties": false, "required": ["profile", "activation", "status", "compositionChange"], "properties": {"profile": {"const": "architecture/sdk-growth/profile.yaml"}, "activation": {"const": "architecture/sdk-growth/activation.json"}, "status": {"const": "pending-authority-qualification"}, "compositionChange": {"const": false}}},
     "$schema": {"type": "string", "minLength": 1},
     "schemaVersion": {"const": 1},
     "status": {"enum": ["pending", "active"]},

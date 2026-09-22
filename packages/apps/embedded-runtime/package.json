@@ -26,7 +26,8 @@
     "@get-modular/core": "catalog:"
   },
   "files": [
-    "dist"
+    "dist",
+    "scripts/run-package-tests.mjs"
   ],
   "exports": {
     ".": {

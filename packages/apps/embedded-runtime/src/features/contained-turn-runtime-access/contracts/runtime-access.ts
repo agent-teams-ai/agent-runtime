@@ -164,7 +164,7 @@ export interface ClaudeCodeSetupExpectedLimitations {
   readonly sessionOverrides: "unobserved";
 }
 
-interface ClaudeCodeSetupOutcomeBase {
+export interface ClaudeCodeSetupOutcomeBase {
   readonly diagnostics: readonly ClaudeCodeSetupDiagnostic[];
   readonly expectedLimitations: ClaudeCodeSetupExpectedLimitations;
 }

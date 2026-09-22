@@ -4,6 +4,7 @@ export type {
   DiscoverCodexInstallationsResult,
   InstallationCandidate,
   InstallationCandidateSource,
+  InstallationAliasObservation,
   RuntimeInstallationDiagnostic,
   RuntimeInstallationObservation,
 } from "./features/runtime-installation-discovery/index.js";

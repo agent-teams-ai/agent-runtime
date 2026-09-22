@@ -13,6 +13,7 @@ export type {
   ClaudeCodePortableIntentView,
   ClaudeCodeSetupSourceObservationView,
   ClaudeCodeSetupExpectedLimitations,
+  ClaudeCodeSetupOutcomeBase,
   InspectClaudeCodeRuntimeSetupOutcome,
   ClaudeCodeRuntimeSetupQueries,
   ClaudeCodeRuntimeAccessHandle,

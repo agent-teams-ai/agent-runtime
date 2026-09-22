@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "sourceCheckpoint": "5a9eb460400f968a7683c75f5f43a8329cad1196",
+  "scope": "A3 exact published EF 1.5.1 qualification; production behavior unchanged",
+  "platform": "linux",
+  "node": "v24.18.0",
+  "pnpm": "11.18.0",
+  "qualification": "package-membership-and-public-imports",
+  "releaseEligible": false,
+  "efCandidateSha256": "bd0c476d2940168ac1b020f42726107cce81580b7b1b014e74aceabbafa9e951",
+  "packagesDeterministic": true,
+  "packages": [
+    {"packageName": "@agent-teams/embedded-runtime", "archiveSha256": "bbfcbe3c7228fa4929adbf93d69f8d723fdb599af9cce3ccd4894f46582ce1c3", "members": 356},
+    {"packageName": "@agent-teams/agent-execution", "archiveSha256": "bf0aa8b54d0e6b66865760e8c29393f28547121d58bf02b1ae0740b814acc3cb", "members": 1241},
+    {"packageName": "@agent-teams/provider-access", "archiveSha256": "cf5272f664dcb1f74e900f7c616e61ad1364ccd86f801c4e43a5d26944a524ef", "members": 241},
+    {"packageName": "@agent-teams/runtime-configuration", "archiveSha256": "0ffe3396b1081dbb9723f1e9eb0af9a5316007b11300fa1b47d2f13344866812", "members": 112},
+    {"packageName": "@agent-teams/runtime-security", "archiveSha256": "bd9849d75aceecefbca5219b9e4866c7072d7357373aa110017e65b7b5eb2617", "members": 352},
+    {"packageName": "@agent-teams/filesystem-custody", "archiveSha256": "b0a569272d49e1b89372c0700b2978ecb3d9849054595b71bc3465269dfaa4bb", "members": 35}
+  ],
+  "publicImports": [
+    "@agent-teams/embedded-runtime",
+    "@agent-teams/embedded-runtime/composition",
+    "@agent-teams/embedded-runtime/scripts/run-package-tests.mjs",
+    "@agent-teams/agent-execution",
+    "@agent-teams/agent-execution/composition",
+    "@agent-teams/provider-access",
+    "@agent-teams/provider-access/composition",
+    "@agent-teams/runtime-configuration",
+    "@agent-teams/runtime-configuration/composition",
+    "@agent-teams/runtime-security",
+    "@agent-teams/runtime-security/composition",
+    "@agent-teams/filesystem-custody",
+    "@agent-teams/filesystem-custody/composition"
+  ],
+  "candidateQualification": {
+    "status": "qualified-rich-observation-strict-extraction-blocked",
+    "version": "1.5.1",
+    "toolArtifactDigest": "sha256:ded82ff837f775ad604e5656bb031d9b72978c246a1a53c2ef1adfdbbae884f9",
+    "candidateSourceCommit": "9424c8c1bd84c6477de92e6c6e82a8acb273d59d",
+    "candidateSourceTree": "83dbc74c2b54000f5c350c27a257fa5943ae8369",
+    "topologyDigest": "sha256:97ee11b656246d91b8a2cf3727e7a64e0a7b8635e793344e9dc50e111da803c9",
+    "lockDigest": "sha256:c337ffa17e213fcc2829b3cbcf7e651065cffa350cfbf87907cd1fee20ce0243",
+    "toolchainDigest": "sha256:65efab52fcd5413eedfe8c954abe4fb26c99c536e32eedf8dd0ded65848eac04",
+    "artifactDigests": ["sha256:d1fb93edff7c821cded647896b781a2bce16ec58fe4436c8e473ffb732ea6aa9"],
+    "observedPackages": [
+      "@agent-teams/agent-execution",
+      "@agent-teams/embedded-runtime",
+      "@agent-teams/filesystem-custody",
+      "@agent-teams/provider-access",
+      "@agent-teams/runtime-configuration",
+      "@agent-teams/runtime-security",
+      "@vioxen/agent-runtime"
+    ],
+    "observedEntries": 117,
+    "surfaceDigest": "sha256:db058478c6ac6d46b67f98158bdab2be7807767d4ee5976ab78d38ffa26d041e",
+    "verdict": "incomplete",
+    "releaseEligible": false,
+    "authorityStatus": "not-invoked-strict-extraction-blocked",
+    "problemCode": "SDK_GROWTH_EVIDENCE_INCOMPLETE",
+    "richEntrypointAuditArtifactSha256": "5d33a306870b7df7cd009f72991b001d7f3ce00b45497e9ccf339d5a28f20030",
+    "richEntrypointAuditExtractorVersion": "7.58.12",
+    "richEntrypointAuditTypeScriptVersion": "5.9.3",
+    "richModelsDeterministic": true,
+    "richOnlyForgottenExportErrors": true,
+    "typedObservationFailures": [
+      {
+        "packages": [
+          "@agent-teams/embedded-runtime",
+          "@agent-teams/agent-execution",
+          "@agent-teams/provider-access",
+          "@agent-teams/runtime-configuration",
+          "@agent-teams/runtime-security"
+        ],
+        "reason": "PUBLIC_API_EXTRACTION_FAILED: ae-forgotten-export"
+      }
+    ],
+    "entrypointAudits": [
+      {"packageName": "@agent-teams/embedded-runtime", "exportPath": ".", "strictErrors": 0, "richErrors": 0, "modelSha256": "05439f030337724871904cb34cedb6e6b1b948b170296c31cd4aeca86a78aee6"},
+      {"packageName": "@agent-teams/embedded-runtime", "exportPath": "./composition", "strictErrors": 31, "richErrors": 93, "modelSha256": "d22a083788f89ba3767e67eaeaab76205aa08c325b2649aa4f95b3017bd73d11"},
+      {"packageName": "@agent-teams/agent-execution", "exportPath": ".", "strictErrors": 0, "richErrors": 0, "modelSha256": "c4d9c6a597ba066f62f8dada8d3469903a29cd8a4a63c8720e7fe2d3ead4626a"},
+      {"packageName": "@agent-teams/agent-execution", "exportPath": "./composition", "strictErrors": 311, "richErrors": 686, "modelSha256": "2015dd89a25ef7040cd61097c853023bdf5861e891e37505204c6785a65cdcdb"},
+      {"packageName": "@agent-teams/provider-access", "exportPath": ".", "strictErrors": 0, "richErrors": 0, "modelSha256": "ca899696de86791a8fd525115a8c68bb00381085e3a3f2b19429bcf659ef63c3"},
+      {"packageName": "@agent-teams/provider-access", "exportPath": "./composition", "strictErrors": 37, "richErrors": 92, "modelSha256": "52d2d9d684d06111cf5f4325dd9b9163ed823ad2f47fe83e73da08a383b6c458"},
+      {"packageName": "@agent-teams/runtime-configuration", "exportPath": ".", "strictErrors": 0, "richErrors": 0, "modelSha256": "15aaa6c7881d247a00702c589de5eb31cde9bf013cb62ff170a12b9373eaeaeb"},
+      {"packageName": "@agent-teams/runtime-configuration", "exportPath": "./composition", "strictErrors": 13, "richErrors": 52, "modelSha256": "101d6d04ae64bfdeb0fada6f00a85ff2e9c388c392176cdd802a9610256d51a4"},
+      {"packageName": "@agent-teams/runtime-security", "exportPath": ".", "strictErrors": 0, "richErrors": 0, "modelSha256": "6c8b20ff3e7777a0e442e4ab9ccdf3e3cd3bf2d7ce246835cae2898d4b10df11"},
+      {"packageName": "@agent-teams/runtime-security", "exportPath": "./composition", "strictErrors": 54, "richErrors": 94, "modelSha256": "4b0ca6ca5918cf4a8db3a38f0fccd8e7e2a4efc4c4dab79e76dee9317bbd438d"},
+      {"packageName": "@agent-teams/filesystem-custody", "exportPath": ".", "strictErrors": 0, "richErrors": 0, "modelSha256": "99ceca394f3d322671722e56b7912a9888836b2a29717f5092306aa7704c5318"},
+      {"packageName": "@agent-teams/filesystem-custody", "exportPath": "./composition", "strictErrors": 0, "richErrors": 0, "modelSha256": "4c4b141545cb7b08d4ab9faed4705b477ff097f47362752e9589f8c16277ffdf"}
+    ]
+  },
+  "limits": [
+    "The exact EF 1.5.1 npm tarball, dist metadata, SHA-256 and SHA-512 identities match; its public sdk-growth-authority export imports from the published bytes.",
+    "A frozen install succeeds in a fresh disposable project with the exact 1.5.1 lock entry. No provider, agent, auth flow, Host or user project is invoked.",
+    "All six AR archives pack deterministically and all thirteen declared public imports execute in fresh disposable consumers.",
+    "Two rich API Extractor passes produce byte-identical models for all twelve typed entrypoints. The rich lane reports only ae-forgotten-export diagnostics; the prior AbortSignal internal failure is resolved.",
+    "Strict extraction passes every package-root entrypoint and both Filesystem Custody entrypoints. Five composition entrypoints retain 446 enforced ae-forgotten-export diagnostics, so typed growth snapshots and SDK admission remain fail closed.",
+    "The external authority is not asked to grant incomplete strict evidence. No baseline, trusted history, owner decision, grant, completion or receipt is fabricated."
+  ],
+  "registryQualification": {
+    "packageName": "@agent-teams/engineering-foundation",
+    "version": "1.5.1",
+    "tarballUrl": "https://registry.npmjs.org/@agent-teams/engineering-foundation/-/engineering-foundation-1.5.1.tgz",
+    "publishedAt": "2026-09-22T08:23:18.839Z",
+    "tarballSha256": "bd0c476d2940168ac1b020f42726107cce81580b7b1b014e74aceabbafa9e951",
+    "npmIntegrity": "sha512-29r5QUvMIFdvsPaJ5m0Yx1Uo6bL85J/teP1p1ThNg7jMEz54cVxyrEnsLx/DN5cc/2CAzq2i8iLnPKgZN1cT8A==",
+    "sourceMergeCommit": "9ce89f804bf237bcf7f9a6694e05616a5a60ce02",
+    "sourceReleaseCommit": "6dff1055579605a539cf686163acf25f46768fb9",
+    "distMetadataMatched": true,
+    "publicAuthorityImport": "passed",
+    "networkRegistryInstall": "passed-fresh-sandbox",
+    "retainedRegistryArtifactInstall": "passed"
+  }
+}

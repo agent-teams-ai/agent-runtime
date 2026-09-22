@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "status": "pending-authority-qualification",
+  "base": "5a9eb460400f968a7683c75f5f43a8329cad1196",
+  "contractRevision": "ar-c0-c0dc683e-r3",
+  "profile": "architecture/sdk-growth/profile.yaml",
+  "qualificationInput": {
+    "packageName": "@agent-teams/engineering-foundation",
+    "version": "1.5.1",
+    "npmIntegrity": "sha512-29r5QUvMIFdvsPaJ5m0Yx1Uo6bL85J/teP1p1ThNg7jMEz54cVxyrEnsLx/DN5cc/2CAzq2i8iLnPKgZN1cT8A==",
+    "archiveSha256": "bd0c476d2940168ac1b020f42726107cce81580b7b1b014e74aceabbafa9e951",
+    "tarballUrl": "https://registry.npmjs.org/@agent-teams/engineering-foundation/-/engineering-foundation-1.5.1.tgz",
+    "publishedAt": "2026-09-22T08:23:18.839Z",
+    "sourceMergeCommit": "9ce89f804bf237bcf7f9a6694e05616a5a60ce02",
+    "sourceReleaseCommit": "6dff1055579605a539cf686163acf25f46768fb9",
+    "use": "exact npm registry artifact; disposable qualification only"
+  },
+  "metadataRoots": [
+    {
+      "packageName": "@vioxen/agent-runtime",
+      "rootPath": ".",
+      "manifestPath": "package.json",
+      "classification": "private-tooling-root-no-supported-sdk",
+      "releaseObligation": false
+    }
+  ],
+  "registry": {
+    "status": "published-exact",
+    "packageName": "@agent-teams/engineering-foundation",
+    "version": "1.5.1",
+    "tarballSha256": "bd0c476d2940168ac1b020f42726107cce81580b7b1b014e74aceabbafa9e951",
+    "integrity": "sha512-29r5QUvMIFdvsPaJ5m0Yx1Uo6bL85J/teP1p1ThNg7jMEz54cVxyrEnsLx/DN5cc/2CAzq2i8iLnPKgZN1cT8A==",
+    "tarballUrl": "https://registry.npmjs.org/@agent-teams/engineering-foundation/-/engineering-foundation-1.5.1.tgz",
+    "publishedAt": "2026-09-22T08:23:18.839Z",
+    "distMetadataRetained": true,
+    "publicAuthorityImport": "passed"
+  },
+  "authority": {
+    "protocol": "reviewrouter:sdk-growth-authority:3",
+    "entrypoint": "@agent-teams/engineering-foundation/sdk-growth-authority",
+    "status": "not-invoked-strict-extraction-blocked",
+    "candidateWorkflowIsAuthority": false
+  },
+  "pending": [
+    "Resolve 446 enforced ae-forgotten-export diagnostics on five composition entrypoints without changing the accepted A3 scope or publishing private implementation types by default.",
+    "After strict extraction passes, generate trusted histories, owner decisions, grant, completion, receipt and admitted report through the external authority.",
+    "Activate SDK admission only after every required authority phase and rejecting mutation passes."
+  ],
+  "excludedLanes": [
+    "K1",
+    "A1",
+    "A2",
+    "dynamic-plugins"
+  ],
+  "packageQualification": {
+    "status": "passed-membership-and-imports",
+    "evidencePath": "architecture/sdk-growth/qualification.json",
+    "cleanRegistryInstall": true
+  },
+  "sdkAdmission": {
+    "status": "blocked-forgotten-exports",
+    "releaseEligible": false
+  }
+}

@@ -6142,5 +6142,11 @@
       "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization",
       "packages/platform/filesystem-custody/src/features/stable-filesystem-custody"
     ]
+  },
+  "sdkGrowth": {
+    "profile": "architecture/sdk-growth/profile.yaml",
+    "activation": "architecture/sdk-growth/activation.json",
+    "status": "pending-authority-qualification",
+    "compositionChange": false
   }
 }

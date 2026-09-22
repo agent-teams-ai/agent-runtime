@@ -15,6 +15,12 @@ const declarationPath = "packages/contexts/agent-execution/src/features/containe
 const factoryPath = "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/feature-module-factory.ts";
 
 export const EXPECTED_PROFILE = Object.freeze({
+  sdkGrowth: {
+    profile: "architecture/sdk-growth/profile.yaml",
+    activation: "architecture/sdk-growth/activation.json",
+    status: "pending-authority-qualification",
+    compositionChange: false,
+  },
   schemaVersion: 1,
   status: "pending",
   authority: {

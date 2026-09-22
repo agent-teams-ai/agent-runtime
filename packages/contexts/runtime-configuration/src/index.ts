@@ -25,6 +25,7 @@ export type {
   ClaudeCodeConfigurationDiagnosticCode,
   ClaudeCodeConfigurationDialect,
   ClaudeCodeConfigurationSource,
+  ClaudeCodeConfigurationSourceEvidence,
   ClaudeCodeConfigurationSourceKind,
   ClaudeCodeConfigurationSourceRole,
   ClaudeCodeCustodyRoot,

@@ -1,0 +1,105 @@
+schemaVersion: 2
+acceptedDecisionBaselinePath: architecture/decisions/accepted-decisions.json
+changesetDirectory: .changeset
+governanceConfigPath: architecture/foundation/governance-architecture-decisions.yaml
+packages:
+  - packageName: "@agent-teams/embedded-runtime"
+    packageRoot: packages/apps/embedded-runtime
+    manifestPath: packages/apps/embedded-runtime/package.json
+    entrypoints:
+      - exportPath: .
+        declarationEntryPoint: packages/apps/embedded-runtime/dist/index.d.ts
+      - exportPath: ./composition
+        declarationEntryPoint: packages/apps/embedded-runtime/dist/composition.d.ts
+    nonTypeExports:
+      - exportPath: ./scripts/run-package-tests.mjs
+        kind: runtime
+    tsconfigPath: packages/apps/embedded-runtime/tsconfig.json
+    releasedBaselinePath: architecture/public-api/embedded-runtime.json
+    approvedBreakingChanges: []
+  - packageName: "@agent-teams/agent-execution"
+    packageRoot: packages/contexts/agent-execution
+    manifestPath: packages/contexts/agent-execution/package.json
+    entrypoints:
+      - exportPath: .
+        declarationEntryPoint: packages/contexts/agent-execution/dist/index.d.ts
+      - exportPath: ./composition
+        declarationEntryPoint: packages/contexts/agent-execution/dist/composition.d.ts
+    nonTypeExports: []
+    tsconfigPath: packages/contexts/agent-execution/tsconfig.json
+    releasedBaselinePath: architecture/public-api/agent-execution.json
+    approvedBreakingChanges: []
+  - packageName: "@agent-teams/provider-access"
+    packageRoot: packages/contexts/provider-access
+    manifestPath: packages/contexts/provider-access/package.json
+    entrypoints:
+      - exportPath: .
+        declarationEntryPoint: packages/contexts/provider-access/dist/index.d.ts
+      - exportPath: ./composition
+        declarationEntryPoint: packages/contexts/provider-access/dist/composition.d.ts
+    nonTypeExports: []
+    tsconfigPath: packages/contexts/provider-access/tsconfig.json
+    releasedBaselinePath: architecture/public-api/provider-access.json
+    approvedBreakingChanges: []
+  - packageName: "@agent-teams/runtime-configuration"
+    packageRoot: packages/contexts/runtime-configuration
+    manifestPath: packages/contexts/runtime-configuration/package.json
+    entrypoints:
+      - exportPath: .
+        declarationEntryPoint: packages/contexts/runtime-configuration/dist/index.d.ts
+      - exportPath: ./composition
+        declarationEntryPoint: packages/contexts/runtime-configuration/dist/composition.d.ts
+    nonTypeExports: []
+    tsconfigPath: packages/contexts/runtime-configuration/tsconfig.json
+    releasedBaselinePath: architecture/public-api/runtime-configuration.json
+    approvedBreakingChanges: []
+  - packageName: "@agent-teams/runtime-security"
+    packageRoot: packages/contexts/runtime-security
+    manifestPath: packages/contexts/runtime-security/package.json
+    entrypoints:
+      - exportPath: .
+        declarationEntryPoint: packages/contexts/runtime-security/dist/index.d.ts
+      - exportPath: ./composition
+        declarationEntryPoint: packages/contexts/runtime-security/dist/composition.d.ts
+    nonTypeExports: []
+    tsconfigPath: packages/contexts/runtime-security/tsconfig.json
+    releasedBaselinePath: architecture/public-api/runtime-security.json
+    approvedBreakingChanges: []
+  - packageName: "@agent-teams/filesystem-custody"
+    packageRoot: packages/platform/filesystem-custody
+    manifestPath: packages/platform/filesystem-custody/package.json
+    entrypoints:
+      - exportPath: .
+        declarationEntryPoint: packages/platform/filesystem-custody/dist/index.d.ts
+      - exportPath: ./composition
+        declarationEntryPoint: packages/platform/filesystem-custody/dist/composition.d.ts
+    nonTypeExports: []
+    tsconfigPath: packages/platform/filesystem-custody/tsconfig.json
+    releasedBaselinePath: architecture/public-api/filesystem-custody.json
+    approvedBreakingChanges: []
+sdkGrowth:
+  contractRevision: foundation:sdk-growth:c0:5
+  policyVersion: foundation:sdk-growth:policy:1
+  comparison:
+    trustedBasePath: architecture/sdk-growth/evidence/trusted-base.json
+    released:
+      - packageName: "@agent-teams/embedded-runtime"
+        kind: initial-unreleased
+        trustedHistoryPath: architecture/sdk-growth/evidence/embedded-runtime-history.json
+      - packageName: "@agent-teams/agent-execution"
+        kind: initial-unreleased
+        trustedHistoryPath: architecture/sdk-growth/evidence/agent-execution-history.json
+      - packageName: "@agent-teams/provider-access"
+        kind: initial-unreleased
+        trustedHistoryPath: architecture/sdk-growth/evidence/provider-access-history.json
+      - packageName: "@agent-teams/runtime-configuration"
+        kind: initial-unreleased
+        trustedHistoryPath: architecture/sdk-growth/evidence/runtime-configuration-history.json
+      - packageName: "@agent-teams/runtime-security"
+        kind: initial-unreleased
+        trustedHistoryPath: architecture/sdk-growth/evidence/runtime-security-history.json
+      - packageName: "@agent-teams/filesystem-custody"
+        kind: initial-unreleased
+        trustedHistoryPath: architecture/sdk-growth/evidence/filesystem-custody-history.json
+  decisionsPath: architecture/sdk-growth/decisions.json
+  reportPath: sdk-growth-report.json

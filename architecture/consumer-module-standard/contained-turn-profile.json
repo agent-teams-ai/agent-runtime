@@ -78,5 +78,11 @@
       "check",
       "check:fast"
     ]
+  },
+  "sdkGrowth": {
+    "profile": "architecture/sdk-growth/profile.yaml",
+    "activation": "architecture/sdk-growth/activation.json",
+    "status": "pending-authority-qualification",
+    "compositionChange": false
   }
 }

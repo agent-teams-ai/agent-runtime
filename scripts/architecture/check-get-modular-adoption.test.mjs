@@ -283,6 +283,7 @@ test('PR71 reviewed owners and helpers retain exact live relationships without e
       'docker-codex-effect-custody-owner', 'docker-consumption-observations',
       'node-docker-deployment-recipe', 'node-docker-route-provenance',
     ],
+    'production.filesystem-custody': ['composition'],
   };
   for (const [id, sources] of Object.entries(subjects)) {
     const boundary = pending.boundaries.find(b => b.id === id);

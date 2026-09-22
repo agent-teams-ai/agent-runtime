@@ -2,6 +2,7 @@ export type {
   LinuxStableDirectoryMutationCapability,
   PathCustodyBoundary,
   PathLineage,
+  StableCustodyPlatform,
   StableDirectoryMutationCapability,
   StableDirectoryMutationCapabilityDisposition,
   StableDirectoryPublicationOutcome,

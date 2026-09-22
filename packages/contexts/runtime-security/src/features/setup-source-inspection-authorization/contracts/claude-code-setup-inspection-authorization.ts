@@ -20,7 +20,7 @@ export interface TrustedClaudeCodeSetupInspectionScope {
   readonly workspaceTrusted: boolean;
 }
 
-interface ClaudeCodePortableSourceEvidence {
+export interface ClaudeCodePortableSourceEvidence {
   readonly displayPath: string;
   readonly kind: ClaudeCodePortableSourceKind;
   readonly observationEpoch: string;

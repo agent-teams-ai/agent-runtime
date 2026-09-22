@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "scope": "frozen-plan A3 SDK enrollment only",
+  "activeCommit": "669a750d8db451e04f075cdeb36576c6606fba6e",
+  "activeSha256": "e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553",
+  "suppliedCurrentSha256": "ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d",
+  "suppliedCurrentEvidencePath": "architecture/get-modular/evidence/sdk-growth-current-standard.md",
+  "suppliedCurrentCommit": null,
+  "delta": [
+    "Executable example links use packages/assembly/tests instead of tests/assembly.",
+    "Supplied current bytes omit nine lines in Outcomes and ownership transfer covering acquisition-time cleanup, async failure ownership, inert summaries and readiness."
+  ],
+  "decision": "Retain accepted active pin and its stricter ownership guidance. A3 changes no shared construction, ownership or lifecycle behavior; no new CMS requirement requires migration. Do not substitute supplied bytes under the old commit or infer a new exact upstream commit from a filename.",
+  "historicalClaims": "Earlier C0 reciprocal-ledger-only comparison does not describe the supplied current bytes; retained C0 evidence is immutable and is not reused as this review.",
+  "adoption": "Existing passive/ordinary scope remains active; contained-turn remains pending; SDK registry/external authority activation remains pending."
+}
