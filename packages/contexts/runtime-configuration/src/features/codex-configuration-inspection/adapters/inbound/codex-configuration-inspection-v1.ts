@@ -4,9 +4,31 @@ import type {
   InspectCodexConfigurationResult,
 } from "../../contracts/codex-configuration-inspection.js";
 import type {
+  CodexInspectionDiagnostic,
   CodexInspectionRequest,
+  CodexSettingKey,
   InspectCodexConfigurationUseCase,
 } from "../../application/models/codex-inspection-models.js";
+import type {
+  CodexConfigurationSemanticDiagnostic,
+  CodexConfigurationSemanticSettingKey,
+} from "../../application/ports/outbound/codex-configuration-semantic-classifier.js";
+
+type Equals<Left, Right> = [Left] extends [Right]
+  ? [Right] extends [Left] ? true : false
+  : false;
+type Expect<T extends true> = T;
+
+/** Compile-time evidence that the independently declared classifier port does
+ * not narrow the application vocabulary it supplies. */
+export type CodexClassifierDiagnosticsAgree = Expect<Equals<
+  CodexConfigurationSemanticDiagnostic,
+  Pick<CodexInspectionDiagnostic, "code" | "setting">
+>>;
+export type CodexClassifierSettingKeysAgree = Expect<Equals<
+  CodexConfigurationSemanticSettingKey,
+  CodexSettingKey
+>>;
 
 /** Perimeter check, not the owner of the rule. The use case already refuses an
  * empty identityScope before touching any port; repeating the check here is

@@ -1,13 +1,23 @@
-export const CLAUDE_CODE_SETTINGS_DIALECT = "claude-code-settings@2026-08-28" as const;
-export const CLAUDE_CODE_OBSERVED_SOURCE_PLAN_CONTRACT =
-  "claude-code-observed-source-plan/v1" as const;
+export type ClaudeCodeConfigurationDialect = "claude-code-settings@2026-08-28";
+export type ClaudeCodeObservedSourcePlanContract = "claude-code-observed-source-plan/v1";
+export type ClaudeCodeModelAlias =
+  | "best" | "fable" | "sonnet" | "opus" | "haiku"
+  | "sonnet[1m]" | "opus[1m]" | "opusplan";
+export type ClaudeCodeEffort = "low" | "medium" | "high" | "xhigh";
+
+export const CLAUDE_CODE_SETTINGS_DIALECT: ClaudeCodeConfigurationDialect =
+  "claude-code-settings@2026-08-28";
+export const CLAUDE_CODE_OBSERVED_SOURCE_PLAN_CONTRACT: ClaudeCodeObservedSourcePlanContract =
+  "claude-code-observed-source-plan/v1";
 export const CLAUDE_CODE_MODEL_DEFAULT = "default" as const;
 
 export const CLAUDE_CODE_MODEL_ALIASES = [
   "best", "fable", "sonnet", "opus", "haiku", "sonnet[1m]", "opus[1m]", "opusplan",
-] as const;
+] as const satisfies readonly ClaudeCodeModelAlias[];
 
-export const CLAUDE_CODE_EFFORT_VALUES = ["low", "medium", "high", "xhigh"] as const;
+export const CLAUDE_CODE_EFFORT_VALUES = [
+  "low", "medium", "high", "xhigh",
+] as const satisfies readonly ClaudeCodeEffort[];
 
 export const CLAUDE_CODE_PROVIDER_ROUTE_VOCABULARY_REVISION =
   "claude-code-provider-route-vocabulary/v2" as const;
@@ -61,9 +71,6 @@ export const CLAUDE_CODE_CONFIGURATION_BUDGETS = Object.freeze({
   stringLength: 16_384,
 });
 
-export type ClaudeCodeConfigurationDialect = typeof CLAUDE_CODE_SETTINGS_DIALECT;
-export type ClaudeCodeModelAlias = typeof CLAUDE_CODE_MODEL_ALIASES[number];
-export type ClaudeCodeEffort = typeof CLAUDE_CODE_EFFORT_VALUES[number];
 export type ClaudeCodeConfigurationSourceRole = "user" | "shared-project" | "project-local";
 export type ClaudeCodeConfigurationSourceKind = ClaudeCodeConfigurationSourceRole;
 export type ClaudeCodeSourceSelectionBasis =
@@ -109,7 +116,7 @@ export interface TrustedClaudeCodeObservedSourcePlan {
     readonly platform: "darwin";
     readonly version: string;
   };
-  readonly contract: typeof CLAUDE_CODE_OBSERVED_SOURCE_PLAN_CONTRACT;
+  readonly contract: ClaudeCodeObservedSourcePlanContract;
   readonly roots: readonly ClaudeCodeCustodyRoot[];
   readonly sources: readonly ClaudeCodeConfigurationSource[];
 }
@@ -167,7 +174,7 @@ export interface InspectClaudeCodeConfigurationResult {
     readonly classifierRevision: string;
     readonly collectorRef: string;
     readonly compatibility: "unqualified";
-    readonly contract: typeof CLAUDE_CODE_OBSERVED_SOURCE_PLAN_CONTRACT;
+    readonly contract: ClaudeCodeObservedSourcePlanContract;
     readonly dialect: ClaudeCodeConfigurationDialect;
     readonly precedence: "not-evaluated";
     readonly topologyRef: string;
