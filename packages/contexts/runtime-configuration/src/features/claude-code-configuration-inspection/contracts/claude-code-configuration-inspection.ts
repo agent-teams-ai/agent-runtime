@@ -84,7 +84,7 @@ export interface ClaudeCodeCustodyRoot {
   readonly rootId: string;
 }
 
-interface ClaudeCodeConfigurationSourceEvidence {
+export interface ClaudeCodeConfigurationSourceEvidence {
   readonly displayPath: string;
   readonly locationClaims?: readonly string[];
   readonly observationEpoch: string;
