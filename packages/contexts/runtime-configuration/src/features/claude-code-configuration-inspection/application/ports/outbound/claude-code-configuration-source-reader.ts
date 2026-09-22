@@ -1,4 +1,29 @@
-import type { ClaudeCodeConfigurationSource } from "../../models/claude-code-inspection-models.js";
+export interface AuthorizedClaudeCodeConfigurationSource {
+  readonly access: "authorized";
+  readonly absolutePath: string;
+  readonly authorizedFileIdentity?: string;
+  readonly canonicalPath: string;
+  readonly custodyRoot: {
+    readonly absolutePath: string;
+    readonly canonicalPath: string;
+    readonly rootId: string;
+  };
+  readonly displayPath: string;
+  readonly locationClaims?: readonly string[];
+  readonly observationEpoch: string;
+  readonly role: "user" | "shared-project" | "project-local";
+  readonly selectionBasis:
+    | "home-default"
+    | "claude-config-dir"
+    | "session-primary-working-directory"
+    | "repository-root"
+    | "main-worktree-root"
+    | "legacy-starting-directory"
+    | "caller-explicit"
+    | "static-preview";
+  readonly sourceId: string;
+  readonly trust: "user" | "workspace-trusted" | "workspace-untrusted";
+}
 
 export type ReadClaudeCodeConfigurationSourceResult =
   | { readonly bytes: Uint8Array; readonly status: "read" }
@@ -6,14 +31,14 @@ export type ReadClaudeCodeConfigurationSourceResult =
 
 export interface ClaudeCodeConfigurationSourceReader {
   measure?(
-    source: Extract<ClaudeCodeConfigurationSource, { readonly access: "authorized" }>,
+    source: AuthorizedClaudeCodeConfigurationSource,
     options?: { readonly signal?: AbortSignal },
   ): Promise<
     | { readonly bytes: number; readonly status: "measured" }
     | { readonly status: "missing" | "stale" | "unreadable" }
   >;
   read(
-    source: Extract<ClaudeCodeConfigurationSource, { readonly access: "authorized" }>,
+    source: AuthorizedClaudeCodeConfigurationSource,
     maximumBytes: number,
     options?: { readonly signal?: AbortSignal },
   ): Promise<ReadClaudeCodeConfigurationSourceResult>;

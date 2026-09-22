@@ -20,6 +20,7 @@ export type {
   ClaudeCodeEffort,
   ClaudeCodeModelAlias,
   ClaudeCodeModelSelection,
+  ClaudeCodeObservedSourcePlanContract,
   ClaudeCodeSourceSelectionBasis,
   ClaudeCodeSourceObservation,
   InspectClaudeCodeConfiguration,

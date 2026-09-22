@@ -20,6 +20,24 @@ import {
   type ClaudeCodeEffortLevel,
   type ClaudeCodeModelName,
 } from "../../application/models/claude-code-vocabulary.js";
+import type {
+  ClaudeCodeSemanticClassifierDiagnostic,
+  ClaudeCodeSemanticClassifierDialect,
+  DeferredClaudeCodeDefinition,
+  PortableClaudeCodeEffortLevel,
+  PortableClaudeCodeModelSelection,
+} from "../../application/ports/outbound/claude-code-configuration-semantic-classifier.js";
+import type { AuthorizedClaudeCodeConfigurationSource } from
+  "../../application/ports/outbound/claude-code-configuration-source-reader.js";
+import type { ClaudeCodeJsonParserDiagnosticCode } from
+  "../../application/ports/outbound/claude-code-json-parser.js";
+import type {
+  ClaudeCodeConfigurationSource,
+  ClaudeCodeDeferredModelObservation,
+  ClaudeCodeInspectionDiagnostic,
+  ClaudeCodeInspectionDiagnosticCode,
+  ClaudeCodeModelSelection,
+} from "../../application/models/claude-code-inspection-models.js";
 
 /** The standard leaves no layer that both `contracts` and `application` may
  * import, so a value both need is declared twice. This adapter is the only file
@@ -35,6 +53,34 @@ type Expect<T extends true> = T;
 export type DialectsAgree = Expect<Equals<ClaudeCodeConfigurationDialect, ClaudeCodeDialect>>;
 export type ModelsAgree = Expect<Equals<ClaudeCodeModelAlias, ClaudeCodeModelName>>;
 export type EffortsAgree = Expect<Equals<ClaudeCodeEffort, ClaudeCodeEffortLevel>>;
+export type ClassifierDialectsAgree = Expect<Equals<
+  ClaudeCodeSemanticClassifierDialect,
+  ClaudeCodeDialect
+>>;
+export type ClassifierModelSelectionsAgree = Expect<Equals<
+  PortableClaudeCodeModelSelection,
+  ClaudeCodeModelSelection
+>>;
+export type ClassifierEffortsAgree = Expect<Equals<
+  PortableClaudeCodeEffortLevel,
+  ClaudeCodeEffortLevel
+>>;
+export type ClassifierDeferredObservationsAgree = Expect<Equals<
+  DeferredClaudeCodeDefinition,
+  Omit<ClaudeCodeDeferredModelObservation, "sourceRef">
+>>;
+export type ClassifierDiagnosticsAgree = Expect<Equals<
+  ClaudeCodeSemanticClassifierDiagnostic,
+  ClaudeCodeInspectionDiagnostic
+>>;
+export type ParserDiagnosticsAgree = Expect<Equals<
+  ClaudeCodeJsonParserDiagnosticCode,
+  ClaudeCodeInspectionDiagnosticCode
+>>;
+export type SourceReaderInputsAgree = Expect<Equals<
+  AuthorizedClaudeCodeConfigurationSource,
+  Extract<ClaudeCodeConfigurationSource, { readonly access: "authorized" }>
+>>;
 
 const sameOrder = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && left.every((value, index) => value === right[index]);

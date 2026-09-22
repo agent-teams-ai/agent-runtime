@@ -4,6 +4,7 @@ import { createInspectCodexConfiguration } from "../application/inspect-codex-co
 import type { CodexConfigurationSemanticClassifier } from "../application/ports/outbound/codex-configuration-semantic-classifier.js";
 import type { CodexTomlParser } from "../application/ports/outbound/codex-toml-parser.js";
 import type { ConfigurationSourceReader } from "../application/ports/outbound/configuration-source-reader.js";
+import type { InspectCodexConfiguration } from "../contracts/codex-configuration-inspection.js";
 
 export interface CodexConfigurationInspectionDependencies {
   readonly digest: ConfigurationDigest;
@@ -13,9 +14,13 @@ export interface CodexConfigurationInspectionDependencies {
   readonly sourceReader: ConfigurationSourceReader;
 }
 
+export interface CodexConfigurationInspectionFeature {
+  readonly inspectCodexConfiguration: InspectCodexConfiguration;
+}
+
 export const createCodexConfigurationInspectionFeature = (
   dependencies: CodexConfigurationInspectionDependencies,
-) =>
+): CodexConfigurationInspectionFeature =>
   Object.freeze({
     inspectCodexConfiguration: createCodexConfigurationInspectionV1(
       createInspectCodexConfiguration(dependencies),
