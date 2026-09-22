@@ -1,22 +1,34 @@
 import { createPostgresMaterializationRepository } from "../adapters/outbound/postgres/materialization-postgres-repository.js";
 import type { MaterializationPostgresPool, MaterializationPostgresTimeouts } from "../adapters/outbound/postgres/materialization-postgres-transactions.js";
 import { createSha256DispatchConsumptionDigest } from "../adapters/outbound/sha256-dispatch-consumption-digest.js";
-import type { CredentialGenerationAcquisition, CredentialRenderingOwner, CredentialRenderingSelection } from "../adapters/outbound/credential-rendering-contracts.js";
+import type { CredentialGenerationAcquisition, CredentialRenderingOwner, CredentialRenderingSelection,
+  OperationCredentialMaterialAdmission } from "../adapters/outbound/credential-rendering-contracts.js";
 import { createAdmittedMaterialCredentialRenderingOwner, createContainedTurnCredentialRenderingOwner } from "./credential-rendering-owner-factory.js";
 import { snapshotCredentialRenderingSelection } from "../adapters/outbound/operation-credential-selection.js";
 import { createMaterializationBindingRepository } from "../adapters/outbound/postgres/materialization-binding-repository.js";
 import { createContainedTurnProviderAccessFeature } from "./feature-module-factory.js";
 import type { ContainedTurnProviderAccessFeatureApi } from "../contracts/contained-turn-provider-access.js";
 
+export interface PostgresCredentialRenderingOwner {
+  readonly providerAccess: ContainedTurnProviderAccessFeatureApi;
+  readonly owner: Readonly<CredentialRenderingOwner>;
+  readonly control: Readonly<{
+    migrate(): Promise<void>;
+    replaceBinding(input: Parameters<ReturnType<typeof createPostgresMaterializationRepository>["replaceBinding"]>[0],
+      expectedHeadVersion: number): Promise<number | undefined>;
+    readonly materialAdmission?: OperationCredentialMaterialAdmission;
+  }>;
+}
+
 /**
- * Private PA store/render assembly for one operation. PA supplies its exact selection
+ * Trusted composition-only PA store/render owner for one operation. PA supplies its exact selection
  * and optional legacy acquisition. Otherwise trusted PA bootstrap admits the seed.
  * The caller owns the borrowed pool; migration and head
  * updates are explicit owner control actions, never request-driven effects.
  */
 export const createPostgresCredentialRenderingOwner = (pool: MaterializationPostgresPool,
   selection: CredentialRenderingSelection, acquisition?: CredentialGenerationAcquisition,
-  timeouts?: Partial<MaterializationPostgresTimeouts>) => {
+  timeouts?: Partial<MaterializationPostgresTimeouts>): Readonly<PostgresCredentialRenderingOwner> => {
   const capturedSelection = snapshotCredentialRenderingSelection(selection);
   const store = createPostgresMaterializationRepository(pool, timeouts);
   let rendering: CredentialRenderingOwner | undefined;

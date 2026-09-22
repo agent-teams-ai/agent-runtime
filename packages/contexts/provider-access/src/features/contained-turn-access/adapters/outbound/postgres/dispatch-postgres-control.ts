@@ -1,5 +1,6 @@
 import { canonicalJson, snapshotDispatchBindingHead, snapshotDispatchControlTime, snapshotDispatchId,
   type DispatchBindingHead } from "../../../domain/dispatch-consumption.js";
+import type { MaterializationAuthorizationBinding } from "../../../application/ports/outbound/materialization-authorization-repository.js";
 import { snapshotAuthorizationCommand } from "../../../domain/materialization-authorization.js";
 import { detachedDispatchData, exactDispatchDataRecord } from "../../dispatch-consumption-data.js";
 import { createSha256DispatchConsumptionDigest } from "../sha256-dispatch-consumption-digest.js";
@@ -16,6 +17,16 @@ export interface DispatchHeadPublication {
   readonly head: DispatchBindingHead;
 }
 export interface DispatchHeadPublicationResult { readonly headVersion: number; readonly materializationHeadVersion: number }
+export interface DispatchPostgresControl {
+  publishHead(input: DispatchHeadPublication): Promise<DispatchHeadPublicationResult>;
+  advanceControlTime(input: DispatchPostgresOwner, value: number): Promise<void>;
+  observeHead(input: DispatchPostgresOwner): Promise<Readonly<{
+    head: DispatchBindingHead | undefined;
+    headVersion: number;
+    controlTime: number;
+    materializationBinding: MaterializationAuthorizationBinding | undefined;
+  }>>;
+}
 
 // Status changes retain the one-use identity. New authority requires a strictly
 // newer binding revision; an old digest can never be republished as fresh use.
@@ -66,7 +77,9 @@ const publishMaterialization = async (client: MaterializationPostgresClient, hea
 };
 
 /** Trusted PA owner only. Never bind this control to caller dispatch expectations. */
-export const createDispatchPostgresControl = (transactions: MaterializationPostgresTransactions) => Object.freeze({
+export const createDispatchPostgresControl = (
+  transactions: MaterializationPostgresTransactions,
+): Readonly<DispatchPostgresControl> => Object.freeze({
   async publishHead(input: DispatchHeadPublication): Promise<DispatchHeadPublicationResult> {
     const data = exactDispatchDataRecord("dispatch publication", input,
       ["publicationRequestId", "expectedHeadVersion", "expectedMaterializationHeadVersion", "head"]);

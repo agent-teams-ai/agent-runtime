@@ -3,7 +3,7 @@ import type {
   CredentialMaterializationAuthorizationV1,
 } from "../../contracts/materialization-authorization-v1.js";
 
-/** Private PA selection, supplied once by PA composition, never by request headers/body. */
+/** Trusted PA composition selection, supplied once and never by request headers/body. */
 export type CredentialRecipe = "codex-chatgpt" | "codex-api" | "claude-oauth" | "claude-api";
 export type CredentialRenderingBinding = Omit<AuthorizeCredentialMaterializationInput,
   "authorizationRequestId" | "requestDigest" | "purpose" | "schemaVersion">;
@@ -16,20 +16,26 @@ export interface CredentialRenderingSelection {
   readonly deadline: number;
 }
 
-/** PA adapter seam only. Not a feature dependency, package export or raw-secret DTO for an ACL. */
+/**
+ * Trusted PA composition seam only. These named contracts are exported only by
+ * the composition entrypoint so a bootstrap owner can implement the exact
+ * custody protocol. They are not root contracts or raw-secret DTOs for an ACL.
+ */
 export interface CredentialGenerationRequest {
   readonly operationRef: string;
   readonly recipe: CredentialRecipe;
   readonly authorization: CredentialMaterializationAuthorizationReceipt;
 }
-export interface PrivateCredentialField {
+export interface CredentialGenerationField {
   readonly name: "token" | "accountId" | "apiKey";
   readonly valueBytes: Uint8Array;
 }
+/** Internal compatibility name; never re-exported by a package entrypoint. */
+export type PrivateCredentialField = CredentialGenerationField;
 export type CredentialGenerationOutcome =
   | { readonly kind: "unsupported" }
   | { readonly kind: "acquired"; readonly request: CredentialGenerationRequest;
-      readonly fields: readonly PrivateCredentialField[] };
+      readonly fields: readonly CredentialGenerationField[] };
 export interface CredentialGenerationAcquisition {
   /**
    * Return the exact request object. Transfer exclusive ownership of dedicated,
@@ -42,18 +48,20 @@ export interface CredentialGenerationAcquisition {
 }
 
 /** Trusted PA bootstrap input, never an ACL dependency or authorization receipt. */
-export interface OperationCredentialMaterial {
+export interface TrustedCredentialMaterialSeed {
   readonly operationRef: string;
   readonly binding: CredentialRenderingBinding;
   readonly recipe: CredentialRecipe;
-  readonly fields: readonly PrivateCredentialField[];
+  readonly fields: readonly CredentialGenerationField[];
 }
+/** Internal compatibility name; never re-exported by a package entrypoint. */
+export type OperationCredentialMaterial = TrustedCredentialMaterialSeed;
 export interface OperationCredentialMaterialAdmission {
   /**
    * One attempt. Acknowledges local custody only. Producer cleans any buffers still
    * attached on rejection; PA erases every transferred buffer, including partial failure.
    */
-  admit(material: OperationCredentialMaterial): { readonly kind: "admitted" | "rejected" };
+  admit(material: TrustedCredentialMaterialSeed): { readonly kind: "admitted" | "rejected" };
 }
 /** Private companion, wired only to the rendering owner, never to the bootstrap/ACL. */
 export interface CredentialGenerationMaterialLifetime {

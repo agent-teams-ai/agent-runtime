@@ -1,11 +1,13 @@
 export type DispatchProvider = "claude" | "codex";
 export type DispatchDisposition = "abandoned_without_claim" | "claim_committed";
 export interface DispatchScopeValue { readonly projectId: string; readonly scopeDigest: string; readonly tenantId: string }
-export interface DispatchBindingHead extends DispatchScopeValue {
+/** Exact non-secret authority head accepted by trusted composition owners. */
+export interface DispatchBindingHead {
   readonly acceptedAuthorityDigest: string; readonly accessRef: string; readonly authorityHeadDigest: string;
   readonly availability: "available" | "unavailable"; readonly bindingDigest: string; readonly bindingRevision: number;
   readonly claimBeforeControlTime: number; readonly credentialBindingDigest: string; readonly credentialBindingRef: string;
-  readonly credentialGeneration: number; readonly opaqueOwnerEvidenceRef: string; readonly provider: DispatchProvider;
+  readonly credentialGeneration: number; readonly opaqueOwnerEvidenceRef: string; readonly provider: "claude" | "codex";
+  readonly projectId: string; readonly scopeDigest: string; readonly tenantId: string;
   readonly providerAccountRef: string; readonly providerRouteRef: string; readonly revocation: "active" | "revoked";
   readonly expiresAtControlTime: number;
 }
