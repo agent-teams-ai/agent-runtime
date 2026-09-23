@@ -182,12 +182,19 @@ import { createLinuxCodexDeploymentAgentRuntimeHost } from '@agent-teams/embedde
 import type { DarwinContainedTurnAuthority } from '@agent-teams/embedded-runtime/composition';
 // @ts-expect-error Package-private declarations cannot be reached through a deep subpath.
 import type {} from '@agent-teams/embedded-runtime/dist/composition/runtime-setup-assembly.js';
+type KeysOfUnion<T> = T extends unknown ? keyof T : never;
 type HostPrivateResourcesClosed =
-  'linuxCodex' extends keyof HostCustodiedContainedTurnDependencies ? false
-    : 'linuxCodexDeployment' extends keyof HostCustodiedContainedTurnDependencies ? false
+  'linuxCodex' extends KeysOfUnion<HostCustodiedContainedTurnDependencies> ? false
+    : 'linuxCodexDeployment' extends KeysOfUnion<HostCustodiedContainedTurnDependencies> ? false
       : true;
 const hostPrivateResourcesClosed: HostPrivateResourcesClosed = true;
 void hostPrivateResourcesClosed;
+type BranchOnlyDependencies =
+  | { readonly authority: 'legacy' }
+  | { readonly authority: 'current'; readonly linuxCodexDeployment: unknown };
+const branchOnlyPrivateResourceDetected:
+  'linuxCodexDeployment' extends KeysOfUnion<BranchOnlyDependencies> ? true : false = true;
+void branchOnlyPrivateResourceDetected;
 type StableHostCompositionTypes = [
   AgentRuntimeHostCreationErrorDetails,
   ContainedTurnHostCustodyAuthority,
