@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 
+// Rebased enrollment 712a retains the five exact artifact bytes from 417126.
 const acceptedSdkEnrollment = Object.freeze({
-  revision: '417126557fa5eb24297e13e51704a5e3fbc7063f',
+  revision: '712a3e38ac9a561e33eb1563608ca4416190ab17',
   profiles: [
     'architecture/get-modular/consumer-profile.json',
     'architecture/consumer-module-standard/contained-turn-profile.json',

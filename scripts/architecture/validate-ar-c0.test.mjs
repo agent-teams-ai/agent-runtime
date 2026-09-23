@@ -12,7 +12,7 @@ const schema = JSON.parse(read('architecture/c0/ar-owned-lifetime/contract.schem
 const validate = c => {validateSchema(c,schema); return validateContract(c,receipt);};
 const expectedBase = 'c0dc683ecb14760c75a69283ad7ec312f6246a63';
 const expectedDelivery = '510882870c1a7c628187dd91d7dff05225068bdb';
-const expectedA3Migration = '417126557fa5eb24297e13e51704a5e3fbc7063f';
+const expectedA3Migration = '712a3e38ac9a561e33eb1563608ca4416190ab17';
 const revisionRead = (overrides = new Map()) => (revision, path) => {
   const replacement = overrides.get(`${revision}:${path}`);
   if (replacement !== undefined) {return replacement;}
