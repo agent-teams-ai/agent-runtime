@@ -4,8 +4,7 @@ import {DockerLifecycleObservations, createDockerLifecycleJournal, type DockerLi
 import {createDockerProviderProcessLaunchIssuer, type LaunchedDockerCustody} from "./docker-lifecycle-issued-launch.js";
 import {DockerContainedTurnHostCustody, type DockerHostCustodyLifetime, type DockerContainedTurnInitOptions, type DockerContainedTurnInitSession} from "./docker-contained-turn-host-custody.js";
 import type {DockerCustodyInitHostExec} from "./init/docker-custody-init-host-session.js";
-import { createDockerRemovalObservationOwner, type DockerHostCustodyContainmentInput,
-  type DockerRemovalObservationOwner } from "./docker-removal-observation-owner.js";
+import { createDockerRemovalObservationOwner, type DockerHostCustodyContainmentInput, type DockerRemovalObservationOwner } from "./docker-removal-observation-owner.js";
 import type {DockerContainerAuthority, DockerContainerObservation, DockerEngineCall, DockerEnginePort} from "./engine/docker-engine-port.js";
 import { dockerCustodyAttemptLocator, dockerCustodyAuthoritySha256 } from "./journal/docker-custody-journal-codec.js";
 import {
