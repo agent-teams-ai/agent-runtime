@@ -2,7 +2,7 @@ import type { ContainedTurnProviderAccessBinding } from "../../contracts/contain
 import type { DispatchBindingHead, DispatchScopeValue, DispatchProvider } from "../../domain/dispatch-consumption.js";
 import type { MaterializationAuthorizationBinding } from "../../application/ports/outbound/materialization-authorization-repository.js";
 
-/** Private trusted AE acknowledgement projection. This DTO is not proof of AE COMMIT. */
+/** Trusted composition-only AE acknowledgement projection. This DTO is not proof of AE COMMIT. */
 export interface PaAcceptedPreparation {
   readonly operationId: string;
   readonly scope: DispatchScopeValue;
@@ -15,7 +15,7 @@ export interface PaAcceptedPreparation {
   readonly claimBindingDigest: string;
   readonly requestDigest: string;
 }
-/** Independently provisioned PA/operator policy; never selected from request expectations. */
+/** Trusted composition-only PA/operator policy; never selected from request expectations. */
 export interface PaDispatchIssuanceSelection {
   readonly issuanceRef: string;
   readonly binding: MaterializationAuthorizationBinding;

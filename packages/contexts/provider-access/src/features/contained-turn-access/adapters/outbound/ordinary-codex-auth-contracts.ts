@@ -4,11 +4,14 @@ export const ORDINARY_CODEX_AUTH_BINARY_SHA256 = 'b973d440acac501fd2594a43e7ca9c
 export const ORDINARY_CODEX_AUTH_MODEL = 'gpt-5.3-codex-spark';
 export type OrdinaryCodexAuthStage = 'startup' | 'initialize' | 'initialized' | 'config/read' | 'account/read' |
   'getAuthStatus' | 'account/rateLimits/read' | 'model/list' | 'closure';
-export const ORDINARY_AUTH_REFUSAL_REASONS = Object.freeze(['validation', 'config_policy', 'config_features',
+export type OrdinaryCodexAuthReason = 'validation' | 'config_policy' | 'config_features' | 'config_endpoint' |
+  'config_origin' | 'config_layers' | 'identity_drift' | 'model_unavailable' | 'model_pagination' |
+  'rpc_envelope' | 'rpc_unsolicited' | 'rpc_error' | 'frame_invalid' | 'output_limit' | 'process_exit' |
+  'stream_closed' | 'io_error' | 'aborted' | 'timeout' | 'journal_failure' | 'cleanup_uncertain';
+export const ORDINARY_AUTH_REFUSAL_REASONS: readonly OrdinaryCodexAuthReason[] = Object.freeze(['validation', 'config_policy', 'config_features',
   'config_endpoint', 'config_origin', 'config_layers', 'identity_drift', 'model_unavailable', 'model_pagination',
   'rpc_envelope', 'rpc_unsolicited', 'rpc_error', 'frame_invalid', 'output_limit', 'process_exit',
   'stream_closed', 'io_error', 'aborted', 'timeout', 'journal_failure', 'cleanup_uncertain'] as const);
-export type OrdinaryCodexAuthReason = typeof ORDINARY_AUTH_REFUSAL_REASONS[number];
 export interface OrdinaryCodexAuthObservation {
   readonly captureRef: string;
   readonly outcome: 'started' | 'closed' | 'refused' | 'cleanup-indeterminate';

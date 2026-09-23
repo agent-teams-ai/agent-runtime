@@ -13,11 +13,11 @@ import {
 import { snapshotAuthorizationRecord, type AuthorizationRecord } from "../../domain/materialization-authorization.js";
 import { canonicalDispatchJournalEntry, detachedDispatchData } from "../dispatch-consumption-data.js";
 
-type OwnerState = "absent" | "consumed_pending" | "claim_committed" | "abandoned_without_claim";
-interface BindingSlot { head: DispatchBindingHead; consumption?: DispatchConsumedReceipt; state: OwnerState }
+export type DispatchConsumptionOwnerState = "absent" | "consumed_pending" | "claim_committed" | "abandoned_without_claim";
+interface BindingSlot { head: DispatchBindingHead; consumption?: DispatchConsumedReceipt; state: DispatchConsumptionOwnerState }
 interface State {
   readonly consumptions: Map<string, { receipt: DispatchConsumedReceipt; slot: BindingSlot }>;
-  readonly historicalOwnerState: Map<string, OwnerState>;
+  readonly historicalOwnerState: Map<string, DispatchConsumptionOwnerState>;
   readonly grants: Map<string, DispatchConsumptionJournalEntry>;
   readonly settlements: Map<string, DispatchSettlementOutcome>;
   readonly settlementsByConsumption: Map<string, DispatchSettlementOutcome>;
@@ -38,8 +38,8 @@ const authorizationKey = (input: MaterializationAuthorizationRequestSelector): s
 export interface InMemoryDispatchConsumptionControl {
   advanceControlTime(value: number): Promise<void>;
   replaceBindingHead(head: DispatchBindingHead): Promise<void>;
-  observeOwnerState(input: { readonly provider: "claude" | "codex"; readonly scopeDigest: string }): OwnerState | undefined;
-  observeHistoricalOwnerState(input: { readonly consumptionDigest: string }): OwnerState | undefined;
+  observeOwnerState(input: { readonly provider: "claude" | "codex"; readonly scopeDigest: string }): DispatchConsumptionOwnerState | undefined;
+  observeHistoricalOwnerState(input: { readonly consumptionDigest: string }): DispatchConsumptionOwnerState | undefined;
 }
 
 const putCanonicalHead = (state: State, head: DispatchBindingHead): void => {

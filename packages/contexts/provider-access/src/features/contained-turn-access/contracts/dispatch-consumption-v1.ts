@@ -10,7 +10,7 @@ export interface DispatchConsumptionBindingExpectation {
 export interface ConsumeForDispatchInput {
   readonly binding: DispatchConsumptionBindingExpectation; readonly claimBindingDigest: string;
   readonly grantRequestId: string; readonly operationId: string; readonly provider: "claude" | "codex";
-  readonly purpose: typeof CONTAINED_TURN_PROVIDER_DISPATCH_PURPOSE; readonly requestDigest: string;
+  readonly purpose: "contained-turn.provider-dispatch/v1"; readonly requestDigest: string;
   readonly scope: DispatchConsumptionScope;
 }
 export interface DispatchConsumptionReceipt {
@@ -20,7 +20,7 @@ export interface DispatchConsumptionReceipt {
   readonly credentialBindingDigest: string; readonly credentialBindingRef: string; readonly credentialGeneration: number;
   readonly grantRequestId: string; readonly opaqueOwnerEvidenceRef: string; readonly operationId: string;
   readonly provider: "claude" | "codex"; readonly providerAccountRef: string; readonly providerRouteRef: string;
-  readonly purpose: typeof CONTAINED_TURN_PROVIDER_DISPATCH_PURPOSE; readonly requestDigest: string;
+  readonly purpose: "contained-turn.provider-dispatch/v1"; readonly requestDigest: string;
   readonly scope: DispatchConsumptionScope;
 }
 export type DispatchConsumptionPreventedReason =
