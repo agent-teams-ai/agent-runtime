@@ -67,6 +67,24 @@ test("root API exposes only product capabilities and keeps Host in composition",
   ]);
 });
 
+test("composition API names stable Host ports and closes product-owned records", async () => {
+  const declaration = await readFile(join(packageRoot, "dist", "composition.d.ts"), "utf8");
+  for (const publicType of [
+    "AgentRuntimeHostCreationErrorDetails",
+    "ContainedTurnHostCustodyAuthority",
+    "ContainedTurnHttpCredentialRenderingOwner",
+    "ContainedTurnHttpRuntimeSecurityOwner",
+    "DarwinContainedTurnDeployment",
+    "RuntimeSetupModuleId",
+  ]) {
+    assert.match(declaration, new RegExp(`\\b${publicType}\\b`, "u"));
+  }
+  assert.doesNotMatch(
+    declaration,
+    /DarwinContainedTurnAuthority|LinuxCodexContainedTurnResources|LinuxCodexDeployment(?:AgentRuntimeHost|Infrastructure)|runtimeSetupDeclarations/u,
+  );
+});
+
 test("contained-turn declarations stay owned across root and composition closure", async () => {
   const runtimeAccessSource = await readFile(
     join(

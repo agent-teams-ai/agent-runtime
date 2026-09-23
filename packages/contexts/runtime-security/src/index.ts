@@ -13,6 +13,7 @@ export type {
 } from "./features/setup-source-inspection-authorization/index.js";
 export {
   CONTAINED_TURN_PROVIDER_DISPATCH_PURPOSE,
+  type ContainedTurnProviderDispatchPurpose,
   type ConsumeForDispatchInput,
   type ConsumeForDispatchOutcome,
   type ContainedTurnDispatchAuthorityV1,
@@ -30,6 +31,7 @@ export {
 } from "./features/contained-turn-dispatch-authority/index.js";
 export type {
   EGRESS_DISPATCH_PURPOSE,
+  EgressDispatchPurpose,
   ContainedTurnEgress,
   ContainedTurnEgressRequest,
   ContainedTurnEgressResult,

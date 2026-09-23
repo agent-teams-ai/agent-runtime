@@ -4,7 +4,7 @@ import { LinuxExclusiveRouteOpeningError, openNodeLinuxExclusiveRoute,
 } from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import type { DockerLinuxOperationRouteAdmission } from "./docker-linux-post-claim-preparation.js";
 
-type RouteOpening = Parameters<typeof openNodeLinuxExclusiveRoute>[0];
+export type DockerLinuxRouteOpening = Parameters<typeof openNodeLinuxExclusiveRoute>[0];
 type Admit = Parameters<DockerLinuxOperationRouteAdmission["admit"]>[0];
 type Outcome = Awaited<ReturnType<DockerLinuxOperationRouteAdmission["admit"]>>;
 
@@ -13,7 +13,7 @@ export type DockerLinuxExclusiveRouteAdmissionInput = Readonly<{
    * facts; this composition transports them and derives none of them. */
   binding: LinuxExclusiveRouteBinding;
   /** The existing Docker owner's inspection port; no command runner is injectable. */
-  engine: RouteOpening["engine"];
+  engine: DockerLinuxRouteOpening["engine"];
   /** Pinned tools from trusted deployment composition, never process.env and
    * never a canary report (`node-linux-exclusive-route.ts` re-verifies both). */
   nsenter: LinuxRouteToolPin;

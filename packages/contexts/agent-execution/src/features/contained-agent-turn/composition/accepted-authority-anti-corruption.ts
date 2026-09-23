@@ -32,7 +32,12 @@ const validateAcceptanceProof = (accepted: ContainedTurnAcceptedAuthorityHandoff
   }
 };
 /** Validates identity only. Authority to call this seam comes from acknowledged AE execution. */
-export const acceptedAuthority = (input: Readonly<{accepted: ContainedTurnAcceptedAuthorityHandoff; subject: ContainedTurnDispatchGrantSubject}>) => {
+export type AcceptedAuthorityInput = Readonly<{
+  accepted: ContainedTurnAcceptedAuthorityHandoff;
+  subject: ContainedTurnDispatchGrantSubject;
+}>;
+
+export const acceptedAuthority = (input: AcceptedAuthorityInput) => {
   const {accepted, subject} = authorityValue(input);
   assertContainedTurnExactRecord("accepted handoff", accepted, ["operationId", "scope", "acceptanceProof", "acceptedAuthorityVector", "acceptedAuthorityVectorDigest", "intent", "constraints", "intentDigest", "constraintsDigest"]);
   const vector = accepted.acceptedAuthorityVector;
@@ -68,7 +73,7 @@ export const acceptedAuthority = (input: Readonly<{accepted: ContainedTurnAccept
   if (!same(expected, subject)) {throw new TypeError("accepted subject or owner request mismatch");}
   return {accepted, subject, bindingDigest};
 };
-export const acceptedProviderPreparation = (input: Parameters<typeof acceptedAuthority>[0] & {readonly grantRequestId: string}) => {
+export const acceptedProviderPreparation = (input: AcceptedAuthorityInput & {readonly grantRequestId: string}) => {
   const safe = authorityValue(input);
   const {accepted, subject, bindingDigest} = acceptedAuthority(safe);
   if (safe.grantRequestId !== subject.providerAccessRequest.grantRequestId) {throw new TypeError("PA request identity mismatch");}

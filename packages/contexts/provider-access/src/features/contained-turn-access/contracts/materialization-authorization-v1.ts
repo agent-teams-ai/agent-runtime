@@ -13,10 +13,10 @@ export interface AuthorizeCredentialMaterializationInput {
   readonly provider: "claude" | "codex";
   readonly providerAccountRef: string;
   readonly providerRouteRef: string;
-  readonly purpose: typeof CREDENTIAL_MATERIALIZATION_PURPOSE;
+  readonly purpose: "contained-turn.credential-materialization-authorization/v1";
   readonly requestDigest: string;
   readonly revocation: "active" | "revoked";
-  readonly schemaVersion: typeof CREDENTIAL_MATERIALIZATION_SCHEMA_VERSION;
+  readonly schemaVersion: 1;
   readonly scopeDigest: string;
   readonly tenantId: string;
 }

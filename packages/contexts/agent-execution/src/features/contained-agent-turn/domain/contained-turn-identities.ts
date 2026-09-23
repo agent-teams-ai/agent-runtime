@@ -44,9 +44,26 @@ export const CONTAINED_TURN_IDENTITY_PREFIXES = Object.freeze({
   proof: "proof:",
   workspace: "workspace:",
   writer_fence: "writer-fence:",
-} as const);
+} as const satisfies Readonly<Record<ContainedTurnIdentityNamespace, string>>);
 
-export type ContainedTurnIdentityNamespace = keyof typeof CONTAINED_TURN_IDENTITY_PREFIXES;
+export type ContainedTurnIdentityNamespace =
+  | "attempt"
+  | "cancellation_command"
+  | "cleanup_permit"
+  | "closure_debt"
+  | "closure_request"
+  | "command"
+  | "custody"
+  | "effect"
+  | "evidence"
+  | "execution_generation"
+  | "host_boot"
+  | "host_instance"
+  | "operation"
+  | "preparation"
+  | "proof"
+  | "workspace"
+  | "writer_fence";
 
 export const validateContainedTurnIdentity = <Namespace extends ContainedTurnIdentityNamespace>(
   namespace: Namespace,

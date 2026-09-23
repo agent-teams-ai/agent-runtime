@@ -13,6 +13,14 @@ const snapshotTimeouts = (input: Partial<MaterializationPostgresTimeouts> | unde
 };
 
 export type RouteSelectionInput = RouteSelectionFacts & Readonly<{deadline: number; operationAbortSignal: AbortSignal}>;
+export interface PostgresRouteSelectionOwner {
+  readCurrent(): Promise<RouteSelectionCurrent | undefined>;
+  readonly control: Readonly<{
+    migrate(): Promise<void>;
+    endorse(expectedHeadVersion: number): Promise<RouteSelectionCurrent>;
+  }>;
+  dispose(): void;
+}
 /**
  * Trusted PA composition control only, never initialized from HTTP input. The pool
  * is borrowed. Construction only snapshots data; neither reads nor migration endorse.
@@ -21,7 +29,7 @@ export type RouteSelectionInput = RouteSelectionFacts & Readonly<{deadline: numb
  * generic replacement remains accepted, but a new route endorsement needs a new revision.
  */
 export const createPostgresRouteSelectionOwner = (pool: MaterializationPostgresPool, input: RouteSelectionInput,
-  timeouts?: Partial<MaterializationPostgresTimeouts>) => {
+  timeouts?: Partial<MaterializationPostgresTimeouts>): Readonly<PostgresRouteSelectionOwner> => {
   const data = exactCredentialData(input, ["binding", "recipe", "descriptor", "deadline", "operationAbortSignal"]);
   const facts = snapshotRouteSelectionFacts({binding: data.binding?.value, recipe: data.recipe?.value, descriptor: data.descriptor?.value});
   const deadline: unknown = data.deadline?.value;

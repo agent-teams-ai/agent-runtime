@@ -1,5 +1,6 @@
-export const CONTAINED_TURN_PROVIDER_DISPATCH_PURPOSE =
-  "contained-turn.provider-dispatch/v1" as const;
+export type ContainedTurnProviderDispatchPurpose = "contained-turn.provider-dispatch/v1";
+export const CONTAINED_TURN_PROVIDER_DISPATCH_PURPOSE: ContainedTurnProviderDispatchPurpose =
+  "contained-turn.provider-dispatch/v1";
 
 export interface DispatchAuthorityScope {
   readonly tenantId: string;
@@ -8,7 +9,7 @@ export interface DispatchAuthorityScope {
 }
 
 export interface ConsumeForDispatchInput {
-  readonly purpose: typeof CONTAINED_TURN_PROVIDER_DISPATCH_PURPOSE;
+  readonly purpose: ContainedTurnProviderDispatchPurpose;
   readonly operationId: string;
   readonly scope: DispatchAuthorityScope;
   readonly grantRequestId: string;
@@ -41,7 +42,7 @@ export type DispatchPreventionReason =
 
 export interface DispatchConsumptionReceipt {
   readonly contractVersion: "contained-turn-dispatch-consumption/v1";
-  readonly purpose: typeof CONTAINED_TURN_PROVIDER_DISPATCH_PURPOSE;
+  readonly purpose: ContainedTurnProviderDispatchPurpose;
   readonly operationId: string;
   readonly scope: DispatchAuthorityScope;
   readonly grantRequestId: string;
@@ -63,7 +64,7 @@ export interface DispatchConsumptionReceipt {
 
 export interface DispatchPreventionEvidence {
   readonly contractVersion: "contained-turn-dispatch-prevention/v1";
-  readonly purpose: typeof CONTAINED_TURN_PROVIDER_DISPATCH_PURPOSE;
+  readonly purpose: ContainedTurnProviderDispatchPurpose;
   readonly operationId: string;
   readonly scope: DispatchAuthorityScope;
   readonly grantRequestId: string;

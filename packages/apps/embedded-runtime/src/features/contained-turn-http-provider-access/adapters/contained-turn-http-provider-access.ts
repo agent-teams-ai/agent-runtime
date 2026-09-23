@@ -1,8 +1,9 @@
 import type { HostHttpEgressSessionDependencies } from "@agent-teams/agent-execution/composition";
 import { types } from "node:util";
 
-type HostAuthorization = HostHttpEgressSessionDependencies["providerAccess"];
-type HostOutcome = Awaited<ReturnType<HostAuthorization["authorize"]>>;
+export type ContainedTurnHttpProviderAccessAuthorization =
+  HostHttpEgressSessionDependencies["providerAccess"];
+type HostOutcome = Awaited<ReturnType<ContainedTurnHttpProviderAccessAuthorization["authorize"]>>;
 type HostReceipt = Extract<HostOutcome, {receipt: unknown}>["receipt"];
 
 export interface ContainedTurnHttpProviderAccessOwner {
@@ -10,10 +11,10 @@ export interface ContainedTurnHttpProviderAccessOwner {
    * Owner response data is inspected before projection into AE's consumer contract.
    */
   readonly authorization: Readonly<{
-    authorize(input: Parameters<HostAuthorization["authorize"]>[0]): Promise<unknown>;
-    observe(input: Parameters<HostAuthorization["observe"]>[0]): Promise<unknown>;
+    authorize(input: Parameters<ContainedTurnHttpProviderAccessAuthorization["authorize"]>[0]): Promise<unknown>;
+    observe(input: Parameters<ContainedTurnHttpProviderAccessAuthorization["observe"]>[0]): Promise<unknown>;
   }>;
-  readonly createRequestDigest: HostAuthorization["createRequestDigest"];
+  readonly createRequestDigest: ContainedTurnHttpProviderAccessAuthorization["createRequestDigest"];
 }
 
 const invalidOwner = (): TypeError => new TypeError("Invalid HTTP Provider Access owner");
@@ -154,13 +155,13 @@ const invoke = <T>(capability: (...args: never[]) => unknown, input: object, pro
 const projectAuthorization = (
   owner: ContainedTurnHttpProviderAccessOwner,
   retainFresh?: RetainFresh,
-): HostAuthorization => {
+): ContainedTurnHttpProviderAccessAuthorization => {
   const outer = dataRecord(owner); exact(outer, ["authorization", "createRequestDigest"]);
   const authorization = dataRecord(outer.authorization); exact(authorization, ["authorize", "observe"]);
   const authorize = method(authorization.authorize);
   const observe = method(authorization.observe);
   const digest = method(outer.createRequestDigest);
-  return Object.freeze<HostAuthorization>({
+  return Object.freeze<ContainedTurnHttpProviderAccessAuthorization>({
     async createRequestDigest(input) {
       try {
         return await invoke(digest, inputSnapshot(input, commandKeys.filter(key => key !== "requestDigest")), value => token({digest: value}, "digest"));
@@ -179,10 +180,10 @@ const projectAuthorization = (
 
 export const createContainedTurnHttpProviderAccessAuthorization = (
   owner: ContainedTurnHttpProviderAccessOwner,
-): HostAuthorization => projectAuthorization(owner);
+): ContainedTurnHttpProviderAccessAuthorization => projectAuthorization(owner);
 
 /** Structural view of the PA-private factory product; never an acquisition port. */
-interface CredentialRenderingOwner {
+export interface ContainedTurnHttpCredentialRenderingOwner {
   readonly authorization: ContainedTurnHttpProviderAccessOwner["authorization"];
   readonly rendering: Readonly<{
     render(receipt: object): Promise<
@@ -194,7 +195,8 @@ interface CredentialRenderingOwner {
   }>;
   dispose(): void;
 }
-type CredentialPair = Pick<HostHttpEgressSessionDependencies, "providerAccess" | "materializer"> & Readonly<{dispose(): void}>;
+export type ContainedTurnHttpCredentialMaterialization =
+  Pick<HostHttpEgressSessionDependencies, "providerAccess" | "materializer"> & Readonly<{dispose(): void}>;
 const renderUnavailable = (): TypeError => new TypeError("HTTP Provider Access credential rendering unavailable");
 const fill = Reflect.get(Uint8Array.prototype, "fill");
 const set = Reflect.get(Uint8Array.prototype, "set");
@@ -208,11 +210,12 @@ const set = Reflect.get(Uint8Array.prototype, "set");
  * Disposal is one-way local admission closure, never durable cancellation truth.
  */
 export const createContainedTurnHttpCredentialMaterialization = (
-  owner: CredentialRenderingOwner, createRequestDigest: ContainedTurnHttpProviderAccessOwner["createRequestDigest"],
-): CredentialPair => {
+  owner: ContainedTurnHttpCredentialRenderingOwner,
+  createRequestDigest: ContainedTurnHttpProviderAccessOwner["createRequestDigest"],
+): ContainedTurnHttpCredentialMaterialization => {
   const outer = dataRecord(owner); exact(outer, ["authorization", "rendering", "dispose"]);
   const rendering = dataRecord(outer.rendering); exact(rendering, ["render"]);
-  const render = method(rendering.render) as CredentialRenderingOwner["rendering"]["render"];
+  const render = method(rendering.render) as ContainedTurnHttpCredentialRenderingOwner["rendering"]["render"];
   const disposeOwner = outer.dispose;
   if (typeof disposeOwner !== "function" || types.isProxy(disposeOwner)) {throw invalidOwner();}
   let closed = false;
@@ -220,13 +223,13 @@ export const createContainedTurnHttpCredentialMaterialization = (
   let disposal: "open" | "disposing" | "disposed" | "failed" = "open";
   let disposalFailure: unknown;
   let fresh = new WeakMap<HostReceipt, object>();
-  const authorization = projectAuthorization({authorization: outer.authorization as CredentialRenderingOwner["authorization"],
+  const authorization = projectAuthorization({authorization: outer.authorization as ContainedTurnHttpCredentialRenderingOwner["authorization"],
     createRequestDigest}, (original, detached) => {
     if (isClosed()) {throw renderUnavailable();}
     fresh.set(detached, original);
   });
   return Object.freeze({
-    providerAccess: Object.freeze<HostAuthorization>({
+    providerAccess: Object.freeze<ContainedTurnHttpProviderAccessAuthorization>({
       async createRequestDigest(input) {
         if (isClosed()) {throw new TypeError("HTTP Provider Access request digest unavailable");}
         const digest = await authorization.createRequestDigest(input);
@@ -244,7 +247,7 @@ export const createContainedTurnHttpCredentialMaterialization = (
         return isClosed() ? unavailable() : result;
       },
     }),
-    materializer: Object.freeze<CredentialPair["materializer"]>({
+    materializer: Object.freeze<ContainedTurnHttpCredentialMaterialization["materializer"]>({
       async render(detached) {
         const original = fresh.get(detached);
         if (isClosed() || original === undefined) {throw renderUnavailable();}
@@ -253,7 +256,7 @@ export const createContainedTurnHttpCredentialMaterialization = (
         try {
           const result = await render(original);
           if (result.kind !== "rendered") {throw renderUnavailable();}
-          let fields: Awaited<ReturnType<CredentialPair["materializer"]["render"]>>;
+          let fields: Awaited<ReturnType<ContainedTurnHttpCredentialMaterialization["materializer"]["render"]>>;
           try {
             if (isClosed() || result.credentials.fields.length < 1 || result.credentials.fields.length > 2) {throw renderUnavailable();}
             const names = new Set<string>();

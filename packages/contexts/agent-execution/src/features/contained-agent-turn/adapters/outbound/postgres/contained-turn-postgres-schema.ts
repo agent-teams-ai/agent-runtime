@@ -7,6 +7,7 @@ export {
 export {
   applyContainedTurnPostgresSchema,
   type ApplyContainedTurnPostgresSchemaOptions,
+  type ContainedTurnPostgresSchemaOptions,
   ContainedTurnPostgresLegacyConversionRequiredError,
   CONTAINED_TURN_POSTGRES_MIGRATION_NAMESPACE,
   CONTAINED_TURN_POSTGRES_MIGRATION_TIMEOUTS,

@@ -11,10 +11,10 @@ export const CONTAINED_TURN_ROUTE_QUALIFICATION_DIMENSIONS = Object.freeze([
   "storageTopology", "transportTopology", "failureDomain",
 ] as const);
 
-type Dimension = (typeof CONTAINED_TURN_ROUTE_QUALIFICATION_DIMENSIONS)[number];
+export type ContainedTurnRouteQualificationDimension = (typeof CONTAINED_TURN_ROUTE_QUALIFICATION_DIMENSIONS)[number];
 
 /** One complete observed scalar tuple, in the registry's own dimension vocabulary. */
-export type ContainedTurnRouteQualificationTarget = Readonly<Record<Dimension, string>>;
+export type ContainedTurnRouteQualificationTarget = Readonly<Record<ContainedTurnRouteQualificationDimension, string>>;
 
 /**
  * Nominal route-enforcement capability. It is not a structural record: only
@@ -38,15 +38,15 @@ export type ContainedTurnRouteEnforcementInput = DockerLinuxExclusiveRouteAdmiss
   enginePolicy?: DockerLinuxPostClaimDependencies["enginePolicy"];
 }>;
 
-type Binding = DockerLinuxExclusiveRouteAdmissionInput["binding"];
+export type ContainedTurnRouteBinding = DockerLinuxExclusiveRouteAdmissionInput["binding"];
 type Owner = Readonly<{policy: string | undefined; target: ContainedTurnRouteQualificationTarget; route: DockerLinuxExclusiveRouteAdmissionInput}>;
 const minted = new WeakMap<object, Owner>();
 const selectedAdmissions = new WeakMap<object, DockerLinuxOperationRouteAdmission>();
 // These facts belong to each committed operation, not to deployment qualification.
-const operationFields = new Set<keyof Binding>([
+const operationFields = new Set<keyof ContainedTurnRouteBinding>([
   "operationId", "attemptId", "custodyId", "executionGenerationId", "authorityVectorDigest",
 ]);
-const snapshotBinding = (binding: Binding): Binding => {
+const snapshotBinding = (binding: ContainedTurnRouteBinding): ContainedTurnRouteBinding => {
   try {return Object.freeze({...custodyDataRecord(binding)});} catch {throw invalidTarget();}
 };
 // The registry forbids these tokens outright; a capability may not carry one.
@@ -112,7 +112,7 @@ export const readContainedTurnRouteEnforcementTarget = (
 ): ContainedTurnRouteQualificationTarget | undefined =>
   value !== null && typeof value === "object" ? minted.get(value)?.target ?? readDarwinCodexRouteEnforcementTarget(value) : undefined;
 
-type Recipe = Parameters<typeof selectNodeDockerRoute>[0];
+export type ContainedTurnRouteRecipe = Parameters<typeof selectNodeDockerRoute>[0];
 
 /** Bind a fresh operation to the original nominal deployment owner. No target or
  * replacement engine/tools are accepted here. An exact issued Node recipe may
@@ -121,22 +121,22 @@ type Recipe = Parameters<typeof selectNodeDockerRoute>[0];
  * provenance and must be used for execution. The capability gains no fields.
  * PA, Host and closure facts must match that owner; only operation identities may change. This allocates no route.
  */
-export function bindContainedTurnRouteEnforcement<P extends Recipe["preparation"]>(
-  capability: ContainedTurnRouteEnforcementCapability, bindingInput: Binding,
-  recipe: Readonly<{route: Recipe["route"]; preparation: P}>,
+export function bindContainedTurnRouteEnforcement<P extends ContainedTurnRouteRecipe["preparation"]>(
+  capability: ContainedTurnRouteEnforcementCapability, bindingInput: ContainedTurnRouteBinding,
+  recipe: Readonly<{route: ContainedTurnRouteRecipe["route"]; preparation: P}>,
 ): DockerLinuxExclusiveRouteAdmissionInput & Readonly<{preparation: P}>;
 export function bindContainedTurnRouteEnforcement(
-  capability: ContainedTurnRouteEnforcementCapability, bindingInput: Binding,
-  recipe?: Recipe,
+  capability: ContainedTurnRouteEnforcementCapability, bindingInput: ContainedTurnRouteBinding,
+  recipe?: ContainedTurnRouteRecipe,
 ): DockerLinuxExclusiveRouteAdmissionInput;
 export function bindContainedTurnRouteEnforcement(
-  capability: ContainedTurnRouteEnforcementCapability, bindingInput: Binding,
+  capability: ContainedTurnRouteEnforcementCapability, bindingInput: ContainedTurnRouteBinding,
   recipe?: Parameters<typeof selectNodeDockerRoute>[0],
 ): DockerLinuxExclusiveRouteAdmissionInput {
   const owner = minted.get(capability);
   if (owner === undefined) {throw invalidTarget();}
   const binding = snapshotBinding(bindingInput);
-  const keys = Reflect.ownKeys(owner.route.binding) as (keyof Binding)[];
+  const keys = Reflect.ownKeys(owner.route.binding) as (keyof ContainedTurnRouteBinding)[];
   if (Reflect.ownKeys(binding).length !== keys.length || keys.some(key =>
     !Object.hasOwn(binding, key) || (!operationFields.has(key) && binding[key] !== owner.route.binding[key]))) {
     throw invalidTarget();

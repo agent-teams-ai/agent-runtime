@@ -1,10 +1,15 @@
 import { custodyDataRecord, readHostCustodyHttpHandoff, hostHttpAbortOperations,
-  NodeCustodyHttpResources, type NodeCustodyHttpResourceInput, type HostCustodyHttpHandoff,
+  NodeCustodyHttpResources, type NodeCustodyHttpIngress, type NodeCustodyHttpResourceInput,
+  type NodeCustodyHttpResourcePreparation, type NodeCustodyHttpSession, type HostCustodyHttpHandoff,
   type HostCustodyHttpResourceLifetime, type HostHttpEgressSessionDependencies
 } from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import { DockerHostCustodyLifecycle, dockerProviderProcessMountFacts, sameDockerAuthority, awaitNetworkCleanupWork,
-  type LaunchedDockerCustody
+  type DockerCustodyAttemptKey, type LaunchedDockerCustody
 } from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
+
+export type { DockerCustodyAttemptKey, HostCustodyHttpHandoff, HostCustodyHttpResourceLifetime,
+  HostHttpEgressSessionDependencies, NodeCustodyHttpIngress, NodeCustodyHttpResourceInput,
+  NodeCustodyHttpResourcePreparation, NodeCustodyHttpSession };
 const observeLaunch = Object.getOwnPropertyDescriptor(DockerHostCustodyLifecycle.prototype, "observeLaunch")!.value as DockerHostCustodyLifecycle["observeLaunch"];
 const rejected = (): TypeError => new TypeError("Docker HTTP custody lifetime unavailable or conflicts");
 const ownerKeys = ["tenantId", "projectId", "operationId", "attemptId", "custodyId", "hostInstanceId", "hostBootId"] as const;

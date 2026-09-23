@@ -7,16 +7,16 @@ import {
   type HostHttpEgressV4Subject,
 } from "./host-http-egress-v4-types.js";
 
-interface Resource { phase: 0 | 1 | 2 | 3 | 4; actual: string | null; }
-interface Exchange { number: number; inbound: Resource; upstream: Resource; closing: boolean; }
+export interface HostHttpEgressReplayResource { phase: 0 | 1 | 2 | 3 | 4; actual: string | null; }
+export interface HostHttpEgressReplayExchange { number: number; inbound: HostHttpEgressReplayResource; upstream: HostHttpEgressReplayResource; closing: boolean; }
 export interface HostHttpEgressV4Ledger {
-  network: Resource; listener: Resource; route: Resource;
+  network: HostHttpEgressReplayResource; listener: HostHttpEgressReplayResource; route: HostHttpEgressReplayResource;
   container: DockerContainerAuthority | null; containerAbsent: boolean;
-  exchange: Exchange | null; exchanges: number;
+  exchange: HostHttpEgressReplayExchange | null; exchanges: number;
   cutoff: boolean; cutoffObserved: boolean; reconcileRequired: boolean; retired: boolean;
   actualIdentities: string[];
 }
-const resource = (): Resource => ({ phase: 0, actual: null });
+const resource = (): HostHttpEgressReplayResource => ({ phase: 0, actual: null });
 export const v4EmptyLedger = (): HostHttpEgressV4Ledger => ({ network: resource(), listener: resource(), route: resource(),
   container: null, containerAbsent: false, exchange: null, exchanges: 0,
   cutoff: false, cutoffObserved: false, reconcileRequired: false, retired: false, actualIdentities: [] });
@@ -58,11 +58,11 @@ const checkObservation = (s: HostHttpEgressV4Subject, state: HostHttpEgressV4Led
       dockerCustodyAuthoritySha256(observation.container) === dockerCustodyAuthoritySha256(state.container));
   }
 };
-const allocate = (r: Resource, receipt?: HostHttpEgressV4Observation): void => {
+const allocate = (r: HostHttpEgressReplayResource, receipt?: HostHttpEgressV4Observation): void => {
   ensure(r.phase === (receipt === undefined ? 0 : 1));
   r.phase = receipt === undefined ? 1 : 2; r.actual = receipt?.actualSha256 ?? null;
 };
-const release = (r: Resource, receipt: boolean): void => {
+const release = (r: HostHttpEgressReplayResource, receipt: boolean): void => {
   ensure(receipt ? r.phase === 3 : r.phase === 1 || r.phase === 2);
   r.phase = receipt ? 4 : 3;
 };

@@ -2,6 +2,8 @@ import type { DispatchDigest } from "../../../application/ports/outbound/dispatc
 import type { DispatchConsumptionRepository, PersistedConsumption } from
   "../../../application/ports/outbound/dispatch-consumption-repository.js";
 import type { DispatchAuthorityHead } from "../../../domain/dispatch-authority-head.js";
+import type { DispatchPublicationKey } from
+  "../../../application/ports/outbound/dispatch-acceptance-owner.js";
 import { snapshotExactDispatchVariant } from "../../../domain/dispatch-exact-record.js";
 import { mapConsumeResultToV1, mapSettlementResultToV1 } from
   "../../../application/contained-turn-dispatch-authority-v1-result-mappers.js";
@@ -129,10 +131,28 @@ const createRecordReaders = (digest: DispatchDigest["digestCanonical"]) => {
 
 export interface PostgresDispatchConsumptionRepository extends DispatchConsumptionRepository {
   migrate(): Promise<void>;
-  readAuthority(key: OperationKey): Promise<Head>;
-  replaceAuthority(head: DispatchAuthorityHead, expectedHeadVersion: string): Promise<HeadChange>;
-  revokeAuthority(key: OperationKey, expectedHeadVersion: string): Promise<HeadChange>;
+  readAuthority(key: DispatchPublicationKey): Promise<PostgresDispatchAuthoritySnapshot>;
+  replaceAuthority(
+    head: DispatchAuthorityHead,
+    expectedHeadVersion: string,
+  ): Promise<PostgresDispatchAuthorityChange>;
+  revokeAuthority(
+    key: DispatchPublicationKey,
+    expectedHeadVersion: string,
+  ): Promise<PostgresDispatchAuthorityChange>;
   close(): void;
+}
+
+/** Supported control-plane projection; PostgreSQL row shapes remain private. */
+export interface PostgresDispatchAuthoritySnapshot {
+  readonly headVersion: string;
+  readonly authority?: DispatchAuthorityHead;
+}
+
+/** Supported result of the PostgreSQL authority-head compare-and-swap. */
+export interface PostgresDispatchAuthorityChange {
+  readonly status: "applied" | "conflict";
+  readonly headVersion: string;
 }
 
 /** Private owner adapter. The caller supplies the SAME digest used by the RS factory.

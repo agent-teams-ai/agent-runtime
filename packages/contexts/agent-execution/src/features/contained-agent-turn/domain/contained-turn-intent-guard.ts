@@ -1,4 +1,4 @@
-import type { ContainedTurnScope } from "./contained-turn-authority.js";
+import type { ContainedTurnAuthorityScope } from "./contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue, type ContainedTurnCanonicalDigest, type ContainedTurnCommandFingerprint } from "./contained-turn-codecs.js";
 import { containedTurnIdentity, type ContainedTurnCancellationCommandId, type ContainedTurnCommandId, type ContainedTurnOperationId, type ContainedTurnProofId } from "./contained-turn-identities.js";
 import { CONTAINED_TURN_LIMITS, validateContainedTurnText } from "./contained-turn-limits.js";
@@ -22,7 +22,7 @@ export interface ContainedTurnPreventionCommand {
   readonly commandId: ContainedTurnCommandId;
   readonly preventionCommandId: ContainedTurnCancellationCommandId;
   readonly preventionDigest: ContainedTurnCanonicalDigest;
-  readonly scope: ContainedTurnScope;
+  readonly scope: ContainedTurnAuthorityScope;
   readonly targetIntentCorrelation: string | null;
   readonly version: 1;
 }

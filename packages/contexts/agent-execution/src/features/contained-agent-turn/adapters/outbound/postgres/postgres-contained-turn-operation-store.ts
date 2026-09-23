@@ -97,7 +97,7 @@ export class PostgresContainedTurnOperationStore implements ContainedTurnKernelO
     client: ContainedTurnPostgresClient,
     operationId: string,
     lock = false,
-    scope?: import("../../../domain/contained-turn-authority.js").ContainedTurnScope,
+    scope?: import("../../../domain/contained-turn-authority.js").ContainedTurnAuthorityScope,
   ): Promise<ContainedTurnKernelOperation | undefined> {
     return this.#operations.load(client, operationId, lock, scope);
   }

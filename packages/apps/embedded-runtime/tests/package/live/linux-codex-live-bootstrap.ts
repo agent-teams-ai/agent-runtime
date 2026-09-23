@@ -15,7 +15,7 @@ import {
   createPostgresDispatchAcceptanceStore,createPostgresDispatchConsumptionRepository
 } from "@agent-teams/runtime-security/composition";
 import {
-  createHostCustodiedAgentRuntimeHost, type HostCustodiedAgentRuntimeHostDependencies,
+  createLinuxCodexDeploymentAgentRuntimeHost, type HostCustodiedAgentRuntimeHostDependencies,
 } from "../../../dist/composition/host-custodied-agent-runtime-host.js";
 import {createLinuxCodexNodeRecipe} from "../../../dist/composition/linux-codex-node-recipe.js";
 import {ContainedTurnConstructionCleanupError, ContainedTurnOwnerDisposalError} from
@@ -29,7 +29,7 @@ import {createLinuxCodexLiveFirewallWiring, type LinuxCodexLiveFirewallPins} fro
 import {createLiveNativeStartCollector} from "./linux-codex-live-native-start.ts";
 
 type Pool = ConstructorParameters<typeof PostgresContainedTurnOperationStore>[0]["pool"];
-type Host = ReturnType<typeof createHostCustodiedAgentRuntimeHost>;
+type Host = ReturnType<typeof createLinuxCodexDeploymentAgentRuntimeHost>;
 type Selection = Parameters<typeof createPostgresOperationDispatchConsumption>[1];
 type Acceptance = Parameters<typeof createDispatchAcceptanceFeature>[0];
 type Recipe = ReturnType<typeof createLinuxCodexNodeRecipe>;
@@ -242,7 +242,7 @@ export const setupLinuxCodexLiveBootstrap = async (pool: Pool, pins: LinuxCodexL
       })});
     const launchRecords = createLinuxCodexLiveLaunchRecords(pins, () => closing);
     setupStage = "host-composition";
-    host = createHostCustodiedAgentRuntimeHost({authorityRevision: pins.authorityRevision,
+    host = createLinuxCodexDeploymentAgentRuntimeHost({authorityRevision: pins.authorityRevision,
       capabilities: pins.capabilities,
       containedTurn: {
         authority: "current",

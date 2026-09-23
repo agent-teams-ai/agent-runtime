@@ -49,12 +49,12 @@ export type ContainedTurnProofKind =
   | "terminal_truth"
   | "workspace_closure";
 
-interface ContainedTurnOperationProofBinding {
+export interface ContainedTurnOperationProofBinding {
   readonly authorityVectorDigest: ContainedTurnCanonicalDigest;
   readonly operationId: ContainedTurnOperationId;
 }
 
-interface ContainedTurnAttemptProofBinding extends ContainedTurnOperationProofBinding {
+export interface ContainedTurnAttemptProofBinding extends ContainedTurnOperationProofBinding {
   readonly attemptId: ContainedTurnAttemptId;
   readonly effectId: ContainedTurnEffectId;
 }

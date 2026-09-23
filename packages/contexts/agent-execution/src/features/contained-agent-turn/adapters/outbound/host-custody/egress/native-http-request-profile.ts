@@ -4,12 +4,37 @@ export type NativeHttpRequestProfileId = "codex-chatgpt-responses/v1" | "codex-a
 
 const codexNames = Object.freeze(["accept", "content-type", "originator", "session-id", "thread-id", "user-agent",
   "version", "x-client-request-id", "x-codex-beta-features", "x-codex-routing-hint", "x-codex-turn-metadata",
-  "x-codex-window-id"] as const);
+  "x-codex-window-id"] as const satisfies readonly HttpPresentationHeaderName[]);
 const claudeNames = Object.freeze(["accept", "anthropic-beta", "anthropic-dangerous-direct-browser-access",
   "anthropic-version", "content-type", "user-agent", "x-app", "x-claude-code-session-id", "x-stainless-arch",
   "x-stainless-lang", "x-stainless-os", "x-stainless-package-version", "x-stainless-retry-count",
-  "x-stainless-runtime", "x-stainless-runtime-version", "x-stainless-timeout"] as const);
-export type HttpPresentationHeaderName = typeof codexNames[number] | typeof claudeNames[number];
+  "x-stainless-runtime", "x-stainless-runtime-version", "x-stainless-timeout"] as const satisfies readonly HttpPresentationHeaderName[]);
+export type HttpPresentationHeaderName =
+  | "accept"
+  | "anthropic-beta"
+  | "anthropic-dangerous-direct-browser-access"
+  | "anthropic-version"
+  | "content-type"
+  | "originator"
+  | "session-id"
+  | "thread-id"
+  | "user-agent"
+  | "version"
+  | "x-app"
+  | "x-claude-code-session-id"
+  | "x-client-request-id"
+  | "x-codex-beta-features"
+  | "x-codex-routing-hint"
+  | "x-codex-turn-metadata"
+  | "x-codex-window-id"
+  | "x-stainless-arch"
+  | "x-stainless-lang"
+  | "x-stainless-os"
+  | "x-stainless-package-version"
+  | "x-stainless-retry-count"
+  | "x-stainless-runtime"
+  | "x-stainless-runtime-version"
+  | "x-stainless-timeout";
 
 export type NativeHttpRequestProfile = Readonly<{
   id: NativeHttpRequestProfileId;

@@ -1,25 +1,29 @@
 /** Private driver boundary. The caller owns the pool and its shutdown. */
-export interface ContainedTurnPostgresQueryResult {
+export interface HttpEgressPostgresQueryResult {
   rows: Record<string, unknown>[];
   rowCount: number | null;
 }
 
-export interface ContainedTurnPostgresClient {
-  query(sql: string, values?: unknown[]): Promise<ContainedTurnPostgresQueryResult>;
+export interface HttpEgressPostgresClient {
+  query(sql: string, values?: unknown[]): Promise<HttpEgressPostgresQueryResult>;
   release(discard?: boolean): void;
 }
 
 export interface ContainedTurnPostgresPool {
-  connect(): Promise<ContainedTurnPostgresClient>;
+  connect(): Promise<HttpEgressPostgresClient>;
+}
+
+export interface PostgresHttpEgressPool {
+  connect(): Promise<HttpEgressPostgresClient>;
 }
 
 // This fence belongs to Host HTTP custody, never agent_execution.schema_migration.
 export const HTTP_EVIDENCE_FENCE = "host-http-egress-receipt/v1:canonical-complete-json/v1";
 const TIMEOUT_MS = 5_000;
 export class PostgresHttpEvidenceTransactions {
-  readonly #pool: ContainedTurnPostgresPool;
-  public constructor(pool: ContainedTurnPostgresPool) {this.#pool = pool;}
-  async #connect(): Promise<ContainedTurnPostgresClient> {
+  readonly #pool: PostgresHttpEgressPool;
+  public constructor(pool: PostgresHttpEgressPool) {this.#pool = pool;}
+  async #connect(): Promise<HttpEgressPostgresClient> {
     const pending = this.#pool.connect();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -29,7 +33,7 @@ export class PostgresHttpEvidenceTransactions {
     } catch (error) {void pending.then((client): undefined => {client.release(true); return undefined;}, () => {}); throw error;}
     finally {clearTimeout(timer);}
   }
-  public async run<T>(work: (client: ContainedTurnPostgresClient, query: (sql: string, values?: unknown[]) => Promise<ContainedTurnPostgresQueryResult>) => Promise<T>): Promise<T> {
+  public async run<T>(work: (client: HttpEgressPostgresClient, query: (sql: string, values?: unknown[]) => Promise<HttpEgressPostgresQueryResult>) => Promise<T>): Promise<T> {
     const client = await this.#connect();
     let discarded = false;
     const query = async (sql: string, values?: unknown[]) => {

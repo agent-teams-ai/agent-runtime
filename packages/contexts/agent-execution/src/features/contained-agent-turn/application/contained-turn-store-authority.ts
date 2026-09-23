@@ -1,4 +1,4 @@
-import type { ContainedTurnScope } from "../domain/contained-turn-authority.js";
+import type { ContainedTurnAuthorityScope } from "../domain/contained-turn-authority.js";
 import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
 import type {
   ContainedTurnCommandId,
@@ -19,14 +19,14 @@ export interface ContainedTurnAcceptanceOwnerKey {
 }
 
 export const containedTurnScopesEqual = (
-  left: ContainedTurnScope,
-  right: ContainedTurnScope,
+  left: ContainedTurnAuthorityScope,
+  right: ContainedTurnAuthorityScope,
 ): boolean => left.projectId === right.projectId && left.tenantId === right.tenantId;
 
 /** Composite acceptance namespace; a command ID is never globally identifying. */
 export const containedTurnAcceptanceOwnerKey = (input: Readonly<{
   commandId: ContainedTurnCommandId;
-  scope: ContainedTurnScope;
+  scope: ContainedTurnAuthorityScope;
 }>): ContainedTurnAcceptanceOwnerKey => {
   assertContainedTurnExactRecord("acceptance owner key input", input, ["commandId", "scope"]);
   assertContainedTurnExactRecord("acceptance owner scope", input.scope, ["projectId", "tenantId"]);
@@ -39,7 +39,7 @@ export const containedTurnAcceptanceOwnerKey = (input: Readonly<{
 
 export const containedTurnOwnerStoreAuthority = (
   operation: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
 ): ContainedTurnOwnerStoreAuthority => {
   if (!containedTurnScopesEqual(operation.scope, trustedScope)) {
     throw new TypeError("owner-store authority scope does not own the operation");
@@ -62,14 +62,14 @@ export const containedTurnOwnerStoreAuthorityMatches = (
 const isOwnedOperation = (
   operation: ContainedTurnKernelOperation,
   operationId: ContainedTurnOperationId,
-  scope: ContainedTurnScope,
+  scope: ContainedTurnAuthorityScope,
 ): boolean => containedTurnScopesEqual(operation.scope, scope) && operation.operationId === operationId;
 
 /** Scope and subject selection for owner-store reads; mismatch is absence. */
 export const selectContainedTurnOwnerStoreRead = (input: Readonly<{
   current: ContainedTurnKernelOperation | undefined;
   operationId: ContainedTurnOperationId;
-  scope: ContainedTurnScope;
+  scope: ContainedTurnAuthorityScope;
 }>): ContainedTurnKernelOperation | undefined => {
   assertContainedTurnExactRecord("owner-store read predicate", input, ["current", "operationId", "scope"]);
   return input.current !== undefined && isOwnedOperation(input.current, input.operationId, input.scope)
@@ -90,7 +90,7 @@ export const classifyContainedTurnOwnerStoreWrite = (input: Readonly<{
   current: ContainedTurnKernelOperation | undefined;
   expectedRevision: number;
   operationId: ContainedTurnOperationId;
-  scope: ContainedTurnScope;
+  scope: ContainedTurnAuthorityScope;
 }>): ContainedTurnOwnerStoreWritePredicate => {
   assertContainedTurnExactRecord("owner-store write predicate", input, [
     "current", "expectedRevision", "operationId", "scope",
@@ -127,7 +127,7 @@ export const sanitizeContainedTurnOwnerStoreOutcome = (input: Readonly<{
 export const sanitizeContainedTurnAcceptanceOutcome = (input: Readonly<{
   candidate: ContainedTurnKernelOperation;
   outcome: AcceptContainedTurnKernelOperationOutcome;
-  scope: ContainedTurnScope;
+  scope: ContainedTurnAuthorityScope;
 }>): AcceptContainedTurnKernelOperationOutcome => {
   assertContainedTurnExactRecord("acceptance outcome sanitizer", input, ["candidate", "outcome", "scope"]);
   if (!containedTurnScopesEqual(input.candidate.scope, input.scope)) {
@@ -165,7 +165,7 @@ export const sanitizeContainedTurnAcceptanceOutcome = (input: Readonly<{
 export const sanitizeContainedTurnIdentificationOutcome = (input: Readonly<{
   commandId: ContainedTurnCommandId;
   outcome: IdentifyContainedTurnAcceptanceOutcome;
-  scope: ContainedTurnScope;
+  scope: ContainedTurnAuthorityScope;
 }>): IdentifyContainedTurnAcceptanceOutcome => {
   assertContainedTurnExactRecord("identification outcome sanitizer", input, ["commandId", "outcome", "scope"]);
   if (input.outcome.kind !== "replayed") {return input.outcome;}

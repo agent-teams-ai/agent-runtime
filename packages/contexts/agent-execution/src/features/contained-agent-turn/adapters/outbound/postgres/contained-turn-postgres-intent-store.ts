@@ -1,7 +1,7 @@
 import type {
   ContainedTurnPostgresClient,
 } from "./contained-turn-postgres-pool.js";
-import { containedTurnCancellationFingerprint, containedTurnScopeDigest, type ContainedTurnScope } from "../../../domain/contained-turn-authority.js";
+import { containedTurnCancellationFingerprint, containedTurnScopeDigest, type ContainedTurnAuthorityScope } from "../../../domain/contained-turn-authority.js";
 import { containedTurnIdentity } from "../../../domain/contained-turn-identities.js";
 import { containedTurnIntentAuthorityDigest, validateContainedTurnGuardDigest, validateContainedTurnPreventionCommand, type ContainedTurnIntentAuthority, type ContainedTurnPreventionReceipt } from "../../../domain/contained-turn-intent-guard.js";
 import type { ContainedTurnKernelOperation } from "../../../domain/contained-turn-kernel-model.js";
@@ -18,7 +18,7 @@ interface IntentRow {
   readonly command_fingerprint: string;
   readonly operation_id: string | null;
 }
-type IntentKey = Readonly<{ commandId: string; commandFingerprint: string; scope: ContainedTurnScope }>;
+type IntentKey = Readonly<{ commandId: string; commandFingerprint: string; scope: ContainedTurnAuthorityScope }>;
 
 /** All writers lock namespace -> intent -> operation. No provider or external authority call runs here. */
 export class ContainedTurnPostgresIntentStore {
@@ -35,7 +35,7 @@ export class ContainedTurnPostgresIntentStore {
   }
 
   /** Missing root authority is a dormant production seam, never inferred from request data. */
-  public async lock(client: ContainedTurnPostgresClient, scope: ContainedTurnScope): Promise<boolean> {
+  public async lock(client: ContainedTurnPostgresClient, scope: ContainedTurnAuthorityScope): Promise<boolean> {
     if (this.#authorityDigest === undefined) {return false;}
     await client.query(
       `INSERT INTO agent_execution.contained_turn_intent_namespace_v1(tenant_id,project_id,authority_digest)

@@ -22,6 +22,13 @@ type Contain = (input: DockerHostCustodyContainmentInput) => Promise<Readonly<{
   journal?: DockerCustodyJournalRecord;
 }>>;
 
+export interface DockerRemovalObservationOwner {
+  observeNoCreation(input: DockerNoCreationInput): Promise<object | undefined>;
+  readNoCreationObservation(token: object): DockerNoCreationObservation | undefined;
+  containAndObserve(input: DockerHostCustodyContainmentInput): Promise<object | undefined>;
+  readObservation(token: object): DockerRemovalObservation | undefined;
+}
+
 /**
  * Private lifecycle-owned evidence for later listener/network release. Creation
  * is inert. Only containAndObserve performs effects, using the existing durable
@@ -31,7 +38,7 @@ type Contain = (input: DockerHostCustodyContainmentInput) => Promise<Readonly<{
  * it does not prove listener/socket closure or confer dispatch authority.
  */
 export const createDockerRemovalObservationOwner = (engine: Pick<DockerEnginePort, "inspect">, contain: Contain,
-  noCreation?: ReturnType<typeof createDockerNoCreationObservationOwner>) => {
+  noCreation?: ReturnType<typeof createDockerNoCreationObservationOwner>): DockerRemovalObservationOwner => {
   const inspect = engine.inspect.bind(engine);
   const observations = new WeakMap<object, DockerRemovalObservation>();
   return Object.freeze({

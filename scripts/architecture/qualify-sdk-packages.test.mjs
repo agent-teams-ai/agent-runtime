@@ -4,9 +4,30 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
-import { assertPackedSdkArchive, assertPublicImports } from "./qualify-sdk-packages.mjs";
+import {
+  assertPackedSdkArchive,
+  assertPublicImports,
+  directoryLinkType,
+  pnpmLauncher
+} from "./qualify-sdk-packages.mjs";
 
 const contract = JSON.parse(readFileSync(new URL("../../architecture/c0/ar-owned-lifetime/contract.json", import.meta.url), "utf8"));
+
+test("use Windows junctions and the pinned pnpm JavaScript launcher", () => {
+  assert.equal(directoryLinkType("win32"), "junction");
+  assert.equal(directoryLinkType("linux"), "dir");
+  assert.deepEqual(pnpmLauncher({
+    nodeExecutable: "C:\\Program Files\\nodejs\\node.exe",
+    pnpmEntrypoint: "C:\\pnpm\\pnpm.cjs"
+  }), {
+    command: "C:\\Program Files\\nodejs\\node.exe",
+    prefixArgs: ["C:\\pnpm\\pnpm.cjs"]
+  });
+});
+
+test("reject qualification without the pinned pnpm launcher", () => {
+  assert.throws(() => pnpmLauncher({ pnpmEntrypoint: null }), /SDK_PNPM_ENTRYPOINT_MISSING/u);
+});
 // These fixtures test membership, not type extraction. Real built package
 // qualification uses the separate disposable pack command and retains archives.
 function fixture(t, pkg, mutate = () => {}) {

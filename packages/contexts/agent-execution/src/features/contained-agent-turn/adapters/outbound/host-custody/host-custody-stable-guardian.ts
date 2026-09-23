@@ -33,7 +33,7 @@ export interface GuardianExitObservation extends CustodiedProviderProcessExit {
   readonly status: "observed";
 }
 
-interface GuardianLaunchInput {
+export interface HostCustodyGuardianLaunchInput {
   readonly darwinRoute?: DarwinSeatbeltProjection;
   readonly arguments: readonly string[];
   readonly descriptors: VerifiedLaunchDescriptors;
@@ -60,7 +60,7 @@ const isHostSignal = (value: unknown): value is NodeJS.Signals =>
 
 const PROVIDER_ERROR_EVENT = "host-custody-provider-error";
 const PROVIDER_EXIT_EVENT = "host-custody-provider-exit";
-type ProviderEventListener = ((error: Error) => void) |
+export type HostCustodyProviderEventListener = ((error: Error) => void) |
   ((code: number | null, signal: NodeJS.Signals | null) => void);
 
 export class StableProcessGroupGuardian {
@@ -68,7 +68,7 @@ export class StableProcessGroupGuardian {
   readonly #guardianExit: Promise<GuardianExitObservation>;
   #guardianExitObservation: GuardianExitObservation | undefined;
   readonly #inherited: readonly { readonly childDescriptor: number }[];
-  readonly #input: GuardianLaunchInput;
+  readonly #input: HostCustodyGuardianLaunchInput;
   #launchDispatched = false;
   #launchOpen = true;
   #exitCode: number | null = null;
@@ -90,7 +90,7 @@ export class StableProcessGroupGuardian {
   #settleStderrFinal: ((status: GuardianProviderStreamFinal) => void) | undefined;
   #settleStdoutFinal: ((status: GuardianProviderStreamFinal) => void) | undefined;
 
-  public constructor(input: GuardianLaunchInput, startAfterMs: number) {
+  public constructor(input: HostCustodyGuardianLaunchInput, startAfterMs: number) {
     if (input.canonicalLaunch !== undefined &&
         (!Number.isSafeInteger(startAfterMs) || startAfterMs < 1 || startAfterMs > 2_147_483_647)) {
       throw new TypeError("Darwin guardian admission deadline is invalid");
@@ -188,15 +188,15 @@ export class StableProcessGroupGuardian {
     return stream === "stdout" ? this.#stdoutFinal : this.#stderrFinal;
   }
 
-  public off(event: "error" | "exit", listener: ProviderEventListener): void {
+  public off(event: "error" | "exit", listener: HostCustodyProviderEventListener): void {
     this.child.off(event === "error" ? PROVIDER_ERROR_EVENT : PROVIDER_EXIT_EVENT, listener as never);
   }
 
-  public on(event: "error" | "exit", listener: ProviderEventListener): void {
+  public on(event: "error" | "exit", listener: HostCustodyProviderEventListener): void {
     this.child.on(event === "error" ? PROVIDER_ERROR_EVENT : PROVIDER_EXIT_EVENT, listener as never);
   }
 
-  public once(event: "error" | "exit", listener: ProviderEventListener): void {
+  public once(event: "error" | "exit", listener: HostCustodyProviderEventListener): void {
     this.child.once(event === "error" ? PROVIDER_ERROR_EVENT : PROVIDER_EXIT_EVENT, listener as never);
   }
 

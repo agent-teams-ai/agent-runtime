@@ -106,15 +106,17 @@ const endpoint = (input: unknown, darwinLoopback = false): string => {
   return input;
 };
 
-/** Pure: the Host supplies an already-created boundary; no filesystem allocation,
- * endpoint allocation, credential lookup or preparation occurs here.
- */
-const createRecipe = (input: {
+export interface CodexNativeBrokerRecipeInput {
   readonly boundary: CodexAppServerPermissionBoundary;
   readonly endpoint: string;
   readonly profile: "codex-chatgpt";
   readonly dockerMounts?: Parameters<typeof createCodexDockerPathProjection>[0];
-}, darwinLoopback = false): CodexNativeBrokerRecipe => {
+}
+
+/** Pure: the Host supplies an already-created boundary; no filesystem allocation,
+ * endpoint allocation, credential lookup or preparation occurs here.
+ */
+const createRecipe = (input: CodexNativeBrokerRecipeInput, darwinLoopback = false): CodexNativeBrokerRecipe => {
   const data = snapshotCodexNativeInput(input, ["boundary", "endpoint", "profile"], ["dockerMounts"]);
   const boundary = data.boundary as CodexAppServerPermissionBoundary;
   assertIssuedCodexPermissionBoundary(boundary);
@@ -132,10 +134,10 @@ const createRecipe = (input: {
   return recipe;
 };
 
-export const createCodexNativeBrokerRecipe = (input: Parameters<typeof createRecipe>[0]): CodexNativeBrokerRecipe => createRecipe(input);
+export const createCodexNativeBrokerRecipe = (input: CodexNativeBrokerRecipeInput): CodexNativeBrokerRecipe => createRecipe(input);
 
 /** Private Darwin composition only; existing Docker recipe acceptance is unchanged. */
-export const createDarwinCodexNativeBrokerRecipe = (input: Omit<Parameters<typeof createRecipe>[0], "dockerMounts"> & {readonly tmpDir: string}): CodexNativeBrokerRecipe => {
+export const createDarwinCodexNativeBrokerRecipe = (input: Omit<CodexNativeBrokerRecipeInput, "dockerMounts"> & {readonly tmpDir: string}): CodexNativeBrokerRecipe => {
   if (!/^http:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}\/backend-api\/codex$/u.test(input.endpoint) ||
       Object.hasOwn(input, "dockerMounts")) {throw rejected();}
   const data = snapshotCodexNativeInput(input, ["boundary", "endpoint", "profile", "tmpDir"]);

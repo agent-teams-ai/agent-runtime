@@ -9,6 +9,10 @@ const directory = "architecture/sdk-growth";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const command = "node scripts/architecture/check-sdk-growth-profile.mjs";
 
+export function normalizeWorkspaceManifestPaths(paths) {
+  return paths.map(path => path.replaceAll("\\", "/")).toSorted();
+}
+
 // This checks consumer enrollment, not SDK admission. EF owns observation,
 // comparison and approval; a candidate-controlled checker cannot grant trust.
 export function checkSdkGrowthProfile(repository = root) {
@@ -19,7 +23,9 @@ export function checkSdkGrowthProfile(repository = root) {
   const frozen = json("architecture/c0/ar-owned-lifetime/contract.json");
   const manifest = json("package.json");
   const workspace = parse(readFileSync(resolve(repository, "pnpm-workspace.yaml"), "utf8"));
-  const discovered = globSync(workspace.packages.map(pattern => `${pattern}/package.json`), { cwd: repository }).toSorted();
+  const discovered = normalizeWorkspaceManifestPaths(
+    globSync(workspace.packages.map(pattern => `${pattern}/package.json`), { cwd: repository })
+  );
   const accepted = frozen.inventory.packages.filter(pkg => pkg.manifest !== "package.json");
   assert.deepEqual(discovered, accepted.map(pkg => pkg.manifest).toSorted(), "SDK_SCOPE_DRIFT");
   assert.deepEqual(profile.packages.map(pkg => pkg.manifestPath).toSorted(), discovered, "SDK_PROFILE_SCOPE_DRIFT");
@@ -38,12 +44,20 @@ export function checkSdkGrowthProfile(repository = root) {
   }, "SDK_REGISTRY_IDENTITY_DRIFT");
   assert.equal(activation.authority.candidateWorkflowIsAuthority, false);
   const review = json("architecture/get-modular/evidence/sdk-growth-standard-review.json");
+  const migrationReview = json("architecture/get-modular/evidence/a3-cms-pin-review.json");
   const consumerProfile = json("architecture/get-modular/consumer-profile.json");
-  assert.equal(review.activeCommit, consumerProfile.standard.commit, "SDK_CMS_PIN_DRIFT");
-  assert.equal(review.activeSha256, consumerProfile.standard.sha256, "SDK_CMS_PIN_DRIFT");
-  assert.equal(createHash("sha256").update(readFileSync(resolve(repository, consumerProfile.standard.evidencePath))).digest("hex"), review.activeSha256, "SDK_CMS_PIN_DRIFT");
+  assert.equal(migrationReview.historicalReview,
+    "architecture/get-modular/evidence/sdk-growth-standard-review.json", "SDK_CMS_REVIEW_DRIFT");
+  assert.equal(review.activeCommit, migrationReview.before.commit, "SDK_CMS_REVIEW_DRIFT");
+  assert.equal(review.activeSha256, migrationReview.before.sha256, "SDK_CMS_REVIEW_DRIFT");
+  assert.equal(consumerProfile.standard.commit, migrationReview.after.commit, "SDK_CMS_PIN_DRIFT");
+  assert.equal(consumerProfile.standard.sha256, migrationReview.after.sha256, "SDK_CMS_PIN_DRIFT");
+  assert.equal(createHash("sha256").update(readFileSync(resolve(repository,
+    consumerProfile.standard.evidencePath))).digest("hex"), migrationReview.after.sha256, "SDK_CMS_PIN_DRIFT");
   assert.equal(review.suppliedCurrentCommit, null, "SDK_CMS_CURRENT_IDENTITY_UNPROVEN");
-  assert.equal(createHash("sha256").update(readFileSync(resolve(repository, review.suppliedCurrentEvidencePath))).digest("hex"), review.suppliedCurrentSha256, "SDK_CMS_REVIEW_DRIFT");
+  assert.equal(createHash("sha256").update(readFileSync(resolve(repository,
+    review.suppliedCurrentEvidencePath))).digest("hex"), review.suppliedCurrentSha256,
+  "SDK_CMS_REVIEW_DRIFT");
   for (const path of ["architecture/get-modular/consumer-profile.json", "architecture/consumer-module-standard/contained-turn-profile.json"]) {
     assert.deepEqual(json(path).sdkGrowth, { profile: `${directory}/profile.yaml`, activation: `${directory}/activation.json`, status: activation.status, compositionChange: false }, "SDK_CONSUMER_PROFILE_DRIFT");
   }
@@ -68,6 +82,7 @@ export function checkSdkGrowthProfile(repository = root) {
     assert.equal(actual.name, prior.name, "SDK_PACKAGE_IDENTITY_DRIFT");
     assert.equal(actual.private, true);
     assert.equal(actual.version, "0.0.0");
+    assert.deepEqual(actual.bin ?? null, prior.bin, "SDK_BIN_CLASSIFICATION_DRIFT");
     const runnerFiles = actual.name === "@agent-teams/embedded-runtime" ? ["scripts/run-package-tests.mjs"] : [];
     assert.deepEqual(actual.files, [...prior.files, ...runnerFiles], "SDK_PACKAGE_FILES_DRIFT");
     assert.equal(JSON.stringify(actual.exports), JSON.stringify(prior.exports), "SDK_EXPORT_MATRIX_DRIFT");

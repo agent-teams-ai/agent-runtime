@@ -214,6 +214,29 @@ test('census rejects new edges and type-to-runtime widening even when policy per
   assert.throws(() => verifySourceCensus(profile, census), /relationships drift/);
 });
 
+test('A3 embedded composition type edges remain reviewed without creating runtime owners', () => {
+  const expected = [
+    ['composition.embedded-runtime', 'packages/apps/embedded-runtime/src/composition.ts', 'contained-turn-access-authority.ts'],
+    ['composition.embedded-runtime', 'packages/apps/embedded-runtime/src/composition.ts', 'contained-turn-authority-capability.ts'],
+    ['composition.embedded-runtime', 'packages/apps/embedded-runtime/src/composition.ts', 'contained-turn-current-authority.ts'],
+    ['composition.embedded-runtime.contained-turn-support', 'packages/apps/embedded-runtime/src/composition/contained-turn-runtime-access.ts', 'contained-turn-operation-ref.ts'],
+  ];
+  for (const [boundaryId, from, target] of expected) {
+    const boundary = pending.boundaries.find(item => item.id === boundaryId);
+    assert.ok(boundary);
+    const edge = boundary.relationships.find(item => item.from === from && item.to === `packages/apps/embedded-runtime/src/composition/${target}` && item.mode === 'type-only');
+    assert.ok(edge, `${boundaryId}: ${target} must be a reviewed type-only edge`);
+    const census = {
+      productionRoots: pending.productionRoots,
+      packageRoots: pending.sourceCensus.packageRoots,
+      featureRoots: pending.sourceCensus.featureRoots,
+      relationships: Object.fromEntries(pending.boundaries.map(item => [item.id, structuredClone(item.relationships)])),
+    };
+    census.relationships[boundaryId].find(item => item.from === edge.from && item.to === edge.to && item.mode === edge.mode).mode = 'runtime';
+    assert.throws(() => verifySourceCensus(pending, census), /live relationships drift/);
+  }
+});
+
 async function retainFixtureCensus(f) {
   const policy = await loadSourcePolicy(f.root);
   const census = await readSourceCensus(f.root, policy);
@@ -356,22 +379,48 @@ test('reviewed documentation pin preserves the normative standard and rejects st
   assert.equal(review.migrationStatus, 'reviewed-documentation-migrated');
 });
 
-test('current lifecycle clarification pin rejects prior commit and prior document bytes', async () => {
+test('historical lifecycle clarification review retains its exact immutable identities', async () => {
   const review = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/ordinary-auth-pin-review.json', import.meta.url)));
-  const bytes = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard.md', import.meta.url), 'utf8');
   const prior = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard-714d6194.md', import.meta.url), 'utf8');
-  assert.equal(pending.standard.commit, review.upstream);
-  assert.equal(pending.standard.sha256, review.upstreamSha256);
-  assert.equal(digest(bytes), review.upstreamSha256);
   assert.equal(digest(prior), review.pinnedSha256);
-  assert.notEqual(digest(prior), digest(bytes));
+  assert.equal(review.upstream, '669a750d8db451e04f075cdeb36576c6606fba6e');
+  assert.equal(review.upstreamSha256, 'e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553');
+  assert.equal(review.migrationStatus, 'reviewed-documentation-migrated');
+});
+
+test('current A3 reciprocal pin rejects the prior commit and prior document bytes', async () => {
+  const review = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/a3-cms-pin-review.json', import.meta.url)));
+  const bytes = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard.md', import.meta.url), 'utf8');
+  const added = `Agent Runtime has accepted static Core/Assembly adoption for passive setup and
+ordinary-session composition in [Agent Runtime PR #168](https://github.com/agent-teams-ai/agent-runtime/pull/168),
+merged as \`3cd722f607e1643b809f6946ee303a5a94469171\`. This reciprocal reference
+records only that accepted passive scope; contained-turn and dynamic plugin
+runtime scope are not admitted. The consumer retains standard revision
+\`669a750d\` with complete-document byte SHA-256
+\`e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553\`.
+Core self-composition and synthetic/packed Hosts remain library evidence, not
+independent production consumers. This reference does not establish
+repository-wide conformance. Full legacy conversion and shared checker
+extraction require separate scope.`;
+  const removed = `Agent Runtime is a planned consumer, not an adopted product claim here. Core
+self-composition and synthetic/packed Hosts are library evidence, not independent
+production consumers. No consumer ledger entry or repository-wide conformance is
+created by this decision. Record reciprocal consumer evidence only after that
+consumer's exact scoped acceptance gates pass. Contained-turn migration, full
+legacy conversion and shared checker extraction require separate scope.`;
+  const prior = bytes.replace(added, removed);
+  assert.notEqual(prior, bytes, 'fixture must reconstruct the exact prior document');
+  assert.equal(digest(prior), review.before.sha256);
+  assert.equal(pending.standard.commit, review.after.commit);
+  assert.equal(pending.standard.sha256, review.after.sha256);
+  assert.equal(digest(bytes), review.after.sha256);
   const {profile, evidence} = fixture();
-  profile.standard.commit = review.upstream; profile.standard.sha256 = review.upstreamSha256;
-  evidence.standard = {commit: review.upstream, bytes};
+  profile.standard.commit = review.after.commit; profile.standard.sha256 = review.after.sha256;
+  evidence.standard = {commit: review.after.commit, bytes};
   assert.equal(verifyAdoption(profile, evidence).status, 'verified-metadata');
-  profile.standard.commit = review.pinned;
+  profile.standard.commit = review.before.commit;
   assert.throws(() => verifyAdoption(profile, evidence), /commit drift/);
-  profile.standard.commit = review.upstream; evidence.standard.bytes = prior;
+  profile.standard.commit = review.after.commit; evidence.standard.bytes = prior;
   assert.throws(() => verifyAdoption(profile, evidence), /bytes drift/);
 });
 

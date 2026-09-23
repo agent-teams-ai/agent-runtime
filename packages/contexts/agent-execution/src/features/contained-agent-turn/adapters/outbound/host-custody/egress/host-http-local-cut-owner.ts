@@ -6,21 +6,21 @@ import {boundedHttpOpaque, snapshotHttpEgressOperation} from "./http-ingress-val
 import type {HostHttpLocalAuthorityCut, HttpEgressBrokerPorts, HttpEgressClock} from "./http-egress-ports.js";
 import type {HttpEgressOperation, HttpEgressReceipt} from "./http-egress-contracts.js";
 
-type CutSnapshot = ReturnType<HostHttpLocalAuthorityCut["read"]>;
-type ClockSample = Omit<CutSnapshot, "status">;
-type ClaimedInput = Parameters<ContainedTurnHostPostClaimPreparation["prepareClaimed"]>[0];
+export type HostHttpLocalCutSnapshot = ReturnType<HostHttpLocalAuthorityCut["read"]>;
+export type HostHttpLocalCutClockSample = Omit<HostHttpLocalCutSnapshot, "status">;
+export type HostHttpLocalCutClaimedInput = Parameters<ContainedTurnHostPostClaimPreparation["prepareClaimed"]>[0];
 type Session = ReturnType<typeof createHostHttpEgressSession>;
 type SessionPorts = Omit<HostHttpEgressSessionDependencies, "identity" | "clock" | "localAuthorityCut">;
 
 export type HostHttpLocalCutInput = Readonly<{
   /** Only the trusted, acknowledged prepareClaimed handoff; a digest is not COMMIT provenance. */
-  claimed: ClaimedInput;
+  claimed: HostHttpLocalCutClaimedInput;
   /** Retain the actual Host-owned opaque live identity; never manufacture a replacement. */
   identity: HttpEgressBrokerPorts["identity"];
-  expectedClock: Readonly<Pick<ClockSample, "authorityId" | "epoch">>;
+  expectedClock: Readonly<Pick<HostHttpLocalCutClockSample, "authorityId" | "epoch">>;
   /** Borrow the SAME control clock/domain used by RS and all Host deadlines.
    * within must bound awaited work and honor its signal; closure uses a separate budget. */
-  clock: Readonly<{read(): ClockSample; within: HttpEgressClock["within"]}>;
+  clock: Readonly<{read(): HostHttpLocalCutClockSample; within: HttpEgressClock["within"]}>;
   operationDeadline: number;
   hostShutdownSignal?: AbortSignal;
 }>;
@@ -89,7 +89,7 @@ export const createHostHttpLocalCutOwner = (value: HostHttpLocalCutInput) => {
   const controller = new AbortController();
   const signals = [...new Set([input.claimed.signal,
     ...(input.hostShutdownSignal === undefined ? [] : [input.hostShutdownSignal])])];
-  let status: CutSnapshot["status"] = "current";
+  let status: HostHttpLocalCutSnapshot["status"] = "current";
   let latest = -1; let reading = false; let bound = false; let active = false; let clockUncertain = false;
   let session: Session | undefined;
   const detach = (): void => {for (const signal of signals) {signal.removeEventListener("abort", cancel);}};
@@ -119,7 +119,7 @@ export const createHostHttpLocalCutOwner = (value: HostHttpLocalCutInput) => {
     }
     return clockUncertain ? Number.NaN : controlTime;
   };
-  const read = (): CutSnapshot => {
+  const read = (): HostHttpLocalCutSnapshot => {
     if (signals.some(signal => signal.aborted)) {cancel();}
     const controlTime = observeTime();
     if (controlTime >= input.operationDeadline || signals.some(signal => signal.aborted)) {cancel();}

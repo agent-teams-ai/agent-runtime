@@ -1,7 +1,7 @@
 import type {
   ContainedTurnPostgresClient,
 } from "./contained-turn-postgres-pool.js";
-import type { ContainedTurnScope } from "../../../domain/contained-turn-authority.js";
+import type { ContainedTurnAuthorityScope } from "../../../domain/contained-turn-authority.js";
 import type {
   ContainedTurnEvidenceId,
   ContainedTurnOperationId,
@@ -99,7 +99,7 @@ export class ContainedTurnPostgresOperationRepository {
     input: Readonly<{
       evidenceId: ContainedTurnEvidenceId;
       operationId: string;
-      scope: ContainedTurnScope;
+      scope: ContainedTurnAuthorityScope;
     }>,
   ): Promise<ContainedTurnKernelOperation> {
     const current = await this.load(client, input.operationId, true, input.scope);
@@ -123,7 +123,7 @@ export class ContainedTurnPostgresOperationRepository {
     client: ContainedTurnPostgresClient,
     operationId: string,
     lock: boolean,
-    scope?: ContainedTurnScope,
+    scope?: ContainedTurnAuthorityScope,
   ): Promise<OperationRow | undefined> {
     const scopePredicate = scope === undefined ? "" : " AND tenant_id = $2 AND project_id = $3";
     const result = await client.query<OperationRow>(
@@ -145,7 +145,7 @@ export class ContainedTurnPostgresOperationRepository {
     client: ContainedTurnPostgresClient,
     operationId: string,
     lock = false,
-    scope?: ContainedTurnScope,
+    scope?: ContainedTurnAuthorityScope,
   ): Promise<ContainedTurnKernelOperation | undefined> {
     const row = await this.#authoritativeRow(client, operationId, lock, scope);
     if (row === undefined) {return undefined;}
@@ -236,7 +236,7 @@ export class ContainedTurnPostgresOperationRepository {
 
   public async rebuildProjections(
     client: ContainedTurnPostgresClient,
-    input: Readonly<{ operationId: ContainedTurnOperationId; scope: ContainedTurnScope }>,
+    input: Readonly<{ operationId: ContainedTurnOperationId; scope: ContainedTurnAuthorityScope }>,
   ): Promise<ContainedTurnKernelOperation | undefined> {
     const row = await this.#authoritativeRow(client, input.operationId, true, input.scope);
     if (row === undefined) {return undefined;}

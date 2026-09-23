@@ -8,16 +8,20 @@ import { createCurrentEgressOwner, snapshotDispatchAuthorityHead,
   type CurrentEgressOwnerInput, type PostgresDispatchConsumptionRepository } from
   "@agent-teams/runtime-security/composition";
 
-type RsReader = Pick<PostgresDispatchConsumptionRepository, "readAuthority">;
-type PaReader = Pick<ReturnType<typeof createPostgresRouteSelectionOwner>, "readCurrent">;
-type AcceptedHead = Awaited<ReturnType<RsReader["readAuthority"]>>;
+export type ContainedTurnCurrentRuntimeSecurityReader =
+  Pick<PostgresDispatchConsumptionRepository, "readAuthority">;
+export type ContainedTurnCurrentProviderAccessReader =
+  Pick<ReturnType<typeof createPostgresRouteSelectionOwner>, "readCurrent">;
+export type ContainedTurnCurrentAcceptedDispatch = Awaited<
+  ReturnType<ContainedTurnCurrentRuntimeSecurityReader["readAuthority"]>
+>;
 
 /** Actual owner contracts; none of the borrowed capabilities transfer disposal. */
 export type ContainedTurnCurrentEgressOwnersInput = Omit<CurrentEgressOwnerInput,
   "acceptedDispatch" | "readRsHead" | "readPaEndorsement"> & Readonly<{
-    acceptedDispatch: AcceptedHead;
-    runtimeSecurity: RsReader;
-    providerAccess: PaReader;
+    acceptedDispatch: ContainedTurnCurrentAcceptedDispatch;
+    runtimeSecurity: ContainedTurnCurrentRuntimeSecurityReader;
+    providerAccess: ContainedTurnCurrentProviderAccessReader;
   }>;
 
 const invalid = (): never => {throw new TypeError("Invalid current egress owner projection");};
@@ -34,7 +38,7 @@ const projectHead = (value: unknown): CurrentEgressDispatchHead => {
       keys.some(key => key !== "headVersion" && key !== "authority") ||
       (fields.authority !== undefined && !("value" in fields.authority))) {return invalid();}
   const raw: unknown = fields.authority?.value;
-  if (raw === undefined) {return { headVersion: fields.headVersion.value as AcceptedHead["headVersion"], authority: null };}
+  if (raw === undefined) {return { headVersion: fields.headVersion.value as ContainedTurnCurrentAcceptedDispatch["headVersion"], authority: null };}
   if (raw === null || typeof raw !== "object" || types.isProxy(raw)) {return invalid();}
   // The domain snapshot uses own-data reflection. Reject proxy scope before that
   // reflection too, without invoking a getter on the supplied head.
@@ -42,7 +46,7 @@ const projectHead = (value: unknown): CurrentEgressDispatchHead => {
   if (!scope || !("value" in scope) || types.isProxy(scope.value)) {return invalid();}
   const head = snapshotDispatchAuthorityHead(raw) ?? invalid();
   return {
-    headVersion: fields.headVersion.value as AcceptedHead["headVersion"],
+    headVersion: fields.headVersion.value as ContainedTurnCurrentAcceptedDispatch["headVersion"],
     authority: {
       operation: {
         scope: { ...head.scope, operationId: head.operationId },
@@ -66,7 +70,7 @@ const projectHead = (value: unknown): CurrentEgressDispatchHead => {
   };
 };
 
-const projectRoute = async (raw: Awaited<ReturnType<PaReader["readCurrent"]>>,
+const projectRoute = async (raw: Awaited<ReturnType<ContainedTurnCurrentProviderAccessReader["readCurrent"]>>,
   operation: CurrentEgressOperation): Promise<CurrentEgressEndorsement | null> => {
   if (raw === undefined) {return null;}
   // PA validates and detaches its full binding, descriptor, generation and digest

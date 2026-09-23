@@ -1,5 +1,6 @@
 export {
   CONTAINED_TURN_PROVIDER_DISPATCH_PURPOSE,
+  type ContainedTurnProviderDispatchPurpose,
   type ConsumeForDispatchInput,
   type ConsumeForDispatchOutcome,
   type ContainedTurnDispatchAuthorityV1,

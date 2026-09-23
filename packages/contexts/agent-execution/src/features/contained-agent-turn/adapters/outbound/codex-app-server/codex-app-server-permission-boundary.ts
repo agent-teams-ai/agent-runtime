@@ -24,6 +24,7 @@ import {
   CODEX_PERMISSION_PROFILE_ID,
   validateCodexAppServerUserAgent,
   type CodexAppServerPlatformTuple,
+  type CodexPermissionProfileId,
 } from "./codex-app-server-platform-tuple.js";
 
 export {
@@ -67,7 +68,7 @@ export const codexEffectiveTurnPolicyDigest = (
   sandboxPolicy: codexTurnSandboxPolicy(mode, boundary.workspaceRef),
 })).digest("hex")}`;
 
-export interface CodexDirectoryIdentity {
+export interface CodexDirectoryIdentitySnapshot {
   readonly device: number;
   readonly inode: number;
   readonly path: string;
@@ -77,7 +78,7 @@ const normalizedAbsoluteDirectory = (
   name: string,
   value: string,
   requirePrivateOwnership: boolean,
-): { readonly identity: CodexDirectoryIdentity; readonly path: string } => {
+): { readonly identity: CodexDirectoryIdentitySnapshot; readonly path: string } => {
   if (!isAbsolute(value) || resolve(value) !== value) {
     throw new TypeError(`${name} must be a normalized absolute path`);
   }
@@ -105,7 +106,7 @@ const normalizedAbsoluteDirectory = (
 
 export const validateCodexDirectoryIdentity = (
   name: string,
-  expected: CodexDirectoryIdentity,
+  expected: CodexDirectoryIdentitySnapshot,
   requirePrivateOwnership = true,
 ): void => {
   const current = normalizedAbsoluteDirectory(name, expected.path, requirePrivateOwnership).identity;
@@ -142,7 +143,7 @@ export const canonicalCodexJson = (value: unknown): string => {
 
 export interface CodexAppServerPermissionBoundary {
   readonly codexHome: string;
-  readonly codexHomeIdentity: CodexDirectoryIdentity;
+  readonly codexHomeIdentity: Readonly<{readonly device: number; readonly inode: number; readonly path: string}>;
   readonly effectivePolicyDigest: string;
   readonly permissionProfile: Readonly<{
     readonly extends: ":read-only" | ":workspace";
@@ -151,10 +152,10 @@ export interface CodexAppServerPermissionBoundary {
     }>;
     readonly network: Readonly<{ readonly enabled: false }>;
   }>;
-  readonly permissionProfileId: typeof CODEX_PERMISSION_PROFILE_ID;
+  readonly permissionProfileId: CodexPermissionProfileId;
   readonly intentMode: CodexContainedTurnMode;
   readonly workspaceRef: string;
-  readonly workspaceIdentity: CodexDirectoryIdentity;
+  readonly workspaceIdentity: Readonly<{readonly device: number; readonly inode: number; readonly path: string}>;
 }
 
 export const createCodexAppServerPermissionBoundary = (input: {
@@ -212,8 +213,8 @@ export const createDarwinNativeCodexPermissionBoundary = (
 };
 
 const issuePermissionBoundary = (
-  privateHome: Readonly<{path: string; identity: CodexDirectoryIdentity}>,
-  workspace: Readonly<{path: string; identity: CodexDirectoryIdentity}>,
+  privateHome: Readonly<{path: string; identity: CodexDirectoryIdentitySnapshot}>,
+  workspace: Readonly<{path: string; identity: CodexDirectoryIdentitySnapshot}>,
   intentMode: unknown,
 ): CodexAppServerPermissionBoundary => {
   const codexHome = privateHome.path;

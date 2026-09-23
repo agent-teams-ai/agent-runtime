@@ -2,7 +2,7 @@ import { types } from "node:util";
 import { snapshotRouteSelectionCurrent } from "@agent-teams/provider-access/composition";
 import type { DockerLinuxExclusiveRouteAdmissionInput } from "@agent-teams/agent-execution/composition";
 
-type RouteBinding = DockerLinuxExclusiveRouteAdmissionInput["binding"];
+export type ContainedTurnLinuxRouteBinding = DockerLinuxExclusiveRouteAdmissionInput["binding"];
 
 /** Operation and product facts the trusted composition root already owns. None
  * of them is a Provider Access fact, and none may come from the environment,
@@ -59,7 +59,7 @@ export const createContainedTurnLinuxRouteBinding = async (input: Readonly<{
   current: unknown;
   /** The provider this operation was accepted for; PA's binding must agree. */
   provider: "claude" | "codex";
-}>): Promise<RouteBinding> => {
+}>): Promise<ContainedTurnLinuxRouteBinding> => {
   const campaign = campaignFacts(input.campaign);
   const endorsement = await snapshotRouteSelectionCurrent(input.current);
   const binding = endorsement.binding;

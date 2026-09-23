@@ -1,4 +1,4 @@
-import type { ContainedTurnScope } from "../domain/contained-turn-authority.js";
+import type { ContainedTurnAuthorityScope } from "../domain/contained-turn-authority.js";
 import { validateContainedTurnPreventionCommand, validateContainedTurnPreventionReceipt, type ContainedTurnPreventionCommand } from "../domain/contained-turn-intent-guard.js";
 import { assertContainedTurnExactRecord, detachAndFreezeContainedTurnValue } from "../domain/contained-turn-record.js";
 import type { ContainedTurnKernelOperationStore } from "./ports/outbound/contained-turn-operation-store.js";
@@ -10,7 +10,7 @@ import { resumeContainedTurnCancellation } from "./contained-turn-cancellation.j
 export interface ContainedTurnIntentCancellationInput {
   readonly prevention: ContainedTurnPreventionCommand;
   /** Independently authenticated by the calling composition root. */
-  readonly scope: ContainedTurnScope;
+  readonly scope: ContainedTurnAuthorityScope;
 }
 export type ContainedTurnIntentCancellationOutcome = Awaited<ReturnType<ContainedTurnKernelOperationStore["preventIntent"]>>;
 

@@ -1,4 +1,4 @@
-import type { ContainedTurnProvider } from "./contained-turn-authority.js";
+import type { ContainedTurnAuthorityProvider } from "./contained-turn-authority.js";
 import {
   digestContainedTurnCanonicalValue,
   parseContainedTurnCanonicalDigest,
@@ -27,7 +27,9 @@ import { CONTAINED_TURN_LIMITS, validateContainedTurnText } from "./contained-tu
 import { containedTurnOperationCutoffRevision, type ContainedTurnOperationCutoffRevision } from "./contained-turn-output-authority.js";
 import { assertContainedTurnExactRecord, detachAndFreezeContainedTurnValue } from "./contained-turn-record.js";
 
-export const COMMITTED_DISPATCH_PROOF_V1_PURPOSE = "contained_turn_committed_dispatch_v1" as const;
+export const COMMITTED_DISPATCH_PROOF_V1_PURPOSE =
+  "contained_turn_committed_dispatch_v1" as const satisfies CommittedDispatchProofV1Purpose;
+export type CommittedDispatchProofV1Purpose = "contained_turn_committed_dispatch_v1";
 
 /** Typed evidence handoff from the sole acknowledged committed dispatch claim to Host Custody. */
 export interface CommittedDispatchProofV1 {
@@ -49,10 +51,10 @@ export interface CommittedDispatchProofV1 {
   readonly preparationToken: ContainedTurnPreparationToken;
   readonly projectId: string;
   readonly proofDigest: ContainedTurnCanonicalDigest;
-  readonly provider: ContainedTurnProvider;
+  readonly provider: ContainedTurnAuthorityProvider;
   readonly providerAccessDispatchProofId: ContainedTurnProofId;
   readonly providerAccessGrantReceiptDigest: ContainedTurnCanonicalDigest;
-  readonly purpose: typeof COMMITTED_DISPATCH_PROOF_V1_PURPOSE;
+  readonly purpose: CommittedDispatchProofV1Purpose;
   readonly runtimeSecurityDispatchProofId: ContainedTurnProofId;
   readonly runtimeSecurityGrantReceiptDigest: ContainedTurnCanonicalDigest;
   readonly tenantId: string;

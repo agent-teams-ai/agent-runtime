@@ -3,10 +3,15 @@ export {
   containedTurnAcceptanceConstraintsDigestV1,
 } from "./contained-turn-acceptance-digests.js";
 export { createContainedTurnOperation } from "../domain/contained-turn-creation.js";
+export type { ContainedTurnKernelOperation, ContainedTurnKernelOutputChunk, ContainedTurnKernelOutputKind
+} from "../domain/contained-turn-kernel-model.js";
+export type { ContainedTurnSchemaVersion } from "../domain/contained-turn-limits.js";
+export type { ContainedTurnAttemptProofBinding, ContainedTurnOperationProofBinding, ContainedTurnProof,
+  ContainedTurnProofKind } from "../domain/contained-turn-proofs.js";
 import type {
   ContainedTurnIntent,
-  ContainedTurnProvider,
-  ContainedTurnScope,
+  ContainedTurnAuthorityProvider,
+  ContainedTurnAuthorityScope,
 } from "../domain/contained-turn-authority.js";
 import { containedTurnIdentity } from "../domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
@@ -19,14 +24,14 @@ import { validateContainedTurnKernelDependencies, type ContainedTurnKernelDepend
 
 export interface ContainedTurnApplicationSubmitInput {
   readonly commandId: string;
-  readonly expectedProvider: ContainedTurnProvider;
+  readonly expectedProvider: ContainedTurnAuthorityProvider;
   readonly intent: ContainedTurnIntent;
-  readonly scope: ContainedTurnScope;
+  readonly scope: ContainedTurnAuthorityScope;
 }
 
 export interface ContainedTurnApplicationRefInput {
   readonly operationId: string;
-  readonly scope: ContainedTurnScope;
+  readonly scope: ContainedTurnAuthorityScope;
 }
 
 export interface ContainedTurnApplicationView {
@@ -39,7 +44,7 @@ export interface ContainedTurnApplicationView {
     readonly kind: "assistant" | "diagnostic" | "progress";
     readonly text: string;
   }[];
-  readonly provider: ContainedTurnProvider;
+  readonly provider: ContainedTurnAuthorityProvider;
   readonly resultRef?: string;
   readonly revision: number;
   readonly status: "accepted" | "cancelled" | "failed" | "reconcile_required" | "running" | "succeeded";

@@ -1,5 +1,23 @@
 export type { ContainedTurnAcceptedAuthorityHandoff } from "../../contained-turn-accepted-authority.js";
-import type { ContainedTurnScope } from "../../../domain/contained-turn-authority.js";
+export type {
+  ContainedTurnClosureDebtId,
+  ContainedTurnClosureRecovery,
+  ContainedTurnClosureRequestId,
+  ContainedTurnClosureStage,
+  ContainedTurnNoWorkspaceClosureFact,
+  ContainedTurnPendingClosure,
+} from "../../../domain/contained-turn-closure-recovery.js";
+export type { CreateContainedTurnOperationInput } from "../../../domain/contained-turn-creation.js";
+export type { ContainedTurnKernelMutation } from "../../../domain/contained-turn-kernel-mutations.js";
+export type {
+  CONTAINED_TURN_V1_REQUIRED_RECEIPTS,
+  CONTAINED_TURN_V1_REQUIRED_RECEIPT_SET_VERSION,
+  ContainedTurnRequiredReceipt,
+  ContainedTurnRequiredReceiptSet,
+  ContainedTurnRequiredReceiptSnapshot,
+  ContainedTurnRequiredReceiptSetVersion,
+} from "../../../domain/contained-turn-required-receipts.js";
+import type { ContainedTurnAuthorityScope } from "../../../domain/contained-turn-authority.js";
 import type {
   ContainedTurnEvidenceId,
   ContainedTurnOperationId,
@@ -57,7 +75,7 @@ export interface ContainedTurnKernelWorkspacePort {
     | { readonly kind: "closed"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "workspace_closure" }> }
     | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "indeterminate" }
   >;
-  create(input: Readonly<{ operationId: ContainedTurnOperationId; scope: ContainedTurnScope }>): Promise<{ readonly workspaceId: ContainedTurnWorkspaceId }>;
+  create(input: Readonly<{ operationId: ContainedTurnOperationId; scope: ContainedTurnAuthorityScope }>): Promise<{ readonly workspaceId: ContainedTurnWorkspaceId }>;
   /** Idempotently quarantines only the exact losing operation-scoped workspace. */
   quarantine(input: Readonly<{
     evidenceId: ContainedTurnEvidenceId;

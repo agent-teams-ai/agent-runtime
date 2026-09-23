@@ -1,4 +1,4 @@
-import type { ContainedTurnScope } from "../domain/contained-turn-authority.js";
+import type { ContainedTurnAuthorityScope } from "../domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
 import { containedTurnGrantSettlementRequestId, type ContainedTurnDispatchGrantSubject } from "../domain/contained-turn-dispatch-authority.js";
 import type {
@@ -59,7 +59,7 @@ export type RetireContainedTurnPreparationOutcome =
 export const retireAndCleanupContainedTurnPreparation = async (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   owner: ContainedTurnDispatchGrantSubject,
   reason: "claim_lost" | "open_failed" | "prevention" | "reconciliation",
   consumedGrantRequestIds: Readonly<{
@@ -153,7 +153,7 @@ export const retireAndCleanupContainedTurnPreparation = async (
 export const quarantineLosingContainedTurnWorkspace = async (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   workspaceId: ContainedTurnWorkspaceId,
 ): Promise<ContainedTurnKernelOperation> => {
   let current = operation;
@@ -183,7 +183,7 @@ export const quarantineLosingContainedTurnWorkspace = async (
 export const bindContainedTurnCancellationWorkspace = async (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
 ): Promise<ContainedTurnKernelOperation> => {
   const workspace = await dependencies.workspace.create({ operationId: operation.operationId, scope: trustedScope });
   try {
@@ -209,7 +209,7 @@ export const bindContainedTurnCancellationWorkspace = async (
 export const releaseLosingContainedTurnCustody = async (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   reservation: Readonly<{
     attemptId: ContainedTurnAttemptId;
     custodyId: ContainedTurnCustodyId;
@@ -238,7 +238,7 @@ export const releaseLosingContainedTurnCustody = async (
 export const reconcileContainedTurnClaimPreparation = async (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   reservation: Readonly<{
     attemptId: ContainedTurnAttemptId;
     custodyId: ContainedTurnCustodyId;

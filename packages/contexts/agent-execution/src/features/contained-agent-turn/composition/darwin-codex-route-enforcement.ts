@@ -4,7 +4,10 @@ import type { CreateCodexCurrentKernelOwnerOptions } from "./codex-current-kerne
 import { createDarwinCodexHostPostClaimPreparation, type DarwinCodexHostPreparationInput } from "./darwin-codex-host-post-claim-preparation.js";
 import {custodyDataRecord, isHostCustodyDataCallback, NodeProviderProcessCustodyCore,
   snapshotHttpBytes, retainFinalizationHttpResources} from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
-import { CODEX_APP_SERVER_DARWIN_ARM64_TUPLE as tuple, selectCodexAppServerPlatformTuple } from "../adapters/outbound/codex-app-server/codex-app-server-platform-tuple.js";
+import {
+  CODEX_APP_SERVER_DARWIN_ARM64_TUPLE_INTERNAL as tuple,
+  selectCodexAppServerPlatformTuple,
+} from "../adapters/outbound/codex-app-server/codex-app-server-platform-tuple.js";
 
 /** Fixed contained-agent-turn feature-local helper, statically composed by the
  * existing outer owner. Neither an Assembly graph node nor a production root.
@@ -26,11 +29,11 @@ export interface DarwinCodexRouteEnforcementInput {
   readonly owner: Omit<CreateCodexCurrentKernelOwnerOptions, "postClaimPreparation">;
   readonly qualificationTarget: ContainedTurnRouteQualificationTarget;
 }
-type Options = CreateCodexCurrentKernelOwnerOptions;
+export type DarwinCodexRouteEnforcementOptions = CreateCodexCurrentKernelOwnerOptions;
 const owners = new WeakMap<object, Readonly<{
   target: ContainedTurnRouteQualificationTarget;
   source: DarwinCodexRouteEnforcementInput["owner"];
-  options: Options;
+  options: DarwinCodexRouteEnforcementOptions;
 }>>();
 const invalid = (): TypeError => new TypeError("Darwin Codex route owner binding is invalid");
 const data = <T extends object>(value: T): T => Object.freeze({...custodyDataRecord(value)});
@@ -86,8 +89,8 @@ export const createDarwinCodexRouteEnforcement = (
       within: ((...args: Parameters<typeof within>) => Reflect.apply(within, localCut.clock, args)) as typeof within,
     })}), catalogSource,
   });
-  const postClaimPreparation: NonNullable<Options["postClaimPreparation"]> = Object.freeze({
-    async prepareClaimed(claimed: Parameters<NonNullable<Options["postClaimPreparation"]>["prepareClaimed"]>[0]) {
+  const postClaimPreparation: NonNullable<DarwinCodexRouteEnforcementOptions["postClaimPreparation"]> = Object.freeze({
+    async prepareClaimed(claimed: Parameters<NonNullable<DarwinCodexRouteEnforcementOptions["postClaimPreparation"]>["prepareClaimed"]>[0]) {
       try {
         const claimedInput = data(claimed);
         const proof = data(claimedInput.committedDispatchProof);
@@ -106,8 +109,8 @@ export const createDarwinCodexRouteEnforcement = (
       } catch {return Object.freeze({kind: "quarantined" as const});}
     },
   });
-  const records: {readonly resolve: Options["launchRecords"]["resolve"]} = data(source.launchRecords); const resolve = method(records.resolve);
-  const launchRecords: Options["launchRecords"] = Object.freeze({resolve: async (request: Parameters<Options["launchRecords"]["resolve"]>[0]) => {
+  const records: {readonly resolve: DarwinCodexRouteEnforcementOptions["launchRecords"]["resolve"]} = data(source.launchRecords); const resolve = method(records.resolve);
+  const launchRecords: DarwinCodexRouteEnforcementOptions["launchRecords"] = Object.freeze({resolve: async (request: Parameters<DarwinCodexRouteEnforcementOptions["launchRecords"]["resolve"]>[0]) => {
     const binding = custodyDataRecord(request.providerBinding);
     if (binding.provider !== "codex" || binding.adapterRevision !== tuple.adapterRevision ||
         binding.binaryRevision !== tuple.binaryRevision || binding.capabilityManifestRevision !== tuple.protocolRevision) {throw invalid();}
@@ -130,7 +133,7 @@ export const readDarwinCodexRouteEnforcementTarget = (value: unknown): Contained
 
 /** Join the existing selected owner to the captured deployment. Only the exact
  * capability-owned preparation is accepted if a caller supplies that option. */
-export const bindDarwinCodexRouteEnforcement = (value: unknown, input: Options): Options => {
+export const bindDarwinCodexRouteEnforcement = (value: unknown, input: DarwinCodexRouteEnforcementOptions): DarwinCodexRouteEnforcementOptions => {
   const owner = value !== null && typeof value === "object" ? owners.get(value) : undefined;
   if (owner === undefined) {throw invalid();}
   const candidate = data(input);

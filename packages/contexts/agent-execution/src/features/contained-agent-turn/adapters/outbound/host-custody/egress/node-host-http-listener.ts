@@ -9,8 +9,8 @@ export type NodeHostHttpListenerConfig = Readonly<{
   highWaterMark?: number;
 }>;
 export type NodeHostHttpAccept = (socket: Socket, signal: AbortSignal) => Promise<void>;
-type Address = Readonly<{ address: string; family: "IPv4"; port: number }>;
-type Closure = Readonly<{ state: "closed" | "unknown" }>;
+export type NodeHostHttpListenerAddress = Readonly<{ address: string; family: "IPv4"; port: number }>;
+export type NodeHostHttpListenerClosure = Readonly<{ state: "closed" | "unknown" }>;
 
 /**
  * Adapter-private, point-in-time facts from this recipe's retained custody.
@@ -40,7 +40,7 @@ export type NodeHostHttpListenerObservation = Readonly<{
     | "socket-close-unobserved" | "consumer-unsettled" | "consumer-work-unsettled" | "native-drop-unobserved")[];
 }>;
 export type NodeHostHttpListener = Readonly<{
-  address: Address; sealAdmission(): void; close(): Promise<Closure>;
+  address: NodeHostHttpListenerAddress; sealAdmission(): void; close(): Promise<NodeHostHttpListenerClosure>;
   observe(): NodeHostHttpListenerObservation;
 }>;
 
@@ -86,7 +86,7 @@ export const createNodeHostHttpListener = (input: NodeHostHttpListenerConfig, cl
   }
   let opened = false; let sealed = false;
   let custody: ListenerCustody | undefined;
-  let emptyClose: Promise<Closure> | undefined;
+  let emptyClose: Promise<NodeHostHttpListenerClosure> | undefined;
   return Object.freeze({
     open(accept: NodeHostHttpAccept, cutoff: AbortController): Promise<NodeHostHttpListener> {
       if (opened || sealed || typeof accept !== "function" || !(cutoff instanceof AbortController)) {return Promise.reject(failure());}
@@ -108,7 +108,7 @@ export const createNodeHostHttpListener = (input: NodeHostHttpListenerConfig, cl
         serverCloseAcknowledged: false, sockets: { observed: 0, closeEvents: 0, awaitingClose: 0, droppedWithoutSocket: 0 },
         consumerPending: false, consumerWorkPending: false });
     },
-    close(): Promise<Closure> {
+    close(): Promise<NodeHostHttpListenerClosure> {
       sealed = true;
       return custody?.close() ?? (emptyClose ??= Promise.resolve(Object.freeze({ state: "closed" })));
     },
@@ -138,7 +138,7 @@ class ListenerCustody {
   #published = false;
   #bindPending = false;
   #closeIssued = false;
-  #closePromise: Promise<Closure> | undefined;
+  #closePromise: Promise<NodeHostHttpListenerClosure> | undefined;
   #operationWatch: AbortController | undefined;
 
   public constructor(config: Config, clock: HttpEgressClock, accept: NodeHostHttpAccept, cutoff: AbortController) {
@@ -281,9 +281,9 @@ class ListenerCustody {
     for (const socket of this.#sockets.keys()) {socket.destroy();}
   }
 
-  public close(): Promise<Closure> {
+  public close(): Promise<NodeHostHttpListenerClosure> {
     if (this.#closePromise !== undefined) {return this.#closePromise;}
-    const completion = Promise.withResolvers<Closure>();
+    const completion = Promise.withResolvers<NodeHostHttpListenerClosure>();
     this.#closePromise = completion.promise;
     this.sealAdmission();
     this.#releaseEndpoint();
@@ -299,7 +299,7 @@ class ListenerCustody {
     try {this.#server.close();} catch { /* No close acknowledgement: retain unknown custody. */ }
   }
 
-  async #observeClosure(): Promise<Closure> {
+  async #observeClosure(): Promise<NodeHostHttpListenerClosure> {
     if (this.#server === undefined) {return Object.freeze({ state: "closed" });}
     const watch = new AbortController();
     try {

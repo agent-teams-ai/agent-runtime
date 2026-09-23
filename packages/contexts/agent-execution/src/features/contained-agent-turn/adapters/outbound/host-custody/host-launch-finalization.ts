@@ -4,8 +4,8 @@ import type { ExecutableObservation, LaunchCandidate } from "./host-custody-laun
 import type { LiveCustody } from "./node-provider-process-custody-state.js";
 import type { NodeCustodyHttpLifetime } from "./node-provider-process-custody-http-reservation.js";
 import { recheckFinalHostLaunch, retainFinalizationHttpResources, validateFinalHostLaunch } from "./host-launch-finalization-validation.js";
-import {
-  type prepareAuthenticatedHostHttpEgressSession, type HostHttpEgressSessionDependencies,
+import type {
+  HostHttpAuthenticatedSession, HostHttpEgressSessionDependencies,
 } from "./egress/host-http-egress-session.js";
 
 export interface FinalHostLaunch extends LaunchCandidate {
@@ -17,7 +17,7 @@ export interface StagedHostLaunch { readonly fingerprintSha256: string }
 export interface ClaimedHostLaunchFinalizer {
   stage(this: ClaimedHostLaunchFinalizer, material: unknown): Promise<StagedHostLaunch>;
   bindSession(this: ClaimedHostLaunchFinalizer, dependencies: HostHttpEgressSessionDependencies):
-    ReturnType<ReturnType<typeof prepareAuthenticatedHostHttpEgressSession>["bind"]>;
+    HostHttpAuthenticatedSession;
   commit(this: ClaimedHostLaunchFinalizer, staged: StagedHostLaunch): FinalHostLaunch;
 }
 const rejected = (): TypeError => new TypeError("Host launch finalization unavailable or conflicts");

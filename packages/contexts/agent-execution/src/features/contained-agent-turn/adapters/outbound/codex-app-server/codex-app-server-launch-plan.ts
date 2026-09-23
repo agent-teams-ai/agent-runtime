@@ -11,7 +11,7 @@ import {
   CODEX_PERMISSION_PROFILE_ID,
   validateCodexDirectoryIdentity,
   type CodexAppServerPermissionBoundary,
-  type CodexDirectoryIdentity,
+  type CodexDirectoryIdentitySnapshot,
 } from "./codex-app-server-permission-boundary.js";
 import {
   codexAppServerTupleForBinaryRevision,
@@ -84,13 +84,13 @@ export interface CodexAppServerLaunchPlanOptions {
 
 export interface CodexAppServerLaunchPlan extends HostCustodyLaunchPlan {
   readonly codexHome: string;
-  readonly codexHomeIdentity: CodexDirectoryIdentity;
+  readonly codexHomeIdentity: Readonly<{readonly device: number; readonly inode: number; readonly path: string}>;
   readonly effectivePolicyDigest: string;
   readonly permissionProfileId: typeof CODEX_PERMISSION_PROFILE_ID;
   readonly tmpDir: string;
-  readonly tmpDirIdentity: CodexDirectoryIdentity;
+  readonly tmpDirIdentity: Readonly<{readonly device: number; readonly inode: number; readonly path: string}>;
   readonly workspaceRef: string;
-  readonly workspaceIdentity: CodexDirectoryIdentity;
+  readonly workspaceIdentity: Readonly<{readonly device: number; readonly inode: number; readonly path: string}>;
 }
 
 const contains = (parent: string, candidate: string): boolean => {
@@ -115,7 +115,7 @@ const privateRoot = (value: unknown, workspaceRef: string): string => {
   return value;
 };
 
-const privateTmpIdentity = (value: string): CodexDirectoryIdentity => {
+const privateTmpIdentity = (value: string): CodexDirectoryIdentitySnapshot => {
   if (!isAbsolute(value) || resolve(value) !== value || value === "/") {
     throw new TypeError("tmpDir must be a normalized absolute non-root path");
   }
@@ -131,14 +131,14 @@ const privateTmpIdentity = (value: string): CodexDirectoryIdentity => {
   return Object.freeze({ device: directory.dev, inode: directory.ino, path: value });
 };
 
-const isDirectoryIdentity = (value: unknown): value is CodexDirectoryIdentity => {
+const isDirectoryIdentity = (value: unknown): value is CodexDirectoryIdentitySnapshot => {
   try {
     const data = snapshotCodexNativeInput(value, ["device", "inode", "path"]);
     return typeof data.device === "number" && typeof data.inode === "number" && typeof data.path === "string";
   } catch {return false;}
 };
 
-const snapshotDirectoryIdentity = (value: CodexDirectoryIdentity): CodexDirectoryIdentity => {
+const snapshotDirectoryIdentity = (value: CodexDirectoryIdentitySnapshot): CodexDirectoryIdentitySnapshot => {
   const data = snapshotCodexNativeInput(value, ["device", "inode", "path"]);
   if (typeof data.device !== "number" || typeof data.inode !== "number" || typeof data.path !== "string") {
     throw new TypeError("Codex launch directory identity must contain inert data");

@@ -34,8 +34,8 @@ import {
   type ContainedTurnKernelWorkspaceOwner,
 } from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 
-type KernelOpen = Parameters<ContainedTurnKernelCustodyAttemptOwner["prepare"]>[0]["kernel"];
-type Processes = CustodiedProviderProcessRegistry & CustodiedSdkProcessLauncher;
+export type ClaudeKernelOpenInput = Parameters<ContainedTurnKernelCustodyAttemptOwner["prepare"]>[0]["kernel"];
+export type ClaudeCurrentKernelProcesses = CustodiedProviderProcessRegistry & CustodiedSdkProcessLauncher;
 type OwnerPrepareInput = Parameters<ContainedTurnKernelCustodyAttemptOwner["prepare"]>[0];
 type OwnerRetireInput = Parameters<ContainedTurnKernelCustodyAttemptOwner["retire"]>[0];
 type OwnerRetainInput = Parameters<ContainedTurnKernelCustodyAttemptOwner["retain"]>[0];
@@ -46,15 +46,15 @@ export interface ClaudeCurrentKernelLaunchRecord {
 }
 export interface ClaudeCurrentKernelLaunchRecordResolver {
   resolve(input: Readonly<{
-    attemptId: KernelOpen["attemptId"];
-    authorityVectorDigest: KernelOpen["authorityVectorDigest"];
-    custodyId: KernelOpen["custodyId"];
-    effectId: KernelOpen["effectId"];
-    intentMode: KernelOpen["intentMode"];
-    operationId: KernelOpen["operationId"];
+    attemptId: ClaudeKernelOpenInput["attemptId"];
+    authorityVectorDigest: ClaudeKernelOpenInput["authorityVectorDigest"];
+    custodyId: ClaudeKernelOpenInput["custodyId"];
+    effectId: ClaudeKernelOpenInput["effectId"];
+    intentMode: ClaudeKernelOpenInput["intentMode"];
+    operationId: ClaudeKernelOpenInput["operationId"];
     providerBinding: ContainedTurnProviderBinding;
     workspaceAuthority: Parameters<ContainedTurnKernelCustodyAttemptOwner["prepare"]>[0]["workspaceAuthority"];
-    workspaceId: KernelOpen["workspaceId"];
+    workspaceId: ClaudeKernelOpenInput["workspaceId"];
   }>): Promise<ClaudeCurrentKernelLaunchRecord | undefined>;
 }
 export interface CreateClaudeCurrentKernelOwnerOptions {
@@ -62,7 +62,7 @@ export interface CreateClaudeCurrentKernelOwnerOptions {
   readonly executablePath: string;
   readonly executableSha256: string;
   readonly hostBootId: string;
-  readonly hostCustody: ContainedTurnHostCustodyPort & Processes;
+  readonly hostCustody: ContainedTurnHostCustodyPort & ClaudeCurrentKernelProcesses;
   readonly hostInstanceId: string;
   readonly launchRecords: ClaudeCurrentKernelLaunchRecordResolver;
   readonly manifest: ContainedTurnCapabilityManifest;
@@ -84,7 +84,7 @@ export interface ClaudeCurrentKernelOwner {
 }
 interface PreparedRecord {
   readonly binding: ContainedTurnProviderBinding;
-  readonly kernel: KernelOpen;
+  readonly kernel: ClaudeKernelOpenInput;
   readonly plan: HostCustodyLaunchPlan;
   readonly privateProjection: ClaudeAgentSdkPrivateProjection;
   readonly workspaceRef: string;
@@ -143,7 +143,7 @@ export const createClaudeCurrentKernelOwner = (
   const platformTuple = assertProductionTuple(options);
   const records = new Map<string, PreparedRecord>();
   const privateDirectoryCustody = captureClaudePrivateDirectoryCustody(options.privateDirectoryCustody);
-  const processes: Processes = Object.freeze({
+  const processes: ClaudeCurrentKernelProcesses = Object.freeze({
     get: options.hostCustody.get.bind(options.hostCustody),
     start: options.hostCustody.start.bind(options.hostCustody),
   });
@@ -217,3 +217,22 @@ export const createClaudeCurrentKernelOwner = (
   return Object.freeze({custody, sealAdmission,
     dispose() {sealAdmission();}, provider});
 };
+
+export {
+  CLAUDE_AGENT_SDK_ADAPTER_REVISION,
+  CLAUDE_AGENT_SDK_BUNDLED_CLI_VERSION,
+  CLAUDE_AGENT_SDK_MANIFEST_REVISION,
+  CLAUDE_AGENT_SDK_RESOURCE_SCOPE_REVISION,
+  CLAUDE_AGENT_SDK_VERSION,
+  type ClaudeAgentSdkContainedTurnProviderOptions,
+  type ClaudeAgentSdkControlClock,
+  type ClaudeAgentSdkPlatformTuple,
+  type ClaudeAgentSdkPrivateProjection,
+  type ClaudeAgentSdkPrivateProjectionResolver,
+  type ClaudeQueryFactory,
+  type ClaudeSdkQuery,
+  type ClaudeSdkQueryInput,
+  type ClaudeSdkSpawnCallback,
+  type ClaudeSdkSpawnOptions,
+  type ClaudeSdkSpawnedProcess,
+} from "../adapters/outbound/claude-agent-sdk/claude-current-kernel-entrypoint.js";

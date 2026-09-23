@@ -3,7 +3,8 @@ import { addAbortListener } from "node:events";
 import type { HostCustodyHttpHandoff as Handoff, HostCustodyHttpResourceLifetime } from "./host-custody-http-resource-lifetime.js";
 import type { LiveCustody } from "./node-provider-process-custody-state.js";
 
-import { NodeCustodyHttpResources, type NodeCustodyHttpResourceInput } from "./node-custody-http-resources.js";
+import { NodeCustodyHttpResources, type NodeCustodyHttpResourceInput,
+  type NodeCustodyHttpResourcePreparation } from "./node-custody-http-resources.js";
 import type { HostHttpEgressSessionDependencies } from "./egress/host-http-egress-session.js";
 
 import type { DarwinSeatbeltRouteOwner } from "./darwin-seatbelt-route-owner.js";
@@ -22,6 +23,11 @@ export type NodeCustodyExecutionSessionIdentity = Readonly<{ [executionSession]:
 export interface NodeCustodyHttpLifetime extends HostCustodyHttpResourceLifetime {
   readonly executionSessionIdentity: NodeCustodyExecutionSessionIdentity;
 }
+/** Narrow handoff view. Runtime authority remains the owner identity issued by
+ * the private Darwin route implementation and authenticated by its WeakSet. */
+export interface IssuedDarwinRouteReservation {
+  readonly lifetime: NodeCustodyHttpLifetime;
+}
 
 /** Only trusted Host wiring inside the actual kernel prepareClaimed may call acquire.
  * This is no claim issuer: possession of a structural proof/digest is insufficient
@@ -36,8 +42,8 @@ export interface NodeCustodyHttpPreparation {
   bindDarwinNativeFinalLaunch(lifetime: NodeCustodyHttpLifetime, authority: RetainedNativeHttpLaunchAuthority,
     lease: DarwinNativeExecutionLease, material: DarwinNativeCodexMaterial, port: number, launch: FinalHostLaunch): Promise<void>;
   prepareResources(lifetime: NodeCustodyHttpLifetime, input: NodeCustodyHttpResourceInput):
-    ReturnType<NodeCustodyHttpResources["prepare"]>;
-  retainDarwinRoute(lifetime: NodeCustodyHttpLifetime, owner: DarwinSeatbeltRouteOwner): void;
+    Promise<NodeCustodyHttpResourcePreparation>;
+  retainDarwinRoute(lifetime: NodeCustodyHttpLifetime, owner: IssuedDarwinRouteReservation): void;
   finalize(lifetime: NodeCustodyHttpLifetime): import("./host-launch-finalization.js").ClaimedHostLaunchFinalizer;
 }
 
@@ -69,7 +75,7 @@ export class NodeProviderProcessCustodyHttpReservation {
     return this.#route?.pending ?? this.#resources.pending;
   }
   public get darwinRoute(): DarwinSeatbeltRouteOwner | undefined {return this.#route;}
-  public retainDarwinRoute(live: LiveCustody, lifetime: NodeCustodyHttpLifetime, owner: DarwinSeatbeltRouteOwner): void {
+  public retainDarwinRoute(live: LiveCustody, lifetime: NodeCustodyHttpLifetime, owner: IssuedDarwinRouteReservation): void {
     this.assertPreparation(lifetime);
     if (this.#route !== undefined || !isIssuedDarwinRouteOwner(owner) || owner.lifetime !== lifetime ||
         live.httpReservation !== this || this.#resources.pending !== undefined) {throw new TypeError("Darwin route owner conflicts");}

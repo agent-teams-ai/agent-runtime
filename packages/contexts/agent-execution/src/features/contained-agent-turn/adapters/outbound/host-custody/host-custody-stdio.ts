@@ -12,7 +12,7 @@ import type { GuardianProviderStreamFinal } from "./host-custody-stable-guardian
 
 type GroupStatus = "absent" | "ambiguous" | "present";
 
-interface StreamAccounting {
+export interface HostCustodyStreamAccounting {
   readonly done: Promise<void>;
   readonly snapshot: () => HostCustodyDrainEvidence;
 }
@@ -49,7 +49,7 @@ export class HostStdinEgress extends Writable {
   }
 }
 
-export class HostStdoutIngress extends Readable implements StreamAccounting {
+export class HostStdoutIngress extends Readable implements HostCustodyStreamAccounting {
   readonly #done: Promise<void>;
   readonly #hash = createHash("sha256");
   readonly #maxBytes: number;
@@ -235,7 +235,7 @@ export class RedactedDiagnosticRing implements AsyncIterable<Uint8Array> {
   }
 }
 
-export class HostStderrIngress implements StreamAccounting {
+export class HostStderrIngress implements HostCustodyStreamAccounting {
   readonly #done: Promise<void>;
   readonly #hash = createHash("sha256");
   readonly #maxBytes: number;

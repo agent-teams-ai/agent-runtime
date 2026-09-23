@@ -1,7 +1,8 @@
 import { capturePostClaimPreparation } from "./host-post-claim-preparation.js";
 import type { ContainedTurnProviderBinding } from "../contracts/contained-agent-turn.js";
 import type { ContainedTurnKernelProviderPort, ContainedTurnKernelCustodyPort } from "../application/ports/outbound/contained-turn-ports.js";
-import { createCodexAppServerLaunchPlan, createCodexAppServerFinalizableLaunchPlan, isIssuedCodexAppServerLaunchPlan } from "../adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
+import { createCodexAppServerLaunchPlan, createCodexAppServerFinalizableLaunchPlan, isIssuedCodexAppServerLaunchPlan,
+  type CodexAppServerLaunchPlan } from "../adapters/outbound/codex-app-server/codex-app-server-launch-plan.js";
 import type { CodexAppServerPermissionBoundary } from "../adapters/outbound/codex-app-server/codex-app-server-permission-boundary.js";
 import {
   selectCodexAppServerPlatformTuple,
@@ -12,7 +13,8 @@ import {
   type CodexAppServerKernelAttemptFactory,
 } from "../adapters/outbound/codex-app-server/codex-app-server-current-kernel-adapter.js";
 import { CodexAppServerContainedTurnProvider } from "../adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.js";
-import type { CodexEffectCustodyAuthority } from "../adapters/outbound/codex-app-server/codex-app-server-effect-custody.js";
+import type { CodexEffectCustodyAuthority, CodexEffectCustodyExecution, CodexEffectCustodyRequest,
+  CodexEndpointPathObservation, CodexExistingPathIdentity, CodexPathKind } from "../adapters/outbound/codex-app-server/codex-app-server-effect-custody.js";
 import {
   startHostCustodyLaunch,
   type ReservedHostLaunchView,
@@ -30,12 +32,12 @@ import {
 import { NodeProviderProcessCustody } from "../adapters/outbound/host-custody/node-provider-process-custody.js";
 import { snapshotCodexCredentialOutputTokens } from "./codex-credential-output-inventory.js";
 
-type KernelOpen = Parameters<ContainedTurnKernelCustodyAttemptOwner["prepare"]>[0]["kernel"];
+export type CodexKernelOpenInput = Parameters<ContainedTurnKernelCustodyAttemptOwner["prepare"]>[0]["kernel"];
 type AttemptInput = Parameters<CodexAppServerKernelAttemptFactory["prepare"]>[0];
 type OwnerPrepareInput = Parameters<ContainedTurnKernelCustodyAttemptOwner["prepare"]>[0];
 type OwnerRetireInput = Parameters<ContainedTurnKernelCustodyAttemptOwner["retire"]>[0];
 type OwnerRetainInput = Parameters<ContainedTurnKernelCustodyAttemptOwner["retain"]>[0];
-type Processes = CustodiedProviderProcessRegistry & CustodiedSdkProcessLauncher;
+export type CodexCurrentKernelProcesses = CustodiedProviderProcessRegistry & CustodiedSdkProcessLauncher;
 
 export interface CodexCurrentKernelLaunchRecord {
   readonly boundary: CodexAppServerPermissionBoundary;
@@ -51,17 +53,17 @@ export interface CodexCurrentKernelLaunchRecord {
 }
 export interface CodexCurrentKernelLaunchRecordResolver {
   resolve(input: Readonly<{
-    attemptId: KernelOpen["attemptId"];
-    authorityVectorDigest: KernelOpen["authorityVectorDigest"];
-    custodyId: KernelOpen["custodyId"];
-    credentialBindingDigest: KernelOpen["providerAccessSnapshot"]["credentialBindingDigest"];
-    credentialGeneration: KernelOpen["providerAccessSnapshot"]["credentialGeneration"];
-    effectId: KernelOpen["effectId"];
-    intentMode: KernelOpen["intentMode"];
-    operationId: KernelOpen["operationId"];
+    attemptId: CodexKernelOpenInput["attemptId"];
+    authorityVectorDigest: CodexKernelOpenInput["authorityVectorDigest"];
+    custodyId: CodexKernelOpenInput["custodyId"];
+    credentialBindingDigest: CodexKernelOpenInput["providerAccessSnapshot"]["credentialBindingDigest"];
+    credentialGeneration: CodexKernelOpenInput["providerAccessSnapshot"]["credentialGeneration"];
+    effectId: CodexKernelOpenInput["effectId"];
+    intentMode: CodexKernelOpenInput["intentMode"];
+    operationId: CodexKernelOpenInput["operationId"];
     providerBinding: ContainedTurnProviderBinding;
     workspaceAuthority: Parameters<ContainedTurnKernelCustodyAttemptOwner["prepare"]>[0]["workspaceAuthority"];
-    workspaceId: KernelOpen["workspaceId"];
+    workspaceId: CodexKernelOpenInput["workspaceId"];
   }>): Promise<CodexCurrentKernelLaunchRecord | undefined>;
 }
 export interface CreateCodexCurrentKernelOwnerOptions {
@@ -69,7 +71,7 @@ export interface CreateCodexCurrentKernelOwnerOptions {
    * owner instead constructs its authority from captured filesystem confinement. */
   readonly effectCustody?: CodexEffectCustodyAuthority;
   readonly hostBootId: string;
-  readonly hostCustody: ContainedTurnHostCustodyPort & Processes;
+  readonly hostCustody: ContainedTurnHostCustodyPort & CodexCurrentKernelProcesses;
   readonly hostInstanceId: string;
   readonly launchRecords: CodexCurrentKernelLaunchRecordResolver;
   /** Mandatory explicit target selected at this outer provider composition seam. */
@@ -87,7 +89,7 @@ export interface CodexCurrentKernelOwner {
 
 interface PreparedRecord {
   readonly binding: ContainedTurnProviderBinding;
-  readonly kernel: KernelOpen;
+  readonly kernel: CodexKernelOpenInput;
   readonly plan: HostCustodyLaunchPlan;
   readonly record: CodexCurrentKernelLaunchRecord;
   readonly sensitiveOutputTokens: readonly string[];
@@ -240,3 +242,6 @@ export const createCodexCurrentKernelOwner = (
     provider: new CodexAppServerCurrentKernelAdapter({ attempts, platformTarget }),
   });
 };
+
+export type { CodexAppServerLaunchPlan, CodexEffectCustodyAuthority, CodexEffectCustodyExecution,
+  CodexEffectCustodyRequest, CodexEndpointPathObservation, CodexExistingPathIdentity, CodexPathKind };

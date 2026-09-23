@@ -58,8 +58,14 @@ const subscribe = (signal: AbortSignal, listener: (event: Event) => void): Retur
     nativeRemoveEventListener.call(signal, "abort", listener);
   }});
 };
+export interface HostHttpAbortOperations {
+  aborted(signal: AbortSignal): boolean;
+  subscribe(signal: AbortSignal, listener: (event: Event) => void): Disposable;
+  remove(subscription: Disposable): void;
+  abort(controller: AbortController): void;
+}
 /** Physical abort operations retained for the private resource composition. */
-export const hostHttpAbortOperations = Object.freeze({
+export const hostHttpAbortOperations: HostHttpAbortOperations = Object.freeze({
   aborted: (signal: AbortSignal): boolean => nativeAborted.call(signal),
   subscribe,
   remove: (subscription: ReturnType<typeof addAbortListener>): void => {subscription[Symbol.dispose]();},

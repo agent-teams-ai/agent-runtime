@@ -4,7 +4,8 @@ import {DockerLifecycleObservations, createDockerLifecycleJournal, type DockerLi
 import {createDockerProviderProcessLaunchIssuer, type LaunchedDockerCustody} from "./docker-lifecycle-issued-launch.js";
 import {DockerContainedTurnHostCustody, type DockerHostCustodyLifetime, type DockerContainedTurnInitOptions, type DockerContainedTurnInitSession} from "./docker-contained-turn-host-custody.js";
 import type {DockerCustodyInitHostExec} from "./init/docker-custody-init-host-session.js";
-import { createDockerRemovalObservationOwner, type DockerHostCustodyContainmentInput } from "./docker-removal-observation-owner.js";
+import { createDockerRemovalObservationOwner, type DockerHostCustodyContainmentInput,
+  type DockerRemovalObservationOwner } from "./docker-removal-observation-owner.js";
 import type {DockerContainerAuthority, DockerContainerObservation, DockerEngineCall, DockerEnginePort} from "./engine/docker-engine-port.js";
 import { dockerCustodyAttemptLocator, dockerCustodyAuthoritySha256 } from "./journal/docker-custody-journal-codec.js";
 import {
@@ -39,7 +40,7 @@ const journalUnavailable = (error: unknown): boolean =>
   error instanceof DockerCustodyJournalUnavailableError || error instanceof DockerCustodyJournalCorruptionError;
 /** Coordinates Docker effects only after their exact journal authority is durable. */
 export class DockerHostCustodyLifecycle {
-  public readonly removalObservation: ReturnType<typeof createDockerRemovalObservationOwner>;
+  public readonly removalObservation: DockerRemovalObservationOwner;
   /** Volatile exact binding permits safe cleanup after same-instance journal loss, but is not restart authority. */
   readonly #authority: DockerLifecycleAuthority;
   private readonly liveLaunches = new Map<string, DockerContainedTurnHostCustody>();

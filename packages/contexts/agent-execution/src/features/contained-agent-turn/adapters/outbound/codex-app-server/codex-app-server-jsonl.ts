@@ -79,7 +79,7 @@ const assertNoDuplicateDecodedPropertyNames = (source: string): void => {
   }
 };
 
-type CodexResponseEnvelope = Readonly<
+export type CodexResponseEnvelope = Readonly<
   | { readonly id: string; readonly kind: "result"; readonly result: unknown }
   | { readonly error: CodexJsonRecord; readonly id: string; readonly kind: "error" }
 >;

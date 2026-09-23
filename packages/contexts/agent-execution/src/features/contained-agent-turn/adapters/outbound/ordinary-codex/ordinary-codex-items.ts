@@ -3,11 +3,11 @@ import {isCodexRecord as isRecord} from "../codex-app-server/codex-app-server-js
 import {validateAndNormalizeCodexThreadItem} from "../codex-app-server/codex-app-server-item-schema.js";
 import {ordinaryCodexRefusal as refuse, ordinaryJson} from "./ordinary-codex-config.js";
 
-const completionRules = {text: "complete_text", phase: "complete_phase", content: "complete_content", summary: "complete_summary",
+export const ORDINARY_CODEX_COMPLETION_RULES = {text: "complete_text", phase: "complete_phase", content: "complete_content", summary: "complete_summary",
   processId: "complete_process", command: "complete_command", commandActions: "complete_actions", changes: "complete_changes",
   delivery: "complete_delivery", questions: "complete_questions", memoryCitation: "complete_memory", clientId: "complete_client",
   cwd: "complete_cwd", source: "complete_source", pluginId: "complete_plugin", scriptPath: "complete_script"} as const;
-export type OrdinaryCodexItemRule = typeof completionRules[keyof typeof completionRules] | "agent_delivery" | "agent_questions" | "agent_memory" | "user_content" | "item_schema_agent_message" | "item_schema_user_message" | "item_schema_reasoning" |
+export type OrdinaryCodexItemRule = typeof ORDINARY_CODEX_COMPLETION_RULES[keyof typeof ORDINARY_CODEX_COMPLETION_RULES] | "agent_delivery" | "agent_questions" | "agent_memory" | "user_content" | "item_schema_agent_message" | "item_schema_user_message" | "item_schema_reasoning" |
   "item_schema_plan" | "item_schema_command" | "item_schema_file_change" | "item_schema" | "item_policy" | "item_paths" | "item_start_state" | "item_delta_state" |
   "item_reasoning" | "item_complete_state" | "item_complete_output" | "item_complete_fields" | "item_terminal";
 type Mark = (rule: OrdinaryCodexItemRule) => void;
@@ -143,7 +143,7 @@ export class OrdinaryCodexItems {
         if (!extendsText(active.text, item.text)) {refuse();}
       }
       else {
-        this.#mark(Object.hasOwn(completionRules, key) ? completionRules[key as keyof typeof completionRules] : "item_complete_fields");
+        this.#mark(Object.hasOwn(ORDINARY_CODEX_COMPLETION_RULES, key) ? ORDINARY_CODEX_COMPLETION_RULES[key as keyof typeof ORDINARY_CODEX_COMPLETION_RULES] : "item_complete_fields");
         if (!equal(active[key], item[key])) {refuse();}
       }
     }

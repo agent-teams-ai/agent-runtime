@@ -4,8 +4,6 @@ import { createContainedTurnHttpCredentialMaterialization,
   type ContainedTurnHttpProviderAccessOwner } from "../../../composition/contained-turn-http-provider-access.js";
 import { bindContainedTurnHttpRuntimeSecurity } from "../../../composition/contained-turn-http-runtime-security.js";
 
-type Materialization = Parameters<typeof createContainedTurnHttpCredentialMaterialization>[0];
-type RuntimeSecurityCandidate = Parameters<typeof bindContainedTurnHttpRuntimeSecurity>[0];
 const AUTHORITY_KEYS = ["providerAccess", "materializer", "runtimeSecurity", "verifier"] as const;
 
 /** The broker session ports that have a real production owner on this revision:
@@ -13,7 +11,8 @@ const AUTHORITY_KEYS = ["providerAccess", "materializer", "runtimeSecurity", "ve
  * Security Ed25519 authorization and its verifier. Disposal closes only the
  * newly created credential pairing, never PA, RS or the Host reservation. */
 export type ContainedTurnHttpEgressAuthorities =
-  Pick<HostHttpEgressSessionDependencies, typeof AUTHORITY_KEYS[number]> & Readonly<{dispose(): void}>;
+  Pick<HostHttpEgressSessionDependencies, "providerAccess" | "materializer" | "runtimeSecurity" | "verifier"> &
+  Readonly<{dispose(): void}>;
 
 /**
  * Every remaining broker session port, which this composition does not own.
@@ -35,7 +34,8 @@ export type ContainedTurnHttpEgressAuthorities =
  * an honest absence rather than a silently unenforced turn.
  */
 export type ContainedTurnHttpEgressBrokerPorts =
-  Omit<HostHttpEgressSessionDependencies, typeof AUTHORITY_KEYS[number]>;
+  Omit<HostHttpEgressSessionDependencies,
+    "providerAccess" | "materializer" | "runtimeSecurity" | "verifier">;
 
 const invalid = (): TypeError => new TypeError("Invalid contained turn HTTP egress session ports");
 
@@ -45,9 +45,9 @@ const invalid = (): TypeError => new TypeError("Invalid contained turn HTTP egre
  * feature port; the owners keep their own policy reads, signer and disposal.
  */
 export const bindContainedTurnHttpEgressAuthorities = (input: Readonly<{
-  providerAccess: Materialization;
+  providerAccess: Parameters<typeof createContainedTurnHttpCredentialMaterialization>[0];
   createRequestDigest: ContainedTurnHttpProviderAccessOwner["createRequestDigest"];
-  runtimeSecurity: RuntimeSecurityCandidate;
+  runtimeSecurity: Parameters<typeof bindContainedTurnHttpRuntimeSecurity>[0];
 }>): ContainedTurnHttpEgressAuthorities => {
   const credentials = createContainedTurnHttpCredentialMaterialization(input.providerAccess, input.createRequestDigest);
   const security = bindContainedTurnHttpRuntimeSecurity(input.runtimeSecurity);

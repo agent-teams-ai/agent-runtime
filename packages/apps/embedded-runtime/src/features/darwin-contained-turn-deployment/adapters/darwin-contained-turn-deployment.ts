@@ -1,16 +1,17 @@
 import {createDarwinCodexRouteEnforcement, NodeHttpEgressBoundaryIds,
   NodeHttpEgressTrustedResolver, PostgresHttpEgressEvidence,
+  type ContainedTurnFeatureDependencies,
   type DarwinCodexRouteEnforcementInput} from "@agent-teams/agent-execution/composition";
 import {createCredentialMaterializationRequestDigest, type createPostgresCredentialRenderingOwner} from "@agent-teams/provider-access/composition";
 import {createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate} from "@agent-teams/runtime-security/composition";
 import {createDarwinContainedTurnAuthority, captureDarwinDeploymentData as captureData,
-  captureDarwinDeploymentPort as capturePort} from "../../../composition/darwin-contained-turn-authority.js";
+  captureDarwinDeploymentPort as capturePort,
+  type DarwinContainedTurnAcknowledgement} from "../../../composition/darwin-contained-turn-authority.js";
 import {createContainedTurnCurrentEgressOwners, type ContainedTurnCurrentEgressOwnersInput} from "../../../composition/contained-turn-current-egress-owners.js";
 import {bindContainedTurnHttpEgressAuthorities, composeContainedTurnHttpEgressSession} from "../../../composition/contained-turn-http-egress-authorities.js";
 import {createContainedTurnHttpUpstreamTransport} from "../../../composition/contained-turn-http-egress-upstream.js";
 import {types} from "node:util";
 
-type Signer = Parameters<typeof createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate>[0];
 type SessionOwner = DarwinCodexRouteEnforcementInput["sessionOwner"];
 type Session = ReturnType<SessionOwner["acquire"]>;
 const throwAcquisitionCleanupFailure = (error: unknown, cleanupFailures: readonly unknown[]): never => {
@@ -26,13 +27,27 @@ export interface DarwinContainedTurnDeploymentInput extends Omit<DarwinCodexRout
    * Select an independently approved exact policy AFTER fresh claimed acknowledgement.
    * This contract does not issue approval or authenticate an arbitrary supplied owner. */
   readonly policyOwner: {
-    currentPolicy(acknowledged: ReturnType<ReturnType<typeof createDarwinContainedTurnAuthority>["take"]>):
+    currentPolicy(acknowledged: DarwinContainedTurnAcknowledgement):
       Pick<ContainedTurnCurrentEgressOwnersInput, "rule" | "approval" | "timing" | "monotonicNow">;
   };
-  readonly signer: Omit<Signer, "authorityOwner" | "scope" | "hostReservationId">;
+  readonly signer: Omit<
+    Parameters<typeof createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate>[0],
+    "authorityOwner" | "scope" | "hostReservationId"
+  >;
   readonly dns: ConstructorParameters<typeof NodeHttpEgressTrustedResolver>[0];
   readonly transport: Parameters<typeof createContainedTurnHttpUpstreamTransport>[0];
-  readonly clock: Session["clock"];
+  readonly clock: ReturnType<DarwinCodexRouteEnforcementInput["sessionOwner"]["acquire"]>["clock"];
+}
+
+export interface DarwinContainedTurnDeployment {
+  readonly routeEnforcement: ReturnType<typeof createDarwinCodexRouteEnforcement>;
+  readonly bindAuthority: (
+    ports: Pick<ContainedTurnFeatureDependencies, "providerAccess" | "security">,
+  ) => Pick<ContainedTurnFeatureDependencies, "providerAccess" | "security">;
+  readonly bindStore: (
+    store: ContainedTurnFeatureDependencies["operationStore"],
+  ) => ContainedTurnFeatureDependencies["operationStore"];
+  readonly dispose: () => void;
 }
 
 /** Private Embedded Runtime composition for the existing contained-agent-turn
@@ -40,12 +55,9 @@ export interface DarwinContainedTurnDeploymentInput extends Omit<DarwinCodexRout
  * single production PA/RS/AE authority root: neither a feature port nor an auth
  * acquisition owner. The internal Session-returning port never leaves this root.
  * Construction captures deployment only; acquisition starts with bridge.take. */
-export const createDarwinContainedTurnDeployment = (raw: DarwinContainedTurnDeploymentInput): Readonly<{
-  routeEnforcement: ReturnType<typeof createDarwinCodexRouteEnforcement>;
-  bindAuthority: ReturnType<typeof createDarwinContainedTurnAuthority>["bind"];
-  bindStore: ReturnType<typeof createDarwinContainedTurnAuthority>["bindStore"];
-  dispose: ReturnType<typeof createDarwinContainedTurnAuthority>["dispose"];
-}> => {
+export const createDarwinContainedTurnDeployment = (
+  raw: DarwinContainedTurnDeploymentInput,
+): Readonly<DarwinContainedTurnDeployment> => {
   const candidate: unknown = raw;
   if (candidate === null || typeof candidate !== "object" || types.isProxy(candidate)) {
     throw new TypeError("Invalid Darwin deployment input");

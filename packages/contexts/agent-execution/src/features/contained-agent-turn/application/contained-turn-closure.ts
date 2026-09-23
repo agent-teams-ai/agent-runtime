@@ -1,4 +1,4 @@
-import type { ContainedTurnScope } from "../domain/contained-turn-authority.js";
+import type { ContainedTurnAuthorityScope } from "../domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
 import { containedTurnIdentity, type ContainedTurnEvidenceId } from "../domain/contained-turn-identities.js";
 import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
@@ -70,7 +70,7 @@ export const redactedContainedTurnEvidenceId = (
 export const readContainedTurnOwnedOperation = async (
   dependencies: ContainedTurnKernelDependencies,
   operationId: ContainedTurnKernelOperation["operationId"],
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
 ): Promise<ContainedTurnKernelOperation | undefined> => selectContainedTurnOwnerStoreRead({
   current: await dependencies.operationStore.read({ operationId, scope: trustedScope }),
   operationId,
@@ -80,7 +80,7 @@ export const readContainedTurnOwnedOperation = async (
 export const recordContainedTurnRejectedDebt = (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   source: RedactedIndeterminateSource,
   debtSource: DebtSource,
 ): Promise<ContainedTurnKernelOperation> => recordContainedTurnReconciliationDebt(
@@ -94,7 +94,7 @@ export const recordContainedTurnRejectedDebt = (
 export const closeContainedTurnPhysicalContainment = async (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
 ): Promise<ContainedTurnKernelOperation> => {
   if (operation.dispatch.kind !== "claimed" || operation.custodyId === undefined ||
       operation.physicalContainment.kind === "contained") {
@@ -140,7 +140,7 @@ type StagedOperation =
 const sealArtifactsAndWorkspace = async (
   dependencies: ContainedTurnKernelDependencies,
   initial: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
 ): Promise<StagedOperation> => {
   if (initial.workspaceId === undefined) {
     const operation = await closeContainedTurnNoWorkspaceObligations(dependencies, initial, trustedScope);
@@ -232,7 +232,7 @@ const sealArtifactsAndWorkspace = async (
 const finalizeContainedTurn = async (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
 ): Promise<ContainedTurnKernelOperation> => {
   if (operation.reconciliation.kind === "required") {return operation;}
   if (operation.closureRecovery.kind === "required") {return operation;}
@@ -309,7 +309,7 @@ type ExecutionAttestation =
 const attestContainedTurnExecution = async (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   observation: Extract<ContainedTurnKernelProviderObservation, { readonly kind: "completed" }>,
 ): Promise<ExecutionAttestation> => {
   if (operation.dispatch.kind !== "claimed" || operation.custodyId === undefined) {
@@ -356,7 +356,7 @@ const attestContainedTurnExecution = async (
 export const closeContainedTurnExecution = async (
   dependencies: ContainedTurnKernelDependencies,
   initial: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   outcome: ContainedTurnKernelProviderObservation,
 ): Promise<ContainedTurnKernelOperation> => {
   if (initial.dispatch.kind !== "claimed" || initial.custodyId === undefined ||
@@ -435,7 +435,7 @@ export const closeContainedTurnExecution = async (
 export const resumeContainedTurnTerminalization = async (
   dependencies: ContainedTurnKernelDependencies,
   initial: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
 ): Promise<ContainedTurnKernelOperation> => {
   if (initial.terminal.kind === "final" || initial.reconciliation.kind === "required" ||
       initial.dispatch.kind !== "claimed" || initial.custodyId === undefined ||
@@ -490,7 +490,7 @@ export const resumeContainedTurnTerminalization = async (
 export const closeContainedTurnWithoutExecution = async (
   dependencies: ContainedTurnKernelDependencies,
   initial: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
 ): Promise<ContainedTurnKernelOperation> => {
   if (initial.providerExecution.kind !== "closed") {return initial;}
   if (initial.dispatch.kind === "prevented") {

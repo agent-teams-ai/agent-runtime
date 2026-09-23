@@ -1,4 +1,4 @@
-import type { ContainedTurnScope } from "../domain/contained-turn-authority.js";
+import type { ContainedTurnAuthorityScope } from "../domain/contained-turn-authority.js";
 import type { ContainedTurnEvidenceId } from "../domain/contained-turn-identities.js";
 import type {
   ContainedTurnKernelOperation,
@@ -40,7 +40,7 @@ export const durableContainedTurnDebtOperation = (
 
 const sanitize = (
   operation: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   outcome: CommitContainedTurnKernelOperationOutcome,
 ): CommitContainedTurnKernelOperationOutcome => sanitizeContainedTurnOwnerStoreOutcome({
   authority: containedTurnOwnerStoreAuthority(operation, trustedScope),
@@ -50,7 +50,7 @@ const sanitize = (
 export const commitContainedTurnMutation = async (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   mutation: ContainedTurnKernelMutation,
 ): Promise<CommitContainedTurnKernelOperationOutcome> => sanitize(
   operation,
@@ -65,7 +65,7 @@ export const commitContainedTurnMutation = async (
 export const advanceContainedTurn = async (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   mutation: ContainedTurnKernelMutation,
 ): Promise<ContainedTurnKernelOperation> => {
   const outcome = await commitContainedTurnMutation(dependencies, operation, trustedScope, mutation);
@@ -81,7 +81,7 @@ export const appendContainedTurnCanonicalOutput = async (input: Readonly<{
   dependencies: ContainedTurnKernelDependencies;
   operation: ContainedTurnKernelOperation;
   output: ContainedTurnKernelOutputChunk;
-  trustedScope: ContainedTurnScope;
+  trustedScope: ContainedTurnAuthorityScope;
 }>): Promise<ContainedTurnKernelOperation> => {
   // Pure validation catches malformed chunks before the owner-store transaction;
   // the store repeats the same transition only after its private authority CAS.
@@ -103,7 +103,7 @@ export const appendContainedTurnCanonicalOutput = async (input: Readonly<{
 export const recordContainedTurnReconciliationDebt = async (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   evidenceId: ContainedTurnEvidenceId,
   source: Extract<ContainedTurnKernelMutation, { readonly kind: "record_reconciliation_debt" }>["source"],
 ): Promise<ContainedTurnKernelOperation> => {
@@ -125,5 +125,5 @@ export const recordContainedTurnReconciliationDebt = async (
 export const readContainedTurnOwnedOperation = (
   dependencies: ContainedTurnKernelDependencies,
   operationId: ContainedTurnKernelOperation["operationId"],
-  scope: ContainedTurnScope,
+  scope: ContainedTurnAuthorityScope,
 ): Promise<ContainedTurnKernelOperation | undefined> => dependencies.operationStore.read({ operationId, scope });

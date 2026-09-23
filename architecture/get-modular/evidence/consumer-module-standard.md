@@ -155,12 +155,17 @@ command, invoked by both fast and full gates, after `pnpm assembly:build`.
 Consumers must additionally link their own executable slice and independent
 binding oracle; copied Markdown examples do not count as evidence.
 
-Agent Runtime is a planned consumer, not an adopted product claim here. Core
-self-composition and synthetic/packed Hosts are library evidence, not independent
-production consumers. No consumer ledger entry or repository-wide conformance is
-created by this decision. Record reciprocal consumer evidence only after that
-consumer's exact scoped acceptance gates pass. Contained-turn migration, full
-legacy conversion and shared checker extraction require separate scope.
+Agent Runtime has accepted static Core/Assembly adoption for passive setup and
+ordinary-session composition in [Agent Runtime PR #168](https://github.com/agent-teams-ai/agent-runtime/pull/168),
+merged as `3cd722f607e1643b809f6946ee303a5a94469171`. This reciprocal reference
+records only that accepted passive scope; contained-turn and dynamic plugin
+runtime scope are not admitted. The consumer retains standard revision
+`669a750d` with complete-document byte SHA-256
+`e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`.
+Core self-composition and synthetic/packed Hosts remain library evidence, not
+independent production consumers. This reference does not establish
+repository-wide conformance. Full legacy conversion and shared checker
+extraction require separate scope.
 
 ## API and metadata ownership
 

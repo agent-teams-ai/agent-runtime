@@ -1,9 +1,9 @@
 import { captureDockerHttpResourceRecord as data, DockerHttpNetworkResources,
   type DockerHttpNetworkResourceInput } from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 
-type Journal = Parameters<DockerHttpNetworkResources["prepare"]>[0];
-type Claim = Parameters<DockerHttpNetworkResources["prepare"]>[1];
-type Call = Parameters<DockerHttpNetworkResources["prepare"]>[2];
+export type DockerOperationNetworkJournal = Parameters<DockerHttpNetworkResources["prepare"]>[0];
+export type DockerOperationNetworkClaim = Parameters<DockerHttpNetworkResources["prepare"]>[1];
+export type DockerOperationNetworkCall = Parameters<DockerHttpNetworkResources["prepare"]>[2];
 export type DockerOperationNetworkAllocation = Readonly<{networkName: string; gateway: string}>;
 export type DockerOperationNetworkOwner = ReturnType<typeof createDockerOperationNetworkOwner>;
 
@@ -29,8 +29,8 @@ export const createDockerOperationNetworkOwner = (input: DockerHttpNetworkResour
     get allocation(): DockerOperationNetworkAllocation | undefined {return allocation;},
     observationOwner: Object.freeze({readObservation: (token: object) => network.readObservation(token)}),
     readObservation: (token: object) => network.readObservation(token),
-    assertClaim: (current: Claim) => {network.assertClaim(current);},
-    async allocate(journal: Journal, current: Claim, call: Call): Promise<DockerOperationNetworkAllocation> {
+    assertClaim: (current: DockerOperationNetworkClaim) => {network.assertClaim(current);},
+    async allocate(journal: DockerOperationNetworkJournal, current: DockerOperationNetworkClaim, call: DockerOperationNetworkCall): Promise<DockerOperationNetworkAllocation> {
       const prepared = await network.prepare(journal, current, call);
       allocation = Object.freeze({networkName: prepared.networkName, gateway: prepared.gateway});
       return allocation;

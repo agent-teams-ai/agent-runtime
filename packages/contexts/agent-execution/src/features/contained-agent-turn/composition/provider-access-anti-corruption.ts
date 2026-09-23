@@ -3,48 +3,48 @@ import { acceptedProviderPreparation, reverseProviderBinding } from "./accepted-
 import type { ContainedTurnProviderAccessPort } from "../application/ports/outbound/contained-turn-ports.js";
 import {
   containedTurnProviderAccessSnapshotDigest,
-  type ContainedTurnIntent, type ContainedTurnProvider,
-  type ContainedTurnProviderAccessSnapshot, type ContainedTurnScope,
+  type ContainedTurnIntent, type ContainedTurnAuthorityProvider,
+  type ContainedTurnProviderAccessSnapshot, type ContainedTurnAuthorityScope,
 } from "../domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
 import { CONTAINED_TURN_OWNER_DISPATCH_PURPOSE } from "../domain/contained-turn-dispatch-authority.js";
 import { containedTurnIdentity } from "../domain/contained-turn-identities.js";
 import { normalizeContainedTurnConsumedGrantReceipt } from "./dispatch-grant-anti-corruption.js";
 
-interface OuterEvidence { readonly authorityDigest: string; readonly bindingAuthorityDigest: string; readonly proofRef: string; readonly purpose: "acceptance" | "dispatch" }
-export interface OuterBinding extends ContainedTurnScope {
+export interface ContainedTurnProviderAccessOuterEvidence { readonly authorityDigest: string; readonly bindingAuthorityDigest: string; readonly proofRef: string; readonly purpose: "acceptance" | "dispatch" }
+export interface OuterBinding extends ContainedTurnAuthorityScope {
   readonly accessRef: string; readonly credentialBindingDigest: string; readonly credentialBindingRef: string;
-  readonly credentialGeneration: number; readonly provider: ContainedTurnProvider; readonly providerAccountRef: string;
+  readonly credentialGeneration: number; readonly provider: ContainedTurnAuthorityProvider; readonly providerAccountRef: string;
   readonly providerRouteRef: string; readonly revision: number;
 }
-type DispatchScope = Readonly<ContainedTurnScope & { readonly scopeDigest: string }>;
-type DispatchBinding = Parameters<ContainedTurnProviderAccessPort["consumeForDispatch"]>[0]["subject"]["providerAccessExpectation"];
-interface ProviderAccessDispatchReceipt extends Omit<DispatchBinding, "authorityHeadDigest"> {
+export type ContainedTurnProviderAccessDispatchScope = Readonly<ContainedTurnAuthorityScope & { readonly scopeDigest: string }>;
+export type ContainedTurnProviderAccessDispatchBinding = Parameters<ContainedTurnProviderAccessPort["consumeForDispatch"]>[0]["subject"]["providerAccessExpectation"];
+export interface ContainedTurnProviderAccessDispatchReceipt extends Omit<ContainedTurnProviderAccessDispatchBinding, "authorityHeadDigest"> {
   readonly authorityHeadDigestAtConsumption: string; readonly claimBeforeControlTime: number;
   readonly claimBindingDigest: string; readonly consumedAtControlTime: number; readonly consumptionDigest: string;
   readonly grantRequestId: string; readonly opaqueOwnerEvidenceRef: string; readonly operationId: string;
-  readonly provider: ContainedTurnProvider; readonly purpose: typeof CONTAINED_TURN_OWNER_DISPATCH_PURPOSE;
-  readonly requestDigest: string; readonly scope: DispatchScope;
+  readonly provider: ContainedTurnAuthorityProvider; readonly purpose: typeof CONTAINED_TURN_OWNER_DISPATCH_PURPOSE;
+  readonly requestDigest: string; readonly scope: ContainedTurnProviderAccessDispatchScope;
 }
-interface ProviderAccessPrevention {
+export interface ContainedTurnProviderAccessPrevention {
   readonly grantRequestId: string; readonly observedAtControlTime: number;
   readonly opaqueOwnerEvidenceRef: string; readonly reason: string;
-  readonly requestDigest: string; readonly scope: DispatchScope;
+  readonly requestDigest: string; readonly scope: ContainedTurnProviderAccessDispatchScope;
 }
-type ProviderAccessConsumeOutcome =
-  | { readonly kind: "consumed"; readonly receipt: ProviderAccessDispatchReceipt }
-  | { readonly kind: "prevented"; readonly prevention: ProviderAccessPrevention }
+export type ContainedTurnProviderAccessConsumeOutcome =
+  | { readonly kind: "consumed"; readonly receipt: ContainedTurnProviderAccessDispatchReceipt }
+  | { readonly kind: "prevented"; readonly prevention: ContainedTurnProviderAccessPrevention }
   | { readonly kind: "conflict" | "invalid" | "indeterminate" | "not_found"; readonly reason?: string };
 
 /** Exact structural view of Provider Access ContainedTurnDispatchConsumptionV1. */
 export interface OuterContainedTurnProviderAccess {
   readonly dispatchConsumptionV1: {
-    consumeForDispatch(input: Readonly<{ binding: DispatchBinding; claimBindingDigest: string; grantRequestId: string; operationId: string; provider: ContainedTurnProvider; purpose: typeof CONTAINED_TURN_OWNER_DISPATCH_PURPOSE; requestDigest: string; scope: DispatchScope }>): Promise<ProviderAccessConsumeOutcome>;
-    observeDispatchConsumption(input: Readonly<{ grantRequestId: string; provider: ContainedTurnProvider; requestDigest: string; scope: DispatchScope }>): Promise<ProviderAccessConsumeOutcome>;
-    settleDispatchConsumption(input: Readonly<{ consumptionDigest: string; disposition: "abandoned_without_claim" | "claim_committed"; expectedBinding: DispatchBinding; operationId: string; provider: ContainedTurnProvider; scope: DispatchScope; settlementRequestId: string }>): Promise<Readonly<{ kind: "settled"; receipt: unknown } | { kind: "conflict" | "invalid" | "indeterminate" | "not_found"; reason?: string }>>;
+    consumeForDispatch(input: Readonly<{ binding: ContainedTurnProviderAccessDispatchBinding; claimBindingDigest: string; grantRequestId: string; operationId: string; provider: ContainedTurnAuthorityProvider; purpose: typeof CONTAINED_TURN_OWNER_DISPATCH_PURPOSE; requestDigest: string; scope: ContainedTurnProviderAccessDispatchScope }>): Promise<ContainedTurnProviderAccessConsumeOutcome>;
+    observeDispatchConsumption(input: Readonly<{ grantRequestId: string; provider: ContainedTurnAuthorityProvider; requestDigest: string; scope: ContainedTurnProviderAccessDispatchScope }>): Promise<ContainedTurnProviderAccessConsumeOutcome>;
+    settleDispatchConsumption(input: Readonly<{ consumptionDigest: string; disposition: "abandoned_without_claim" | "claim_committed"; expectedBinding: ContainedTurnProviderAccessDispatchBinding; operationId: string; provider: ContainedTurnAuthorityProvider; scope: ContainedTurnProviderAccessDispatchScope; settlementRequestId: string }>): Promise<Readonly<{ kind: "settled"; receipt: unknown } | { kind: "conflict" | "invalid" | "indeterminate" | "not_found"; reason?: string }>>;
   };
-  readonly resolve: { execute(input: Readonly<{ provider: ContainedTurnProvider; scope: ContainedTurnScope }>): Promise<Readonly<{ binding: OuterBinding; evidence: OuterEvidence; kind: "resolved" } | { evidence: OuterEvidence; kind: "unavailable"; reason: string }>> };
-  readonly revalidate: { execute(input: Readonly<{ binding: OuterBinding; provider: ContainedTurnProvider; scope: ContainedTurnScope }>): Promise<Readonly<{ binding: OuterBinding; evidence: OuterEvidence; kind: "valid" } | { evidence: OuterEvidence; kind: "rejected"; reason: string }>> };
+  readonly resolve: { execute(input: Readonly<{ provider: ContainedTurnAuthorityProvider; scope: ContainedTurnAuthorityScope }>): Promise<Readonly<{ binding: OuterBinding; evidence: ContainedTurnProviderAccessOuterEvidence; kind: "resolved" } | { evidence: ContainedTurnProviderAccessOuterEvidence; kind: "unavailable"; reason: string }>> };
+  readonly revalidate: { execute(input: Readonly<{ binding: OuterBinding; provider: ContainedTurnAuthorityProvider; scope: ContainedTurnAuthorityScope }>): Promise<Readonly<{ binding: OuterBinding; evidence: ContainedTurnProviderAccessOuterEvidence; kind: "valid" } | { evidence: ContainedTurnProviderAccessOuterEvidence; kind: "rejected"; reason: string }>> };
 }
 
 export type ProviderAccessRouteCOwnerDiagnostic =
@@ -66,7 +66,7 @@ export class ProviderAccessRouteCOwnerError extends TypeError {
   }
 }
 
-type CapturedOwner = Readonly<{
+export type ContainedTurnProviderAccessCapturedOwner = Readonly<{
   consumeForDispatch: OuterContainedTurnProviderAccess["dispatchConsumptionV1"]["consumeForDispatch"];
   observeDispatchConsumption: OuterContainedTurnProviderAccess["dispatchConsumptionV1"]["observeDispatchConsumption"];
   resolve: OuterContainedTurnProviderAccess["resolve"]["execute"];
@@ -149,7 +149,7 @@ export const capturedMethod = (owner: object, value: unknown): ((...args: unknow
   }
 };
 
-const captureProviderAccessOwner = (value: unknown): CapturedOwner => {
+const captureProviderAccessOwner = (value: unknown): ContainedTurnProviderAccessCapturedOwner => {
   const outer = exactStableDataRecord(value, ["dispatchConsumptionV1", "resolve", "revalidate"]);
   const dispatchOwner = exactStableDataRecord(outer.dispatchConsumptionV1, [
     "consumeForDispatch", "observeDispatchConsumption", "settleDispatchConsumption",
@@ -158,21 +158,21 @@ const captureProviderAccessOwner = (value: unknown): CapturedOwner => {
   const revalidateOwner = exactStableDataRecord(outer.revalidate, ["execute"]);
   try {
     return trustedFreeze({
-      consumeForDispatch: capturedMethod(outer.dispatchConsumptionV1 as object, dispatchOwner.consumeForDispatch) as CapturedOwner["consumeForDispatch"],
-      observeDispatchConsumption: capturedMethod(outer.dispatchConsumptionV1 as object, dispatchOwner.observeDispatchConsumption) as CapturedOwner["observeDispatchConsumption"],
-      resolve: capturedMethod(outer.resolve as object, resolveOwner.execute) as CapturedOwner["resolve"],
-      revalidate: capturedMethod(outer.revalidate as object, revalidateOwner.execute) as CapturedOwner["revalidate"],
-      settleDispatchConsumption: capturedMethod(outer.dispatchConsumptionV1 as object, dispatchOwner.settleDispatchConsumption) as CapturedOwner["settleDispatchConsumption"],
+      consumeForDispatch: capturedMethod(outer.dispatchConsumptionV1 as object, dispatchOwner.consumeForDispatch) as ContainedTurnProviderAccessCapturedOwner["consumeForDispatch"],
+      observeDispatchConsumption: capturedMethod(outer.dispatchConsumptionV1 as object, dispatchOwner.observeDispatchConsumption) as ContainedTurnProviderAccessCapturedOwner["observeDispatchConsumption"],
+      resolve: capturedMethod(outer.resolve as object, resolveOwner.execute) as ContainedTurnProviderAccessCapturedOwner["resolve"],
+      revalidate: capturedMethod(outer.revalidate as object, revalidateOwner.execute) as ContainedTurnProviderAccessCapturedOwner["revalidate"],
+      settleDispatchConsumption: capturedMethod(outer.dispatchConsumptionV1 as object, dispatchOwner.settleDispatchConsumption) as ContainedTurnProviderAccessCapturedOwner["settleDispatchConsumption"],
     });
   } catch {
     throw new ProviderAccessRouteCOwnerError("invalid_method");
   }
 };
 
-const opaqueEvidenceDigest = (evidence: OuterEvidence): string => digestContainedTurnCanonicalValue(evidence as never);
-const proofId = (evidence: OuterEvidence, purpose: OuterEvidence["purpose"]) => containedTurnIdentity("proof", `proof:provider-access:${purpose}:${opaqueEvidenceDigest(evidence)}`);
-const evidenceId = (evidence: OuterEvidence, purpose: OuterEvidence["purpose"]) => containedTurnIdentity("evidence", `evidence:provider-access:${purpose}:${opaqueEvidenceDigest(evidence)}`);
-const snapshot = (binding: OuterBinding, evidence: OuterEvidence): ContainedTurnProviderAccessSnapshot => {
+const opaqueEvidenceDigest = (evidence: ContainedTurnProviderAccessOuterEvidence): string => digestContainedTurnCanonicalValue(evidence as never);
+const proofId = (evidence: ContainedTurnProviderAccessOuterEvidence, purpose: ContainedTurnProviderAccessOuterEvidence["purpose"]) => containedTurnIdentity("proof", `proof:provider-access:${purpose}:${opaqueEvidenceDigest(evidence)}`);
+const evidenceId = (evidence: ContainedTurnProviderAccessOuterEvidence, purpose: ContainedTurnProviderAccessOuterEvidence["purpose"]) => containedTurnIdentity("evidence", `evidence:provider-access:${purpose}:${opaqueEvidenceDigest(evidence)}`);
+const snapshot = (binding: OuterBinding, evidence: ContainedTurnProviderAccessOuterEvidence): ContainedTurnProviderAccessSnapshot => {
   exactFrozenDataRecord(binding, ["accessRef", "credentialBindingDigest", "credentialBindingRef", "credentialGeneration", "projectId", "provider", "providerAccountRef", "providerRouteRef", "revision", "tenantId"]);
   exactFrozenDataRecord(evidence, ["authorityDigest", "bindingAuthorityDigest", "proofRef", "purpose"]);
   if (binding.credentialBindingDigest !== evidence.bindingAuthorityDigest ||
@@ -187,7 +187,7 @@ const snapshot = (binding: OuterBinding, evidence: OuterEvidence): ContainedTurn
   revision: binding.revision, tenantId: binding.tenantId,
 });
 };
-const resolutionDigest = (binding: ContainedTurnProviderAccessSnapshot, evidence: OuterEvidence, phase: "acceptance" | "dispatch") => digestContainedTurnCanonicalValue({
+const resolutionDigest = (binding: ContainedTurnProviderAccessSnapshot, evidence: ContainedTurnProviderAccessOuterEvidence, phase: "acceptance" | "dispatch") => digestContainedTurnCanonicalValue({
   bindingDigest: containedTurnProviderAccessSnapshotDigest(binding), ownerAuthorityDigest: evidence.authorityDigest,
   phase, proofPurpose: evidence.purpose, proofRef: evidence.proofRef,
 });
@@ -216,13 +216,13 @@ export const exactBoundedToken = (value: unknown): value is string => {
   return true;
 };
 
-const scopeMatches = (value: unknown, expected: DispatchScope): boolean => {
+const scopeMatches = (value: unknown, expected: ContainedTurnProviderAccessDispatchScope): boolean => {
   const scope = exactFrozenDataRecord(value, dispatchScopeKeys);
   return scope.projectId === expected.projectId && scope.scopeDigest === expected.scopeDigest &&
     scope.tenantId === expected.tenantId;
 };
 
-const bindingMatches = (value: unknown, expected: DispatchBinding): boolean => {
+const bindingMatches = (value: unknown, expected: ContainedTurnProviderAccessDispatchBinding): boolean => {
   const binding = exactFrozenDataRecord(value, dispatchBindingKeys);
   for (const key of dispatchBindingKeys) {
     if (binding[key] !== expected[key]) {return false;}
@@ -244,8 +244,8 @@ const preventionReason = (value: unknown): value is string => {
 
 const snapshotBoundPrevention = (
   value: unknown,
-  request: Readonly<{grantRequestId: string; requestDigest: string; scope: DispatchScope}>,
-): ProviderAccessPrevention => {
+  request: Readonly<{grantRequestId: string; requestDigest: string; scope: ContainedTurnProviderAccessDispatchScope}>,
+): ContainedTurnProviderAccessPrevention => {
   const data = exactFrozenDataRecord(value, [
     "grantRequestId", "observedAtControlTime", "opaqueOwnerEvidenceRef", "reason", "requestDigest", "scope",
   ]);
@@ -269,8 +269,8 @@ const settlementMatches = (
   value: unknown,
   request: Readonly<{
     consumptionDigest: string; disposition: "abandoned_without_claim" | "claim_committed";
-    expectedBinding: DispatchBinding; operationId: string; provider: ContainedTurnProvider;
-    scope: DispatchScope; settlementRequestId: string;
+    expectedBinding: ContainedTurnProviderAccessDispatchBinding; operationId: string; provider: ContainedTurnAuthorityProvider;
+    scope: ContainedTurnProviderAccessDispatchScope; settlementRequestId: string;
   }>,
 ): boolean => {
   const outcome = exactFrozenDataRecord(value, ["kind", "receipt"]);
@@ -293,7 +293,7 @@ export const createContainedTurnProviderAccessPort = (outer: OuterContainedTurnP
   return providerAccessPort(owner);
 };
 
-const providerAccessPort = (owner: CapturedOwner, publish?: (input: Parameters<ContainedTurnProviderAccessPort["consumeForDispatch"]>[0], request: Parameters<CapturedOwner["consumeForDispatch"]>[0]) => ReturnType<CapturedOwner["consumeForDispatch"]>): ContainedTurnProviderAccessPort => {
+const providerAccessPort = (owner: ContainedTurnProviderAccessCapturedOwner, publish?: (input: Parameters<ContainedTurnProviderAccessPort["consumeForDispatch"]>[0], request: Parameters<ContainedTurnProviderAccessCapturedOwner["consumeForDispatch"]>[0]) => ReturnType<ContainedTurnProviderAccessCapturedOwner["consumeForDispatch"]>): ContainedTurnProviderAccessPort => {
   const port: ContainedTurnProviderAccessPort = {
   async consumeForDispatch(input) {
     const subject = input.subject;
@@ -355,7 +355,7 @@ const providerAccessPort = (owner: CapturedOwner, publish?: (input: Parameters<C
         { evidenceId: grantEvidenceId("settle", { input, outcome }), kind: "indeterminate" };
     } catch {return { evidenceId: boundaryFailureEvidenceId("settle", input), kind: "indeterminate" };}
   },
-  async resolveForAcceptance(input: Readonly<{ intent: ContainedTurnIntent; provider: ContainedTurnProvider; scope: ContainedTurnScope }>) {
+  async resolveForAcceptance(input: Readonly<{ intent: ContainedTurnIntent; provider: ContainedTurnAuthorityProvider; scope: ContainedTurnAuthorityScope }>) {
     const request = Object.freeze({ provider: input.provider, scope: input.scope });
     try {
       const outcome = await ownerOutputValue(owner.resolve(request));
@@ -397,7 +397,7 @@ export interface OuterContainedTurnProviderAccessOperation {
   readonly resolve: OuterContainedTurnProviderAccess["resolve"];
   readonly revalidate: OuterContainedTurnProviderAccess["revalidate"];
   readonly dispatchConsumption: OuterContainedTurnProviderAccess["dispatchConsumptionV1"] & {
-    publishAndConsumeForDispatch(prepared: ReturnType<typeof acceptedProviderPreparation>, request: Parameters<CapturedOwner["consumeForDispatch"]>[0]): ReturnType<CapturedOwner["consumeForDispatch"]>;
+    publishAndConsumeForDispatch(prepared: ReturnType<typeof acceptedProviderPreparation>, request: Parameters<ContainedTurnProviderAccessCapturedOwner["consumeForDispatch"]>[0]): ReturnType<ContainedTurnProviderAccessCapturedOwner["consumeForDispatch"]>;
   };
 }
 export const createContainedTurnOperationProviderAccessPort = (outer: OuterContainedTurnProviderAccessOperation): ContainedTurnProviderAccessPort => {

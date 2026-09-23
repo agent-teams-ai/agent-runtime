@@ -10,7 +10,7 @@ import type {
   ContainedTurnWorkspaceClosureRecord,
 } from "./contained-turn-workspace-state.ts";
 
-type Bridge = ReturnType<typeof consumeDarwinNativeWorkspaceSelection>;
+export type DarwinAttemptWorkspaceBridge = ReturnType<typeof consumeDarwinNativeWorkspaceSelection>;
 /** Private backend beneath the existing workspace owner. That owner retains
  * its creation/seal/closure records and receipt authority. Root composition
  * binds these callbacks to that selected instance, never a caller record API. */
@@ -20,7 +20,7 @@ export interface DarwinNativeRetainedWorkspaceOwners {
   readonly closure: () => Promise<ContainedTurnWorkspaceClosureRecord>;
   readonly artifactResult: () => Promise<ContainedTurnResultPublicationRecord>;
 }
-function createDarwinAttemptWorkspaceBackend(bridge: Bridge, selected: DarwinNativeRetainedWorkspaceOwners) {
+export function createDarwinAttemptWorkspaceBackend(bridge: DarwinAttemptWorkspaceBridge, selected: DarwinNativeRetainedWorkspaceOwners) {
   const records = Object.freeze({ creation: selected.creation, seal: selected.seal,
     closure: selected.closure, artifactResult: selected.artifactResult });
   let materialized: ContainedTurnWorkspaceTree | undefined;

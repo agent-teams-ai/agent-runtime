@@ -3,8 +3,11 @@ import { HostHttpEgressV4Journal } from "./journal/host-http-egress-v4-journal.j
 import { v4Exact, v4Hash, v4Subject } from "./journal/host-http-egress-v4-codec.js";
 import type { HostHttpEgressV4Subject } from "./journal/host-http-egress-v4-types.js";
 
-const attemptKeys = ["tenantId", "projectId", "operationId", "attemptId", "custodyId", "hostInstanceId", "hostBootId"] as const;
-type Identity = Readonly<Pick<HostHttpEgressV4Subject["attempt"], typeof attemptKeys[number]> & {
+const DOCKER_HTTP_LISTENER_ATTEMPT_KEYS = Object.freeze([
+  "tenantId", "projectId", "operationId", "attemptId", "custodyId", "hostInstanceId", "hostBootId",
+] as const);
+export type DockerHttpListenerIdentity = Readonly<Pick<HostHttpEgressV4Subject["attempt"],
+  "tenantId" | "projectId" | "operationId" | "attemptId" | "custodyId" | "hostInstanceId" | "hostBootId"> & {
   effectId: string; workspaceId: string; executionGenerationId: string;
   committedClaimSha256: string; acceptedAuthoritySha256: string;
 }>;
@@ -23,12 +26,12 @@ export const createDockerHttpListenerLifecycle = (input: Readonly<{
   v4Exact(input, ["v4", "subject"]);
   const journal = input.v4; const subject = v4Subject(input.subject);
   let bound = false;
-  return Object.freeze({bind(identity: Identity) {
+  return Object.freeze({bind(identity: DockerHttpListenerIdentity) {
     if (bound) {return reject();}
     bound = true;
     v4Exact(identity, ["tenantId", "projectId", "operationId", "attemptId", "custodyId", "hostInstanceId",
       "hostBootId", "effectId", "workspaceId", "executionGenerationId", "committedClaimSha256", "acceptedAuthoritySha256"]);
-    if (attemptKeys.some(key => identity[key] !== subject.attempt[key]) ||
+    if (DOCKER_HTTP_LISTENER_ATTEMPT_KEYS.some(key => identity[key] !== subject.attempt[key]) ||
       subject.effectId !== identity.effectId || subject.workspaceId !== identity.workspaceId ||
       subject.executionGenerationId !== identity.executionGenerationId ||
       subject.committedClaimSha256 !== identity.committedClaimSha256 ||

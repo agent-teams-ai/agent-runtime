@@ -3,13 +3,13 @@ import {readNodeLinuxRouteNamespace, readNodeLinuxDockerCgroup,
   from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 import type {DockerHttpConsumptionReferences} from "./node-docker-deployment-recipe.js";
 
-type Launch = Parameters<DockerHostCustodyLifecycle["observeLaunch"]>[0];
-type Call = Parameters<typeof readNodeLinuxDockerCgroup>[2];
+export type DockerConsumptionLaunch = Parameters<DockerHostCustodyLifecycle["observeLaunch"]>[0];
+export type DockerConsumptionEngineCall = Parameters<typeof readNodeLinuxDockerCgroup>[2];
 
 /** Docker-private projection of existing owners, with no injectable observations. */
 export const DockerConsumptionObservations = {
-  async read(lifecycle: DockerHostCustodyLifecycle, launch: Launch,
-    route: LinuxExclusiveRouteOwner, endpoint: LinuxExclusiveRouteEndpoint, call: Call):
+  async read(lifecycle: DockerHostCustodyLifecycle, launch: DockerConsumptionLaunch,
+    route: LinuxExclusiveRouteOwner, endpoint: LinuxExclusiveRouteEndpoint, call: DockerConsumptionEngineCall):
     Promise<Omit<DockerHttpConsumptionReferences, "listenerIdentity">> {
     const observed = lifecycle.observeLaunch(launch);
     const digest = observed.journal.authoritySha256;

@@ -1,0 +1,11 @@
+{
+  "extends": "../../../../../../architecture/foundation/scaffold-tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": false
+  },
+  "files": [
+    "linux-codex-live-bootstrap.ts"
+  ]
+}

@@ -6,10 +6,24 @@ import { snapshotAuthorizationCommand, snapshotAuthorizationOwnerSelector, snaps
 import { detachedDispatchData, exactDispatchDataRecord } from "../../dispatch-consumption-data.js";
 import { assertMaterializationSchema, migrateMaterializationSchema } from "./materialization-postgres-schema.js";
 import { createRouteSelectionPersistence } from "./route-selection-postgres.js";
+import type { RouteSelectionCurrent } from "./route-selection-data.js";
 import { MaterializationPostgresTransactions, type MaterializationPostgresClient, type MaterializationPostgresPool,
   type MaterializationPostgresTimeouts } from "./materialization-postgres-transactions.js";
 
 export type MaterializationPostgresOwner = Pick<MaterializationAuthorizationBinding, "tenantId" | "projectId" | "provider" | "scopeDigest">;
+export interface PostgresMaterializationRepositoryOwner {
+  readonly repository: MaterializationAuthorizationRepository;
+  readonly routeSelection: Readonly<{
+    readCurrent(expected: RouteSelectionCurrent, check: () => void): Promise<RouteSelectionCurrent | undefined>;
+    endorse(expected: RouteSelectionCurrent, headVersion: number,
+      check: () => void): Promise<RouteSelectionCurrent | undefined>;
+    migrate(check: () => void): Promise<void>;
+  }>;
+  observeBinding(input: MaterializationPostgresOwner): Promise<MaterializationAuthorizationBinding | undefined>;
+  migrate(): Promise<void>;
+  replaceBinding(input: MaterializationAuthorizationBinding, expectedHeadVersion: number): Promise<number | undefined>;
+  dispose(): void;
+}
 type Owner = MaterializationPostgresOwner;
 const ownerWhere = "owner_id = $1 AND tenant_id = $2 AND project_id = $3 AND provider = $4 AND scope_digest = $5";
 const selectorSnapshot = (value: MaterializationAuthorizationRequestSelector): MaterializationAuthorizationRequestSelector => {
@@ -63,7 +77,7 @@ const readRecord = async (client: MaterializationPostgresClient, selector: Mater
 
 /** PA-M1 persistence only. No raw credentials, dispatch consumption or cross-context transaction. */
 export const createPostgresMaterializationRepository = (pool: MaterializationPostgresPool,
-  timeouts?: Partial<MaterializationPostgresTimeouts>) => {
+  timeouts?: Partial<MaterializationPostgresTimeouts>): Readonly<PostgresMaterializationRepositoryOwner> => {
   const transactions = new MaterializationPostgresTransactions(pool, timeouts);
   const repository: MaterializationAuthorizationRepository = Object.freeze({
     async observeAuthorizationRequest(input: MaterializationAuthorizationRequestSelector) {

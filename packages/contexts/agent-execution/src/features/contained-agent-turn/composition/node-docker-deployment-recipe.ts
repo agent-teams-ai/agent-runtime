@@ -11,17 +11,17 @@ import {createNodeHostHttpConsumptionJournal} from "../adapters/outbound/host-cu
 
 const commandId = (): string => `command:${randomBytes(32).toString("hex")}`;
 
-type Dependencies = DockerLinuxPostClaimDependencies;
-type Call = Parameters<Dependencies["engineIdentity"]>[0];
-type Policy = Parameters<Dependencies["openLifecycle"]>[0];
+export type NodeDockerDeploymentDependencies = DockerLinuxPostClaimDependencies;
+export type NodeDockerEngineIdentityCall = Parameters<NodeDockerDeploymentDependencies["engineIdentity"]>[0];
+type Policy = Parameters<NodeDockerDeploymentDependencies["openLifecycle"]>[0];
 type Residue = ReturnType<typeof createNodeLinuxDockerResidueCustody>;
-type Consumption = Parameters<typeof createNodeHostHttpConsumptionJournal>[0];
+export type NodeDockerHostHttpConsumption = Parameters<typeof createNodeHostHttpConsumptionJournal>[0];
 
-export type NodeDockerConsumptionReferences = Pick<Consumption["envelope"],
+export type NodeDockerConsumptionReferences = Pick<NodeDockerHostHttpConsumption["envelope"],
   "selectedDockerAuthorityDigest" | "networkNamespaceIdentity" | "cgroupIdentity" | "listenerIdentity" | "signerIdentity">;
 export type DockerHttpConsumptionReferences = Omit<NodeDockerConsumptionReferences, "signerIdentity">;
 export type NodeDockerConsumptionRecipe = Readonly<{
-  prepare(references: NodeDockerConsumptionReferences): ReturnType<Dependencies["resources"]["consumption"]["prepare"]>;
+  prepare(references: NodeDockerConsumptionReferences): ReturnType<NodeDockerDeploymentDependencies["resources"]["consumption"]["prepare"]>;
 }>;
 
   const contains = (parent: string, child: string) => {
@@ -30,7 +30,7 @@ export type NodeDockerConsumptionRecipe = Readonly<{
   };
 
 export interface NodeDockerDeploymentRecipeInput {
-  readonly enginePolicy: Dependencies["enginePolicy"];
+  readonly enginePolicy: NodeDockerDeploymentDependencies["enginePolicy"];
   /** Claimed operation facts supplied by the private deployment composition. */
   readonly routeSubject?: NodeDockerRouteSubject;
   /** Dedicated, already-created private directories outside provider mounts.
@@ -41,17 +41,17 @@ export interface NodeDockerDeploymentRecipeInput {
   readonly nft: DockerLinuxExclusiveRouteAdmissionInput["nft"];
   /** Host storage and the bound subject reader; observations arrive after route admission. */
   readonly consumption: Readonly<{
-    directory: Consumption["directory"];
-    limits?: Consumption["limits"];
-    readEnvelope(references: NodeDockerConsumptionReferences): Consumption["envelope"];
+    directory: NodeDockerHostHttpConsumption["directory"];
+    limits?: NodeDockerHostHttpConsumption["limits"];
+    readEnvelope(references: NodeDockerConsumptionReferences): NodeDockerHostHttpConsumption["envelope"];
   }>;
 }
 
 export interface NodeDockerDeploymentRecipe {
-  readonly preparation: Pick<Dependencies, "enginePolicy" | "engineIdentity" | "openLifecycle" | "openResourceJournal">;
+  readonly preparation: Pick<NodeDockerDeploymentDependencies, "enginePolicy" | "engineIdentity" | "openLifecycle" | "openResourceJournal">;
   readonly route: Omit<DockerLinuxExclusiveRouteAdmissionInput, "binding">;
   readonly consumption: NodeDockerConsumptionRecipe;
-  releaseAfterHostCleanup(call: Call): Promise<"released" | "pending">;
+  releaseAfterHostCleanup(call: NodeDockerEngineIdentityCall): Promise<"released" | "pending">;
 }
 
 /** One operation's concrete production owners. Construction does no I/O.
@@ -84,10 +84,10 @@ export const createNodeDockerDeploymentRecipe = (input: NodeDockerDeploymentReci
   const readEnvelope = input.consumption.readEnvelope.bind(input.consumption);
   let consumptionEntered = false;
   let consumptionSettled = true;
-  let consumptionFlight: ReturnType<Dependencies["resources"]["consumption"]["prepare"]> | undefined;
+  let consumptionFlight: ReturnType<NodeDockerDeploymentDependencies["resources"]["consumption"]["prepare"]> | undefined;
   let closed = false;
   let storage: NodeDockerCustodyJournalStorage | undefined;
-  let identityFlight: ReturnType<Dependencies["engineIdentity"]> | undefined;
+  let identityFlight: ReturnType<NodeDockerDeploymentDependencies["engineIdentity"]> | undefined;
   let lifecycle: Residue | undefined;
   let routeEngine: NodeUnixSocketDockerEngine | undefined;
   let journal: HostHttpEgressV4Journal | undefined;
@@ -95,9 +95,9 @@ export const createNodeDockerDeploymentRecipe = (input: NodeDockerDeploymentReci
   let published = false;
   let release: Promise<"released" | "pending"> | undefined;
   const assertOpen = () => {if (closed) {throw new TypeError("Docker recipe admission closed");}};
-  const preparation: Pick<Dependencies, "enginePolicy" | "engineIdentity" | "openLifecycle" | "openResourceJournal"> = Object.freeze({
+  const preparation: Pick<NodeDockerDeploymentDependencies, "enginePolicy" | "engineIdentity" | "openLifecycle" | "openResourceJournal"> = Object.freeze({
     enginePolicy: Object.freeze(enginePolicy),
-    engineIdentity(call: Call) {
+    engineIdentity(call: NodeDockerEngineIdentityCall) {
       assertOpen();
       if (identityFlight !== undefined) {throw new TypeError("Docker recipe identity is one-use");}
       identityFlight = (async () => {
@@ -122,7 +122,7 @@ export const createNodeDockerDeploymentRecipe = (input: NodeDockerDeploymentReci
       routeEngine = new NodeUnixSocketDockerEngine({policy: selected});
       return lifecycle.lifecycle;
     },
-    openResourceJournal({subject, observer}: Parameters<Dependencies["openResourceJournal"]>[0]) {
+    openResourceJournal({subject, observer}: Parameters<NodeDockerDeploymentDependencies["openResourceJournal"]>[0]) {
       assertOpen();
       if (lifecycle === undefined || journalFlight !== undefined) {throw new TypeError("Docker recipe journal order conflict");}
       journal = new HostHttpEgressV4Journal(new HostHttpEgressV4NodeStorage(resourceRoot), subject, observer);
@@ -174,13 +174,13 @@ export const createNodeDockerDeploymentRecipe = (input: NodeDockerDeploymentReci
     return consumptionFlight;
   }});
   return Object.freeze({preparation, route, consumption,
-    /** Call after the Host's existing cleanup has settled. This closes only
+    /** NodeDockerEngineIdentityCall after the Host's existing cleanup has settled. This closes only
      * local descriptor/storage custody, never a container or an operation.
      * V4 itself refuses retirement while any required absence proof is missing.
      * Failed preparation is joined before closing its unpublished descriptors.
      * Keep this owner reachable and retry pending cleanup; never erase its roots.
      */
-    releaseAfterHostCleanup(call: Call): Promise<"released" | "pending"> {
+    releaseAfterHostCleanup(call: NodeDockerEngineIdentityCall): Promise<"released" | "pending"> {
       closed = true;
       if (call.signal.aborted || !Number.isSafeInteger(call.deadlineEpochMs) || Date.now() >= call.deadlineEpochMs) {
         return Promise.resolve("pending");

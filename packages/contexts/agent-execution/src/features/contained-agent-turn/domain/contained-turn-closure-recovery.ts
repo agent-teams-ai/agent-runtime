@@ -41,7 +41,7 @@ export type ContainedTurnClosureRecovery =
     readonly requestId: ContainedTurnClosureRequestId;
     readonly stage: ContainedTurnClosureStage;
   };
-
+export type ContainedTurnPendingClosure = Extract<ContainedTurnClosureRecovery, { readonly kind: "required" }>;
 // The score counts closed-stage binding alternatives and null normalization, not control flow.
 // oxlint-disable-next-line complexity
 const closureRequestValue = (

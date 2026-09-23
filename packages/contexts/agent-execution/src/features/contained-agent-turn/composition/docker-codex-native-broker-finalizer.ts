@@ -13,7 +13,7 @@ import type {DockerLinuxOperationRouteAdmission} from "./docker-linux-post-claim
 import {retainDockerNativeBrokerRoute} from "./docker-native-broker-route.js";
 
 type Finish = NonNullable<CreateDockerCodexHostKernelOwnerOptions["finishClaimed"]>;
-type Session = ReturnType<DockerHostHttpResources["bindSession"]>;
+export type DockerCodexNativeBrokerSession = ReturnType<DockerHostHttpResources["bindSession"]>;
 export interface DockerCodexNativeBrokerFinalizerInput {
   readonly routeAdmission: DockerLinuxOperationRouteAdmission;
   /** Existing private broker owners, including PA, RS and credential rendering.
@@ -62,7 +62,7 @@ export const createDockerCodexNativeBrokerFinalizer = (value: DockerCodexNativeB
   const diagnostic = retainNativeStartDiagnostic(input.nativeFiles);
   let entered = false;
   let cut = false;
-  let session: Session | undefined;
+  let session: DockerCodexNativeBrokerSession | undefined;
   let cutHttp: (() => void) | undefined;
   let subscription: ReturnType<typeof hostHttpAbortOperations.subscribe> | undefined;
   const cutoff = () => {
@@ -149,7 +149,7 @@ export const createDockerCodexNativeBrokerFinalizer = (value: DockerCodexNativeB
     }
   };
   return Object.freeze({routeAdmission: route.routeAdmission, finishClaimed, cutoff,
-    async execute(operation: Parameters<Session["execute"]>[0]) {
+    async execute(operation: Parameters<DockerCodexNativeBrokerSession["execute"]>[0]) {
       if (cut || session === undefined) {throw rejected();}
       try {
         const receipt = await session.execute(operation);

@@ -8,7 +8,7 @@ import {
   CODEX_PERMISSION_PROFILE_ID,
   canonicalCodexJson,
   type CodexAppServerPermissionBoundary,
-  type CodexDirectoryIdentity,
+  type CodexDirectoryIdentitySnapshot,
 } from "./codex-app-server-permission-boundary.js";
 import { detachCodexManifest } from "./codex-app-server-receipt-identity.js";
 
@@ -79,7 +79,7 @@ const boundedString = (value: unknown, name: string): string => {
   return value;
 };
 
-const directoryIdentity = (value: unknown, name: string): CodexDirectoryIdentity => {
+const directoryIdentity = (value: unknown, name: string): CodexDirectoryIdentitySnapshot => {
   const identity = snapshotRecord(value, name, ["device", "inode", "path"]);
   if (!Number.isSafeInteger(identity.device) || Number(identity.device) < 0
     || !Number.isSafeInteger(identity.inode) || Number(identity.inode) < 0) {

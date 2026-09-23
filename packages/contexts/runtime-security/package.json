@@ -33,6 +33,7 @@
     }
   },
   "devDependencies": {
+    "@microsoft/api-extractor": "catalog:",
     "@types/pg": "catalog:",
     "pg": "catalog:"
   }

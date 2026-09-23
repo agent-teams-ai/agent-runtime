@@ -1,5 +1,5 @@
 import { validateContainedTurnIdentity } from "../domain/contained-turn-identities.js";
-import type { ContainedTurnScope } from "../domain/contained-turn-authority.js";
+import type { ContainedTurnAuthorityScope } from "../domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
 import { containedTurnOperationDispatchSubject, type ContainedTurnDispatchGrantSubject } from "../domain/contained-turn-dispatch-authority.js";
 import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
@@ -10,7 +10,7 @@ import { containedTurnAcceptanceConstraintsDigestV1, containedTurnAcceptanceInte
 
 export type ContainedTurnAcceptedAuthorityHandoff = Readonly<{
   operationId: ContainedTurnKernelOperation["operationId"];
-  scope: ContainedTurnScope;
+  scope: ContainedTurnAuthorityScope;
   acceptanceProof: Extract<ContainedTurnKernelOperation["proofs"][number], { readonly kind: "acceptance" }>;
   acceptedAuthorityVector: ContainedTurnKernelOperation["acceptedAuthorityVector"];
   acceptedAuthorityVectorDigest: ContainedTurnKernelOperation["acceptedAuthorityVectorDigest"];
@@ -22,7 +22,7 @@ export type ContainedTurnAcceptedAuthorityHandoff = Readonly<{
 
 export const prepareContainedTurnAcceptedSubject = (
   operation: ContainedTurnKernelOperation & { readonly workspaceId: NonNullable<ContainedTurnKernelOperation["workspaceId"]> },
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   subject: Pick<ContainedTurnDispatchGrantSubject, "attemptId" | "custodyId" | "executionGenerationId" | "hostBootId" | "hostInstanceId" | "preparationToken">,
 ): ContainedTurnDispatchGrantSubject => {
   return containedTurnOperationDispatchSubject(operation, trustedScope, subject, operation.operationCutoff.revision);
@@ -31,7 +31,7 @@ export const prepareContainedTurnAcceptedSubject = (
 /** Private acknowledged-owner path only. This projection is not standalone database commit proof. */
 export const createContainedTurnAcceptedAuthorityHandoff = (
   operation: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   subject: ContainedTurnDispatchGrantSubject,
 ): ContainedTurnAcceptedAuthorityHandoff => {
   // Validate inside the caught handoff path so malformed custody still retires

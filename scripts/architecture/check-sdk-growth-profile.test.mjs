@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { checkSdkGrowthProfile } from "./check-sdk-growth-profile.mjs";
+import { checkSdkGrowthProfile, normalizeWorkspaceManifestPaths } from "./check-sdk-growth-profile.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const contractPath = "architecture/c0/ar-owned-lifetime/contract.json";
@@ -13,7 +13,7 @@ const contract = JSON.parse(readFileSync(join(root, contractPath), "utf8"));
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), "ar-sdk-profile-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  for (const path of [contractPath, "pnpm-workspace.yaml", "architecture/sdk-growth", "architecture/get-modular/consumer-profile.json", "architecture/get-modular/evidence/consumer-module-standard.md", "architecture/get-modular/evidence/sdk-growth-standard-review.json", "architecture/get-modular/evidence/sdk-growth-current-standard.md", "architecture/consumer-module-standard/contained-turn-profile.json", ...contract.inventory.packages.map(pkg => pkg.manifest)]) {
+  for (const path of [contractPath, "pnpm-workspace.yaml", "architecture/sdk-growth", "architecture/get-modular/consumer-profile.json", "architecture/get-modular/evidence/consumer-module-standard.md", "architecture/get-modular/evidence/a3-cms-pin-review.json", "architecture/get-modular/evidence/sdk-growth-standard-review.json", "architecture/get-modular/evidence/sdk-growth-current-standard.md", "architecture/consumer-module-standard/contained-turn-profile.json", ...contract.inventory.packages.map(pkg => pkg.manifest)]) {
     mkdirSync(dirname(join(directory, path)), { recursive: true });
     cpSync(join(root, path), join(directory, path), { recursive: true });
   }
@@ -77,6 +77,22 @@ test("reject root SDK added under metadata classification", t => {
   mutate(directory, "package.json", value => { value.exports = "./index.js"; });
   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_ROOT_CLASSIFICATION_DRIFT/u);
 });
+test("reject an unclassified workspace package executable", t => {
+  const directory = fixture(t);
+  mutate(directory, "packages/apps/embedded-runtime/package.json", value => {
+    value.bin = { "ar-sdk-check": "./dist/index.js" };
+  });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_BIN_CLASSIFICATION_DRIFT/u);
+});
+test("normalize Windows workspace discovery paths before scope comparison", () => {
+  assert.deepEqual(normalizeWorkspaceManifestPaths([
+    "packages\\contexts\\provider-access\\package.json",
+    "packages\\apps\\embedded-runtime\\package.json"
+  ]), [
+    "packages/apps/embedded-runtime/package.json",
+    "packages/contexts/provider-access/package.json"
+  ]);
+});
 for (const pkg of contract.inventory.packages.filter(value => value.exports !== null)) {
   test(`reject lost branch or condition reorder: ${pkg.name}`, t => {
     const directory = fixture(t);
@@ -98,9 +114,14 @@ test("reject changed supplied CMS bytes under retained review", t => {
   writeFileSync(join(directory, "architecture/get-modular/evidence/sdk-growth-current-standard.md"), "changed\n");
   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CMS_REVIEW_DRIFT/u);
 });
-test("reject a retained CMS digest detached from the active profile", t => {
+test("reject drift in the preserved historical A3 CMS review", t => {
   const directory = fixture(t);
   mutate(directory, "architecture/get-modular/evidence/sdk-growth-standard-review.json", value => { value.activeSha256 = "0".repeat(64); });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CMS_REVIEW_DRIFT/u);
+});
+test("reject the current CMS pin detached from the fresh migration review", t => {
+  const directory = fixture(t);
+  mutate(directory, "architecture/get-modular/evidence/a3-cms-pin-review.json", value => { value.after.sha256 = "0".repeat(64); });
   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CMS_PIN_DRIFT/u);
 });
 test("reject exported runner omitted from actual package files", t => {

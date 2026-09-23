@@ -1,8 +1,8 @@
 import type { ContainedTurnCancellationCommand } from "./contained-turn-authority.js";
 import type { ContainedTurnConsumedGrantReceipts } from "./contained-turn-dispatch-authority.js";
 import type {
-  ContainedTurnClosureRecovery,
   ContainedTurnClosureStage,
+  ContainedTurnPendingClosure,
 } from "./contained-turn-closure-recovery.js";
 import type {
   ContainedTurnAttemptId,
@@ -19,17 +19,15 @@ import type { ContainedTurnProof } from "./contained-turn-proofs.js";
 import { containedTurnInvariant as invariant } from "./contained-turn-invariant.js";
 import { assertContainedTurnExactRecord } from "./contained-turn-record.js";
 
-type PendingClosure = Extract<ContainedTurnClosureRecovery, { readonly kind: "required" }>;
-
 export type ContainedTurnKernelMutation =
   | { readonly kind: "bind_workspace"; readonly workspaceId: ContainedTurnWorkspaceId }
   | { readonly kind: "begin_closure_stage"; readonly stage: ContainedTurnClosureStage }
-  | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "note_closure_stage_unknown"; readonly request: PendingClosure }
-  | { readonly kind: "refresh_containment_attestation_request"; readonly request: PendingClosure }
-  | { readonly kind: "complete_physical_containment"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "physical_containment" }>; readonly request: PendingClosure }
-  | { readonly artifactManifestRef: string; readonly artifactProof: Extract<ContainedTurnProof, { readonly kind: "artifact_manifest_seal" }>; readonly kind: "complete_artifact_seal"; readonly request: PendingClosure; readonly resultProof: Extract<ContainedTurnProof, { readonly kind: "result_publication" }>; readonly resultRef: string }
-  | { readonly kind: "complete_workspace_close"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "workspace_closure" }>; readonly request: PendingClosure }
-  | { readonly kind: "complete_containment_attestation"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "containment" }>; readonly request: PendingClosure }
+  | { readonly evidenceId: ContainedTurnEvidenceId; readonly kind: "note_closure_stage_unknown"; readonly request: ContainedTurnPendingClosure }
+  | { readonly kind: "refresh_containment_attestation_request"; readonly request: ContainedTurnPendingClosure }
+  | { readonly kind: "complete_physical_containment"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "physical_containment" }>; readonly request: ContainedTurnPendingClosure }
+  | { readonly artifactManifestRef: string; readonly artifactProof: Extract<ContainedTurnProof, { readonly kind: "artifact_manifest_seal" }>; readonly kind: "complete_artifact_seal"; readonly request: ContainedTurnPendingClosure; readonly resultProof: Extract<ContainedTurnProof, { readonly kind: "result_publication" }>; readonly resultRef: string }
+  | { readonly kind: "complete_workspace_close"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "workspace_closure" }>; readonly request: ContainedTurnPendingClosure }
+  | { readonly kind: "complete_containment_attestation"; readonly proof: Extract<ContainedTurnProof, { readonly kind: "containment" }>; readonly request: ContainedTurnPendingClosure }
   | {
     readonly attemptId: ContainedTurnAttemptId; readonly custodyId: ContainedTurnCustodyId;
     readonly claimProof: Extract<ContainedTurnProof, { readonly kind: "dispatch_claim" }>;

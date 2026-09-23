@@ -1,4 +1,4 @@
-import type { ContainedTurnScope } from "./contained-turn-authority.js";
+import type { ContainedTurnAuthorityScope } from "./contained-turn-authority.js";
 import type { ContainedTurnKernelOperation } from "./contained-turn-kernel-model.js";
 import { assertContainedTurnExactRecord } from "./contained-turn-record.js";
 
@@ -25,7 +25,7 @@ export interface ContainedTurnCleanupPermit extends ContainedTurnDispatchPrepara
   readonly permitId: ContainedTurnCleanupPermitId;
 }
 
-interface PreparationBase extends ContainedTurnDispatchPreparationIdentity {
+export interface ContainedTurnDispatchPreparationBase extends ContainedTurnDispatchPreparationIdentity {
   readonly providerAccessConsumptionReceipt?: ContainedTurnConsumedGrantReceipt<"provider_access">;
   readonly providerAccessGrantRequestId: string | null;
   readonly runtimeSecurityConsumptionReceipt?: ContainedTurnConsumedGrantReceipt<"runtime_security">;
@@ -33,9 +33,9 @@ interface PreparationBase extends ContainedTurnDispatchPreparationIdentity {
 }
 
 export type ContainedTurnDispatchPreparation =
-  | (PreparationBase & { readonly kind: "active" })
-  | (PreparationBase & { readonly kind: "claimed" })
-  | (PreparationBase & {
+  | (ContainedTurnDispatchPreparationBase & { readonly kind: "active" })
+  | (ContainedTurnDispatchPreparationBase & { readonly kind: "claimed" })
+  | (ContainedTurnDispatchPreparationBase & {
     readonly cleanupEvidenceIds: readonly string[];
     readonly cleanupPermit: ContainedTurnCleanupPermit;
     readonly custodyReleased: boolean;
@@ -47,7 +47,7 @@ export type ContainedTurnDispatchPreparation =
     readonly runtimeSecurityNotConsumed: boolean;
     readonly runtimeSecuritySettled: boolean;
   })
-  | (PreparationBase & {
+  | (ContainedTurnDispatchPreparationBase & {
     readonly cleanupEvidenceIds: readonly string[];
     readonly cleanupPermitId: ContainedTurnCleanupPermitId;
     readonly kind: "cleanup_closed";
@@ -116,10 +116,13 @@ const validateGrantRequestId = (owner: string, value: string | null): void => {
   }
 };
 
-type BindablePreparation = Extract<ContainedTurnDispatchPreparation, { readonly kind: "active" | "cleanup_pending" }>;
+export type ContainedTurnBindableDispatchPreparation = Extract<
+  ContainedTurnDispatchPreparation,
+  { readonly kind: "active" | "cleanup_pending" }
+>;
 
 const assertConsumptionCanBind = (
-  preparation: BindablePreparation,
+  preparation: ContainedTurnBindableDispatchPreparation,
   providerAccessGrantRequestId: string | null,
   runtimeSecurityGrantRequestId: string | null,
 ): void => {
@@ -137,11 +140,11 @@ export function bindContainedTurnPreparationGrantRequests(
 export function bindContainedTurnPreparationGrantRequests(
   preparation: ContainedTurnDispatchPreparation,
   consumedGrantRequestIds: ContainedTurnConsumedGrantRequestIds,
-): BindablePreparation;
+): ContainedTurnBindableDispatchPreparation;
 export function bindContainedTurnPreparationGrantRequests(
   preparation: ContainedTurnDispatchPreparation,
   consumedGrantRequestIds: ContainedTurnConsumedGrantRequestIds,
-): BindablePreparation {
+): ContainedTurnBindableDispatchPreparation {
   if (preparation.kind !== "active" && preparation.kind !== "cleanup_pending") {
     throw new TypeError("only an active or pending dispatch preparation can bind consumed grants");
   }
@@ -395,7 +398,7 @@ export interface ContainedTurnPreparationClosureProof {
 /** The store checks this under the same operation lock used by preparation insertion. */
 export const containedTurnPreparationClosureBinding = (
   operation: ContainedTurnKernelOperation,
-  scope: ContainedTurnScope,
+  scope: ContainedTurnAuthorityScope,
 ): Omit<ContainedTurnPreparationClosureProof, "preparationCount"> => {
   if (operation.scope.tenantId !== scope.tenantId || operation.scope.projectId !== scope.projectId ||
       operation.dispatch.kind !== "prevented" || operation.operationCutoff.kind !== "closed" ||
@@ -422,7 +425,7 @@ export const containedTurnPreparationClosureBinding = (
 export const validateContainedTurnPreparationClosureProof = (
   candidate: unknown,
   operation: ContainedTurnKernelOperation,
-  scope: ContainedTurnScope,
+  scope: ContainedTurnAuthorityScope,
 ): ContainedTurnPreparationClosureProof => {
   if (candidate === null || typeof candidate !== "object") {
     throw new TypeError("preparation closure proof is unavailable");

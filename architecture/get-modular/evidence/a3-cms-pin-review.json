@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "reviewedOn": "2026-09-23",
+  "repository": "agent-teams-ai/get-modular",
+  "path": "docs/architecture/common-assembly.md",
+  "anchor": "consumer-module-standard",
+  "before": {
+    "commit": "669a750d8db451e04f075cdeb36576c6606fba6e",
+    "sha256": "e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553",
+    "byteLength": 22017
+  },
+  "after": {
+    "commit": "ac49bb3374946330ec820591f8195a22d2c90900",
+    "sha256": "d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f",
+    "byteLength": 22337,
+    "evidencePath": "architecture/get-modular/evidence/consumer-module-standard.md"
+  },
+  "sourceMainCommit": "6b31f20fe3e5fb8324812aa2ee907905751cde71",
+  "sourceMainDocumentCommit": "ac49bb3374946330ec820591f8195a22d2c90900",
+  "sourceMainSha256": "d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f",
+  "delta": {
+    "path": "architecture/get-modular/evidence/a3-cms-pin-delta.diff",
+    "sha256": "75fbaee48d4e6c7ad61548f15237a62a8a0e5e85cd8a642ec29a335a13de49d8",
+    "hunks": 1,
+    "removedLines": 6,
+    "addedLines": 11,
+    "summary": "The only complete-document byte change replaces the planned-consumer paragraph with Get Modular's reciprocal Agent Runtime adoption record."
+  },
+  "behavioralContractChange": false,
+  "scopeDisposition": "The reciprocal text records already accepted passive setup and ordinary-session composition, explicitly excludes contained-turn and dynamic plugin runtime scope, and establishes no repository-wide conformance. It adds no composition behavior, capability, binding, lifecycle ownership, package, or qualification claim.",
+  "adoption": {
+    "passiveAndOrdinary": "active",
+    "containedTurn": "pending",
+    "sdkExternalAuthority": "pending-authority-qualification"
+  },
+  "historicalReview": "architecture/get-modular/evidence/sdk-growth-standard-review.json",
+  "historicalReviewDisposition": "Preserved as the earlier A3 review. Its uncommitted ea5457 snapshot is not current upstream authority and is not used for this pin."
+}

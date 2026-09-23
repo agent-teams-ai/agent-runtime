@@ -29,12 +29,14 @@ import {
   validateContainedTurnProofs,
   type ContainedTurnProofRecord,
 } from "./contained-turn-proof-validation.js";
-import { containedTurnSatisfactionDigest } from "./contained-turn-satisfaction.js";
+import {
+  containedTurnSatisfactionDigest,
+  type ContainedTurnSatisfactionInput,
+} from "./contained-turn-satisfaction.js";
 import { assertContainedTurnDataRecord, assertContainedTurnExactRecord } from "./contained-turn-record.js";
 import { containedTurnOperationCutoffRevision } from "./contained-turn-output-authority.js";
 import { validateContainedTurnRequiredReceiptSnapshot } from "./contained-turn-required-receipts.js";
 import { containedTurnNoWorkspaceFactClosesReceipts as noWorkspaceFactClosesReceipts, validateContainedTurnOutput } from "./contained-turn-state-validation.js";
-
 type AuthorityKeys = "acceptedAuthorityVector" | "acceptedAuthorityVectorDigest" | "adapterSnapshot" |
   "artifactManifestRef" | "capabilityManifest" | "commandFingerprint" | "intent" | "providerAccessSnapshot" |
   "requiredReceiptSet" | "requiredReceiptSetDigest" | "resultRef" | "scope";
@@ -46,9 +48,7 @@ type AuthorityValidatedOperation = Omit<ContainedTurnOperationCollections, Autho
   Pick<ContainedTurnKernelOperation, AuthorityKeys> & { readonly cancellation: CancellationRecord };
 type ProofRecordsOperation = AuthorityValidatedOperation & { readonly proofs: readonly ContainedTurnProofRecord[] };
 type IdentityKeys = "commandId" | "operationId" | "effectId" | "workspaceId" | "custodyId" | "hostBootId" | "hostInstanceId";
-export type ContainedTurnIdentityValidatedOperation = Omit<ProofRecordsOperation, IdentityKeys> & Pick<ContainedTurnKernelOperation, IdentityKeys>;
-export type ContainedTurnProofValidatedOperation = Omit<ContainedTurnIdentityValidatedOperation, "proofs"> & Pick<ContainedTurnKernelOperation, "proofs">;
-export type ContainedTurnOutputValidatedOperation = Omit<ContainedTurnProofValidatedOperation, "output"> & Pick<ContainedTurnKernelOperation, "output">;
+export type ContainedTurnIdentityValidatedOperation = Omit<ProofRecordsOperation, IdentityKeys> & Pick<ContainedTurnKernelOperation, IdentityKeys>; export type ContainedTurnProofValidatedOperation = Omit<ContainedTurnIdentityValidatedOperation, "proofs"> & Pick<ContainedTurnKernelOperation, "proofs">; export type ContainedTurnOutputValidatedOperation = Omit<ContainedTurnProofValidatedOperation, "output"> & Pick<ContainedTurnKernelOperation, "output">;
 
 // The count exhaustively validates every disjoint identity axis and evidence source.
 // oxlint-disable-next-line complexity
@@ -109,7 +109,6 @@ function validateIdentities(operation: ProofRecordsOperation): asserts operation
     validateContainedTurnIdentity("evidence", evidenceId);
   }
 }
-
 const validateCanonicalDigests = (operation: ContainedTurnOperationCollections & ContainedTurnAuthorityShape): void => {
   parseContainedTurnCanonicalDigest(operation.acceptedAuthorityVectorDigest);
   parseContainedTurnCanonicalDigest(operation.commandFingerprint);
@@ -129,12 +128,10 @@ const validateCanonicalDigests = (operation: ContainedTurnOperationCollections &
     parseContainedTurnCanonicalDigest(operation.cancellation.command.scopeDigest);
   }
 };
-
 const validateAuthorityRevisionNamespace = (name: string, value: unknown, acceptedPrefixes: readonly string[]): void => {
   invariant(typeof value === "string" && acceptedPrefixes.some((prefix) => value.startsWith(prefix)),
     `${name} must use its authority revision namespace`);
 };
-
 const validateAuthorityReferences = (operation: ContainedTurnOperationCollections & ContainedTurnAuthorityShape): void => {
   assertContainedTurnDataRecord("capability manifest", operation.capabilityManifest);
   const references: Array<readonly [string, unknown]> = [
@@ -181,12 +178,10 @@ const validateAuthorityReferences = (operation: ContainedTurnOperationCollection
     "Provider Access generation and revision must be positive safe integers",
   );
 };
-
 const hasAmbiguity = (operation: ContainedTurnOperationShape): boolean =>
   operation.providerProcessStart.kind === "unknown" || operation.providerAcceptance.kind === "unknown" ||
   operation.providerExecution.kind === "unknown" || operation.containment.kind === "uncertain" ||
   operation.effect.kind === "ambiguous";
-
 const validateTerminal = (operation: ContainedTurnOutputValidatedOperation): void => {
   if (operation.terminal.kind === "open") {return;}
   invariant(operation.reconciliation.kind === "clear", "reconciliation debt blocks terminal truth");
@@ -228,7 +223,12 @@ const validateTerminal = (operation: ContainedTurnOutputValidatedOperation): voi
         operation.proofs.some(proof => proof.kind === "provider_not_started")),
     "terminal truth must match the provider terminal observation",
   );
-  invariant(operation.terminal.satisfactionDigest === containedTurnSatisfactionDigest(operation), "terminal satisfaction digest does not recompute");
+  invariant(
+    operation.terminal.satisfactionDigest === containedTurnSatisfactionDigest(
+      operation as unknown as ContainedTurnSatisfactionInput,
+    ),
+    "terminal satisfaction digest does not recompute",
+  );
   requireContainedTurnProof(operation, operation.terminal.terminalProofId, "terminal_truth");
 };
 

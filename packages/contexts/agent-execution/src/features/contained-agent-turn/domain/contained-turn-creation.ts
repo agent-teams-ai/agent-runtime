@@ -6,7 +6,7 @@ import {
   type ContainedTurnIntent,
   type ContainedTurnProviderAccessSnapshot,
   type ContainedTurnProviderAdapterSnapshot,
-  type ContainedTurnScope,
+  type ContainedTurnAuthorityScope,
 } from "./contained-turn-authority.js";
 import type {
   ContainedTurnCommandId,
@@ -37,7 +37,7 @@ export interface CreateContainedTurnOperationInput {
   readonly operationId: ContainedTurnOperationId;
   readonly providerAccessSnapshot: ContainedTurnProviderAccessSnapshot;
   readonly schemaVersion: ContainedTurnSchemaVersion;
-  readonly scope: ContainedTurnScope;
+  readonly scope: ContainedTurnAuthorityScope;
 }
 
 export const createContainedTurnOperation = (

@@ -2,10 +2,10 @@ import { types as utilTypes } from "node:util";
 import { nativeHeaderValueAllowed, NATIVE_HTTP_HEADER_LIMITS,
   type NativeHttpRequestProfile, type NativeHttpRequestProfileId } from "./native-http-request-profile.js";
 
-type PresentationField = Readonly<{name: string; valueBytes: Uint8Array}>;
+export type NativeHttpPresentationField = Readonly<{name: string; valueBytes: Uint8Array}>;
 /** Explicit profile carrier through the existing broker preparation seam; no ambient registry. */
 export type NativeHttpPresentationFields = Readonly<{requestProfile: NativeHttpRequestProfileId;
-  fields: readonly PresentationField[]}>;
+  fields: readonly NativeHttpPresentationField[]}>;
 
 const encoder = new TextEncoder();
 const invalid = (): never => {throw new TypeError("invalid HTTP presentation fields");};
@@ -55,7 +55,7 @@ const validateNativeHeaderBounds = (name: string, value: string, names: Readonly
 };
 
 export const selectHttpPresentationFields = (request: unknown, allowed: readonly string[],
-  profile?: NativeHttpRequestProfile): readonly PresentationField[] | NativeHttpPresentationFields => {
+  profile?: NativeHttpRequestProfile): readonly NativeHttpPresentationField[] | NativeHttpPresentationFields => {
   const descriptors = data(request, ["method", "path", "headers", "body", "wireBytes"]);
   if (profile !== undefined && (descriptors.method?.value !== profile.upstreamMethod
     || descriptors.path?.value !== profile.upstreamPath)) {return invalid();}
@@ -63,7 +63,7 @@ export const selectHttpPresentationFields = (request: unknown, allowed: readonly
   // must not inherit native profile limits; forwarded fields retain serializer limits.
   const entries = headerEntries(descriptors.headers?.value,
     profile === undefined ? Number.MAX_SAFE_INTEGER : NATIVE_HTTP_HEADER_LIMITS.maximumInboundFields);
-  const names = new Set<string>(); const selected: PresentationField[] = []; let totalValueBytes = 0;
+  const names = new Set<string>(); const selected: NativeHttpPresentationField[] = []; let totalValueBytes = 0;
   for (const entry of entries) {
     const {name, value} = readHeader(entry);
     if (profile !== undefined) {

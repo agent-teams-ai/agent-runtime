@@ -27,14 +27,22 @@ export interface DarwinNativeWorkspaceTree {
 /** The native header is the only wire-number/limit/slot definition. This
  * source-only adapter deliberately requires that exact adjacent header; root
  * must preserve/pin it in a future reviewed native packaging step. */
-const commandNames = [
+export type DarwinAttemptOwnerCommand =
+  | "START_ONCE" | "CUTOFF" | "READ_STATUS" | "SETTLE_LAUNCH_ROUTE"
+  | "SETTLE_ARTIFACT_RESULT" | "WORKSPACE_FREEZE" | "WORKSPACE_CLEANUP"
+  | "WORKSPACE_CLOSE" | "SETTLE_WORKSPACE" | "SETTLE_PRIVATE"
+  | "DISPOSE_ONCE" | "READ_CLOSED_WORKSPACE"
+  | "MATERIALIZE_BEGIN" | "MATERIALIZE_ENTRY" | "MATERIALIZE_CHUNK" | "MATERIALIZE_FINISH"
+  | "COMMIT_CREATION" | "READ_TREE" | "BIND_PREPARED" | "CONFIRM_CLAIM" | "READ_OBSERVATION"
+  | "MATERIAL_BEGIN" | "MATERIAL_CHUNK" | "MATERIAL_FINISH" | "BIND_FINAL_LAUNCH"
+  | "WRITE_INPUT" | "CLOSE_INPUT" | "QUERY_CLOSED_WORKSPACE";
+const DARWIN_ATTEMPT_OWNER_COMMAND_NAMES = Object.freeze([
   "START_ONCE", "CUTOFF", "READ_STATUS", "SETTLE_LAUNCH_ROUTE",
   "SETTLE_ARTIFACT_RESULT", "WORKSPACE_FREEZE", "WORKSPACE_CLEANUP",
   "WORKSPACE_CLOSE", "SETTLE_WORKSPACE", "SETTLE_PRIVATE",
   "DISPOSE_ONCE", "READ_CLOSED_WORKSPACE",
   "MATERIALIZE_BEGIN", "MATERIALIZE_ENTRY", "MATERIALIZE_CHUNK", "MATERIALIZE_FINISH", "COMMIT_CREATION", "READ_TREE", "BIND_PREPARED", "CONFIRM_CLAIM", "READ_OBSERVATION", "MATERIAL_BEGIN", "MATERIAL_CHUNK", "MATERIAL_FINISH", "BIND_FINAL_LAUNCH", "WRITE_INPUT", "CLOSE_INPUT", "QUERY_CLOSED_WORKSPACE",
-] as const;
-export type DarwinAttemptOwnerCommand = typeof commandNames[number];
+] as const satisfies readonly DarwinAttemptOwnerCommand[]);
 export interface DarwinAttemptOwnerRequest {
   readonly command: DarwinAttemptOwnerCommand;
   readonly sequence: number;
@@ -43,7 +51,7 @@ export interface DarwinAttemptOwnerRequest {
   readonly argument: number;
 }
 export const darwinAttemptOwnerFrameBytes = numeric("FRAME_BYTES");
-const exactKeys = ["argument", "binding", "command", "launch", "sequence"];
+const exactKeys = Object.freeze(["argument", "binding", "command", "launch", "sequence"] as const);
 
 const zeroRequestArgument = (argument: number): boolean => argument === 0;
 const requestArgumentValidators: Readonly<Record<DarwinAttemptOwnerCommand, (argument: number) => boolean>> = {
@@ -86,7 +94,7 @@ export function encodeDarwinAttemptOwnerRequest(request: DarwinAttemptOwnerReque
       Object.values(Object.getOwnPropertyDescriptors(request)).some((item) => !("value" in item))) {
     throw new Error("inexact owner command shape");
   }
-  if (!commandNames.includes(request.command) || !Number.isInteger(request.sequence) ||
+  if (!DARWIN_ATTEMPT_OWNER_COMMAND_NAMES.includes(request.command) || !Number.isInteger(request.sequence) ||
       request.sequence < 1 || request.sequence > 0xffff_ffff ||
       typeof request.binding !== "string" || !digest.test(request.binding) ||
       typeof request.launch !== "string" || !digest.test(request.launch) ||
@@ -113,7 +121,7 @@ export function decodeDarwinAttemptOwnerRequest(bytes: Uint8Array): DarwinAttemp
       frame.subarray(numeric("ARGUMENT_OFFSET") + 4).some((byte) => byte !== 0)) {
     throw new Error("invalid owner frame header or reserved bytes");
   }
-  const command = commandNames.find((name) => numeric(name) === frame.readUInt32BE(numeric("KIND_OFFSET")));
+  const command = DARWIN_ATTEMPT_OWNER_COMMAND_NAMES.find((name) => numeric(name) === frame.readUInt32BE(numeric("KIND_OFFSET")));
   if (command === undefined) {throw new Error("unknown owner command");}
   const request = {
     command,
@@ -150,7 +158,13 @@ export class DarwinAttemptOwnerFrameReader {
   }
 }
 
-const eventNames = ["STATUS", "PREEXEC", "IMAGE", "EXIT", "STREAMS", "STDOUT", "STDERR", "REFUSED", "HELLO", "RELEASED", "TREE_ENTRY", "TREE_CHUNK", "TREE_END", "CLOSED_READ", "OBSERVATION", "MATERIAL_RESULT"] as const;
+export type DarwinAttemptOwnerEventKind = "STATUS" | "PREEXEC" | "IMAGE" | "EXIT" | "STREAMS" | "STDOUT" | "STDERR" |
+  "REFUSED" | "HELLO" | "RELEASED" | "TREE_ENTRY" | "TREE_CHUNK" | "TREE_END" | "CLOSED_READ" | "OBSERVATION" |
+  "MATERIAL_RESULT";
+const DARWIN_ATTEMPT_OWNER_EVENT_NAMES = Object.freeze([
+  "STATUS", "PREEXEC", "IMAGE", "EXIT", "STREAMS", "STDOUT", "STDERR", "REFUSED", "HELLO", "RELEASED",
+  "TREE_ENTRY", "TREE_CHUNK", "TREE_END", "CLOSED_READ", "OBSERVATION", "MATERIAL_RESULT",
+] as const satisfies readonly DarwinAttemptOwnerEventKind[]);
 export interface DarwinAttemptOwnerImage {
   readonly protocol: "ae-darwin-owned-image/v1";
   readonly pid: number;
@@ -162,7 +176,7 @@ export interface DarwinAttemptOwnerImage {
   readonly ino: string;
 }
 export interface DarwinAttemptOwnerEvent {
-  readonly kind: typeof eventNames[number];
+  readonly kind: DarwinAttemptOwnerEventKind;
   readonly sequence: number;
   readonly serial: number;
   readonly revision: number;
@@ -209,9 +223,9 @@ const imageAt = (frame: Buffer, offset: number): DarwinAttemptOwnerImage | undef
 const eventPayloadLength = (frame: Buffer): number => {
   if (frame.length !== darwinAttemptOwnerEventBytes || frame.readUInt32BE(0) !== numeric("EVENT_MAGIC") ||
       frame.readUInt32BE(4) !== numeric("VERSION")) {throw new Error("invalid native event header");}
-  const kind = eventNames.find((name) => numeric(`EVENT_${name}`) === frame.readUInt32BE(8));
+  const kind = DARWIN_ATTEMPT_OWNER_EVENT_NAMES.find((name) => numeric(`EVENT_${name}`) === frame.readUInt32BE(8));
   const length = frame.readUInt32BE(numeric("EVENT_LENGTH_OFFSET"));
-  const bounds: Partial<Record<typeof eventNames[number], readonly [number, number]>> = {
+  const bounds: Partial<Record<DarwinAttemptOwnerEventKind, readonly [number, number]>> = {
     STDOUT: [1, numeric("STREAM_CHUNK_BYTES")], STDERR: [1, numeric("STREAM_CHUNK_BYTES")],
     OBSERVATION: [numeric("OBSERVATION_BYTES"), numeric("OBSERVATION_BYTES")],
     MATERIAL_RESULT: [numeric("MATERIAL_RESULT_BYTES"), numeric("MATERIAL_RESULT_BYTES")],
@@ -296,12 +310,12 @@ const validateEventExit = (exit: number, signal: number): void => {
 };
 export function decodeDarwinAttemptOwnerEvent(frame: Buffer, payload: Uint8Array): DarwinAttemptOwnerEvent {
   if (eventPayloadLength(frame) !== payload.byteLength) {throw new Error("partial or surplus native payload");}
-  const kind = eventNames.find((name) => numeric(`EVENT_${name}`) === frame.readUInt32BE(8));
+  const kind = DARWIN_ATTEMPT_OWNER_EVENT_NAMES.find((name) => numeric(`EVENT_${name}`) === frame.readUInt32BE(8));
   if (kind === undefined) {throw new Error("unknown native event");}
   const get = (name: string): number => frame.readUInt32BE(numeric(`EVENT_${name}_OFFSET`));
   const wide = (name: string): string => frame.readBigUInt64BE(numeric(`EVENT_${name}_OFFSET`)).toString();
   const commandNumber = get("COMMAND");
-  const command = commandNames.find((name) => numeric(name) === commandNumber);
+  const command = DARWIN_ATTEMPT_OWNER_COMMAND_NAMES.find((name) => numeric(name) === commandNumber);
   const owner = imageAt(frame, numeric("EVENT_OWNER_OFFSET"));
   const child = imageAt(frame, numeric("EVENT_CHILD_OFFSET"));
   const flags = get("FLAGS");

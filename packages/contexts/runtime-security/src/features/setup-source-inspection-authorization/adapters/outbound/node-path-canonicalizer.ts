@@ -16,10 +16,11 @@ const authorizationFileIdentity = (stats: {
   readonly size: bigint;
 }): string => `${stats.dev}:${stats.ino}:${stats.ctimeNs}:${stats.size}`;
 
-type OpenStablePath = typeof openPathUnderCustody;
+/** Supported injectable custody operation for deterministic composition tests and hosts. */
+export type StablePathCustodyOpener = typeof openPathUnderCustody;
 
 export interface NodePathCanonicalizerDependencies {
-  readonly openStablePath?: OpenStablePath;
+  readonly openStablePath?: StablePathCustodyOpener;
 }
 
 export const createNodePathCanonicalizer = (

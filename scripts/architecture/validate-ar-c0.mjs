@@ -5,6 +5,12 @@ import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
 import {v2InputPolicy} from './runtime-setup-l0-evidence-v2-inputs.mjs';
+import {
+  acceptedA3Revision,
+  currentCmsStandard,
+  validateCmsProfileTransition as validateCmsProfileTransitionCore,
+  validateProfileMigrations as validateProfileMigrationsCore,
+} from './validate-ar-c0-profile-migrations.mjs';
 
 export const base = 'c0dc683ecb14760c75a69283ad7ec312f6246a63';
 export const delivery = '510882870c1a7c628187dd91d7dff05225068bdb';
@@ -157,11 +163,13 @@ const fixedIdentity = {
   }
 };
 // The immutable base, not candidate hashes or receipts, owns repository identities.
-const baseCache = new Map();
-const baseBytes = path => {
-  if (!baseCache.has(path)) {baseCache.set(path, execFileSync('git',['show',`${base}:${path}`],{cwd:root}));}
-  return baseCache.get(path);
+const revisionCache = new Map();
+const revisionBytes = (revision, path) => {
+  const key = `${revision}:${path}`;
+  if (!revisionCache.has(key)) {revisionCache.set(key, execFileSync('git',['show',key],{cwd:root}));}
+  return revisionCache.get(key);
 };
+const baseBytes = path => revisionBytes(base, path);
 const supportedVerdicts = {
   "K1": "blocked",
   "A1": "blocked",
@@ -214,9 +222,17 @@ export function validateIndependentCi({readBytes = read, inputPolicy = v2InputPo
   assert.equal(sha256(readBytes(ciWorkflow)), ciWorkflowHash, 'C0 CI workflow bytes drift');
 }
 
+export function validateProfileMigrations(c, {readCurrentBytes = read, readRevisionBytes = revisionBytes} = {}) {
+  return validateProfileMigrationsCore(c, {baseRevision:base, readCurrentBytes, readRevisionBytes, sha256});
+}
+
+export function validateCmsProfileTransition(c, {readCurrentBytes = read, readRevisionBytes = revisionBytes} = {}) {
+  return validateCmsProfileTransitionCore(c, {readCurrentBytes, readRevisionBytes});
+}
+
 // This deliberately validates retained C0 evidence, never executes runtime code.
 // Expected admissions are independently derived from the rebased c0dc683 review.
-export function validateContract(c, receipt, {readBytes = read} = {}) {
+export function validateContract(c, receipt, {readBytes = read, readRevisionBytes = revisionBytes} = {}) {
   assert.equal(c.schemaVersion, 1, 'unsupported C0 schema revision');
   for (const key of ['planPath','qualityStandardPath','qualityStandardSha256']) {assert.equal(c.source[key], fixedIdentity[key], `fixed source identity: ${key}`);}
   for (const [key,value] of Object.entries(fixedIdentity.cms)) {assert.deepEqual(c.cms[key], value, `fixed CMS identity: ${key}; active authority`);}
@@ -349,36 +365,51 @@ export function validateContract(c, receipt, {readBytes = read} = {}) {
   assert.deepEqual(Object.fromEntries(w.deadlines.map(d => [d.id,d.milliseconds])), expectedDeadlines, 'nested deadline census');
   assert.equal(w.deadlines.length, Object.keys(expectedDeadlines).length);
   for (const d of w.deadlines) {assert.ok(c.evidence[d.evidence]);}
-  validateContractBytes(c, readBytes);
+  validateContractBytes(c, readBytes, readRevisionBytes);
   return true;
 }
 
-function validateContractBytes(c, readBytes) {
-  for (const record of Object.values(c.evidence)) {assert.equal(sha256(readBytes(record.path)), record.sha256, `stale source bytes: ${record.path}`);}
-  for (const p of c.inventory.profiles) {
-    assert.equal(sha256(readBytes(p.path)), p.sha256, 'profile changed before adoption');
-    assert.equal(JSON.parse(readBytes(p.path)).status, p.status);
+function validateContractBytes(c, readBytes, readRevisionBytes) {
+  for (const record of Object.values(c.evidence)) {
+    assert.equal(sha256(readRevisionBytes(base, record.path)), record.sha256, `stale frozen source bytes: ${record.path}`);
   }
+  validateProfileMigrations(c, {readCurrentBytes: readBytes, readRevisionBytes});
+  validateCmsProfileTransition(c, {readCurrentBytes: readBytes, readRevisionBytes});
   const cms = c.cms, active = JSON.parse(readBytes(cms.activeProfile));
-  assert.deepEqual(cms.before, active.standard, 'historical pin mistaken for active authority');
+  const historicalActive = JSON.parse(readRevisionBytes(base, cms.activeProfile));
+  assert.deepEqual(cms.before, historicalActive.standard, 'frozen historical CMS authority drift');
+  assert.deepEqual(active.standard, currentCmsStandard, 'current CMS authority drift');
   assert.equal(cms.before.commit, '669a750d8db451e04f075cdeb36576c6606fba6e');
   assert.equal(cms.after.commit, 'ac49bb3374946330ec820591f8195a22d2c90900');
-  for (const version of [cms.before,cms.after]) {assert.equal(sha256(readBytes(version.evidencePath)), version.sha256, 'CMS complete bytes drift');}
+  assert.equal(sha256(readRevisionBytes(base, cms.before.evidencePath)), cms.before.sha256, 'historical CMS complete bytes drift');
+  assert.equal(sha256(readBytes(cms.after.evidencePath)), cms.after.sha256, 'frozen successor CMS complete bytes drift');
+  assert.equal(sha256(readBytes(active.standard.evidencePath)), active.standard.sha256, 'current CMS complete bytes drift');
+  assert.ok(
+    Buffer.from(readBytes(active.standard.evidencePath)).equals(Buffer.from(readBytes(cms.after.evidencePath))),
+    'current CMS evidence differs from frozen authenticated successor bytes',
+  );
   assert.equal(cms.after.sha256, 'd5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f');
   assert.equal(cms.fullDocumentBytesEqual, false, 'false CMS byte no-op');
   assert.match(cms.normativeContractDelta, /^no-op:/u);
   assert.equal(cms.upstreamFreshness, "observed: upstream main 610e595fe1f2e893d01ee44ceecd6349b5a3c8ce on 2026-09-16; exact common-assembly.md SHA-256 d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f equals retained ac49bb33 bytes. Active 669a750d pin migration remains pending; no adoption activation.", 'unproven live upstream claim');
   assert.equal(sha256(readBytes(cms.deltaPath)), cms.deltaSha256);
-  for (const item of [c.inventory.lock,c.inventory.workspace,...c.inventory.archives.map(a => ({path:a.archivePath,sha256:a.archiveSha256})),c.ci]) {assert.equal(sha256(readBytes(item.path ?? item.workflow)), item.sha256);}
+  assert.equal(sha256(readRevisionBytes(base, c.inventory.lock.path)), c.inventory.lock.sha256, 'retained lock digest');
+  readRevisionBytes(acceptedA3Revision, c.inventory.lock.path);
+  // The workspace catalog may evolve with the independently governed SDK
+  // profile; its frozen identity is the fixed contract record checked above.
+  for (const item of [...c.inventory.archives.map(a => ({path:a.archivePath,sha256:a.archiveSha256})),c.ci]) {
+    assert.equal(sha256(readBytes(item.path ?? item.workflow)), item.sha256);
+  }
   assert.equal(c.inventory.packages.length, 7, 'missing package');
   for (const p of c.inventory.packages) {
     assert.equal(p.activation, 'pending', 'SDK active before qualified observer');
-    const m = JSON.parse(readBytes(p.manifest));
+    const m = JSON.parse(readRevisionBytes(base, p.manifest));
     for (const key of ['name','version','private','exports','main','types','bin']) {assert.deepEqual(m[key] ?? null, p[key], `stale package surface ${p.name}.${key}`);}
     assert.equal(JSON.stringify(m.exports ?? null), JSON.stringify(p.exports), 'ordered export map differs from source');
     assert.deepEqual(m.files ?? [], p.files);
     assert.equal(JSON.stringify(p.branches.map(b => [b.subpath,b.resolutionTree])), JSON.stringify(Object.entries(p.exports ?? {})), 'missing or changed ordered export branches');
     for (const branch of p.branches) {assert.equal(branch.coverage, 'incomplete');}
+    readRevisionBytes(acceptedA3Revision, p.manifest);
   }
 }
 
@@ -404,8 +435,9 @@ export function validateWorkspaceEvidence() {
   assert.equal(bytes.at(-1), 10, 'missing final LF');
   validateContract(c, receipt);
   assert.equal(git('rev-parse', `${base}^{tree}`), c.source.tree, 'retained source tree drift');
-  // Current files must still be the exact reviewed source, not just match editable digests.
-  for (const e of Object.values(c.evidence)) {assert.equal(sha256(read(e.path)),sha256(execFileSync('git',['show',`${base}:${e.path}`],{cwd:root})), 'source differs from exact base');}
+  // Frozen facts are authenticated from their exact historical revision;
+  // current production evolution is governed by its owning architecture gates.
+  for (const e of Object.values(c.evidence)) {assert.equal(e.sha256,sha256(execFileSync('git',['show',`${base}:${e.path}`],{cwd:root})), 'frozen source differs from exact base');}
   const manifests = git('ls-tree','-r','--name-only',base).split('\n').filter(p => p === 'package.json' || /^packages\/[^/]+\/[^/]+\/package\.json$/u.test(p));
   assert.deepEqual(c.inventory.packages.map(p => p.manifest), manifests);
   for (const p of c.inventory.packages) {assert.equal(p.sha256,sha256(execFileSync('git',['show',`${base}:${p.manifest}`],{cwd:root})), 'base manifest identity drift');}

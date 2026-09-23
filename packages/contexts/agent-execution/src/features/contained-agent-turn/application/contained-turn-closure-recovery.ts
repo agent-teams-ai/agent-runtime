@@ -1,4 +1,4 @@
-import type { ContainedTurnScope } from "../domain/contained-turn-authority.js";
+import type { ContainedTurnAuthorityScope } from "../domain/contained-turn-authority.js";
 import type { ContainedTurnClosureRecovery, ContainedTurnClosureStage } from "../domain/contained-turn-closure-recovery.js";
 import { containedTurnNoWorkspaceClosureFact, isContainedTurnClosureStageCompleted } from "../domain/contained-turn-closure-recovery.js";
 import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
@@ -47,7 +47,7 @@ interface ClosureCommitOutcome {
 const commitCandidate = async (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   candidate: ContainedTurnKernelOperation,
 ): Promise<ClosureCommitOutcome | undefined> => {
   let outcome: ReturnType<typeof sanitizeContainedTurnOwnerStoreOutcome>;
@@ -72,7 +72,7 @@ const commitCandidate = async (
 const commitMutation = (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   mutation: ContainedTurnKernelMutation,
 ): Promise<ClosureCommitOutcome | undefined> => commitCandidate(
   dependencies, operation, trustedScope, mutateContainedTurnOperation(operation, mutation),
@@ -81,7 +81,7 @@ const commitMutation = (
 const ensureDurableStageDebt = async (
   dependencies: ContainedTurnKernelDependencies,
   initial: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   stage: ContainedTurnClosureStage,
 ): Promise<Readonly<{ operation: ContainedTurnKernelOperation; useQuery: boolean }>> => {
   let current = initial;
@@ -109,7 +109,7 @@ const ensureDurableStageDebt = async (
 const retainUnknownClosureDebt = async (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   evidenceId: ContainedTurnEvidenceId,
 ): Promise<ContainedTurnKernelOperation> => {
   const request = operation.closureRecovery;
@@ -146,7 +146,7 @@ const closureUnknownEvidenceId = (
 export const closeContainedTurnNoWorkspaceObligations = async (
   dependencies: ContainedTurnKernelDependencies,
   initial: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
 ): Promise<ContainedTurnKernelOperation> => {
   const stage = await ensureDurableStageDebt(dependencies, initial, trustedScope, "no_workspace");
   let current = stage.operation;
@@ -180,7 +180,7 @@ export const closeContainedTurnNoWorkspaceObligations = async (
 export const resumeContainedTurnClosureStage = async <Proof>(
   dependencies: ContainedTurnKernelDependencies,
   initial: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   driver: ClosureStageDriver<Proof>,
 ): Promise<ResumeContainedTurnClosureOutcome> => {
   const staged = await ensureDurableStageDebt(dependencies, initial, trustedScope, driver.stage);

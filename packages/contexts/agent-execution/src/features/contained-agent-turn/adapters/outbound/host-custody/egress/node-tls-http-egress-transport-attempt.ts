@@ -20,8 +20,8 @@ import {
   type FixedNodeTlsTrust,
 } from "./node-tls-http-egress-transport-support.js";
 
-type SocketEvent = "close" | "end" | "error" | "readable" | "secureConnect" | "timeout";
-type SocketListener = (...arguments_: readonly unknown[]) => void;
+export type NodeTlsSocketEvent = "close" | "end" | "error" | "readable" | "secureConnect" | "timeout";
+export type NodeTlsSocketListener = (...arguments_: readonly unknown[]) => void;
 
 /** Structural seam used only by deterministic socket-race tests. Production supplies a real TLSSocket. */
 export interface OwnedNodeTlsSocket {
@@ -33,9 +33,9 @@ export interface OwnedNodeTlsSocket {
   readonly readableLength: number;
   readonly closed: boolean;
   readonly destroyed: boolean;
-  once(event: SocketEvent, listener: SocketListener): this;
-  on(event: SocketEvent, listener: SocketListener): this;
-  off(event: SocketEvent, listener: SocketListener): this;
+  once(event: NodeTlsSocketEvent, listener: NodeTlsSocketListener): this;
+  on(event: NodeTlsSocketEvent, listener: NodeTlsSocketListener): this;
+  off(event: NodeTlsSocketEvent, listener: NodeTlsSocketListener): this;
   setTimeout(milliseconds: number): this;
   destroy(error?: Error): this;
   write(buffer: Uint8Array, callback: (error?: Error | null) => void): boolean;

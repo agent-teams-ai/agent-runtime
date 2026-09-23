@@ -1,4 +1,4 @@
-import type { ContainedTurnScope } from "../domain/contained-turn-authority.js";
+import type { ContainedTurnAuthorityScope } from "../domain/contained-turn-authority.js";
 import type {
   ContainedTurnEvidenceId,
   ContainedTurnPreparationToken,
@@ -48,7 +48,7 @@ const raceContainedTurnCompletionBoundary = async <Value>(
 const preventContainedTurnDispatch = async (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   preventionProofId: ContainedTurnProofId,
 ): Promise<ContainedTurnKernelOperation> => {
   let proofs: Awaited<ReturnType<ContainedTurnKernelDependencies["operationStore"]["proofsForPrevention"]>>;
@@ -79,7 +79,7 @@ const claimContainedTurnConsumedGrantDispatch = async (input: Readonly<{
   initial: ContainedTurnKernelOperation;
   preparationToken: ContainedTurnPreparationToken;
   prepared: Awaited<ReturnType<ContainedTurnKernelDependencies["operationStore"]["prepareDispatch"]>>;
-  trustedScope: ContainedTurnScope;
+  trustedScope: ContainedTurnAuthorityScope;
 }>): Promise<Readonly<{
   committedDispatchProof?: CommittedDispatchProofV1; operation: ContainedTurnKernelOperation; startPermitted: boolean;
 }>> => {
@@ -112,7 +112,7 @@ const claimContainedTurnConsumedGrantDispatch = async (input: Readonly<{
 const claimContainedTurnDispatch = async (
   dependencies: ContainedTurnKernelDependencies,
   initial: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
 ): Promise<Readonly<{
   operation: ContainedTurnKernelOperation;
   committedDispatchProof?: CommittedDispatchProofV1;
@@ -182,7 +182,7 @@ const claimContainedTurnDispatch = async (
 const closeUnknownStart = async (
   dependencies: ContainedTurnKernelDependencies,
   claimed: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   evidenceId: ContainedTurnEvidenceId,
 ): Promise<ContainedTurnKernelOperation> => {
   let current = await readContainedTurnOwnedOperation(
@@ -204,7 +204,7 @@ const closeUnknownStart = async (
 const startContainedTurnExecution = async (
   dependencies: ContainedTurnKernelDependencies,
   claimed: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   committedDispatchProof: CommittedDispatchProofV1,
 ): Promise<ContainedTurnKernelOperation> => {
   if (claimed.dispatch.kind !== "claimed" || claimed.custodyId === undefined ||
@@ -334,7 +334,7 @@ const startContainedTurnExecution = async (
 export const dispatchContainedTurn = async (
   dependencies: ContainedTurnKernelDependencies,
   initial: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
 ): Promise<ContainedTurnKernelOperation> => {
   const claimed = await claimContainedTurnDispatch(dependencies, initial, trustedScope);
   return claimed.startPermitted && claimed.committedDispatchProof !== undefined &&

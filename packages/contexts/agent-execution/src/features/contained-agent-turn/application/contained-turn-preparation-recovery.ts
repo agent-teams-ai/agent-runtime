@@ -1,4 +1,4 @@
-import type { ContainedTurnScope } from "../domain/contained-turn-authority.js";
+import type { ContainedTurnAuthorityScope } from "../domain/contained-turn-authority.js";
 import { containedTurnGrantSettlementRequestId } from "../domain/contained-turn-dispatch-authority.js";
 import type {
   ContainedTurnDispatchPreparation,
@@ -55,7 +55,7 @@ const completeTarget = async (
 
 export const recoverContainedTurnDispatchPreparations = async (
   dependencies: ContainedTurnKernelDependencies,
-  scope: ContainedTurnScope,
+  scope: ContainedTurnAuthorityScope,
 ): Promise<Readonly<{ discovered: number; retired: number }>> => {
   const list = dependencies.operationStore.listDispatchPreparations?.bind(dependencies.operationStore);
   if (list === undefined) {

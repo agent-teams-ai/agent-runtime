@@ -1,9 +1,9 @@
 import type { ContainedTurnAcceptedAuthorityHandoff } from "../../contained-turn-accepted-authority.js";
 import type {
   ContainedTurnIntent,
-  ContainedTurnProvider,
+  ContainedTurnAuthorityProvider,
   ContainedTurnProviderAccessSnapshot,
-  ContainedTurnScope,
+  ContainedTurnAuthorityScope,
 } from "../../../domain/contained-turn-authority.js";
 import type { ContainedTurnCanonicalDigest } from "../../../domain/contained-turn-codecs.js";
 import type {
@@ -73,13 +73,13 @@ export interface ContainedTurnProviderAccessPort {
   resolveForAcceptance(input: Readonly<{
     operationId: ContainedTurnOperationId;
     intent: ContainedTurnIntent;
-    provider: ContainedTurnProvider;
-    scope: ContainedTurnScope;
+    provider: ContainedTurnAuthorityProvider;
+    scope: ContainedTurnAuthorityScope;
   }>): Promise<ResolveContainedTurnProviderAccessOutcome>;
   revalidateForDispatch(input: Readonly<{
     acceptedSnapshot: ContainedTurnProviderAccessSnapshot;
     operationId: ContainedTurnOperationId;
-    scope: ContainedTurnScope;
+    scope: ContainedTurnAuthorityScope;
   }>): Promise<RevalidateContainedTurnProviderAccessOutcome>;
 }
 
@@ -98,8 +98,8 @@ export interface ContainedTurnKernelSecurityPort {
     operationId: ContainedTurnOperationId;
     constraintsDigest: ContainedTurnCanonicalDigest;
     intent: ContainedTurnIntent;
-    provider: ContainedTurnProvider;
-    scope: ContainedTurnScope;
+    provider: ContainedTurnAuthorityProvider;
+    scope: ContainedTurnAuthorityScope;
   }>): Promise<
     | { readonly acceptanceProofId: ContainedTurnProofId; readonly authorityRevision: string; readonly containmentPolicyDigest: ContainedTurnCanonicalDigest; readonly decisionDigest: ContainedTurnCanonicalDigest; readonly kind: "allowed" }
     | { readonly kind: "denied" }
@@ -109,7 +109,7 @@ export interface ContainedTurnKernelSecurityPort {
     decisionDigest: ContainedTurnCanonicalDigest;
     operationId: ContainedTurnOperationId;
     securityAuthorityRevision: string;
-    scope: ContainedTurnScope;
+    scope: ContainedTurnAuthorityScope;
   }>): Promise<
     | { readonly dispatchDecisionDigest: ContainedTurnCanonicalDigest; readonly kind: "current"; readonly proofId: ContainedTurnProofId }
     | { readonly kind: "prevented"; readonly preventionProofId: ContainedTurnProofId }

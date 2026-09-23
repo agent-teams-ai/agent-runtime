@@ -18,12 +18,12 @@ import {
   type CodexAppServerPlatformTuple,
 } from "./codex-app-server-platform-tuple.js";
 
-type KernelExecutionInput = Parameters<ContainedTurnKernelProviderPort["execute"]>[0];
+export type CodexKernelExecutionInput = Parameters<ContainedTurnKernelProviderPort["execute"]>[0];
 const executeReviewedCodexProtocol = Object.getOwnPropertyDescriptor(CodexAppServerContainedTurnProvider.prototype, "execute")!.value as CodexAppServerContainedTurnProvider["execute"];
 
-interface CodexAppServerKernelProcess {
+export interface CodexAppServerCustodiedKernelProcess {
   readonly custody: ContainedTurnCustodyHandle;
-  readonly kernelCustodyId: KernelExecutionInput["custodyId"];
+  readonly kernelCustodyId: CodexKernelExecutionInput["custodyId"];
   readonly provider: CodexAppServerContainedTurnProvider;
   readonly workspaceRef: string;
 }
@@ -34,21 +34,21 @@ export interface PreparedCodexAppServerKernelAttempt {
    * the only seam allowed to create the fresh provider process and to resolve
    * the owner-private raw workspace path.
    */
-  createProcess(isCancellationRequested: KernelExecutionInput["isCancellationRequested"]):
-    CodexAppServerKernelProcess | Promise<CodexAppServerKernelProcess>;
+  createProcess(isCancellationRequested: CodexKernelExecutionInput["isCancellationRequested"]):
+    CodexAppServerCustodiedKernelProcess | Promise<CodexAppServerCustodiedKernelProcess>;
 }
 
 export interface CodexAppServerKernelAttemptFactory {
   prepare(input: Readonly<{
-    adapterSnapshot: KernelExecutionInput["adapterSnapshot"];
-    attemptId: KernelExecutionInput["attemptId"];
-    authorityVectorDigest: KernelExecutionInput["authorityVectorDigest"];
-    custodyId: KernelExecutionInput["custodyId"];
-    effectId: KernelExecutionInput["effectId"];
-    intent: KernelExecutionInput["intent"];
-    operationId: KernelExecutionInput["operationId"];
-    providerAccessSnapshot: KernelExecutionInput["providerAccessSnapshot"];
-    workspaceId: KernelExecutionInput["workspaceId"];
+    adapterSnapshot: CodexKernelExecutionInput["adapterSnapshot"];
+    attemptId: CodexKernelExecutionInput["attemptId"];
+    authorityVectorDigest: CodexKernelExecutionInput["authorityVectorDigest"];
+    custodyId: CodexKernelExecutionInput["custodyId"];
+    effectId: CodexKernelExecutionInput["effectId"];
+    intent: CodexKernelExecutionInput["intent"];
+    operationId: CodexKernelExecutionInput["operationId"];
+    providerAccessSnapshot: CodexKernelExecutionInput["providerAccessSnapshot"];
+    workspaceId: CodexKernelExecutionInput["workspaceId"];
   }>): Promise<PreparedCodexAppServerKernelAttempt>;
 }
 
@@ -80,7 +80,7 @@ ContainedTurnCapabilityManifest = Object.freeze({
 });
 
 const sameAdapterSnapshot = (
-  value: KernelExecutionInput["adapterSnapshot"],
+  value: CodexKernelExecutionInput["adapterSnapshot"],
   platformTuple: CodexAppServerPlatformTuple,
 ): boolean => value.provider === "codex"
   && value.adapterRevision === platformTuple.adapterRevision
@@ -88,7 +88,7 @@ const sameAdapterSnapshot = (
   && value.capabilityManifestRevision === platformTuple.protocolRevision;
 
 const indeterminate = (
-  input: KernelExecutionInput,
+  input: CodexKernelExecutionInput,
   reason: string,
 ): ContainedTurnKernelProviderObservation => Object.freeze({
   evidenceId: containedTurnIdentity(
@@ -108,7 +108,7 @@ const indeterminate = (
 
 const matchesExecutionAuthority = (
   provider: CodexAppServerContainedTurnProvider,
-  input: KernelExecutionInput,
+  input: CodexKernelExecutionInput,
 ): boolean => {
   if (!(provider instanceof CodexAppServerContainedTurnProvider)) {return false;}
   const binding = provider.manifest.providerBinding;
@@ -142,7 +142,7 @@ export class CodexAppServerCurrentKernelAdapter implements ContainedTurnKernelPr
     });
   }
 
-  public async execute(input: KernelExecutionInput): Promise<ContainedTurnKernelProviderObservation> {
+  public async execute(input: CodexKernelExecutionInput): Promise<ContainedTurnKernelProviderObservation> {
     if (!sameAdapterSnapshot(input.adapterSnapshot, this.#platformTuple)
       || input.providerAccessSnapshot.provider !== "codex") {
       return indeterminate(input, "authority-identity-mismatch");
@@ -212,4 +212,5 @@ export class CodexAppServerCurrentKernelAdapter implements ContainedTurnKernelPr
   }
 }
 export {createCodexDockerPathProjection, codexDockerProjectionSource, projectCodexDockerExecutable,
-  projectCodexDockerPrivatePath, type CodexDockerPathProjection} from "./codex-docker-path-projection.js";
+  projectCodexDockerPrivatePath, type CodexDockerMountPaths, type CodexDockerPathProjection,
+  type CodexProtocolPaths} from "./codex-docker-path-projection.js";

@@ -8,6 +8,7 @@ import {
   createHostCustodiedContainedTurn,
   type HostCustodiedContainedTurnComposition,
   type HostCustodiedContainedTurnDependencies,
+  type LinuxCodexDeploymentContainedTurnDependencies,
 } from "./contained-turn-feature-composition.js";
 import { disposeAfterContainedTurnConstructionFailure } from "./contained-turn-construction-failure.js";
 
@@ -16,6 +17,14 @@ export interface HostCustodiedAgentRuntimeHostDependencies {
   readonly capabilities: Omit<AgentRuntimeHostDependencies, "containedTurn">;
   readonly containedTurn: HostCustodiedContainedTurnDependencies;
 }
+
+/** Package-private Linux deployment input. The public Host dependency record
+ * deliberately excludes product-owned infrastructure. */
+export type LinuxCodexDeploymentAgentRuntimeHostDependencies = Readonly<
+  Omit<HostCustodiedAgentRuntimeHostDependencies, "containedTurn"> & {
+    readonly containedTurn: LinuxCodexDeploymentContainedTurnDependencies;
+  }
+>;
 
 type ContainedTurnCompositionFactory = (
   dependencies: HostCustodiedContainedTurnDependencies,
@@ -59,6 +68,15 @@ export const composeHostCustodiedAgentRuntimeHost = (
 /** Retains current-provider ownership inside the private Embedded Runtime Host lifetime. */
 export const createHostCustodiedAgentRuntimeHost = (
   dependencies: HostCustodiedAgentRuntimeHostDependencies,
+): AgentRuntimeHost => composeHostCustodiedAgentRuntimeHost(
+  dependencies,
+  createHostCustodiedContainedTurn,
+  createAgentRuntimeHost,
+);
+
+/** Typed package-private entrypoint for the existing Linux deployment root. */
+export const createLinuxCodexDeploymentAgentRuntimeHost = (
+  dependencies: LinuxCodexDeploymentAgentRuntimeHostDependencies,
 ): AgentRuntimeHost => composeHostCustodiedAgentRuntimeHost(
   dependencies,
   createHostCustodiedContainedTurn,

@@ -4,14 +4,14 @@ import type {HttpEgressEvidence} from "./http-egress-ports.js";
 import {canonicalHttpEvidenceReceipt, snapshotHttpEvidenceIdentity, snapshotHttpEvidenceScope,
   type PostgresHttpEgressReceiptIdentity,
   type PostgresHttpEgressEvidenceScope} from "./postgres-http-egress-evidence-codec.js";
-import {HTTP_EVIDENCE_FENCE, PostgresHttpEvidenceTransactions, type ContainedTurnPostgresPool} from "./postgres-http-egress-evidence-transactions.js";
+import {HTTP_EVIDENCE_FENCE, PostgresHttpEvidenceTransactions, type PostgresHttpEgressPool} from "./postgres-http-egress-evidence-transactions.js";
 export type {PostgresHttpEgressEvidenceScope} from "./postgres-http-egress-evidence-codec.js";
 
 /** Explicit administrative initialization of an empty private Host schema.
  * Existing schemas are verified, never repaired or automatically upgraded.
  * The caller owns the borrowed pool and its database/role selection.
  */
-export const initializePostgresHttpEgressEvidence = async (pool: ContainedTurnPostgresPool): Promise<void> => {
+export const initializePostgresHttpEgressEvidence = async (pool: PostgresHttpEgressPool): Promise<void> => {
   await new PostgresHttpEvidenceTransactions(pool).run(async (_client, query) => {
     await query("SELECT pg_advisory_xact_lock(721903522)");
     const existing = await query("SELECT 1 FROM pg_namespace WHERE nspname = 'host_http_egress'");
@@ -54,7 +54,7 @@ export const initializePostgresHttpEgressEvidence = async (pool: ContainedTurnPo
 export class PostgresHttpEgressEvidence implements HttpEgressEvidence {
   readonly #scope: PostgresHttpEgressEvidenceScope;
   readonly #transactions: PostgresHttpEvidenceTransactions;
-  public constructor(pool: ContainedTurnPostgresPool, scope: PostgresHttpEgressEvidenceScope) {
+  public constructor(pool: PostgresHttpEgressPool, scope: PostgresHttpEgressEvidenceScope) {
     this.#scope = snapshotHttpEvidenceScope(scope);
     this.#transactions = new PostgresHttpEvidenceTransactions(pool);
   }

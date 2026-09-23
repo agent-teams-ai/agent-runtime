@@ -1,6 +1,9 @@
 // Private Embedded Runtime Darwin acknowledgement join under contained-agent-turn.
 // Fixed direct owner; no Module Kit node or Consumer Standard adoption claim.
-import {createContainedTurnHttpEgressRoute} from "../../../composition/contained-turn-http-egress-upstream.js";
+import {
+  createContainedTurnHttpEgressRoute,
+  type ContainedTurnHttpEgressRoutePorts,
+} from "../../../composition/contained-turn-http-egress-upstream.js";
 import {isDeepStrictEqual, types} from "node:util";
 import {containedTurnPreparationToken, type ContainedTurnFeatureDependencies, type DarwinCodexRouteEnforcementInput,
   type NativePreparedAttemptBinding, type RetainedNativeAttemptAuthority} from "@agent-teams/agent-execution/composition";
@@ -102,9 +105,9 @@ const captureDarwinOperationStore = (store: Store): Store => {
  * the retained native attempt owner. It decorates the store without adding an
  * eighth feature port or manufacturing native authority from caller data. */
 export const bindDarwinNativeAttemptAuthority = (
-  store: Store,
+  store: ContainedTurnFeatureDependencies["operationStore"],
   attemptAuthority: RetainedNativeAttemptAuthority,
-): Store => {
+): ContainedTurnFeatureDependencies["operationStore"] => {
   const captured = captureDarwinOperationStore(store);
   const authority = captureDarwinDeploymentPort(attemptAuthority, ["bindPreparedAttempt", "confirmCommittedClaim"]);
   const prepare = captured.prepareDispatch.bind(captured);
@@ -184,15 +187,28 @@ const validatePublishedRoute = (binding: Route["binding"], scope: PaReceipt["sco
  * Only a complete matching pair becomes selectable, after committed claim.
  * There is deliberately no launch-record hook and no authority publication here.
  */
+export interface DarwinContainedTurnAcknowledgement {
+  readonly input: Parameters<ContainedTurnFeatureDependencies["security"]["consumeForDispatch"]>[0];
+  readonly acceptedDispatch: ContainedTurnCurrentEgressOwnersInput["acceptedDispatch"];
+  readonly current: Awaited<ReturnType<typeof snapshotRouteSelectionCurrent>>;
+  readonly providerAccessReceipt: Extract<
+    Awaited<ReturnType<ContainedTurnFeatureDependencies["providerAccess"]["consumeForDispatch"]>>,
+    {kind: "consumed"}
+  >["receipt"];
+  readonly runtimeSecurityReceipt: Extract<
+    Awaited<ReturnType<ContainedTurnFeatureDependencies["security"]["consumeForDispatch"]>>,
+    {kind: "consumed"}
+  >["receipt"];
+  readonly upstream: ContainedTurnHttpEgressRoutePorts;
+}
+
 export interface DarwinContainedTurnAuthority {
   bind(ports: Ports): Ports;
-  bindStore(store: Store): Store;
+  bindStore(
+    store: ContainedTurnFeatureDependencies["operationStore"],
+  ): ContainedTurnFeatureDependencies["operationStore"];
   dispose(): void;
-  take(proof: CommittedDispatchProofV1): Readonly<{
-    input: Input; acceptedDispatch: Head; current: Route;
-    providerAccessReceipt: PaReceipt; runtimeSecurityReceipt: RsReceipt;
-    upstream: NonNullable<Retained["upstream"]>;
-  }>;
+  take(proof: CommittedDispatchProofV1): Readonly<DarwinContainedTurnAcknowledgement>;
 }
 export const createDarwinContainedTurnAuthority = (readers: Readers): DarwinContainedTurnAuthority => {
   const retained = new Map<string, Retained>();

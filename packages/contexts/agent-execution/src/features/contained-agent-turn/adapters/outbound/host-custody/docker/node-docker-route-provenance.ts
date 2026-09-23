@@ -7,8 +7,8 @@ import type {DockerHostCustodyLifecycle} from "./docker-host-custody-lifecycle.j
 import type {dockerHostCustodyAttemptKey} from "./docker-host-custody-lifecycle-guards.js";
 
 type Route = Pick<Parameters<typeof openNodeLinuxExclusiveRoute>[0], "engine" | "nsenter" | "nft">;
-type Binding = LinuxExclusiveRouteBinding;
-export type NodeDockerRouteSubject = Pick<Binding,
+export type NodeDockerRouteBinding = LinuxExclusiveRouteBinding;
+export type NodeDockerRouteSubject = Pick<NodeDockerRouteBinding,
   "operationId" | "attemptId" | "custodyId" | "executionGenerationId" | "authorityVectorDigest" | "hostBootId">;
 type Policy = Omit<DockerEnginePolicy, "allowedNetworkName">;
 type Preparation = Readonly<{
@@ -86,7 +86,7 @@ const retainNodeDockerRoute = (route: Route, subject: NodeDockerRouteSubject,
   recipes.set(route, Object.freeze({subject: snapshot(subject), preparation: captured, policy: nodeDockerRoutePolicy(captured.enginePolicy), isOpen}));
 };
 
-const selectNodeDockerRoute = <P extends Preparation>(recipe: Readonly<{route: Route; preparation: P}>, binding: Binding, policy: string,
+const selectNodeDockerRoute = <P extends Preparation>(recipe: Readonly<{route: Route; preparation: P}>, binding: NodeDockerRouteBinding, policy: string,
   pins: Pick<Route, "nsenter" | "nft">): Readonly<{engine: Route["engine"]; preparation: P; isOpen(): boolean}> => {
   const data = custodyDataRecord(recipe);
   const preparation = snapshot(data.preparation);

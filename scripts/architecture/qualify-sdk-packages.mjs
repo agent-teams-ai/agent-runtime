@@ -15,6 +15,18 @@ function run(command, args, cwd) {
   return result.stdout;
 }
 
+export function directoryLinkType(platform = process.platform) {
+  return platform === "win32" ? "junction" : "dir";
+}
+
+export function pnpmLauncher({
+  nodeExecutable = process.execPath,
+  pnpmEntrypoint = process.env.npm_execpath
+} = {}) {
+  assert.ok(pnpmEntrypoint, "SDK_PNPM_ENTRYPOINT_MISSING: run qualification through the pinned pnpm script");
+  return { command: nodeExecutable, prefixArgs: [pnpmEntrypoint] };
+}
+
 export function assertPackedSdkArchive(archive, expected, cwd) {
   const files = run("tar", ["tzf", archive], cwd).trim().split("\n").toSorted();
   const packed = JSON.parse(run("tar", ["xOf", archive, "package/package.json"], cwd));
@@ -38,6 +50,8 @@ export function assertPublicImports(consumer, specifiers) {
 // observer and authority route own SDK semantics; this grants no SDK admission.
 export function qualifySdkPackages(repository = root) {
   const profile = parse(readFileSync(join(repository, "architecture/sdk-growth/profile.yaml"), "utf8"));
+  const pnpm = pnpmLauncher();
+  const linkType = directoryLinkType();
   const sandbox = mkdtempSync(join(tmpdir(), "ar-sdk-packed-"));
   for (const path of ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", ".npmrc"]) {
     cpSync(join(repository, path), join(sandbox, path));
@@ -61,7 +75,7 @@ export function qualifySdkPackages(repository = root) {
       assert.ok(dependency, `SDK_WORKSPACE_DEPENDENCY_MISSING: ${name}`);
       const link = join(sandbox, pkg.packageRoot, "node_modules", name);
       mkdirSync(dirname(link), { recursive: true });
-      symlinkSync(join(sandbox, dependency.packageRoot), link, "dir");
+      symlinkSync(join(sandbox, dependency.packageRoot), link, linkType);
     }
     // Materialize workspace versions before packing so pnpm does not derive a
     // dependency-key order from filesystem link discovery. Stable manifest
@@ -79,7 +93,7 @@ export function qualifySdkPackages(repository = root) {
   for (const pkg of profile.packages) {
     const output = join(sandbox, "archives", pkg.packageName.split("/").at(-1));
     mkdirSync(output, { recursive: true });
-    run("pnpm", ["pack", "--config.ignore-scripts=true", "--pack-destination", output], join(sandbox, pkg.packageRoot));
+    run(pnpm.command, [...pnpm.prefixArgs, "pack", "--config.ignore-scripts=true", "--pack-destination", output], join(sandbox, pkg.packageRoot));
     const archives = readdirSync(output).filter(name => name.endsWith(".tgz"));
     assert.equal(archives.length, 1);
     const archive = join(output, archives[0]);
@@ -104,7 +118,7 @@ export function qualifySdkPackages(repository = root) {
         ?? realpathSync(join(repository, pkg.packageRoot, "node_modules", name));
       const link = join(location, "node_modules", ...name.split("/"));
       mkdirSync(dirname(link), { recursive: true });
-      symlinkSync(dependency, link, "dir");
+      symlinkSync(dependency, link, linkType);
     }
   }
   const publicImports = profile.packages.flatMap(pkg => {

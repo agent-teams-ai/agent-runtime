@@ -7,14 +7,24 @@ export {
   type ClaudeAgentSdkKernelPrivateExecutionResolver,
 } from "./claude-agent-sdk-current-kernel-adapter.js";
 export {
+  CLAUDE_AGENT_SDK_ADAPTER_REVISION,
+  CLAUDE_AGENT_SDK_BUNDLED_CLI_VERSION,
   CLAUDE_AGENT_SDK_DARWIN_ARM64_TUPLE,
   CLAUDE_AGENT_SDK_LINUX_X64_TUPLE,
+  CLAUDE_AGENT_SDK_MANIFEST_REVISION,
   CLAUDE_AGENT_SDK_PRODUCTION_TUPLE,
+  CLAUDE_AGENT_SDK_RESOURCE_SCOPE_REVISION,
+  CLAUDE_AGENT_SDK_VERSION,
   createClaudeAgentSdkLaunchPlan,
   selectClaudeAgentSdkPlatformTuple,
   type ClaudeAgentSdkPlatformTuple,
   type ClaudeAgentSdkPrivateProjection,
+  type ClaudeAgentSdkPrivateProjectionResolver,
 } from "./claude-agent-sdk-launch-plan.js";
 export {
   captureClaudePrivateDirectoryCustody,
 } from "./claude-private-directory-custody.js";
+
+// Public composition declaration dependencies for this adapter boundary.
+export { type ClaudeAgentSdkControlClock } from "./claude-agent-sdk-control-clock.js";
+export { type ClaudeQueryFactory, type ClaudeSdkQuery, type ClaudeSdkQueryInput, type ClaudeSdkSpawnCallback, type ClaudeSdkSpawnOptions, type ClaudeSdkSpawnedProcess } from "./claude-agent-sdk-query-contracts.js";

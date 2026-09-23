@@ -1,4 +1,10 @@
-import type { CodexEndpointPathObservation } from "./codex-app-server-path-identity.js";
+import type {
+  CodexEndpointPathObservation,
+  CodexExistingPathIdentity,
+  CodexPathKind,
+} from "./codex-app-server-path-identity.js";
+
+export type { CodexEndpointPathObservation, CodexExistingPathIdentity, CodexPathKind };
 
 export interface CodexEffectCustodyExecution {
   readonly attemptId: string;

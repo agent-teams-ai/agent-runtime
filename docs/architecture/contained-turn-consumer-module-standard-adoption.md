@@ -22,20 +22,20 @@ code_anchors:
 Agent Runtime's passive setup adopts the Get Modular Consumer Module Standard
 under ADR-0015 and the active `architecture/get-modular/consumer-profile.json`.
 This separate contained-turn profile pins the same reviewed standard at commit
-`669a750d8db451e04f075cdeb36576c6606fba6e` and complete-document SHA-256
-`e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`.
+`ac49bb3374946330ec820591f8195a22d2c90900` and complete-document SHA-256
+`d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f`.
 ADR-0016 proposes only the contained-turn seven-port classification as pending.
 It does not weaken or duplicate the active passive setup Assembly claim.
 
-The [passive adoption migration record](get-modular-adoption.md#pr110-standard-pin-migration)
-reviews the exact PR110 byte delta and shared retained evidence. This pin update
-clarifies acquisition and handoff ownership, borrowed capabilities, opaque causes,
-and reference lifetimes; it does not adopt contained-turn or confer readiness.
-Existing Host owners retain cleanup authority. The previous contained-turn pin
-was `f1ec0152c34715395685b349844a7d1c18a2f015`; its document SHA-256 was
-`ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d`.
-The enforcing checker compares both current profile identities and hashes the
-shared retained bytes. Current paired migration evidence remains outstanding.
+The [A3 migration record](get-modular-adoption.md#a3-consumer-module-standard-pin-migration)
+reviews the exact reciprocal-adoption byte delta and shared retained evidence.
+It adds no behavioral contract and does not adopt contained-turn or confer
+readiness. Existing Host owners retain cleanup authority. The immediately prior
+shared pin was `669a750d8db451e04f075cdeb36576c6606fba6e`; its document SHA-256 was
+`e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`.
+The enforcing checker compares both current profile identities, hashes the
+shared retained bytes and exact delta, and preserves this profile as pending.
+Current paired migration evidence remains outstanding.
 
 ## Ownership boundary
 

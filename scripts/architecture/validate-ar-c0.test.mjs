@@ -4,7 +4,7 @@ import {mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync} from 'node
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
-import {artifact, ciWorkflow, createGit, sha256, validateContract, validateDeliveryRange, validateIndependentCi, validateSchema, validateWorkspace, validateWorkspaceEvidence} from './validate-ar-c0.mjs';
+import {artifact, ciWorkflow, createGit, sha256, validateCmsProfileTransition, validateContract, validateDeliveryRange, validateIndependentCi, validateProfileMigrations, validateSchema, validateWorkspace, validateWorkspaceEvidence} from './validate-ar-c0.mjs';
 const read = p => readFileSync(new URL(`../../${p}`,import.meta.url));
 const original = JSON.parse(read(artifact));
 const receipt = JSON.parse(read('architecture/c0/ar-owned-lifetime/identity.json'));
@@ -12,14 +12,23 @@ const schema = JSON.parse(read('architecture/c0/ar-owned-lifetime/contract.schem
 const validate = c => {validateSchema(c,schema); return validateContract(c,receipt);};
 const expectedBase = 'c0dc683ecb14760c75a69283ad7ec312f6246a63';
 const expectedDelivery = '510882870c1a7c628187dd91d7dff05225068bdb';
+const expectedA3Migration = '417126557fa5eb24297e13e51704a5e3fbc7063f';
+const revisionRead = (overrides = new Map()) => (revision, path) => {
+  const replacement = overrides.get(`${revision}:${path}`);
+  if (replacement !== undefined) {return replacement;}
+  const result = spawnSync('git', ['show', `${revision}:${path}`], {cwd:new URL('../../', import.meta.url), encoding:null});
+  assert.equal(result.status, 0, result.stderr.toString());
+  return result.stdout;
+};
+const currentRead = (overrides = new Map()) => path => overrides.get(path) ?? read(path);
 
 const withRepository = callback => {
   const cwd = mkdtempSync(join(tmpdir(), 'validate-ar-c0-'));
   const runGit = createGit(cwd);
   try {
     runGit('init', '--quiet', '--initial-branch=main');
-    runGit('config', 'user.name', 'C0 Test');
-    runGit('config', 'user.email', 'c0-test@example.invalid');
+    runGit('config', 'user.name', 'iliya');
+    runGit('config', 'user.email', 'iliyazelenkog@gmail.com');
     const commit = message => {runGit('add', '-A'); runGit('commit', '--quiet', '-m', message); return runGit('rev-parse', 'HEAD');};
     return callback({cwd, runGit, commit});
   } finally {rmSync(cwd, {recursive:true, force:true});}
@@ -120,6 +129,111 @@ test('rejects drift in the independent C0 CI workflow', () => {
     /workflow bytes drift/u,
   );
 });
+test('authenticates frozen C0 and r117 SDK bytes while accepting governed current profile evolution', () => {
+  const retained = revisionRead();
+  for (const profile of original.inventory.profiles) {
+    assert.equal(sha256(retained(expectedBase, profile.path)), profile.sha256);
+  }
+  const activePath = 'architecture/get-modular/consumer-profile.json';
+  assert.notEqual(sha256(read(activePath)), sha256(retained(expectedA3Migration,activePath)), 'fixture must exercise post-r117 profile evolution');
+  assert.deepEqual(validateProfileMigrations(original), [
+    activePath,
+    'architecture/consumer-module-standard/contained-turn-profile.json',
+  ]);
+  assert.deepEqual(validateCmsProfileTransition(original), [
+    activePath,
+    'architecture/consumer-module-standard/contained-turn-profile.json',
+  ]);
+});
+test('rejects r117 SDK enrollment that rewrites a frozen profile field', () => {
+  const path = 'architecture/get-modular/consumer-profile.json';
+  const candidate = JSON.parse(revisionRead()(expectedA3Migration,path));
+  candidate.status = 'pending';
+  const bytes = Buffer.from(`${JSON.stringify(candidate,null,2)}\n`);
+  const revisions = new Map([[`${expectedA3Migration}:${path}`, bytes]]);
+  assert.throws(
+    () => validateProfileMigrations(original, {readCurrentBytes:currentRead(new Map([[path,bytes]])), readRevisionBytes:revisionRead(revisions)}),
+    /accepted r117 SDK profile drift/u,
+  );
+});
+test('rejects drift in the accepted r117 SDK profile extension', () => {
+  const path = 'architecture/consumer-module-standard/contained-turn-profile.json';
+  const candidate = JSON.parse(revisionRead()(expectedA3Migration,path));
+  candidate.sdkGrowth.candidateMayAuthorize = true;
+  const bytes = Buffer.from(`${JSON.stringify(candidate,null,2)}\n`);
+  const revisions = new Map([[`${expectedA3Migration}:${path}`, bytes]]);
+  assert.throws(
+    () => validateProfileMigrations(original, {readCurrentBytes:currentRead(new Map([[path,bytes]])), readRevisionBytes:revisionRead(revisions)}),
+    /accepted r117 SDK profile drift/u,
+  );
+});
+test('rejects adding the r117 SDK extension to any other frozen profile', () => {
+  const path = 'architecture/feature-module-standard/candidate-profile.json';
+  const candidate = JSON.parse(revisionRead()(expectedA3Migration,path));
+  candidate.sdkGrowth = JSON.parse(revisionRead()(expectedA3Migration,'architecture/get-modular/consumer-profile.json')).sdkGrowth;
+  const bytes = Buffer.from(`${JSON.stringify(candidate,null,2)}\n`);
+  const revisions = new Map([[`${expectedA3Migration}:${path}`, bytes]]);
+  assert.throws(
+    () => validateProfileMigrations(original, {readCurrentBytes:currentRead(new Map([[path,bytes]])), readRevisionBytes:revisionRead(revisions)}),
+    /unreviewed r117 profile migration/u,
+  );
+});
+test('rejects dropping either reviewed r117 SDK profile migration', () => {
+  const path = 'architecture/consumer-module-standard/contained-turn-profile.json';
+  const retained = revisionRead()(expectedBase,path);
+  const revisions = new Map([[`${expectedA3Migration}:${path}`, retained]]);
+  assert.throws(
+    () => validateProfileMigrations(original, {readCurrentBytes:currentRead(new Map([[path,retained]])), readRevisionBytes:revisionRead(revisions)}),
+    /accepted r117 SDK profile drift/u,
+  );
+});
+test('rejects drift in r117 SDK qualification artifacts at the accepted revision', () => {
+  for (const path of ['architecture/sdk-growth/profile.yaml','architecture/sdk-growth/activation.json','architecture/sdk-growth/qualification.json']) {
+    const revisions = new Map([[`${expectedA3Migration}:${path}`, Buffer.from('drift\n')]]);
+    assert.throws(
+      () => validateProfileMigrations(original, {readRevisionBytes:revisionRead(revisions)}),
+      /accepted r117 SDK artifact drift/u,
+    );
+  }
+});
+test('rejects an extra current change to an unrelated frozen profile', () => {
+  const path = 'architecture/feature-module-standard/candidate-profile.json';
+  const candidate = JSON.parse(read(path));
+  candidate.unreviewed = true;
+  const bytes = Buffer.from(`${JSON.stringify(candidate,null,2)}\n`);
+  assert.throws(
+    () => validateProfileMigrations(original, {readCurrentBytes:currentRead(new Map([[path,bytes]]))}),
+    /unrelated frozen profile changed/u,
+  );
+});
+test('rejects wrong current CMS authority while leaving non-CMS profile evolution to its owning gates', () => {
+  const path = 'architecture/get-modular/consumer-profile.json';
+  const candidate = JSON.parse(read(path));
+  candidate.standard.commit = '0'.repeat(40);
+  const bytes = Buffer.from(`${JSON.stringify(candidate,null,2)}\n`);
+  assert.throws(
+    () => validateCmsProfileTransition(original, {readCurrentBytes:currentRead(new Map([[path,bytes]]))}),
+    /current active CMS authority drift/u,
+  );
+});
+test('rejects an unreviewed current authority change outside the delegated CMS slot', () => {
+  const path = 'architecture/get-modular/consumer-profile.json';
+  const candidate = JSON.parse(read(path));
+  candidate.authority.owner = 'Unreviewed owner';
+  const bytes = Buffer.from(`${JSON.stringify(candidate,null,2)}\n`);
+  assert.throws(
+    () => validateCmsProfileTransition(original, {readCurrentBytes:currentRead(new Map([[path,bytes]]))}),
+    /outside delegated CMS and source relationships/u,
+  );
+});
+test('rejects drift in historical CMS bytes authenticated from the retained revision', () => {
+  const path = original.cms.before.evidencePath;
+  const revisions = new Map([[`${expectedBase}:${path}`, Buffer.from('drift\n')]]);
+  assert.throws(
+    () => validateContract(original,receipt,{readRevisionBytes:revisionRead(revisions)}),
+    /historical CMS complete bytes drift/u,
+  );
+});
 const cases = [
   ['unsupported schema revision', c => {c.schemaVersion=2;}, /schema revision/],
   ['pre-rebase source', c => {c.source.commit = 'be96f01ea54ec7d2ec0156774e3dfb75fac46803';}, /stale source/],
@@ -195,9 +309,16 @@ for (const [name,mutate,expected] of cases) {test(`rejects ${name}`, () => {
   const c=structuredClone(original); mutate(c); assert.throws(() => validate(c),expected);
 });}
 test('rejects actual plan/source byte drift, not just changed contract strings', () => {
-  for (const path of [original.source.planPath,original.evidence.lifecycle.path]) {
-    assert.throws(() => validateContract(original,receipt,{readBytes:p => p===path ? Buffer.from('drift') : read(p)}),/stale/);
-  }
+  assert.throws(
+    () => validateContract(original,receipt,{readBytes:p => p===original.source.planPath ? Buffer.from('drift') : read(p)}),
+    /stale/,
+  );
+  const path = original.evidence.lifecycle.path;
+  const revisions = new Map([[`${expectedBase}:${path}`, Buffer.from('drift')]]);
+  assert.throws(
+    () => validateContract(original,receipt,{readRevisionBytes:revisionRead(revisions)}),
+    /stale frozen source bytes/,
+  );
 
 });
 test('independent source oracle proves exact shared owner identity and existing wait facade', () => {
@@ -283,7 +404,19 @@ for (const collection of ['packages','profiles','archives']) {
 }
 
 test('retained CMS delta is the exact complete-document comparison', () => {
-  const compared = spawnSync('git', ['diff', '--no-index', '--abbrev=7', '--unified=2', '--src-prefix=retained/', '--dst-prefix=upstream/', original.cms.before.evidencePath, original.cms.after.evidencePath], {cwd:new URL('../../', import.meta.url)});
-  assert.equal(compared.status, 1, 'expected the reviewed reciprocal-reference delta');
-  assert.equal(compared.stdout.toString().replace(/^ +$/gmu, ''), read(original.cms.deltaPath).toString(), 'retained CMS diff differs from the pinned document comparison');
+  const cwd = mkdtempSync(join(tmpdir(), 'validate-ar-c0-cms-'));
+  const beforeName = 'consumer-module-standard.md';
+  const afterName = 'common-assembly-ac49bb33.md';
+  try {
+    writeFileSync(join(cwd,beforeName), revisionRead()(expectedBase,original.cms.before.evidencePath));
+    writeFileSync(join(cwd,afterName), read(original.cms.after.evidencePath));
+    const compared = spawnSync('git', [
+      'diff', '--no-index', '--abbrev=7', '--unified=2',
+      '--src-prefix=retained/architecture/get-modular/evidence/',
+      '--dst-prefix=upstream/architecture/c0/ar-owned-lifetime/evidence/',
+      beforeName, afterName,
+    ], {cwd});
+    assert.equal(compared.status, 1, 'expected the reviewed reciprocal-reference delta');
+    assert.equal(compared.stdout.toString().replace(/^ +$/gmu, ''), read(original.cms.deltaPath).toString(), 'retained CMS diff differs from the pinned document comparison');
+  } finally {rmSync(cwd, {recursive:true, force:true});}
 });

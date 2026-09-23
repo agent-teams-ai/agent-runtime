@@ -7,7 +7,7 @@ export interface EgressDispatchScope {
 }
 
 export interface EgressDispatchObservation {
-  readonly purpose: typeof EGRESS_DISPATCH_PURPOSE;
+  readonly purpose: "contained-turn.provider-dispatch/v1";
   readonly operationId: string;
   readonly scope: EgressDispatchScope;
   readonly grantRequestId: string;
@@ -25,7 +25,7 @@ export interface EgressDispatchObservation {
 
 export interface EgressDispatchConsumptionReceipt {
   readonly contractVersion: "contained-turn-dispatch-consumption/v1";
-  readonly purpose: typeof EGRESS_DISPATCH_PURPOSE;
+  readonly purpose: "contained-turn.provider-dispatch/v1";
   readonly operationId: string;
   readonly scope: EgressDispatchScope;
   readonly grantRequestId: string;

@@ -15,7 +15,7 @@ export const syntheticFacts = () => ({operationId: "synthetic-operation", genera
   codexHome: {path: "/synthetic/private/home", dev: 1n, ino: 3n, uid: 501, mode: 0o40700},
   tmpDir: {path: "/synthetic/private/tmp", dev: 1n, ino: 4n, uid: 501, mode: 0o40700},
   workspace: {path: "/synthetic/workspace", dev: 1n, ino: 5n, uid: 501, mode: 0o40700}});
-export function issueSyntheticSelection(facts = syntheticFacts(), mutateMaterial = (_: any) => {}) {
+export function issueSyntheticSelection(facts = syntheticFacts(), mutateMaterial: (facts: any) => void = () => {}) {
   const selection = Object.freeze({}); const observation = Object.freeze({});
   const state = {facts, observation, current: true, installed: false, mutateMaterial};
   selections.set(selection, state); observations.set(observation, state); return selection;

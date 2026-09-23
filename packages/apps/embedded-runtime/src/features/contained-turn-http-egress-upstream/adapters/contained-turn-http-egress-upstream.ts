@@ -3,13 +3,11 @@ import { createNativeHttpEgressRoute, nativeHttpRequestProfile, NodeTlsHttpEgres
   type HostHttpEgressSessionDependencies, type NodeTlsHttpEgressTransportOptions,
 } from "@agent-teams/agent-execution/composition";
 
-type Route = HostHttpEgressSessionDependencies["route"];
-type Snapshot = HostHttpEgressSessionDependencies["providerAccessSnapshot"];
-type Transport = HostHttpEgressSessionDependencies["transport"];
+export type ContainedTurnHttpUpstreamTransport = HostHttpEgressSessionDependencies["transport"];
 
 export type ContainedTurnHttpEgressRoutePorts = Readonly<{
-  route: Route;
-  providerAccessSnapshot: Snapshot;
+  route: HostHttpEgressSessionDependencies["route"];
+  providerAccessSnapshot: HostHttpEgressSessionDependencies["providerAccessSnapshot"];
 }>;
 
 const invalid = (): TypeError => new TypeError("Invalid contained turn HTTP egress upstream projection");
@@ -77,4 +75,4 @@ export const createContainedTurnHttpEgressRoute = async (input: Readonly<{
  */
 export const createContainedTurnHttpUpstreamTransport = (
   options: NodeTlsHttpEgressTransportOptions,
-): Transport => new NodeTlsHttpEgressTransport(options);
+): ContainedTurnHttpUpstreamTransport => new NodeTlsHttpEgressTransport(options);

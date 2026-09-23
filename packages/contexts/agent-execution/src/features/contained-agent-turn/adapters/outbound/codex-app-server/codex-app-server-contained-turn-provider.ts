@@ -3,8 +3,10 @@ import { isAbsolute, relative, resolve } from "node:path";
 
 import type {
   ContainedTurnAdapterCapabilityManifest,
+  ContainedTurnProviderExecutionOutcome,
   ContainedTurnProviderPort,
 } from "../legacy/legacy-contained-turn-ports.js";
+export type { ContainedTurnAdapterCapabilityManifest, ContainedTurnProviderExecutionOutcome, ContainedTurnProviderPort };
 import type {
   CustodiedProviderProcess,
   CustodiedProviderProcessRegistry,
@@ -185,9 +187,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
       "maxActiveNotifications", options.maxActiveNotifications, DEFAULT_MAX_ACTIVE_NOTIFICATIONS,
     );
     this.#requestTimeoutMs = positiveInteger("requestTimeoutMs", options.requestTimeoutMs, DEFAULT_REQUEST_TIMEOUT_MS);
-    this.#additionalSensitiveOutputTokens = Object.freeze([
-      ...new Set((options.sensitiveOutputTokens ?? []).filter(token => token.length > 0)),
-    ]);
+    this.#additionalSensitiveOutputTokens = Object.freeze([...new Set((options.sensitiveOutputTokens ?? []).filter(token => token.length > 0))]);
     this.#tmpDir = options.tmpDir;
     this.#turnTimeoutMs = positiveInteger("turnTimeoutMs", options.turnTimeoutMs, DEFAULT_TURN_TIMEOUT_MS);
     this.#cancellationPollMs = positiveInteger("cancellationPollMs", options.cancellationPollMs, DEFAULT_CANCELLATION_POLL_MS);

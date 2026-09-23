@@ -163,6 +163,41 @@ await assert.rejects(access.claudeCodeSetup.inspect(), /Host is disposed/u);
 import type { RuntimeAccessHandle } from '@agent-teams/embedded-runtime';
 import { createDefaultAgentRuntimeHost, type AgentRuntimeHost } from '@agent-teams/embedded-runtime/composition';
 import { createAgentRuntimeHost, type OrdinaryAgentRuntimeHostOptions } from '@agent-teams/embedded-runtime/composition';
+import type {
+  AgentRuntimeHostCreationErrorDetails,
+  ContainedTurnHostCustodyAuthority,
+  ContainedTurnHttpCredentialRenderingOwner,
+  ContainedTurnHttpRuntimeSecurityOwner,
+  DarwinContainedTurnDeployment,
+  HostCustodiedContainedTurnDependencies,
+  RuntimeSetupModuleId,
+} from '@agent-teams/embedded-runtime/composition';
+// @ts-expect-error Product-owned Linux resources are not public composition records.
+import type { LinuxCodexContainedTurnResources } from '@agent-teams/embedded-runtime/composition';
+// @ts-expect-error Product-owned deployment infrastructure stays private.
+import type { LinuxCodexDeploymentInfrastructure } from '@agent-teams/embedded-runtime/composition';
+// @ts-expect-error The typed Linux deployment root stays package-private.
+import { createLinuxCodexDeploymentAgentRuntimeHost } from '@agent-teams/embedded-runtime/composition';
+// @ts-expect-error The Darwin acknowledgement join is not a public composition owner.
+import type { DarwinContainedTurnAuthority } from '@agent-teams/embedded-runtime/composition';
+// @ts-expect-error Package-private declarations cannot be reached through a deep subpath.
+import type {} from '@agent-teams/embedded-runtime/dist/composition/runtime-setup-assembly.js';
+type HostPrivateResourcesClosed =
+  'linuxCodex' extends keyof HostCustodiedContainedTurnDependencies ? false
+    : 'linuxCodexDeployment' extends keyof HostCustodiedContainedTurnDependencies ? false
+      : true;
+const hostPrivateResourcesClosed: HostPrivateResourcesClosed = true;
+void hostPrivateResourcesClosed;
+type StableHostCompositionTypes = [
+  AgentRuntimeHostCreationErrorDetails,
+  ContainedTurnHostCustodyAuthority,
+  ContainedTurnHttpCredentialRenderingOwner,
+  ContainedTurnHttpRuntimeSecurityOwner,
+  DarwinContainedTurnDeployment,
+  RuntimeSetupModuleId,
+];
+declare const stableHostCompositionTypes: StableHostCompositionTypes;
+void stableHostCompositionTypes;
 declare const ordinaryOptions: OrdinaryAgentRuntimeHostOptions;
 const ordinaryPending: Promise<AgentRuntimeHost> = createAgentRuntimeHost(ordinaryOptions);
 // @ts-expect-error Active ordinary bootstrap must also be awaited.
@@ -197,6 +232,28 @@ test("installed archives expose async composition and preserve passive sibling a
   const root = await mkdtemp(join(tmpdir(), "ar-packed-consumer-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   await withVerifiedArchives(root, pin => readFile(join(repositoryRoot, pin.archivePath)), consumePackedArchives);
+});
+
+test("private Linux deployment caller retains contextual typing", () => {
+  run(
+    join(repositoryRoot, "node_modules", ".bin", "tsc"),
+    ["--project", "tests/package/linux-codex-deployment-private-caller.types.tsconfig.json", "--pretty", "false"],
+    join(repositoryRoot, "packages/apps/embedded-runtime"),
+  );
+});
+
+test("private Linux bootstrap adds no diagnostics beyond its existing pool port mismatch", () => {
+  const compiler = join(repositoryRoot, "node_modules", ".bin", "tsc");
+  const result = spawnSync(compiler, [
+    "--project", "tests/package/live/linux-codex-live-bootstrap.types.tsconfig.json", "--pretty", "false",
+  ], {cwd: join(repositoryRoot, "packages/apps/embedded-runtime"), encoding: "utf8"});
+  assert.equal(result.error, undefined, result.error?.message);
+  const output = `${result.stdout}\n${result.stderr}`;
+  const bootstrapDiagnostics = output.split("\n").filter(line =>
+    line.startsWith("tests/package/live/linux-codex-live-bootstrap.ts("));
+  assert.deepEqual(bootstrapDiagnostics, [
+    "tests/package/live/linux-codex-live-bootstrap.ts(192,33): error TS2339: Property 'query' does not exist on type 'ContainedTurnPostgresPool'.",
+  ]);
 });
 
 test("verified retained archives are staged as exact consumer file dependencies", async t => {

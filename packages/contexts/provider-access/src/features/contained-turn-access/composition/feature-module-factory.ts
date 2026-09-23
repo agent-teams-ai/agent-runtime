@@ -1,6 +1,7 @@
 import { createResolveContainedTurnProviderAccess } from "../application/resolve-contained-turn-provider-access.js";
 import { createRevalidateContainedTurnProviderAccess } from "../application/revalidate-contained-turn-provider-access.js";
-import type { ProviderAccessBindingRepository } from "../application/ports/outbound/provider-access-binding-repository.js";
+import type { ContainedTurnProviderAccessRepository,
+  ProviderAccessBindingRepository } from "../application/ports/outbound/provider-access-binding-repository.js";
 import type { ContainedTurnProviderAccessFeatureApi } from "../contracts/contained-turn-provider-access.js";
 import { createContainedTurnProviderAccessAdapter } from "../adapters/inbound/contained-turn-provider-access-mapper.js";
 import {
@@ -10,8 +11,9 @@ import {
   isRuntimeProxy,
 } from "../adapters/provider-access-data.js";
 
-interface ContainedTurnProviderAccessDependencies {
-  readonly bindingRepository: ProviderAccessBindingRepository;
+/** Narrow composition dependency; persistence implementations remain owner-internal. */
+export interface ContainedTurnProviderAccessDependencies {
+  readonly bindingRepository: ContainedTurnProviderAccessRepository;
 }
 
 const indeterminateObservation = () => Object.freeze({ kind: "indeterminate" as const });

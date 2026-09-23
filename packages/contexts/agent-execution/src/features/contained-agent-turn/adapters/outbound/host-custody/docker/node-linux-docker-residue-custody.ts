@@ -17,10 +17,10 @@ type ResourceReadback = Omit<DockerContainerResourceFacts,
   readonly cgroupNamespaceMode: string; readonly capabilitiesDropped: string; readonly noNewPrivileges: boolean;
   readonly restart: string; readonly readOnlyRoot: boolean; readonly pidNamespaceMode: string; readonly mountPropagation: string;
 };
-type Launched = Parameters<DockerHostCustodyLifecycle["observeLaunch"]>[0];
+export type LinuxDockerResidueLaunchedCustody = Parameters<DockerHostCustodyLifecycle["observeLaunch"]>[0];
 const concreteLifecycles = new WeakMap<DockerHostCustodyLifecycle, LinuxDockerResidueOwner>();
 export const readNodeLinuxDockerCgroup = async (lifecycle: DockerHostCustodyLifecycle,
-  launch: Launched, call: DockerEngineCall): Promise<string> => {
+  launch: LinuxDockerResidueLaunchedCustody, call: DockerEngineCall): Promise<string> => {
   const owner = concreteLifecycles.get(lifecycle);
   if (owner === undefined) {throw residueFault();}
   const observed = observeWorkspaceLaunch.call(lifecycle, launch);
@@ -35,11 +35,11 @@ const methods: {
   observeLaunch: (this: DockerHostCustodyLifecycle, ...args: Parameters<DockerHostCustodyLifecycle["observeLaunch"]>) => ReturnType<DockerHostCustodyLifecycle["observeLaunch"]>;
 } = DockerHostCustodyLifecycle.prototype;
 const observeWorkspaceLaunch = methods.observeLaunch;
-const workspaceProofs = new WeakMap<object, Readonly<{launch: Launched; lifecycle: DockerHostCustodyLifecycle; capture: DockerWorkspaceCapture}>>();
-const capturedLaunches = new WeakSet<Launched>();
+const workspaceProofs = new WeakMap<object, Readonly<{launch: LinuxDockerResidueLaunchedCustody; lifecycle: DockerHostCustodyLifecycle; capture: DockerWorkspaceCapture}>>();
+const capturedLaunches = new WeakSet<LinuxDockerResidueLaunchedCustody>();
 /** One-use launch provenance; no pathname or caller-created object can issue proof. */
 export const captureDockerWorkspaceCustody = async (lifecycle: DockerHostCustodyLifecycle,
-  launch: Launched, call: DockerEngineCall): Promise<object> => {
+  launch: LinuxDockerResidueLaunchedCustody, call: DockerEngineCall): Promise<object> => {
   const owner = concreteLifecycles.get(lifecycle);
   const observed = observeWorkspaceLaunch.call(lifecycle, launch);
   if (owner === undefined || capturedLaunches.has(launch) || observed.retired || observed.terminal !== null ||
@@ -53,7 +53,7 @@ export const captureDockerWorkspaceCustody = async (lifecycle: DockerHostCustody
   workspaceProofs.set(proof, Object.freeze({launch, lifecycle, capture}));
   return proof;
 };
-export const readDockerWorkspaceCustody = (proof: object, launch: Launched): DockerWorkspaceCapture => {
+export const readDockerWorkspaceCustody = (proof: object, launch: LinuxDockerResidueLaunchedCustody): DockerWorkspaceCapture => {
   const retained = workspaceProofs.get(proof);
   if (retained === undefined || retained.launch !== launch) {throw residueFault();}
   const current = observeWorkspaceLaunch.call(retained.lifecycle, launch);
@@ -370,14 +370,14 @@ class LinuxDockerResidueOwner implements DockerHostCustodyResiduePort {
   }
 }
 
-type ResidueComposition = Omit<DockerHostCustodyCompositionDependencies, "engine" | "residue"> & {
+export type LinuxDockerResidueComposition = Omit<DockerHostCustodyCompositionDependencies, "engine" | "residue"> & {
   readonly policy: DockerEnginePolicy;
 };
 
 /** Docker-private test seam; observations still come only from the engine at
  * start/inspect. No pin/brand issuance or always-empty configuration is exposed. */
 export const composeLinuxDockerResidueCustody = (
-  input: ResidueComposition, engine: DockerEnginePort, io: DockerResidueIo,
+  input: LinuxDockerResidueComposition, engine: DockerEnginePort, io: DockerResidueIo,
 ) => {
   const owner = new LinuxDockerResidueOwner(engine, snapshotDockerEnginePolicy(input.policy), io);
   const decorated: DockerEnginePort = Object.freeze({
@@ -403,7 +403,7 @@ export const composeLinuxDockerResidueCustody = (
 /** Effect-free Docker-private production composition. The existing engine owns
  * all effects/attach I/O; the existing lifecycle owns receipts and execution.
  * Only this factory selects the actual Linux FD backend, with no caller override. */
-export const createNodeLinuxDockerResidueCustody = (input: ResidueComposition) => {
+export const createNodeLinuxDockerResidueCustody = (input: LinuxDockerResidueComposition) => {
   const policy = snapshotDockerEnginePolicy(input.policy);
   return composeLinuxDockerResidueCustody({...input, policy}, new NodeUnixSocketDockerEngine({policy}),
     new NodeLinuxDockerResidueIo());

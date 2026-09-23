@@ -30,9 +30,16 @@ const dockerOperationNetworkMethods: {
     ...args: Parameters<DockerOperationNetwork[Key]>) => ReturnType<DockerOperationNetwork[Key]>;
 } = DockerOperationNetwork.prototype;
 const {sealAdmission, allocate, retainContainer, inspectMembership, remove} = dockerOperationNetworkMethods;
-const identityKeys = ["tenantId", "projectId", "operationId", "attemptId", "custodyId", "hostInstanceId", "hostBootId"] as const;
-const claimKeys = ["effectId", "workspaceId", "executionGenerationId", "committedClaimSha256", "acceptedAuthoritySha256"] as const;
-export type DockerHttpResourceClaim = Readonly<Record<typeof identityKeys[number], string> & {
+const DOCKER_HTTP_NETWORK_IDENTITY_KEYS = Object.freeze([
+  "tenantId", "projectId", "operationId", "attemptId", "custodyId", "hostInstanceId", "hostBootId",
+] as const);
+const claimKeys = Object.freeze([
+  "effectId", "workspaceId", "executionGenerationId", "committedClaimSha256", "acceptedAuthoritySha256",
+] as const);
+export type DockerHttpResourceClaim = Readonly<Record<
+  "tenantId" | "projectId" | "operationId" | "attemptId" | "custodyId" | "hostInstanceId" | "hostBootId",
+  string
+> & {
   effectId: string; workspaceId: string; executionGenerationId: string;
   committedClaimSha256: string; acceptedAuthoritySha256: string;
 }>;
@@ -91,9 +98,9 @@ export class DockerHttpNetworkResources implements HostHttpEgressV4ObservationOw
   public readObservation(token: object): HostHttpEgressV4Observation | undefined {return this.#tokens.get(token);}
 
   public assertClaim(current: DockerHttpResourceClaim): void {
-    try {v4Exact(current, [...identityKeys, ...claimKeys]);} catch {this.cutoff(); throw rejected();}
+    try {v4Exact(current, [...DOCKER_HTTP_NETWORK_IDENTITY_KEYS, ...claimKeys]);} catch {this.cutoff(); throw rejected();}
     const subject = this.#subject;
-    if (identityKeys.some(key => current[key] !== subject.attempt[key]) ||
+    if (DOCKER_HTTP_NETWORK_IDENTITY_KEYS.some(key => current[key] !== subject.attempt[key]) ||
       claimKeys.some(key => current[key] !== subject[key])) {this.cutoff(); throw rejected();}
   }
   #record(kind: HostHttpEgressV4Intent) {

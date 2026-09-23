@@ -1,4 +1,4 @@
-/** Private driver boundary. The caller owns the pool and its shutdown. */
+/** Composition driver contract. The caller owns the pool and its shutdown. */
 export interface MaterializationPostgresClient {
   query(sql: string, values?: unknown[]): Promise<{rows: Record<string, unknown>[]; rowCount: number | null}>;
   release(discard?: boolean): void;

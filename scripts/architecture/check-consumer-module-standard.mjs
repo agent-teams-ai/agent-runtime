@@ -4,6 +4,11 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, posix, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseSync, Visitor } from "oxc-parser";
+import {
+  standardDeltaPath,
+  standardReviewPath,
+  validateStandardMigration,
+} from "./consumer-module-standard-pin.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const profilePath = "architecture/consumer-module-standard/contained-turn-profile.json";
@@ -13,7 +18,6 @@ const packagePath = "package.json";
 const entrypointPath = "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts";
 const declarationPath = "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ports/outbound/contained-turn-ports.ts";
 const factoryPath = "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/feature-module-factory.ts";
-
 export const EXPECTED_PROFILE = Object.freeze({
   sdkGrowth: {
     profile: "architecture/sdk-growth/profile.yaml",
@@ -28,8 +32,8 @@ export const EXPECTED_PROFILE = Object.freeze({
       repository: "agent-teams-ai/get-modular",
       path: "docs/architecture/common-assembly.md",
       anchor: "consumer-module-standard",
-      gitCommit: "669a750d8db451e04f075cdeb36576c6606fba6e",
-      sha256: "e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553",
+      gitCommit: "ac49bb3374946330ec820591f8195a22d2c90900",
+      sha256: "d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f",
     },
     featureModuleStandard: {
       repository: "agent-teams-ai/.github",
@@ -103,9 +107,12 @@ const requiredPaths = Object.freeze([
   profilePath,
   decisionPath,
   "docs/architecture/contained-turn-consumer-module-standard-adoption.md",
+  standardReviewPath,
+  standardDeltaPath,
   entrypointPath,
   declarationPath,
   factoryPath,
+  "scripts/architecture/consumer-module-standard-pin.mjs",
   "scripts/architecture/check-consumer-module-standard.mjs",
   "scripts/architecture/check-consumer-module-standard.test.mjs",
 ]);
@@ -364,6 +371,8 @@ export async function loadConsumerModuleStandardInputs(root = repositoryRoot) {
     "architecture/get-modular/consumer-profile.json"), "utf8"));
   const standardBytes = await readFile(resolve(root,
     "architecture/get-modular/evidence/consumer-module-standard.md"));
+  const standardReview = JSON.parse(await readFile(resolve(root, standardReviewPath), "utf8"));
+  const standardDeltaBytes = await readFile(resolve(root, standardDeltaPath));
   const packageManifest = JSON.parse(await readFile(resolve(root, packagePath), "utf8"));
   const decisionRegistry = JSON.parse(await readFile(resolve(root, decisionRegistryPath), "utf8"));
   const decisionBytes = await readFile(resolve(root, decisionPath));
@@ -374,7 +383,8 @@ export async function loadConsumerModuleStandardInputs(root = repositoryRoot) {
     try { return [path, (await stat(resolve(root, path))).isFile()]; }
     catch { return [path, false]; }
   })));
-  return { decisionBytes, decisionRegistry, packageManifest, passiveProfile, pathExistence, profile, sources, standardBytes };
+  return { decisionBytes, decisionRegistry, packageManifest, passiveProfile, pathExistence, profile, sources,
+    standardBytes, standardDeltaBytes, standardReview };
 }
 
 const validatePendingDecision = inputs => {
@@ -406,6 +416,7 @@ export function validateConsumerModuleStandard(inputs) {
     "standard evidence path must remain shared");
   assert.equal(createHash("sha256").update(inputs.standardBytes).digest("hex"),
     standard.sha256, "retained standard bytes must match the reviewed pin");
+  validateStandardMigration(inputs.standardReview, inputs.standardDeltaBytes);
 
   for (const path of requiredPaths) {
     assert.equal(inputs.pathExistence.get(path), true, `required adoption path is missing: ${path}`);

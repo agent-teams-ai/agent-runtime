@@ -11,9 +11,9 @@ import { assertNetworkContainer, assertNetworkEngine, awaitNetworkCleanupWork, d
   networkDigest, networkFailure, networkObject, operationNetworkLabels, operationNetworkName,
   type DockerOperationNetworkBinding, type DockerOperationNetworkObservation } from "./docker-operation-network-codec.js";
 
-type EngineInput = ConstructorParameters<typeof NodeUnixSocketDockerEngine>[0];
-type Client = NonNullable<EngineInput["client"]>;
-export type DockerOperationNetworkInput = EngineInput & Readonly<{binding: DockerOperationNetworkBinding}>;
+export type DockerOperationNetworkEngineInput = ConstructorParameters<typeof NodeUnixSocketDockerEngine>[0];
+type Client = NonNullable<DockerOperationNetworkEngineInput["client"]>;
+export type DockerOperationNetworkInput = DockerOperationNetworkEngineInput & Readonly<{binding: DockerOperationNetworkBinding}>;
 export type DockerOperationNetworkRemoval = Readonly<{
   state: "absent"; networkId: string; evidenceSha256: string; reconcileRequired: boolean;
 }> | Readonly<{state: "unknown"}>;

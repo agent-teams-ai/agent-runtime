@@ -44,10 +44,10 @@ export interface NodeContainedTurnWorkspaceOwner {
 
 type LaunchInput = Parameters<NodeContainedTurnWorkspaceOwner["withLaunchAuthority"]>[0];
 type NativeArtifactSource = NonNullable<ContainedTurnArtifactSealingContext["nativeSource"]>;
-type ClosureInput = Readonly<{operationId: ContainedTurnOperationId; workspaceId: ContainedTurnWorkspaceId}>;
+export type NodeContainedTurnWorkspaceClosureInput = Readonly<{operationId: ContainedTurnOperationId; workspaceId: ContainedTurnWorkspaceId}>;
 interface OwnerPrivateFacts {
-  readonly readNativeReceipts: (input: ClosureInput) => ReturnType<SelectedNativeWorkspaceBackend["readReceipts"]>;
-  readonly readNativeClosure: (input: ClosureInput) => ReturnType<SelectedNativeWorkspaceBackend["readClosed"]>;
+  readonly readNativeReceipts: (input: NodeContainedTurnWorkspaceClosureInput) => ReturnType<SelectedNativeWorkspaceBackend["readReceipts"]>;
+  readonly readNativeClosure: (input: NodeContainedTurnWorkspaceClosureInput) => ReturnType<SelectedNativeWorkspaceBackend["readClosed"]>;
   readonly native: boolean;
   readonly attachArtifacts: (
     roots: ContainedTurnArtifactSealingContext["workspaceRoots"],
@@ -89,7 +89,7 @@ export const withNodeContainedTurnNativeWorkspaceSelection = <Result>(
 
 /** Issued owner only; the native backend requires a genuine RELEASED grant. */
 export const readNodeContainedTurnNativeWorkspaceClosure = (
-  owner: NodeContainedTurnWorkspaceOwner, input: ClosureInput,
+  owner: NodeContainedTurnWorkspaceOwner, input: NodeContainedTurnWorkspaceClosureInput,
 ): ReturnType<SelectedNativeWorkspaceBackend["readClosed"]> => {
   const facts = issuedOwners.get(owner);
   if (facts?.native !== true) {throw new Error("contained turn native workspace owner is not issued");}
@@ -99,7 +99,7 @@ export const readNodeContainedTurnNativeWorkspaceClosure = (
 /** Durable creation/seal/publication readback of this issued native owner.
  * Caller records, paths and receipt codecs are absent. Closure is verified separately. */
 export const readNodeContainedTurnNativeWorkspaceReceipts = (
-  owner: NodeContainedTurnWorkspaceOwner, input: ClosureInput,
+  owner: NodeContainedTurnWorkspaceOwner, input: NodeContainedTurnWorkspaceClosureInput,
 ): ReturnType<SelectedNativeWorkspaceBackend["readReceipts"]> => {
   const facts = issuedOwners.get(owner);
   if (facts?.native !== true) {throw new Error("contained turn native workspace owner is not issued");}
@@ -212,7 +212,7 @@ const initializeOwnerBackend = async (options: NodeContainedTurnWorkspaceOptions
 };
 const nativeClosureReader = (native: SelectedNativeWorkspaceBackend | undefined,
   operations: ReadonlyMap<ContainedTurnOperationId, ContainedTurnWorkspaceId>,
-  workspaces: ReadonlyMap<ContainedTurnWorkspaceId, ContainedTurnOperationId>) => async (input: ClosureInput) => {
+  workspaces: ReadonlyMap<ContainedTurnWorkspaceId, ContainedTurnOperationId>) => async (input: NodeContainedTurnWorkspaceClosureInput) => {
   if (!native || operations.get(input.operationId) !== input.workspaceId || workspaces.get(input.workspaceId) !== input.operationId) {
     throw new Error("contained turn native closure identity is not owned by this owner");
   }
@@ -220,7 +220,7 @@ const nativeClosureReader = (native: SelectedNativeWorkspaceBackend | undefined,
 };
 
 const nativeReceiptReader = (native: SelectedNativeWorkspaceBackend | undefined,
-  assertOpen: () => void, assertIdentity: (input: ClosureInput) => void) => async (input: ClosureInput) => {
+  assertOpen: () => void, assertIdentity: (input: NodeContainedTurnWorkspaceClosureInput) => void) => async (input: NodeContainedTurnWorkspaceClosureInput) => {
   assertOpen();
   assertIdentity(input);
   if (native === undefined) {throw new Error("contained turn native workspace owner is not issued");}

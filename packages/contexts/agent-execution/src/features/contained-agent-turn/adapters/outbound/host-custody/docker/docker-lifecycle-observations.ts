@@ -8,19 +8,19 @@ import {dockerCustodyAttemptLocator, dockerCustodyAuthoritySha256, dockerCustody
 import {DockerCustodyJournalConflictError, type DockerCustodyAttemptKey, type DockerCustodyJournalLimits,
   type DockerCustodyJournalRecord, type DockerCustodyJournalStorage} from "./journal/docker-custody-journal-types.js";
 
-type Present = Extract<DockerContainerObservation, {existence: "present"}>;
-type Absent = Extract<DockerContainerObservation, {existence: "absent"}>;
+export type DockerLifecyclePresentObservation = Extract<DockerContainerObservation, {existence: "present"}>;
+export type DockerLifecycleAbsentObservation = Extract<DockerContainerObservation, {existence: "absent"}>;
 export interface DockerLifecycleObservation {
   readonly authority: DockerContainerAuthority;
   readonly key: DockerCustodyAttemptKey;
   readonly journal: DockerCustodyJournalRecord;
-  readonly initial: Present;
+  readonly initial: DockerLifecyclePresentObservation;
   readonly mountFacts: Readonly<{workspaceSource: string; privateRootSource: string; imageDigest: string}>;
   readonly execution: Readonly<{exec: DockerCustodyInitHostExec; result: DockerCustodyInitHostStart | null;
     journal: DockerCustodyJournalRecord | null; settled: boolean}> | null;
-  readonly terminal: Readonly<{observation: Present; journal: DockerCustodyJournalRecord}> | null;
+  readonly terminal: Readonly<{observation: DockerLifecyclePresentObservation; journal: DockerCustodyJournalRecord}> | null;
   readonly recursiveEmpty: Readonly<{journal: DockerCustodyJournalRecord}> | null;
-  readonly removal: Readonly<{observation: Absent; journal: DockerCustodyJournalRecord}> | null;
+  readonly removal: Readonly<{observation: DockerLifecycleAbsentObservation; journal: DockerCustodyJournalRecord}> | null;
   readonly attachCleanup: "pending" | "complete";
   readonly retired: boolean;
 }
@@ -33,7 +33,7 @@ interface Retained {
 const freezeJournal = (record: DockerCustodyJournalRecord): DockerCustodyJournalRecord => Object.freeze({
   ...record, attemptKey: Object.freeze({...record.attemptKey}), evidence: Object.freeze({...record.evidence}),
 });
-const freezePresent = (observation: Present): Present => Object.freeze({...observation,
+const freezePresent = (observation: DockerLifecyclePresentObservation): DockerLifecyclePresentObservation => Object.freeze({...observation,
   authority: Object.freeze({...observation.authority}), engine: Object.freeze({...observation.engine}),
   resources: Object.freeze({...observation.resources}), state: Object.freeze({...observation.state}),
 });

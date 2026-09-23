@@ -18,6 +18,17 @@ export type {
   EgressTransportObservationV1,
 } from "./domain/egress-authorization.js";
 export type {
+  EgressDispatchConsumptionReceipt as EgressDispatchConsumptionPortReceipt,
+  EgressDispatchObservation as EgressDispatchPortObservation,
+  EgressDispatchScope as EgressDispatchPortScope,
+} from "./domain/dispatch-consumption.js";
+export type {
+  EgressDispatchPurpose,
+  EgressDispatchConsumptionReceipt,
+  EgressDispatchObservation,
+  EgressDispatchScope,
+} from "./contracts/contained-turn-egress-v1.js";
+export type {
   ContainedTurnEgress,
   ContainedTurnEgressRequest,
   ContainedTurnEgressResult,

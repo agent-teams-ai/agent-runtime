@@ -39,7 +39,7 @@ import {
 export type ContainedTurnOuterCompositionDependencies =
   Omit<ContainedTurnFeatureDependencies, "providerAccess" | "security"> & ContainedTurnAuthorityDependencies;
 
-type HostCustodyAuthority = CreateCodexCurrentKernelOwnerOptions["hostCustody"];
+export type ContainedTurnHostCustodyAuthority = CreateCodexCurrentKernelOwnerOptions["hostCustody"];
 
 export type ContainedTurnHostProviderSelection =
   | Readonly<{
@@ -55,7 +55,7 @@ export type HostCustodiedContainedTurnDependencies =
   Omit<ContainedTurnFeatureDependencies, "custody" | "provider" | "providerAccess" | "security"> &
   ContainedTurnAuthorityDependencies & {
   /** One operation-scoped authority shared by the custody and provider adapters. */
-  readonly hostCustody: HostCustodyAuthority;
+  readonly hostCustody: ContainedTurnHostCustodyAuthority;
   readonly selectedProvider: ContainedTurnHostProviderSelection;
   /**
    * The enforced-route capability, obtainable only from Agent Execution's
@@ -65,11 +65,24 @@ export type HostCustodiedContainedTurnDependencies =
    * an authentic one.
    */
   readonly routeEnforcement?: ContainedTurnRouteEnforcementCapability | DarwinCodexRouteEnforcementCapability;
-  /** Trusted private deployment composition only; never read from workspace configuration. */
-  readonly linuxCodex?: LinuxCodexContainedTurnResources;
-  /** Production infrastructure for the private acknowledged resource assembly. */
-  readonly linuxCodexDeployment?: LinuxCodexDeploymentInfrastructure;
 };
+
+/** Product-owned extensions are deliberately absent from the public Host port.
+ * They remain accepted at runtime only by this package's private deployment
+ * composition and never become constructible public dependency records. */
+type PrivateHostCustodiedContainedTurnDependencies = HostCustodiedContainedTurnDependencies & Readonly<{
+  readonly linuxCodex?: LinuxCodexContainedTurnResources;
+  readonly linuxCodexDeployment?: LinuxCodexDeploymentInfrastructure;
+}>;
+
+/** Package-private projection for the typed Linux deployment composition root. */
+export type LinuxCodexDeploymentContainedTurnDependencies = Extract<
+  HostCustodiedContainedTurnDependencies,
+  {readonly authority: "current"}
+> & Readonly<{
+  readonly linuxCodex?: never;
+  readonly linuxCodexDeployment: LinuxCodexDeploymentInfrastructure;
+}>;
 
 export interface HostCustodiedContainedTurnComposition {
   readonly feature: ContainedTurnCapabilityBundle;
@@ -189,7 +202,7 @@ const captureProviderOwner = (
 
 const createSelectedProviderOwner = (
   snapshot: ContainedTurnProviderSelectionSnapshot,
-  hostCustody: HostCustodyAuthority,
+  hostCustody: ContainedTurnHostCustodyAuthority,
   factories: ContainedTurnProviderOwnerFactories,
   routeEnforcement?: unknown,
 ): ClaudeCurrentKernelOwner | CodexCurrentKernelOwner => {
@@ -260,7 +273,7 @@ export const composeHostCustodiedContainedTurn = (
       if (route !== undefined && "value" in route && readContainedTurnRouteEnforcementTarget(route.value)?.platform === "darwin-arm64") {
         const host = trustedGetOwnPropertyDescriptor(dependencies, "hostCustody");
         if (host === undefined || !("value" in host)) {throw invalidProviderOwner();}
-        return host.value as HostCustodyAuthority;
+        return host.value as ContainedTurnHostCustodyAuthority;
       }
       return dependencies.hostCustody;
     })(), ownerFactories, trustedGetOwnPropertyDescriptor(dependencies, "routeEnforcement")?.value,
@@ -406,7 +419,7 @@ export const composeQualifiedHostCustodiedContainedTurn = (
 /** Private deployment entrypoint. Uses the same product qualification gate and
  * current authority root; it does not export a new application capability. */
 const createLinuxCodexDeployment = (
-  dependencies: Omit<Extract<HostCustodiedContainedTurnDependencies, {authority: "current"}>, "linuxCodex" | "linuxCodexDeployment">,
+  dependencies: Extract<PrivateHostCustodiedContainedTurnDependencies, {authority: "current"}>,
   infrastructure: LinuxCodexDeploymentInfrastructure,
 ): HostCustodiedContainedTurnComposition => {
   const {selection: provider} = snapshotContainedTurnProviderSelection(dependencies);
@@ -448,16 +461,17 @@ const createLinuxCodexDeployment = (
 export const createHostCustodiedContainedTurn = (
   dependencies: HostCustodiedContainedTurnDependencies,
 ): HostCustodiedContainedTurnComposition => {
-  const candidate: unknown = dependencies;
+  const privateDependencies = dependencies as PrivateHostCustodiedContainedTurnDependencies;
+  const candidate: unknown = privateDependencies;
   const deployment = candidate !== null && typeof candidate === "object" && !trustedIsProxy(candidate)
-    ? trustedGetOwnPropertyDescriptor(dependencies, "linuxCodexDeployment") : undefined;
+    ? trustedGetOwnPropertyDescriptor(privateDependencies, "linuxCodexDeployment") : undefined;
   if (deployment !== undefined) {
-    if (!("value" in deployment) || trustedGetOwnPropertyDescriptor(dependencies, "linuxCodex") !== undefined) {
+    if (!("value" in deployment) || trustedGetOwnPropertyDescriptor(privateDependencies, "linuxCodex") !== undefined) {
       throw new TypeError("Linux Codex deployment selection is ambiguous");
     }
-    const {selection} = snapshotContainedTurnAuthority(dependencies);
+    const {selection} = snapshotContainedTurnAuthority(privateDependencies);
     if (selection.authority !== "current") {throw new TypeError("Linux Codex deployment requires current authority");}
-    return createLinuxCodexDeployment(dependencies as Extract<HostCustodiedContainedTurnDependencies, {authority: "current"}>, deployment.value as LinuxCodexDeploymentInfrastructure);
+    return createLinuxCodexDeployment(privateDependencies as Extract<PrivateHostCustodiedContainedTurnDependencies, {authority: "current"}>, deployment.value as LinuxCodexDeploymentInfrastructure);
   }
   return composeQualifiedHostCustodiedContainedTurn(
     dependencies,
@@ -465,7 +479,7 @@ export const createHostCustodiedContainedTurn = (
       claude: createClaudeCurrentKernelOwner,
       codex: (options: CreateCodexCurrentKernelOwnerOptions) => {
         if (options.platformTarget.platform !== "linux") {return createCodexCurrentKernelOwner(options);}
-        const descriptor = trustedGetOwnPropertyDescriptor(dependencies, "linuxCodex");
+        const descriptor = trustedGetOwnPropertyDescriptor(privateDependencies, "linuxCodex");
         return createLinuxCodexContainedTurnOwner(options,
           descriptor !== undefined && "value" in descriptor ? descriptor.value as LinuxCodexContainedTurnResources : undefined);
       },

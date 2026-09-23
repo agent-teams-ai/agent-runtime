@@ -85,9 +85,9 @@ failure without repeating an observed close. Host tests cover retained journal
 writes and exact-once final disposal. No real provider is launched.
 
 The 2026-09-14 review compared the retained complete standard against the
-controller's current upstream measurement: both are revision `669a750d` and
-SHA-256 `e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`.
-There is no standard byte delta or pin migration. This applies its existing
+controller's then-current upstream measurement: both were revision `669a750d`
+and SHA-256 `e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`.
+At that checkpoint there was no standard byte delta or pin migration. This applies its existing
 Host ownership and required static binding rules; shared guidance needs no change.
 Accepted ADRs and retained standard bytes remain unchanged. The local lifecycle
 and binding evidence remains pending execution because this checkout lacks
@@ -106,23 +106,23 @@ document does not certify their completion.
 bounded contract. ADR-0008 and its historical evidence remain immutable;
 ADR-0013 continues to govern exactly its three active FMS features.
 
-The central authority is Get Modular's accepted ADR-0026 and
-[consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/669a750d8db451e04f075cdeb36576c6606fba6e/docs/architecture/common-assembly.md#consumer-module-standard).
-The merged PR110 revision supersedes the previous reviewed standard pin:
+The central authority is Get Modular's accepted ADR-0026 and the exact pinned
+[consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/ac49bb3374946330ec820591f8195a22d2c90900/docs/architecture/common-assembly.md#consumer-module-standard).
+The A3 pin migration supersedes the retained merged PR110 revision:
 
 - Repository: `agent-teams-ai/get-modular`.
-- Commit: `669a750d8db451e04f075cdeb36576c6606fba6e`.
+- Commit: `ac49bb3374946330ec820591f8195a22d2c90900`.
 - Path: `docs/architecture/common-assembly.md`; anchor: `consumer-module-standard`.
-- Complete document SHA-256: `e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`.
+- Complete document SHA-256: `d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f`.
 - Retained bytes are recorded by the consumer profile; they are evidence, not a second authority.
 
 Document identity, package versions/archive integrity, Core compatibility token,
 and local adoption authority are distinct. The profile retains the approved published
 Core and Assembly 0.1.0 archives, verifies their SHA-256 and lock integrity,
 and requires exact catalog versions. It records actual blocking commands,
-without `conformant: true` for the repository. The exact merged PR110 document
-was reviewed on 2026-09-13 against the previously retained bytes. The migration
-and its remaining evidence work are recorded below; no moving main is consumed.
+without `conformant: true` for the repository. The exact A3 migration from the
+merged PR110 document is reviewed below against immutable commit and document
+identities; no moving main is consumed.
 
 The consumed release sources are distinct from the standard pin:
 
@@ -162,6 +162,24 @@ cross-feature edges inside an existing policy boundary. Fixed helpers within
 one feature remain ordinary imports. The two retained Host-custodied
 contained-turn composition seams are enumerated explicitly. New capabilities
 hidden inside existing functions still require semantic ownership review.
+
+The A3 public-export reconciliation records four additional type-only edges:
+the Embedded Runtime composition entrypoint to access authority, authority
+capability and current authority types, plus the contained-turn runtime access
+composition to its operation-reference type. These are declaration dependencies
+inside existing owners, not new runtime bindings or separately managed module
+lifecycles. The exact source census rejects an absent edge or a change from
+type-only to runtime; contained-turn adoption and qualification remain pending.
+
+The same draft reconciliation records 76 more exact relationships introduced by
+the curated Agent Execution, Provider Access and Runtime Security surfaces:
+70 type-only declarations and six runtime exports from the Agent Execution
+internal barrel. Most declarations are exported through existing feature
+entrypoints; the runtime exports remain fixed helpers of the contained-turn
+feature, not new independent composition handles. The complete source/target
+list is retained in the profile, and its live census currently passes all 59
+adoption tests. This classification remains subject to final public-surface
+review and a fresh census after the A3 export patch is finalized.
 
 ### PR71 incoming composition review
 
@@ -442,15 +460,15 @@ paired evidence is pending. After committing the policy and all included inputs,
 run the capture commands above on Linux x64 and Darwin arm64 at that same commit,
 then merge the fresh receipts. This bounded-identity change does not itself
 establish current platform evidence or adoption completion.
-The bounded-policy review used the current retained standard pin
+The bounded-policy review used the then-current retained standard pin
 `669a750d8db451e04f075cdeb36576c6606fba6e`, whose complete bytes match the profile's
 SHA-256 `e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`.
-On 2026-09-15, the orchestrator verified with `gh` that current get-modular main
+On 2026-09-15, the orchestrator verified with `gh` that get-modular main at that checkpoint
 is `610e595fe1f2e893d01ee44ceecd6349b5a3c8ce`, four commits ahead of the retained
 pin. The only `common-assembly.md` delta is the reciprocal Agent Runtime
-PR #168 ledger paragraph, which explicitly retains consumer standard revision
-`669a750d` and limits accepted passive scope. No pin migration or shared-behavior
-change is required for this bounded evidence-policy patch. Adoption remains
+PR #168 ledger paragraph, which explicitly retained consumer standard revision
+`669a750d` and limited accepted passive scope. That historical evidence-policy
+patch required no pin migration or shared-behavior change. Adoption remains
 pending for fresh Linux x64 and Darwin arm64 receipts.
 
 Implementation review re-read the pinned Consumer Module Standard and compared
@@ -563,7 +581,7 @@ activation; this documentation migration alone supplies none of that evidence.
 
 ## Reviewed auth-compatibility documentation pin migration
 
-On 2026-09-13, the reviewed upstream revision is
+On 2026-09-13, the reviewed upstream revision was
 `669a750d8db451e04f075cdeb36576c6606fba6e`, complete-document SHA-256
 `e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`.
 The nine added lines clarify acquisition-time cleanup registration, responsibility
@@ -572,8 +590,8 @@ between construction and readiness. The ordinary auth adapter remains the owner
 of its helper and cleanup; no new capability, graph node or dependency slot is
 introduced. This delivery corrects failed RPC settlement within that owner.
 
-The mutable profiles, rejecting checker expectation and retained current document
-use this revision. The prior bytes remain in
+At that checkpoint, the mutable profiles, rejecting checker expectation and
+retained current document used this revision. The prior bytes remain in
 `architecture/get-modular/evidence/consumer-module-standard-714d6194.md`;
 `ordinary-auth-pin-review.json` and `ordinary-auth-pin-delta.diff` in the same
 evidence directory record the reviewed transition. The earlier pin review and
@@ -581,11 +599,10 @@ the ordinary execution contract remains unchanged. Its pre-merge ADR-0020 bytes
 are retained by ADR-0090 following the identifier collision with main. Pin migration does not qualify a live
 ordinary turn or activate the legacy pending ADR-0016 scope.
 
-Before this delivery, current upstream `a10f33a37bbf8f65134156f1e7d09cbb20b7633a`
-was compared with the accepted pin. The canonical
-`docs/architecture/common-assembly.md` bytes are unchanged, so the reviewed
-`669a750d8db451e04f075cdeb36576c6606fba6e` pin and its retained evidence remain
-current; no pin migration is required.
+Before that delivery, upstream `a10f33a37bbf8f65134156f1e7d09cbb20b7633a`
+was compared with its accepted pin. The canonical
+`docs/architecture/common-assembly.md` bytes were unchanged, so no further pin
+migration was required at that historical checkpoint.
 
 ## A3 SDK growth enrollment qualification
 
@@ -634,15 +651,41 @@ snapshots and SDK admission therefore remain fail closed. The external authority
 is uninvoked, and no baseline, trusted history, owner decision, grant, completion
 or receipt is fabricated for these initial-unreleased packages.
 
-The [A3 standard review](../../architecture/get-modular/evidence/sdk-growth-standard-review.json)
-compares the active `669a750d` pin against the supplied complete current document
-with SHA-256 `ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d`.
-The supplied bytes change executable-example paths and omit nine ownership and
-readiness guidance lines present in the accepted pin. They are not the
-reciprocal-ledger-only delta described by historical C0 evidence. A3 adds no
-shared composition behavior or new CMS requirement; the accepted pin and its
-stricter ownership guidance remain intact. The supplied snapshot carries no new
-exact upstream commit identity, so it cannot silently replace that pin.
+The [earlier A3 standard review](../../architecture/get-modular/evidence/sdk-growth-standard-review.json)
+compared the active `669a750d` pin with supplied bytes whose SHA-256 was
+`ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d`.
+Those bytes had no upstream commit identity, so the review correctly declined
+to use them as moving authority. The review remains historical evidence and is
+not the current authority or retained current standard.
+
+### A3 Consumer Module Standard pin migration
+
+The fresh [pinned review](../../architecture/get-modular/evidence/a3-cms-pin-review.json)
+migrates both consumer profiles from Get Modular commit
+`669a750d8db451e04f075cdeb36576c6606fba6e`, complete-document SHA-256
+`e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`,
+to exact document commit `ac49bb3374946330ec820591f8195a22d2c90900`,
+complete-document SHA-256
+`d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f`.
+Get Modular main was observed at exact source commit
+`6b31f20fe3e5fb8324812aa2ee907905751cde71`; its complete document bytes are
+unchanged from `ac49bb3374946330ec820591f8195a22d2c90900`. The retained current standard
+is byte-identical to that immutable source. Main itself is not the pin.
+
+The [complete byte delta](../../architecture/get-modular/evidence/a3-cms-pin-delta.diff)
+is one replacement hunk: six lines describing Agent Runtime as a planned
+consumer become eleven lines recording the reciprocal accepted passive setup
+and ordinary-session adoption. The new text expressly keeps contained-turn and
+dynamic plugin runtime scope outside that record and disclaims repository-wide
+conformance. It changes no Consumer Module Standard rule, composition behavior,
+capability, binding, lifecycle owner, package identity, or qualification claim.
+
+Accordingly passive setup and ordinary-session adoption remain active,
+contained-turn adoption remains pending with empty active wiring and no adopted
+boundary, and SDK external authority remains `pending-authority-qualification`.
+ADR-0015, ADR-0090, proposed ADR-0016, C0 retained evidence, the earlier A3
+review, package/archive pins, source census, SDK profile and SDK activation are
+unchanged. This migration does not expand A3 scope or activate new composition.
 
 Initial-unreleased histories, exact initial surface decisions, packed custody,
 and external trusted enrollment must be qualified before SDK activation. A

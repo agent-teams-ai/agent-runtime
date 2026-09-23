@@ -1,7 +1,7 @@
 import {randomUUID} from "node:crypto";
-interface OrdinaryQuery {readonly text: string; readonly values: unknown[]; readonly query_timeout: number}
+export interface OrdinaryPostgresQuery {readonly text: string; readonly values: unknown[]; readonly query_timeout: number}
 export interface OrdinaryPostgresClient {
-  query(sql: string | OrdinaryQuery, values?: unknown[]): Promise<{rows: Record<string, unknown>[]; rowCount: number | null}>;
+  query(sql: string | OrdinaryPostgresQuery, values?: unknown[]): Promise<{rows: Record<string, unknown>[]; rowCount: number | null}>;
   release(discard?: boolean): void;
 }
 export interface OrdinaryPostgresPool {connect(): Promise<OrdinaryPostgresClient>}
@@ -12,7 +12,7 @@ import {ORDINARY_PROFILE, type OrdinaryOperation, type OrdinaryPreparation, type
 import {ordinaryPreparationDigest, ordinaryTerminalStatus, validateOrdinaryInput, validateOrdinaryOperation} from "../../../domain/ordinary-validation.js";
 import {decodeOrdinaryState, encodeOrdinaryState} from "./ordinary-state-codec.js";
 
-const query = (text: string, values: unknown[] = []): OrdinaryQuery => ({text, values, query_timeout: 5000});
+const query = (text: string, values: unknown[] = []): OrdinaryPostgresQuery => ({text, values, query_timeout: 5000});
 export const ORDINARY_POSTGRES_SCHEMA = `CREATE TABLE IF NOT EXISTS ordinary_turn_operations_v3 (
  tenant_id text NOT NULL, project_id text NOT NULL, command_id text NOT NULL,
  operation_id text NOT NULL, revision bigint NOT NULL CHECK (revision >= 0), state text NOT NULL,
@@ -22,7 +22,7 @@ const boundedClient = (client: OrdinaryPostgresClient): OrdinaryPostgresClient =
   let released = false;
   const release = (discard = false): void => {if (!released) {released = true; client.release(discard);}};
   return {
-    async query(sql: string | OrdinaryQuery, values?: unknown[]) {
+    async query(sql: string | OrdinaryPostgresQuery, values?: unknown[]) {
       if (released) {throw new Error("ordinary database client closed");}
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {return await Promise.race([

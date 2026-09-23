@@ -17,6 +17,8 @@ const fresh = async () => {
     profile: structuredClone(inputs.profile),
     passiveProfile: structuredClone(inputs.passiveProfile),
     standardBytes: Buffer.from(inputs.standardBytes),
+    standardDeltaBytes: Buffer.from(inputs.standardDeltaBytes),
+    standardReview: structuredClone(inputs.standardReview),
     sources: new Map(inputs.sources),
   };
 };
@@ -40,16 +42,16 @@ test("rejects central pin drift and an unsupported active claim", async () => {
 
 test("rejects stale merged pins, split profile identities and retained byte drift", async () => {
   for (const [field, value] of [
-    ["gitCommit", "f1ec0152c34715395685b349844a7d1c18a2f015"],
-    ["sha256", "ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d"],
+    ["gitCommit", "669a750d8db451e04f075cdeb36576c6606fba6e"],
+    ["sha256", "e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553"],
   ]) {
     const stale = await fresh();
     stale.profile.authority.consumerModuleStandard[field] = value;
     assert.throws(() => validateConsumerModuleStandard(stale), /reviewed pending-adoption record/u);
   }
   for (const [field, value] of [
-    ["commit", "a05f2cb51553e1efc5ba89be352e4aba04675088"],
-    ["sha256", "ea54578ebe69fc410bf973b6112dcefc4ad7c163e563e0ee307cd7b5f8b8723d"],
+    ["commit", "669a750d8db451e04f075cdeb36576c6606fba6e"],
+    ["sha256", "e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553"],
     ["path", "docs/another-standard.md"],
     ["anchor", "another-standard"],
     ["repository", "another/repository"],
@@ -64,6 +66,24 @@ test("rejects stale merged pins, split profile identities and retained byte drif
   const bytes = await fresh();
   bytes.standardBytes = Buffer.concat([bytes.standardBytes, Buffer.from("drift")]);
   assert.throws(() => validateConsumerModuleStandard(bytes), /retained standard bytes/u);
+});
+
+test("rejects stale or rewritten A3 pin migration evidence", async () => {
+  const stale = await fresh();
+  stale.standardReview.after.commit = stale.standardReview.before.commit;
+  assert.throws(() => validateConsumerModuleStandard(stale), /exact current pin/u);
+
+  const movingMain = await fresh();
+  movingMain.standardReview.sourceMainCommit = "main";
+  assert.throws(() => validateConsumerModuleStandard(movingMain), /source main commit drift/u);
+
+  const expanded = await fresh();
+  expanded.standardReview.adoption.containedTurn = "active";
+  assert.throws(() => validateConsumerModuleStandard(expanded), /preserve scoped adoption states/u);
+
+  const delta = await fresh();
+  delta.standardDeltaBytes = Buffer.concat([delta.standardDeltaBytes, Buffer.from("drift")]);
+  assert.throws(() => validateConsumerModuleStandard(delta), /exact byte delta drift/u);
 });
 
 test("rejects missing governed paths and proposed decision lifecycle drift", async () => {
@@ -163,7 +183,8 @@ test("rejects slot drift and an unknown production factory caller", async () => 
     .replace("  createContainedTurnFeature,", "  buildContainedTurn as createContainedTurnFeature,"));
   exportAlias.sources.set("packages/apps/embedded-runtime/src/composition/alias-consumer.ts",
     'import { buildContainedTurn } from "@agent-teams/agent-execution/composition";\nbuildContainedTurn({});\n');
-  assert.throws(() => validateConsumerModuleStandard(exportAlias), /reference count drift|aliases are not classified/u);
+  assert.throws(() => validateConsumerModuleStandard(exportAlias),
+    /reference count drift|aliases are not classified|unknown or missing contained-turn composition boundary reference/u);
 
   const stringNamedAlias = await fresh();
   stringNamedAlias.sources.set("packages/apps/embedded-runtime/src/composition/string-alias-consumer.ts",

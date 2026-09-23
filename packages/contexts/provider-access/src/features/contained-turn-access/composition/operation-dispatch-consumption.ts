@@ -9,9 +9,22 @@ import { createOperationDispatchRepository, samePaOwner } from "../adapters/outb
 import { createSha256DispatchConsumptionDigest } from "../adapters/outbound/sha256-dispatch-consumption-digest.js";
 import { createContainedTurnDispatchConsumptionV1 } from "./dispatch-consumption-v1-factory.js";
 
+export interface OperationDispatchConsumptionOwner {
+  readonly dispatchConsumption: Readonly<{
+    consumeForDispatch(input: ConsumeForDispatchInput): Promise<ConsumeForDispatchOutcome>;
+    publishAndConsumeForDispatch(input: PaAcceptedPreparation, request: ConsumeForDispatchInput): Promise<ConsumeForDispatchOutcome>;
+    observeDispatchConsumption(input: ObserveDispatchConsumptionInput): Promise<ConsumeForDispatchOutcome>;
+    settleDispatchConsumption(input: SettleDispatchConsumptionInput): Promise<SettleDispatchConsumptionOutcome>;
+  }>;
+  readonly control: Readonly<{ provisionIssuance(): Promise<void> }>;
+}
+
 const conflict = (): ConsumeForDispatchOutcome => Object.freeze({kind: "conflict", reason: "grant_request_digest_conflict"});
-/** Private composition; issuance provisioning is an explicit independent control action. */
-export const createOperationDispatchConsumption = (store: PaOperationStore, selection: PaDispatchIssuanceSelection) => {
+/** Trusted composition owner; issuance provisioning is an explicit independent control action. */
+export const createOperationDispatchConsumption = (
+  store: PaOperationStore,
+  selection: PaDispatchIssuanceSelection,
+): Readonly<OperationDispatchConsumptionOwner> => {
   const issuance = snapshotPaIssuance(selection);
   const {provider, tenantId, projectId, scopeDigest} = issuance.binding;
   const owner = Object.freeze({provider, scope: Object.freeze({tenantId, projectId, scopeDigest})});

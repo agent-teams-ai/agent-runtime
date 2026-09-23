@@ -6,6 +6,9 @@ import {createOrdinaryCodexLaunchRecipe, ORDINARY_CODEX_MODEL, ORDINARY_CODEX_PR
   ordinaryCodexRefusal as refuse, ordinaryJson, validateOrdinaryCodexConfig} from "./ordinary-codex-config.js";
 import {type OrdinaryCodexEventRule, OrdinaryCodexProtocol, OrdinaryCodexTurnEvents, ordinaryCodexTurn, admitOrdinaryStartup, isOrdinaryCodexId} from "./ordinary-codex-protocol.js";
 
+export { ORDINARY_CODEX_COMPLETION_RULES, type OrdinaryCodexItemRule } from "./ordinary-codex-items.js";
+export type { OrdinaryCodexEventRule };
+
 export interface OrdinaryCodexObservation extends OrdinaryBinding {
   readonly kind: "thread_start" | "turn_start" | "terminal" | "transport_drained" | "model_metadata_defaulted" | "provider_stage";
   readonly stage?: `event_validation_${OrdinaryCodexEventRule}` | `drain_validation_${OrdinaryCodexEventRule}` | "binding" | "initialize_request" | "initialize_validation" | "initialized" | "config_request" | "config_validation" | "thread_request" | "thread_validation" | "startup_validation" | "turn_request" | "turn_validation" | "event_read" | "event_validation" | "input_close" | "drain_read" | "drain_validation" | "output_emit";

@@ -1,5 +1,5 @@
 import { createContainedTurnAcceptedAuthorityHandoff, prepareContainedTurnAcceptedSubject } from "./contained-turn-accepted-authority.js";
-import type { ContainedTurnScope } from "../domain/contained-turn-authority.js";
+import type { ContainedTurnAuthorityScope } from "../domain/contained-turn-authority.js";
 import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
 import {
   containedTurnDispatchClaimBindingDigest,
@@ -93,7 +93,7 @@ const grantSettlementFailed = async (
 export const claimContainedTurnWithConsumedGrants = async (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   subject: ContainedTurnDispatchGrantSubject,
   hostCustodyProof: Extract<Awaited<ReturnType<ContainedTurnKernelDependencies["custody"]["open"]>>["hostCustodyProof"], { readonly kind: "host_custody" }>,
 ): Promise<ClaimContainedTurnWithConsumedGrantsOutcome> => {
@@ -236,7 +236,7 @@ export const claimPreparedContainedTurn = async (input: Readonly<{
   operation: ContainedTurnKernelOperation;
   preparation: Awaited<ReturnType<ContainedTurnKernelDependencies["operationStore"]["prepareDispatch"]>>;
   preparationToken: ContainedTurnPreparationToken;
-  trustedScope: ContainedTurnScope;
+  trustedScope: ContainedTurnAuthorityScope;
 }>): Promise<ClaimPreparedContainedTurnOutcome> => {
   const { custody, dependencies, operation, preparation, preparationToken, trustedScope } = input;
   if (operation.workspaceId === undefined) {return { kind: "stopped", operation };}

@@ -61,3 +61,10 @@ export const createContainedTurnFeature = (
   };
   return Object.freeze(feature);
 };
+
+export type { ContainedTurnFeatureApi, ContainedTurnMode, ContainedTurnOperationRef, ContainedTurnOutputKind,
+  ContainedTurnOutputView, ContainedTurnProvider, ContainedTurnProviderBinding, ContainedTurnScope,
+  ContainedTurnStatus, ContainedTurnView, ObserveContainedTurn, ObserveContainedTurnInput,
+  ObserveContainedTurnOutcome, RequestContainedTurnCancellation, RequestContainedTurnCancellationInput,
+  RequestContainedTurnCancellationOutcome, SubmitContainedTurn, SubmitContainedTurnInput,
+  SubmitContainedTurnOptions, SubmitContainedTurnOutcome } from "../contracts/contained-agent-turn.js";

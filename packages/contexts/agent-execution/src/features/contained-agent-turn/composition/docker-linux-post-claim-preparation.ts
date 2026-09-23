@@ -11,20 +11,20 @@ import { createDockerHostHttpEgressObservers, dockerHostCustodyAttemptKey, docke
   type LinuxExclusiveRouteEndpoint, type LinuxExclusiveRouteOwner,
 } from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
 
-type Preparation = ContainedTurnHostPostClaimPreparation;
-type Claimed = Parameters<Preparation["prepareClaimed"]>[0];
-type Outcome = Awaited<ReturnType<Preparation["prepareClaimed"]>>;
+export type DockerLinuxPostClaimPreparation = ContainedTurnHostPostClaimPreparation;
+export type DockerLinuxClaimedInput = Parameters<DockerLinuxPostClaimPreparation["prepareClaimed"]>[0];
+type Outcome = Awaited<ReturnType<DockerLinuxPostClaimPreparation["prepareClaimed"]>>;
 type UnsupportedReason = Extract<Outcome, {kind: "unsupported"}>["reason"];
-type LaunchInput = Parameters<DockerHostCustodyLifecycle["launch"]>[0];
-type EngineCall = LaunchInput["call"];
-type Launched = Awaited<ReturnType<DockerHostCustodyLifecycle["launch"]>>;
-type InitOptions = Parameters<Launched["openInitSession"]>[0];
-type EngineIdentity = Parameters<typeof dockerHostCustodyAttemptKey>[2];
-type EnginePolicy = DockerHttpNetworkResourceInput["engine"]["policy"];
-type EngineClient = DockerHttpNetworkResourceInput["engine"]["client"];
-type Subject = DockerHttpNetworkResourceInput["subject"];
-type ResourceJournal = Parameters<ReturnType<typeof createDockerHostHttpResources>["prepare"]>[0];
-type ObservationOwner = ReturnType<typeof createDockerOperationNetworkOwner>["observationOwner"];
+export type DockerLinuxLaunchInput = Parameters<DockerHostCustodyLifecycle["launch"]>[0];
+export type DockerLinuxEngineCall = DockerLinuxLaunchInput["call"];
+export type DockerLinuxLaunchedCustody = Awaited<ReturnType<DockerHostCustodyLifecycle["launch"]>>;
+export type DockerLinuxInitOptions = Parameters<DockerLinuxLaunchedCustody["openInitSession"]>[0];
+export type DockerLinuxEngineIdentity = Parameters<typeof dockerHostCustodyAttemptKey>[2];
+export type DockerLinuxEnginePolicy = DockerHttpNetworkResourceInput["engine"]["policy"];
+export type DockerLinuxEngineClient = DockerHttpNetworkResourceInput["engine"]["client"];
+export type DockerLinuxResourceSubject = DockerHttpNetworkResourceInput["subject"];
+export type DockerLinuxResourceJournal = Parameters<ReturnType<typeof createDockerHostHttpResources>["prepare"]>[0];
+export type DockerLinuxObservationOwner = ReturnType<typeof createDockerOperationNetworkOwner>["observationOwner"];
 type Observers = ReturnType<typeof createDockerHostHttpEgressObservers>;
 
 /** The installed lease's first-write authority, in the exact shape the broker's
@@ -41,7 +41,7 @@ export type DockerLinuxOperationRouteFirstWrite = Readonly<{
  * never a claim the orchestration can make on its behalf. */
 export interface DockerLinuxOperationRouteAdmission {
   admit(input: Readonly<{
-    authority: Launched["authority"];
+    authority: DockerLinuxLaunchedCustody["authority"];
     endpoint: LinuxExclusiveRouteEndpoint;
     signal: AbortSignal;
     deadlineEpochMs: number;
@@ -76,17 +76,17 @@ export type DockerLinuxPostClaimDependencies = Readonly<{
   create: DockerHostCustodyContainerCreateInput;
   /** The operation network name is bound by this owner, so the trusted root
    * supplies every other Engine policy field and never the network name. */
-  enginePolicy: Omit<EnginePolicy, "allowedNetworkName">;
-  engineClient?: EngineClient;
+  enginePolicy: Omit<DockerLinuxEnginePolicy, "allowedNetworkName">;
+  engineClient?: DockerLinuxEngineClient;
   /** Engine identity is read before the network exists; it must not depend on
    * `allowedNetworkName`, which is exactly what the attempt key regression pins. */
-  engineIdentity(call: EngineCall): Promise<EngineIdentity>;
-  openLifecycle(policy: EnginePolicy): DockerHostCustodyLifecycle;
+  engineIdentity(call: DockerLinuxEngineCall): Promise<DockerLinuxEngineIdentity>;
+  openLifecycle(policy: DockerLinuxEnginePolicy): DockerHostCustodyLifecycle;
   /** Returns an already-opened V4 resource ledger for this subject. Storage,
    * locator and command identity stay with the trusted root. */
-  openResourceJournal(input: Readonly<{subject: Subject; observer: ObservationOwner}>): Promise<ResourceJournal>;
+  openResourceJournal(input: Readonly<{subject: DockerLinuxResourceSubject; observer: DockerLinuxObservationOwner}>): Promise<DockerLinuxResourceJournal>;
   resources: DockerHostHttpListenerResources;
-  initOptions: InitOptions;
+  initOptions: DockerLinuxInitOptions;
   hostLifecycleGenerationSha256: string;
   cleanupMilliseconds: number;
   deadlines: DockerLinuxPostClaimDeadlines;
@@ -102,25 +102,25 @@ export type DockerLinuxPostClaimDependencies = Readonly<{
 /** The IO owner issues and validates this capability. Composition retains the
  * exact object; it never reconstructs IO or opens a second init session. */
 export interface DockerLinuxPreparedProviderIo {
-  ready(): ReturnType<ReturnType<Launched["openInitSession"]>["ready"]>;
+  ready(): ReturnType<ReturnType<DockerLinuxLaunchedCustody["openInitSession"]>["ready"]>;
 }
-export type DockerLinuxClaimedPreparation = Claimed;
+export type DockerLinuxClaimedPreparation = DockerLinuxClaimedInput;
 export type DockerLinuxPreparedExecution<Io extends DockerLinuxPreparedProviderIo> = Readonly<{
-  launch: Launched; providerIo: Io; plan: CodexAppServerLaunchPlan;
+  launch: DockerLinuxLaunchedCustody; providerIo: Io; plan: CodexAppServerLaunchPlan;
 }>;
 export type DockerLinuxClaimedJoin<Io extends DockerLinuxPreparedProviderIo> = Readonly<{
   captureHost?(): Promise<Readonly<{create: DockerHostCustodyContainerCreateInput; hostLifecycleGenerationSha256: string}>>;
-  beforeLaunch?(input: Readonly<{identity: EngineIdentity; policy: EnginePolicy}>): Promise<NonNullable<LaunchInput["imageInit"]>>;
-  afterLaunch?(input: Readonly<{claimed: Claimed; launch: Launched}>): void;
-  afterInit?(input: Readonly<{claimed: Claimed; launch: Launched}>): Promise<void>;
-  prepareProviderIo(input: Readonly<{claimed: Claimed; launch: Launched; init: InitOptions}>): Io;
-  finishClaimed(input: Readonly<{claimed: Claimed; launch: Launched; providerIo: Io;
+  beforeLaunch?(input: Readonly<{identity: DockerLinuxEngineIdentity; policy: DockerLinuxEnginePolicy}>): Promise<NonNullable<DockerLinuxLaunchInput["imageInit"]>>;
+  afterLaunch?(input: Readonly<{claimed: DockerLinuxClaimedInput; launch: DockerLinuxLaunchedCustody}>): void;
+  afterInit?(input: Readonly<{claimed: DockerLinuxClaimedInput; launch: DockerLinuxLaunchedCustody}>): Promise<void>;
+  prepareProviderIo(input: Readonly<{claimed: DockerLinuxClaimedInput; launch: DockerLinuxLaunchedCustody; init: DockerLinuxInitOptions}>): Io;
+  finishClaimed(input: Readonly<{claimed: DockerLinuxClaimedInput; launch: DockerLinuxLaunchedCustody; providerIo: Io;
     http: DockerHostHttpResources; routeFirstWrite: DockerLinuxOperationRouteFirstWrite}>):
     Promise<Readonly<{plan: CodexAppServerLaunchPlan}>>;
 }>;
 export interface DockerLinuxPostClaimOwner<Io extends DockerLinuxPreparedProviderIo> {
-  readonly preparation: Preparation;
-  takePrepared(claimed: Claimed): DockerLinuxPreparedExecution<Io>;
+  readonly preparation: DockerLinuxPostClaimPreparation;
+  takePrepared(claimed: DockerLinuxClaimedInput): DockerLinuxPreparedExecution<Io>;
   cutoff(): void;
   cleanup(input: Readonly<{deadlineEpochMs: number}>): Promise<Readonly<{kind: "released" | "quarantined"}>>;
 }
@@ -182,18 +182,18 @@ const prepared = (): Outcome => Object.freeze({kind: "prepared" as const});
  */
 export const createDockerLinuxPostClaimPreparation = (
   dependencies: DockerLinuxPostClaimDependencies,
-): Preparation => createPreparationOwner(dependencies).preparation;
+): DockerLinuxPostClaimPreparation => createPreparationOwner(dependencies).preparation;
 
 type PreparationResources = {
   network: ReturnType<typeof createDockerOperationNetworkOwner> | undefined;
   observers: Observers | undefined;
-  journal: ResourceJournal | undefined;
+  journal: DockerLinuxResourceJournal | undefined;
   allocated: DockerOperationNetworkAllocation | undefined;
   networkAttempted: boolean;
   lifecycle: DockerHostCustodyLifecycle | undefined;
-  launched: Launched | undefined;
+  launched: DockerLinuxLaunchedCustody | undefined;
   launchAttempted: boolean;
-  launchKey: Launched["key"] | undefined;
+  launchKey: DockerLinuxLaunchedCustody["key"] | undefined;
   routeAttempted: boolean;
   routeInstalled: boolean;
   routeOwner: LinuxExclusiveRouteOwner | undefined;
@@ -213,8 +213,8 @@ const createHostLaunchPreparation = <Io extends DockerLinuxPreparedProviderIo>(
   dependencies: DockerLinuxPostClaimDependencies, join: DockerLinuxClaimedJoin<Io> | undefined,
   assertOpen: () => void,
 ) => ({
-  async captureHost(proof: Claimed["committedDispatchProof"]) {
-    const owner: LaunchInput["owner"] = Object.freeze({tenantId: proof.tenantId, projectId: proof.projectId,
+  async captureHost(proof: DockerLinuxClaimedInput["committedDispatchProof"]) {
+    const owner: DockerLinuxLaunchInput["owner"] = Object.freeze({tenantId: proof.tenantId, projectId: proof.projectId,
       operationId: proof.operationId, attemptId: proof.attemptId, custodyId: proof.custodyId,
       hostInstanceId: proof.hostInstanceId, hostBootId: proof.hostBootId});
     assertOpen();
@@ -223,7 +223,7 @@ const createHostLaunchPreparation = <Io extends DockerLinuxPreparedProviderIo>(
     return {owner, create: host?.create ?? dependencies.create,
       hostLifecycleGenerationSha256: host?.hostLifecycleGenerationSha256 ?? dependencies.hostLifecycleGenerationSha256};
   },
-  async beforeLaunch(input: Readonly<{identity: EngineIdentity; policy: EnginePolicy}>, call: EngineCall) {
+  async beforeLaunch(input: Readonly<{identity: DockerLinuxEngineIdentity; policy: DockerLinuxEnginePolicy}>, call: DockerLinuxEngineCall) {
     const imageInit = await join?.beforeLaunch?.(input);
     assertOpen();
     return {call, ...(imageInit === undefined ? {} : {imageInit})};
@@ -232,11 +232,11 @@ const createHostLaunchPreparation = <Io extends DockerLinuxPreparedProviderIo>(
 
 const prepareOperationNetwork = (
   dependencies: DockerLinuxPostClaimDependencies, resources: PreparationResources,
-  input: Readonly<{proof: Claimed["committedDispatchProof"]; owner: LaunchInput["owner"];
-    create: DockerHostCustodyContainerCreateInput; identity: EngineIdentity}>,
+  input: Readonly<{proof: DockerLinuxClaimedInput["committedDispatchProof"]; owner: DockerLinuxLaunchInput["owner"];
+    create: DockerHostCustodyContainerCreateInput; identity: DockerLinuxEngineIdentity}>,
 ) => {
   const {proof, owner, create, identity} = input;
-  const subject: Subject = Object.freeze({
+  const subject: DockerLinuxResourceSubject = Object.freeze({
     attempt: dockerHostCustodyAttemptKey(owner, create, identity),
     effectId: proof.effectId, workspaceId: proof.workspaceId, executionGenerationId: proof.executionGenerationId,
     committedClaimSha256: proof.proofDigest.slice(7), acceptedAuthoritySha256: proof.acceptedAuthorityVectorDigest.slice(7),
@@ -245,7 +245,7 @@ const prepareOperationNetwork = (
     listenerHandle: dependencies.subjectFacts.listenerHandle, routeHandle: dependencies.subjectFacts.routeHandle,
   });
   const recipe = dockerHttpOperationNetworkRecipe(subject);
-  const policy: EnginePolicy = Object.freeze({...dependencies.enginePolicy, allowedNetworkName: recipe.name});
+  const policy: DockerLinuxEnginePolicy = Object.freeze({...dependencies.enginePolicy, allowedNetworkName: recipe.name});
   const engine = dependencies.engineClient === undefined
     ? Object.freeze({policy}) : Object.freeze({policy, client: dependencies.engineClient});
   resources.network = createDockerOperationNetworkOwner({subject, engine, cleanupMilliseconds: dependencies.cleanupMilliseconds});
@@ -264,7 +264,7 @@ const createResourceCutoff = (resources: PreparationResources): (() => void) => 
 
 const createResourceCleanup = (
   resources: PreparationResources,
-  input: Readonly<{routeAdmission: DockerLinuxOperationRouteAdmission; cleanupCall(): EngineCall;
+  input: Readonly<{routeAdmission: DockerLinuxOperationRouteAdmission; cleanupCall(): DockerLinuxEngineCall;
     cleanupMs: number; observationDeadline: number}>,
 ): (() => Promise<boolean>) => {
   const {routeAdmission, cleanupCall, cleanupMs, observationDeadline} = input;
@@ -393,22 +393,22 @@ const createFailureSettlement = (cutoff: () => void, settleResources: () => Prom
     return await settleResources() ? unsupported(reason) : quarantined();
   };
 
-const createPreparationCalls = (input: Claimed, admissionAbort: AbortController,
+const createPreparationCalls = (input: DockerLinuxClaimedInput, admissionAbort: AbortController,
   admissionDeadline: number, observationAbort: AbortController, observation: Readonly<{deadline: number; cleanupMs: number}>) => {
   const observationDeadline = observation.deadline;
-    const call = (milliseconds: number): EngineCall =>
+    const call = (milliseconds: number): DockerLinuxEngineCall =>
       Object.freeze({signal: AbortSignal.any([input.signal, admissionAbort.signal]),
         deadlineEpochMs: Math.min(admissionDeadline, Date.now() + milliseconds)});
     // Release is not admission: an irreversible caller cutoff must not stop the
     // Engine and journal work that proves these resources actually went away.
-    const cleanupCall = (): EngineCall =>
+    const cleanupCall = (): DockerLinuxEngineCall =>
       Object.freeze({signal: observationAbort.signal,
         deadlineEpochMs: Math.min(observationDeadline, Date.now() + observation.cleanupMs)});
   return {call, cleanupCall};
 };
 
 const createLaunchLifetime = (signal: AbortSignal, admissionSignal: AbortSignal, admissionDeadline: number,
-  observationSignal: AbortSignal, observationDeadline: number): NonNullable<LaunchInput["lifetime"]> => ({
+  observationSignal: AbortSignal, observationDeadline: number): NonNullable<DockerLinuxLaunchInput["lifetime"]> => ({
   admission: {signal: AbortSignal.any([signal, admissionSignal]), deadlineEpochMs: admissionDeadline},
   observation: {signal: observationSignal, deadlineEpochMs: observationDeadline,
     isActive: () => !observationSignal.aborted && Date.now() < observationDeadline},
@@ -442,8 +442,8 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
   const observationDeadline = admissionDeadline + deadlines.cleanupMs;
   let entered = false;
   let cut = false;
-  let retainedClaim: Claimed | undefined;
-  let claimBinding: Readonly<Pick<Claimed, "committedDispatchProof" | "underlyingCustodyRef" | "signal">> | undefined;
+  let retainedClaim: DockerLinuxClaimedInput | undefined;
+  let claimBinding: Readonly<Pick<DockerLinuxClaimedInput, "committedDispatchProof" | "underlyingCustodyRef" | "signal">> | undefined;
   let execution: DockerLinuxPreparedExecution<Io> | undefined;
   let taken = false;
   let cutResources: (() => void) | undefined;
@@ -451,7 +451,7 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
   let preparationFlight: Promise<Outcome> | undefined;
   const cutoff = () => {cut = true; admissionAbort.abort(); cutResources?.();};
   const settleResources = createCleanupSettlement(() => cleanupResources?.() ?? true, observationAbort, observationDeadline);
-  const prepareClaimed = async (input: Claimed): Promise<Outcome> => {
+  const prepareClaimed = async (input: DockerLinuxClaimedInput): Promise<Outcome> => {
     if (entered) {return unsupported("owner");}
     entered = true;
     retainedClaim = input;
@@ -596,14 +596,14 @@ const createPreparationOwner = <Io extends DockerLinuxPreparedProviderIo>(
       return await settle(REASONS[stage]);
     }
   };
-  const preparation: Preparation = Object.freeze({prepareClaimed(input: Claimed) {
+  const preparation: DockerLinuxPostClaimPreparation = Object.freeze({prepareClaimed(input: DockerLinuxClaimedInput) {
     if (preparationFlight !== undefined) {return Promise.resolve(unsupported("owner"));}
     // Defer entry until the flight is retained, including reentrant callbacks.
     preparationFlight = Promise.resolve().then(() => prepareClaimed(input));
     return preparationFlight;
   }});
   return Object.freeze({preparation, cutoff,
-    takePrepared(claimed: Claimed) {
+    takePrepared(claimed: DockerLinuxClaimedInput) {
       if (cut || taken || execution === undefined || claimed !== retainedClaim ||
         claimed.committedDispatchProof !== claimBinding?.committedDispatchProof ||
         claimed.underlyingCustodyRef !== claimBinding.underlyingCustodyRef ||

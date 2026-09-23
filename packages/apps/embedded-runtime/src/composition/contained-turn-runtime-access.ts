@@ -6,6 +6,9 @@ export {
   type ContainedTurnSubmissionCoordinator,
 } from "../features/contained-turn-runtime-access/internal.js";
 export type {
+  ContainedTurnCompositionOperationRef,
+} from "./contained-turn-operation-ref.js";
+export type {
   CancelRuntimeContainedTurnOutcome,
   ClaudeCodePortableIntentView,
   ClaudeCodeRuntimeAccessHandle,
@@ -14,6 +17,7 @@ export type {
   ClaudeCodeSetupDiagnosticCode,
   ClaudeCodeSetupExpectedLimitations,
   ClaudeCodeSetupInstallationView,
+  ClaudeCodeSetupOutcomeBase,
   ClaudeCodeSetupSourceObservationView,
   CodexRuntimeSetupQueries,
   CodexSetupDiagnostic,

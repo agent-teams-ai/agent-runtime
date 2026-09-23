@@ -1,4 +1,4 @@
-import type { ContainedTurnProviderAdapterSnapshot, ContainedTurnScope } from "./contained-turn-authority.js";
+import type { ContainedTurnProviderAdapterSnapshot, ContainedTurnAuthorityScope } from "./contained-turn-authority.js";
 import type { ContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
 import type {
   ContainedTurnAttemptId,
@@ -80,7 +80,7 @@ const OUTPUT_WRITE_AUTHORITY_FIELDS = Object.freeze([
   "writerFence",
 ] as const satisfies readonly (keyof ContainedTurnOutputWriteAuthority)[]);
 
-const sameScope = (left: ContainedTurnScope, right: ContainedTurnScope): boolean =>
+const sameScope = (left: ContainedTurnAuthorityScope, right: ContainedTurnAuthorityScope): boolean =>
   left.projectId === right.projectId && left.tenantId === right.tenantId;
 
 export const containedTurnOutputWriteAuthority = (
@@ -122,7 +122,7 @@ export const classifyContainedTurnOutputAppend = (input: Readonly<{
   expectedCursor: number;
   expectedRevision: number;
   operationId: ContainedTurnOperationId;
-  scope: ContainedTurnScope;
+  scope: ContainedTurnAuthorityScope;
 }>): ContainedTurnOutputAppendPredicate => {
   assertContainedTurnExactRecord("output append predicate", input, [
     "authority", "current", "expectedCursor", "expectedRevision", "operationId", "scope",

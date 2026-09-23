@@ -101,7 +101,7 @@ export class ContainedTurnPostgresPreparationStore {
     private readonly intents: ContainedTurnPostgresIntentStore,
   ) {}
 
-  async #load(client: ContainedTurnPostgresClient, operationId: string, scope: import("../../../domain/contained-turn-authority.js").ContainedTurnScope) {
+  async #load(client: ContainedTurnPostgresClient, operationId: string, scope: import("../../../domain/contained-turn-authority.js").ContainedTurnAuthorityScope) {
     return this.operations.load(client, operationId, true, scope);
   }
 

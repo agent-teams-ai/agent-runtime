@@ -20,9 +20,9 @@ import {createDockerCodexCurrentKernelOwner, captureDockerCodexProcessInput, typ
 import {createDockerLinuxPostClaimOwner, type DockerLinuxPostClaimDependencies, type DockerLinuxClaimedJoin,
   type DockerLinuxPostClaimOwner, type DockerLinuxClaimedPreparation} from "./docker-linux-post-claim-preparation.js";
 
-type Prepare = Parameters<ContainedTurnKernelCustodyAttemptOwner["prepare"]>[0];
-type Kernel = Prepare["kernel"];
-type FinalizeInput = Parameters<DockerLinuxClaimedJoin<PreparedDockerProviderIo>["finishClaimed"]>[0];
+export type DockerCodexHostPrepare = Parameters<ContainedTurnKernelCustodyAttemptOwner["prepare"]>[0];
+export type DockerCodexHostKernel = DockerCodexHostPrepare["kernel"];
+export type DockerCodexHostFinalizeInput = Parameters<DockerLinuxClaimedJoin<PreparedDockerProviderIo>["finishClaimed"]>[0];
 const apply = Reflect.apply;
 export type DockerCodexHostPreparationSelection = DockerLinuxPostClaimDependencies & Readonly<{
   nativeFiles: DeferredCodexNativeBrokerFiles;
@@ -42,15 +42,15 @@ export interface CreateDockerCodexHostKernelOwnerOptions {
    * Missing selection refuses before allocation; observed bytes cannot select it. */
   readonly imageInitLock?: DockerImageInitLock;
   /** Trusted, operation-scoped resource selection. No effects during selection. */
-  preparation(input: Readonly<{kernel: Kernel; record: CodexCurrentKernelLaunchRecord}>): DockerCodexHostPreparationSelection;
+  preparation(input: Readonly<{kernel: DockerCodexHostKernel; record: CodexCurrentKernelLaunchRecord}>): DockerCodexHostPreparationSelection;
   /** Unavailable until the native broker owner binds this HTTP reservation,
    * installed first-write route and issued Docker-path native material. Missing
    * finalization refuses before allocation; there is no ordinary-plan fallback. */
-  readonly finishClaimed?: (input: FinalizeInput & Readonly<{record: CodexCurrentKernelLaunchRecord; originalPlan: CodexAppServerLaunchPlan}>) =>
+  readonly finishClaimed?: (input: DockerCodexHostFinalizeInput & Readonly<{record: CodexCurrentKernelLaunchRecord; originalPlan: CodexAppServerLaunchPlan}>) =>
     ReturnType<DockerLinuxClaimedJoin<PreparedDockerProviderIo>["finishClaimed"]>;
 }
 interface Retained {
-  readonly kernel: Kernel;
+  readonly kernel: DockerCodexHostKernel;
   readonly record: CodexCurrentKernelLaunchRecord;
   readonly originalPlan: CodexAppServerLaunchPlan;
   ref?: string;
@@ -135,7 +135,7 @@ export const createDockerCodexHostKernelOwner = (value: CreateDockerCodexHostKer
   let disposed = false;
   const isDisposed = (): boolean => disposed;
   const attemptOwner: ContainedTurnKernelCustodyAttemptOwner = Object.freeze({
-    async prepare(input: Prepare) {
+    async prepare(input: DockerCodexHostPrepare) {
       if (isDisposed() || records.has(input.kernel.custodyId) || records.size >= 64) {throw new TypeError("Docker attempt unavailable");}
       const kernel = Object.freeze({...input.kernel, adapterSnapshot: Object.freeze({...input.kernel.adapterSnapshot}),
         providerAccessSnapshot: Object.freeze({...input.kernel.providerAccessSnapshot})});

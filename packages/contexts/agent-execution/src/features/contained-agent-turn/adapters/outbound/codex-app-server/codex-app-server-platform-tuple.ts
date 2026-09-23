@@ -10,6 +10,7 @@ export const CODEX_APP_SERVER_BINDINGS_SHA256 = "6884b9a77fe389ca3f0ed5c327115d5
 // retained evidence does not qualify behavior, route, or deployment.
 export const CODEX_APP_SERVER_ADAPTER_REVISION = "codex-app-server-contained-turn:0.153.4+native-permission-config-v2";
 export const CODEX_PERMISSION_PROFILE_ID = "agent-runtime-contained-v1";
+export type CodexPermissionProfileId = "agent-runtime-contained-v1";
 export const CODEX_CAPABILITY_MANIFEST_REVISION =
   `contained-turn:v1:codex-app-server:0.153.4:schema-${CODEX_APP_SERVER_SCHEMA_SHA256}:bindings-${CODEX_APP_SERVER_BINDINGS_SHA256}:agent-runtime-contained-v1:native-permission-config-v2`;
 
@@ -62,7 +63,7 @@ export const CODEX_APP_SERVER_LINUX_X64_TUPLE = tuple({
   version: CODEX_APP_SERVER_VERSION,
 });
 
-export const CODEX_APP_SERVER_DARWIN_ARM64_TUPLE = tuple({
+export const CODEX_APP_SERVER_DARWIN_ARM64_TUPLE_INTERNAL = tuple({
   adapterRevision: CODEX_APP_SERVER_ADAPTER_REVISION,
   architecture: "arm64",
   binaryRevision: "@openai/codex:0.153.4+darwin-arm64",
@@ -81,7 +82,29 @@ export const CODEX_APP_SERVER_DARWIN_ARM64_TUPLE = tuple({
   version: CODEX_APP_SERVER_VERSION,
 });
 
-const TUPLES = Object.freeze([CODEX_APP_SERVER_LINUX_X64_TUPLE, CODEX_APP_SERVER_DARWIN_ARM64_TUPLE] as const);
+export const CODEX_APP_SERVER_DARWIN_ARM64_TUPLE: Readonly<{
+  adapterRevision: typeof CODEX_APP_SERVER_ADAPTER_REVISION;
+  architecture: CodexAppServerArchitecture;
+  binaryRevision: string;
+  binarySha256: string;
+  clientName: "agent-runtime";
+  containmentProfile: HostCustodyContainmentProfile;
+  nativeDependencyAliasRevision: string;
+  packageRevision: "@openai/codex@0.153.4";
+  platform: CodexAppServerPlatform;
+  platformFamily: "unix";
+  platformOs: "linux" | "macos";
+  protocolRevision: typeof CODEX_CAPABILITY_MANIFEST_REVISION;
+  resolvedNativePackageRevision: string;
+  userAgentArchitecture: "arm64" | "x86_64";
+  userAgentOsName: "Mac OS" | "Ubuntu";
+  version: "0.153.4";
+}> = CODEX_APP_SERVER_DARWIN_ARM64_TUPLE_INTERNAL;
+
+const TUPLES = Object.freeze([
+  CODEX_APP_SERVER_LINUX_X64_TUPLE,
+  CODEX_APP_SERVER_DARWIN_ARM64_TUPLE_INTERNAL,
+] as const);
 
 export class CodexAppServerPlatformTupleUnsupportedError extends Error {
   public constructor() {super("No exact Codex App Server platform tuple is supported"); this.name = "CodexAppServerPlatformTupleUnsupportedError";}

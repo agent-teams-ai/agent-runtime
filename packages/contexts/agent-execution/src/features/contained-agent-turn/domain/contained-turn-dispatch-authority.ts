@@ -1,7 +1,7 @@
 import type { ContainedTurnKernelOperation } from "./contained-turn-kernel-model.js";
 import type { ContainedTurnOperationShape } from "./contained-turn-operation-shape.js";
 import type { ContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
-import { containedTurnProviderAccessSnapshotDigest, containedTurnScopeDigest, type ContainedTurnScope, type ContainedTurnProvider } from "./contained-turn-authority.js";
+import { containedTurnProviderAccessSnapshotDigest, containedTurnScopeDigest, type ContainedTurnAuthorityScope, type ContainedTurnAuthorityProvider } from "./contained-turn-authority.js";
 import { digestContainedTurnCanonicalInput, digestContainedTurnCanonicalValue, parseContainedTurnCanonicalDigest } from "./contained-turn-codecs.js";
 import type {
   ContainedTurnAttemptId,
@@ -21,9 +21,14 @@ import { validateContainedTurnIdentity } from "./contained-turn-identities.js";
 import { CONTAINED_TURN_LIMITS, validateContainedTurnText } from "./contained-turn-limits.js";
 import { containedTurnInvariant as invariant } from "./contained-turn-invariant.js";
 
-export const CONTAINED_TURN_OWNER_DISPATCH_PURPOSE = "contained-turn.provider-dispatch/v1" as const;
-export const CONTAINED_TURN_DISPATCH_GRANT_OWNERS = Object.freeze(["provider_access", "runtime_security"] as const);
-export type ContainedTurnDispatchGrantOwner = (typeof CONTAINED_TURN_DISPATCH_GRANT_OWNERS)[number];
+export const CONTAINED_TURN_OWNER_DISPATCH_PURPOSE =
+  "contained-turn.provider-dispatch/v1" as const satisfies ContainedTurnOwnerDispatchPurpose;
+export type ContainedTurnOwnerDispatchPurpose = "contained-turn.provider-dispatch/v1";
+export type ContainedTurnDispatchGrantOwner = "provider_access" | "runtime_security";
+export const CONTAINED_TURN_DISPATCH_GRANT_OWNERS = Object.freeze([
+  "provider_access",
+  "runtime_security",
+] as const satisfies readonly ContainedTurnDispatchGrantOwner[]);
 
 export interface ContainedTurnProviderAccessDispatchExpectation {
   readonly acceptedAuthorityDigest: string; readonly accessRef: string; readonly authorityHeadDigest: string;
@@ -48,7 +53,7 @@ export interface ContainedTurnDispatchGrantSubject {
   readonly effectId: ContainedTurnEffectId; readonly executionGenerationId: ContainedTurnExecutionGenerationId;
   readonly hostBootId: ContainedTurnHostBootId; readonly hostInstanceId: ContainedTurnHostInstanceId;
   readonly operationCutoffRevision: ContainedTurnOperationCutoffRevision; readonly operationId: ContainedTurnOperationId;
-  readonly preparationToken: ContainedTurnPreparationToken; readonly provider: ContainedTurnProvider;
+  readonly preparationToken: ContainedTurnPreparationToken; readonly provider: ContainedTurnAuthorityProvider;
   readonly providerAccessExpectation: ContainedTurnProviderAccessDispatchExpectation;
   readonly providerAccessRequest: ContainedTurnOwnerDispatchRequestIdentity;
   readonly purpose: "contained_turn_provider_start_v1";
@@ -57,9 +62,14 @@ export interface ContainedTurnDispatchGrantSubject {
   readonly scope: Readonly<{ projectId: string; tenantId: string }>;
   readonly scopeDigest: ContainedTurnCanonicalDigest; readonly workspaceId: ContainedTurnWorkspaceId;
 }
-type SubjectSeed = Omit<ContainedTurnDispatchGrantSubject, "providerAccessRequest" | "runtimeSecurityRequest">;
+export type ContainedTurnDispatchGrantSubjectSeed = Omit<
+  ContainedTurnDispatchGrantSubject,
+  "providerAccessRequest" | "runtimeSecurityRequest"
+>;
 
-const claimBindingValue = (subject: SubjectSeed | ContainedTurnDispatchGrantSubject) => ({
+const claimBindingValue = (
+  subject: ContainedTurnDispatchGrantSubjectSeed | ContainedTurnDispatchGrantSubject,
+) => ({
   attemptId: subject.attemptId, custodyId: subject.custodyId, effectId: subject.effectId,
   executionGenerationId: subject.executionGenerationId, hostBootId: subject.hostBootId,
   hostInstanceId: subject.hostInstanceId, operationCutoffRevision: subject.operationCutoffRevision,
@@ -69,29 +79,29 @@ const claimBindingValue = (subject: SubjectSeed | ContainedTurnDispatchGrantSubj
   scopeDigest: subject.scopeDigest, workspaceId: subject.workspaceId,
 });
 export const containedTurnDispatchClaimBindingDigest = (
-  subject: SubjectSeed | ContainedTurnDispatchGrantSubject,
+  subject: ContainedTurnDispatchGrantSubjectSeed | ContainedTurnDispatchGrantSubject,
 ): ContainedTurnCanonicalDigest => digestContainedTurnCanonicalInput(claimBindingValue(subject));
 export const containedTurnDispatchGrantRequestId = (
   owner: ContainedTurnDispatchGrantOwner,
-  subject: SubjectSeed | ContainedTurnDispatchGrantSubject,
+  subject: ContainedTurnDispatchGrantSubjectSeed | ContainedTurnDispatchGrantSubject,
 ): string => `grant-request:${digestContainedTurnCanonicalInput({
   claimBindingDigest: containedTurnDispatchClaimBindingDigest(subject), owner,
   purpose: "contained_turn_dispatch_grant_request_v1",
 })}`;
-const providerAccessClaimBindingDigest = (subject: SubjectSeed, grantRequestId: string) =>
+const providerAccessClaimBindingDigest = (subject: ContainedTurnDispatchGrantSubjectSeed, grantRequestId: string) =>
   digestContainedTurnCanonicalInput({
     ...subject.providerAccessExpectation, grantRequestId, operationId: subject.operationId,
     provider: subject.provider, purpose: CONTAINED_TURN_OWNER_DISPATCH_PURPOSE,
     scope: { ...subject.scope, scopeDigest: subject.scopeDigest },
   });
-const providerAccessRequestDigest = (subject: SubjectSeed, grantRequestId: string, claimBindingDigest: string) =>
+const providerAccessRequestDigest = (subject: ContainedTurnDispatchGrantSubjectSeed, grantRequestId: string, claimBindingDigest: string) =>
   digestContainedTurnCanonicalInput({
     binding: subject.providerAccessExpectation, claimBindingDigest, grantRequestId,
     operationId: subject.operationId, provider: subject.provider,
     purpose: CONTAINED_TURN_OWNER_DISPATCH_PURPOSE,
     scope: { ...subject.scope, scopeDigest: subject.scopeDigest },
   });
-const runtimeSecurityRequestDigest = (subject: SubjectSeed, grantRequestId: string, claimBindingDigest: string) => {
+const runtimeSecurityRequestDigest = (subject: ContainedTurnDispatchGrantSubjectSeed, grantRequestId: string, claimBindingDigest: string) => {
   const expected = subject.runtimeSecurityExpectation;
   return digestContainedTurnCanonicalInput({
     acceptedAuthorityDigest: expected.acceptedAuthorityDigest, authorityGeneration: expected.authorityGeneration,
@@ -103,7 +113,9 @@ const runtimeSecurityRequestDigest = (subject: SubjectSeed, grantRequestId: stri
     scope: { ...subject.scope, scopeDigest: subject.scopeDigest },
   });
 };
-export const completeContainedTurnDispatchGrantSubject = (seed: SubjectSeed): ContainedTurnDispatchGrantSubject => {
+export const completeContainedTurnDispatchGrantSubject = (
+  seed: ContainedTurnDispatchGrantSubjectSeed,
+): ContainedTurnDispatchGrantSubject => {
   const providerAccessGrantRequestId = containedTurnDispatchGrantRequestId("provider_access", seed);
   const runtimeSecurityGrantRequestId = containedTurnDispatchGrantRequestId("runtime_security", seed);
   const providerAccessClaim = providerAccessClaimBindingDigest(seed, providerAccessGrantRequestId);
@@ -128,7 +140,7 @@ export interface ContainedTurnConsumedGrantReceipt<Owner extends ContainedTurnDi
   readonly consumedAtControlTime: number; readonly consumptionDigest: string;
   readonly grantRequestDigest: ContainedTurnCanonicalDigest; readonly grantRequestId: string;
   readonly operationId: ContainedTurnOperationId; readonly owner: Owner; readonly ownerEvidenceRef: string;
-  readonly provider: ContainedTurnProvider; readonly purpose: typeof CONTAINED_TURN_OWNER_DISPATCH_PURPOSE;
+  readonly provider: ContainedTurnAuthorityProvider; readonly purpose: ContainedTurnOwnerDispatchPurpose;
   readonly requestDigest: ContainedTurnCanonicalDigest;
   readonly scope: Readonly<{ projectId: string; scopeDigest: ContainedTurnCanonicalDigest; tenantId: string }>;
   readonly validThroughOperationCutoffRevision: ContainedTurnOperationCutoffRevision;
@@ -273,7 +285,7 @@ type DispatchOperationFacts = Pick<ContainedTurnKernelOperation,
 /** Shared live and persisted projection; the cutoff is the original dispatch claim's cutoff. */
 export const containedTurnOperationDispatchSubject = (
   operation: DispatchOperationFacts & { readonly workspaceId: ContainedTurnWorkspaceId },
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
   subject: Pick<ContainedTurnDispatchGrantSubject, "attemptId" | "custodyId" | "executionGenerationId" | "hostBootId" | "hostInstanceId" | "preparationToken">,
   operationCutoffRevision: ContainedTurnOperationCutoffRevision,
 ): ContainedTurnDispatchGrantSubject => {

@@ -19,10 +19,10 @@ import type {CodexCurrentKernelLaunchRecord} from "./codex-current-kernel-owner.
 import {snapshotCodexCredentialOutputTokens} from "./codex-credential-output-inventory.js";
 import {createDockerCustodiedProviderProcessRegistry} from "./docker-custodied-provider-process.js";
 
-type AttemptInput = Parameters<CodexAppServerKernelAttemptFactory["prepare"]>[0];
+export type DockerCodexKernelAttemptInput = Parameters<CodexAppServerKernelAttemptFactory["prepare"]>[0];
 export interface CreateDockerCodexCurrentKernelOwnerOptions {
   /** Accepted attempt authority, retained by trusted outer composition. */
-  readonly attempt: AttemptInput;
+  readonly attempt: DockerCodexKernelAttemptInput;
   readonly boundary: CodexAppServerPermissionBoundary;
   readonly credentialOutputInventory: CodexCurrentKernelLaunchRecord["credentialOutputInventory"];
   readonly effectCustody: CodexEffectCustodyAuthority;
@@ -38,7 +38,7 @@ export interface DockerCodexCurrentKernelOwner {
   dispose(): void;
 }
 
-const attemptDigest = (input: AttemptInput) => digestContainedTurnCanonicalValue({
+const attemptDigest = (input: DockerCodexKernelAttemptInput) => digestContainedTurnCanonicalValue({
   adapterSnapshot: {...input.adapterSnapshot}, attemptId: input.attemptId,
   authorityVectorDigest: input.authorityVectorDigest, custodyId: input.custodyId,
   effectId: input.effectId, intent: {...input.intent}, operationId: input.operationId,
@@ -192,7 +192,7 @@ export const createDockerCodexCurrentKernelOwner = (
     }
   };
   const attempts: CodexAppServerKernelAttemptFactory = Object.freeze({
-    async prepare(input: AttemptInput) {
+    async prepare(input: DockerCodexKernelAttemptInput) {
       nativeStartStep(diagnosticKey, "prepared-handoff", () => {
       assertOpen();
       if (prepared || attemptDigest(input) !== expectedAttempt) {throw new TypeError("Docker Codex attempt is unavailable");}

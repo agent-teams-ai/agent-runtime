@@ -1,6 +1,6 @@
-import type {ContainedTurnScope} from "./contained-turn-authority.js";
+import type {ContainedTurnAuthorityScope} from "./contained-turn-authority.js";
 import type {ContainedTurnKernelOutputKind} from "./contained-turn-kernel-model.js";
-export interface OrdinaryInput {readonly commandId: string; readonly expectedProvider: string; readonly intent: {readonly mode: "analysis" | "workspace-write"; readonly prompt: string}; readonly scope: ContainedTurnScope}
+export interface OrdinaryInput {readonly commandId: string; readonly expectedProvider: string; readonly intent: {readonly mode: "analysis" | "workspace-write"; readonly prompt: string}; readonly scope: ContainedTurnAuthorityScope}
 export interface OrdinaryOutput {readonly cursor: number; readonly kind: ContainedTurnKernelOutputKind; readonly text: string}
 export type OrdinaryStatus = "accepted" | "running" | "succeeded" | "failed" | "cancelled" | "reconcile_required";
 
@@ -29,7 +29,7 @@ export interface OrdinaryOperation extends OrdinaryBinding {
   readonly effectId: string;
   readonly commandId: string;
   readonly fingerprint: string;
-  readonly scope: ContainedTurnScope;
+  readonly scope: ContainedTurnAuthorityScope;
   readonly input: OrdinaryInput;
   readonly preparation: OrdinaryPreparation | null;
   readonly revision: number;
@@ -48,7 +48,7 @@ export interface OrdinaryAuthoritySnapshot extends OrdinaryBinding {
   readonly consumptionRevision: number;
   readonly authorityDigest: string;
   readonly expiresAt: number;
-  readonly scope: ContainedTurnScope;
+  readonly scope: ContainedTurnAuthorityScope;
   readonly provider: string;
 }
 export interface OrdinaryPreparation {
@@ -60,7 +60,7 @@ export interface OrdinaryPreparation {
   readonly credentialGeneration: number;
 }
 
-export interface OrdinaryOperationRef {readonly operationId: string; readonly scope: ContainedTurnScope}
+export interface OrdinaryOperationRef {readonly operationId: string; readonly scope: ContainedTurnAuthorityScope}
 export interface OrdinaryView {
   readonly operationId: string; readonly effectId: string; readonly commandId: string; readonly provider: string;
   readonly revision: number; readonly status: OrdinaryStatus; readonly output: readonly OrdinaryOutput[];

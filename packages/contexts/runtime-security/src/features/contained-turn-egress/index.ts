@@ -1,5 +1,6 @@
 export {
   EGRESS_DISPATCH_PURPOSE,
+  type EgressDispatchPurpose,
   type ContainedTurnEgress,
   type ContainedTurnEgressRequest,
   type ContainedTurnEgressResult,

@@ -5,7 +5,7 @@ import type {
   ContainedTurnIntent,
   ContainedTurnProviderAccessSnapshot,
   ContainedTurnProviderAdapterSnapshot,
-  ContainedTurnScope,
+  ContainedTurnAuthorityScope,
 } from "./contained-turn-authority.js";
 import type { ContainedTurnConsumedGrantReceipts } from "./contained-turn-dispatch-authority.js";
 import type {
@@ -130,7 +130,7 @@ export interface ContainedTurnKernelOperation {
   readonly requiredReceiptSetDigest: ContainedTurnCanonicalDigest;
   readonly revision: number;
   readonly schemaVersion: ContainedTurnSchemaVersion;
-  readonly scope: ContainedTurnScope;
+  readonly scope: ContainedTurnAuthorityScope;
   readonly terminal:
     | { readonly kind: "open" }
     | {

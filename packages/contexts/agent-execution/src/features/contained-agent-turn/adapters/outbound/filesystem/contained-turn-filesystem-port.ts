@@ -1,4 +1,4 @@
-import type { ContainedTurnScope } from "../../../domain/contained-turn-authority.js";
+import type { ContainedTurnAuthorityScope } from "../../../domain/contained-turn-authority.js";
 import type { ContainedTurnOutputKind } from "../../../contracts/contained-agent-turn.js";
 
 /**
@@ -12,22 +12,22 @@ import type { ContainedTurnOutputKind } from "../../../contracts/contained-agent
 export interface ContainedTurnFilesystemWorkspacePort {
   close(input: Readonly<{
     operationId: string;
-    scope: ContainedTurnScope;
+    scope: ContainedTurnAuthorityScope;
     workspaceRef: string;
   }>): Promise<{ readonly receiptRef: string }>;
   create(input: Readonly<{
     operationId: string;
-    scope: ContainedTurnScope;
+    scope: ContainedTurnAuthorityScope;
   }>): Promise<{ readonly workspaceRef: string }>;
   quarantine(input: Readonly<{
     evidenceRef: string;
     operationId: string;
-    scope: ContainedTurnScope;
+    scope: ContainedTurnAuthorityScope;
     workspaceRef: string;
   }>): Promise<void>;
   verify(input: Readonly<{
     operationId: string;
-    scope: ContainedTurnScope;
+    scope: ContainedTurnAuthorityScope;
     workspaceRef: string;
   }>): Promise<ContainedTurnWorkspaceLaunchAuthority>;
 }
@@ -46,7 +46,7 @@ export interface ContainedTurnFilesystemArtifactPort {
       kind: ContainedTurnOutputKind;
       text: string;
     }>[];
-    scope: ContainedTurnScope;
+    scope: ContainedTurnAuthorityScope;
     workspaceRef: string;
   }>): Promise<Readonly<{
     manifestReceiptRef: string;

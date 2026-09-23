@@ -13,14 +13,40 @@ export const networkObject = (value: unknown): Record<string, unknown> => {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {throw networkFailure();}
   return value as Record<string, unknown>;
 };
-const engineKeys = ["daemonIdentitySha256", "daemonBootGenerationSha256", "hostIdentitySha256", "hostBootGenerationSha256"] as const;
-const bindingKeys = [...engineKeys, "operationSha256", "executionGenerationSha256", "networkHandleSha256",
-  "ownerIdentitySha256", "operationNonceSha256", "launchFingerprintSha256"] as const;
+const engineKeys = Object.freeze([
+  "daemonIdentitySha256", "daemonBootGenerationSha256", "hostIdentitySha256", "hostBootGenerationSha256",
+] as const);
+const DOCKER_OPERATION_NETWORK_BINDING_KEYS = Object.freeze([
+  ...engineKeys, "operationSha256", "executionGenerationSha256", "networkHandleSha256",
+  "ownerIdentitySha256", "operationNonceSha256", "launchFingerprintSha256",
+] as const);
 /** Docker-private fixed recipe. No endpoint selection or general network grants. */
-export type DockerOperationNetworkBinding = Readonly<Record<typeof bindingKeys[number], string>>;
+export interface DockerOperationNetworkBinding {
+  readonly daemonIdentitySha256: string;
+  readonly daemonBootGenerationSha256: string;
+  readonly hostIdentitySha256: string;
+  readonly hostBootGenerationSha256: string;
+  readonly operationSha256: string;
+  readonly executionGenerationSha256: string;
+  readonly networkHandleSha256: string;
+  readonly ownerIdentitySha256: string;
+  readonly operationNonceSha256: string;
+  readonly launchFingerprintSha256: string;
+}
 export const networkBinding = (input: DockerOperationNetworkBinding): DockerOperationNetworkBinding => {
-  const value = snapshotOwnDataObject(input, bindingKeys, bindingKeys, "invalid-authority");
-  return Object.freeze(Object.fromEntries(bindingKeys.map(key => [key, networkDigest(value[key])]))) as DockerOperationNetworkBinding;
+  const value = snapshotOwnDataObject(input, DOCKER_OPERATION_NETWORK_BINDING_KEYS, DOCKER_OPERATION_NETWORK_BINDING_KEYS, "invalid-authority");
+  return Object.freeze({
+    daemonIdentitySha256: networkDigest(value.daemonIdentitySha256),
+    daemonBootGenerationSha256: networkDigest(value.daemonBootGenerationSha256),
+    hostIdentitySha256: networkDigest(value.hostIdentitySha256),
+    hostBootGenerationSha256: networkDigest(value.hostBootGenerationSha256),
+    operationSha256: networkDigest(value.operationSha256),
+    executionGenerationSha256: networkDigest(value.executionGenerationSha256),
+    networkHandleSha256: networkDigest(value.networkHandleSha256),
+    ownerIdentitySha256: networkDigest(value.ownerIdentitySha256),
+    operationNonceSha256: networkDigest(value.operationNonceSha256),
+    launchFingerprintSha256: networkDigest(value.launchFingerprintSha256),
+  });
 };
 export const operationNetworkName = (input: DockerOperationNetworkBinding): string =>
   `ar-http-${canonicalJsonSha256(networkBinding(input))}`;
@@ -35,7 +61,7 @@ export const assertNetworkContainer = (binding: DockerOperationNetworkBinding, c
 };
 export const operationNetworkLabels = (binding: DockerOperationNetworkBinding, allocation: string) => Object.freeze({
   "com.agent-runtime.http-operation-network": "1",
-  ...Object.fromEntries(bindingKeys.map(key => [`com.agent-runtime.http.${key}`, binding[key]])),
+  ...Object.fromEntries(DOCKER_OPERATION_NETWORK_BINDING_KEYS.map(key => [`com.agent-runtime.http.${key}`, binding[key]])),
   "com.agent-runtime.http.allocation": networkDigest(allocation),
 });
 export type DockerOperationNetworkObservation = Readonly<{

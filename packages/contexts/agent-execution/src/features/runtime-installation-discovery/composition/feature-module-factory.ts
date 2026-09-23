@@ -1,4 +1,5 @@
 import { createNodeStableIdentityHasher } from "../adapters/outbound/node-stable-identity-hasher.js";
+import { createNodeExecutableFileObserver as createNodeExecutableFileObserverInternal } from "../adapters/outbound/node-executable-file-observer.js";
 import { createDiscoverClaudeCodeInstallations } from "../application/discover-claude-code-installations.js";
 import { createDiscoverCodexInstallations } from "../application/discover-codex-installations.js";
 import type {
@@ -22,6 +23,21 @@ import type {
 export interface RuntimeInstallationDiscoveryDependencies {
   readonly executableFileObserver: ExecutableFileObserver;
 }
+
+export const createNodeExecutableFileObserver: (
+  dependencies?: Readonly<{
+    effectiveIdentity?: Readonly<{
+      gid: number;
+      groups: readonly number[];
+      uid: number;
+    }>;
+    effectiveIdentitySupplier?: () => Readonly<{
+      gid: number;
+      groups: readonly number[];
+      uid: number;
+    }> | undefined;
+  }>,
+) => ExecutableFileObserver = createNodeExecutableFileObserverInternal;
 
 const toApplicationCodexCandidate = (
   candidate: InstallationCandidate,

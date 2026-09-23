@@ -6,36 +6,36 @@ import {
 import { containedTurnIdentity } from "../domain/contained-turn-identities.js";
 import { normalizeContainedTurnConsumedGrantReceipt } from "./dispatch-grant-anti-corruption.js";
 
-type SecuritySubject = Parameters<ContainedTurnKernelSecurityPort["consumeForDispatch"]>[0]["subject"];
-type SecurityScope = Readonly<SecuritySubject["scope"] & { readonly scopeDigest: string }>;
-type SecurityConsumeInput = Readonly<{
-  purpose: typeof CONTAINED_TURN_OWNER_DISPATCH_PURPOSE; operationId: string; scope: SecurityScope;
+export type ContainedTurnSecuritySubject = Parameters<ContainedTurnKernelSecurityPort["consumeForDispatch"]>[0]["subject"];
+export type ContainedTurnSecurityScope = Readonly<ContainedTurnSecuritySubject["scope"] & { readonly scopeDigest: string }>;
+export type ContainedTurnSecurityConsumeInput = Readonly<{
+  purpose: typeof CONTAINED_TURN_OWNER_DISPATCH_PURPOSE; operationId: string; scope: ContainedTurnSecurityScope;
   grantRequestId: string; requestDigest: string; providerId: string; authorityGeneration: string;
   providerBindingDigest: string; claimBindingDigest: string; acceptedAuthorityDigest: string;
   expectedAuthorityHeadDigest: string; expectedAuthorityRevision: string;
   expectedConstraintsDigest: string; expectedContainmentPolicyDigest: string;
 }>;
-interface SecurityReceipt {
+export interface ContainedTurnSecurityReceipt {
   readonly contractVersion: "contained-turn-dispatch-consumption/v1";
   readonly purpose: typeof CONTAINED_TURN_OWNER_DISPATCH_PURPOSE; readonly operationId: string;
-  readonly scope: SecurityScope; readonly grantRequestId: string; readonly requestDigest: string;
+  readonly scope: ContainedTurnSecurityScope; readonly grantRequestId: string; readonly requestDigest: string;
   readonly providerId: string; readonly authorityGeneration: string; readonly providerBindingDigest: string;
   readonly claimBindingDigest: string; readonly acceptedAuthorityDigest: string;
   readonly authorityHeadDigestAtConsumption: string; readonly authorityRevision: string;
   readonly constraintsDigest: string; readonly containmentPolicyDigest: string; readonly consumptionDigest: string;
   readonly claimBeforeControlTime: number; readonly consumedAtControlTime: number; readonly ownerEvidenceRef: string;
 }
-type SecurityConsumeOutcome =
-  | { readonly status: "consumed"; readonly receipt: SecurityReceipt; readonly lifecycleState?: "consumed_pending" | "claim_committed" | "abandoned_without_claim" }
+export type ContainedTurnSecurityConsumeOutcome =
+  | { readonly status: "consumed"; readonly receipt: ContainedTurnSecurityReceipt; readonly lifecycleState?: "consumed_pending" | "claim_committed" | "abandoned_without_claim" }
   | { readonly status: "prevented"; readonly evidence: unknown }
   | { readonly status: "not_found" | "conflict" | "indeterminate"; readonly reason?: string };
 
 /** Exact structural view of Runtime Security ContainedTurnDispatchAuthorityV1. */
 export interface OuterContainedTurnRuntimeSecurityAuthority {
-  consumeForDispatch(input: SecurityConsumeInput): Promise<SecurityConsumeOutcome>;
-  observeDispatchConsumption(input: SecurityConsumeInput): Promise<SecurityConsumeOutcome>;
+  consumeForDispatch(input: ContainedTurnSecurityConsumeInput): Promise<ContainedTurnSecurityConsumeOutcome>;
+  observeDispatchConsumption(input: ContainedTurnSecurityConsumeInput): Promise<ContainedTurnSecurityConsumeOutcome>;
   settleDispatchConsumption(input: Readonly<{
-    scope: SecurityScope; operationId: string; providerId: string; authorityGeneration: string;
+    scope: ContainedTurnSecurityScope; operationId: string; providerId: string; authorityGeneration: string;
     grantRequestId: string; settlementRequestId: string; consumptionDigest: string;
     disposition: "abandoned_without_claim" | "claim_committed";
   }>): Promise<Readonly<{ status: "settled"; receipt: unknown } | { status: "invalid_request" | "not_found" | "conflict" | "indeterminate"; reason?: string }>>;
@@ -57,7 +57,7 @@ export const createContainedTurnRuntimeSecurityPort = (
   ...legacy,
   async consumeForDispatch({ subject }) {
     const expected = subject.runtimeSecurityExpectation;
-    const request: SecurityConsumeInput = Object.freeze({
+    const request: ContainedTurnSecurityConsumeInput = Object.freeze({
       acceptedAuthorityDigest: expected.acceptedAuthorityDigest,
       authorityGeneration: expected.authorityGeneration,
       claimBindingDigest: subject.runtimeSecurityRequest.claimBindingDigest,
@@ -71,7 +71,7 @@ export const createContainedTurnRuntimeSecurityPort = (
       requestDigest: subject.runtimeSecurityRequest.requestDigest,
       scope: Object.freeze({ ...subject.scope, scopeDigest: subject.scopeDigest }),
     });
-    let outcome: SecurityConsumeOutcome;
+    let outcome: ContainedTurnSecurityConsumeOutcome;
     try {outcome = await outer.consumeForDispatch(request);} catch {return { evidenceId: evidenceId("consume", request), kind: "indeterminate" };}
     if (outcome.status === "indeterminate") {
       try {outcome = await outer.observeDispatchConsumption(request);} catch {return { evidenceId: evidenceId("consume", request), kind: "indeterminate" };}

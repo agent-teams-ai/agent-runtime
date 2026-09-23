@@ -2,10 +2,22 @@ import {
   digestContainedTurnCanonicalInput,
   type ContainedTurnCanonicalDigest,
 } from "./contained-turn-codecs.js";
-import type { ContainedTurnOutputValidatedOperation } from "./contained-turn-validation.js";
+import type { ContainedTurnKernelOperation } from "./contained-turn-kernel-model.js";
+
+export type ContainedTurnSatisfactionInput = Pick<ContainedTurnKernelOperation,
+  | "acceptedAuthorityVectorDigest"
+  | "artifactManifestRef"
+  | "effect"
+  | "output"
+  | "proofs"
+  | "providerProcessStart"
+  | "requiredReceiptSet"
+  | "requiredReceiptSetDigest"
+  | "resultRef"
+>;
 
 export const containedTurnSatisfactionDigest = (
-  operation: ContainedTurnOutputValidatedOperation,
+  operation: ContainedTurnSatisfactionInput,
 ): ContainedTurnCanonicalDigest => digestContainedTurnCanonicalInput({
   artifactManifestRef: operation.artifactManifestRef ?? null,
   authorityVectorDigest: operation.acceptedAuthorityVectorDigest,

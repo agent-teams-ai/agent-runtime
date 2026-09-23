@@ -1,6 +1,6 @@
 import { containedTurnIdentity } from "../domain/contained-turn-identities.js";
 import { digestContainedTurnCanonicalValue } from "../domain/contained-turn-codecs.js";
-import type { ContainedTurnScope } from "../domain/contained-turn-authority.js";
+import type { ContainedTurnAuthorityScope } from "../domain/contained-turn-authority.js";
 import type { ContainedTurnKernelOperation } from "../domain/contained-turn-kernel-model.js";
 import type { ContainedTurnApplicationRefInput, ContainedTurnApplicationObserveOutcome } from "./contained-turn-engine.js";
 import { assertContainedTurnExactRecord } from "../domain/contained-turn-record.js";
@@ -82,7 +82,7 @@ export const requestContainedTurnCancellation = async (
 export const resumeContainedTurnCancellation = async (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,
-  trustedScope: ContainedTurnScope,
+  trustedScope: ContainedTurnAuthorityScope,
 ): Promise<ContainedTurnKernelOperation> => {
   if (operation.terminal.kind === "final" || operation.cancellation.kind !== "requested") {return operation;}
   let current = operation;

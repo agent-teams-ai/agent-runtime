@@ -451,16 +451,22 @@ export interface ApplyContainedTurnPostgresSchemaOptions {
   readonly targetVersion?: 1 | 2 | 3 | 4 | 5 | 6 | 7;
 }
 
+export interface ContainedTurnPostgresSchemaOptions {
+  /** Used by staged deploys; V4 remains fenced as a disposable-test-only target. */
+  readonly targetVersion?: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+}
+
 export const applyContainedTurnPostgresSchema = async (
   pool: ContainedTurnPostgresPool,
-  options: ApplyContainedTurnPostgresSchemaOptions = {},
+  options: ContainedTurnPostgresSchemaOptions = {},
 ): Promise<void> => {
+  const internalOptions = options as ApplyContainedTurnPostgresSchemaOptions;
   const targetVersion = options.targetVersion ?? CONTAINED_TURN_POSTGRES_SCHEMA_VERSION;
   if (!Number.isSafeInteger(targetVersion) || targetVersion < 1 ||
       targetVersion > CONTAINED_TURN_POSTGRES_SCHEMA_VERSION) {
     throw new RangeError(`unsupported contained turn PostgreSQL migration target ${String(targetVersion)}`);
   }
-  if ((targetVersion === 4) !== (options.allowUnfencedV4ForTest === true)) {
+  if ((targetVersion === 4) !== (internalOptions.allowUnfencedV4ForTest === true)) {
     throw new TypeError("contained turn PostgreSQL v4 requires the explicit disposable-test fence bypass");
   }
   const client = await connectForMigration(pool);

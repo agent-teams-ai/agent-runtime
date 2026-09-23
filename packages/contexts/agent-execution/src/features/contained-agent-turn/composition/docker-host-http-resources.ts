@@ -1,17 +1,36 @@
 import type {DockerHttpConsumptionReferences} from "./node-docker-deployment-recipe.js";
 import {DockerCustodyHttpReservation} from "./docker-custody-http-reservation.js";
 import { captureDockerHttpResourceRecord as data, subscribeDockerHttpAbort as addAbortListener } from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
+import type { DockerCustodyAttemptKey } from "../adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.js";
+import type { HostCustodyHttpHandoff, HostCustodyHttpResourceLifetime, HostHttpEgressSessionDependencies,
+  NodeCustodyHttpIngress, NodeCustodyHttpResourceInput, NodeCustodyHttpResourcePreparation,
+  NodeCustodyHttpSession } from "../adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.js";
 import { createV4HostHttpListenerLifecycle } from "./v4-host-http-listener-lifecycle.js";
 import type { DockerOperationNetworkAllocation, DockerOperationNetworkOwner } from "./docker-operation-network-owner.js";
 
-type Preparation = NonNullable<ReturnType<typeof DockerCustodyHttpReservation.httpPreparation>>;
-type Handoff = Parameters<Preparation["acquire"]>[0];
-type Resources = Parameters<Preparation["prepareResources"]>[1];
-type Journal = Parameters<typeof createV4HostHttpListenerLifecycle>[0]["v4"];
+export interface DockerHostHttpPreparation {
+  readonly binding: Readonly<{
+    readonly attempt: DockerCustodyAttemptKey;
+    readonly imageDigest: string;
+    readonly hostLifecycleGenerationSha256: string;
+  }>;
+  acquire(handoff: HostCustodyHttpHandoff): HostCustodyHttpResourceLifetime;
+  prepareResources(lifetime: HostCustodyHttpResourceLifetime,
+    resources: NodeCustodyHttpResourceInput): Promise<NodeCustodyHttpResourcePreparation>;
+  openIngress(lifetime: HostCustodyHttpResourceLifetime): NodeCustodyHttpIngress;
+  bindSession(lifetime: HostCustodyHttpResourceLifetime,
+    dependencies: HostHttpEgressSessionDependencies): NodeCustodyHttpSession;
+  cutoff(): void;
+  cleanup(deadlineEpochMs: number): Promise<boolean>;
+  cleanupOutcome(deadlineEpochMs: number): Promise<Readonly<{released: boolean; dependenciesReleased: boolean}>>;
+}
+export type DockerHostHttpHandoff = Parameters<DockerHostHttpPreparation["acquire"]>[0];
+export type DockerHostHttpResourceSet = Parameters<DockerHostHttpPreparation["prepareResources"]>[1];
+export type DockerHostHttpJournal = Parameters<typeof createV4HostHttpListenerLifecycle>[0]["v4"];
 /** The listener recipe is built from the observed gateway, never from a guess. */
-export type DockerHostHttpListenerResources = Omit<Resources, "listener" | "listenerLifecycle" | "consumption"> &
-  Readonly<{listenerFor: (host: string, context: DockerOperationNetworkOwner["listenerContext"]) => Resources["listener"];
-    consumption: Readonly<{prepare(references: DockerHttpConsumptionReferences): ReturnType<Resources["consumption"]["prepare"]>}>}>;
+export type DockerHostHttpListenerResources = Omit<DockerHostHttpResourceSet, "listener" | "listenerLifecycle" | "consumption"> &
+  Readonly<{listenerFor: (host: string, context: DockerOperationNetworkOwner["listenerContext"]) => DockerHostHttpResourceSet["listener"];
+    consumption: Readonly<{prepare(references: DockerHttpConsumptionReferences): ReturnType<DockerHostHttpResourceSet["consumption"]["prepare"]>}>}>;
 export type DockerHostHttpResources = ReturnType<typeof createDockerHostHttpResources>;
 const {httpPreparation} = DockerCustodyHttpReservation;
 
@@ -28,8 +47,9 @@ export const createDockerHostHttpResources = (input: Readonly<{
   hostLifecycleGenerationSha256: string;
 }>) => {
   input = data(input);
-  const host = httpPreparation(input.host);
-  if (host === undefined) {throw new TypeError("Host HTTP resource preparation unavailable");}
+  const candidate = httpPreparation(input.host);
+  if (candidate === undefined) {throw new TypeError("Host HTTP resource preparation unavailable");}
+  const host: DockerHostHttpPreparation = candidate;
   const expectedGeneration = input.hostLifecycleGenerationSha256;
   if (expectedGeneration !== host.binding.hostLifecycleGenerationSha256) {throw new TypeError("Host generation changed");}
   const network = input.network;
@@ -54,7 +74,7 @@ export const createDockerHostHttpResources = (input: Readonly<{
   let ready = false;
   let ingressEntered = false;
   let sessionEntered = false;
-  let retainedLifetime: ReturnType<Preparation["acquire"]> | undefined;
+  let retainedLifetime: ReturnType<DockerHostHttpPreparation["acquire"]> | undefined;
   const requireReady = () => {
     if (cut || !ready || retainedLifetime === undefined || retainedLifetime.signal.aborted || network.signal.aborted) {
       throw new TypeError("Host HTTP resources are not ready or admission is closed");
@@ -92,20 +112,20 @@ export const createDockerHostHttpResources = (input: Readonly<{
     get listener(): Readonly<{observe: () => unknown}> | undefined {return listenerReadback;},
     observationOwner: network.observationOwner,
     cutoff,
-    openIngress(): ReturnType<Preparation["openIngress"]> {
+    openIngress(): ReturnType<DockerHostHttpPreparation["openIngress"]> {
       const lifetime = requireReady();
       if (ingressEntered) {throw new TypeError("Host HTTP ingress already entered");}
       ingressEntered = true;
       return host.openIngress(lifetime);
     },
-    bindSession(dependencies: Parameters<Preparation["bindSession"]>[1]): ReturnType<Preparation["bindSession"]> {
+    bindSession(dependencies: Parameters<DockerHostHttpPreparation["bindSession"]>[1]): ReturnType<DockerHostHttpPreparation["bindSession"]> {
       const lifetime = requireReady();
       if (!ingressEntered || sessionEntered) {throw new TypeError("Host HTTP session unavailable or already entered");}
       sessionEntered = true;
       return host.bindSession(lifetime, dependencies);
     },
-    async prepare(journal: Journal, handoff: Handoff, resources: DockerHostHttpListenerResources,
-      afterListenerOpened: (address: Awaited<ReturnType<Resources["listener"]["open"]>>["address"]) =>
+    async prepare(journal: DockerHostHttpJournal, handoff: DockerHostHttpHandoff, resources: DockerHostHttpListenerResources,
+      afterListenerOpened: (address: Awaited<ReturnType<DockerHostHttpResourceSet["listener"]["open"]>>["address"]) =>
         Promise<Omit<DockerHttpConsumptionReferences, "listenerIdentity">>) {
       if (entered) {throw new TypeError("Host HTTP resource preparation already entered");}
       entered = true;

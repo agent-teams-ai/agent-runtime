@@ -19,11 +19,11 @@ import {
 } from "./contained-turn-filesystem-custody.js";
 import { readDirectoryNamesBounded } from "./contained-turn-filesystem-reads.js";
 
-type DurableOpenFile = (path: string, flags: number, mode: number) => Promise<NodeFileHandle>;
+export type ContainedTurnDurableOpenFile = (path: string, flags: number, mode: number) => Promise<NodeFileHandle>;
 
 export interface ContainedTurnFilesystemFaults {
   checkpoint(point: string): Promise<void> | void;
-  openFile?: DurableOpenFile;
+  openFile?: ContainedTurnDurableOpenFile;
   writeFile?(handle: FileHandle, bytes: Buffer): Promise<void>;
 }
 
@@ -156,7 +156,7 @@ const prepareTemporaryWrite = (input: {
   readonly temporaryKind: "cas" | "metadata";
 }): Readonly<{
   noFollow: number;
-  openFile: DurableOpenFile;
+  openFile: ContainedTurnDurableOpenFile;
   temporaryName: string;
 }> => {
   const noFollow = constants.O_NOFOLLOW;
@@ -185,7 +185,7 @@ const acquireTemporaryFile = async (
   stagingDirectory: FileHandle,
   temporaryName: string,
   noFollow: number,
-  openFile: DurableOpenFile,
+  openFile: ContainedTurnDurableOpenFile,
   faults: ContainedTurnFilesystemFaults | undefined,
 ): Promise<FileHandle> => {
   if (isNativeHostDescriptor(stagingDirectory) && faults?.openFile !== undefined) {

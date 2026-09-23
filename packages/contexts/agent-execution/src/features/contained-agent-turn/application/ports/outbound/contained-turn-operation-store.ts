@@ -1,6 +1,6 @@
 import type {
   ContainedTurnCancellationCommand,
-  ContainedTurnScope,
+  ContainedTurnAuthorityScope,
 } from "../../../domain/contained-turn-authority.js";
 import type {
   ContainedTurnCanonicalDigest,
@@ -76,7 +76,7 @@ export interface ContainedTurnOwnerStoreAuthority {
   readonly commandId: ContainedTurnCommandId;
   readonly effectId: ContainedTurnEffectId;
   readonly operationId: ContainedTurnOperationId;
-  readonly scope: ContainedTurnScope;
+  readonly scope: ContainedTurnAuthorityScope;
 }
 
 export interface ContainedTurnKernelOperationStore {
@@ -95,7 +95,7 @@ export interface ContainedTurnKernelOperationStore {
   preventIntent(input: Readonly<{
     command: ContainedTurnPreventionCommand;
     /** Independently authenticated scope, never copied from the command. */
-    scope: ContainedTurnScope;
+    scope: ContainedTurnAuthorityScope;
   }>): Promise<
     | { readonly kind: "committed"; readonly receipt: ContainedTurnPreventionReceipt }
     | { readonly kind: "conflict" | "denied" | "indeterminate" }
@@ -104,7 +104,7 @@ export interface ContainedTurnKernelOperationStore {
   listDispatchPreparations?(input: Readonly<{
     kinds?: readonly ("active" | "cleanup_pending")[];
     limit?: number;
-    scope: ContainedTurnScope;
+    scope: ContainedTurnAuthorityScope;
   }>): Promise<readonly Readonly<{
     operation: ContainedTurnKernelOperation;
     preparation: ContainedTurnDispatchPreparation;
@@ -154,7 +154,7 @@ export interface ContainedTurnKernelOperationStore {
     commandFingerprint: ContainedTurnCommandFingerprint;
     commandId: ContainedTurnCommandId;
     /** Independently trusted owner scope; never derive it from a stored or candidate operation. */
-    scope: ContainedTurnScope;
+    scope: ContainedTurnAuthorityScope;
   }>): Promise<IdentifyContainedTurnAcceptanceOutcome>;
   prepareDispatch(input: Readonly<{
     authority: ContainedTurnOwnerStoreAuthority;
@@ -213,7 +213,7 @@ export interface ContainedTurnKernelOperationStore {
   /** A scope mismatch is represented exactly like an absent operation. */
   read(input: Readonly<{
     operationId: ContainedTurnOperationId;
-    scope: ContainedTurnScope;
+    scope: ContainedTurnAuthorityScope;
   }>): Promise<ContainedTurnKernelOperation | undefined>;
   requestCancellation(input: Readonly<{
     authority: ContainedTurnOwnerStoreAuthority;

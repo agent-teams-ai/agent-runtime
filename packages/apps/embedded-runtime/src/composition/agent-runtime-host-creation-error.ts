@@ -59,9 +59,37 @@ export const assemblyErrorCodes = {
   "assembly.run.internal": "internal_failure",
 } satisfies Record<BindingErrorCode | PreparationErrorCode | RunErrorCode, AgentRuntimeHostCreationErrorCode>;
 
-export type RuntimeSetupModuleId = (typeof runtimeSetupDeclarations)[number]["moduleId"] | (typeof runtimeOrdinarySetupDeclarations)[number]["moduleId"];
+type InternalRuntimeSetupModuleId =
+  | (typeof runtimeSetupDeclarations)[number]["moduleId"]
+  | (typeof runtimeOrdinarySetupDeclarations)[number]["moduleId"];
 
-interface CreationErrorDetails {
+/** Stable public projection of the private Core/Assembly module identities that
+ * may accompany a Host creation failure. Assembly declarations remain private. */
+export type RuntimeSetupModuleId =
+  | "agent-runtime/setup-security"
+  | "agent-runtime/installation-discovery"
+  | "agent-runtime/codex-configuration"
+  | "agent-runtime/claude-configuration"
+  | "agent-runtime/codex-planner"
+  | "agent-runtime/claude-planner"
+  | "agent-runtime/runtime-host"
+  | "ordinary/store"
+  | "ordinary/security"
+  | "ordinary/provider-access"
+  | "ordinary/workspace"
+  | "ordinary/artifacts"
+  | "ordinary/process"
+  | "ordinary/provider"
+  | "ordinary/turn";
+
+type SameModuleIds =
+  [InternalRuntimeSetupModuleId] extends [RuntimeSetupModuleId]
+    ? [RuntimeSetupModuleId] extends [InternalRuntimeSetupModuleId] ? true : false
+    : false;
+type AssertModuleIds<T extends true> = T;
+type _RuntimeSetupModuleIdsRemainExact = AssertModuleIds<SameModuleIds>;
+
+export interface AgentRuntimeHostCreationErrorDetails {
   readonly cancellationObserved?: boolean | undefined;
   readonly cleanupFailed?: boolean;
   readonly diagnostics?: readonly string[];
@@ -80,7 +108,7 @@ export class AgentRuntimeHostCreationError extends Error {
   constructor(
     readonly code: AgentRuntimeHostCreationErrorCode,
     readonly phase: AgentRuntimeHostCreationPhase,
-    details: CreationErrorDetails = {},
+    details: AgentRuntimeHostCreationErrorDetails = {},
   ) {
     super(`Agent Runtime Host creation failed: ${code}`);
     this.name = "AgentRuntimeHostCreationError";

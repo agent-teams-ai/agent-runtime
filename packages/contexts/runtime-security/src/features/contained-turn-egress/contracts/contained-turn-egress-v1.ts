@@ -1,4 +1,6 @@
-export const EGRESS_DISPATCH_PURPOSE = "contained-turn.provider-dispatch/v1" as const;
+export type EgressDispatchPurpose = "contained-turn.provider-dispatch/v1";
+export const EGRESS_DISPATCH_PURPOSE: EgressDispatchPurpose =
+  "contained-turn.provider-dispatch/v1";
 
 export interface EgressDispatchScope {
   readonly tenantId: string;
@@ -7,7 +9,7 @@ export interface EgressDispatchScope {
 }
 
 export interface EgressDispatchObservation {
-  readonly purpose: typeof EGRESS_DISPATCH_PURPOSE;
+  readonly purpose: EgressDispatchPurpose;
   readonly operationId: string;
   readonly scope: EgressDispatchScope;
   readonly grantRequestId: string;
@@ -25,7 +27,7 @@ export interface EgressDispatchObservation {
 
 export interface EgressDispatchConsumptionReceipt {
   readonly contractVersion: "contained-turn-dispatch-consumption/v1";
-  readonly purpose: typeof EGRESS_DISPATCH_PURPOSE;
+  readonly purpose: EgressDispatchPurpose;
   readonly operationId: string;
   readonly scope: EgressDispatchScope;
   readonly grantRequestId: string;

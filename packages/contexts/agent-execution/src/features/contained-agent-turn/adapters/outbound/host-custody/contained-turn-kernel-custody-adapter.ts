@@ -52,7 +52,7 @@ export type {
   ContainedTurnKernelCustodyAttemptOwner,
   ContainedTurnKernelWorkspaceOwner,
 } from "./contained-turn-kernel-custody-contracts.js";
-type StartInput = Parameters<ContainedTurnKernelCustodyPort["start"]>[0];
+export type ContainedTurnCustodyStartInput = Parameters<ContainedTurnKernelCustodyPort["start"]>[0];
 type StartProof = Extract<ContainedTurnProof, { readonly kind: "provider_process_start" }>;
 type NoStartProof = Extract<ContainedTurnProof, { readonly kind: "provider_process_no_start" }>;
 type StartObservation =
@@ -62,8 +62,8 @@ type StartObservation =
     readonly evidenceId: ReturnType<typeof evidenceId>;
     readonly kind: "indeterminate";
   };
-type PhysicalInput = Parameters<ContainedTurnKernelCustodyPort["ensurePhysicalContainment"]>[0];
-type ContainmentInput = Parameters<ContainedTurnKernelCustodyPort["attestContainment"]>[0];
+export type ContainedTurnPhysicalContainmentInput = Parameters<ContainedTurnKernelCustodyPort["ensurePhysicalContainment"]>[0];
+export type ContainedTurnContainmentAttestationInput = Parameters<ContainedTurnKernelCustodyPort["attestContainment"]>[0];
 /**
  * Outer anti-corruption adapter from raw Host facts to the kernel proof port.
  * Provider protocol completion is sealed from the exact one-use execute promise;
@@ -203,7 +203,7 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     if (input.phase === "start") {void boundary.expiration.then(() => {this.#preparing.get(input.custodyId)?.abort(); return null;});}
     return boundary;
   }
-  public async start(input: StartInput): ReturnType<ContainedTurnKernelCustodyPort["start"]> {
+  public async start(input: ContainedTurnCustodyStartInput): ReturnType<ContainedTurnKernelCustodyPort["start"]> {
     if (this.#admissionClosed) {throw new TypeError("Host Custody admission is unavailable");}
     const reservation = readKernelReservation(this.#reservations, input);
     const hostCustodyProof = this.#openOutcome(reservation).hostCustodyProof;
@@ -319,17 +319,17 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     return result;
   }
   public ensurePhysicalContainment(
-    input: PhysicalInput,
+    input: ContainedTurnPhysicalContainmentInput,
   ): ReturnType<ContainedTurnKernelCustodyPort["ensurePhysicalContainment"]> {
     return this.#physicalContainment(input, true);
   }
   public queryPhysicalContainment(
-    input: PhysicalInput,
+    input: ContainedTurnPhysicalContainmentInput,
   ): ReturnType<ContainedTurnKernelCustodyPort["queryPhysicalContainment"]> {
     return this.#physicalContainment(input, false);
   }
   async #physicalContainment(
-    input: PhysicalInput,
+    input: ContainedTurnPhysicalContainmentInput,
     initiate: boolean,
   ): ReturnType<ContainedTurnKernelCustodyPort["ensurePhysicalContainment"]> {
     const reservation = readKernelReservation(this.#reservations, input);
@@ -343,17 +343,17 @@ export class ContainedTurnKernelCustodyAdapter implements ContainedTurnKernelCus
     });
   }
   public attestContainment(
-    input: ContainmentInput,
+    input: ContainedTurnContainmentAttestationInput,
   ): ReturnType<ContainedTurnKernelCustodyPort["attestContainment"]> {
     return this.#attestContainment(input, true);
   }
   public queryContainmentAttestation(
-    input: ContainmentInput,
+    input: ContainedTurnContainmentAttestationInput,
   ): ReturnType<ContainedTurnKernelCustodyPort["queryContainmentAttestation"]> {
     return this.#attestContainment(input, false);
   }
   async #attestContainment(
-    input: ContainmentInput,
+    input: ContainedTurnContainmentAttestationInput,
     initiate: boolean,
   ): ReturnType<ContainedTurnKernelCustodyPort["attestContainment"]> {
     const reservation = readKernelReservation(this.#reservations, input);

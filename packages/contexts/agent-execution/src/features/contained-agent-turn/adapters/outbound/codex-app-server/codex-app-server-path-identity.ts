@@ -18,19 +18,19 @@ const portableSegment = (segment: string): boolean =>
 const missingPath = (error: unknown): boolean =>
   error !== null && typeof error === "object" && "code" in error && error.code === "ENOENT";
 
-type PathKind = "directory" | "file";
+export type CodexPathKind = "directory" | "file";
 
-interface ExistingPathIdentity {
+export interface CodexExistingPathIdentity {
   readonly device: bigint;
   readonly inode: bigint;
-  readonly kind: PathKind;
+  readonly kind: CodexPathKind;
   readonly path: string;
 }
 
 /** Untrusted provider endpoint observation. It is diagnostic only and never a custody or effect receipt. */
 export interface CodexEndpointPathObservation {
   readonly authority: "provider-observation-only";
-  readonly existing: readonly ExistingPathIdentity[];
+  readonly existing: readonly CodexExistingPathIdentity[];
   /** A missing suffix has no inode. It may materialize, but is recaptured before later reconciliation. */
   readonly firstMissingPath?: string;
   readonly path: string;
@@ -64,7 +64,7 @@ const containedEndpointSuffix = (candidate: string, workspaceRef: string, allowW
   return suffix;
 };
 
-const kindOf = (observation: BigIntStats): PathKind => {
+const kindOf = (observation: BigIntStats): CodexPathKind => {
   if (observation.isDirectory()) {return "directory";}
   if (observation.isFile()) {return "file";}
   throw new TypeError("Codex provider path has an unsupported filesystem type");
@@ -87,7 +87,7 @@ const assertDirectoryEntriesUnambiguous = (path: string): Map<string, string> =>
 const captureExisting = (
   path: string,
   boundary: CodexAppServerPermissionBoundary,
-): ExistingPathIdentity => {
+): CodexExistingPathIdentity => {
   const observation = lstatSync(path, { bigint: true });
   if (observation.isSymbolicLink() || realpathSync(path) !== path) {
     throw new TypeError("Codex provider path has symlink-like ambiguity");
@@ -112,7 +112,7 @@ const captureEndpointObservation = (
   suffix: string,
   boundary: CodexAppServerPermissionBoundary,
 ): CodexEndpointPathObservation => {
-  const existing: ExistingPathIdentity[] = [captureExisting(boundary.workspaceRef, boundary)];
+  const existing: CodexExistingPathIdentity[] = [captureExisting(boundary.workspaceRef, boundary)];
   let parent = boundary.workspaceRef;
   let firstMissingPath: string | undefined;
   const segments = suffix === "" ? [] : suffix.split(sep);

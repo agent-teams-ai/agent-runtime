@@ -3,13 +3,14 @@ import type { HostCustodyHttpResourceLifetime, HostCustodyHttpResourceOwner } fr
 import { custodyDataRecord } from "./host-custody-inert-record.js";
 import type { createNodeHostHttpListener, NodeHostHttpAccept, NodeHostHttpListener } from "./egress/node-host-http-listener.js";
 import type { createNodeHostHttpConsumptionJournal, PreparedHostHttpConsumptionJournal } from "./egress/node-host-http-consumption-journal.js";
-import { prepareAuthenticatedHostHttpEgressSession, type HostHttpEgressSessionDependencies } from "./egress/host-http-egress-session.js";
+import { prepareAuthenticatedHostHttpEgressSession, type HostHttpAuthenticatedSession,
+  type HostHttpEgressSessionDependencies, type PreparedHostHttpAuthenticatedSession } from "./egress/host-http-egress-session.js";
 import { createHostHttpLocalCutOwner, type HostHttpLocalCutInput } from "./egress/host-http-local-cut-owner.js";
 
-type ListenerRecipe = Omit<ReturnType<typeof createNodeHostHttpListener>, "settleAccepted">;
-type ConsumptionRecipe = ReturnType<typeof createNodeHostHttpConsumptionJournal>;
-type Ingress = ReturnType<typeof prepareAuthenticatedHostHttpEgressSession>;
-type Session = ReturnType<Ingress["bind"]>;
+export type NodeCustodyHttpListenerRecipe = Omit<ReturnType<typeof createNodeHostHttpListener>, "settleAccepted">;
+export type NodeCustodyHttpConsumptionRecipe = ReturnType<typeof createNodeHostHttpConsumptionJournal>;
+export type NodeCustodyHttpIngress = PreparedHostHttpAuthenticatedSession;
+export type NodeCustodyHttpSession = HostHttpAuthenticatedSession;
 /** Host-owned private consumer contract. An acknowledged intent permits a
  * listener effect; it is never physical closure or qualification evidence. */
 export interface NodeCustodyHttpListenerLifecycle {
@@ -19,9 +20,9 @@ export interface NodeCustodyHttpListenerLifecycle {
   }>;
 }
 export type NodeCustodyHttpResourceInput = Readonly<{
-  listener: ListenerRecipe;
+  listener: NodeCustodyHttpListenerRecipe;
   accept: NodeHostHttpAccept;
-  consumption: ConsumptionRecipe;
+  consumption: NodeCustodyHttpConsumptionRecipe;
   localCut: Omit<HostHttpLocalCutInput, "claimed" | "identity">;
   listenerLifecycle: NodeCustodyHttpListenerLifecycle;
 }>;
@@ -74,8 +75,8 @@ export class NodeCustodyHttpResources {
   #listenerOwned = false;
   #listener: NodeHostHttpListener | undefined;
   #journal: PreparedHostHttpConsumptionJournal | undefined;
-  #ingress: Ingress | undefined;
-  #session: Session | undefined;
+  #ingress: NodeCustodyHttpIngress | undefined;
+  #session: NodeCustodyHttpSession | undefined;
   #binding = false;
   #preparation: Promise<void> | undefined;
   #listenerOpen: Promise<void> | undefined;
@@ -93,7 +94,7 @@ export class NodeCustodyHttpResources {
 
   public get pending(): Promise<void> | undefined {return this.#preparation;}
 
-  public openIngress(lifetime: HostCustodyHttpResourceLifetime): Ingress {
+  public openIngress(lifetime: HostCustodyHttpResourceLifetime): NodeCustodyHttpIngress {
     if (this.#isCut() || this.#ingress !== undefined || this.#binding) {throw rejected();}
     // Reserve before entropy issuance, including a synchronous throw/reentrant cut.
     this.#binding = true;
@@ -105,7 +106,7 @@ export class NodeCustodyHttpResources {
     finally {this.#binding = false;}
   }
 
-  public bindSession(dependencies: HostHttpEgressSessionDependencies): Session {
+  public bindSession(dependencies: HostHttpEgressSessionDependencies): NodeCustodyHttpSession {
     if (this.#isCut() || this.#ingress === undefined || this.#session !== undefined || this.#binding ||
       this.#entered && (this.#journal === undefined || this.#listener === undefined)) {throw rejected();}
     this.#binding = true;

@@ -8,15 +8,15 @@ import type { StrictHttpRequest } from "./strict-http-request.js";
 import { boundedHttpOpaque } from "./http-ingress-validation.js";
 
 export type HostHttpEgressSessionDependencies = Omit<HttpEgressBrokerPorts, "guard">;
-type SessionIdentity = HostHttpEgressSessionDependencies["identity"];
-type AuthenticatedSession = Readonly<{
+export type HostHttpSessionIdentity = HostHttpEgressSessionDependencies["identity"];
+export type HostHttpAuthenticatedSession = Readonly<{
   nativeBearerToken(): string;
   execute(operation: HttpEgressOperation): Promise<HttpEgressReceipt>;
   close(): void;
 }>;
-type PreparedAuthenticatedSession = Readonly<{
+export type PreparedHostHttpAuthenticatedSession = Readonly<{
   nativeBearerToken(): string;
-  bind(this: PreparedAuthenticatedSession, dependencies: HostHttpEgressSessionDependencies): AuthenticatedSession;
+  bind(this: PreparedHostHttpAuthenticatedSession, dependencies: HostHttpEgressSessionDependencies): HostHttpAuthenticatedSession;
   close(): void;
 }>;
 
@@ -38,7 +38,7 @@ const snapshotData = (value: unknown): Readonly<Record<string, unknown>> => {
   })));
 };
 
-const snapshotIdentity = (value: unknown): SessionIdentity => {
+const snapshotIdentity = (value: unknown): HostHttpSessionIdentity => {
   const data = snapshotData(value);
   if (Object.keys(data).length !== identityFields.length
     || !boundedHttpOpaque(data.operationId) || !boundedHttpOpaque(data.attemptId)
@@ -88,7 +88,7 @@ export const createHostHttpEgressSession = (dependencies: HostHttpEgressSessionD
  * now; this handle is never a product factory dependency or a caller capability.
  * Returned token strings are sensitive native input and cannot be zeroized by JS.
  */
-export const prepareAuthenticatedHostHttpEgressSession = (input: SessionIdentity): PreparedAuthenticatedSession => {
+export const prepareAuthenticatedHostHttpEgressSession = (input: HostHttpSessionIdentity): PreparedHostHttpAuthenticatedSession => {
   const identity = snapshotIdentity(input);
   const ingress = issueHostHttpIngressAuthorization();
   let used = false; let closed = false;
@@ -98,9 +98,9 @@ export const prepareAuthenticatedHostHttpEgressSession = (input: SessionIdentity
     try {session?.close();} finally {ingress.close();}
   };
   const isClosed = (): boolean => closed;
-  const prepared: PreparedAuthenticatedSession = Object.freeze({
+  const prepared: PreparedHostHttpAuthenticatedSession = Object.freeze({
     nativeBearerToken: ingress.nativeBearerToken,
-    bind(this: PreparedAuthenticatedSession, dependencies: HostHttpEgressSessionDependencies): AuthenticatedSession {
+    bind(this: PreparedHostHttpAuthenticatedSession, dependencies: HostHttpEgressSessionDependencies): HostHttpAuthenticatedSession {
       if (this !== prepared || used || closed) {close(); throw rejected();}
       used = true;
       try {

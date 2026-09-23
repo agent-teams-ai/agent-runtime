@@ -1,14 +1,17 @@
 import type {HostHttpEgressSessionDependencies} from "@agent-teams/agent-execution/composition";
-import type {createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate,
+import type {HostEgressVerifierV2, ProviderProcessEgressAuthorizationV2,
   ProvisionalEgressAuthorizationV2, SignedFirstApplicationByteGrantV2,
   TrustedHostRequestProjectionV2} from "@agent-teams/runtime-security/composition";
 
-type Candidate = ReturnType<typeof createNodeEd25519ProviderProcessEgressAuthorizationV2Candidate>;
-type Binding = Pick<HostHttpEgressSessionDependencies, "runtimeSecurity" | "verifier">;
-export type ContainedTurnHttpRuntimeSecurityBinding = Binding;
-type HttpDecision = Extract<Awaited<ReturnType<Binding["runtimeSecurity"]["requestProvisional"]>>,
+export interface ContainedTurnHttpRuntimeSecurityOwner {
+  readonly hostEgressAuthorizationV2: ProviderProcessEgressAuthorizationV2;
+  readonly hostEgressVerifierV2: HostEgressVerifierV2;
+}
+export type ContainedTurnHttpRuntimeSecurityBinding =
+  Pick<HostHttpEgressSessionDependencies, "runtimeSecurity" | "verifier">;
+type HttpDecision = Extract<Awaited<ReturnType<ContainedTurnHttpRuntimeSecurityBinding["runtimeSecurity"]["requestProvisional"]>>,
   {status: "authorized"}>["decision"];
-type HttpGrant = Extract<Awaited<ReturnType<Binding["runtimeSecurity"]["authorizeFirstApplicationByte"]>>,
+type HttpGrant = Extract<Awaited<ReturnType<ContainedTurnHttpRuntimeSecurityBinding["runtimeSecurity"]["authorizeFirstApplicationByte"]>>,
   {status: "authorized"}>["grant"];
 
 /** Narrow the signed request without rewriting any signed field. */
@@ -47,7 +50,9 @@ const httpGrant = (grant: SignedFirstApplicationByteGrantV2): HttpGrant | undefi
  * This binding creates no key, listener or authority and adds no feature port.
  * Only the trusted composition root supplies this frozen owner-created object.
  */
-export const bindContainedTurnHttpRuntimeSecurity = (candidate: Candidate): Binding => {
+export const bindContainedTurnHttpRuntimeSecurity = (
+  candidate: ContainedTurnHttpRuntimeSecurityOwner,
+): ContainedTurnHttpRuntimeSecurityBinding => {
   const authorization = candidate.hostEgressAuthorizationV2;
   const verifier = candidate.hostEgressVerifierV2;
   const requestProvisional = authorization.requestProvisional.bind(authorization);
@@ -57,7 +62,7 @@ export const bindContainedTurnHttpRuntimeSecurity = (candidate: Candidate): Bind
   const signingKey = Object.freeze({...verifier.signingKey});
   const denied = Object.freeze({status: "denied" as const});
   return Object.freeze({
-    runtimeSecurity: Object.freeze<Binding["runtimeSecurity"]>({
+    runtimeSecurity: Object.freeze<ContainedTurnHttpRuntimeSecurityBinding["runtimeSecurity"]>({
       async requestProvisional(input) {
         try {
           const outcome = await requestProvisional(input);
@@ -75,7 +80,7 @@ export const bindContainedTurnHttpRuntimeSecurity = (candidate: Candidate): Bind
         } catch {return denied;}
       },
     }),
-    verifier: Object.freeze<Binding["verifier"]>({signingKey,
+    verifier: Object.freeze<ContainedTurnHttpRuntimeSecurityBinding["verifier"]>({signingKey,
       verifyProvisionalDecision(value) {try {return verifyProvisionalDecision(value);} catch {return false;}},
       verifyGrant(value) {try {return verifyGrant(value);} catch {return false;}},
     }),

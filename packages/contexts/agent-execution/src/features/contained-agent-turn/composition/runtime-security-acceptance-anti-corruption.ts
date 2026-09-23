@@ -10,14 +10,14 @@ import { authorityValue, ownerValue } from "./authority-owner-boundary.js";
 import { capturedMethod, exactStableDataRecord, exactBoundedToken } from "./provider-access-anti-corruption.js";
 import { createContainedTurnRuntimeSecurityPort, type OuterContainedTurnRuntimeSecurityAuthority } from "./runtime-security-anti-corruption.js";
 
-type Intent = Readonly<{operationId: string; scope: Readonly<{tenantId: string; projectId: string; scopeDigest: string}>; providerId: string; intentDigest: string; policyRevision: string}>;
-type Policy = Omit<Intent, "operationId"> & Readonly<{enabled: boolean; revoked: boolean; constraintsDigest: string; containmentPolicyDigest: string; validFromControlTime: number; claimBeforeControlTime: number}>;
-type Decision = Intent & Readonly<{decisionDigest: string; ownerEvidenceRef: string; policy: Policy}>;
-type Preparation = Readonly<{acceptance: Intent; decisionDigest: string; authorityGeneration: string; providerBindingDigest: string; claimBindingDigest: string; requestDigest: string; grantRequestId: string}>;
+export type ContainedTurnSecurityIntent = Readonly<{operationId: string; scope: Readonly<{tenantId: string; projectId: string; scopeDigest: string}>; providerId: string; intentDigest: string; policyRevision: string}>;
+export type ContainedTurnSecurityPolicy = Omit<ContainedTurnSecurityIntent, "operationId"> & Readonly<{enabled: boolean; revoked: boolean; constraintsDigest: string; containmentPolicyDigest: string; validFromControlTime: number; claimBeforeControlTime: number}>;
+export type ContainedTurnSecurityDecision = ContainedTurnSecurityIntent & Readonly<{decisionDigest: string; ownerEvidenceRef: string; policy: ContainedTurnSecurityPolicy}>;
+export type ContainedTurnSecurityPreparation = Readonly<{acceptance: ContainedTurnSecurityIntent; decisionDigest: string; authorityGeneration: string; providerBindingDigest: string; claimBindingDigest: string; requestDigest: string; grantRequestId: string}>;
 /** Structural view of actual createDispatchAcceptanceFeature; no permission algorithm lives here. */
 export interface OuterContainedTurnSecurityAcceptance {
-  evaluateForAcceptance(input: Intent): Promise<Readonly<{status: "allowed"; decision: Decision} | {status: "denied"} | {status: "indeterminate"; reason: string}>>;
-  publishAndConsumeForDispatch(prepared: Preparation, request: Parameters<OuterContainedTurnRuntimeSecurityAuthority["consumeForDispatch"]>[0]): ReturnType<OuterContainedTurnRuntimeSecurityAuthority["consumeForDispatch"]>;
+  evaluateForAcceptance(input: ContainedTurnSecurityIntent): Promise<Readonly<{status: "allowed"; decision: ContainedTurnSecurityDecision} | {status: "denied"} | {status: "indeterminate"; reason: string}>>;
+  publishAndConsumeForDispatch(prepared: ContainedTurnSecurityPreparation, request: Parameters<OuterContainedTurnRuntimeSecurityAuthority["consumeForDispatch"]>[0]): ReturnType<OuterContainedTurnRuntimeSecurityAuthority["consumeForDispatch"]>;
   observeDispatchConsumption: OuterContainedTurnRuntimeSecurityAuthority["observeDispatchConsumption"];
   settleDispatchConsumption: OuterContainedTurnRuntimeSecurityAuthority["settleDispatchConsumption"];
 }
@@ -26,7 +26,7 @@ const evidence = (phase: string) => containedTurnIdentity("evidence", `evidence:
 const proof = (phase: string, value: unknown) => containedTurnIdentity("proof", `proof:runtime-security:${phase}:${hash(value as never)}`);
 const selectionKey = (operationId: string, scope: unknown) => hash({operationId, scope} as never);
 const same = (a: unknown, b: unknown) => hash(a as never) === hash(b as never);
-const checkDecision = (decision: Decision, intent: Intent, constraintsDigest: string) => {
+const checkDecision = (decision: ContainedTurnSecurityDecision, intent: ContainedTurnSecurityIntent, constraintsDigest: string) => {
   exact("RS decision", decision, ["operationId", "scope", "providerId", "intentDigest", "policyRevision", "decisionDigest", "ownerEvidenceRef", "policy"]);
   const {policy, decisionDigest, ownerEvidenceRef, ...selector} = decision;
   exact("RS policy", policy, ["scope", "providerId", "intentDigest", "policyRevision", "enabled", "revoked", "constraintsDigest", "containmentPolicyDigest", "validFromControlTime", "claimBeforeControlTime"]);
@@ -50,12 +50,12 @@ export const createContainedTurnSecurityAcceptancePort = (
   const methods = exactStableDataRecord(outer, ["evaluateForAcceptance", "publishAndConsumeForDispatch", "observeDispatchConsumption", "settleDispatchConsumption"]);
   const owner = Object.freeze(Object.fromEntries(Object.keys(methods).map(key => [key, capturedMethod(outer, methods[key])]))) as unknown as OuterContainedTurnSecurityAcceptance;
   // Retained selectors are lookup identities only. Every dispatch check calls the actual current owner again.
-  const selections = new Map<string, Readonly<{intent: Intent; constraintsDigest: string; decision: Decision}>>();
+  const selections = new Map<string, Readonly<{intent: ContainedTurnSecurityIntent; constraintsDigest: string; decision: ContainedTurnSecurityDecision}>>();
   const acceptance: Pick<ContainedTurnKernelSecurityPort, "authorizeForAcceptance" | "revalidateForDispatch"> = Object.freeze({
     async authorizeForAcceptance(input) {
       try {
         const value = authorityValue(input);
-        const intent: Intent = Object.freeze({operationId: value.operationId, scope: Object.freeze({...value.scope, scopeDigest: containedTurnScopeDigest(value.scope)}),
+        const intent: ContainedTurnSecurityIntent = Object.freeze({operationId: value.operationId, scope: Object.freeze({...value.scope, scopeDigest: containedTurnScopeDigest(value.scope)}),
           providerId: value.provider, intentDigest: containedTurnAcceptanceIntentDigestV1(value.intent), policyRevision});
         const outcome = await ownerValue(owner.evaluateForAcceptance(intent));
         if (outcome.status === "denied") {exact("RS denial", outcome, ["status"]); return {kind: "denied"};}
@@ -97,7 +97,7 @@ export const createContainedTurnSecurityAcceptancePort = (
         const {accepted, subject, bindingDigest} = acceptedAuthority(input);
         const vector = accepted.acceptedAuthorityVector;
         if (vector.securityAuthorityRevision !== policyRevision) {throw new TypeError("RS trusted selection mismatch");}
-        const prepared: Preparation = Object.freeze({acceptance: Object.freeze({operationId: accepted.operationId,
+        const prepared: ContainedTurnSecurityPreparation = Object.freeze({acceptance: Object.freeze({operationId: accepted.operationId,
           scope: Object.freeze({...accepted.scope, scopeDigest: containedTurnScopeDigest(accepted.scope)}), providerId: vector.adapterSnapshot.provider,
           intentDigest: accepted.intentDigest, policyRevision: vector.securityAuthorityRevision}), decisionDigest: vector.securityDecisionDigest,
           authorityGeneration: vector.operationAuthorityRevision, providerBindingDigest: bindingDigest,
