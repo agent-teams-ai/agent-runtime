@@ -33,3 +33,9 @@ allowBuilds:
   msgpackr-extract: false
   opencode-ai: true
 minimumReleaseAge: 0
+minimumReleaseAgeExclude:
+  - "@agent-teams/repository-mutation@0.2.1"
+  - "@agent-teams/document-authoring@0.3.1"
+  - "@agent-teams/docs-protocol@0.6.1"
+  - "@agent-teams/docs-protocol-agent-teams@0.2.11"
+  - "@agent-teams/engineering-foundation@1.6.0"

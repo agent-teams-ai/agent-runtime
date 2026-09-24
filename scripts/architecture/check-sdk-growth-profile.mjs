@@ -13,6 +13,55 @@ export function normalizeWorkspaceManifestPaths(paths) {
   return paths.map(path => path.replaceAll("\\", "/")).toSorted();
 }
 
+function checkPackedQualification(repository, qualification, profile, json) {
+  assert.equal(qualification.packagesDeterministic, true, "SDK_PACKAGE_QUALIFICATION_DRIFT");
+  assert.deepEqual(qualification.packages.map(pkg => pkg.packageName).toSorted(), profile.packages.map(pkg => pkg.packageName).toSorted(), "SDK_QUALIFICATION_SCOPE_DRIFT");
+  assert.deepEqual(qualification.packages.map(({ packageName, archiveSha256, members }) => [packageName, archiveSha256, members]), [
+    ["@agent-teams/embedded-runtime", "0ee0aad987e973bf6ffabee775dd6150366ecb2b995262cf5e5b96021ca736b3", 356],
+    ["@agent-teams/agent-execution", "0b3401fc33bfdb3f12e60ffbd72eba1e857e1ca68cd972f6ab5a2615e38c9214", 1241],
+    ["@agent-teams/provider-access", "3e0675ca6ac65c11bfb44d70d770f7d254bf30eb261db0acd620616e956d6799", 241],
+    ["@agent-teams/runtime-configuration", "92207cfd475dfa0bd14f35be8912c13c7a3fded336373a76e99ac36ebc0ab656", 112],
+    ["@agent-teams/runtime-security", "9a02fd5b15231620ea2e0e97fde7a4c43a6ff220a80efcca756dc3aa8af47577", 352],
+    ["@agent-teams/filesystem-custody", "b0a569272d49e1b89372c0700b2978ecb3d9849054595b71bc3465269dfaa4bb", 35]
+  ], "SDK_CURRENT_ARCHIVES_DRIFT");
+  assert.deepEqual(qualification.packEvidence, {
+    status: "two-deterministic-runs",
+    runSha256: ["aa565ee638760039bb3429a25c13bfdbcc7e55656343cc61e10d07e7e61a7c61", "2f282b1d16a00cda7fde860aa12a388c2669b89c2cf8a83d0b3f5d21334b1973"],
+    archiveHashesMatch: true, publicImportsMatch: true
+  }, "SDK_PACK_EVIDENCE_DRIFT");
+  for (const pkg of qualification.packages) {
+    assert.match(pkg.archiveSha256, /^[a-f0-9]{64}$/u, "SDK_PACKAGE_QUALIFICATION_DRIFT");
+    assert.ok(Number.isSafeInteger(pkg.members) && pkg.members > 0, "SDK_PACKAGE_QUALIFICATION_DRIFT");
+  }
+  const expectedImports = profile.packages.flatMap(pkg => {
+    const exports = Object.keys(json(pkg.manifestPath).exports);
+    return exports.map(exportPath => `${pkg.packageName}${exportPath === "." ? "" : exportPath.slice(1)}`);
+  });
+  assert.deepEqual(qualification.publicImports.toSorted(), expectedImports.toSorted(), "SDK_PUBLIC_IMPORT_QUALIFICATION_DRIFT");
+  for (const [index, name] of ["ef160-pack-run-a.txt", "ef160-pack-run-b.txt"].entries()) {
+    const bytes = readFileSync(resolve(repository, `${directory}/evidence/${name}`));
+    assert.equal(createHash("sha256").update(bytes).digest("hex"), qualification.packEvidence.runSha256[index], "SDK_PACK_EVIDENCE_DRIFT");
+    const log = bytes.toString("utf8");
+    const start = log.lastIndexOf('{\n  "schemaVersion"');
+    assert.ok(start >= 0, "SDK_PACK_EVIDENCE_DRIFT");
+    const receipt = JSON.parse(log.slice(start));
+    assert.equal(receipt.releaseEligible, false, "SDK_ADMISSION_OVERCLAIM");
+    assert.deepEqual(receipt.packages.map(({ packageName, archiveSha256, members }) => ({ packageName, archiveSha256, members })), qualification.packages, "SDK_PACK_EVIDENCE_DRIFT");
+    assert.deepEqual(receipt.publicImports, qualification.publicImports, "SDK_PACK_EVIDENCE_DRIFT");
+  }
+}
+
+function checkRegistryIdentity(activation) {
+  assert.deepEqual(activation.registry, {
+    status: "published-exact", packageName: "@agent-teams/engineering-foundation", version: "1.6.0",
+    tarballSha256: "842f81ca68e9c3207a0da967eb599229d4d30ea32cd69a9a1686f2eb240f54eb",
+    integrity: "sha512-E6ytO+3xhZsaPTo49DRuhldQBRMFlF06EGqqERuGHrc4q11eLssTA9fsbEGCm1e4B8n/i8AsMt2ZkQklFeolWA==",
+    tarballUrl: "https://registry.npmjs.org/@agent-teams/engineering-foundation/-/engineering-foundation-1.6.0.tgz",
+    publishedAt: "2026-09-24T00:19:03.115Z",
+    distMetadataRetained: true, publicAuthorityImport: "passed"
+  }, "SDK_REGISTRY_IDENTITY_DRIFT");
+}
+
 // This checks consumer enrollment, not SDK admission. EF owns observation,
 // comparison and approval; a candidate-controlled checker cannot grant trust.
 export function checkSdkGrowthProfile(repository = root) {
@@ -34,14 +83,7 @@ export function checkSdkGrowthProfile(repository = root) {
   assert.equal(profile.sdkGrowth.policyVersion, "foundation:sdk-growth:policy:1");
   assert.equal(activation.contractRevision, frozen.contractRevision);
   assert.equal(activation.status, "pending-authority-qualification");
-  assert.deepEqual(activation.registry, {
-    status: "published-exact", packageName: "@agent-teams/engineering-foundation", version: "1.5.1",
-    tarballSha256: "bd0c476d2940168ac1b020f42726107cce81580b7b1b014e74aceabbafa9e951",
-    integrity: "sha512-29r5QUvMIFdvsPaJ5m0Yx1Uo6bL85J/teP1p1ThNg7jMEz54cVxyrEnsLx/DN5cc/2CAzq2i8iLnPKgZN1cT8A==",
-    tarballUrl: "https://registry.npmjs.org/@agent-teams/engineering-foundation/-/engineering-foundation-1.5.1.tgz",
-    publishedAt: "2026-09-22T08:23:18.839Z",
-    distMetadataRetained: true, publicAuthorityImport: "passed"
-  }, "SDK_REGISTRY_IDENTITY_DRIFT");
+  checkRegistryIdentity(activation);
   assert.equal(activation.authority.candidateWorkflowIsAuthority, false);
   const review = json("architecture/get-modular/evidence/sdk-growth-standard-review.json");
   const migrationReview = json("architecture/get-modular/evidence/a3-cms-pin-review.json");
@@ -61,13 +103,14 @@ export function checkSdkGrowthProfile(repository = root) {
   for (const path of ["architecture/get-modular/consumer-profile.json", "architecture/consumer-module-standard/contained-turn-profile.json"]) {
     assert.deepEqual(json(path).sdkGrowth, { profile: `${directory}/profile.yaml`, activation: `${directory}/activation.json`, status: activation.status, compositionChange: false }, "SDK_CONSUMER_PROFILE_DRIFT");
   }
-  assert.equal(activation.qualificationInput.version, "1.5.1", "SDK_EF_VERSION_DRIFT");
+  assert.equal(activation.qualificationInput.version, "1.6.0", "SDK_EF_VERSION_DRIFT");
+  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], activation.qualificationInput.version, "SDK_EF_VERSION_DRIFT");
   assert.equal(activation.qualificationInput.archiveSha256, activation.registry.tarballSha256, "SDK_EF_ARCHIVE_DRIFT");
   assert.equal(activation.qualificationInput.npmIntegrity, activation.registry.integrity, "SDK_EF_INTEGRITY_DRIFT");
   assert.equal(activation.qualificationInput.tarballUrl, activation.registry.tarballUrl, "SDK_EF_URL_DRIFT");
   assert.equal(activation.qualificationInput.publishedAt, activation.registry.publishedAt, "SDK_EF_PUBLICATION_DRIFT");
-  assert.equal(activation.qualificationInput.sourceMergeCommit, "9ce89f804bf237bcf7f9a6694e05616a5a60ce02", "SDK_EF_SOURCE_DRIFT");
-  assert.equal(activation.qualificationInput.sourceReleaseCommit, "6dff1055579605a539cf686163acf25f46768fb9", "SDK_EF_SOURCE_DRIFT");
+  assert.equal(activation.qualificationInput.sourceMergeCommit, "49402509372e3f4a96c534401636fb12ff5dbee2", "SDK_EF_SOURCE_DRIFT");
+  assert.equal(activation.qualificationInput.sourceReleaseCommit, "852cd5130cad84d750788b080f0e358ac5210355", "SDK_EF_SOURCE_DRIFT");
   assert.equal(manifest.name, "@vioxen/agent-runtime");
   assert.equal(manifest.private, true);
   for (const key of ["exports", "main", "types", "bin"]) {
@@ -91,26 +134,27 @@ export function checkSdkGrowthProfile(repository = root) {
     assert.equal(pkg.tsconfigPath, `${pkg.packageRoot}/tsconfig.json`);
   }
   assert.deepEqual(activation.packageQualification, { status: "passed-membership-and-imports", evidencePath: `${directory}/qualification.json`, cleanRegistryInstall: true }, "SDK_PACKAGE_QUALIFICATION_DRIFT");
-  assert.deepEqual(activation.sdkAdmission, { status: "blocked-forgotten-exports", releaseEligible: false }, "SDK_ADMISSION_OVERCLAIM");
+  assert.deepEqual(activation.sdkAdmission, { status: "blocked-current-typed-observation", releaseEligible: false }, "SDK_ADMISSION_OVERCLAIM");
   const qualification = json(activation.packageQualification.evidencePath);
-  assert.equal(qualification.sourceCheckpoint, "5a9eb460400f968a7683c75f5f43a8329cad1196", "SDK_QUALIFICATION_BASE_DRIFT");
+  assert.equal(qualification.historicalSourceCheckpoint, "5a9eb460400f968a7683c75f5f43a8329cad1196", "SDK_QUALIFICATION_BASE_DRIFT");
   assert.equal(qualification.qualification, "package-membership-and-public-imports", "SDK_PACKAGE_QUALIFICATION_DRIFT");
   assert.equal(qualification.releaseEligible, false, "SDK_ADMISSION_OVERCLAIM");
   assert.equal(qualification.efCandidateSha256, activation.qualificationInput.archiveSha256, "SDK_EF_CANDIDATE_DRIFT");
-  assert.equal(qualification.packagesDeterministic, true, "SDK_PACKAGE_QUALIFICATION_DRIFT");
-  assert.deepEqual(qualification.packages.map(pkg => pkg.packageName).toSorted(), profile.packages.map(pkg => pkg.packageName).toSorted(), "SDK_QUALIFICATION_SCOPE_DRIFT");
-  for (const pkg of qualification.packages) {
-    assert.match(pkg.archiveSha256, /^[a-f0-9]{64}$/u, "SDK_PACKAGE_QUALIFICATION_DRIFT");
-    assert.ok(Number.isSafeInteger(pkg.members) && pkg.members > 0, "SDK_PACKAGE_QUALIFICATION_DRIFT");
-  }
-  const expectedImports = profile.packages.flatMap(pkg => {
-    const exports = Object.keys(json(pkg.manifestPath).exports);
-    return exports.map(exportPath => `${pkg.packageName}${exportPath === "." ? "" : exportPath.slice(1)}`);
-  });
-  assert.deepEqual(qualification.publicImports.toSorted(), expectedImports.toSorted(), "SDK_PUBLIC_IMPORT_QUALIFICATION_DRIFT");
-  const candidate = qualification.candidateQualification;
+  checkPackedQualification(repository, qualification, profile, json);
+  const current = qualification.successorCandidateQualification;
+  assert.deepEqual(current, {
+    status: "pending-current-typed-observation", version: activation.qualificationInput.version,
+    sourceBase: "e88f879e8e9cdedbb5954932399b5207033cd0e9",
+    typedObservationStatus: "not-captured", strictExtractionStatus: "not-captured",
+    authorityStatus: "not-invoked-current-typed-observation-pending", releaseEligible: false
+  }, "SDK_CURRENT_OBSERVATION_OVERCLAIM");
+  assert.equal(activation.sdkAdmission.status, "blocked-current-typed-observation", "SDK_ADMISSION_OVERCLAIM");
+  assert.equal(activation.sdkAdmission.releaseEligible, false, "SDK_ADMISSION_OVERCLAIM");
+  assert.equal(activation.authority.status, current.authorityStatus, "SDK_ADMISSION_OVERCLAIM");
+  assert.equal(qualification.efCandidateSha256, activation.registry.tarballSha256, "SDK_EF_ARCHIVE_DRIFT");
+  const candidate = qualification.historicalCandidateQualification;
   assert.equal(candidate.status, "qualified-rich-observation-strict-extraction-blocked", "SDK_EF_CANDIDATE_OBSERVATION_MISSING");
-  assert.equal(candidate.version, activation.qualificationInput.version, "SDK_EF_CANDIDATE_DRIFT");
+  assert.equal(candidate.version, "1.5.1", "SDK_EF_CANDIDATE_DRIFT");
   for (const value of [candidate.toolArtifactDigest, candidate.topologyDigest, candidate.lockDigest, candidate.toolchainDigest, candidate.surfaceDigest, ...candidate.artifactDigests]) {
     assert.match(value, /^sha256:[a-f0-9]{64}$/u, "SDK_EF_CANDIDATE_REPORT_DRIFT");
   }

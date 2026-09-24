@@ -26,7 +26,7 @@ function mutate(directory, path, change) {
   writeFileSync(destination, path.endsWith(".yaml") ? stringify(value) : `${JSON.stringify(value, null, 2)}\n`);
 }
 
-test("exact EF 1.5.1 enrollment retains deterministic rich models and fails closed on strict composition exports", t => {
+test("exact EF 1.6.0 package enrollment keeps historical EF 1.5.1 observation separate and current admission blocked", t => {
   assert.deepEqual(checkSdkGrowthProfile(fixture(t)), { status: "pending-authority-qualification", packages: 6, metadataRoots: 1, releaseEligible: false });
 });
 for (const script of ["sdk-growth:profile", "test:sdk-growth:profile", "test:sdk-growth:packed"]) {
@@ -141,27 +141,60 @@ test("reject a package qualification promoted to release evidence", t => {
 });
 test("reject a packed-candidate observation promoted to release evidence", t => {
   const directory = fixture(t);
-  mutate(directory, "architecture/sdk-growth/qualification.json", value => { value.candidateQualification.releaseEligible = true; });
+  mutate(directory, "architecture/sdk-growth/qualification.json", value => { value.historicalCandidateQualification.releaseEligible = true; });
   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_ADMISSION_OVERCLAIM/u);
 });
 test("reject published registry identity drift", t => {
   const directory = fixture(t);
-  mutate(directory, "architecture/sdk-growth/activation.json", value => { value.registry.version = "1.5.0"; });
+  mutate(directory, "architecture/sdk-growth/activation.json", value => { value.registry.version = "1.5.1"; });
   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_REGISTRY_IDENTITY_DRIFT/u);
+});
+test("reject root EF pin detached from the exact registry artifact", t => {
+  const directory = fixture(t);
+  mutate(directory, "package.json", value => { value.devDependencies["@agent-teams/engineering-foundation"] = "1.5.1"; });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_EF_VERSION_DRIFT/u);
+});
+test("reject an old archive relabeled as current", t => {
+  const directory = fixture(t);
+  mutate(directory, "architecture/sdk-growth/qualification.json", value => {
+    value.packages[0].archiveSha256 = "bbfcbe3c7228fa4929adbf93d69f8d723fdb599af9cce3ccd4894f46582ce1c3";
+  });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CURRENT_ARCHIVES_DRIFT/u);
+});
+test("reject an omitted current pack receipt", t => {
+  const directory = fixture(t);
+  mutate(directory, "architecture/sdk-growth/qualification.json", value => { value.packEvidence.runSha256.pop(); });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_PACK_EVIDENCE_DRIFT/u);
+});
+test("reject substituted current pack receipt bytes", t => {
+  const directory = fixture(t);
+  const path = join(directory, "architecture/sdk-growth/evidence/ef160-pack-run-a.txt");
+  writeFileSync(path, `${readFileSync(path, "utf8")}\nchanged\n`);
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_PACK_EVIDENCE_DRIFT/u);
+});
+test("reject historical EF 1.5.1 observation relabeled as current", t => {
+  const directory = fixture(t);
+  mutate(directory, "architecture/sdk-growth/qualification.json", value => { value.historicalCandidateQualification.version = "1.6.0"; });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_EF_CANDIDATE_DRIFT/u);
+});
+test("reject current observation promoted without source-bound evidence", t => {
+  const directory = fixture(t);
+  mutate(directory, "architecture/sdk-growth/qualification.json", value => { value.successorCandidateQualification.releaseEligible = true; });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CURRENT_OBSERVATION_OVERCLAIM/u);
 });
 test("reject removal of the observed typed qualification blocker", t => {
   const directory = fixture(t);
-  mutate(directory, "architecture/sdk-growth/qualification.json", value => { value.candidateQualification.typedObservationFailures = []; });
+  mutate(directory, "architecture/sdk-growth/qualification.json", value => { value.historicalCandidateQualification.typedObservationFailures = []; });
   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_TYPED_FAILURE_EVIDENCE_DRIFT/u);
 });
 test("reject drift in the direct typed entrypoint audit", t => {
   const directory = fixture(t);
-  mutate(directory, "architecture/sdk-growth/qualification.json", value => { value.candidateQualification.entrypointAudits[0].strictErrors += 1; });
+  mutate(directory, "architecture/sdk-growth/qualification.json", value => { value.historicalCandidateQualification.entrypointAudits[0].strictErrors += 1; });
   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_TYPED_ENTRYPOINT_AUDIT_DRIFT/u);
 });
 
 test("reject nondeterministic rich models", t => {
   const directory = fixture(t);
-  mutate(directory, "architecture/sdk-growth/qualification.json", value => { value.candidateQualification.richModelsDeterministic = false; });
+  mutate(directory, "architecture/sdk-growth/qualification.json", value => { value.historicalCandidateQualification.richModelsDeterministic = false; });
   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_TYPED_ENTRYPOINT_AUDIT_DRIFT/u);
 });

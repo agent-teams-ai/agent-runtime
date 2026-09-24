@@ -1,0 +1,76 @@
+$ pnpm product:build && node scripts/architecture/qualify-sdk-packages.mjs
+$ pnpm --filter './packages/**' -r run build
+Scope: 6 of 7 workspace projects
+packages/contexts/provider-access build$ tsc --project tsconfig.json --pretty false
+packages/platform/filesystem-custody build$ tsc --project tsconfig.json --pretty false && node scripts/build-native-helper.mjs
+packages/contexts/provider-access build: Done
+packages/platform/filesystem-custody build: Done
+packages/contexts/agent-execution build$ tsc --project tsconfig.json --pretty false && node scripts/copy-runtime-assets.mjs
+packages/contexts/runtime-configuration build$ tsc --project tsconfig.json --pretty false
+packages/contexts/runtime-security build$ tsc --project tsconfig.json --pretty false
+packages/contexts/runtime-configuration build: Done
+packages/contexts/runtime-security build: Done
+packages/contexts/agent-execution build: Done
+packages/apps/embedded-runtime build$ tsc --project tsconfig.json --pretty false
+packages/apps/embedded-runtime build: Done
+{
+  "schemaVersion": 1,
+  "qualification": "package-membership-and-public-imports",
+  "releaseEligible": false,
+  "sandbox": "/tmp/ar-sdk-packed-CQGjWj",
+  "platform": "linux",
+  "node": "v24.18.0",
+  "packages": [
+    {
+      "packageName": "@agent-teams/embedded-runtime",
+      "archive": "/tmp/ar-sdk-packed-CQGjWj/archives/embedded-runtime/agent-teams-embedded-runtime-0.0.0.tgz",
+      "archiveSha256": "0ee0aad987e973bf6ffabee775dd6150366ecb2b995262cf5e5b96021ca736b3",
+      "members": 356
+    },
+    {
+      "packageName": "@agent-teams/agent-execution",
+      "archive": "/tmp/ar-sdk-packed-CQGjWj/archives/agent-execution/agent-teams-agent-execution-0.0.0.tgz",
+      "archiveSha256": "0b3401fc33bfdb3f12e60ffbd72eba1e857e1ca68cd972f6ab5a2615e38c9214",
+      "members": 1241
+    },
+    {
+      "packageName": "@agent-teams/provider-access",
+      "archive": "/tmp/ar-sdk-packed-CQGjWj/archives/provider-access/agent-teams-provider-access-0.0.0.tgz",
+      "archiveSha256": "3e0675ca6ac65c11bfb44d70d770f7d254bf30eb261db0acd620616e956d6799",
+      "members": 241
+    },
+    {
+      "packageName": "@agent-teams/runtime-configuration",
+      "archive": "/tmp/ar-sdk-packed-CQGjWj/archives/runtime-configuration/agent-teams-runtime-configuration-0.0.0.tgz",
+      "archiveSha256": "92207cfd475dfa0bd14f35be8912c13c7a3fded336373a76e99ac36ebc0ab656",
+      "members": 112
+    },
+    {
+      "packageName": "@agent-teams/runtime-security",
+      "archive": "/tmp/ar-sdk-packed-CQGjWj/archives/runtime-security/agent-teams-runtime-security-0.0.0.tgz",
+      "archiveSha256": "9a02fd5b15231620ea2e0e97fde7a4c43a6ff220a80efcca756dc3aa8af47577",
+      "members": 352
+    },
+    {
+      "packageName": "@agent-teams/filesystem-custody",
+      "archive": "/tmp/ar-sdk-packed-CQGjWj/archives/filesystem-custody/agent-teams-filesystem-custody-0.0.0.tgz",
+      "archiveSha256": "b0a569272d49e1b89372c0700b2978ecb3d9849054595b71bc3465269dfaa4bb",
+      "members": 35
+    }
+  ],
+  "publicImports": [
+    "@agent-teams/embedded-runtime",
+    "@agent-teams/embedded-runtime/composition",
+    "@agent-teams/embedded-runtime/scripts/run-package-tests.mjs",
+    "@agent-teams/agent-execution",
+    "@agent-teams/agent-execution/composition",
+    "@agent-teams/provider-access",
+    "@agent-teams/provider-access/composition",
+    "@agent-teams/runtime-configuration",
+    "@agent-teams/runtime-configuration/composition",
+    "@agent-teams/runtime-security",
+    "@agent-teams/runtime-security/composition",
+    "@agent-teams/filesystem-custody",
+    "@agent-teams/filesystem-custody/composition"
+  ]
+}

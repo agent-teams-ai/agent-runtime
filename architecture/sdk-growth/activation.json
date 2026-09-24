@@ -6,13 +6,13 @@
   "profile": "architecture/sdk-growth/profile.yaml",
   "qualificationInput": {
     "packageName": "@agent-teams/engineering-foundation",
-    "version": "1.5.1",
-    "npmIntegrity": "sha512-29r5QUvMIFdvsPaJ5m0Yx1Uo6bL85J/teP1p1ThNg7jMEz54cVxyrEnsLx/DN5cc/2CAzq2i8iLnPKgZN1cT8A==",
-    "archiveSha256": "bd0c476d2940168ac1b020f42726107cce81580b7b1b014e74aceabbafa9e951",
-    "tarballUrl": "https://registry.npmjs.org/@agent-teams/engineering-foundation/-/engineering-foundation-1.5.1.tgz",
-    "publishedAt": "2026-09-22T08:23:18.839Z",
-    "sourceMergeCommit": "9ce89f804bf237bcf7f9a6694e05616a5a60ce02",
-    "sourceReleaseCommit": "6dff1055579605a539cf686163acf25f46768fb9",
+    "version": "1.6.0",
+    "npmIntegrity": "sha512-E6ytO+3xhZsaPTo49DRuhldQBRMFlF06EGqqERuGHrc4q11eLssTA9fsbEGCm1e4B8n/i8AsMt2ZkQklFeolWA==",
+    "archiveSha256": "842f81ca68e9c3207a0da967eb599229d4d30ea32cd69a9a1686f2eb240f54eb",
+    "tarballUrl": "https://registry.npmjs.org/@agent-teams/engineering-foundation/-/engineering-foundation-1.6.0.tgz",
+    "publishedAt": "2026-09-24T00:19:03.115Z",
+    "sourceMergeCommit": "49402509372e3f4a96c534401636fb12ff5dbee2",
+    "sourceReleaseCommit": "852cd5130cad84d750788b080f0e358ac5210355",
     "use": "exact npm registry artifact; disposable qualification only"
   },
   "metadataRoots": [
@@ -27,22 +27,22 @@
   "registry": {
     "status": "published-exact",
     "packageName": "@agent-teams/engineering-foundation",
-    "version": "1.5.1",
-    "tarballSha256": "bd0c476d2940168ac1b020f42726107cce81580b7b1b014e74aceabbafa9e951",
-    "integrity": "sha512-29r5QUvMIFdvsPaJ5m0Yx1Uo6bL85J/teP1p1ThNg7jMEz54cVxyrEnsLx/DN5cc/2CAzq2i8iLnPKgZN1cT8A==",
-    "tarballUrl": "https://registry.npmjs.org/@agent-teams/engineering-foundation/-/engineering-foundation-1.5.1.tgz",
-    "publishedAt": "2026-09-22T08:23:18.839Z",
+    "version": "1.6.0",
+    "tarballSha256": "842f81ca68e9c3207a0da967eb599229d4d30ea32cd69a9a1686f2eb240f54eb",
+    "integrity": "sha512-E6ytO+3xhZsaPTo49DRuhldQBRMFlF06EGqqERuGHrc4q11eLssTA9fsbEGCm1e4B8n/i8AsMt2ZkQklFeolWA==",
+    "tarballUrl": "https://registry.npmjs.org/@agent-teams/engineering-foundation/-/engineering-foundation-1.6.0.tgz",
+    "publishedAt": "2026-09-24T00:19:03.115Z",
     "distMetadataRetained": true,
     "publicAuthorityImport": "passed"
   },
   "authority": {
     "protocol": "reviewrouter:sdk-growth-authority:3",
     "entrypoint": "@agent-teams/engineering-foundation/sdk-growth-authority",
-    "status": "not-invoked-strict-extraction-blocked",
+    "status": "not-invoked-current-typed-observation-pending",
     "candidateWorkflowIsAuthority": false
   },
   "pending": [
-    "Resolve 446 enforced ae-forgotten-export diagnostics on five composition entrypoints without changing the accepted A3 scope or publishing private implementation types by default.",
+    "Capture source-bound EF 1.6.0 typed observation and strict extraction for all twelve current entrypoints; historical EF 1.5.1 diagnostics are not current evidence.",
     "After strict extraction passes, generate trusted histories, owner decisions, grant, completion, receipt and admitted report through the external authority.",
     "Activate SDK admission only after every required authority phase and rejecting mutation passes."
   ],
@@ -58,7 +58,7 @@
     "cleanRegistryInstall": true
   },
   "sdkAdmission": {
-    "status": "blocked-forgotten-exports",
+    "status": "blocked-current-typed-observation",
     "releaseEligible": false
   }
 }

@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { parse } from "yaml";
 
 export function assertQualityAdoption({ manifest, foundation, profile }) {
-  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.5.1");
+  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.6.0");
   assert.equal(manifest.devDependencies["oxlint-tsgolint"], "catalog:");
   assert.equal(foundation.schemaVersion, 2);
   assert.deepEqual(foundation.capabilities["quality.source-coverage"], {
