@@ -82,6 +82,12 @@ test("reject root classification changed to a release obligation", t => {
   mutate(directory, "architecture/sdk-growth/metadata-root.json", value => { value.releaseHistory = "released"; });
   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_ROOT_CLASSIFICATION_DRIFT/u);
 });
+test("reject noncanonical root classification bytes accepted by parsed JSON", t => {
+  const directory = fixture(t);
+  const path = join(directory, "architecture/sdk-growth/metadata-root.json");
+  writeFileSync(path, `${JSON.stringify(JSON.parse(readFileSync(path, "utf8")), null, 2)}\n`);
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_ROOT_CLASSIFICATION_DRIFT/u);
+});
 test("reject root classification path redirected to unrelated bytes", t => {
   const directory = fixture(t);
   mutate(directory, "architecture/sdk-growth/activation.json", value => { value.metadataRoots[0].classificationPath = "package.json"; });

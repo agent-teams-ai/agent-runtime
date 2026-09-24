@@ -62,14 +62,14 @@ function checkRegistryIdentity(activation) {
   }, "SDK_REGISTRY_IDENTITY_DRIFT");
 }
 
-function checkRootClassification(manifest, activation, json) {
+function checkRootClassification(repository, manifest, activation, json) {
   assert.equal(manifest.name, "@vioxen/agent-runtime");
   assert.equal(manifest.private, true);
   for (const key of ["exports", "main", "types", "bin"]) {
     assert.equal(manifest[key], undefined, "SDK_ROOT_CLASSIFICATION_DRIFT");
   }
   const classificationPath = `${directory}/metadata-root.json`;
-  assert.deepEqual(json(classificationPath), {
+  const classification = {
     schemaVersion: "foundation:sdk-growth:metadata-root:1",
     kind: "non-release-metadata-root",
     packageName: manifest.name,
@@ -78,7 +78,10 @@ function checkRootClassification(manifest, activation, json) {
     decisionId: "AR-SDK-ROOT-001",
     ownerRef: "architecture/tooling",
     releaseHistory: "none"
-  }, "SDK_ROOT_CLASSIFICATION_DRIFT");
+  };
+  assert.deepEqual(json(classificationPath), classification, "SDK_ROOT_CLASSIFICATION_DRIFT");
+  const canonicalBytes = JSON.stringify(Object.fromEntries(Object.keys(classification).toSorted().map(key => [key, classification[key]])));
+  assert.equal(readFileSync(resolve(repository, classificationPath), "utf8"), canonicalBytes, "SDK_ROOT_CLASSIFICATION_DRIFT");
   assert.deepEqual(activation.metadataRoots, [{ packageName: manifest.name, rootPath: ".", manifestPath: "package.json", classificationPath, classification: "private-tooling-root-no-supported-sdk", releaseObligation: false }], "SDK_ROOT_CLASSIFICATION_DRIFT");
 }
 
@@ -131,7 +134,7 @@ export function checkSdkGrowthProfile(repository = root) {
   assert.equal(activation.qualificationInput.publishedAt, activation.registry.publishedAt, "SDK_EF_PUBLICATION_DRIFT");
   assert.equal(activation.qualificationInput.sourceMergeCommit, "49402509372e3f4a96c534401636fb12ff5dbee2", "SDK_EF_SOURCE_DRIFT");
   assert.equal(activation.qualificationInput.sourceReleaseCommit, "852cd5130cad84d750788b080f0e358ac5210355", "SDK_EF_SOURCE_DRIFT");
-  checkRootClassification(manifest, activation, json);
+  checkRootClassification(repository, manifest, activation, json);
   for (const pkg of profile.packages) {
     const actual = json(pkg.manifestPath);
     const prior = accepted.find(entry => entry.manifest === pkg.manifestPath);
