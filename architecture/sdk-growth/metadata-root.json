@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "foundation:sdk-growth:metadata-root:1",
+  "kind": "non-release-metadata-root",
+  "packageName": "@vioxen/agent-runtime",
+  "rootPath": ".",
+  "manifestPath": "package.json",
+  "decisionId": "AR-SDK-ROOT-001",
+  "ownerRef": "architecture/tooling",
+  "releaseHistory": "none"
+}

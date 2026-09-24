@@ -77,6 +77,16 @@ test("reject root SDK added under metadata classification", t => {
   mutate(directory, "package.json", value => { value.exports = "./index.js"; });
   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_ROOT_CLASSIFICATION_DRIFT/u);
 });
+test("reject root classification changed to a release obligation", t => {
+  const directory = fixture(t);
+  mutate(directory, "architecture/sdk-growth/metadata-root.json", value => { value.releaseHistory = "released"; });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_ROOT_CLASSIFICATION_DRIFT/u);
+});
+test("reject root classification path redirected to unrelated bytes", t => {
+  const directory = fixture(t);
+  mutate(directory, "architecture/sdk-growth/activation.json", value => { value.metadataRoots[0].classificationPath = "package.json"; });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_ROOT_CLASSIFICATION_DRIFT/u);
+});
 test("reject an unclassified workspace package executable", t => {
   const directory = fixture(t);
   mutate(directory, "packages/apps/embedded-runtime/package.json", value => {

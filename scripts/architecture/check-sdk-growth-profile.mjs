@@ -116,7 +116,18 @@ export function checkSdkGrowthProfile(repository = root) {
   for (const key of ["exports", "main", "types", "bin"]) {
     assert.equal(manifest[key], undefined, "SDK_ROOT_CLASSIFICATION_DRIFT");
   }
-  assert.deepEqual(activation.metadataRoots, [{ packageName: manifest.name, rootPath: ".", manifestPath: "package.json", classification: "private-tooling-root-no-supported-sdk", releaseObligation: false }]);
+  const classificationPath = `${directory}/metadata-root.json`;
+  assert.deepEqual(json(classificationPath), {
+    schemaVersion: "foundation:sdk-growth:metadata-root:1",
+    kind: "non-release-metadata-root",
+    packageName: manifest.name,
+    rootPath: ".",
+    manifestPath: "package.json",
+    decisionId: "AR-SDK-ROOT-001",
+    ownerRef: "architecture/tooling",
+    releaseHistory: "none"
+  }, "SDK_ROOT_CLASSIFICATION_DRIFT");
+  assert.deepEqual(activation.metadataRoots, [{ packageName: manifest.name, rootPath: ".", manifestPath: "package.json", classificationPath, classification: "private-tooling-root-no-supported-sdk", releaseObligation: false }], "SDK_ROOT_CLASSIFICATION_DRIFT");
   for (const pkg of profile.packages) {
     const actual = json(pkg.manifestPath);
     const prior = accepted.find(entry => entry.manifest === pkg.manifestPath);
