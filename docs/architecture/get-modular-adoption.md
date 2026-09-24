@@ -619,10 +619,10 @@ Both active and pending consumer profiles reference the same
 consumer enrollment in fast/full gates. These checks reject scope and command
 changes but do not perform EF SDK comparison or grant trusted admission.
 SDK authority activation remains pending. The repository dependency and lock now
-use the exact published EF 1.5.1 artifact: tarball SHA-256
-`bd0c476d2940168ac1b020f42726107cce81580b7b1b014e74aceabbafa9e951`, npm
-integrity `sha512-29r5QUvMIFdvsPaJ5m0Yx1Uo6bL85J/teP1p1ThNg7jMEz54cVxyrEnsLx/DN5cc/2CAzq2i8iLnPKgZN1cT8A==`,
-and publication time `2026-09-22T08:23:18.839Z`. Dist metadata, provenance and
+use the exact published EF 1.6.0 artifact: tarball SHA-256
+`842f81ca68e9c3207a0da967eb599229d4d30ea32cd69a9a1686f2eb240f54eb`, npm
+integrity `sha512-E6ytO+3xhZsaPTo49DRuhldQBRMFlF06EGqqERuGHrc4q11eLssTA9fsbEGCm1e4B8n/i8AsMt2ZkQklFeolWA==`,
+and publication time `2026-09-24T00:19:03.115Z`. Dist metadata, provenance and
 the release tag resolve to the identities in the activation record. The public
 `sdk-growth-authority` export imports from those published bytes, and a frozen
 install succeeds in a fresh disposable project. No local dependency or
@@ -637,19 +637,18 @@ scripts. Packed membership fixtures also reject reordered conditions, missing
 declarations, the omitted runner and source leaks. Foundation changed-file
 routing includes the SDK profiles and gate scripts.
 
-EF 1.5.1 resolves the prior pinned-library `AbortSignal` failure. Two rich
-API Extractor 7.58.12 / TypeScript 5.9.3 passes produce byte-identical models for
-all twelve typed entrypoints and report no error kind except
-`ae-forgotten-export`. Strict extraction passes every package-root entrypoint and
-both Filesystem Custody entrypoints, confirming the staged public-type fixes.
-The other five composition entrypoints still report 446 enforced
-`ae-forgotten-export` diagnostics: 31 Embedded Runtime, 311 Agent Execution, 37
-Provider Access, 13 Runtime Configuration and 54 Runtime Security. Those
-composition facades expose private implementation types. Publishing hundreds of
-those types or suppressing the extractor rule would exceed A3. Typed growth
-snapshots and SDK admission therefore remain fail closed. The external authority
-is uninvoked, and no baseline, trusted history, owner decision, grant, completion
-or receipt is fabricated for these initial-unreleased packages.
+The retained EF 1.5.1 typed observation is historical. It resolved the prior
+pinned-library `AbortSignal` failure, but five composition entrypoints then
+reported 446 `ae-forgotten-export` diagnostics. Its source, lock and tool digests
+cannot qualify EF 1.6.0. The historical audit and counts remain in the
+qualification record for traceability.
+
+EF 1.6.0 package membership and public imports are qualified against the
+published artifact. Current source-bound typed observation and strict extraction
+are still pending in the admission record. No source-local command may convert
+that pending status into a trusted grant. The external authority is uninvoked,
+and no baseline, trusted history, owner decision, grant, completion or receipt
+is fabricated for these initial-unreleased packages.
 
 The [earlier A3 standard review](../../architecture/get-modular/evidence/sdk-growth-standard-review.json)
 compared the active `669a750d` pin with supplied bytes whose SHA-256 was
