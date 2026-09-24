@@ -11,6 +11,8 @@ const mutations = {
   missing: value => { delete value.foundation.capabilities["quality.source-coverage"]; },
   disabled: value => { value.foundation.capabilities["quality.source-coverage"].enabled = false; },
   "wrong profile": value => { value.foundation.capabilities["quality.source-coverage"].configPath = "other.yaml"; },
+  "stale coverage schema": value => { value.profile.schemaVersion = 1; },
+  "wrong bridge admissions": value => { value.profile.bridgeAdmissionsPath = "other.json"; },
   "wrong authority": value => { value.profile.featureProfilePath = "other.json"; },
   "wrong pin": value => { value.manifest.devDependencies["@agent-teams/engineering-foundation"] = "^1.6.0"; },
   "stale pin": value => { value.manifest.devDependencies["@agent-teams/engineering-foundation"] = "1.5.1"; },

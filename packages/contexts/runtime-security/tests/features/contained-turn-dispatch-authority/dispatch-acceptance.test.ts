@@ -46,6 +46,17 @@ const fixture = async () => {
     setNow: (value: number) => {now = value; pg.setTime(value);} };
 };
 
+test('acceptance construction rejects accessor policy methods without reading them', async () => {
+  const f = await fixture();
+  let reads = 0;
+  const policy = Object.defineProperty({}, 'read', {
+    enumerable: true, get() {reads += 1; throw new Error('accessor invoked');},
+  });
+  assert.throws(() => createDispatchAcceptanceFeature({...f.deps, policy} as never), TypeError);
+  assert.equal(reads, 0);
+  f.db.assertReleased();
+});
+
 test('scoped policy produces a retained decision; restart and replay preserve identity/deadline', async () => {
   const f = await fixture();
   f.setNow(150);

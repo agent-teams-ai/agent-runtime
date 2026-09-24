@@ -54,7 +54,7 @@ const snapshotRecord = (
   if (prototype !== Object.prototype && prototype !== null) {
     throw new TypeError(`${name} must be a plain record`);
   }
-  const descriptors = Object.getOwnPropertyDescriptors(value) as unknown as Record<PropertyKey, PropertyDescriptor>;
+  const descriptors: Record<string, PropertyDescriptor> = Object.getOwnPropertyDescriptors(value);
   const keys = Reflect.ownKeys(descriptors);
   if (keys.some(key => typeof key !== "string")) {throw new TypeError(`${name} must not have symbol keys`);}
   const allowed = new Set([...required, ...optional]);
@@ -159,7 +159,7 @@ const snapshotArray = (value: unknown, name: string, maximumLength: number): rea
   if (!Array.isArray(value) || utilTypes.isProxy(value) || Object.getPrototypeOf(value) !== Array.prototype) {
     throw new TypeError(`${name} must be a non-Proxy plain array`);
   }
-  const descriptors = Object.getOwnPropertyDescriptors(value) as unknown as Record<PropertyKey, PropertyDescriptor>;
+  const descriptors: Record<string, PropertyDescriptor> = Object.getOwnPropertyDescriptors(value);
   const lengthDescriptor = descriptors.length;
   if (lengthDescriptor === undefined || !("value" in lengthDescriptor)
     || !Number.isSafeInteger(lengthDescriptor.value) || Number(lengthDescriptor.value) > maximumLength) {

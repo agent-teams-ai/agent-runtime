@@ -1,5 +1,6 @@
 import {
   snapshotProviderAccessBinding,
+  snapshotProviderAccessProvider,
   snapshotProviderAccessScope,
   type ProviderAccessBindingRecord,
   type ProviderAccessScopeValue,
@@ -73,14 +74,41 @@ const BINDING_KEYS = [
   "projectId", "provider", "providerAccountRef", "providerRouteRef", "revision", "revocation", "tenantId",
 ] as const;
 
+const stringField = (name: string, value: unknown): string => {
+  if (typeof value !== "string") {throw new TypeError(`${name} must be a primitive string`);}
+  return value;
+};
+const numberField = (name: string, value: unknown): number => {
+  if (typeof value !== "number") {throw new TypeError(`${name} must be a primitive number`);}
+  return value;
+};
+
 export const canonicalProviderAccessScope = (value: unknown): ProviderAccessScopeValue => {
   const data = exactProviderAccessDataRecord("scope", value, ["projectId", "tenantId"]);
-  return snapshotProviderAccessScope(data as unknown as ProviderAccessScopeValue);
+  return snapshotProviderAccessScope({
+    projectId: stringField("projectId", data.projectId),
+    tenantId: stringField("tenantId", data.tenantId),
+  });
 };
 
 export const canonicalProviderAccessBinding = (value: unknown): ProviderAccessBindingRecord => {
   const data = exactProviderAccessDataRecord("binding", value, BINDING_KEYS);
-  return snapshotProviderAccessBinding(data as unknown as ProviderAccessBindingRecord);
+  const availability = data.availability;
+  if (availability !== "available" && availability !== "unavailable") {throw new TypeError("availability is invalid");}
+  const revocation = data.revocation;
+  if (revocation !== "active" && revocation !== "revoked") {throw new TypeError("revocation is invalid");}
+  return snapshotProviderAccessBinding({
+    accessRef: stringField("accessRef", data.accessRef), availability,
+    credentialBindingDigest: stringField("credentialBindingDigest", data.credentialBindingDigest),
+    credentialBindingRef: stringField("credentialBindingRef", data.credentialBindingRef),
+    credentialGeneration: numberField("credentialGeneration", data.credentialGeneration),
+    projectId: stringField("projectId", data.projectId),
+    provider: snapshotProviderAccessProvider(data.provider),
+    providerAccountRef: stringField("providerAccountRef", data.providerAccountRef),
+    providerRouteRef: stringField("providerRouteRef", data.providerRouteRef),
+    revision: numberField("revision", data.revision), revocation,
+    tenantId: stringField("tenantId", data.tenantId),
+  });
 };
 
 export const canonicalProviderAccessObservation = (value: unknown): ProviderAccessBindingObservation => {

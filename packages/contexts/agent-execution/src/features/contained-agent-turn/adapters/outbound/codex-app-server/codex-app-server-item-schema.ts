@@ -100,6 +100,7 @@ const validate = (value: unknown, schema: Schema, applyDefaults: boolean): boole
 export const validateAndNormalizeCodexThreadItem = (value: unknown): Record<string, unknown> | undefined => {
   if (!isRecord(value)) {return undefined;}
   const normalized = structuredClone(value);
-  const threadItem = (CODEX_ITEM_COMPLETED_SCHEMA.definitions as unknown as Readonly<Record<string, Schema>>).ThreadItem;
+  const definitions: Readonly<Record<string, Schema>> = CODEX_ITEM_COMPLETED_SCHEMA.definitions;
+  const threadItem = definitions["ThreadItem"];
   return threadItem !== undefined && validate(normalized, threadItem, true) ? normalized : undefined;
 };

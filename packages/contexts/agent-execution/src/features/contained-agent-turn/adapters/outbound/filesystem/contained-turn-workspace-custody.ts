@@ -46,5 +46,16 @@ export const bindContainedTurnWorkspaceRoots = async (
     assertSameFilesystemMount(custodyRoot, root);
     entries.push([key, root]);
   }
-  return Object.freeze(Object.fromEntries(entries)) as unknown as ContainedTurnWorkspaceRoots;
+  const bound: Record<string, BoundContainedTurnRoot> = Object.fromEntries(entries);
+  const root = (key: keyof ContainedTurnWorkspaceRoots): BoundContainedTurnRoot => {
+    const value = bound[key];
+    if (value === undefined) {throw new TypeError(`missing contained turn workspace root: ${key}`);}
+    return value;
+  };
+  return Object.freeze({
+    active: root("active"), cleanup: root("cleanup"), closed: root("closed"), closing: root("closing"),
+    creations: root("creations"), frozen: root("frozen"), materializing: root("materializing"),
+    quarantine: root("quarantine"), receipts: root("receipts"), seals: root("seals"),
+    staging: root("staging"), stagingQuarantine: root("stagingQuarantine"),
+  } satisfies ContainedTurnWorkspaceRoots);
 };

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import {mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
 import type {TestContext} from "node:test";
 import {postClaimFixture} from "./docker-linux-post-claim-fixture.ts";
 import {createEgressFixture} from "../http-egress-test-fixture.ts";
@@ -20,7 +22,7 @@ type FinishInput = Parameters<NonNullable<CreateDockerCodexHostKernelOwnerOption
  * Engine, listener, route enforcement, PA/RS and upstream IO are synthetic. */
 export const nativeFinalizerFixture = async (t: TestContext, executablePath = "/usr/local/bin/codex") => {
   const f = await postClaimFixture(t);
-  const root = realpathSync(mkdtempSync("/tmp/ar69-native-finalizer-component-"));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "ar69-native-finalizer-component-")));
   t.after(() => rmSync(root, {recursive: true, force: true}));
   const privateRootPath = `${root}/private`; const codexHome = `${privateRootPath}/home`;
   const tmpDir = `${privateRootPath}/tmp`; const workspaceRef = `${root}/workspace`;

@@ -101,7 +101,7 @@ export const retainFinalizationHttpResources = (
     const owner = custodyDataRecord(original);
     const operations: Record<string, unknown> = {...owner};
     for (const name of names) {
-      const method = (owner as unknown as Record<string, unknown>)[name];
+      const method: unknown = Reflect.get(owner, name);
       if (typeof method !== "function" || types.isProxy(method)) {reject();}
       operations[name] = (...args: unknown[]) => Reflect.apply(method as (...args: unknown[]) => unknown, original, args);
     }

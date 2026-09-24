@@ -87,7 +87,7 @@ export const createValidationTools = (primitives: EgressSecurityPrimitives) => {
     if (length === undefined || !("value" in length) || !Number.isSafeInteger(length.value) ||
         (length.value as number) < 0 || (length.value as number) > maximum) {return;}
     if (Reflect.ownKeys(value).length !== (length.value as number) + 1) {return;}
-    const descriptors = Object.getOwnPropertyDescriptors(value) as unknown as Record<PropertyKey, PropertyDescriptor>;
+    const descriptors = Object.getOwnPropertyDescriptors(value);
     const output: unknown[] = [];
     for (let index = 0; index < (length.value as number); index += 1) {
       const descriptor = descriptors[String(index)]; if (descriptor === undefined || !("value" in descriptor)) {return;}
@@ -97,10 +97,14 @@ export const createValidationTools = (primitives: EgressSecurityPrimitives) => {
   };
   const methods: Methods = <Name extends string>(value: unknown, names: readonly Name[]) => {
     const owner = exact(value, names);
-    if (owner === undefined || names.some(name => !primitives.callable(owner[name]))) {return;}
-    return Object.freeze(Object.fromEntries(names.map(name => [name, (...args: unknown[]) =>
-      Reflect.apply(owner[name] as (...values: unknown[]) => unknown, value, args)]))) as unknown as
-      Readonly<Record<Name, (...args: never[]) => unknown>>;
+    if (owner === undefined) {return;}
+    const captured = Object.create(null) as Record<Name, (...args: never[]) => unknown>;
+    for (const name of names) {
+      const method = owner[name];
+      if (!primitives.callable(method)) {return;}
+      captured[name] = (...args: never[]) => Reflect.apply(method, value, args);
+    }
+    return Object.freeze(captured);
   };
   return {primitives, hash, exact, dense, methods} satisfies ValidationTools;
 };

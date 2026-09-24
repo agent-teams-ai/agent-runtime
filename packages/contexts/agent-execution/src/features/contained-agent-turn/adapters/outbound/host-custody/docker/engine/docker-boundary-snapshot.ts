@@ -74,7 +74,7 @@ const dataValues = (
         Object.getPrototypeOf(value) !== Object.prototype) {
       return fail(code);
     }
-    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const descriptors: Record<string, PropertyDescriptor> = Object.getOwnPropertyDescriptors(value);
     const keys = Reflect.ownKeys(descriptors);
     if (keys.some(key => typeof key !== "string")) {return fail(code);}
     const stringKeys = keys as string[];
@@ -106,10 +106,10 @@ const dataArray = (
     if (!Array.isArray(value) || utilTypes.isProxy(value) || Object.getPrototypeOf(value) !== Array.prototype) {
       return fail(code);
     }
-    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const descriptors: Record<string, PropertyDescriptor> = Object.getOwnPropertyDescriptors(value);
     const keys = Reflect.ownKeys(descriptors);
     if (keys.some(key => typeof key !== "string")) {return fail(code);}
-    const lengthDescriptor = (descriptors as unknown as Record<string, PropertyDescriptor>)["length"];
+    const lengthDescriptor = descriptors["length"];
     const lengthValue = lengthDescriptor?.value as unknown;
     if (lengthDescriptor === undefined || lengthDescriptor.get !== undefined || lengthDescriptor.set !== undefined ||
         typeof lengthValue !== "number" || !Number.isSafeInteger(lengthValue) || lengthValue < 0) {

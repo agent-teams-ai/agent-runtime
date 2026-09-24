@@ -48,10 +48,7 @@ export const createStaticProviderAccessBindingRepository = (
   if (!Array.isArray(authorities) || isRuntimeProxy(authorities)) {
     throw new TypeError("authorities must be a stable array");
   }
-  const authorityDescriptors = Object.getOwnPropertyDescriptors(authorities) as unknown as Record<
-    PropertyKey,
-    PropertyDescriptor
-  >;
+  const authorityDescriptors: Record<string, PropertyDescriptor> = Object.getOwnPropertyDescriptors(authorities);
   const length = authorityDescriptors.length;
   if (length === undefined || !("value" in length) || typeof length.value !== "number") {
     throw new TypeError("authorities must be a stable array");

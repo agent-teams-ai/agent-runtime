@@ -154,7 +154,7 @@ export const kernelClosureProofId = (
   "proof",
   `proof:filesystem-closure:${digestContainedTurnCanonicalValue({
     proofKind,
-    record: record as unknown as { readonly [key: string]: string | number },
+    record: {...record},
   })}`,
 );
 

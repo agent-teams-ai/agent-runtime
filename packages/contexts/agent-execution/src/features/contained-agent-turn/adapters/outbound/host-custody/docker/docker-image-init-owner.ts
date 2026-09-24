@@ -30,13 +30,20 @@ export interface DockerImageInitOwner {
   /** Same owner, witness, original authority object and exact independent Host binding. */
   assertWitness(witness: DockerImageInitWitness, authority: DockerContainerAuthority, host: DockerImageInitHostBinding): void;
 }
+const hostDigest = (part: unknown): string => {
+  if (typeof part !== "string" || !/^[a-f0-9]{64}$/u.test(part)) {
+    throw new DockerEngineError("invalid-authority");
+  }
+  return part;
+};
 const hostBinding = (value: DockerImageInitHostBinding): DockerImageInitHostBinding => {
   const keys = ["hostIdentitySha256", "hostBootGenerationSha256", "hostLifecycleGenerationSha256"];
   const bound = snapshotOwnDataObject(value, keys, keys, "invalid-authority");
-  if (Object.values(bound).some(part => typeof part !== "string" || !/^[a-f0-9]{64}$/u.test(part))) {
-    throw new DockerEngineError("invalid-authority");
-  }
-  return bound as unknown as DockerImageInitHostBinding;
+  return Object.freeze({
+    hostIdentitySha256: hostDigest(bound.hostIdentitySha256),
+    hostBootGenerationSha256: hostDigest(bound.hostBootGenerationSha256),
+    hostLifecycleGenerationSha256: hostDigest(bound.hostLifecycleGenerationSha256),
+  });
 };
 const methods: {
   verifyCreatedImageInit: (this: NodeUnixSocketDockerEngine, ...args: Parameters<NodeUnixSocketDockerEngine["verifyCreatedImageInit"]>) => ReturnType<NodeUnixSocketDockerEngine["verifyCreatedImageInit"]>;

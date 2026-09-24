@@ -326,13 +326,12 @@ export const copyAcceptedOperation = <Scope extends ContainedTurnCompositionScop
     if (typeof rawScope !== "object" || rawScope === null) {
       return contractViolation("malformed_owner_outcome");
     }
-    const scope = rawScope as unknown as Readonly<Record<string, unknown>>;
     snapshot = Object.freeze({
       kind: "snapshot",
       value: Object.freeze({
         operationId,
-        projectId: scope.projectId,
-        tenantId: scope.tenantId,
+        projectId: Reflect.get(rawScope, "projectId") as unknown,
+        tenantId: Reflect.get(rawScope, "tenantId") as unknown,
       }),
     });
   } catch {

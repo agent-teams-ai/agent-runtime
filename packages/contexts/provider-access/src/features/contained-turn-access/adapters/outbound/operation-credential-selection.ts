@@ -26,6 +26,7 @@ export const snapshotCredentialRenderingSelection = (value: CredentialRenderingS
   }
   const operationAbortSignal = data.operationAbortSignal?.value as AbortSignal;
   signalAborted(operationAbortSignal); // Brand check only: no listener, timer, credential or repository effect.
+  // The command snapshot above validates every binding member; retain the original detached field order.
   return Object.freeze({operationRef, deadline, operationAbortSignal, recipe: recipe as CredentialRenderingSelection["recipe"],
-    binding: Object.freeze(binding) as unknown as CredentialRenderingSelection["binding"]});
+    binding: Object.freeze(binding) as CredentialRenderingSelection["binding"]});
 };

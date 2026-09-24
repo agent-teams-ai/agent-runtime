@@ -25,22 +25,27 @@ export const exact = <Name extends string>(value: unknown, names: readonly Name[
   if (isNodeDispatchProxy(value)) {return invalid();}
   return snapshotExactDispatchRecord(value, names) ?? invalid();
 };
-export const operationSelector = (value: OperationKey): OperationKey => {
+type OperationFields = Readonly<{
+  scope: unknown; providerId: unknown; authorityGeneration: unknown; operationId: unknown;
+}>;
+export const operationSelector = (value: OperationFields): OperationKey => {
   const scope = exact(value.scope, ["tenantId", "projectId", "scopeDigest"]);
-  if (![scope.tenantId, scope.projectId, scope.scopeDigest, value.providerId,
-    value.authorityGeneration, value.operationId].every(isBoundedDispatchIdentifier)) {return invalid();}
-  return Object.freeze({ scope: Object.freeze({ tenantId: scope.tenantId as string,
-    projectId: scope.projectId as string, scopeDigest: scope.scopeDigest as string }),
+  if (!isBoundedDispatchIdentifier(scope.tenantId) || !isBoundedDispatchIdentifier(scope.projectId) ||
+    !isBoundedDispatchIdentifier(scope.scopeDigest) || !isBoundedDispatchIdentifier(value.providerId) ||
+    !isBoundedDispatchIdentifier(value.authorityGeneration) ||
+    !isBoundedDispatchIdentifier(value.operationId)) {return invalid();}
+  return Object.freeze({ scope: Object.freeze({ tenantId: scope.tenantId,
+    projectId: scope.projectId, scopeDigest: scope.scopeDigest }),
   providerId: value.providerId, authorityGeneration: value.authorityGeneration,
   operationId: value.operationId });
 };
 const operationNames = ["scope", "providerId", "authorityGeneration", "operationId"] as const;
 export const captureOperation = (value: unknown): OperationKey =>
-  operationSelector(exact(value, operationNames) as unknown as OperationKey);
+  operationSelector(exact(value, operationNames));
 export const captureConsume = (value: unknown): ConsumeKey => {
   const fields = exact(value, [...operationNames, "grantRequestId"]);
   if (!isBoundedDispatchIdentifier(fields.grantRequestId)) {return invalid();}
-  return Object.freeze({ ...operationSelector(fields as unknown as OperationKey),
+  return Object.freeze({ ...operationSelector(fields),
     grantRequestId: fields.grantRequestId });
 };
 export const captureSettlement = (value: unknown): SettlementKey => {
@@ -48,7 +53,7 @@ export const captureSettlement = (value: unknown): SettlementKey => {
     "consumptionDigest"]);
   if (![fields.grantRequestId, fields.settlementRequestId, fields.consumptionDigest]
     .every(isBoundedDispatchIdentifier)) {return invalid();}
-  return Object.freeze({ ...operationSelector(fields as unknown as OperationKey),
+  return Object.freeze({ ...operationSelector(fields),
     grantRequestId: fields.grantRequestId as string,
     settlementRequestId: fields.settlementRequestId as string,
     consumptionDigest: fields.consumptionDigest as string });
@@ -100,7 +105,7 @@ export const headVersion = (value: unknown): string => {
 export const consumeFact = (value: unknown, key: ConsumeKey, digest: Digest): ConsumeFact => {
   const fields = exact(value, [...operationNames, "grantRequestId", "requestDigest",
     "requestFingerprint", "outcome"]);
-  const identity = { ...operationSelector(fields as unknown as OperationKey),
+  const identity = { ...operationSelector(fields),
     grantRequestId: fields.grantRequestId as string };
   if (!matchesGrant(identity, key) ||
     ![fields.requestDigest, fields.requestFingerprint].every(isBoundedDispatchIdentifier)) {return invalid();}
@@ -127,7 +132,7 @@ export const settlementFact = (value: unknown, key: ConsumeKey, digest: Digest,
   expectedRequestId?: string): SettlementFact => {
   const fields = exact(value, [...operationNames, "grantRequestId", "settlementRequestId",
     "consumptionDigest", "settlementDigest", "outcome"]);
-  const identity = { ...operationSelector(fields as unknown as OperationKey),
+  const identity = { ...operationSelector(fields),
     grantRequestId: fields.grantRequestId as string };
   if (!matchesGrant(identity, key) || ![fields.settlementRequestId, fields.consumptionDigest,
     fields.settlementDigest].every(isBoundedDispatchIdentifier) ||

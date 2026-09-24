@@ -36,6 +36,10 @@ const headers = (input: unknown): readonly string[] => {
   }
   return input as readonly string[];
 };
+const routeStringField = (value: unknown): string => {
+  if (typeof value !== "string") {throw new TypeError("Invalid PA route recipe association");}
+  return value;
+};
 const descriptorSnapshot = (input: unknown, provider: string, recipe: unknown): RouteSelectionDescriptor => {
   const data = exactDispatchDataRecord("PA route descriptor", input, ["id", "provider", "credentialMode", "originHost", "originPort",
     "upstreamMethod", "upstreamPath", "forwardedRequestHeaderNames", "credentialFieldNames", "requiredHeaderNames", "exactValues"]);
@@ -53,17 +57,36 @@ const descriptorSnapshot = (input: unknown, provider: string, recipe: unknown): 
     !required.includes(name) || typeof value !== "string" || !/^[\x20-\x7e]{1,512}$/u.test(value) || value.trim() !== value)) {
     throw new TypeError("Invalid PA route exact headers");
   }
-  return data as unknown as RouteSelectionDescriptor;
+  if (!Array.isArray(data.credentialFieldNames) ||
+      data.credentialFieldNames.some(name => typeof name !== "string") ||
+      (data.provider !== "codex" && data.provider !== "claude")) {
+    throw new TypeError("Invalid PA route recipe association");
+  }
+  const credentialFields = data.credentialFieldNames.filter((name): name is string => typeof name === "string");
+  const exactValues: Record<string, string> = {};
+  for (const [name, value] of Object.entries(exact)) {
+    if (typeof value !== "string") {throw new TypeError("Invalid PA route exact headers");}
+    exactValues[name] = value;
+  }
+  return Object.freeze({
+    id: routeStringField(data.id), provider: data.provider,
+    credentialMode: routeStringField(data.credentialMode), originHost: routeStringField(data.originHost),
+    originPort: 443, upstreamMethod: "POST", upstreamPath: routeStringField(data.upstreamPath),
+    forwardedRequestHeaderNames: forwarded, credentialFieldNames: Object.freeze(credentialFields),
+    requiredHeaderNames: required, exactValues: Object.freeze(exactValues),
+  });
 };
 export const snapshotRouteSelectionFacts = (input: unknown): RouteSelectionFacts => {
   const data = exactDispatchDataRecord("PA route selection", input, ["binding", "recipe", "descriptor"]);
   const keys = AUTHORIZATION_COMMAND_KEYS.filter(key => !["authorizationRequestId", "requestDigest", "purpose", "schemaVersion"].includes(key));
   const binding = exactDispatchDataRecord("PA route binding", data.binding, keys);
-  snapshotAuthorizationCommand({...binding, authorizationRequestId: "route:selection", requestDigest: "route:selection",
+  const command = snapshotAuthorizationCommand({...binding, authorizationRequestId: "route:selection", requestDigest: "route:selection",
     purpose: "contained-turn.credential-materialization-authorization/v1", schemaVersion: 1});
   if (binding.availability !== "available" || binding.revocation !== "active") {throw new TypeError("PA route binding unavailable");}
-  return Object.freeze({binding: binding as unknown as MaterializationAuthorizationBinding, recipe: data.recipe as CredentialRecipe,
-    descriptor: descriptorSnapshot(data.descriptor, binding.provider as string, data.recipe)});
+  const {authorizationRequestId: _authorizationRequestId, requestDigest: _requestDigest,
+    purpose: _purpose, schemaVersion: _schemaVersion, ...validatedBinding} = command;
+  return Object.freeze({binding: Object.freeze(validatedBinding), recipe: data.recipe as CredentialRecipe,
+    descriptor: descriptorSnapshot(data.descriptor, validatedBinding.provider, data.recipe)});
 };
 
 export const snapshotRouteSelectionCurrent = async (input: unknown): Promise<RouteSelectionCurrent> => {

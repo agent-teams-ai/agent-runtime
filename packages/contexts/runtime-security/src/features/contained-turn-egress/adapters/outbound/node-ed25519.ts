@@ -27,7 +27,13 @@ export const createNodeEd25519EgressSigner = (identity: NodeEd25519SignerIdentit
       privateKey.asymmetricKeyType !== "ed25519" || publicKey.asymmetricKeyType !== "ed25519") {
     throw new TypeError("invalid Ed25519 signer identity");
   }
-  const key = Object.freeze({...captured}) as unknown as NodeEd25519SignerIdentity;
+  const key: NodeEd25519SignerIdentity = Object.freeze({
+    keyId: captured.keyId,
+    keyGeneration: captured.keyGeneration,
+    signerRevision: captured.signerRevision,
+    privateKey,
+    publicKey,
+  });
   return Object.freeze({
     sign(body: Uint8Array, expected: Readonly<{keyId: string; keyGeneration: string; signerRevision: string}>) {
       if (expected.keyId !== key.keyId || expected.keyGeneration !== key.keyGeneration ||

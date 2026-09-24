@@ -124,7 +124,7 @@ export const validateContainedTurnKernelDependencies = (
   for (const [owner, methods] of Object.entries(requiredMethods)) {
     const port = dependencies[owner as keyof typeof requiredMethods];
     for (const method of methods) {
-      if (typeof (port as unknown as Readonly<Record<string, unknown>>)[method] !== "function") {
+      if (typeof Reflect.get(port, method) !== "function") {
         throw new TypeError(`contained-turn production dependency ${owner}.${method} is mandatory`);
       }
     }

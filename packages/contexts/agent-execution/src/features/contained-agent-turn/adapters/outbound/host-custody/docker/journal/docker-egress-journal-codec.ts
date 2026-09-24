@@ -119,21 +119,52 @@ const safeInteger = (value: unknown, label: string, allowZero = true): number =>
 
 const identityFrom = (value: unknown): DockerEgressIdentity => {
   assertExact(value, IDENTITY_KEYS, "egress identity");
-  const result: Record<string, string> = {};
-  for (const [key, prefix] of Object.entries(ID_PREFIXES)) { result[key] = fixed(value[key], prefix, key); }
-  result.exactFingerprintSha256 = digest(value.exactFingerprintSha256, "exactFingerprintSha256");
-  return Object.freeze(result) as unknown as DockerEgressIdentity;
+  const result: DockerEgressIdentity = {
+    operationId: fixed(value.operationId, ID_PREFIXES.operationId, "operationId"),
+    attemptId: fixed(value.attemptId, ID_PREFIXES.attemptId, "attemptId"),
+    effectId: fixed(value.effectId, ID_PREFIXES.effectId, "effectId"),
+    custodyId: fixed(value.custodyId, ID_PREFIXES.custodyId, "custodyId"),
+    workspaceId: fixed(value.workspaceId, ID_PREFIXES.workspaceId, "workspaceId"),
+    hostSlotId: fixed(value.hostSlotId, ID_PREFIXES.hostSlotId, "hostSlotId"),
+    hostInstanceId: fixed(value.hostInstanceId, ID_PREFIXES.hostInstanceId, "hostInstanceId"),
+    hostBootId: fixed(value.hostBootId, ID_PREFIXES.hostBootId, "hostBootId"),
+    executionGenerationId: fixed(value.executionGenerationId, ID_PREFIXES.executionGenerationId, "executionGenerationId"),
+    daemonId: fixed(value.daemonId, ID_PREFIXES.daemonId, "daemonId"),
+    daemonGenerationId: fixed(value.daemonGenerationId, ID_PREFIXES.daemonGenerationId, "daemonGenerationId"),
+    slotGenerationId: fixed(value.slotGenerationId, ID_PREFIXES.slotGenerationId, "slotGenerationId"),
+    exactFingerprintSha256: digest(value.exactFingerprintSha256, "exactFingerprintSha256"),
+  };
+  return Object.freeze(result);
 };
 const authorityFrom = (value: unknown): DockerEgressAuthorityBinding => {
   assertExact(value, AUTHORITY_KEYS, "egress authority binding");
-  return Object.freeze(Object.fromEntries(AUTHORITY_KEYS.map(key => [key, digest(value[key], key)]))) as unknown as DockerEgressAuthorityBinding;
+  return Object.freeze({
+    acceptedAuthoritySha256: digest(value.acceptedAuthoritySha256, "acceptedAuthoritySha256"),
+    brokerPolicySha256: digest(value.brokerPolicySha256, "brokerPolicySha256"),
+    materializationAuthorizationSha256: digest(value.materializationAuthorizationSha256, "materializationAuthorizationSha256"),
+    operationSha256: digest(value.operationSha256, "operationSha256"),
+    routeAuthorizationSha256: digest(value.routeAuthorizationSha256, "routeAuthorizationSha256"),
+    scopeSha256: digest(value.scopeSha256, "scopeSha256"),
+  } satisfies DockerEgressAuthorityBinding);
 };
 const resourcesFrom = (value: unknown): DockerEgressResourceIdentities => {
   assertExact(value, RESOURCE_KEYS, "egress cleanup handles");
-  const result = Object.fromEntries(RESOURCE_KEYS.map(key => [key, fixed(value[key], RESOURCE_PREFIXES[key], key)]));
-  const opaqueParts = Object.values(result).map(handle => handle.slice(handle.indexOf(":") + 1));
+  const result: DockerEgressResourceIdentities = {
+    brokerCgroupHandle: fixed(value.brokerCgroupHandle, RESOURCE_PREFIXES.brokerCgroupHandle, "brokerCgroupHandle"),
+    brokerInboundSocketHandle: fixed(value.brokerInboundSocketHandle, RESOURCE_PREFIXES.brokerInboundSocketHandle, "brokerInboundSocketHandle"),
+    brokerListenerHandle: fixed(value.brokerListenerHandle, RESOURCE_PREFIXES.brokerListenerHandle, "brokerListenerHandle"),
+    brokerNamespaceHandle: fixed(value.brokerNamespaceHandle, RESOURCE_PREFIXES.brokerNamespaceHandle, "brokerNamespaceHandle"),
+    brokerProcessHandle: fixed(value.brokerProcessHandle, RESOURCE_PREFIXES.brokerProcessHandle, "brokerProcessHandle"),
+    brokerUpstreamSocketHandle: fixed(value.brokerUpstreamSocketHandle, RESOURCE_PREFIXES.brokerUpstreamSocketHandle, "brokerUpstreamSocketHandle"),
+    networkEndpointHandle: fixed(value.networkEndpointHandle, RESOURCE_PREFIXES.networkEndpointHandle, "networkEndpointHandle"),
+    privateNetworkHandle: fixed(value.privateNetworkHandle, RESOURCE_PREFIXES.privateNetworkHandle, "privateNetworkHandle"),
+    providerContainerHandle: fixed(value.providerContainerHandle, RESOURCE_PREFIXES.providerContainerHandle, "providerContainerHandle"),
+    providerEndpointHandle: fixed(value.providerEndpointHandle, RESOURCE_PREFIXES.providerEndpointHandle, "providerEndpointHandle"),
+    upstreamRuleHandle: fixed(value.upstreamRuleHandle, RESOURCE_PREFIXES.upstreamRuleHandle, "upstreamRuleHandle"),
+  };
+  const opaqueParts = RESOURCE_KEYS.map(key => result[key].slice(result[key].indexOf(":") + 1));
   if (new Set(opaqueParts).size !== RESOURCE_KEYS.length) { throw new TypeError("cleanup handles must be pairwise unique"); }
-  return Object.freeze(result) as unknown as DockerEgressResourceIdentities;
+  return Object.freeze(result);
 };
 const subjectBody = (identity: DockerEgressIdentity, authority: DockerEgressAuthorityBinding,
   resources: DockerEgressResourceIdentities): Readonly<Record<string, unknown>> => ({

@@ -107,7 +107,7 @@ const exactModeArray = (value: unknown): readonly ("analysis" | "workspace-write
   if (!Array.isArray(value) || utilTypes.isProxy(value) || Object.getPrototypeOf(value) !== Array.prototype) {
     throw new TypeError("Codex supported modes must be a non-Proxy plain array");
   }
-  const descriptors = Object.getOwnPropertyDescriptors(value) as unknown as Record<PropertyKey, PropertyDescriptor>;
+  const descriptors: Record<string, PropertyDescriptor> = Object.getOwnPropertyDescriptors(value);
   const lengthDescriptor = descriptors.length;
   if (lengthDescriptor === undefined || !("value" in lengthDescriptor)
     || !Number.isSafeInteger(lengthDescriptor.value) || Number(lengthDescriptor.value) > 2) {

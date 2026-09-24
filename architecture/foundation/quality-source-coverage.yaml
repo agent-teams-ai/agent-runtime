@@ -1,4 +1,5 @@
-schemaVersion: 1
+schemaVersion: 2
+bridgeAdmissionsPath: architecture/foundation/quality-source-coverage-bridge-admissions.json
 sourcePolicyPath: architecture/foundation/source-dependencies.yaml
 suppressionPolicyPath: architecture/foundation/suppression-governance.yaml
 featureProfilePath: architecture/feature-module-standard/candidate-profile.json

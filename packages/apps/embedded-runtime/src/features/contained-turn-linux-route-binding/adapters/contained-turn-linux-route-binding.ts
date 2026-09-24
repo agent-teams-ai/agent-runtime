@@ -30,15 +30,25 @@ const campaignFacts = (value: unknown): ContainedTurnLinuxRouteCampaign => {
       Object.getPrototypeOf(value) !== Object.prototype ||
       Reflect.ownKeys(value).length !== CAMPAIGN_KEYS.length) {throw invalid();}
   const fields = Object.getOwnPropertyDescriptors(value);
-  const facts = Object.create(null) as Record<string, string>;
-  for (const key of CAMPAIGN_KEYS) {
+  const fieldValue = (key: typeof CAMPAIGN_KEYS[number]): string => {
     const field = fields[key];
     if (field === undefined || !("value" in field) || field.enumerable !== true ||
         typeof field.value !== "string" || field.value.length < 1 || field.value.length > 256 ||
         /[\p{Cc}\s]/u.test(field.value)) {throw invalid();}
-    facts[key] = field.value;
-  }
-  return Object.freeze(facts) as unknown as ContainedTurnLinuxRouteCampaign;
+    return field.value;
+  };
+  return Object.freeze({
+    operationId: fieldValue("operationId"),
+    attemptId: fieldValue("attemptId"),
+    custodyId: fieldValue("custodyId"),
+    hostBootId: fieldValue("hostBootId"),
+    executionGenerationId: fieldValue("executionGenerationId"),
+    authorityVectorDigest: fieldValue("authorityVectorDigest"),
+    sourceRevision: fieldValue("sourceRevision"),
+    adapterRevision: fieldValue("adapterRevision"),
+    binaryRevision: fieldValue("binaryRevision"),
+    capabilityManifestRevision: fieldValue("capabilityManifestRevision"),
+  } satisfies ContainedTurnLinuxRouteCampaign);
 };
 
 /**

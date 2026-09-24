@@ -219,6 +219,19 @@ test("finalizable native plan reserves HOME at the retained private root", async
   } finally {rmSync(root, {recursive: true, force: true});}
 });
 
+test("finalizable native plan rejects unrecognized input and platform target fields", async () => {
+  const {boundary} = await setup();
+  const options = {boundary, executablePath: "/synthetic/codex", intentMode: "analysis",
+    platformTarget: {platform: "darwin", architecture: "arm64"},
+    privateRootPath: "/synthetic/private", tmpDir: "/synthetic/private/tmp"};
+  const access = {provider: "codex", providerRouteRef: "synthetic-route", credentialGeneration: 1,
+    credentialBindingRef: "synthetic-binding", ownerAuthorityDigest: "synthetic-authority"};
+  assert.throws(() => launch.createCodexAppServerFinalizableLaunchPlan(
+    {...options, unexpected: true} as never, access), TypeError);
+  assert.throws(() => launch.createCodexAppServerFinalizableLaunchPlan(
+    {...options, platformTarget: {...options.platformTarget, unexpected: true}} as never, access), TypeError);
+});
+
 test("synchronous native finalizer cannot manufacture material, clone files, or skip expiry", async () => {
   const {selection, recipe, boundary} = await setup();
   const options = {boundary, executablePath: "/synthetic/codex", intentMode: "analysis", platformTarget: {platform: "darwin", architecture: "arm64"},

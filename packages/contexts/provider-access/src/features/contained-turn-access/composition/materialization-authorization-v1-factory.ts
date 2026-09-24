@@ -72,7 +72,7 @@ const MATERIALIZATION_AUTHORIZATION_BINDING_KEYS = [
 const bindingSnapshot = (value: unknown): MaterializationAuthorizationBinding => {
   const data = exactProviderAccessDataRecord(
     "authorization binding", value, MATERIALIZATION_AUTHORIZATION_BINDING_KEYS,
-  ) as unknown as MaterializationAuthorizationBinding;
+  );
   const record = snapshotAuthorizationRecord({
     ...data, authorizationRequestId: "boundary:validation", decision: "authorized", purpose:
       "contained-turn.credential-materialization-authorization/v1", rejectionReason: null, requestDigest: "pending",

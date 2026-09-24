@@ -1,0 +1,157 @@
+{
+  "schemaVersion": 1,
+  "bridges": [
+    {
+      "path": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/capture-boundary-ports.ts",
+      "start": 1981,
+      "end": 2126,
+      "sha256": "f5a1c64ecf8da93c3ebae35dd9620a365d54a38d35f52813e0cb19e4913a18d7",
+      "rationale": "Exact host and owner method sets are captured before the egress dependency bag receives typed port signatures.",
+      "rejectingTest": "packages/contexts/runtime-security/tests/features/contained-turn-egress/contained-turn-egress-route-binding.test.ts"
+    },
+    {
+      "path": "packages/contexts/runtime-security/src/features/contained-turn-egress/application/capture-boundary-ports.ts",
+      "start": 2722,
+      "end": 2763,
+      "sha256": "5bb3beb2245d7a840ebe8ce6bef26a757279e1636d0a367b1f269afbec7a5f86",
+      "rationale": "The session boundary checks execute, close and writeExact as own callable methods before publishing the transport port.",
+      "rejectingTest": "packages/contexts/runtime-security/tests/features/contained-turn-egress/contained-turn-egress.test.ts"
+    },
+    {
+      "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
+      "start": 13299,
+      "end": 13498,
+      "sha256": "c85b0b0fb8ee97f857c6f030eebbe40749093290bcf4621691c88b0a589813cf",
+      "rationale": "The exact native launch option snapshot is checked against issued boundary and supported target facts before it can authorize a plan.",
+      "rejectingTest": "packages/contexts/agent-execution/tests/features/contained-agent-turn/provider-launch-plan-authority.test.ts"
+    },
+    {
+      "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
+      "start": 14024,
+      "end": 14282,
+      "sha256": "41e29c74c7f985034a296e90917b56826c11b1bd3806536e2b8a4de011d2cfaa",
+      "rationale": "The permission boundary is an exact detached snapshot whose root identities and issued policy are checked before launch.",
+      "rejectingTest": "packages/contexts/agent-execution/tests/features/contained-agent-turn/provider-launch-plan-authority.test.ts"
+    },
+    {
+      "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
+      "start": 18053,
+      "end": 18254,
+      "sha256": "8d1a126fe87eaf85ab0bacecfd09a72a90db0fb0eadade9e50360fd580ca69b2",
+      "rationale": "The finalizable launch option snapshot retains only the validated native option fields before custody finalization.",
+      "rejectingTest": "packages/contexts/agent-execution/tests/features/contained-agent-turn/native-custody-consumer-source.test.ts"
+    },
+    {
+      "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts",
+      "start": 18415,
+      "end": 18479,
+      "sha256": "833a4c12fd3de5d7120df6c513fa050352586c22de431f2e38a0b5c4ae27c42c",
+      "rationale": "The platform target has already passed the fixed supported tuple selection before its frozen projection is retained.",
+      "rejectingTest": "packages/contexts/agent-execution/tests/features/contained-agent-turn/native-custody-consumer-source.test.ts"
+    },
+    {
+      "path": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/contained-turn-dispatch-authority-v1-result-mappers.ts",
+      "start": 2121,
+      "end": 2192,
+      "sha256": "29eaa6f5702718570c910f32d64b68a4e4414673c85dfeb0cee08151f0636545",
+      "rationale": "Exact persisted receipt fields and scope are revalidated by validConsumptionReceipt and canonical digest comparison before publication.",
+      "rejectingTest": "packages/contexts/runtime-security/tests/features/contained-turn-dispatch-authority/contained-turn-dispatch-authority-adversarial.test.ts"
+    },
+    {
+      "path": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/dispatch-acceptance-factory.ts",
+      "start": 1989,
+      "end": 2453,
+      "sha256": "9348db00a827f071ff547fe616dcc01fe4c26cfb579e03471e8d205fee0fdaca",
+      "rationale": "Each acceptance owner exposes only the exact captured methods; returned owner facts are detached and checked before publication.",
+      "rejectingTest": "packages/contexts/runtime-security/tests/features/contained-turn-dispatch-authority/dispatch-acceptance.test.ts"
+    },
+    {
+      "path": "packages/contexts/runtime-security/src/features/contained-turn-egress/domain/validation.ts",
+      "start": 13807,
+      "end": 13980,
+      "sha256": "8e70a0a3cbf1ef9fb627af35c24dfa9e6e80126053f496636860a2eec4c3fe60",
+      "rationale": "The egress request projection follows exact field, scope, header, body and budget validation before canonical bytes or transport use.",
+      "rejectingTest": "packages/contexts/runtime-security/tests/features/contained-turn-egress/contained-turn-egress.test.ts"
+    },
+    {
+      "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-preparation-codec.ts",
+      "start": 2073,
+      "end": 2133,
+      "sha256": "92e9d4c1048daa3f4035337e12a235672ea12a49bb4fcb6c936168ce32520cdc",
+      "rationale": "A closed stored record enters the preparation snapshot validator, which rejects malformed variants before any replay.",
+      "rejectingTest": "packages/contexts/agent-execution/tests/features/contained-agent-turn/contained-turn-preparation-settlement-codec.test.ts"
+    },
+    {
+      "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-validation.ts",
+      "start": 15543,
+      "end": 15597,
+      "sha256": "c91ecdc112568243fb4cf34f0f53a233285fce4475a8b1094d0d4d8cca17d24d",
+      "rationale": "The digest input is reached only after identity, proof, output and execution-axis validation of the kernel operation.",
+      "rejectingTest": "packages/contexts/agent-execution/tests/features/contained-agent-turn/contained-turn-kernel.test.ts"
+    },
+    {
+      "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
+      "start": 28916,
+      "end": 29067,
+      "sha256": "be730768a405448acd9673e1bdbbacc7de2d1aa5ebc0f8bdf6cf4dc2c9f51775",
+      "rationale": "The operation owner and dispatch methods are exact stable data records with callable capture before the legacy port is assembled.",
+      "rejectingTest": "packages/contexts/agent-execution/tests/features/contained-agent-turn/owner-bridge-rejections.test.ts"
+    },
+    {
+      "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/runtime-security-acceptance-anti-corruption.ts",
+      "start": 5546,
+      "end": 5707,
+      "sha256": "78aa62648a0500f8a70456a95f6f04b52c889ad3c94459af783a01fcd6815ea6",
+      "rationale": "The security acceptance owner is an exact stable method record and captured methods retain their original receiver.",
+      "rejectingTest": "packages/contexts/agent-execution/tests/features/contained-agent-turn/owner-bridge-rejections.test.ts"
+    },
+    {
+      "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-launch-finalization-validation.ts",
+      "start": 7347,
+      "end": 7418,
+      "sha256": "8000f4be745ed501f432ef398adef3bbcebc00b4b63b3ef1b80d86bdc6a3ea1e",
+      "rationale": "Every retained HTTP resource method and route is checked and captured before the finalization dependency bag is returned.",
+      "rejectingTest": "packages/contexts/agent-execution/tests/features/contained-agent-turn/docker-native-finalizer.test.ts"
+    },
+    {
+      "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-codec.ts",
+      "start": 9541,
+      "end": 9583,
+      "sha256": "2c236ade6b764ca73fea4673cbb3068a0378e110f4fb80dc0063440eb7249325",
+      "rationale": "Strict JSON and exact V4 record keys precede record validation and checksum and sequence verification.",
+      "rejectingTest": "packages/contexts/agent-execution/tests/features/contained-agent-turn/host-http-egress-v4-journal.test.ts"
+    },
+    {
+      "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/journal/host-http-egress-v4-codec.ts",
+      "start": 11156,
+      "end": 11201,
+      "sha256": "db37523f97c1d8b8e864a4b31b5cfed3623ced3a6fcf856be6f5d958c3548a2e",
+      "rationale": "Strict JSON and exact V4 tombstone keys precede disposition validation and checksum verification.",
+      "rejectingTest": "packages/contexts/agent-execution/tests/features/contained-agent-turn/host-http-egress-v4-journal.test.ts"
+    },
+    {
+      "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-boundary-snapshot.ts",
+      "start": 7724,
+      "end": 7809,
+      "sha256": "d2dbc9ea26038c060e4d14a9fa29a7eac7b6e589ac6edb3f3f884b44e2087f90",
+      "rationale": "The Docker policy has an exact key set, scalar type checks and a detached environment-key array; engine policy checks reject unsafe values.",
+      "rejectingTest": "packages/contexts/agent-execution/tests/features/contained-agent-turn/docker-host-custody-engine.test.ts"
+    },
+    {
+      "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-boundary-snapshot.ts",
+      "start": 8117,
+      "end": 8187,
+      "sha256": "f459e2031963e251316f6e20022996ebf3a3977021c6d4cb9e4ea5185231f0d8",
+      "rationale": "Every Docker container authority member is an own string value in the exact captured authority record.",
+      "rejectingTest": "packages/contexts/agent-execution/tests/features/contained-agent-turn/docker-host-custody-engine.test.ts"
+    },
+    {
+      "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/engine/docker-boundary-snapshot.ts",
+      "start": 8676,
+      "end": 8893,
+      "sha256": "dbfdbd28c2dcb9307d28f198ab29c7d899c8d8a8677973b98153f43488d0cd03",
+      "rationale": "The Docker create request has exact scalar fields and detached string arguments and environment before engine use.",
+      "rejectingTest": "packages/contexts/agent-execution/tests/features/contained-agent-turn/docker-host-custody-engine.test.ts"
+    }
+  ]
+}

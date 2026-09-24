@@ -11,7 +11,9 @@ export function assertQualityAdoption({ manifest, foundation, profile }) {
   assert.deepEqual(foundation.capabilities["quality.source-coverage"], {
     configPath: "architecture/foundation/quality-source-coverage.yaml"
   });
-  assert.equal(profile.schemaVersion, 1);
+  assert.equal(profile.schemaVersion, 2);
+  assert.equal(profile.bridgeAdmissionsPath,
+    "architecture/foundation/quality-source-coverage-bridge-admissions.json");
   assert.equal(profile.featureProfilePath, "architecture/feature-module-standard/candidate-profile.json");
   assert.equal(profile.sourcePolicyPath, "architecture/foundation/source-dependencies.yaml");
   assert.equal(profile.suppressionPolicyPath, "architecture/foundation/suppression-governance.yaml");
