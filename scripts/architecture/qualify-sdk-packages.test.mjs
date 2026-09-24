@@ -4,8 +4,10 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   assertPackedSdkArchive,
+  assertPrivateDeepPathsRejected,
   assertPublicImports,
   directoryLinkType,
   pnpmLauncher
@@ -93,4 +95,28 @@ test("public import qualification executes the packed entrypoint", t => {
   writeFileSync(join(packageRoot, "index.js"), "export const qualified = true;\n");
   assert.deepEqual(assertPublicImports(directory, ["test-package"]), ["test-package"]);
   assert.throws(() => assertPublicImports(directory, ["test-package/missing"]), /ERR_PACKAGE_PATH_NOT_EXPORTED/u);
+});
+
+test("packed private deep paths reject runtime and type imports", t => {
+  const consumer = mkdtempSync(join(tmpdir(), "ar-sdk-private-import-"));
+  t.after(() => rmSync(consumer, { recursive: true, force: true }));
+  const packageRoot = join(consumer, "node_modules", "test-package");
+  mkdirSync(join(packageRoot, "dist"), { recursive: true });
+  writeFileSync(join(consumer, "package.json"), JSON.stringify({ type: "module" }));
+  const manifest = { name: "test-package", type: "module", exports: {
+    ".": { types: "./dist/composition.d.ts", import: "./dist/composition.js" }
+  } };
+  writeFileSync(join(packageRoot, "package.json"), JSON.stringify(manifest));
+  writeFileSync(join(packageRoot, "dist", "composition.js"), "export const value = 1;\n");
+  writeFileSync(join(packageRoot, "dist", "composition.d.ts"), "export declare const value: number;\n");
+  const compiler = fileURLToPath(new URL("../../node_modules/typescript/bin/tsc", import.meta.url));
+  assertPrivateDeepPathsRejected(consumer, ["test-package"], compiler);
+  manifest.exports["./dist/composition.js"] = "./dist/composition.js";
+  writeFileSync(join(packageRoot, "package.json"), JSON.stringify(manifest));
+  assert.throws(() => assertPrivateDeepPathsRejected(consumer, ["test-package"], compiler),
+    /Private runtime path was importable/u);
+  manifest.exports["./dist/composition.js"] = { types: "./dist/composition.d.ts" };
+  writeFileSync(join(packageRoot, "package.json"), JSON.stringify(manifest));
+  assert.throws(() => assertPrivateDeepPathsRejected(consumer, ["test-package"], compiler),
+    /Private type paths were importable/u);
 });

@@ -51,6 +51,8 @@ import {
   type MaterializationPostgresPool,
   type PostgresCredentialRenderingOwner,
 } from "@agent-teams/provider-access/composition";
+// @ts-expect-error owner selector is private to Provider Access
+import type { AuthorizationOwnerSelector } from "@agent-teams/provider-access/composition";
 
 const provider: ProviderAccessProvider = "codex";
 const client = {

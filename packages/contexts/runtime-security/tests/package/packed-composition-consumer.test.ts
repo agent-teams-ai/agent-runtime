@@ -72,6 +72,8 @@ import {
   type PostgresDispatchAuthorityChange,
   type PostgresDispatchConsumptionRepository,
 } from "@agent-teams/runtime-security/composition";
+// @ts-expect-error operation selector is private to Runtime Security
+import type { OperationKey } from "@agent-teams/runtime-security/composition";
 
 const client = {
   async query(_sql: string, _values?: unknown[]) {

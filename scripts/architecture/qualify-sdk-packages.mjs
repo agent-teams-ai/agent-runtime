@@ -46,6 +46,26 @@ export function assertPublicImports(consumer, specifiers) {
   return specifiers;
 }
 
+export function assertPrivateDeepPathsRejected(consumer, packageNames, compiler) {
+  const imports = packageNames.map(name => `${name}/dist/composition.js`);
+  for (const specifier of imports) {
+    const result = spawnSync(process.execPath, ["--input-type=module", "--eval",
+      `await import(${JSON.stringify(specifier)});`], { cwd: consumer, encoding: "utf8" });
+    assert.notEqual(result.status, 0, `Private runtime path was importable: ${specifier}`);
+    assert.match(result.stderr, /ERR_PACKAGE_PATH_NOT_EXPORTED/u, `Wrong runtime rejection: ${specifier}`);
+  }
+  const fixture = join(consumer, "private-deep-paths.mts");
+  writeFileSync(fixture, `${imports.map(specifier => `import type {} from ${JSON.stringify(specifier)};`).join("\n")}\n`);
+  const result = spawnSync(process.execPath, [compiler, "--noEmit", "--strict", "--skipLibCheck",
+    "--target", "ES2022", "--module", "NodeNext", "--moduleResolution", "NodeNext", fixture],
+  { cwd: consumer, encoding: "utf8", timeout: 300_000 });
+  assert.notEqual(result.status, 0, "Private type paths were importable");
+  for (const specifier of imports) {
+    assert.ok(result.stdout.split("\n").some(line => line.includes(specifier) && line.includes("TS2307")),
+      `Missing private type rejection: ${specifier}\n${result.stdout}\n${result.stderr}`);
+  }
+}
+
 // Qualification of actual package membership and public importability. EF's
 // observer and authority route own SDK semantics; this grants no SDK admission.
 export function qualifySdkPackages(repository = root) {
@@ -126,6 +146,8 @@ export function qualifySdkPackages(repository = root) {
     return Object.keys(manifest.exports).map(exportPath => `${pkg.packageName}${exportPath === "." ? "" : exportPath.slice(1)}`);
   });
   assertPublicImports(consumer, publicImports);
+  assertPrivateDeepPathsRejected(consumer, profile.packages.map(pkg => pkg.packageName),
+    join(repository, "node_modules", "typescript", "bin", "tsc"));
   const receipt = { schemaVersion: 1, qualification: "package-membership-and-public-imports", releaseEligible: false, sandbox, platform: process.platform, node: process.version, packages, publicImports };
   writeFileSync(join(sandbox, "receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);
   return receipt;

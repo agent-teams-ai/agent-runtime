@@ -167,6 +167,8 @@ import {
   type ConfigurationSourceReader,
   type InspectClaudeCodeConfiguration,
 } from "@agent-teams/runtime-configuration/composition";
+// @ts-expect-error source selection model is private to Runtime Configuration
+import type { CodexSourceSelection } from "@agent-teams/runtime-configuration/composition";
 
 const digest = {
   hmacSha256Hex: () => "0".repeat(64),
