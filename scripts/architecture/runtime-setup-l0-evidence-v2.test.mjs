@@ -510,8 +510,12 @@ test("bounded real-source merge/check accepts unrelated and report-only delivery
   const runGit = gitWithEnv({...process.env, ...callerIdentity(process.cwd())});
   const commit = () => {runGit(source, "add", "-A"); runGit(source, "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "synthetic bounded delivery"); return runGit(source, "rev-parse", "HEAD");};
   const workspacePath = resolve(source, "pnpm-workspace.yaml");
-  const currentWorkspace = readFileSync(workspacePath, "utf8");
+  // This fixture models the earlier release-age cleanup independently of the
+  // current managed Docs package pins, which may need their own exclusions.
+  const currentWorkspace = readFileSync(workspacePath, "utf8").replace(
+    /^minimumReleaseAgeExclude:\n(?:[ \t]+-[^\n]*\n)+/mu, "");
   assert.match(currentWorkspace, /^minimumReleaseAge: 0$/mu);
+  assert.doesNotMatch(currentWorkspace, /^minimumReleaseAgeExclude:/mu);
   writeFileSync(workspacePath, currentWorkspace.replace(/^minimumReleaseAge: 0$/mu,
     'minimumReleaseAgeExclude:\n  - "@agent-teams/engineering-foundation@1.3.3"\n\n  - "@agent-teams/docs-protocol-agent-teams@0.2.8"'));
   runGit(source, "init", "--quiet"); commit();
