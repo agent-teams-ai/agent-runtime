@@ -7,3 +7,4 @@ coverage/
 *.log
 *.tsbuildinfo
 packages/apps/embedded-runtime/tests/live/mac-pa-auth/helper-attempts.jsonl
+**/.cache/
