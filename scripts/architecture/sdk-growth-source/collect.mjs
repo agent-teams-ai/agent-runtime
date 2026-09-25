@@ -7,6 +7,10 @@ import { buildCandidate, candidateIdentity, inspectPackedSurface } from "./candi
 
 export const PACKAGE = "@agent-teams/filesystem-custody";
 const PACKAGE_ROOT = "packages/platform/filesystem-custody";
+const SOURCE_REMOTES = new Set([
+  "https://github.com/agent-teams-ai/agent-runtime",
+  "https://github.com/agent-teams-ai/agent-runtime.git"
+]);
 const WORKSPACE_INPUTS = ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", ".npmrc"];
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
 
@@ -22,8 +26,7 @@ export function inspectSource(repository, commit, tree) {
     throw new Error("source: absolute repository and full commit/tree required");
   }
   if (git(repository, ["rev-parse", "--show-toplevel"]).toString("utf8").trim() !== resolve(repository) ||
-      git(repository, ["remote", "get-url", "origin"]).toString("utf8").trim() !==
-        "https://github.com/agent-teams-ai/agent-runtime.git") {
+      !SOURCE_REMOTES.has(git(repository, ["remote", "get-url", "origin"]).toString("utf8").trim())) {
     throw new Error("source: wrong repository identity");
   }
   if (git(repository, ["rev-parse", `${commit}^{commit}`]).toString("utf8").trim() !== commit ||
