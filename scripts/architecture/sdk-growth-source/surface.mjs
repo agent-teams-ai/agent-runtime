@@ -20,12 +20,12 @@ export function inspectSurface(sourceManifest, packedManifest, files) {
   }
   const census = { declarations: [], javascript: [], native: [], other: [] };
   for (const path of files.keys()) {
-    if (path.endsWith(".d.ts")) census.declarations.push(path);
-    else if (path.endsWith(".js")) census.javascript.push(path);
-    else if (path.endsWith(".node")) census.native.push(path);
-    else census.other.push(path);
+    if (path.endsWith(".d.ts")) { census.declarations.push(path); }
+    else if (path.endsWith(".js")) { census.javascript.push(path); }
+    else if (path.endsWith(".node")) { census.native.push(path); }
+    else { census.other.push(path); }
   }
-  for (const members of Object.values(census)) members.sort();
-  if (!census.native.includes("dist/rename-no-replace.node")) throw new Error("surface: expected native member missing");
+  for (const [kind, members] of Object.entries(census)) { census[kind] = members.toSorted(); }
+  if (!census.native.includes("dist/rename-no-replace.node")) { throw new Error("surface: expected native member missing"); }
   return { exports, census, typedClosure: "incomplete", runtimeReachability: "incomplete", nativeClosure: "incomplete" };
 }

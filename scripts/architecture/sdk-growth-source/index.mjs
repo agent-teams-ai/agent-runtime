@@ -23,16 +23,16 @@ function protectedParent(path) {
     if (current === path && (stat.uid !== uid || (stat.mode & 0o7777) !== 0o700)) {
       throw new Error("output: operator-owned 0700 parent required");
     }
-    if (current === path) protectedStat = stat;
+    if (current === path) { protectedStat = stat; }
     const next = dirname(current);
-    if (next === current) break;
+    if (next === current) { break; }
     current = next;
   }
   return protectedStat;
 }
 
 export function writeProtectedOutput(repository, output, entries, hooks = {}) {
-  if (resolve(output) !== output || !basename(output)) throw new Error("output: normalized absolute path required");
+  if (resolve(output) !== output || !basename(output)) { throw new Error("output: normalized absolute path required"); }
   assertExternalOutput(repository, output);
   const parent = dirname(output);
   const validatedParent = protectedParent(parent);
@@ -40,7 +40,7 @@ export function writeProtectedOutput(repository, output, entries, hooks = {}) {
   const parentFd = openSync(parent, directoryFlags);
   try {
     const parentStat = fstatSync(parentFd);
-    if (!sameIdentity(validatedParent, parentStat)) throw new Error("output: parent replaced");
+    if (!sameIdentity(validatedParent, parentStat)) { throw new Error("output: parent replaced"); }
     const checkParent = () => {
       assertExternalOutput(repository, output);
       if (!sameIdentity(parentStat, lstatSync(parent)) || !sameIdentity(parentStat, fstatSync(parentFd))) {
@@ -58,12 +58,12 @@ export function writeProtectedOutput(repository, output, entries, hooks = {}) {
       const checkOutput = () => {
         checkParent();
         if (!sameIdentity(outputStat, lstatSync(at(parentFd, basename(output)))) ||
-            !sameIdentity(outputStat, fstatSync(outputFd))) throw new Error("output: directory replaced");
+            !sameIdentity(outputStat, fstatSync(outputFd))) { throw new Error("output: directory replaced"); }
       };
       checkOutput();
       hooks.afterOutputOpen?.();
       for (const [name, bytes] of entries) {
-        if (!/^[A-Za-z0-9][A-Za-z0-9.-]*$/u.test(name)) throw new Error("output: unsafe member name");
+        if (!/^[A-Za-z0-9][A-Za-z0-9.-]*$/u.test(name)) { throw new Error("output: unsafe member name"); }
         checkOutput();
         const file = openSync(at(outputFd, name), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
         try { fchmodSync(file, 0o600); writeFileSync(file, bytes); }
@@ -78,18 +78,18 @@ export function run(args) {
   const options = {};
   for (let i = 0; i < args.length; i += 2) {
     const name = args[i];
-    if (!name?.startsWith("--") || !args[i + 1] || options[name]) throw new Error("usage: --repository ABS --commit SHA --tree SHA --archive TGZ --installed-base ABS --output ABS");
+    if (!name?.startsWith("--") || !args[i + 1] || options[name]) { throw new Error("usage: --repository ABS --commit SHA --tree SHA --archive TGZ --installed-base ABS --output ABS"); }
     options[name] = args[i + 1];
   }
   const names = ["--repository", "--commit", "--tree", "--archive", "--installed-base", "--output"];
-  if (Object.keys(options).length !== names.length || names.some(name => !options[name])) throw new Error("usage: exact source, archive, installation and external output required");
+  if (Object.keys(options).length !== names.length || names.some(name => !options[name])) { throw new Error("usage: exact source, archive, installation and external output required"); }
   assertExternalOutput(options["--repository"], options["--output"]);
   const candidate = collect({ repository: options["--repository"], commit: options["--commit"],
     tree: options["--tree"], archivePath: options["--archive"], installedBase: options["--installed-base"] });
   const tgz = readBoundedArchive(options["--archive"]);
   const inspected = inspectArchive(tgz);
   if (inspected.transport.sha256 !== candidate.transport.sha256 ||
-      inspected.canonical.sha256 !== candidate.canonicalArchive.sha256) throw new Error("archive: changed during collection");
+      inspected.canonical.sha256 !== candidate.canonicalArchive.sha256) { throw new Error("archive: changed during collection"); }
   writeProtectedOutput(options["--repository"], options["--output"], [
     ["filesystem-custody.tgz", tgz], ["canonical-archive.json", inspected.canonical.payload],
     ["candidate.json", `${JSON.stringify(candidate, null, 2)}\n`]

@@ -60,7 +60,7 @@ test("archive reader rejects unsafe names, links, duplicate paths and resource e
     { name: "package/a?b" }, { name: "package/a|b" },
     { name: "package/link", kind: "2", link: "package/file" },
     { name: "package/huge", bytes: Buffer.alloc(16 * 1024 * 1024 + 1) }
-  ]) assert.throws(() => inspectArchive(tar([member])), /archive:/u);
+  ]) {assert.throws(() => inspectArchive(tar([member])), /archive:/u); }
   assert.throws(() => inspectArchive(tar([{ name: "package/A" }, { name: "package/a" }])), /collision/u);
   assert.throws(() => inspectArchive(tar([{ name: "package/A/x" }, { name: "package/a/y" }])), /directory case collision/u);
   assert.throws(() => inspectArchive(tar([{ name: "package/a" }, { name: "package/a/b" }])), /collision/u);
@@ -193,7 +193,7 @@ test("installed inventory rejects a concurrent root addition after enumeration",
     mkdirSync(join(sandbox, "key"));
     writeFileSync(join(sandbox, "key", "existing"), "x");
     assert.throws(() => installedFiles(sandbox, "key", prefix => {
-      if (prefix === "") writeFileSync(join(sandbox, "key", "added"), "y");
+      if (prefix === "") { writeFileSync(join(sandbox, "key", "added"), "y"); }
     }), /directory changed/u);
   } finally { rmSync(sandbox, { recursive: true, force: true }); }
 });
@@ -202,7 +202,7 @@ test("installed inventory bounds each directory before reading every member", ()
   const sandbox = mkdtempSync(join(tmpdir(), "ar-source-count-"));
   try {
     mkdirSync(join(sandbox, "key"));
-    for (let i = 0; i < 257; i++) writeFileSync(join(sandbox, "key", String(i).padStart(3, "0")), "");
+    for (let i = 0; i < 257; i++) { writeFileSync(join(sandbox, "key", String(i).padStart(3, "0")), ""); }
     assert.throws(() => installedFiles(sandbox, "key"), /member count limit/u);
   } finally { rmSync(sandbox, { recursive: true, force: true }); }
 });
@@ -307,7 +307,7 @@ test("scoped tooling feature has exact FMS ownership, census and blocking Founda
   const profile = JSON.parse(readFileSync(join(repository, "architecture/feature-module-standard/sdk-growth-source.json"), "utf8"));
   const scripts = JSON.parse(readFileSync(join(repository, "package.json"), "utf8")).scripts;
   const actual = readdirSync(join(repository, "scripts/architecture/sdk-growth-source"))
-    .filter(name => name.endsWith(".mjs")).map(name => `scripts/architecture/sdk-growth-source/${name}`).sort();
+    .filter(name => name.endsWith(".mjs")).map(name => `scripts/architecture/sdk-growth-source/${name}`).toSorted();
   const verify = (candidate, routes = scripts) => {
     assert.deepEqual(candidate.modules.policy, [
       "scripts/architecture/sdk-growth-source/candidate.mjs",
@@ -319,7 +319,7 @@ test("scoped tooling feature has exact FMS ownership, census and blocking Founda
       "scripts/architecture/sdk-growth-source/index.mjs"
     ]);
     assert.equal(candidate.modules.test, "scripts/architecture/sdk-growth-source/collector.test.mjs");
-    assert.deepEqual([...candidate.modules.policy, ...candidate.modules.adaptersAndComposition, candidate.modules.test].sort(), actual);
+    assert.deepEqual([...candidate.modules.policy, ...candidate.modules.adaptersAndComposition, candidate.modules.test].toSorted(), actual);
     assert.equal(candidate.authority.sha256, "851653f96643cf0466b67ab22963661976b00de44840fa3144a48a8c054f95fa");
     assert.equal(candidate.scope, "development-tooling-only");
     assert.equal(candidate.consumerModuleStandard.sha256, "d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f");

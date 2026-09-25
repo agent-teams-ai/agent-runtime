@@ -108,13 +108,13 @@ test("Source Dependencies uses schema v3 with root package and every workspace p
   assert.match(source, /"architecture\.source-dependencies", "--consumer", root, "--json"/u);
 });
 
-test("qualified stable28 managed state and unchanged native source policy retain exact bytes", async () => {
+test("qualified stable28 managed state and scoped source policy retain exact bytes", async () => {
   const expected = {
     "architecture/foundation/docs-consumer-integration.json": "1fc8cb4431b20d2e51cfb54194ba98fc121cd417bb42541e0bdf87040f759720",
     "architecture/foundation/docs-protocol-managed-state.json": "7b0f900339030d7aab0f17d5b84612d3f5ee35b457283d2755994c4284f36159",
     "architecture/foundation/docs-protocol-qualification.json": "1f7e50ec5b0e6ecc991668b83790b2367062240043c4b885c58377855968969b",
     "architecture/foundation/document-authoring.yaml": "d6f5ba4b178e742e122f6711c9d989d52a77768eb68527b0ecdf3c9a9699c6d2",
-    "architecture/foundation/source-dependencies.yaml": "39d5c0c38efcc5e496abd465da1f610d3765a3d107a0480a7f515777f9334595",
+    "architecture/foundation/source-dependencies.yaml": "2d0f83c82ee9fa0df45f3d9e667cc0d263c6992a9d5ed4b3da5f661202a10fb6",
   };
   for (const [path, digest] of Object.entries(expected)) {
     assert.equal(createHash("sha256").update(await read(path)).digest("hex"), digest, path);
