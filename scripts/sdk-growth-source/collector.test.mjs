@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
-import { appendFileSync, chmodSync, linkSync, mkdtempSync, mkdirSync, readFileSync, readSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { appendFileSync, chmodSync, linkSync, mkdtempSync, mkdirSync, readFileSync, readSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, truncateSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import test from "node:test";
@@ -12,7 +12,7 @@ import { assertExternalOutput, collect, git, inspectSource, installedFiles, inve
 import { run, writeProtectedOutput } from "./index.mjs";
 import { inspectSurface } from "./surface.mjs";
 
-const repository = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const repository = resolvePath(dirname(fileURLToPath(import.meta.url)), "../..");
 const fixture = readFileSync(new URL("./fixtures/filesystem-custody-retained.tgz", import.meta.url));
 const commit = "765bbfbb6a3a59906d052706396309f0cb8a61fc";
 const tree = execFileSync("git", ["-C", repository, "rev-parse", `${commit}^{tree}`], { encoding: "utf8" }).trim();
@@ -173,6 +173,42 @@ test("Git process errors fail even with a zero status and replace refs are disab
   }), /injected process failure/u);
 });
 
+test("source origin accepts only the two exact HTTPS URLs", () => {
+  const sandbox = mkdtempSync(join(tmpdir(), "ar-source-origin-"));
+  try {
+    const checkout = join(sandbox, "checkout");
+    execFileSync("git", ["init", "--quiet", checkout]);
+    for (const path of ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", ".npmrc",
+      "packages/platform/filesystem-custody/package.json",
+      "packages/platform/filesystem-custody/native/rename-no-replace.c",
+      "packages/platform/filesystem-custody/scripts/build-native-helper.mjs"]) {
+      const target = join(checkout, path);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, path.endsWith("package.json") && path.includes("filesystem-custody") ?
+        JSON.stringify({ name: "@agent-teams/filesystem-custody", version: "0.0.0" }) : "fixture\n");
+    }
+    execFileSync("git", ["-C", checkout, "add", "-A"]);
+    execFileSync("git", ["-C", checkout, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.test",
+      "commit", "--quiet", "-m", "fixture"]);
+    const localCommit = execFileSync("git", ["-C", checkout, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    const localTree = execFileSync("git", ["-C", checkout, "rev-parse", "HEAD^{tree}"], { encoding: "utf8" }).trim();
+    execFileSync("git", ["-C", checkout, "remote", "add", "origin",
+      "https://github.com/agent-teams-ai/agent-runtime.git"]);
+    for (const remote of ["https://github.com/agent-teams-ai/agent-runtime",
+      "https://github.com/agent-teams-ai/agent-runtime.git"]) {
+      execFileSync("git", ["-C", checkout, "remote", "set-url", "origin", remote]);
+      assert.equal(inspectSource(checkout, localCommit, localTree).commit, localCommit);
+      for (const padded of [` ${remote}`, `${remote} `, `\t${remote}`, `${remote}\t`, `\r${remote}`, `${remote}\r`]) {
+        execFileSync("git", ["-C", checkout, "remote", "set-url", "origin", padded]);
+        assert.throws(() => inspectSource(checkout, localCommit, localTree), /wrong repository identity/u);
+      }
+    }
+    execFileSync("git", ["-C", checkout, "remote", "set-url", "origin",
+      "https://github.com/agent-teams-ai/agent-runtime.git.evil"]);
+    assert.throws(() => inspectSource(checkout, localCommit, localTree), /wrong repository identity/u);
+  } finally { rmSync(sandbox, { recursive: true, force: true }); }
+});
+
 test("installed inventory rejects aggregate size before content reads", () => {
   const sandbox = mkdtempSync(join(tmpdir(), "ar-source-total-limit-"));
   try {
@@ -207,6 +243,48 @@ test("installed inventory bounds each directory before reading every member", ()
   } finally { rmSync(sandbox, { recursive: true, force: true }); }
 });
 
+test("installed inventory rejects a hardlink added after its file was read", async () => {
+  const sandbox = mkdtempSync(join(tmpdir(), "ar-source-late-link-"));
+  try {
+    const installed = join(sandbox, "key");
+    mkdirSync(installed);
+    const first = join(installed, "000-first");
+    writeFileSync(first, "first");
+    const old = new Date(Date.now() - 60_000);
+    utimesSync(first, old, new Date());
+    const initialAtime = statSync(first).atimeMs;
+    const laterBytes = Buffer.alloc(256 * 1024);
+    for (let i = 1; i < 256; i++) {
+      writeFileSync(join(installed, String(i).padStart(3, "0")), laterBytes);
+    }
+    const outside = join(sandbox, "outside-hardlink");
+    const watcher = spawn(process.execPath, ["-e", `
+      const { statSync, linkSync } = require("node:fs");
+      process.stdout.write("ready\\n");
+      const deadline = Date.now() + 3000;
+      while (statSync(process.argv[1]).atimeMs <= Number(process.argv[3])) {
+        if (Date.now() >= deadline) { throw new Error("first file was not read"); }
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+      linkSync(process.argv[1], process.argv[2]);
+    `, first, outside, String(initialAtime)], { stdio: ["ignore", "pipe", "pipe"] });
+    const ready = new Promise((resolve, reject) => {
+      watcher.stdout.once("data", resolve);
+      watcher.once("error", reject);
+    });
+    const done = new Promise((resolve, reject) => {
+      watcher.once("exit", code => code === 0 ? resolve() : reject(new Error(`watcher exited ${code}`)));
+      watcher.once("error", reject);
+    });
+    await ready;
+    let failure;
+    try { installedFiles(sandbox, "key"); } catch (error) { failure = error; }
+    await done;
+    assert.equal(statSync(outside).nlink, 2);
+    assert.match(failure?.message ?? "", /installed: changed during read 000-first/u);
+  } finally { rmSync(sandbox, { recursive: true, force: true }); }
+});
+
 test("archive reader stops concurrent compressed growth at the read limit", () => {
   const sandbox = mkdtempSync(join(tmpdir(), "ar-source-growth-"));
   try {
@@ -224,6 +302,17 @@ test("archive reader stops concurrent compressed growth at the read limit", () =
     }), /compressed size limit during read/u);
     assert.equal(injected, true);
     assert.ok(requested < 17 * 1024 * 1024);
+  } finally { rmSync(sandbox, { recursive: true, force: true }); }
+});
+
+test("archive reader rejects an unwritten FIFO without blocking", () => {
+  const sandbox = mkdtempSync(join(tmpdir(), "ar-source-fifo-"));
+  try {
+    const fifo = join(sandbox, "archive.tgz");
+    execFileSync("mkfifo", [fifo]);
+    execFileSync(process.execPath, ["--input-type=module", "-e",
+      'import assert from "node:assert/strict"; const { readBoundedArchive } = await import(process.argv[1]); assert.throws(() => readBoundedArchive(process.argv[2]), /regular compressed file/u);',
+      new URL("./archive.mjs", import.meta.url).href, fifo], { timeout: 3000 });
   } finally { rmSync(sandbox, { recursive: true, force: true }); }
 });
 

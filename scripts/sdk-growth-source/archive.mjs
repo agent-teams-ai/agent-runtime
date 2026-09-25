@@ -9,7 +9,7 @@ const MAX_MEMBERS = 256;
 const hash = (algorithm, bytes) => createHash(algorithm).update(bytes).digest(algorithm === "sha512" ? "base64" : "hex");
 
 export function readBoundedArchive(path, read = readSync) {
-  const descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const stat = fstatSync(descriptor, { bigint: true });
     if (!stat.isFile() || stat.size === 0n || stat.size > BigInt(MAX_TGZ)) { throw new Error("archive: regular compressed file within size limit required"); }

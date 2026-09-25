@@ -94,6 +94,7 @@ test("Source Dependencies uses schema v3 with root package and every workspace p
     "packages/platform/filesystem-custody/src",
     "packages/platform/filesystem-custody/tests",
     "scripts/architecture",
+    "scripts/sdk-growth-source",
     "scripts/ci",
     "scripts/docs",
     "scripts/foundation",

@@ -26,7 +26,7 @@ export function inspectSource(repository, commit, tree) {
     throw new Error("source: absolute repository and full commit/tree required");
   }
   if (git(repository, ["rev-parse", "--show-toplevel"]).toString("utf8").trim() !== resolve(repository) ||
-      !SOURCE_REMOTES.has(git(repository, ["remote", "get-url", "origin"]).toString("utf8").trim())) {
+      !SOURCE_REMOTES.has(git(repository, ["remote", "get-url", "origin"]).toString("utf8").replace(/\n$/u, ""))) {
     throw new Error("source: wrong repository identity");
   }
   if (git(repository, ["rev-parse", `${commit}^{commit}`]).toString("utf8").trim() !== commit ||
@@ -50,6 +50,8 @@ const MAX_INSTALLED_DEPTH = 32;
 const DIRECTORY_FLAGS = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
 const descriptorPath = (descriptor, name) => `/proc/self/fd/${descriptor}/${name}`;
 const sameIdentity = (a, b) => a.dev === b.dev && a.ino === b.ino && a.mode === b.mode;
+const sameFileState = (a, b) => sameIdentity(a, b) && b.isFile() && b.nlink === 1n &&
+  a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs;
 const directoryState = descriptor => fstatSync(descriptor, { bigint: true });
 const sameDirectoryState = (a, b) => sameIdentity(a, b) && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs;
 
@@ -70,7 +72,7 @@ function enumerateInstalled(descriptor, prefix, depth, state, onEnumerated) {
   const before = directoryState(descriptor);
   const items = boundedDirectoryItems(descriptor);
   if (state.entries + items.length > MAX_INSTALLED_ENTRIES) { throw new Error("installed: member count limit"); }
-  const snapshots = items.map(item => lstatSync(descriptorPath(descriptor, item.name)));
+  const snapshots = items.map(item => lstatSync(descriptorPath(descriptor, item.name), { bigint: true }));
   if (!sameDirectoryState(before, directoryState(descriptor))) { throw new Error("installed: directory changed during enumeration"); }
   const names = items.map(item => item.name).toSorted();
   state.directories.push({ descriptor, state: before, names, path: prefix });
@@ -82,19 +84,19 @@ function enumerateInstalled(descriptor, prefix, depth, state, onEnumerated) {
     if (item.isDirectory()) {
       const child = openSync(descriptorPath(descriptor, item.name), DIRECTORY_FLAGS);
       state.opened.push(child);
-      if (!sameIdentity(snapshots[index], fstatSync(child))) { throw new Error(`installed: directory replaced ${path}`); }
+      if (!sameIdentity(snapshots[index], fstatSync(child, { bigint: true }))) { throw new Error(`installed: directory replaced ${path}`); }
       state.directories.push({ descriptor: child, parent: descriptor, name: item.name, snapshot: snapshots[index], path });
       enumerateInstalled(child, path, depth + 1, state, onEnumerated);
     }
     else if (item.isFile()) {
       const file = openSync(descriptorPath(descriptor, item.name), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
       state.opened.push(file);
-      const stat = fstatSync(file);
-      if (!sameIdentity(snapshots[index], stat) || !stat.isFile() || stat.nlink !== 1) {
+      const stat = fstatSync(file, { bigint: true });
+      if (!sameFileState(snapshots[index], stat)) {
         throw new Error(`installed: linked or replaced member ${path}`);
       }
-      if (stat.size > MAX_INSTALLED_FILE || state.total + stat.size > MAX_INSTALLED_TOTAL) { throw new Error("installed: byte limit"); }
-      state.total += stat.size;
+      if (stat.size > BigInt(MAX_INSTALLED_FILE) || BigInt(state.total) + stat.size > BigInt(MAX_INSTALLED_TOTAL)) { throw new Error("installed: byte limit"); }
+      state.total += Number(stat.size);
       state.pending.push({ file, parent: descriptor, name: item.name, stat, path });
     }
     else { throw new Error(`installed: nonregular member ${path}`); }
@@ -102,19 +104,23 @@ function enumerateInstalled(descriptor, prefix, depth, state, onEnumerated) {
   if (!sameDirectoryState(before, directoryState(descriptor))) { throw new Error("installed: directory changed"); }
 }
 
-function readInstalledFile({ file, parent, name, stat, path }) {
-  const bytes = Buffer.alloc(stat.size);
+function validateInstalledFile({ file, parent, name, stat, path }) {
+  if (!sameFileState(stat, fstatSync(file, { bigint: true })) ||
+      !sameFileState(stat, lstatSync(descriptorPath(parent, name), { bigint: true }))) {
+    throw new Error(`installed: changed during read ${path}`);
+  }
+}
+
+function readInstalledFile(pending) {
+  const { file, stat, path } = pending;
+  const bytes = Buffer.alloc(Number(stat.size));
   let offset = 0;
   while (offset < bytes.length) {
     const count = readSync(file, bytes, offset, bytes.length - offset, offset);
     if (count === 0) { throw new Error(`installed: changed during read ${path}`); }
     offset += count;
   }
-  const after = fstatSync(file);
-  if (!sameIdentity(stat, after) || after.size !== stat.size || after.mtimeMs !== stat.mtimeMs || after.ctimeMs !== stat.ctimeMs ||
-      !sameIdentity(stat, lstatSync(descriptorPath(parent, name)))) {
-    throw new Error(`installed: changed during read ${path}`);
-  }
+  validateInstalledFile(pending);
   return bytes;
 }
 
@@ -132,8 +138,8 @@ export function installedFiles(base, key, onEnumerated = () => {}) {
         files.set(pending.path, readInstalledFile(pending));
       }
       for (const { descriptor, parent, name, snapshot, state: before, names, path } of state.directories) {
-        if (snapshot && (!sameIdentity(snapshot, fstatSync(descriptor)) ||
-            !sameIdentity(snapshot, lstatSync(descriptorPath(parent, name))))) {
+        if (snapshot && (!sameIdentity(snapshot, fstatSync(descriptor, { bigint: true })) ||
+            !sameIdentity(snapshot, lstatSync(descriptorPath(parent, name), { bigint: true })))) {
           throw new Error(`installed: directory replaced ${path}`);
         }
         if (before && (!sameDirectoryState(before, directoryState(descriptor)) ||
@@ -146,6 +152,7 @@ export function installedFiles(base, key, onEnumerated = () => {}) {
         throw new Error("installed: root directory replaced");
       }
       if (!sameIdentity(fstatSync(baseDescriptor), lstatSync(base))) { throw new Error("installed: base directory replaced"); }
+      for (const pending of state.pending) { validateInstalledFile(pending); }
     }
     finally { for (const descriptor of state.opened.toReversed()) { closeSync(descriptor); } }
   } finally { closeSync(baseDescriptor); }
