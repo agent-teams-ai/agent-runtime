@@ -2391,6 +2391,7 @@ boundaries:
     - node:child_process
     - node:crypto
     - node:fs
+    - node:module
     - node:os
     - node:path
     - node:test

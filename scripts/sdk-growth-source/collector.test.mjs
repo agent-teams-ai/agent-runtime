@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { execFileSync, spawn } from "node:child_process";
-import { appendFileSync, chmodSync, linkSync, mkdtempSync, mkdirSync, readFileSync, readSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, truncateSync, utimesSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import fs, { appendFileSync, chmodSync, linkSync, mkdtempSync, mkdirSync, readFileSync, readSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -243,46 +244,29 @@ test("installed inventory bounds each directory before reading every member", ()
   } finally { rmSync(sandbox, { recursive: true, force: true }); }
 });
 
-test("installed inventory rejects a hardlink added after its file was read", async () => {
+test("installed inventory rejects a hardlink added after its file was read", () => {
   const sandbox = mkdtempSync(join(tmpdir(), "ar-source-late-link-"));
+  const originalLstatSync = fs.lstatSync;
   try {
     const installed = join(sandbox, "key");
     mkdirSync(installed);
     const first = join(installed, "000-first");
     writeFileSync(first, "first");
-    const old = new Date(Date.now() - 60_000);
-    utimesSync(first, old, new Date());
-    const initialAtime = statSync(first).atimeMs;
-    const laterBytes = Buffer.alloc(256 * 1024);
-    for (let i = 1; i < 256; i++) {
-      writeFileSync(join(installed, String(i).padStart(3, "0")), laterBytes);
-    }
     const outside = join(sandbox, "outside-hardlink");
-    const watcher = spawn(process.execPath, ["-e", `
-      const { statSync, linkSync } = require("node:fs");
-      process.stdout.write("ready\\n");
-      const deadline = Date.now() + 3000;
-      while (statSync(process.argv[1]).atimeMs <= Number(process.argv[3])) {
-        if (Date.now() >= deadline) { throw new Error("first file was not read"); }
-      }
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
-      linkSync(process.argv[1], process.argv[2]);
-    `, first, outside, String(initialAtime)], { stdio: ["ignore", "pipe", "pipe"] });
-    const ready = new Promise((resolve, reject) => {
-      watcher.stdout.once("data", resolve);
-      watcher.once("error", reject);
-    });
-    const done = new Promise((resolve, reject) => {
-      watcher.once("exit", code => code === 0 ? resolve() : reject(new Error(`watcher exited ${code}`)));
-      watcher.once("error", reject);
-    });
-    await ready;
-    let failure;
-    try { installedFiles(sandbox, "key"); } catch (error) { failure = error; }
-    await done;
+    let linked = false;
+    fs.lstatSync = (path, ...rest) => {
+      if (!linked && path === sandbox) { linked = true; linkSync(first, outside); }
+      return originalLstatSync(path, ...rest);
+    };
+    syncBuiltinESMExports();
+    assert.throws(() => installedFiles(sandbox, "key"), /installed: changed during read 000-first/u);
+    assert.equal(linked, true);
     assert.equal(statSync(outside).nlink, 2);
-    assert.match(failure?.message ?? "", /installed: changed during read 000-first/u);
-  } finally { rmSync(sandbox, { recursive: true, force: true }); }
+  } finally {
+    fs.lstatSync = originalLstatSync;
+    syncBuiltinESMExports();
+    rmSync(sandbox, { recursive: true, force: true });
+  }
 });
 
 test("archive reader stops concurrent compressed growth at the read limit", () => {
