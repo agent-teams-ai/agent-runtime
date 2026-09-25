@@ -21,6 +21,10 @@ changedChecks:
     script: test
     extensions: [.ts, .tsx, .mts, .cts]
     passPaths: false
+  - id: sdk-growth-source
+    script: test:sdk-growth:source
+    extensions: [.mjs, .tgz]
+    passPaths: false
   - id: rust-boundaries
     script: spike:rust-boundaries
     extensions: [.rs, .toml, .lock]
@@ -33,6 +37,8 @@ fullScanPaths:
   - scripts/architecture/check-sdk-growth-profile.test.mjs
   - scripts/architecture/qualify-sdk-packages.mjs
   - scripts/architecture/qualify-sdk-packages.test.mjs
+  - scripts/architecture/sdk-growth-source
+  - architecture/feature-module-standard/sdk-growth-source.json
   - .oxlintrc.json
   - .github/workflows
   - architecture/foundation

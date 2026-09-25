@@ -2340,6 +2340,62 @@ boundaries:
     - node:zlib
     runtimeReferences:
     - dynamic
+- id: tooling.sdk-growth-source.policy
+  dependencyMode: development
+  roots:
+  - scripts/architecture/sdk-growth-source/candidate.mjs
+  - scripts/architecture/sdk-growth-source/surface.mjs
+  entrypoints:
+  - scripts/architecture/sdk-growth-source/candidate.mjs
+  - scripts/architecture/sdk-growth-source/surface.mjs
+  allow:
+    boundaries: []
+    packages: []
+    builtins: []
+    runtimeReferences: []
+- id: tooling.sdk-growth-source.adapters
+  dependencyMode: development
+  roots:
+  - scripts/architecture/sdk-growth-source/archive.mjs
+  - scripts/architecture/sdk-growth-source/collect.mjs
+  - scripts/architecture/sdk-growth-source/index.mjs
+  entrypoints:
+  - scripts/architecture/sdk-growth-source/archive.mjs
+  - scripts/architecture/sdk-growth-source/collect.mjs
+  - scripts/architecture/sdk-growth-source/index.mjs
+  allow:
+    boundaries:
+    - tooling.sdk-growth-source.policy
+    packages: []
+    builtins:
+    - node:child_process
+    - node:crypto
+    - node:fs
+    - node:path
+    - node:url
+    - node:zlib
+    runtimeReferences: []
+- id: tooling.sdk-growth-source.tests
+  dependencyMode: development
+  roots:
+  - scripts/architecture/sdk-growth-source/collector.test.mjs
+  entrypoints: []
+  allow:
+    boundaries:
+    - tooling.sdk-growth-source.adapters
+    - tooling.sdk-growth-source.policy
+    packages: []
+    builtins:
+    - node:assert/strict
+    - node:child_process
+    - node:crypto
+    - node:fs
+    - node:os
+    - node:path
+    - node:test
+    - node:url
+    - node:zlib
+    runtimeReferences: []
 - id: tooling.architecture
   dependencyMode: development
   roots:

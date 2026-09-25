@@ -179,6 +179,25 @@ test("contained-turn domain and application remain dependency-free core", async 
   })).includes("architecture.source-dependencies.forbidden-package-dependency"));
 });
 
+test("Filesystem Custody source collector keeps policy inside its scoped tooling boundary", async () => {
+  const policyBoundary = boundariesById.get("tooling.sdk-growth-source.policy");
+  const adapterBoundary = boundariesById.get("tooling.sdk-growth-source.adapters");
+  assert.deepEqual(policyBoundary.allowedBuiltins, []);
+  assert.deepEqual(policyBoundary.allowedPackages, []);
+  assert.deepEqual(policyBoundary.allowedBoundaries, []);
+  assert.deepEqual(adapterBoundary.allowedBoundaries, ["tooling.sdk-growth-source.policy"]);
+  const candidate = "scripts/architecture/sdk-growth-source/candidate.mjs";
+  const adapter = "scripts/architecture/sdk-growth-source/collect.mjs";
+  const testFile = "scripts/architecture/sdk-growth-source/collector.test.mjs";
+  assert.deepEqual(rules(await analyzeFixture({ [candidate]: "import 'node:fs';\n" })),
+    ["architecture.source-dependencies.forbidden-builtin-dependency"]);
+  assert.deepEqual(rules(await analyzeFixture({ [candidate]: "import './collect.mjs';\n" })),
+    ["architecture.source-dependencies.forbidden-boundary-dependency"]);
+  assert.deepEqual(rules(await analyzeFixture({ [adapter]: "import '@anthropic-ai/claude-agent-sdk';\n" })),
+    ["architecture.source-dependencies.forbidden-package-dependency"]);
+  assert.deepEqual(rules(await analyzeFixture({ [testFile]: "import './candidate.mjs';\n" })), []);
+});
+
 test("the real parser observes every retained Node import in composition and TLS support", async () => {
   const composition = "packages/apps/embedded-runtime/src/composition";
   const host = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody";
