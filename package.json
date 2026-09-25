@@ -85,7 +85,7 @@
     "sdk-growth:profile": "node scripts/architecture/check-sdk-growth-profile.mjs",
     "test:sdk-growth:profile": "node --test scripts/architecture/check-sdk-growth-profile.test.mjs",
     "test:sdk-growth:packed": "node --test scripts/architecture/qualify-sdk-packages.test.mjs",
-    "test:sdk-growth:source": "node --test scripts/architecture/sdk-growth-source/collector.test.mjs",
+    "test:sdk-growth:source": "node --test scripts/sdk-growth-source/collector.test.mjs",
     "sdk-growth:pack": "pnpm product:build && node scripts/architecture/qualify-sdk-packages.mjs"
   },
   "dependencies": {

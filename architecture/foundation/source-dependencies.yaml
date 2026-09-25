@@ -28,6 +28,7 @@ governedRoots:
 - packages/platform/filesystem-custody/src
 - packages/platform/filesystem-custody/tests
 - scripts/architecture
+- scripts/sdk-growth-source
 - scripts/ci
 - scripts/docs
 - scripts/foundation
@@ -2343,11 +2344,11 @@ boundaries:
 - id: tooling.sdk-growth-source.policy
   dependencyMode: development
   roots:
-  - scripts/architecture/sdk-growth-source/candidate.mjs
-  - scripts/architecture/sdk-growth-source/surface.mjs
+  - scripts/sdk-growth-source/candidate.mjs
+  - scripts/sdk-growth-source/surface.mjs
   entrypoints:
-  - scripts/architecture/sdk-growth-source/candidate.mjs
-  - scripts/architecture/sdk-growth-source/surface.mjs
+  - scripts/sdk-growth-source/candidate.mjs
+  - scripts/sdk-growth-source/surface.mjs
   allow:
     boundaries: []
     packages: []
@@ -2356,13 +2357,13 @@ boundaries:
 - id: tooling.sdk-growth-source.adapters
   dependencyMode: development
   roots:
-  - scripts/architecture/sdk-growth-source/archive.mjs
-  - scripts/architecture/sdk-growth-source/collect.mjs
-  - scripts/architecture/sdk-growth-source/index.mjs
+  - scripts/sdk-growth-source/archive.mjs
+  - scripts/sdk-growth-source/collect.mjs
+  - scripts/sdk-growth-source/index.mjs
   entrypoints:
-  - scripts/architecture/sdk-growth-source/archive.mjs
-  - scripts/architecture/sdk-growth-source/collect.mjs
-  - scripts/architecture/sdk-growth-source/index.mjs
+  - scripts/sdk-growth-source/archive.mjs
+  - scripts/sdk-growth-source/collect.mjs
+  - scripts/sdk-growth-source/index.mjs
   allow:
     boundaries:
     - tooling.sdk-growth-source.policy
@@ -2378,7 +2379,7 @@ boundaries:
 - id: tooling.sdk-growth-source.tests
   dependencyMode: development
   roots:
-  - scripts/architecture/sdk-growth-source/collector.test.mjs
+  - scripts/sdk-growth-source/collector.test.mjs
   entrypoints: []
   allow:
     boundaries:

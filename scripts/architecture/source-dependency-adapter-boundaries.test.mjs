@@ -186,9 +186,9 @@ test("Filesystem Custody source collector keeps policy inside its scoped tooling
   assert.deepEqual(policyBoundary.allowedPackages, []);
   assert.deepEqual(policyBoundary.allowedBoundaries, []);
   assert.deepEqual(adapterBoundary.allowedBoundaries, ["tooling.sdk-growth-source.policy"]);
-  const candidate = "scripts/architecture/sdk-growth-source/candidate.mjs";
-  const adapter = "scripts/architecture/sdk-growth-source/collect.mjs";
-  const testFile = "scripts/architecture/sdk-growth-source/collector.test.mjs";
+  const candidate = "scripts/sdk-growth-source/candidate.mjs";
+  const adapter = "scripts/sdk-growth-source/collect.mjs";
+  const testFile = "scripts/sdk-growth-source/collector.test.mjs";
   assert.deepEqual(rules(await analyzeFixture({ [candidate]: "import 'node:fs';\n" })),
     ["architecture.source-dependencies.forbidden-builtin-dependency"]);
   assert.deepEqual(rules(await analyzeFixture({ [candidate]: "import './collect.mjs';\n" })),

@@ -12,7 +12,7 @@ import { assertExternalOutput, collect, git, inspectSource, installedFiles, inve
 import { run, writeProtectedOutput } from "./index.mjs";
 import { inspectSurface } from "./surface.mjs";
 
-const repository = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+const repository = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const fixture = readFileSync(new URL("./fixtures/filesystem-custody-retained.tgz", import.meta.url));
 const commit = "765bbfbb6a3a59906d052706396309f0cb8a61fc";
 const tree = execFileSync("git", ["-C", repository, "rev-parse", `${commit}^{tree}`], { encoding: "utf8" }).trim();
@@ -291,13 +291,13 @@ test("protected output rejects parent replacement between validation and open", 
 
 test("focused check remains blocking in changed, fast and full routes", () => {
   const packageScripts = JSON.parse(readFileSync(join(repository, "package.json"), "utf8")).scripts;
-  assert.equal(packageScripts["test:sdk-growth:source"], "node --test scripts/architecture/sdk-growth-source/collector.test.mjs");
+  assert.equal(packageScripts["test:sdk-growth:source"], "node --test scripts/sdk-growth-source/collector.test.mjs");
   for (const gate of ["check:fast", "check"]) {
     assert.ok(packageScripts[gate].includes("pnpm test:sdk-growth:source &&"), `${gate} must block on source check`);
   }
   const workflow = readFileSync(join(repository, "architecture/foundation/repository-agent-workflow.yaml"), "utf8");
   assert.match(workflow, /- id: sdk-growth-source\n\s+script: test:sdk-growth:source\n\s+extensions: \[\.mjs, \.tgz\]\n\s+passPaths: false\n/u);
-  assert.match(workflow, /- scripts\/architecture\/sdk-growth-source\n/u);
+  assert.match(workflow, /- scripts\/sdk-growth-source\n/u);
   assert.match(workflow, /- architecture\/feature-module-standard\/sdk-growth-source\.json\n/u);
   const purePolicy = readFileSync(new URL("./surface.mjs", import.meta.url), "utf8");
   assert.doesNotMatch(purePolicy, /from ["'](?:node:|@agent-teams\/engineering-foundation\/)/u);
@@ -306,19 +306,19 @@ test("focused check remains blocking in changed, fast and full routes", () => {
 test("scoped tooling feature has exact FMS ownership, census and blocking Foundation policy", () => {
   const profile = JSON.parse(readFileSync(join(repository, "architecture/feature-module-standard/sdk-growth-source.json"), "utf8"));
   const scripts = JSON.parse(readFileSync(join(repository, "package.json"), "utf8")).scripts;
-  const actual = readdirSync(join(repository, "scripts/architecture/sdk-growth-source"))
-    .filter(name => name.endsWith(".mjs")).map(name => `scripts/architecture/sdk-growth-source/${name}`).toSorted();
+  const actual = readdirSync(join(repository, "scripts/sdk-growth-source"))
+    .filter(name => name.endsWith(".mjs")).map(name => `scripts/sdk-growth-source/${name}`).toSorted();
   const verify = (candidate, routes = scripts) => {
     assert.deepEqual(candidate.modules.policy, [
-      "scripts/architecture/sdk-growth-source/candidate.mjs",
-      "scripts/architecture/sdk-growth-source/surface.mjs"
+      "scripts/sdk-growth-source/candidate.mjs",
+      "scripts/sdk-growth-source/surface.mjs"
     ]);
     assert.deepEqual(candidate.modules.adaptersAndComposition, [
-      "scripts/architecture/sdk-growth-source/archive.mjs",
-      "scripts/architecture/sdk-growth-source/collect.mjs",
-      "scripts/architecture/sdk-growth-source/index.mjs"
+      "scripts/sdk-growth-source/archive.mjs",
+      "scripts/sdk-growth-source/collect.mjs",
+      "scripts/sdk-growth-source/index.mjs"
     ]);
-    assert.equal(candidate.modules.test, "scripts/architecture/sdk-growth-source/collector.test.mjs");
+    assert.equal(candidate.modules.test, "scripts/sdk-growth-source/collector.test.mjs");
     assert.deepEqual([...candidate.modules.policy, ...candidate.modules.adaptersAndComposition, candidate.modules.test].toSorted(), actual);
     assert.equal(candidate.authority.sha256, "851653f96643cf0466b67ab22963661976b00de44840fa3144a48a8c054f95fa");
     assert.equal(candidate.scope, "development-tooling-only");
@@ -327,7 +327,7 @@ test("scoped tooling feature has exact FMS ownership, census and blocking Founda
     assert.deepEqual(candidate.foundationBoundaries, ["tooling.sdk-growth-source.policy", "tooling.sdk-growth-source.adapters", "tooling.sdk-growth-source.tests"]);
     assert.equal(routes["foundation:check"], "agent-teams-foundation check && pnpm foundation:boundaries:negative && pnpm foundation:assert-dev-only && pnpm foundation:assert-registry && pnpm quality:adoption");
     assert.equal(routes["foundation:boundaries:negative"], "node --test scripts/architecture/source-dependency-adapter-boundaries.test.mjs scripts/docs/runtime-builtin-permissions.test.mjs scripts/ci/run-ordinary-postgres.test.mjs");
-    assert.equal(routes["test:sdk-growth:source"], "node --test scripts/architecture/sdk-growth-source/collector.test.mjs");
+    assert.equal(routes["test:sdk-growth:source"], "node --test scripts/sdk-growth-source/collector.test.mjs");
     assert.equal(routes["check:changed"], "agent-teams-foundation agent-workflow changed --consumer .");
     for (const gate of ["check", "check:fast"]) {
       assert.ok(routes[gate].includes("pnpm test:sdk-growth:source &&"));

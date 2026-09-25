@@ -12,15 +12,15 @@
   },
   "modules": {
     "policy": [
-      "scripts/architecture/sdk-growth-source/candidate.mjs",
-      "scripts/architecture/sdk-growth-source/surface.mjs"
+      "scripts/sdk-growth-source/candidate.mjs",
+      "scripts/sdk-growth-source/surface.mjs"
     ],
     "adaptersAndComposition": [
-      "scripts/architecture/sdk-growth-source/archive.mjs",
-      "scripts/architecture/sdk-growth-source/collect.mjs",
-      "scripts/architecture/sdk-growth-source/index.mjs"
+      "scripts/sdk-growth-source/archive.mjs",
+      "scripts/sdk-growth-source/collect.mjs",
+      "scripts/sdk-growth-source/index.mjs"
     ],
-    "test": "scripts/architecture/sdk-growth-source/collector.test.mjs"
+    "test": "scripts/sdk-growth-source/collector.test.mjs"
   },
   "foundationBoundaries": [
     "tooling.sdk-growth-source.policy",

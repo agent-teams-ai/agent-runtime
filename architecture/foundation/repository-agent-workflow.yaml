@@ -37,7 +37,7 @@ fullScanPaths:
   - scripts/architecture/check-sdk-growth-profile.test.mjs
   - scripts/architecture/qualify-sdk-packages.mjs
   - scripts/architecture/qualify-sdk-packages.test.mjs
-  - scripts/architecture/sdk-growth-source
+  - scripts/sdk-growth-source
   - architecture/feature-module-standard/sdk-growth-source.json
   - .oxlintrc.json
   - .github/workflows

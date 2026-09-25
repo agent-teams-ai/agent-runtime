@@ -114,7 +114,7 @@ test("qualified stable28 managed state and scoped source policy retain exact byt
     "architecture/foundation/docs-protocol-managed-state.json": "7b0f900339030d7aab0f17d5b84612d3f5ee35b457283d2755994c4284f36159",
     "architecture/foundation/docs-protocol-qualification.json": "1f7e50ec5b0e6ecc991668b83790b2367062240043c4b885c58377855968969b",
     "architecture/foundation/document-authoring.yaml": "d6f5ba4b178e742e122f6711c9d989d52a77768eb68527b0ecdf3c9a9699c6d2",
-    "architecture/foundation/source-dependencies.yaml": "2d0f83c82ee9fa0df45f3d9e667cc0d263c6992a9d5ed4b3da5f661202a10fb6",
+    "architecture/foundation/source-dependencies.yaml": "0f3e0d45b09314f01b273ab526d652ccff3512db9c3ee989739eba8f4109bad1",
   };
   for (const [path, digest] of Object.entries(expected)) {
     assert.equal(createHash("sha256").update(await read(path)).digest("hex"), digest, path);
