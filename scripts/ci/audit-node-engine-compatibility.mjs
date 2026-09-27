@@ -76,7 +76,7 @@ const packageManifests = () => {
       manifests.push(join(packageRoot, entry.parentPath.slice(packageRoot.length), entry.name));
     }
   }
-  return manifests.sort();
+  return manifests.toSorted();
 };
 
 const packageName = path => {
