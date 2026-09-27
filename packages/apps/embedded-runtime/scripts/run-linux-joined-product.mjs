@@ -9,7 +9,9 @@ import {runOwnedTestProcess} from "./owned-test-process.mjs";
 assert.equal(process.platform, "linux", "joined integration requires Linux");
 assert.equal(process.arch, "x64", "joined integration requires x64");
 assert.equal(process.geteuid(), 0, "run only on an authorized disposable Linux test host");
-assert.equal(Number(process.versions.node.split(".")[0]), 24, "build and run with Node 24");
+const [nodeMajor, nodeMinor] = process.versions.node.split(".").map(Number);
+assert.ok(nodeMajor === 24 || (nodeMajor === 26 && nodeMinor >= 10),
+  "build and run with production Node 24 or qualified Node 26");
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const executable = async name => {
   for (const base of ["/usr/bin", "/usr/sbin", "/bin", "/sbin"]) {

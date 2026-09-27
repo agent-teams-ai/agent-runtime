@@ -31,7 +31,7 @@ test("portable v3 preserves strict Authoring v3 authority and both semantic vali
 test("projected direct tooling pins and disabled release-age waiting preserve the package manager", async () => {
   const manifest = await json("package.json"), workspace = await yaml("pnpm-workspace.yaml");
   assert.equal(manifest.packageManager, "pnpm@11.18.0");
-  assert.deepEqual(manifest.engines, { node: ">=24.18.0 <25", pnpm: "11.18.0" });
+  assert.deepEqual(manifest.engines, { node: ">=24.18.0 <25 || >=26.10.0 <27", pnpm: "11.18.0" });
   assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.6.0");
   assert.equal(manifest.devDependencies["@agent-teams/docs-protocol"], "0.6.1");
   assert.equal(manifest.devDependencies["@agent-teams/docs-protocol-agent-teams"], "0.2.11");
