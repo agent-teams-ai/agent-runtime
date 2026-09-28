@@ -1,4 +1,4 @@
-import {readFileSync, readdirSync} from "node:fs";
+import {readFileSync, readdirSync, lstatSync} from "node:fs";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 
@@ -68,12 +68,33 @@ export const satisfiesNodeRange = (range, target) => {
   });
 };
 
-const packageManifests = () => {
-  const manifests = [join(root, "package.json")];
-  const packageRoot = join(root, "packages");
-  for (const entry of readdirSync(packageRoot, {recursive: true, withFileTypes: true})) {
-    if (entry.isFile() && entry.name === "package.json") {
-      manifests.push(join(packageRoot, entry.parentPath.slice(packageRoot.length), entry.name));
+// The pre-install audit reads only the direct package roots selected by the
+// workspace's one-level globs; it never walks dependency or cache directories.
+const ownedPackageParents = workspaceRoot => {
+  const workspace = readFileSync(join(workspaceRoot, "pnpm-workspace.yaml"), "utf8");
+  const lines = workspace.match(/^packages:\s*\n((?:[ \t]+- [^\n]+\n)+)/u)?.[1];
+  if (lines === undefined) {throw new Error("Missing workspace package globs");}
+  return lines.trim().split("\n").map(line => {
+    const glob = line.trim().match(/^- ["']?([a-z0-9/-]+\/\*)["']?$/u)?.[1];
+    if (glob === undefined || glob.includes("//")) {throw new Error(`Unsupported workspace package glob: ${line}`);}
+    return glob.slice(0, -2);
+  });
+};
+
+export const packageManifests = (workspaceRoot = root) => {
+  const manifests = [join(workspaceRoot, "package.json")];
+  for (const parent of ownedPackageParents(workspaceRoot)) {
+    let directory = workspaceRoot;
+    let owned = true;
+    for (const component of parent.split("/")) {
+      directory = join(directory, component);
+      if (!lstatSync(directory, {throwIfNoEntry: false})?.isDirectory()) {owned = false; break;}
+    }
+    if (!owned) {continue;}
+    for (const entry of readdirSync(directory, {withFileTypes: true})) {
+      if (!entry.isDirectory()) {continue;}
+      const manifest = join(directory, entry.name, "package.json");
+      if (lstatSync(manifest, {throwIfNoEntry: false})?.isFile()) {manifests.push(manifest);}
     }
   }
   return manifests.toSorted();

@@ -47,7 +47,7 @@ jobs:
           corepack install --global pnpm@11.18.0
 
       - name: Install dependencies strictly
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --engine-strict --strict-peer-dependencies
 
       - name: Run Node compatibility guards
         run: pnpm check:node-compat
