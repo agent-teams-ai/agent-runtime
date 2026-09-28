@@ -87,12 +87,7 @@ function checkRootClassification(repository, manifest, activation, json) {
   assert.deepEqual(activation.metadataRoots, [{ packageName: manifest.name, rootPath: ".", manifestPath: "package.json", classificationPath, classification: "private-tooling-root-no-supported-sdk", releaseObligation: false }], "SDK_ROOT_CLASSIFICATION_DRIFT");
 }
 
-// This checks consumer enrollment, not SDK admission. EF owns observation,
-// comparison and approval; a candidate-controlled checker cannot grant trust.
-export function checkSdkGrowthProfile(repository = root) {
-  const json = path => JSON.parse(readFileSync(resolve(repository, path), "utf8"));
-  const profile = parse(readFileSync(resolve(repository, `${directory}/profile.yaml`), "utf8"));
-  const activation = json(`${directory}/activation.json`);
+function checkC0Provenance(repository, json) {
   const c0Transition = json(`${directory}/evidence/c0-ci-timeout-transition.json`);
   assert.deepEqual(c0Transition, {
     schemaVersion: 1, kind: "sdk-c0-ci-timeout-contract-rebind", contractRevision: "ar-c0-c0dc683e-r3",
@@ -125,6 +120,16 @@ export function checkSdkGrowthProfile(repository = root) {
   assert.equal(frozen.ci.workflow, c0Transition.workflow.path, "SDK_C0_WORKFLOW_DRIFT");
   assert.equal(frozen.ci.sha256, c0Transition.workflow.afterSha256, "SDK_C0_WORKFLOW_DRIFT");
   assert.equal(sha256(readFileSync(resolve(repository, c0Transition.workflow.path))), c0Transition.workflow.afterSha256, "SDK_C0_WORKFLOW_DRIFT");
+  return frozen;
+}
+
+// This checks consumer enrollment, not SDK admission. EF owns observation,
+// comparison and approval; a candidate-controlled checker cannot grant trust.
+export function checkSdkGrowthProfile(repository = root) {
+  const json = path => JSON.parse(readFileSync(resolve(repository, path), "utf8"));
+  const profile = parse(readFileSync(resolve(repository, `${directory}/profile.yaml`), "utf8"));
+  const activation = json(`${directory}/activation.json`);
+  const frozen = checkC0Provenance(repository, json);
   const manifest = json("package.json");
   const workspace = parse(readFileSync(resolve(repository, "pnpm-workspace.yaml"), "utf8"));
   const discovered = normalizeWorkspaceManifestPaths(

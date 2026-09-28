@@ -10,6 +10,7 @@ import { test } from "node:test";
 import { checkSdkGrowthProfile, normalizeWorkspaceManifestPaths } from "./check-sdk-growth-profile.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
+const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 const contractPath = "architecture/c0/ar-owned-lifetime/contract.json";
 const contract = JSON.parse(readFileSync(join(root, contractPath), "utf8"));
 function fixture(t) {
@@ -77,7 +78,6 @@ test("reject same-change frozen C0 mutation", t => {
 test("retained C0 transition matches exact Git bytes and only the authorized timeout/digest fields", () => {
   const transition = JSON.parse(readFileSync(join(root, "architecture/sdk-growth/evidence/c0-ci-timeout-transition.json"), "utf8"));
   const gitBytes = (commit, path) => execFileSync("git", ["show", `${commit}:${path}`], { cwd: root });
-  const digest = bytes => createHash("sha256").update(bytes).digest("hex");
   const gitText = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
   assert.equal(gitText("rev-parse", `${transition.contract.afterCommit}^`), transition.contract.beforeCommit);
   assert.equal(gitText("rev-parse", `${transition.workflow.afterCommit}^`), transition.workflow.beforeCommit);
