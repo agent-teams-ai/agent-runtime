@@ -15,8 +15,11 @@ export const v2InputPolicy = Object.freeze({
   ]),
   // Explicit evidence/checker import closure; unrelated architecture tools are excluded.
   files: Object.freeze([
+    ".github/workflows/node-26-compatibility.yml",
     ".github/workflows/runtime-current-adoption-capture.yml",
+    "scripts/ci/audit-node-engine-compatibility.mjs",
     "scripts/ci/node-engine-compatibility.test.mjs",
+    "scripts/ci/node-runtime-compatibility.test.mjs",
     "scripts/architecture/ar2-evidence-custody.mjs",
     "scripts/architecture/check-feature-modules.mjs",
     "scripts/architecture/check-get-modular-adoption.mjs",
@@ -66,6 +69,7 @@ export const v2InputPolicy = Object.freeze({
     "docs/decisions/0017-feature-module-production-scope-roles.md",
     "docs/architecture/feature-module-standard-v1-candidate.md",
     "docs/architecture/qualification-registry.json", "docs/architecture/readiness.md",
+    "docs/spikes/linux-nonroot-containment-egress-results.md",
     "docs/spikes/runtime-setup-assembly-adoption-evidence.json",
     "docs/spikes/runtime-setup-l0-dogfooding-evidence.json",
   ]),

@@ -13,6 +13,27 @@ import { targets, tools, command, sha256, json, validateStream, validateReceipt,
 import {platformSites} from "./runtime-setup-l0-evidence-platform-sites.mjs";
 import {identity as getIdentity, mergeReceipts, checkV2, validateRetainedReceiptCompatibility, v2ReportPath, retainedV2} from "./runtime-setup-l0-evidence-v2-capture.mjs";
 
+test("capture prerequisite code and configuration are protected SOURCE inputs", () => {
+  const root = new URL("../../", import.meta.url);
+  const read = path => readFileSync(new URL(path, root), "utf8");
+  const manifest = JSON.parse(read("package.json"));
+  const workflow = read(".github/workflows/runtime-current-adoption-capture.yml");
+  assert.match(workflow, /run: pnpm check:node-compat/u);
+  assert.match(manifest.scripts["check:node-compat"], /node-engine-compatibility\.test\.mjs scripts\/ci\/node-runtime-compatibility\.test\.mjs/u);
+  assert.match(read("scripts/ci/node-engine-compatibility.test.mjs"), /from "\.\/audit-node-engine-compatibility\.mjs"/u);
+  assert.match(read("scripts/ci/node-engine-compatibility.test.mjs"), /\.github\/workflows\/node-26-compatibility\.yml/u);
+  assert.match(read("scripts/ci/node-runtime-compatibility.test.mjs"), /docs\/spikes\/linux-nonroot-containment-egress-results\.md/u);
+  for (const path of [
+    ".github/workflows/node-26-compatibility.yml",
+    "scripts/ci/audit-node-engine-compatibility.mjs",
+    "scripts/ci/node-engine-compatibility.test.mjs",
+    "scripts/ci/node-runtime-compatibility.test.mjs",
+    "docs/spikes/linux-nonroot-containment-egress-results.md",
+  ]) {
+    assert.ok(v2InputPolicy.files.includes(path), `capture prerequisite outside SOURCE closure: ${path}`);
+  }
+});
+
 test("capture workflow reserves and uploads only its exact bounded directory", t => {
   const workflow = parseYaml(readFileSync(new URL("../../.github/workflows/runtime-current-adoption-capture.yml", import.meta.url), "utf8"));
   const steps = workflow.jobs.capture.steps;

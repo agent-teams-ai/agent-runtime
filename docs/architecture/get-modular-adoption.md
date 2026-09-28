@@ -441,6 +441,11 @@ retained standard/package archives; FMS/source policy, authority registry and
 explicit accepted authority inputs; this adoption record (read by the checker);
 qualification/readiness and retained L0/v1 reports. Architecture checker and
 authority dependencies are enumerated as files, not directory-wide roots.
+The capture workflow's `check:node-compat` prerequisite also binds its engine
+audit implementation, both executed compatibility tests, the Node 26 workflow
+asserted by the engine test, and the retained Linux containment record read by
+the runtime test. These files are SOURCE inputs even though the capture receipt
+records the later embedded-runtime check command.
 The policy declares required roots and files explicitly. New dependencies outside
 these roots require a reviewed policy update before capture.
 
