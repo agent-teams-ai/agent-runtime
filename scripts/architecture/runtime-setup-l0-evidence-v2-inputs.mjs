@@ -2,8 +2,8 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstatSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { lstatSync, readFileSync, readdirSync } from "node:fs";
+import { extname, posix, resolve } from "node:path";
 import { evidencePackages } from "./runtime-setup-l0-evidence-spec.mjs";
 
 export const v2InputPolicy = Object.freeze({
@@ -101,6 +101,96 @@ export const v2InputPolicy = Object.freeze({
   ]),
 });
 const pathspec = [...v2InputPolicy.roots, ...v2InputPolicy.files].map(path => `:(top,literal)${path}`);
+const sourceExtensions = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"]);
+const workspacePatterns = ["experiments/*", "packages/apps/*", "packages/contexts/*", "packages/platform/*"];
+const within = (path, parent) => path === parent || path.startsWith(`${parent}/`);
+const metadata = (_, name) => name === ".git" || name === "node_modules";
+function assertManifestBound(root, manifest, selectedPaths) {
+  let stat;
+  try {stat = lstatSync(resolve(root, manifest));}
+  catch (error) {if (error.code === "ENOENT") {return;} throw error;}
+  assert.ok(!stat.isSymbolicLink(), `source discovery symlink: ${manifest}`);
+  if (stat.isFile()) {assert.ok(selectedPaths.has(manifest),
+    `discovered workspace manifest is not committed at SOURCE revision: ${manifest}`);}
+}
+function plainYamlList(root, path, key) {
+  const lines = readFileSync(resolve(root, path), "utf8").split(/\r?\n/u);
+  const headings = lines.flatMap((line, index) => line === `${key}:` ? [index] : []);
+  assert.equal(headings.length, 1, `SOURCE policy requires one plain ${key} list: ${path}`);
+  const values = [];
+  for (const line of lines.slice(headings[0] + 1)) {
+    if (/^[A-Za-z][A-Za-z0-9-]*:/u.test(line)) {break;}
+    if (line.trim() === "" || line.trimStart().startsWith("#")) {continue;}
+    const match = /^\s*-\s+(?:"([^"]+)"|'([^']+)'|([^\s#]+))\s*$/u.exec(line);
+    assert.ok(match, `SOURCE policy requires a plain ${key} list: ${path}`);
+    values.push(match[1] ?? match[2] ?? match[3]);
+  }
+  assert.ok(values.length, `SOURCE policy requires a nonempty plain ${key} list: ${path}`);
+  return values;
+}
+
+// Foundation reads physical source trees and workspace manifests, including
+// ignored paths. Git's pathspec inventory alone cannot observe those additions.
+// Walk only the configured governed roots and selected package roots; the
+// workspace glob parents below are the exact current discovery boundary.
+function assertLiveDiscoveryBound(root, selectedPaths) {
+  const governedRoots = plainYamlList(root, "architecture/foundation/source-dependencies.yaml", "governedRoots");
+  const discoveredPatterns = plainYamlList(root, "pnpm-workspace.yaml", "packages");
+  assert.deepEqual(discoveredPatterns, workspacePatterns,
+    "workspace discovery patterns require a reviewed SOURCE policy update");
+  for (const governed of governedRoots) {
+    assert.ok(v2InputPolicy.roots.some(inputRoot => within(governed, inputRoot)),
+      `source discovery root outside SOURCE: ${governed}`);
+  }
+  const scan = (start, excluded, accept) => {
+    const pending = [start];
+    while (pending.length) {
+      const directory = pending.pop();
+      for (const entry of readdirSync(resolve(root, directory), {withFileTypes: true})) {
+        const path = posix.join(directory, entry.name);
+        if (excluded(directory, entry.name)) {
+          if (entry.name === "dist" && entry.isSymbolicLink()) {assert.fail(`source discovery symlink: ${path}`);}
+          continue;
+        }
+        if (entry.isSymbolicLink()) {assert.fail(`source discovery symlink: ${path}`);}
+        if (entry.isDirectory()) {pending.push(path);}
+        else if (entry.isFile() && accept(path)) {
+          assert.ok(selectedPaths.has(path), `discovered input is not committed at SOURCE revision: ${path}`);
+        }
+      }
+    }
+  };
+  const sourceFile = path => sourceExtensions.has(extname(path));
+  for (const governed of governedRoots) {
+    scan(governed, metadata, sourceFile);
+  }
+  scan("docs/decisions", metadata, path => extname(path) === ".md");
+  for (const packageRoot of evidencePackages) {
+    const packageExcluded = (directory, name) => {
+      if (metadata(directory, name)) {return true;}
+      if (name !== "dist" && name !== "coverage") {return false;}
+      const generated = `${directory}/${name}`;
+      if (governedRoots.some(governed => within(governed, generated))) {return false;}
+      // Foundation excludes generated directories only at a package root.
+      if (directory === packageRoot) {return true;}
+      if (posix.dirname(directory) !== packageRoot) {return false;}
+      try {return lstatSync(resolve(root, directory, "package.json")).isFile();}
+      catch (error) {if (error.code === "ENOENT") {return false;} throw error;}
+    };
+    scan(packageRoot, packageExcluded,
+      path => sourceFile(path) || posix.basename(path) === "package.json");
+  }
+  for (const pattern of workspacePatterns) {
+    const parent = pattern.slice(0, -2);
+    for (const entry of readdirSync(resolve(root, parent), {withFileTypes: true})) {
+      if (entry.name === ".git" || entry.name === "node_modules") {continue;}
+      const manifest = `${parent}/${entry.name}/package.json`;
+      if (entry.isDirectory() && posix.matchesGlob(`${parent}/${entry.name}`, pattern)) {
+        assertManifestBound(root, manifest, selectedPaths);
+      }
+    }
+  }
+}
 const git = (root, ...args) => execFileSync("git", args, {cwd: root, encoding: "utf8",
   maxBuffer: 32 * 1024 * 1024,
   env: {...process.env, GIT_NO_LAZY_FETCH: "1", GIT_NO_REPLACE_OBJECTS: "1", GIT_OPTIONAL_LOCKS: "0"}});
@@ -169,5 +259,7 @@ export function v2Inputs(root, sourceRevision) {
     }
     return {path, mode, sha256: createHash("sha256").update(readFileSync(resolve(root, path))).digest("hex")};
   });
-  return checkedInputs(inputs);
+  const result = checkedInputs(inputs);
+  assertLiveDiscoveryBound(root, new Set(result.inputs.map(input => input.path)));
+  return result;
 }

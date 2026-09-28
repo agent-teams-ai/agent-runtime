@@ -464,6 +464,16 @@ additions, removals, renames and mode/byte changes reject evidence. Git diff
 status 0 accepts equality, status 1 rejects drift; other Git errors propagate as
 infrastructure failures. Receipt inventories cannot omit or add inputs, and old
 or mixed policy identities cannot satisfy the current gate.
+The physical discovery check also walks the configured Foundation governed
+source roots and selected package roots for source files, the live decision
+catalog for Markdown, and the four bounded pnpm workspace glob parents for
+package manifests. A discovered file outside the exact revision's selected
+inventory rejects capture or delivery even when `.gitignore` hides it. A newly
+discovered workspace sibling is rejected until a reviewed SOURCE policy and
+owner boundary include it. The accepted plain-list workspace patterns and
+governed roots are read from the bound configuration bytes; changed discovery
+syntax or patterns fail closed for policy review. This reconciles Git identity
+with the prerequisite's physical readers without inventorying the whole repo.
 
 The generated v2 report is outside the closure to avoid self-reference.
 Unrelated tracked files outside the selected roots and explicit files (for

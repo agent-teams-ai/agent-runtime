@@ -509,13 +509,17 @@ test("bounded inventory rejects missing inputs, links and gitlinks and preserves
   const identity = callerIdentity(process.cwd());
   const runGit = gitWithEnv({...process.env, ...identity});
   runGit(root, "init", "--quiet");
-  const directories = new Set([...v2InputPolicy.roots, ...v2InputPolicy.requiredRoots]);
+  const sourceConfig = parseYaml(readFileSync(new URL("../../architecture/foundation/source-dependencies.yaml", import.meta.url), "utf8"));
+  const directories = new Set([...v2InputPolicy.roots, ...v2InputPolicy.requiredRoots, ...sourceConfig.governedRoots]);
   for (const path of directories) {
     fs.mkdirSync(resolve(root, path), {recursive: true});
     writeFileSync(resolve(root, path, "fixture.txt"), "fixture");
   }
   for (const path of [...v2InputPolicy.files, ...v2InputPolicy.required]) {
     fs.mkdirSync(resolve(root, path, ".."), {recursive: true}); writeFileSync(resolve(root, path), "fixture");
+  }
+  for (const path of ["pnpm-workspace.yaml", "architecture/foundation/source-dependencies.yaml", ".gitignore"]) {
+    writeFileSync(resolve(root, path), readFileSync(new URL(`../../${path}`, import.meta.url)));
   }
   const workflowPath = ".github/workflows/runtime-current-adoption-capture.yml";
   writeFileSync(resolve(root, workflowPath), readFileSync(new URL(`../../${workflowPath}`, import.meta.url)));
@@ -525,6 +529,19 @@ test("bounded inventory rejects missing inputs, links and gitlinks and preserves
   const revision = commit(), baseline = v2Inputs(root, revision);
   assert.deepEqual(v2InputsAtRevision(root, revision), baseline);
   assert.equal(baseline.inputPolicy, v2InputPolicy.version);
+  const ignoredSource = "scripts/ci/.cache/r147-probe.ts";
+  fs.mkdirSync(resolve(root, ignoredSource, ".."), {recursive: true});
+  writeFileSync(resolve(root, ignoredSource), "export const broken = ;\n");
+  assert.equal(runGit(root, "check-ignore", ignoredSource), ignoredSource);
+  assert.throws(() => v2Inputs(root, revision), /discovered input is not committed at SOURCE revision/);
+  assert.deepEqual(v2InputsAtRevision(root, revision), baseline);
+  rmSync(resolve(root, ignoredSource), {force: true});
+  const siblingManifest = "packages/apps/r147-disposable/package.json";
+  fs.mkdirSync(resolve(root, siblingManifest, ".."), {recursive: true});
+  writeFileSync(resolve(root, siblingManifest), JSON.stringify({name: "@review/r147-disposable", version: "0.0.0", private: true, type: "module"}));
+  assert.throws(() => v2Inputs(root, revision), /discovered workspace manifest is not committed at SOURCE revision/);
+  assert.deepEqual(v2InputsAtRevision(root, revision), baseline);
+  rmSync(resolve(root, siblingManifest, ".."), {recursive: true});
   const originalWorkflow = baseline.inputs.find(input => input.path === workflowPath);
   assert.ok(originalWorkflow, "capture workflow is a protected input");
   const originalDecisionIndex = baseline.inputs.find(input => input.path === decisionIndex);
@@ -709,6 +726,29 @@ test("bounded real-source merge/check accepts unrelated and report-only delivery
   }
   commit();
   const deliveryRevision = runGit(source, "rev-parse", "HEAD");
+  for (const [path, content, reason] of [
+    ["scripts/ci/.cache/r147-probe.ts", "export const broken = ;\n", /discovered input is not committed at SOURCE revision/],
+    ["packages/apps/r147-disposable/package.json", JSON.stringify({name: "@review/r147-disposable", version: "0.0.0", private: true, type: "module"}), /discovered workspace manifest is not committed at SOURCE revision/],
+  ]) {await t.test(`delivered SOURCE rejects live discovery: ${path}`, () => {
+    fs.mkdirSync(resolve(source, path, ".."), {recursive: true});
+    writeFileSync(resolve(source, path), content);
+    assert.throws(() => getIdentity(source, current.sourceRevision), reason);
+    assert.throws(() => checkV2(source, output), reason);
+    runGit(source, "add", "-f", path);
+    const changedRevision = commit();
+    if (path.startsWith("scripts/")) {
+      assert.ok(v2Inputs(source, changedRevision).inputs.some(input => input.path === path),
+        "committed governed source is bound at its own revision");
+    } else {
+      assert.throws(() => getIdentity(source, changedRevision), reason,
+        "new workspace sibling requires an explicit SOURCE policy revision");
+    }
+    const committedReason = path.startsWith("packages/") ? reason : /source\/input mismatch/;
+    assert.throws(() => getIdentity(source, current.sourceRevision), committedReason);
+    assert.throws(() => checkV2(source, output), committedReason);
+    runGit(source, "reset", "--hard", deliveryRevision);
+    rmSync(resolve(source, path, ".."), {recursive: true, force: true});
+  });}
   for (const path of ["scripts/unrelated-checker.mjs", "docs/spikes/unrelated-decision.md"]) {
     await t.test(`unrelated tracked edit preserves identity: ${path}`, () => {
       fs.appendFileSync(resolve(source, path), "changed");
