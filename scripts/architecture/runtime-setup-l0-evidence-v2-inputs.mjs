@@ -12,8 +12,13 @@ export const v2InputPolicy = Object.freeze({
   roots: Object.freeze([...evidencePackages,
     "architecture/get-modular",
     "architecture/feature-module-standard", "architecture/consumer-module-standard",
+    // The synchronous adoption prerequisite reads the live ADR catalog and
+    // Foundation's configured source roots, including tooling and experiments.
+    "docs/decisions", "experiments", "scripts/architecture", "scripts/ci",
+    "scripts/docs", "scripts/foundation", "scripts/native-helper",
+    "scripts/sdk-growth-source",
   ]),
-  // Explicit evidence/checker import closure; unrelated architecture tools are excluded.
+  // Other capture, authority, and configuration inputs outside those roots.
   files: Object.freeze([
     ".github/workflows/node-26-compatibility.yml",
     ".github/workflows/runtime-current-adoption-capture.yml",
@@ -62,6 +67,7 @@ export const v2InputPolicy = Object.freeze({
     "architecture/foundation/source-dependencies.yaml", "foundation.config.yaml",
     "architecture/foundation/governance-architecture-decisions.yaml",
     "architecture/decisions/accepted-decisions.json",
+    "docs/decisions/README.md",
     "docs/decisions/0015-passive-setup-static-assembly-adoption.md",
     "docs/decisions/0090-ordinary-user-session-codex-execution-profile.md",
     "docs/architecture/get-modular-adoption.md",
@@ -76,6 +82,9 @@ export const v2InputPolicy = Object.freeze({
   // Required nested inputs cannot disappear even in a new capture revision.
   requiredRoots: Object.freeze([
     ...evidencePackages.flatMap(path => [`${path}/src`, `${path}/tests`]),
+    "docs/decisions", "experiments", "scripts/architecture", "scripts/ci",
+    "scripts/docs", "scripts/foundation", "scripts/native-helper",
+    "scripts/sdk-growth-source",
     "packages/apps/embedded-runtime/scripts",
     "packages/contexts/agent-execution/scripts",
     "packages/platform/filesystem-custody/scripts", "packages/platform/filesystem-custody/native",

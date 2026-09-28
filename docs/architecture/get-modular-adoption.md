@@ -439,8 +439,16 @@ lock/workspace/tool and TypeScript configuration; architecture evidence/checker
 helpers (including platform-site and AR-2 custody); consumer profiles, schema,
 retained standard/package archives; FMS/source policy, authority registry and
 explicit accepted authority inputs; this adoption record (read by the checker);
-qualification/readiness and retained L0/v1 reports. Architecture checker and
-authority dependencies are enumerated as files, not directory-wide roots.
+qualification/readiness and retained L0/v1 reports. The capture CLI runs the
+adoption checker synchronously before capture. Its live ADR governance catalog
+therefore binds the `docs/decisions` root, including the decision index and
+accepted decision bytes. Foundation source diagnostics bind the governed
+`experiments` and tooling roots (`scripts/architecture`, `scripts/ci`,
+`scripts/docs`, `scripts/foundation`, `scripts/native-helper`, and
+`scripts/sdk-growth-source`). These roots also cover future files read by the
+same configured source census. Package roots already cover its package sources
+and scripts. Authority and configuration paths outside those roots remain
+explicit files.
 The capture workflow's `check:node-compat` prerequisite also binds its engine
 audit implementation, both executed compatibility tests, the Node 26 workflow
 asserted by the engine test, and the retained Linux containment record read by
@@ -458,10 +466,11 @@ infrastructure failures. Receipt inventories cannot omit or add inputs, and old
 or mixed policy identities cannot satisfy the current gate.
 
 The generated v2 report is outside the closure to avoid self-reference.
-Unrelated tracked files (for example the root README and unrelated files inside
-`scripts/architecture` or `docs/decisions`), unrelated untracked files
-and report-only edits/commits do not invalidate an otherwise identical capture.
-Repository-wide Foundation governance checks remain independent and unchanged.
+Unrelated tracked files outside the selected roots and explicit files (for
+example the root README), unrelated untracked files and report-only edits/commits
+do not invalidate an otherwise identical capture. The live adoption and
+Foundation source checks are capture prerequisites and their repository-owned
+inputs are part of SOURCE identity.
 Clean CI still needs the report and Git object closure for R and the required
 historical revisions; bundled receipts do not replace historical source readback.
 The rejecting fixtures deliver a report-only commit into a fresh clone, delete

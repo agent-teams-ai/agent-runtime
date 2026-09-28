@@ -32,6 +32,22 @@ test("capture prerequisite code and configuration are protected SOURCE inputs", 
   ]) {
     assert.ok(v2InputPolicy.files.includes(path), `capture prerequisite outside SOURCE closure: ${path}`);
   }
+  // The capture CLI calls this checker before recording any receipt. Its live
+  // governance catalog and Foundation diagnostic roots are transitive inputs.
+  assert.match(read("scripts/architecture/runtime-setup-l0-evidence.mjs"), /execFileSync\(process\.execPath, \[adoptionPaths\.checker\]/u);
+  assert.match(read("scripts/architecture/check-get-modular-adoption.mjs"), /readAcceptedArchitectureDecisionEvidence/u);
+  assert.match(read("scripts/architecture/check-get-modular-adoption.mjs"), /requireSourceDiagnostics\(consumerRoot\)/u);
+  const governance = parseYaml(read("architecture/foundation/governance-architecture-decisions.yaml"));
+  for (const path of [...governance.adrRoots, governance.index.path]) {
+    assert.ok(v2InputPolicy.roots.some(inputRoot => path === inputRoot || path.startsWith(`${inputRoot}/`)) ||
+      v2InputPolicy.files.includes(path), `governance input outside SOURCE closure: ${path}`);
+  }
+  const sourceConfig = parseYaml(read("architecture/foundation/source-dependencies.yaml"));
+  const governed = new Set(sourceConfig.governedRoots);
+  for (const path of ["docs/decisions", ...governed]) {
+    assert.ok(v2InputPolicy.roots.some(inputRoot => path === inputRoot || path.startsWith(`${inputRoot}/`)),
+      `indirect capture prerequisite outside SOURCE closure: ${path}`);
+  }
 });
 
 test("capture workflow reserves and uploads only its exact bounded directory", t => {
@@ -503,12 +519,25 @@ test("bounded inventory rejects missing inputs, links and gitlinks and preserves
   }
   const workflowPath = ".github/workflows/runtime-current-adoption-capture.yml";
   writeFileSync(resolve(root, workflowPath), readFileSync(new URL(`../../${workflowPath}`, import.meta.url)));
+  const decisionIndex = "docs/decisions/README.md";
+  writeFileSync(resolve(root, decisionIndex), readFileSync(new URL(`../../${decisionIndex}`, import.meta.url)));
   const commit = () => {runGit(root, "add", "-A"); runGit(root, "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "synthetic policy"); return runGit(root, "rev-parse", "HEAD");};
   const revision = commit(), baseline = v2Inputs(root, revision);
   assert.deepEqual(v2InputsAtRevision(root, revision), baseline);
   assert.equal(baseline.inputPolicy, v2InputPolicy.version);
   const originalWorkflow = baseline.inputs.find(input => input.path === workflowPath);
   assert.ok(originalWorkflow, "capture workflow is a protected input");
+  const originalDecisionIndex = baseline.inputs.find(input => input.path === decisionIndex);
+  assert.ok(originalDecisionIndex, "live governance catalog is a protected input");
+  const decisionIndexBytes = readFileSync(resolve(root, decisionIndex), "utf8");
+  assert.match(decisionIndexBytes, /## Accepted/u);
+  writeFileSync(resolve(root, decisionIndex), decisionIndexBytes.replace("## Accepted", "## Wrong heading"));
+  assert.throws(() => v2Inputs(root, revision), /committed and clean/);
+  const changedDecisionRevision = commit();
+  assert.notEqual(v2Inputs(root, changedDecisionRevision).inputs.find(input => input.path === decisionIndex).sha256,
+    originalDecisionIndex.sha256, "indirect prerequisite mutation must change receipt identity");
+  assert.throws(() => v2Inputs(root, revision), /source\/input mismatch/);
+  runGit(root, "reset", "--hard", revision);
   const workflowBytes = readFileSync(resolve(root, workflowPath), "utf8");
   assert.match(workflowBytes, /pnpm install --frozen-lockfile --engine-strict --strict-peer-dependencies/u);
   writeFileSync(resolve(root, workflowPath), workflowBytes.replace(
@@ -674,14 +703,14 @@ test("bounded real-source merge/check accepts unrelated and report-only delivery
   fs.appendFileSync(resolve(source, "README.md"), "changed");
   assert.deepEqual(getIdentity(source, current.sourceRevision), current);
   checkV2(source, output); commit(); checkV2(source, output);
-  for (const path of ["scripts/architecture/unrelated-checker.mjs", "docs/decisions/unrelated-decision.md"]) {
+  for (const path of ["scripts/unrelated-checker.mjs", "docs/spikes/unrelated-decision.md"]) {
     fs.mkdirSync(resolve(source, path, ".."), {recursive: true});
     writeFileSync(resolve(source, path), "unrelated tracked fixture");
   }
   commit();
   const deliveryRevision = runGit(source, "rev-parse", "HEAD");
-  for (const path of ["scripts/architecture/unrelated-checker.mjs", "docs/decisions/unrelated-decision.md"]) {
-    await t.test(`unrelated sibling edit preserves identity: ${path}`, () => {
+  for (const path of ["scripts/unrelated-checker.mjs", "docs/spikes/unrelated-decision.md"]) {
+    await t.test(`unrelated tracked edit preserves identity: ${path}`, () => {
       fs.appendFileSync(resolve(source, path), "changed");
       assert.deepEqual(getIdentity(source, current.sourceRevision), current);
       checkV2(source, output); commit();
