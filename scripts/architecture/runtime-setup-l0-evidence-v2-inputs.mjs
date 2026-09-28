@@ -114,6 +114,19 @@ const sourceExtensions = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts",
 const workspacePatterns = ["experiments/*", "packages/apps/*", "packages/contexts/*", "packages/platform/*"];
 const within = (path, parent) => path === parent || path.startsWith(`${parent}/`);
 const metadata = (_, name) => name === ".git" || name === "node_modules";
+function hasPackageAuthority(root, directory) {
+  let stat;
+  try {stat = lstatSync(resolve(root, directory, "package.json"));}
+  catch (error) {if (error.code === "ENOENT") {return false;} throw error;}
+  if (!stat.isFile()) {return false;}
+  const value = JSON.parse(readFileSync(resolve(root, directory, "package.json"), "utf8"));
+  assert.ok(value !== null && typeof value === "object" && !Array.isArray(value),
+    `package manifest must contain an object: ${directory}/package.json`);
+  // Foundation 1.6.0 observes a lone valid type key as a module scope,
+  // not as package authority for generated-output exclusion.
+  return !(Object.keys(value).length === 1 &&
+    (value.type === "module" || value.type === "commonjs"));
+}
 function assertManifestBound(root, manifest, selectedPaths, requireRegular = false) {
   let stat;
   try {stat = lstatSync(resolve(root, manifest));}
@@ -228,8 +241,7 @@ function assertLiveDiscoveryBound(root, selectedPaths) {
       // Foundation excludes generated directories only at a package root.
       if (directory === packageRoot) {return true;}
       if (posix.dirname(directory) !== packageRoot) {return false;}
-      try {return lstatSync(resolve(root, directory, "package.json")).isFile();}
-      catch (error) {if (error.code === "ENOENT") {return false;} throw error;}
+      return hasPackageAuthority(root, directory);
     };
     scan(packageRoot, packageExcluded,
       path => sourceFile(path) || posix.basename(path) === "package.json", true);

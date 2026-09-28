@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {test} from "node:test";
 import {execFileSync, spawnSync} from "node:child_process";
 import * as fs from "node:fs";
-import {mkdtempSync, rmSync, writeFileSync} from "node:fs";
+import {constants, cpSync, mkdtempSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
 
@@ -16,7 +16,9 @@ test("SOURCE rejects every real Foundation manifest and topology observation", a
   const root = mkdtempSync(join(tmpdir(), "v2-source-discovery-"));
   t.after(() => rmSync(root, {recursive: true, force: true}));
   execFileSync("git", ["clone", "--quiet", "--shared", "--no-hardlinks", process.cwd(), root]);
-  fs.symlinkSync(resolve("node_modules"), resolve(root, "node_modules"), "dir");
+  // Keep the disposable checkout's installation physically independent.
+  cpSync(resolve("node_modules"), resolve(root, "node_modules"),
+    {recursive: true, verbatimSymlinks: true, mode: constants.COPYFILE_FICLONE});
   const {checkAdoption} = await import("./check-get-modular-adoption.mjs");
   const revision = git(root, "rev-parse", "HEAD");
   const baseline = v2Inputs(root, revision);
@@ -54,7 +56,7 @@ test("SOURCE rejects every real Foundation manifest and topology observation", a
     const created = spawnSync("mkfifo", [resolve(root, path)]);
     assert.equal(created.status, 0, "disposable FIFO fixture must be created");
     try {
-      await assert.rejects(checkAdoption(root), /PACKAGE_MANIFEST_INVALID/u);
+      await assert.rejects(checkAdoption(root), /SOURCE_DIRECTORY_INVALID/u);
       assert.throws(() => v2Inputs(root, revision), /package manifest must be a regular file/u);
     } finally {remove(path);}
   });}
@@ -81,6 +83,56 @@ test("SOURCE rejects every real Foundation manifest and topology observation", a
     await checkAdoption(root);
     assert.throws(() => v2Inputs(root, revision), /discovered input is not committed/u);
   } finally {remove("scripts/ci/.cache/r164-scope");}
+  for (const type of ["module", "commonjs"]) {await t.test(`pure ${type} scope keeps ignored generated source in SOURCE`, async () => {
+    const scope = "packages/apps/embedded-runtime/.cache";
+    const manifest = `${scope}/package.json`;
+    put(manifest, JSON.stringify({type}));
+    git(root, "add", "-f", manifest);
+    execFileSync("git", ["-c", "user.name=Disposable", "-c", "user.email=disposable@example.invalid",
+      "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "disposable module scope"], {cwd: root});
+    try {
+      const current = git(root, "rev-parse", "HEAD");
+      assert.equal((await checkAdoption(root)).status, "verified");
+      const scoped = v2Inputs(root, current);
+      assert.ok(scoped.inputs.some(input => input.path === manifest));
+      for (const output of ["dist", "coverage"]) {
+        const source = `${scope}/${output}/unbound.ts`;
+        put(source, "export const unbound = 1;\n");
+        try {
+          await assert.rejects(checkAdoption(root), /architecture\.source-dependencies\.unclassified-source-file/u);
+          assert.throws(() => v2Inputs(root, current), /discovered input is not committed/u);
+        } finally {remove(`${scope}/${output}`);}
+      }
+    } finally {git(root, "reset", "--hard", revision); remove(scope);}
+  });}
+  await t.test("package authority keeps generated output excluded", async () => {
+    const scope = "packages/apps/embedded-runtime/.cache";
+    const manifest = `${scope}/package.json`;
+    put(manifest, '{"name":"@review/nested","type":"module"}');
+    git(root, "add", "-f", manifest);
+    execFileSync("git", ["-c", "user.name=Disposable", "-c", "user.email=disposable@example.invalid",
+      "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "disposable package authority"], {cwd: root});
+    try {
+      const current = git(root, "rev-parse", "HEAD");
+      const owned = v2Inputs(root, current);
+      for (const output of ["dist", "coverage"]) {
+        put(`${scope}/${output}/generated.ts`, "export const generated = 1;\n");
+        try {
+          assert.deepEqual(v2Inputs(root, current), owned);
+        } finally {remove(`${scope}/${output}`);}
+      }
+    } finally {git(root, "reset", "--hard", revision); remove(scope);}
+  });
+  await t.test("selected package authority allows generated output in real checker", async () => {
+    for (const output of ["dist", "coverage"]) {
+      const generated = `packages/apps/embedded-runtime/${output}/generated.ts`;
+      put(generated, "export const generated = 1;\n");
+      try {
+        assert.equal((await checkAdoption(root)).status, "verified");
+        assert.deepEqual(v2Inputs(root, revision), baseline);
+      } finally {remove(`packages/apps/embedded-runtime/${output}`);}
+    }
+  });
   for (const path of ["scripts/package.json", "packages/package.json",
     "packages/apps/package.json", "packages/contexts/package.json", "packages/platform/package.json"]) {
     await t.test(`committed ancestor bound against old revision: ${path}`, () => {

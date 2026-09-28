@@ -481,6 +481,12 @@ workspace patterns and governed roots are read from the bound configuration
 bytes; changed discovery syntax or patterns fail closed for policy review.
 Ordinary unrelated files remain outside the inventory.
 
+Generated `dist` and `coverage` beneath a direct child of a selected package
+root are excluded only when that child has package authority. A manifest whose
+sole key is valid `type` (`module` or `commonjs`) establishes a module scope,
+not package authority; source files under its generated-named directories stay
+in SOURCE discovery. Genuine package roots still exclude generated output.
+
 The generated v2 report is outside the closure to avoid self-reference.
 Unrelated tracked files outside the selected roots and explicit files (for
 example the root README), unrelated untracked files and report-only edits/commits
