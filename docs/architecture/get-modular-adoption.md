@@ -350,8 +350,12 @@ original source closure. Current specification counts cannot redefine that recor
 
 ### Paired adoption capture v2
 
-The current gate requires a new `runtime-setup-assembly-adoption-v2-evidence.json`
-under `docs/spikes`. Its absence keeps current evidence pending. V2 binds ADR-0015,
+The original `runtime-setup-assembly-adoption-v2-evidence.json` remains retained
+byte-for-byte (SHA-256 `08fef99589d67358f020e3a0b063a44d6c4c99381370f76b2ca200b005d9bf3d`).
+Following the Node 26 compatibility source change, the single current selection is
+`docs/spikes/runtime-setup-assembly-adoption-v2-node26-evidence.json`. Its absence
+fails the current check; the original report never substitutes for it. The
+successor also authenticates the original v2 bytes. V2 binds ADR-0015,
 the historical records, current construction traces and a bounded tracked Runtime
 Setup input closure to exactly two receipts: Linux x64 and Darwin arm64, both using
 Node `v24.18.0` and pnpm `11.18.0`. The two original explicit Node test argv lists
@@ -383,6 +387,12 @@ Darwin skips this exact registration with the explicit Linux descriptor-custody
 reason; the merger requires the successful Linux counterpart. Connection URLs
 accept only `127.0.0.1` or `[::1]`, with no query or fragment.
 
+The `runtime-current-adoption-capture` pull-request workflow captures on real
+Linux x64 and macOS arm64 runners at the exact PR head. It uses a fresh disposable
+Linux PostgreSQL database and uploads each original receipt with its sibling
+artifacts; a failed job cannot supply acceptable evidence. Collect the two
+artifacts from the same source revision and retain their original bytes.
+
 In clean disposable checkouts of the same final implementation commit, install
 with `pnpm install --frozen-lockfile`, then run
 `pnpm --filter './packages/**' -r run clean` and `pnpm product:build` with native
@@ -404,7 +414,7 @@ source checkout:
 ```sh
 node scripts/architecture/runtime-setup-l0-evidence.mjs \
   --merge-adoption-receipts "$LINUX_RECEIPT" "$DARWIN_RECEIPT" \
-  --output docs/spikes/runtime-setup-assembly-adoption-v2-evidence.json
+  --output docs/spikes/runtime-setup-assembly-adoption-v2-node26-evidence.json
 node scripts/architecture/runtime-setup-l0-evidence.mjs --check
 ```
 
@@ -414,7 +424,8 @@ Receipt paths and execution directories remain provenance metadata only: checks
 decode the bundled bytes and run the existing strict receipt, stream and paired
 coverage validators without reading external capture paths. Hashes authenticate
 retained bytes, not independent execution. No external artifact service or
-additional input exclusion is required.
+additional input exclusion is required for delivered verification; the PR
+workflow uses short-lived artifacts only to transfer the two original captures.
 
 Commit the complete implementation as source revision R before either final
 capture. Capture both targets at R, then create delivery revision D by adding

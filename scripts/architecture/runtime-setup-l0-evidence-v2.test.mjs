@@ -10,7 +10,7 @@ import { testProcesses, packagePath, checkStages, reporterArg } from "@agent-tea
 import { targets, tools, command, sha256, json, validateStream, validateReceipt, validateCoverage, requirePostgres, validatePlatformSites } from "./runtime-setup-l0-evidence-v2.mjs";
 
 import {platformSites} from "./runtime-setup-l0-evidence-platform-sites.mjs";
-import {identity as getIdentity, mergeReceipts, checkV2, validateRetainedReceiptCompatibility, v2ReportPath} from "./runtime-setup-l0-evidence-v2-capture.mjs";
+import {identity as getIdentity, mergeReceipts, checkV2, validateRetainedReceiptCompatibility, v2ReportPath, retainedV2} from "./runtime-setup-l0-evidence-v2-capture.mjs";
 
 const counts = events => ({tests: events.length, failed: 0, passed: events.filter(e => e.status === "passed").length,
   cancelled: 0, skipped: events.filter(e => e.status === "skipped").length, todo: 0,
@@ -326,6 +326,26 @@ async function deliveryFixture(t, caller = process.cwd(), env = process.env) {
   const delivered = resolve(consumer, v2ReportPath);
   const {checkV2: deliveredCheck} = await import(resolve(consumer, "scripts/architecture/runtime-setup-l0-evidence-v2-capture.mjs"));
   deliveredCheck(consumer, delivered);
+  const {checkCurrentV2: deliveredCurrentCheck} = await import(resolve(consumer, "scripts/architecture/runtime-setup-l0-evidence-v2-capture.mjs"));
+  deliveredCurrentCheck(consumer);
+  await t.test("default selector requires the new current report", () => {
+    rmSync(delivered);
+    assert.throws(() => deliveredCurrentCheck(consumer), /ENOENT/);
+    writeFileSync(delivered, json(report));
+    deliveredCurrentCheck(consumer);
+  });
+  await t.test("original v2 remains historical and its exact bytes are retained", () => {
+    const old = resolve(consumer, retainedV2.path), bytes = readFileSync(old);
+    assert.equal(sha256(bytes), retainedV2.sha256);
+    assert.throws(() => deliveredCheck(consumer, old), /source\/input mismatch/);
+    writeFileSync(delivered, bytes);
+    assert.throws(() => deliveredCurrentCheck(consumer), /source\/input mismatch/);
+    writeFileSync(delivered, json(report));
+    writeFileSync(old, Buffer.concat([bytes, Buffer.from(" ")]));
+    assert.throws(() => deliveredCurrentCheck(consumer), /retained original v2 bytes drifted/);
+    writeFileSync(old, bytes);
+    deliveredCurrentCheck(consumer);
+  });
   for (const [name, mutate, reason] of [
     ["missing receipt", r => {r.receipts.pop();}, /Assertion/],
     ["missing receipt bytes", r => {delete r.receipts[0].receiptBase64;}, /missing base64/],
@@ -339,6 +359,7 @@ async function deliveryFixture(t, caller = process.cwd(), env = process.env) {
       receipt.identity.sourceRevision = delivery;
       const bytes = Buffer.from(json(receipt)); ref.receiptBase64 = bytes.toString("base64"); ref.sha256 = sha256(bytes);
     }, /identity mismatch/],
+    ["stale current source", r => {r.identity.sourceRevision = "0".repeat(40);}, /./],
   ]) {await t.test(`rejects ${name}`, () => {
     const changed = structuredClone(report); mutate(changed); writeFileSync(delivered, json(changed));
     assert.throws(() => deliveredCheck(consumer, delivered), reason);
@@ -506,6 +527,8 @@ test("bounded real-source merge/check accepts unrelated and report-only delivery
   for (const path of new Set(paths)) {
     fs.mkdirSync(resolve(source, path, ".."), {recursive: true}); fs.copyFileSync(resolve(path), resolve(source, path));
   }
+  fs.mkdirSync(resolve(source, retainedV2.path, ".."), {recursive: true});
+  fs.copyFileSync(resolve(retainedV2.path), resolve(source, retainedV2.path));
   writeFileSync(resolve(source, "README.md"), "unrelated tracked file");
   const runGit = gitWithEnv({...process.env, ...callerIdentity(process.cwd())});
   const commit = () => {runGit(source, "add", "-A"); runGit(source, "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "synthetic bounded delivery"); return runGit(source, "rev-parse", "HEAD");};
@@ -636,7 +659,7 @@ test("bounded real-source merge/check accepts unrelated and report-only delivery
   const consumer = resolve(root, "consumer");
   runGit(root, "clone", "--quiet", "--no-local", source, consumer);
   checkV2(consumer, resolve(consumer, v2ReportPath));
-  const old = JSON.parse(readFileSync(resolve(v2ReportPath)));
+  const old = JSON.parse(readFileSync(resolve(retainedV2.path)));
   const oldReceipt = JSON.parse(Buffer.from(old.receipts[0].receiptBase64, "base64"));
   assert.throws(() => validateReceipt(oldReceipt, current, () => assert.fail("stale identity must reject before artifacts")), /identity mismatch/);
 });

@@ -9,7 +9,13 @@ import { checkCommand, testCommand } from "@agent-teams/embedded-runtime/scripts
 import { adoptionAuthority, adoptionConstruction, adoptionPaths, retainedHistoricalSha256 } from "./runtime-setup-l0-evidence-adoption.mjs";
 import { command, targets, tools, sha256, json, requirePostgres, validateReceipt, validateCoverage, validatePlatformSites } from "./runtime-setup-l0-evidence-v2.mjs";
 
-export const v2ReportPath = "docs/spikes/runtime-setup-assembly-adoption-v2-evidence.json";
+// The first v2 delivery is retained at its original path. This is the single
+// current-report selection shared by merge and the default check command.
+export const v2ReportPath = "docs/spikes/runtime-setup-assembly-adoption-v2-node26-evidence.json";
+export const retainedV2 = Object.freeze({
+  path: "docs/spikes/runtime-setup-assembly-adoption-v2-evidence.json",
+  sha256: "08fef99589d67358f020e3a0b063a44d6c4c99381370f76b2ca200b005d9bf3d",
+});
 export const retainedV1 = Object.freeze({
   revision: "08fb1a71b75134b43af52579e8de86a44b2a3815", path: adoptionPaths.report,
   sha256: "4432ad0a6b23a8f99fa37183da5270ec312f83056d0de62d8da117d6566777ac",
@@ -154,10 +160,11 @@ function loadReceipt(root, path, current) {
 function reportBody(root, current, references) {
   const historical = JSON.parse(readFileSync(resolve(root, adoptionPaths.historical)));
   assert.equal(sha256(readFileSync(resolve(root, retainedV1.path))), retainedV1.sha256, "retained v1 bytes drifted");
+  assert.equal(sha256(readFileSync(resolve(root, retainedV2.path))), retainedV2.sha256, "retained original v2 bytes drifted");
   return {schemaVersion: 2, evidenceKind: "runtime-setup-static-assembly-construction",
     identity: current, authority: adoptionAuthority,
     historical: {revision: historicalSpecRevision, path: adoptionPaths.historical, sha256: retainedHistoricalSha256, sourceRevision: historical.sourceRevision},
-    retainedV1,
+    retainedV1, retainedV2,
     construction: adoptionConstruction, requiredTargets: targets, receipts: references,
     scope: "embedded-runtime passive setup",
     limitations: ["hashes-authenticate-bytes-not-independent-execution", "historical-L1-HOLD-unchanged",
@@ -202,4 +209,7 @@ export function checkV2(root, path) {
   });
   validateCoverage(loaded);
   assert.deepEqual(report, reportBody(root, current, report.receipts));
+}
+export function checkCurrentV2(root) {
+  return checkV2(root, resolve(root, v2ReportPath));
 }
