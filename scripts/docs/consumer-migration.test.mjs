@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
 import test from "node:test";
 import { parseDocument } from "yaml";
 
@@ -131,8 +130,6 @@ test("qualified stable28 managed state retains exact bytes", async () => {
 
 test("scoped source policy retains both historic edges and its committed amendment", async () => {
   const policyPath = "architecture/foundation/source-dependencies.yaml";
-  const gitEnvironment = { ...process.env, GIT_NO_REPLACE_OBJECTS: "1" };
-  const git = (...args) => execFileSync("git", args, { cwd: root, env: gitEnvironment });
   const receipt = await json("architecture/foundation/source-policy-node-compatibility-evolution.json");
   assert.deepEqual(receipt, {
     schemaVersion: 1,
@@ -152,34 +149,80 @@ test("scoped source policy retains both historic edges and its committed amendme
       sha256: "85f4235863df10f71610f21a1ea3854253f19078b0af8b502875c27ddacf6610",
     },
   });
-  const verifyEdge = (name, edge) => {
-    assert.equal(git("rev-parse", "--verify", `${edge.revision}^{commit}`).toString().trim(), edge.revision, name);
-    assert.equal(git("rev-parse", "--verify", `${edge.revision}:${policyPath}`).toString().trim(), edge.blob, name);
-    const bytes = git("cat-file", "blob", edge.blob);
+  // Retain the small Git commit/tree path proof because the Docs Protocol checkout is depth 1.
+  // Git object hashes authenticate each retained object's bytes and bind each policy blob to its commit.
+  const fixture = await json("scripts/docs/fixtures/source-policy-historic-git-objects.json");
+  assert.equal(fixture.schemaVersion, 1);
+  const objectId = (type, bytes) => createHash("sha1")
+    .update(Buffer.from(`${type} ${bytes.length}\0`)).update(bytes).digest("hex");
+  const historicObject = (type, id) => {
+    const object = fixture.objects[id];
+    assert.equal(object?.type, type, id);
+    const bytes = Buffer.from(object.bytes, "base64");
+    assert.equal(objectId(type, bytes), id, id);
+    return bytes;
+  };
+  const commitHeader = id => historicObject("commit", id).toString("utf8").split("\n\n", 1)[0];
+  const parent = id => {
+    const parents = [...commitHeader(id).matchAll(/^parent ([0-9a-f]{40})$/gmu)];
+    assert.equal(parents.length, 1, id);
+    return parents[0][1];
+  };
+  const intermediate1 = parent(receipt.committedAmendment.revision);
+  const intermediate2 = parent(intermediate1);
+  assert.equal(parent(intermediate2), receipt.successor.revision);
+  assert.equal(parent(receipt.successor.revision), receipt.predecessor.revision);
+  const treeEntry = (treeId, name, mode) => {
+    const tree = historicObject("tree", treeId);
+    const matches = [];
+    for (let offset = 0; offset < tree.length;) {
+      const space = tree.indexOf(0x20, offset);
+      const nul = tree.indexOf(0, space + 1);
+      assert.ok(space > offset && nul > space && nul + 21 <= tree.length, treeId);
+      const entryMode = tree.toString("ascii", offset, space);
+      const entryName = tree.toString("utf8", space + 1, nul);
+      if (entryName === name) matches.push({ mode: entryMode, id: tree.subarray(nul + 1, nul + 21).toString("hex") });
+      offset = nul + 21;
+    }
+    assert.equal(matches.length, 1, `${treeId}:${name}`);
+    assert.equal(matches[0].mode, mode, `${treeId}:${name}`);
+    return matches[0].id;
+  };
+  const verifyEdge = (name, edge, bytes) => {
+    const tree = /^tree ([0-9a-f]{40})$/mu.exec(commitHeader(edge.revision));
+    assert.ok(tree, name);
+    const architecture = treeEntry(tree[1], "architecture", "40000");
+    const foundation = treeEntry(architecture, "foundation", "40000");
+    assert.equal(treeEntry(foundation, "source-dependencies.yaml", "100644"), edge.blob, name);
+    assert.equal(objectId("blob", bytes), edge.blob, name);
     assert.equal(sha256(bytes), edge.sha256, name);
     return bytes;
   };
-  const committedBytes = Object.fromEntries(Object.entries(receipt).filter(([name]) => name !== "schemaVersion")
-    .map(([name, edge]) => [name, verifyEdge(name, edge)]));
+  const liveBytes = await readFile(new URL(policyPath, root));
+  const amendment = liveBytes.toString("utf8");
+  const marker = "- id: tooling.node-compatibility-ci";
+  const markerIndex = amendment.indexOf(marker);
+  assert.ok(markerIndex > 0);
+  const amendmentLine = "    - node:assert/strict\n    - node:child_process\n";
+  assert.equal(amendment.slice(markerIndex).split(amendmentLine).length, 2);
+  const successor = amendment.slice(0, markerIndex) + amendment.slice(markerIndex)
+    .replace(amendmentLine, "    - node:assert/strict\n");
+  const scopedRoots = "  - scripts/ci/run-ordinary-postgres.mjs\n  - scripts/ci/run-ordinary-postgres.test.mjs\n";
+  assert.equal(successor.slice(0, markerIndex).split(scopedRoots).length, 2);
+  const predecessor = successor.slice(0, markerIndex).replace(scopedRoots, "  - scripts/ci\n");
+  const committedBytes = {
+    predecessor: verifyEdge("predecessor", receipt.predecessor, Buffer.from(predecessor)),
+    successor: verifyEdge("successor", receipt.successor, Buffer.from(successor)),
+    committedAmendment: verifyEdge("committed amendment", receipt.committedAmendment, liveBytes),
+  };
   assert.throws(() => verifyEdge("changed successor digest", {
     ...receipt.successor, sha256: receipt.predecessor.sha256,
-  }));
+  }, committedBytes.successor));
   assert.throws(() => verifyEdge("changed amendment blob", {
     ...receipt.committedAmendment, blob: receipt.successor.blob,
-  }));
-  git("merge-base", "--is-ancestor", receipt.predecessor.revision, receipt.successor.revision);
-  git("merge-base", "--is-ancestor", receipt.successor.revision, receipt.committedAmendment.revision);
-  const liveBytes = await readFile(new URL(policyPath, root));
-  assert.deepEqual(liveBytes, committedBytes.committedAmendment);
-  assert.equal(execFileSync("git", ["hash-object", "--stdin"], { cwd: root, env: gitEnvironment, input: liveBytes }).toString().trim(),
-    receipt.committedAmendment.blob);
-  const successor = committedBytes.successor.toString("utf8");
-  const marker = "- id: tooling.node-compatibility-ci";
-  const markerIndex = successor.indexOf(marker);
-  assert.ok(markerIndex > 0);
-  const expectedAmendment = successor.slice(0, markerIndex) + successor.slice(markerIndex)
-    .replace("    - node:assert/strict\n", "    - node:assert/strict\n    - node:child_process\n");
-  assert.equal(committedBytes.committedAmendment.toString("utf8"), expectedAmendment);
+  }, committedBytes.committedAmendment));
+  assert.throws(() => verifyEdge("changed historical bytes", receipt.predecessor,
+    Buffer.from(predecessor.replace("  - scripts/ci\n", "  - scripts/ci/altered\n"))));
   assert.notEqual(sha256(committedBytes.predecessor), receipt.successor.sha256);
   assert.notEqual(sha256(committedBytes.successor), receipt.committedAmendment.sha256);
   const policy = await yaml(policyPath);
