@@ -93,3 +93,39 @@ test("Node 26 lane explicitly rejects incompatible engine and peer fixtures with
   assert.equal(peerResult.status, 1, peerResult.stderr || peerResult.error?.message);
   assert.match(peerResult.stdout + peerResult.stderr, /ERR_PNPM_PEER_DEP_ISSUES/u);
 });
+
+test("pnpm workspace strict settings reject fresh and locked invalid engine and peer graphs", t => {
+  assert.equal(spawnSync("pnpm", ["--version"], {encoding: "utf8"}).stdout.trim(), "11.18.0");
+  const fixture = mkdtempSync(join(tmpdir(), "capture-pnpm-strict-"));
+  t.after(() => rmSync(fixture, {recursive: true, force: true}));
+  const workspace = readFileSync(new URL("../../pnpm-workspace.yaml", import.meta.url));
+  const run = (directory, args) => spawnSync("pnpm", ["--dir", directory, "install", "--offline", "--ignore-scripts",
+    "--store-dir", join(fixture, "store"), ...args], {encoding: "utf8", env: {...process.env, CI: "true"}});
+  const cases = [
+    {name: "engine", packages: {incompatible: {name: "incompatible", version: "1.0.0", engines: {node: "<1"}}},
+      error: /ERR_PNPM_UNSUPPORTED_ENGINE/u, relax: ["--no-engine-strict"]},
+    {name: "peer", packages: {plugin: {name: "plugin", version: "1.0.0", peerDependencies: {host: "^2.0.0"}},
+      host: {name: "host", version: "1.0.0"}}, error: /ERR_PNPM_PEER_DEP_ISSUES/u,
+      relax: ["--no-strict-peer-dependencies"]},
+  ];
+  for (const {name, packages, error, relax} of cases) {
+    const directory = join(fixture, name);
+    mkdirSync(directory);
+    writeFileSync(join(directory, "pnpm-workspace.yaml"), workspace);
+    writeFileSync(join(directory, "package.json"), JSON.stringify({name: `${name}-fixture`, version: "1.0.0",
+      dependencies: Object.fromEntries(Object.keys(packages).map(key => [key, `file:./${key}`]))}));
+    for (const [key, manifest] of Object.entries(packages)) {
+      mkdirSync(join(directory, key));
+      writeFileSync(join(directory, key, "package.json"), JSON.stringify(manifest));
+    }
+    const fresh = run(directory, []);
+    assert.equal(fresh.status, 1, `${name} fresh: ${fresh.stdout}${fresh.stderr}`);
+    assert.match(fresh.stdout + fresh.stderr, error);
+    const lock = run(directory, ["--lockfile-only", ...relax]);
+    assert.equal(lock.status, 0, `${name} lock fixture: ${lock.stdout}${lock.stderr}`);
+    const check = run(directory, name === "engine" ? ["--frozen-lockfile", "--engine-strict", "--strict-peer-dependencies"] :
+      ["--resolution-only", "--lockfile-only", "--no-frozen-lockfile", "--engine-strict", "--strict-peer-dependencies"]);
+    assert.equal(check.status, 1, `${name} locked: ${check.stdout}${check.stderr}`);
+    assert.match(check.stdout + check.stderr, error);
+  }
+});

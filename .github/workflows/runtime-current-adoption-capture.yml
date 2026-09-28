@@ -34,6 +34,14 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     steps:
+      - name: Reserve bounded capture artifact directory
+        shell: bash
+        env:
+          CAPTURE_OUTPUT_DIR: ${{ runner.temp }}/adoption-current-${{ github.event.pull_request.head.sha }}-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          mkdir "$CAPTURE_OUTPUT_DIR"
+          echo "CAPTURE_OUTPUT_DIR=$CAPTURE_OUTPUT_DIR" >> "$GITHUB_ENV"
+
       - name: Checkout exact pull request head
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -93,23 +101,19 @@ jobs:
           assert.equal(process.version, 'v24.18.0');
           NODE
           test "$(pnpm --version)" = '11.18.0'
-          test "$(pnpm config get engine-strict)" = 'true'
-          test "$(pnpm config get strict-peer-dependencies)" = 'true'
           test -z "${NODE_OPTIONS:-}"
           test -z "${NODE_TEST_CONTEXT:-}"
 
-      - name: Reserve unique capture artifact directory
-        shell: bash
-        env:
-          CAPTURE_TARGET: ${{ matrix.target }}
-          SOURCE_REVISION: ${{ github.event.pull_request.head.sha }}
-        run: |
-          output="$RUNNER_TEMP/adoption-current-$SOURCE_REVISION-$CAPTURE_TARGET-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          mkdir "$output"
-          echo "CAPTURE_OUTPUT_DIR=$output" >> "$GITHUB_ENV"
+      - name: Prove pinned pnpm rejects incompatible fixtures
+        run: pnpm check:node-compat
 
       - name: Install frozen dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --engine-strict --strict-peer-dependencies
+
+      - name: Check locked peer graph
+        run: |
+          pnpm install --resolution-only --lockfile-only --no-frozen-lockfile --engine-strict --strict-peer-dependencies
+          git diff --exit-code -- pnpm-lock.yaml
 
       - name: Build workspace dependencies
         run: pnpm --filter '@agent-teams/embedded-runtime^...' -r run build
@@ -153,7 +157,6 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: current-adoption-${{ github.event.pull_request.head.sha }}-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ env.CAPTURE_OUTPUT_DIR }}/
-          include-hidden-files: true
+          path: ${{ runner.temp }}/adoption-current-${{ github.event.pull_request.head.sha }}-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}/
           retention-days: 7
           if-no-files-found: warn

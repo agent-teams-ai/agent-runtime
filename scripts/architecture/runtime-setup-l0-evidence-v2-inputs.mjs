@@ -15,6 +15,8 @@ export const v2InputPolicy = Object.freeze({
   ]),
   // Explicit evidence/checker import closure; unrelated architecture tools are excluded.
   files: Object.freeze([
+    ".github/workflows/runtime-current-adoption-capture.yml",
+    "scripts/ci/node-engine-compatibility.test.mjs",
     "scripts/architecture/ar2-evidence-custody.mjs",
     "scripts/architecture/check-feature-modules.mjs",
     "scripts/architecture/check-get-modular-adoption.mjs",
@@ -75,6 +77,8 @@ export const v2InputPolicy = Object.freeze({
     "packages/platform/filesystem-custody/scripts", "packages/platform/filesystem-custody/native",
   ]),
   required: Object.freeze([
+    ".github/workflows/runtime-current-adoption-capture.yml",
+    "scripts/ci/node-engine-compatibility.test.mjs",
     ...evidencePackages.flatMap(path => [`${path}/package.json`, `${path}/tsconfig.json`]),
     "scripts/architecture/runtime-setup-l0-evidence-v2-inputs.mjs",
     "architecture/get-modular/consumer-profile.json", "architecture/get-modular/consumer-profile.schema.json",

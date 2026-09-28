@@ -5,12 +5,49 @@ import { execFileSync, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
+import { parse as parseYaml } from "yaml";
 import { testProcesses, packagePath, checkStages, reporterArg } from "@agent-teams/embedded-runtime/scripts/run-package-tests.mjs";
 import { targets, tools, command, sha256, json, validateStream, validateReceipt, validateCoverage, requirePostgres, validatePlatformSites } from "./runtime-setup-l0-evidence-v2.mjs";
 
 import {platformSites} from "./runtime-setup-l0-evidence-platform-sites.mjs";
 import {identity as getIdentity, mergeReceipts, checkV2, validateRetainedReceiptCompatibility, v2ReportPath, retainedV2} from "./runtime-setup-l0-evidence-v2-capture.mjs";
+
+test("capture workflow reserves and uploads only its exact bounded directory", t => {
+  const workflow = parseYaml(readFileSync(new URL("../../.github/workflows/runtime-current-adoption-capture.yml", import.meta.url), "utf8"));
+  const steps = workflow.jobs.capture.steps;
+  const reserve = steps[0];
+  const upload = steps.at(-1);
+  assert.equal(reserve.name, "Reserve bounded capture artifact directory");
+  assert.equal(upload.name, "Upload receipt or failure diagnostics");
+  assert.equal(upload.if, "always()");
+  assert.equal(upload.with.path, `${reserve.env.CAPTURE_OUTPUT_DIR}/`);
+  assert.match(upload.with.path, /^\$\{\{ runner\.temp \}\}\/adoption-current-\$\{\{ github\.event\.pull_request\.head\.sha \}\}-\$\{\{ matrix\.target \}\}-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}\/$/u);
+  assert.ok(!upload.with.path.includes("env.CAPTURE_OUTPUT_DIR"));
+  assert.notEqual(upload.with["include-hidden-files"], true);
+  const temp = mkdtempSync(join(tmpdir(), "capture-upload-early-failure-"));
+  t.after(() => rmSync(temp, {recursive: true, force: true}));
+  const values = {"runner.temp": temp, "github.event.pull_request.head.sha": "a".repeat(40),
+    "matrix.target": "linux-x64", "github.run_id": "7", "github.run_attempt": "1"};
+  const expanded = upload.with.path.replace(/\$\{\{\s*([^}]+?)\s*\}\}/gu, (_, key) => values[key] ?? "");
+  assert.ok(resolve(expanded).startsWith(`${temp}${sep}`), "even an early failed checkout cannot select runner root");
+  assert.equal(fs.existsSync(expanded), false, "early failure has no uploadable directory");
+  assert.match(reserve.run, /mkdir "\$CAPTURE_OUTPUT_DIR"/u);
+  assert.ok(!steps.find(step => step.name === "Verify target and strict tools").run.includes("pnpm config get"));
+  assert.match(steps.find(step => step.name === "Capture exact original receipt and artifacts").run,
+    /--output "\$CAPTURE_OUTPUT_DIR\/\$CAPTURE_TARGET\.json"/u);
+  assert.match(steps.find(step => step.name === "Record failed capture diagnostics").run,
+    /\$CAPTURE_OUTPUT_DIR\/failure-diagnostics\.txt/u);
+  assert.equal(steps.find(step => step.name === "Prove pinned pnpm rejects incompatible fixtures").run,
+    "pnpm check:node-compat");
+  assert.match(steps.find(step => step.name === "Install frozen dependencies").run,
+    /^pnpm install --frozen-lockfile --engine-strict --strict-peer-dependencies$/u);
+  assert.match(steps.find(step => step.name === "Check locked peer graph").run,
+    /pnpm install --resolution-only --lockfile-only --no-frozen-lockfile --engine-strict --strict-peer-dependencies/u);
+  const workspace = parseYaml(readFileSync(new URL("../../pnpm-workspace.yaml", import.meta.url), "utf8"));
+  assert.equal(workspace.engineStrict, true);
+  assert.equal(workspace.strictPeerDependencies, true);
+});
 
 const counts = events => ({tests: events.length, failed: 0, passed: events.filter(e => e.status === "passed").length,
   cancelled: 0, skipped: events.filter(e => e.status === "skipped").length, todo: 0,
@@ -443,10 +480,25 @@ test("bounded inventory rejects missing inputs, links and gitlinks and preserves
   for (const path of [...v2InputPolicy.files, ...v2InputPolicy.required]) {
     fs.mkdirSync(resolve(root, path, ".."), {recursive: true}); writeFileSync(resolve(root, path), "fixture");
   }
+  const workflowPath = ".github/workflows/runtime-current-adoption-capture.yml";
+  writeFileSync(resolve(root, workflowPath), readFileSync(new URL(`../../${workflowPath}`, import.meta.url)));
   const commit = () => {runGit(root, "add", "-A"); runGit(root, "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "synthetic policy"); return runGit(root, "rev-parse", "HEAD");};
   const revision = commit(), baseline = v2Inputs(root, revision);
   assert.deepEqual(v2InputsAtRevision(root, revision), baseline);
   assert.equal(baseline.inputPolicy, v2InputPolicy.version);
+  const originalWorkflow = baseline.inputs.find(input => input.path === workflowPath);
+  assert.ok(originalWorkflow, "capture workflow is a protected input");
+  const workflowBytes = readFileSync(resolve(root, workflowPath), "utf8");
+  assert.match(workflowBytes, /pnpm install --frozen-lockfile --engine-strict --strict-peer-dependencies/u);
+  writeFileSync(resolve(root, workflowPath), workflowBytes.replace(
+    "pnpm install --frozen-lockfile --engine-strict --strict-peer-dependencies",
+    "pnpm install --frozen-lockfile --engine-strict --strict-peer-dependencies --reporter=append-only"));
+  assert.throws(() => v2Inputs(root, revision), /committed and clean/);
+  const changedWorkflowRevision = commit();
+  assert.notEqual(v2Inputs(root, changedWorkflowRevision).inputs.find(input => input.path === workflowPath).sha256,
+    originalWorkflow.sha256, "capture install mutation must change input digest");
+  assert.throws(() => v2Inputs(root, revision), /source\/input mismatch/);
+  runGit(root, "reset", "--hard", revision);
   assert.deepEqual(baseline.inputs.map(i => i.path), baseline.inputs.map(i => i.path).toSorted());
   for (const path of [...v2InputPolicy.roots, ...v2InputPolicy.requiredRoots, ...v2InputPolicy.files, ...v2InputPolicy.required]) {
     rmSync(resolve(root, path), {recursive: true, force: true});
