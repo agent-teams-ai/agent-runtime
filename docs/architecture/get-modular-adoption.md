@@ -665,6 +665,20 @@ Both active and pending consumer profiles reference the same
 `pnpm sdk-growth:profile` and `pnpm test:sdk-growth:profile` enforce the frozen
 consumer enrollment in fast/full gates. These checks reject scope and command
 changes but do not perform EF SDK comparison or grant trusted admission.
+The retained [C0 timeout transition](../../architecture/sdk-growth/evidence/c0-ci-timeout-transition.json)
+records the exact historical bytes behind the SDK profile digest repair. Commit
+`a1a18eb50af0d890487c5388fc1688c67caadec9` changed only the CI `check`
+job timeout from 35 to 60 minutes. Commit
+`8e5e859d10981e1623d0617e933afc68a9e8770c` then rebound the frozen AR C0
+contract's `ci.sha256`, identity and AR C0 validator oracle to those workflow
+bytes. The contract
+SHA-256 changed from `4c88c378c6d54303fd4910f521480e6fe120743dfcdc618007efb1395a684c05`
+to `549d4fb14ae2f2ccae3697bc3c60a4c784e47b1895366423f28d498c59fe923a`.
+The SDK checker pins the new exact bytes and checks the retained transition,
+identity and workflow; its rejecting tests verify the retained Git bytes and
+reject later contract or provenance mutations. This rebind does not add SDK
+admission evidence.
+
 SDK authority activation remains pending. The repository dependency and lock now
 use the exact published EF 1.6.0 artifact: tarball SHA-256
 `842f81ca68e9c3207a0da967eb599229d4d30ea32cd69a9a1686f2eb240f54eb`, npm

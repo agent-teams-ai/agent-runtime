@@ -8,6 +8,8 @@ import { parse } from "yaml";
 const directory = "architecture/sdk-growth";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const command = "node scripts/architecture/check-sdk-growth-profile.mjs";
+const c0ContractSha256 = "549d4fb14ae2f2ccae3697bc3c60a4c784e47b1895366423f28d498c59fe923a";
+const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
 
 export function normalizeWorkspaceManifestPaths(paths) {
   return paths.map(path => path.replaceAll("\\", "/")).toSorted();
@@ -91,8 +93,38 @@ export function checkSdkGrowthProfile(repository = root) {
   const json = path => JSON.parse(readFileSync(resolve(repository, path), "utf8"));
   const profile = parse(readFileSync(resolve(repository, `${directory}/profile.yaml`), "utf8"));
   const activation = json(`${directory}/activation.json`);
-  assert.equal(createHash("sha256").update(readFileSync(resolve(repository, "architecture/c0/ar-owned-lifetime/contract.json"))).digest("hex"), "4c88c378c6d54303fd4910f521480e6fe120743dfcdc618007efb1395a684c05", "SDK_C0_BASE_MUTATION");
-  const frozen = json("architecture/c0/ar-owned-lifetime/contract.json");
+  const c0Transition = json(`${directory}/evidence/c0-ci-timeout-transition.json`);
+  assert.deepEqual(c0Transition, {
+    schemaVersion: 1, kind: "sdk-c0-ci-timeout-contract-rebind", contractRevision: "ar-c0-c0dc683e-r3",
+    contract: {
+      path: "architecture/c0/ar-owned-lifetime/contract.json",
+      beforeCommit: "a1a18eb50af0d890487c5388fc1688c67caadec9",
+      beforeSha256: "4c88c378c6d54303fd4910f521480e6fe120743dfcdc618007efb1395a684c05",
+      afterCommit: "8e5e859d10981e1623d0617e933afc68a9e8770c",
+      afterSha256: c0ContractSha256, onlyChangedField: "ci.sha256"
+    },
+    workflow: {
+      path: ".github/workflows/ci.yml",
+      beforeCommit: "075e838cc68f135505c71b7ce9aeee60e1044828",
+      beforeSha256: "79a3d062c473cdd4a3188cdc8da27e7de33d6b64e847e885047ba0dbcadfe9f4",
+      afterCommit: "a1a18eb50af0d890487c5388fc1688c67caadec9",
+      afterSha256: "efcc166d1526ee15b5ac4cc017854b3da037432e01eba9272835c23c674b69fb",
+      onlyChangedField: "jobs.check.timeout-minutes", beforeMinutes: 35, afterMinutes: 60
+    },
+    identityPath: "architecture/c0/ar-owned-lifetime/identity.json",
+    validatorPath: "scripts/architecture/validate-ar-c0.mjs",
+    admission: "pending-authority-qualification"
+  }, "SDK_C0_PROVENANCE_DRIFT");
+  const contractBytes = readFileSync(resolve(repository, c0Transition.contract.path));
+  assert.equal(sha256(contractBytes), c0ContractSha256, "SDK_C0_BASE_MUTATION");
+  const frozen = JSON.parse(contractBytes);
+  const c0Identity = json(c0Transition.identityPath);
+  assert.equal(c0Identity.artifact, c0Transition.contract.path, "SDK_C0_IDENTITY_DRIFT");
+  assert.equal(c0Identity.sha256, c0ContractSha256, "SDK_C0_IDENTITY_DRIFT");
+  assert.equal(c0Identity.contractRevision, frozen.contractRevision, "SDK_C0_IDENTITY_DRIFT");
+  assert.equal(frozen.ci.workflow, c0Transition.workflow.path, "SDK_C0_WORKFLOW_DRIFT");
+  assert.equal(frozen.ci.sha256, c0Transition.workflow.afterSha256, "SDK_C0_WORKFLOW_DRIFT");
+  assert.equal(sha256(readFileSync(resolve(repository, c0Transition.workflow.path))), c0Transition.workflow.afterSha256, "SDK_C0_WORKFLOW_DRIFT");
   const manifest = json("package.json");
   const workspace = parse(readFileSync(resolve(repository, "pnpm-workspace.yaml"), "utf8"));
   const discovered = normalizeWorkspaceManifestPaths(
