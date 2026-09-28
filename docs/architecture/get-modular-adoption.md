@@ -465,15 +465,21 @@ status 0 accepts equality, status 1 rejects drift; other Git errors propagate as
 infrastructure failures. Receipt inventories cannot omit or add inputs, and old
 or mixed policy identities cannot satisfy the current gate.
 The physical discovery check also walks the configured Foundation governed
-source roots and selected package roots for source files, the live decision
-catalog for Markdown, and the four bounded pnpm workspace glob parents for
-package manifests. A discovered file outside the exact revision's selected
-inventory rejects capture or delivery even when `.gitignore` hides it. A newly
-discovered workspace sibling is rejected until a reviewed SOURCE policy and
-owner boundary include it. The accepted plain-list workspace patterns and
-governed roots are read from the bound configuration bytes; changed discovery
-syntax or patterns fail closed for policy review. This reconciles Git identity
-with the prerequisite's physical readers without inventorying the whole repo.
+source roots and selected package roots for source files and nested manifests,
+the live decision catalog for Markdown, and the observed ancestor manifest
+slots up to the repository root. Manifest slots bind absence, regular-file
+identity and committed bytes at the selected revision. The pnpm workspace
+reader traverses directories from the repository root before applying its four
+bounded glob patterns. SOURCE therefore rejects unsafe entry names and portable
+case or NFC directory collisions throughout that traversal, including empty
+and ignored directories, and portable source-file collisions inside selected
+source trees. A discovered source or observed manifest outside the
+exact revision's selected inventory rejects capture or delivery even when
+`.gitignore` hides it. A newly discovered workspace sibling is rejected until
+a reviewed SOURCE policy and owner boundary include it. The accepted plain-list
+workspace patterns and governed roots are read from the bound configuration
+bytes; changed discovery syntax or patterns fail closed for policy review.
+Ordinary unrelated files remain outside the inventory.
 
 The generated v2 report is outside the closure to avoid self-reference.
 Unrelated tracked files outside the selected roots and explicit files (for

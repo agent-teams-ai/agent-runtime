@@ -100,16 +100,26 @@ export const v2InputPolicy = Object.freeze({
     "architecture/get-modular/evidence/get-modular-assembly-0.1.0.tgz",
   ]),
 });
-const pathspec = [...v2InputPolicy.roots, ...v2InputPolicy.files].map(path => `:(top,literal)${path}`);
+// These slots are optional, but Foundation v3 observes their absence on every
+// run. Bind a newly committed manifest at its own revision and reject it when
+// a receipt still names an older revision where the slot was absent.
+const observedManifestSlots = Object.freeze([
+  "scripts/package.json", "packages/package.json",
+  "packages/apps/package.json", "packages/contexts/package.json",
+  "packages/platform/package.json",
+]);
+const pathspec = [...v2InputPolicy.roots, ...v2InputPolicy.files, ...observedManifestSlots]
+  .map(path => `:(top,literal)${path}`);
 const sourceExtensions = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"]);
 const workspacePatterns = ["experiments/*", "packages/apps/*", "packages/contexts/*", "packages/platform/*"];
 const within = (path, parent) => path === parent || path.startsWith(`${parent}/`);
 const metadata = (_, name) => name === ".git" || name === "node_modules";
-function assertManifestBound(root, manifest, selectedPaths) {
+function assertManifestBound(root, manifest, selectedPaths, requireRegular = false) {
   let stat;
   try {stat = lstatSync(resolve(root, manifest));}
   catch (error) {if (error.code === "ENOENT") {return;} throw error;}
   assert.ok(!stat.isSymbolicLink(), `source discovery symlink: ${manifest}`);
+  if (requireRegular) {assert.ok(stat.isFile(), `package manifest must be a regular file: ${manifest}`);}
   if (stat.isFile()) {assert.ok(selectedPaths.has(manifest),
     `discovered workspace manifest is not committed at SOURCE revision: ${manifest}`);}
 }
@@ -129,12 +139,45 @@ function plainYamlList(root, path, key) {
   return values;
 }
 
+// Foundation's workspace reader traverses from repository root before it
+// applies glob selection. Empty and ignored directories can change its result.
+function assertWorkspaceDirectoryTopology(root) {
+  const directoryIdentities = new Map();
+  const pendingDirectories = ["."];
+  while (pendingDirectories.length) {
+    const directory = pendingDirectories.pop();
+    for (const entry of readdirSync(resolve(root, directory), {withFileTypes: true})) {
+      assert.ok(entry.name && entry.name !== "." && entry.name !== ".." &&
+        !entry.name.includes("/") && !entry.name.includes("\\"),
+      `unsafe workspace entry: ${directory}/${entry.name}`);
+      if (!entry.isDirectory() || metadata(directory, entry.name)) {continue;}
+      const path = directory === "." ? entry.name : `${directory}/${entry.name}`;
+      const identity = path.normalize("NFC").toLocaleLowerCase("en-US");
+      const previous = directoryIdentities.get(identity);
+      assert.ok(previous === undefined || previous === path,
+        `workspace directory portable collision: ${previous} and ${path}`);
+      directoryIdentities.set(identity, path);
+      pendingDirectories.push(path);
+    }
+  }
+}
+
+function assertPortableSourceFile(path, identities, observesManifests) {
+  if (!observesManifests || !sourceExtensions.has(extname(path))) {return;}
+  const identity = path.normalize("NFC").toLocaleLowerCase("en-US");
+  const previous = identities.get(identity);
+  assert.ok(previous === undefined || previous === path,
+    `source file portable collision: ${previous} and ${path}`);
+  identities.set(identity, path);
+}
+
 // Foundation reads physical source trees and workspace manifests, including
 // ignored paths. Git's pathspec inventory alone cannot observe those additions.
-// Walk only the configured governed roots and selected package roots; the
-// workspace glob parents below are the exact current discovery boundary.
 function assertLiveDiscoveryBound(root, selectedPaths) {
   const governedRoots = plainYamlList(root, "architecture/foundation/source-dependencies.yaml", "governedRoots");
+  const packageRoots = plainYamlList(root, "architecture/foundation/source-dependencies.yaml", "packageRoots");
+  assert.deepEqual(packageRoots, evidencePackages,
+    "package roots require a reviewed SOURCE policy update");
   const discoveredPatterns = plainYamlList(root, "pnpm-workspace.yaml", "packages");
   assert.deepEqual(discoveredPatterns, workspacePatterns,
     "workspace discovery patterns require a reviewed SOURCE policy update");
@@ -142,7 +185,9 @@ function assertLiveDiscoveryBound(root, selectedPaths) {
     assert.ok(v2InputPolicy.roots.some(inputRoot => within(governed, inputRoot)),
       `source discovery root outside SOURCE: ${governed}`);
   }
-  const scan = (start, excluded, accept) => {
+  assertWorkspaceDirectoryTopology(root);
+  const sourceIdentities = new Map();
+  const scan = (start, excluded, accept, observesManifests = false) => {
     const pending = [start];
     while (pending.length) {
       const directory = pending.pop();
@@ -152,9 +197,15 @@ function assertLiveDiscoveryBound(root, selectedPaths) {
           if (entry.name === "dist" && entry.isSymbolicLink()) {assert.fail(`source discovery symlink: ${path}`);}
           continue;
         }
+        if (observesManifests && entry.name === "package.json") {
+          assert.ok(entry.isFile(), `package manifest must be a regular file: ${path}`);
+        }
         if (entry.isSymbolicLink()) {assert.fail(`source discovery symlink: ${path}`);}
-        if (entry.isDirectory()) {pending.push(path);}
+        if (entry.isDirectory()) {
+          pending.push(path);
+        }
         else if (entry.isFile() && accept(path)) {
+          assertPortableSourceFile(path, sourceIdentities, observesManifests);
           assert.ok(selectedPaths.has(path), `discovered input is not committed at SOURCE revision: ${path}`);
         }
       }
@@ -162,7 +213,10 @@ function assertLiveDiscoveryBound(root, selectedPaths) {
   };
   const sourceFile = path => sourceExtensions.has(extname(path));
   for (const governed of governedRoots) {
-    scan(governed, metadata, sourceFile);
+    scan(governed, metadata, path => sourceFile(path) || posix.basename(path) === "package.json", true);
+  }
+  for (const manifest of observedManifestSlots) {
+    assertManifestBound(root, manifest, selectedPaths, true);
   }
   scan("docs/decisions", metadata, path => extname(path) === ".md");
   for (const packageRoot of evidencePackages) {
@@ -178,7 +232,7 @@ function assertLiveDiscoveryBound(root, selectedPaths) {
       catch (error) {if (error.code === "ENOENT") {return false;} throw error;}
     };
     scan(packageRoot, packageExcluded,
-      path => sourceFile(path) || posix.basename(path) === "package.json");
+      path => sourceFile(path) || posix.basename(path) === "package.json", true);
   }
   for (const pattern of workspacePatterns) {
     const parent = pattern.slice(0, -2);

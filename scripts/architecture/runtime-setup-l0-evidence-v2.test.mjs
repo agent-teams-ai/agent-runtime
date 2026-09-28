@@ -1,4 +1,5 @@
 import { v2InputPolicy, v2Inputs, v2InputsAtRevision } from "./runtime-setup-l0-evidence-v2-inputs.mjs";
+import { registerSourceDiscoveryTests } from "./runtime-setup-l0-evidence-v2-discovery.test.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -12,6 +13,8 @@ import { targets, tools, command, sha256, json, validateStream, validateReceipt,
 
 import {platformSites} from "./runtime-setup-l0-evidence-platform-sites.mjs";
 import {identity as getIdentity, mergeReceipts, checkV2, validateRetainedReceiptCompatibility, v2ReportPath, retainedV2} from "./runtime-setup-l0-evidence-v2-capture.mjs";
+
+registerSourceDiscoveryTests();
 
 test("capture prerequisite code and configuration are protected SOURCE inputs", () => {
   const root = new URL("../../", import.meta.url);
