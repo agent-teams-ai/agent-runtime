@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import test from "node:test";
 import { parseDocument } from "yaml";
 
 const root = new URL("../../", import.meta.url);
 const read = path => readFile(new URL(path, root), "utf8");
 const json = async path => JSON.parse(await read(path));
+const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
 const yaml = async path => {
   const document = parseDocument(await read(path), { uniqueKeys: true });
   assert.deepEqual(document.errors, []);
@@ -127,26 +129,60 @@ test("qualified stable28 managed state retains exact bytes", async () => {
   assert.match(suite, /for \(const scenario of scenarioContract\.scenarios\)/u);
 });
 
-test("scoped source policy has its reviewed successor identity", async () => {
+test("scoped source policy retains both historic edges and its committed amendment", async () => {
+  const policyPath = "architecture/foundation/source-dependencies.yaml";
+  const gitEnvironment = { ...process.env, GIT_NO_REPLACE_OBJECTS: "1" };
+  const git = (...args) => execFileSync("git", args, { cwd: root, env: gitEnvironment });
   const receipt = await json("architecture/foundation/source-policy-node-compatibility-evolution.json");
   assert.deepEqual(receipt, {
     schemaVersion: 1,
     predecessor: {
       revision: "ab8efe2874c0600ea3930b4fe72bfc68d173543d",
+      blob: "ae4dd7771d60aaa7ba24bf1e56f553f9826d7a77",
       sha256: "073d904b6ed55ac5ae8d0738d2b50762cc65ef653ed647aa28e98b5d574370b0",
     },
     successor: {
       revision: "98b75f694a0c72ad26d2cab19ff56713676b56a6",
+      blob: "0f633e5fc2d2bad14a08ea5467bc0a07d6bad682",
       sha256: "a8ab641089abd81b0bb4387ef47ecf63a193aba2051d6ed87a3b5e2c8fca1c4c",
     },
-    workingTreeAmendment: {
-      baseRevision: "458ef541c4a67d316b3f88edf94766c3eaabece0",
+    committedAmendment: {
+      revision: "8b104417d51fe95d77c7dfff623fb484ce3e759b",
+      blob: "9beef0450e9f3e86e2819e874faf06e0f94efe5e",
       sha256: "85f4235863df10f71610f21a1ea3854253f19078b0af8b502875c27ddacf6610",
     },
   });
-  assert.equal(createHash("sha256").update(await read("architecture/foundation/source-dependencies.yaml")).digest("hex"),
-    receipt.workingTreeAmendment.sha256);
-  const policy = await yaml("architecture/foundation/source-dependencies.yaml");
+  const verifyEdge = (name, edge) => {
+    assert.equal(git("rev-parse", "--verify", `${edge.revision}^{commit}`).toString().trim(), edge.revision, name);
+    assert.equal(git("rev-parse", "--verify", `${edge.revision}:${policyPath}`).toString().trim(), edge.blob, name);
+    const bytes = git("cat-file", "blob", edge.blob);
+    assert.equal(sha256(bytes), edge.sha256, name);
+    return bytes;
+  };
+  const committedBytes = Object.fromEntries(Object.entries(receipt).filter(([name]) => name !== "schemaVersion")
+    .map(([name, edge]) => [name, verifyEdge(name, edge)]));
+  assert.throws(() => verifyEdge("changed successor digest", {
+    ...receipt.successor, sha256: receipt.predecessor.sha256,
+  }));
+  assert.throws(() => verifyEdge("changed amendment blob", {
+    ...receipt.committedAmendment, blob: receipt.successor.blob,
+  }));
+  git("merge-base", "--is-ancestor", receipt.predecessor.revision, receipt.successor.revision);
+  git("merge-base", "--is-ancestor", receipt.successor.revision, receipt.committedAmendment.revision);
+  const liveBytes = await readFile(new URL(policyPath, root));
+  assert.deepEqual(liveBytes, committedBytes.committedAmendment);
+  assert.equal(execFileSync("git", ["hash-object", "--stdin"], { cwd: root, env: gitEnvironment, input: liveBytes }).toString().trim(),
+    receipt.committedAmendment.blob);
+  const successor = committedBytes.successor.toString("utf8");
+  const marker = "- id: tooling.node-compatibility-ci";
+  const markerIndex = successor.indexOf(marker);
+  assert.ok(markerIndex > 0);
+  const expectedAmendment = successor.slice(0, markerIndex) + successor.slice(markerIndex)
+    .replace("    - node:assert/strict\n", "    - node:assert/strict\n    - node:child_process\n");
+  assert.equal(committedBytes.committedAmendment.toString("utf8"), expectedAmendment);
+  assert.notEqual(sha256(committedBytes.predecessor), receipt.successor.sha256);
+  assert.notEqual(sha256(committedBytes.successor), receipt.committedAmendment.sha256);
+  const policy = await yaml(policyPath);
   const byId = new Map(policy.boundaries.map(boundary => [boundary.id, boundary]));
   assert.deepEqual(byId.get("tooling.ordinary-postgres-ci")?.roots, [
     "scripts/ci/run-ordinary-postgres.mjs",

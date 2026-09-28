@@ -66,16 +66,19 @@ fixtures must still reject an unclassified future CI file, unauthorized Node
 builtins in ordinary PostgreSQL CI, and imports outside the Node compatibility
 allowlist.
 
-The uncommitted correction on base `458ef541c4a67d316b3f88edf94766c3eaabece0`
-adds `node:child_process` to only the exact three-file Node compatibility CI
-boundary so its disposable pnpm engine and peer rejection test can execute.
-The live policy SHA-256 is
+The correction is committed at exact revision
+`8b104417d51fe95d77c7dfff623fb484ce3e759b`, policy Git blob
+`9beef0450e9f3e86e2819e874faf06e0f94efe5e`, and SHA-256
 `85f4235863df10f71610f21a1ea3854253f19078b0af8b502875c27ddacf6610`.
-The same evolution receipt records this working-tree amendment separately from
-the historical successor revision. The two-file ordinary PostgreSQL boundary,
-all governed roots, and the stable28 managed cohort remain unchanged. Removing
-that one allowlist entry restores the previous policy bytes and hash. The
-current source policy is pending the complete `pnpm check` gate.
+It adds `node:child_process` only to the exact three-file Node compatibility CI
+boundary so its disposable pnpm engine and peer rejection test can execute.
+The evolution receipt retains the predecessor and successor commit, blob and
+SHA-256 identities alongside this committed amendment. The migration gate reads
+each policy from its actual Git object, checks its SHA-256 and ancestry, and
+proves that this amendment differs from the successor by that one allowlist
+entry. Removing it restores the successor's exact policy bytes and hash. The
+two-file ordinary PostgreSQL boundary, all governed roots, and the stable28
+managed cohort remain unchanged.
 
 ## Advisory quality diagnostics
 
