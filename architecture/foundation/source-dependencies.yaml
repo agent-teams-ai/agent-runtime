@@ -3024,6 +3024,7 @@ boundaries:
     packages: []
     builtins:
     - node:assert/strict
+    - node:child_process
     - node:crypto
     - node:fs
     - node:fs/promises

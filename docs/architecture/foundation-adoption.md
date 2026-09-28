@@ -64,8 +64,18 @@ records both revisions. No governed root, workspace package or production
 boundary was removed. The Foundation source check and disposable rejecting
 fixtures must still reject an unclassified future CI file, unauthorized Node
 builtins in ordinary PostgreSQL CI, and imports outside the Node compatibility
-allowlist. The current source policy is pending the complete `pnpm check` gate;
-the stable28 managed cohort is unchanged.
+allowlist.
+
+The uncommitted correction on base `458ef541c4a67d316b3f88edf94766c3eaabece0`
+adds `node:child_process` to only the exact three-file Node compatibility CI
+boundary so its disposable pnpm engine and peer rejection test can execute.
+The live policy SHA-256 is
+`85f4235863df10f71610f21a1ea3854253f19078b0af8b502875c27ddacf6610`.
+The same evolution receipt records this working-tree amendment separately from
+the historical successor revision. The two-file ordinary PostgreSQL boundary,
+all governed roots, and the stable28 managed cohort remain unchanged. Removing
+that one allowlist entry restores the previous policy bytes and hash. The
+current source policy is pending the complete `pnpm check` gate.
 
 ## Advisory quality diagnostics
 

@@ -205,12 +205,14 @@ test("Node compatibility CI owns its APIs without granting PostgreSQL or future 
   const postgres = "scripts/ci/run-ordinary-postgres.mjs";
   assert.deepEqual(await analyzeFixture({
     [audit]: "import 'node:fs';\n",
-    [engine]: "import './audit-node-engine-compatibility.mjs';\n",
+    [engine]: "import 'node:child_process';\nimport './audit-node-engine-compatibility.mjs';\n",
     [runtime]: "import 'node:crypto';\nimport 'node:module';\nimport 'node:os';\nimport 'node:util';\n",
   }), []);
   assert.deepEqual(rules(await analyzeFixture({[postgres]: "import 'node:crypto';\n"})),
     ["architecture.source-dependencies.forbidden-builtin-dependency"]);
-  assert.deepEqual(rules(await analyzeFixture({[runtime]: "import 'node:child_process';\n"})),
+  assert.deepEqual(rules(await analyzeFixture({[postgres]: "import 'node:child_process';\n"})),
+    ["architecture.source-dependencies.forbidden-builtin-dependency"]);
+  assert.deepEqual(rules(await analyzeFixture({[runtime]: "import 'node:net';\n"})),
     ["architecture.source-dependencies.forbidden-builtin-dependency"]);
   assert.deepEqual(rules(await analyzeFixture({"scripts/ci/unreviewed-capability.mjs": "import 'node:crypto';\n"})),
     ["architecture.source-dependencies.unclassified-source-file"]);

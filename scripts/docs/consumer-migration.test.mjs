@@ -139,9 +139,13 @@ test("scoped source policy has its reviewed successor identity", async () => {
       revision: "98b75f694a0c72ad26d2cab19ff56713676b56a6",
       sha256: "a8ab641089abd81b0bb4387ef47ecf63a193aba2051d6ed87a3b5e2c8fca1c4c",
     },
+    workingTreeAmendment: {
+      baseRevision: "458ef541c4a67d316b3f88edf94766c3eaabece0",
+      sha256: "85f4235863df10f71610f21a1ea3854253f19078b0af8b502875c27ddacf6610",
+    },
   });
   assert.equal(createHash("sha256").update(await read("architecture/foundation/source-dependencies.yaml")).digest("hex"),
-    receipt.successor.sha256);
+    receipt.workingTreeAmendment.sha256);
   const policy = await yaml("architecture/foundation/source-dependencies.yaml");
   const byId = new Map(policy.boundaries.map(boundary => [boundary.id, boundary]));
   assert.deepEqual(byId.get("tooling.ordinary-postgres-ci")?.roots, [
