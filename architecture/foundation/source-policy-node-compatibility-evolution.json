@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "predecessor": {
+    "revision": "ab8efe2874c0600ea3930b4fe72bfc68d173543d",
+    "sha256": "073d904b6ed55ac5ae8d0738d2b50762cc65ef653ed647aa28e98b5d574370b0"
+  },
+  "successor": {
+    "revision": "98b75f694a0c72ad26d2cab19ff56713676b56a6",
+    "sha256": "a8ab641089abd81b0bb4387ef47ecf63a193aba2051d6ed87a3b5e2c8fca1c4c"
+  }
+}

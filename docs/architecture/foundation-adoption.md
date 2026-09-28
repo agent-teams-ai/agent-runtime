@@ -46,6 +46,27 @@ capability below has an AR-owned configuration and executes in `pnpm check`.
 re-evaluated in the same PR that introduces the corresponding public contract or
 publishing workflow.
 
+## Node compatibility source policy evolution
+
+The stable28 documentation cohort and its managed files keep their original
+byte identities. The existing migration test also pinned the then-current
+Source Dependencies policy at SHA-256
+`073d904b6ed55ac5ae8d0738d2b50762cc65ef653ed647aa28e98b5d574370b0`
+at revision `ab8efe2874c0600ea3930b4fe72bfc68d173543d`. That is historical
+qualification evidence, not the identity of the live source policy.
+
+Revision `98b75f694a0c72ad26d2cab19ff56713676b56a6` scoped the existing
+ordinary PostgreSQL CI boundary to its two files and added an exact development
+boundary for the three Node compatibility CI files. The resulting live policy
+has SHA-256 `a8ab641089abd81b0bb4387ef47ecf63a193aba2051d6ed87a3b5e2c8fca1c4c`;
+the [successor identity](../../architecture/foundation/source-policy-node-compatibility-evolution.json)
+records both revisions. No governed root, workspace package or production
+boundary was removed. The Foundation source check and disposable rejecting
+fixtures must still reject an unclassified future CI file, unauthorized Node
+builtins in ordinary PostgreSQL CI, and imports outside the Node compatibility
+allowlist. The current source policy is pending the complete `pnpm check` gate;
+the stable28 managed cohort is unchanged.
+
 ## Advisory quality diagnostics
 
 Agent Runtime owns `architecture/foundation/quality-gate-runner.yaml`. Its only

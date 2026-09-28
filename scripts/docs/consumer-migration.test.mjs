@@ -109,13 +109,12 @@ test("Source Dependencies uses schema v3 with root package and every workspace p
   assert.match(source, /"architecture\.source-dependencies", "--consumer", root, "--json"/u);
 });
 
-test("qualified stable28 managed state and scoped source policy retain exact bytes", async () => {
+test("qualified stable28 managed state retains exact bytes", async () => {
   const expected = {
     "architecture/foundation/docs-consumer-integration.json": "1fc8cb4431b20d2e51cfb54194ba98fc121cd417bb42541e0bdf87040f759720",
     "architecture/foundation/docs-protocol-managed-state.json": "7b0f900339030d7aab0f17d5b84612d3f5ee35b457283d2755994c4284f36159",
     "architecture/foundation/docs-protocol-qualification.json": "1f7e50ec5b0e6ecc991668b83790b2367062240043c4b885c58377855968969b",
     "architecture/foundation/document-authoring.yaml": "d6f5ba4b178e742e122f6711c9d989d52a77768eb68527b0ecdf3c9a9699c6d2",
-    "architecture/foundation/source-dependencies.yaml": "073d904b6ed55ac5ae8d0738d2b50762cc65ef653ed647aa28e98b5d574370b0",
   };
   for (const [path, digest] of Object.entries(expected)) {
     assert.equal(createHash("sha256").update(await read(path)).digest("hex"), digest, path);
@@ -126,4 +125,32 @@ test("qualified stable28 managed state and scoped source policy retain exact byt
   const suite = await read("scripts/docs/docs-protocol-adoption.test.mjs");
   assert.doesNotMatch(suite, /Reflect\.get|runDocsProtocolQualificationV2/u);
   assert.match(suite, /for \(const scenario of scenarioContract\.scenarios\)/u);
+});
+
+test("scoped source policy has its reviewed successor identity", async () => {
+  const receipt = await json("architecture/foundation/source-policy-node-compatibility-evolution.json");
+  assert.deepEqual(receipt, {
+    schemaVersion: 1,
+    predecessor: {
+      revision: "ab8efe2874c0600ea3930b4fe72bfc68d173543d",
+      sha256: "073d904b6ed55ac5ae8d0738d2b50762cc65ef653ed647aa28e98b5d574370b0",
+    },
+    successor: {
+      revision: "98b75f694a0c72ad26d2cab19ff56713676b56a6",
+      sha256: "a8ab641089abd81b0bb4387ef47ecf63a193aba2051d6ed87a3b5e2c8fca1c4c",
+    },
+  });
+  assert.equal(createHash("sha256").update(await read("architecture/foundation/source-dependencies.yaml")).digest("hex"),
+    receipt.successor.sha256);
+  const policy = await yaml("architecture/foundation/source-dependencies.yaml");
+  const byId = new Map(policy.boundaries.map(boundary => [boundary.id, boundary]));
+  assert.deepEqual(byId.get("tooling.ordinary-postgres-ci")?.roots, [
+    "scripts/ci/run-ordinary-postgres.mjs",
+    "scripts/ci/run-ordinary-postgres.test.mjs",
+  ]);
+  assert.deepEqual(byId.get("tooling.node-compatibility-ci")?.roots, [
+    "scripts/ci/audit-node-engine-compatibility.mjs",
+    "scripts/ci/node-engine-compatibility.test.mjs",
+    "scripts/ci/node-runtime-compatibility.test.mjs",
+  ]);
 });
