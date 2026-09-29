@@ -58,6 +58,7 @@ export const v2InputPolicy = Object.freeze({
     "scripts/architecture/runtime-setup-l0-evidence-v2-inputs.mjs",
     "scripts/architecture/runtime-setup-l0-evidence-v2.mjs",
     "scripts/architecture/runtime-setup-l0-evidence-v2.test.mjs",
+    "scripts/architecture/runtime-setup-l0-evidence-v2-inventory.test.mjs",
     "scripts/architecture/runtime-setup-l0-evidence-validation.mjs",
     "scripts/architecture/runtime-setup-l0-evidence-validation.test.mjs",
     "scripts/architecture/runtime-setup-l0-evidence.mjs",
