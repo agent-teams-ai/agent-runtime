@@ -8,6 +8,8 @@ const root = new URL("../../", import.meta.url);
 const read = path => readFile(new URL(path, root), "utf8");
 const json = async path => JSON.parse(await read(path));
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
+const objectId = (type, bytes) => createHash("sha1")
+  .update(Buffer.from(`${type} ${bytes.length}\0`)).update(bytes).digest("hex");
 const yaml = async path => {
   const document = parseDocument(await read(path), { uniqueKeys: true });
   assert.deepEqual(document.errors, []);
@@ -153,8 +155,6 @@ test("scoped source policy retains both historic edges and its committed amendme
   // Git object hashes authenticate each retained object's bytes and bind each policy blob to its commit.
   const fixture = await json("scripts/docs/fixtures/source-policy-historic-git-objects.json");
   assert.equal(fixture.schemaVersion, 1);
-  const objectId = (type, bytes) => createHash("sha1")
-    .update(Buffer.from(`${type} ${bytes.length}\0`)).update(bytes).digest("hex");
   const historicObject = (type, id) => {
     const object = fixture.objects[id];
     assert.equal(object?.type, type, id);
@@ -181,7 +181,9 @@ test("scoped source policy retains both historic edges and its committed amendme
       assert.ok(space > offset && nul > space && nul + 21 <= tree.length, treeId);
       const entryMode = tree.toString("ascii", offset, space);
       const entryName = tree.toString("utf8", space + 1, nul);
-      if (entryName === name) matches.push({ mode: entryMode, id: tree.subarray(nul + 1, nul + 21).toString("hex") });
+      if (entryName === name) {
+        matches.push({ mode: entryMode, id: tree.subarray(nul + 1, nul + 21).toString("hex") });
+      }
       offset = nul + 21;
     }
     assert.equal(matches.length, 1, `${treeId}:${name}`);
