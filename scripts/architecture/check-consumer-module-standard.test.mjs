@@ -16,6 +16,8 @@ const fresh = async () => {
     pathExistence: new Map(inputs.pathExistence),
     profile: structuredClone(inputs.profile),
     passiveProfile: structuredClone(inputs.passiveProfile),
+    historicalDeltaBytes: Buffer.from(inputs.historicalDeltaBytes),
+    historicalReview: structuredClone(inputs.historicalReview),
     standardBytes: Buffer.from(inputs.standardBytes),
     standardDeltaBytes: Buffer.from(inputs.standardDeltaBytes),
     standardReview: structuredClone(inputs.standardReview),
@@ -42,16 +44,16 @@ test("rejects central pin drift and an unsupported active claim", async () => {
 
 test("rejects stale merged pins, split profile identities and retained byte drift", async () => {
   for (const [field, value] of [
-    ["gitCommit", "669a750d8db451e04f075cdeb36576c6606fba6e"],
-    ["sha256", "e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553"],
+    ["gitCommit", "ac49bb3374946330ec820591f8195a22d2c90900"],
+    ["sha256", "d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f"],
   ]) {
     const stale = await fresh();
     stale.profile.authority.consumerModuleStandard[field] = value;
     assert.throws(() => validateConsumerModuleStandard(stale), /reviewed pending-adoption record/u);
   }
   for (const [field, value] of [
-    ["commit", "669a750d8db451e04f075cdeb36576c6606fba6e"],
-    ["sha256", "e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553"],
+    ["commit", "ac49bb3374946330ec820591f8195a22d2c90900"],
+    ["sha256", "d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f"],
     ["path", "docs/another-standard.md"],
     ["anchor", "another-standard"],
     ["repository", "another/repository"],
@@ -68,18 +70,30 @@ test("rejects stale merged pins, split profile identities and retained byte drif
   assert.throws(() => validateConsumerModuleStandard(bytes), /retained standard bytes/u);
 });
 
-test("rejects stale or rewritten A3 pin migration evidence", async () => {
+test("rejects stale or rewritten current migration evidence and historical A3 drift", async () => {
   const stale = await fresh();
   stale.standardReview.after.commit = stale.standardReview.before.commit;
   assert.throws(() => validateConsumerModuleStandard(stale), /exact current pin/u);
 
-  const movingMain = await fresh();
-  movingMain.standardReview.sourceMainCommit = "main";
-  assert.throws(() => validateConsumerModuleStandard(movingMain), /source main commit drift/u);
+  const unsupported = await fresh();
+  unsupported.standardReview.scopeDisposition.dynamicAgentRuntime = "active";
+  assert.throws(() => validateConsumerModuleStandard(unsupported), /cannot promote unsupported scope/u);
 
   const expanded = await fresh();
-  expanded.standardReview.adoption.containedTurn = "active";
-  assert.throws(() => validateConsumerModuleStandard(expanded), /preserve scoped adoption states/u);
+  expanded.standardReview.scopeDisposition.containedTurn = "active";
+  assert.throws(() => validateConsumerModuleStandard(expanded), /cannot promote unsupported scope/u);
+
+  const missingAuthority = await fresh();
+  delete missingAuthority.standardReview.upstreamDecision;
+  assert.throws(() => validateConsumerModuleStandard(missingAuthority), /accepted upstream authority/u);
+
+  const wrongSource = await fresh();
+  wrongSource.standardReview.consumerSourceCommit = "moving-head";
+  assert.throws(() => validateConsumerModuleStandard(wrongSource), /source identity drift/u);
+
+  const history = await fresh();
+  history.historicalReview.after.commit = "moving-main";
+  assert.throws(() => validateConsumerModuleStandard(history), /exact current pin/u);
 
   const delta = await fresh();
   delta.standardDeltaBytes = Buffer.concat([delta.standardDeltaBytes, Buffer.from("drift")]);
@@ -90,6 +104,12 @@ test("rejects missing governed paths and proposed decision lifecycle drift", asy
   const missing = await fresh();
   missing.pathExistence.set(missing.profile.legacyBoundaries[0].factoryPath, false);
   assert.throws(() => validateConsumerModuleStandard(missing), /required adoption path is missing/u);
+
+  const missingMigration = await fresh();
+  missingMigration.pathExistence.set(
+    "architecture/get-modular/evidence/dynamic-host-cms-pin-review.json", false);
+  assert.throws(() => validateConsumerModuleStandard(missingMigration),
+    /required adoption path is missing/u);
 
   const accepted = await fresh();
   accepted.decisionBytes = Buffer.from(accepted.decisionBytes.toString("utf8")

@@ -388,9 +388,15 @@ test('historical lifecycle clarification review retains its exact immutable iden
   assert.equal(review.migrationStatus, 'reviewed-documentation-migrated');
 });
 
-test('current A3 reciprocal pin rejects the prior commit and prior document bytes', async () => {
-  const review = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/a3-cms-pin-review.json', import.meta.url)));
+test('current dynamic Host pin preserves A3 history and rejects prior document bytes', async () => {
+  const review = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/dynamic-host-cms-pin-review.json', import.meta.url)));
+  const historical = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/a3-cms-pin-review.json', import.meta.url)));
   const bytes = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard.md', import.meta.url), 'utf8');
+  const prior = bytes.replace('  - ADR-0029\n', '').replace(
+    /### Optional dynamic Host lifecycle candidate\n[\s\S]*?(?=\| Use \| Reject \| Evidence \|)/u, '');
+  assert.notEqual(prior, bytes, 'fixture must reconstruct the exact A3 document');
+  assert.equal(digest(prior), review.before.sha256);
+  assert.equal(review.before.sha256, historical.after.sha256);
   const added = `Agent Runtime has accepted static Core/Assembly adoption for passive setup and
 ordinary-session composition in [Agent Runtime PR #168](https://github.com/agent-teams-ai/agent-runtime/pull/168),
 merged as \`3cd722f607e1643b809f6946ee303a5a94469171\`. This reciprocal reference
@@ -408,9 +414,9 @@ production consumers. No consumer ledger entry or repository-wide conformance is
 created by this decision. Record reciprocal consumer evidence only after that
 consumer's exact scoped acceptance gates pass. Contained-turn migration, full
 legacy conversion and shared checker extraction require separate scope.`;
-  const prior = bytes.replace(added, removed);
-  assert.notEqual(prior, bytes, 'fixture must reconstruct the exact prior document');
-  assert.equal(digest(prior), review.before.sha256);
+  const preA3 = prior.replace(added, removed);
+  assert.notEqual(preA3, prior, 'fixture must reconstruct the pre-A3 document');
+  assert.equal(digest(preA3), historical.before.sha256);
   assert.equal(pending.standard.commit, review.after.commit);
   assert.equal(pending.standard.sha256, review.after.sha256);
   assert.equal(digest(bytes), review.after.sha256);

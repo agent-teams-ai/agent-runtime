@@ -5,8 +5,11 @@ import { dirname, posix, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseSync, Visitor } from "oxc-parser";
 import {
+  historicalDeltaPath,
+  historicalReviewPath,
   standardDeltaPath,
   standardReviewPath,
+  validateHistoricalA3Migration,
   validateStandardMigration,
 } from "./consumer-module-standard-pin.mjs";
 
@@ -32,8 +35,8 @@ export const EXPECTED_PROFILE = Object.freeze({
       repository: "agent-teams-ai/get-modular",
       path: "docs/architecture/common-assembly.md",
       anchor: "consumer-module-standard",
-      gitCommit: "ac49bb3374946330ec820591f8195a22d2c90900",
-      sha256: "d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f",
+      gitCommit: "24d6557a1b04b01a3a73c64b1d9a9afd83d89c8f",
+      sha256: "33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd",
     },
     featureModuleStandard: {
       repository: "agent-teams-ai/.github",
@@ -109,6 +112,8 @@ const requiredPaths = Object.freeze([
   "docs/architecture/contained-turn-consumer-module-standard-adoption.md",
   standardReviewPath,
   standardDeltaPath,
+  historicalReviewPath,
+  historicalDeltaPath,
   entrypointPath,
   declarationPath,
   factoryPath,
@@ -373,6 +378,8 @@ export async function loadConsumerModuleStandardInputs(root = repositoryRoot) {
     "architecture/get-modular/evidence/consumer-module-standard.md"));
   const standardReview = JSON.parse(await readFile(resolve(root, standardReviewPath), "utf8"));
   const standardDeltaBytes = await readFile(resolve(root, standardDeltaPath));
+  const historicalReview = JSON.parse(await readFile(resolve(root, historicalReviewPath), "utf8"));
+  const historicalDeltaBytes = await readFile(resolve(root, historicalDeltaPath));
   const packageManifest = JSON.parse(await readFile(resolve(root, packagePath), "utf8"));
   const decisionRegistry = JSON.parse(await readFile(resolve(root, decisionRegistryPath), "utf8"));
   const decisionBytes = await readFile(resolve(root, decisionPath));
@@ -384,7 +391,7 @@ export async function loadConsumerModuleStandardInputs(root = repositoryRoot) {
     catch { return [path, false]; }
   })));
   return { decisionBytes, decisionRegistry, packageManifest, passiveProfile, pathExistence, profile, sources,
-    standardBytes, standardDeltaBytes, standardReview };
+    standardBytes, standardDeltaBytes, standardReview, historicalReview, historicalDeltaBytes };
 }
 
 const validatePendingDecision = inputs => {
@@ -417,6 +424,7 @@ export function validateConsumerModuleStandard(inputs) {
   assert.equal(createHash("sha256").update(inputs.standardBytes).digest("hex"),
     standard.sha256, "retained standard bytes must match the reviewed pin");
   validateStandardMigration(inputs.standardReview, inputs.standardDeltaBytes);
+  validateHistoricalA3Migration(inputs.historicalReview, inputs.historicalDeltaBytes);
 
   for (const path of requiredPaths) {
     assert.equal(inputs.pathExistence.get(path), true, `required adoption path is missing: ${path}`);

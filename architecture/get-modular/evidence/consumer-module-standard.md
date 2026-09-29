@@ -7,6 +7,7 @@ summary: Bounded plan and execution contract for the optional assembly component
 related:
   - ADR-0023
   - ADR-0026
+  - ADR-0029
   - ARCH-CURRENT-CONTRACT
   - ARCH-MVP-IMPLEMENTATION-ROADMAP
 ---
@@ -93,6 +94,37 @@ a false type claim.
 Construction may be async without making domain APIs async. Preserve Host-owned
 cleanup, the created journal and untransferred returned-product handoff. Do not
 introduce a generic lifecycle manager for passive construction.
+
+### Optional dynamic Host lifecycle candidate
+
+[ADR-0029](../decisions/0029-admit-an-optional-lifecycle-kernel-candidate.md)
+admits `@get-modular/lifecycle-kernel` only as a candidate shared policy package.
+The Host still owns trusted artifact admission, literal imports, grants,
+product generation IDs, readiness, routing, async work, resource handles,
+cleanup and recovery. Core/Assembly do not import the kernel. This does not
+change a passive composition scope or certify Agent Runtime dynamic adoption.
+
+For an explicitly adopted dynamic scope, keep inert selected declarations
+separate from executable loaders. Reject the **whole selected graph** for
+namespace, capability, binding or loader mismatch before any candidate import.
+The Host creates a strong construction-attempt owner before the first import,
+reserves custody before each possible acquisition, and checks live call and
+product authority again after awaits and immediately before effects. Kernel
+call/custody leases are bookkeeping identities, not artifact grants or cleanup
+tickets. New admission closes at quiesce; ordinary effects close at retirement.
+Private owner cleanup may continue afterward without restoring plugin authority.
+An observer timeout never releases held work or proves physical disposal.
+
+Record source SHA, exact package/archive hashes, this standard's full-document
+SHA-256 and retained copy, TEST/production classification and real rejecting
+commands in the consumer profile. A synthetic TEST Host can demonstrate these
+races but cannot
+meet ADR-0028's two production ownership scopes or G1 public qualification.
+Until those gates and a product's local adoption decision pass, classify the
+dynamic boundary as pending. Retained consumers that initiate **new** calls
+after owner retirement are outside the first kernel contract; supporting them
+requires a successor decision, separate evidence and product policy rather
+than treating custody as invocation authority.
 
 | Use | Reject | Evidence |
 | --- | --- | --- |

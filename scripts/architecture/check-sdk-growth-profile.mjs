@@ -4,6 +4,10 @@ import { globSync, readFileSync } from "node:fs";
 import { posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
+import {
+  historicalDeltaPath, standardDeltaPath, validateHistoricalA3Migration,
+  validateStandardMigration,
+} from "./consumer-module-standard-pin.mjs";
 
 const directory = "architecture/sdk-growth";
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -146,12 +150,22 @@ export function checkSdkGrowthProfile(repository = root) {
   checkRegistryIdentity(activation);
   assert.equal(activation.authority.candidateWorkflowIsAuthority, false);
   const review = json("architecture/get-modular/evidence/sdk-growth-standard-review.json");
-  const migrationReview = json("architecture/get-modular/evidence/a3-cms-pin-review.json");
+  const historicalMigration = json("architecture/get-modular/evidence/a3-cms-pin-review.json");
+  const migrationReview = json("architecture/get-modular/evidence/dynamic-host-cms-pin-review.json");
   const consumerProfile = json("architecture/get-modular/consumer-profile.json");
-  assert.equal(migrationReview.historicalReview,
+  validateHistoricalA3Migration(historicalMigration, readFileSync(resolve(repository, historicalDeltaPath)));
+  validateStandardMigration(migrationReview, readFileSync(resolve(repository, standardDeltaPath)));
+  assert.equal(historicalMigration.historicalReview,
     "architecture/get-modular/evidence/sdk-growth-standard-review.json", "SDK_CMS_REVIEW_DRIFT");
-  assert.equal(review.activeCommit, migrationReview.before.commit, "SDK_CMS_REVIEW_DRIFT");
-  assert.equal(review.activeSha256, migrationReview.before.sha256, "SDK_CMS_REVIEW_DRIFT");
+  assert.equal(review.activeCommit, historicalMigration.before.commit, "SDK_CMS_REVIEW_DRIFT");
+  assert.equal(review.activeSha256, historicalMigration.before.sha256, "SDK_CMS_REVIEW_DRIFT");
+  assert.equal(migrationReview.historicalReview,
+    "architecture/get-modular/evidence/a3-cms-pin-review.json", "SDK_CMS_REVIEW_DRIFT");
+  assert.equal(migrationReview.before.commit, historicalMigration.after.commit, "SDK_CMS_REVIEW_DRIFT");
+  assert.equal(migrationReview.before.sha256, historicalMigration.after.sha256, "SDK_CMS_REVIEW_DRIFT");
+  assert.equal(sha256(readFileSync(resolve(repository,
+    "architecture/c0/ar-owned-lifetime/evidence/common-assembly-ac49bb33.md"))),
+  historicalMigration.after.sha256, "SDK_CMS_REVIEW_DRIFT");
   assert.equal(consumerProfile.standard.commit, migrationReview.after.commit, "SDK_CMS_PIN_DRIFT");
   assert.equal(consumerProfile.standard.sha256, migrationReview.after.sha256, "SDK_CMS_PIN_DRIFT");
   assert.equal(createHash("sha256").update(readFileSync(resolve(repository,

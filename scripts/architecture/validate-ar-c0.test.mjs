@@ -216,6 +216,17 @@ test('rejects wrong current CMS authority while leaving non-CMS profile evolutio
     /current active CMS authority drift/u,
   );
 });
+test('rejects a pending profile left on the historical A3 pin', () => {
+  const path = 'architecture/consumer-module-standard/contained-turn-profile.json';
+  const candidate = JSON.parse(read(path));
+  candidate.authority.consumerModuleStandard.gitCommit = original.cms.after.commit;
+  candidate.authority.consumerModuleStandard.sha256 = original.cms.after.sha256;
+  const bytes = Buffer.from(`${JSON.stringify(candidate,null,2)}\n`);
+  assert.throws(
+    () => validateCmsProfileTransition(original, {readCurrentBytes:currentRead(new Map([[path,bytes]]))}),
+    /current pending CMS authority drift/u,
+  );
+});
 test('rejects an unreviewed current authority change outside the delegated CMS slot', () => {
   const path = 'architecture/get-modular/consumer-profile.json';
   const candidate = JSON.parse(read(path));
@@ -233,6 +244,28 @@ test('rejects drift in historical CMS bytes authenticated from the retained revi
     () => validateContract(original,receipt,{readRevisionBytes:revisionRead(revisions)}),
     /historical CMS complete bytes drift/u,
   );
+});
+test('rejects rewritten frozen C0 successor bytes after the current pin migration', () => {
+  const path = original.cms.after.evidencePath;
+  assert.throws(
+    () => validateContract(original,receipt,{readBytes:p => p === path ? Buffer.from('drift\n') : read(p)}),
+    /frozen successor CMS complete bytes drift/u,
+  );
+});
+test('rejects current CMS migration review or delta drift', () => {
+  const reviewPath = 'architecture/get-modular/evidence/dynamic-host-cms-pin-review.json';
+  const deltaPath = 'architecture/get-modular/evidence/dynamic-host-cms-pin-delta.diff';
+  const review = JSON.parse(read(reviewPath));
+  review.after.sha256 = '0'.repeat(64);
+  for (const [path, bytes, error] of [
+    [reviewPath, Buffer.from(`${JSON.stringify(review,null,2)}\n`), /dynamic Host migration must retain the exact current pin/u],
+    [deltaPath, Buffer.from('drift\n'), /dynamic Host migration exact byte delta drift/u],
+  ]) {
+    assert.throws(
+      () => validateContract(original,receipt,{readBytes:p => p === path ? bytes : read(p)}),
+      error,
+    );
+  }
 });
 const cases = [
   ['unsupported schema revision', c => {c.schemaVersion=2;}, /schema revision/],

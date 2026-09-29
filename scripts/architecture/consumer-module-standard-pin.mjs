@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 
-export const standardReviewPath = "architecture/get-modular/evidence/a3-cms-pin-review.json";
-export const standardDeltaPath = "architecture/get-modular/evidence/a3-cms-pin-delta.diff";
+export const historicalReviewPath = "architecture/get-modular/evidence/a3-cms-pin-review.json";
+export const historicalDeltaPath = "architecture/get-modular/evidence/a3-cms-pin-delta.diff";
+export const standardReviewPath = "architecture/get-modular/evidence/dynamic-host-cms-pin-review.json";
+export const standardDeltaPath = "architecture/get-modular/evidence/dynamic-host-cms-pin-delta.diff";
 
 const expected = Object.freeze({
   before: {
@@ -21,7 +23,7 @@ const expected = Object.freeze({
   deltaSha256: "75fbaee48d4e6c7ad61548f15237a62a8a0e5e85cd8a642ec29a335a13de49d8",
 });
 
-export const validateStandardMigration = (review, deltaBytes) => {
+export const validateHistoricalA3Migration = (review, deltaBytes) => {
   assert.deepEqual({
     schemaVersion: review.schemaVersion,
     reviewedOn: review.reviewedOn,
@@ -45,7 +47,7 @@ export const validateStandardMigration = (review, deltaBytes) => {
     "standard migration review source document commit drift");
   assert.equal(review.sourceMainSha256, expected.after.sha256,
     "standard migration review source main bytes drift");
-  assert.equal(review.delta?.path, standardDeltaPath,
+  assert.equal(review.delta?.path, historicalDeltaPath,
     "standard migration review delta path drift");
   assert.equal(review.delta?.sha256, expected.deltaSha256,
     "standard migration review delta digest drift");
@@ -70,4 +72,56 @@ export const validateStandardMigration = (review, deltaBytes) => {
   assert.match(review.historicalReviewDisposition,
     /not current upstream authority and is not used for this pin/u,
     "standard migration cannot treat uncommitted historical bytes as authority");
+};
+
+export const validateStandardMigration = (review, deltaBytes) => {
+  assert.deepEqual({
+    schemaVersion: review.schemaVersion,
+    reviewedOn: review.reviewedOn,
+    repository: review.repository,
+    path: review.path,
+    anchor: review.anchor,
+  }, {
+    schemaVersion: 1,
+    reviewedOn: "2026-09-29",
+    repository: "agent-teams-ai/get-modular",
+    path: "docs/architecture/common-assembly.md",
+    anchor: "consumer-module-standard",
+  }, "dynamic Host migration review identity drift");
+  assert.equal(review.consumerSourceCommit,
+    "be0a811288da4261d26063790c9f7924991523fe",
+    "dynamic Host migration source identity drift");
+  assert.deepEqual(review.before, expected.after,
+    "dynamic Host migration must start at the reviewed A3 pin");
+  assert.deepEqual(review.after, {
+    commit: "24d6557a1b04b01a3a73c64b1d9a9afd83d89c8f",
+    sha256: "33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd",
+    byteLength: 24312,
+    evidencePath: "architecture/get-modular/evidence/consumer-module-standard.md",
+  }, "dynamic Host migration must retain the exact current pin");
+  assert.deepEqual(review.upstreamDecision, {
+    id: "ADR-0029",
+    path: "docs/decisions/0029-admit-an-optional-lifecycle-kernel-candidate.md",
+    sha256: "9247eb2c2eb70cbbc215426446101314b1085d1d03fee02b6dc0467a737eac00",
+    status: "accepted",
+  }, "dynamic Host migration must identify its accepted upstream authority");
+  assert.deepEqual(review.delta, {
+    path: standardDeltaPath,
+    sha256: "68ae0186812b6f6d8615bd064f0b523537ba07b0f547336e28ca34b78a7eac8b",
+    hunks: 2,
+    removedLines: 0,
+    addedLines: 32,
+    summary: "Adds ADR-0029 to related decisions and 31 lines for an optional dynamic Host lifecycle candidate.",
+  }, "dynamic Host migration delta summary drift");
+  assert.equal(createHash("sha256").update(deltaBytes).digest("hex"),
+    review.delta.sha256, "dynamic Host migration exact byte delta drift");
+  assert.deepEqual(review.scopeDisposition, {
+    passiveAndOrdinary: "active-unchanged",
+    containedTurn: "pending-unchanged",
+    dynamicAgentRuntime: "not-certified",
+    packageUpgrade: "none",
+    sdkExternalAuthority: "pending-authority-qualification",
+  }, "dynamic Host migration cannot promote unsupported scope");
+  assert.equal(review.historicalReview, historicalReviewPath,
+    "dynamic Host migration must preserve the historical A3 review");
 };

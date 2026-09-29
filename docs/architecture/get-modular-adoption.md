@@ -107,22 +107,24 @@ bounded contract. ADR-0008 and its historical evidence remain immutable;
 ADR-0013 continues to govern exactly its three active FMS features.
 
 The central authority is Get Modular's accepted ADR-0026 and the exact pinned
-[consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/ac49bb3374946330ec820591f8195a22d2c90900/docs/architecture/common-assembly.md#consumer-module-standard).
-The A3 pin migration supersedes the retained merged PR110 revision:
+[consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/24d6557a1b04b01a3a73c64b1d9a9afd83d89c8f/docs/architecture/common-assembly.md#consumer-module-standard).
+The reviewed dynamic Host pin migration supersedes the A3 pin; the A3 review
+remains historical:
 
 - Repository: `agent-teams-ai/get-modular`.
-- Commit: `ac49bb3374946330ec820591f8195a22d2c90900`.
+- Commit: `24d6557a1b04b01a3a73c64b1d9a9afd83d89c8f`.
 - Path: `docs/architecture/common-assembly.md`; anchor: `consumer-module-standard`.
-- Complete document SHA-256: `d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f`.
+- Complete document SHA-256: `33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd`.
 - Retained bytes are recorded by the consumer profile; they are evidence, not a second authority.
 
 Document identity, package versions/archive integrity, Core compatibility token,
 and local adoption authority are distinct. The profile retains the approved published
 Core and Assembly 0.1.0 archives, verifies their SHA-256 and lock integrity,
 and requires exact catalog versions. It records actual blocking commands,
-without `conformant: true` for the repository. The exact A3 migration from the
-merged PR110 document is reviewed below against immutable commit and document
-identities; no moving main is consumed.
+without `conformant: true` for the repository. The A3 migration from the
+merged PR110 document remains reviewed below. The current dynamic Host
+migration is reviewed separately against exact upstream bytes; no moving main
+is consumed.
 
 The consumed release sources are distinct from the standard pin:
 
@@ -782,8 +784,8 @@ complete-document SHA-256
 `d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f`.
 Get Modular main was observed at exact source commit
 `6b31f20fe3e5fb8324812aa2ee907905751cde71`; its complete document bytes are
-unchanged from `ac49bb3374946330ec820591f8195a22d2c90900`. The retained current standard
-is byte-identical to that immutable source. Main itself is not the pin.
+unchanged from `ac49bb3374946330ec820591f8195a22d2c90900`. The retained standard
+at that checkpoint was byte-identical to that immutable source. Main itself was not the pin.
 
 The [complete byte delta](../../architecture/get-modular/evidence/a3-cms-pin-delta.diff)
 is one replacement hunk: six lines describing Agent Runtime as a planned
@@ -806,3 +808,33 @@ candidate-controlled workflow or passing profile fixture is not this authority.
 Linux portable checks do not establish Darwin qualification; existing paired
 Host evidence and its outstanding work remain separate. K1/A1/A2 and dynamic
 plugins are outside this delivery.
+
+## Reviewed optional dynamic Host standard pin migration
+
+At exact Agent Runtime source `be0a811288da4261d26063790c9f7924991523fe`,
+the [new migration review](../../architecture/get-modular/evidence/dynamic-host-cms-pin-review.json)
+compares historical A3 pin `ac49bb3374946330ec820591f8195a22d2c90900`
+(SHA-256 `d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f`)
+with exact Get Modular main `24d6557a1b04b01a3a73c64b1d9a9afd83d89c8f`
+(SHA-256 `33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd`).
+The [retained delta](../../architecture/get-modular/evidence/dynamic-host-cms-pin-delta.diff)
+adds ADR-0029 to related authority and an optional dynamic Host lifecycle
+candidate section. The supplied accepted ADR-0029 bytes have SHA-256
+`9247eb2c2eb70cbbc215426446101314b1085d1d03fee02b6dc0467a737eac00`.
+The earlier [A3 review](../../architecture/get-modular/evidence/a3-cms-pin-review.json)
+and its delta remain historical and are still enforced by the checker.
+
+The new section requires whole selected graph rejection before dynamic candidate
+imports, Host-owned construction and acquisition custody, and authority checks
+after awaits before effects. It describes bookkeeping call and custody leases,
+retirement limits, and exact evidence for an explicitly adopted dynamic scope.
+Its own text says passive composition scope is unchanged and Agent Runtime
+dynamic adoption is not certified. No lifecycle kernel package is added here;
+Core and Assembly archive pins stay fixed. Passive setup and ordinary-session
+scope remain active, contained-turn remains pending, and SDK external authority
+remains pending qualification. Current profile and retained bytes use the exact
+new pin. This migration alone supplies no dynamic production adoption evidence.
+The SDK profile gate checks the new reviewed pin after authenticating the A3
+review and frozen A3 bytes. The C0 gate authenticates its frozen `ac49bb33`
+successor separately, then checks this reviewed current transition and both
+current profile authority slots without changing the C0 contract or verdicts.

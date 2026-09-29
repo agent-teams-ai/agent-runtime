@@ -16,7 +16,7 @@ const contract = JSON.parse(readFileSync(join(root, contractPath), "utf8"));
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), "ar-sdk-profile-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  for (const path of [contractPath, "architecture/c0/ar-owned-lifetime/identity.json", ".github/workflows/ci.yml", "pnpm-workspace.yaml", "architecture/sdk-growth", "architecture/get-modular/consumer-profile.json", "architecture/get-modular/evidence/consumer-module-standard.md", "architecture/get-modular/evidence/a3-cms-pin-review.json", "architecture/get-modular/evidence/sdk-growth-standard-review.json", "architecture/get-modular/evidence/sdk-growth-current-standard.md", "architecture/consumer-module-standard/contained-turn-profile.json", ...contract.inventory.packages.map(pkg => pkg.manifest)]) {
+  for (const path of [contractPath, "architecture/c0/ar-owned-lifetime/identity.json", "architecture/c0/ar-owned-lifetime/evidence/common-assembly-ac49bb33.md", ".github/workflows/ci.yml", "pnpm-workspace.yaml", "architecture/sdk-growth", "architecture/get-modular/consumer-profile.json", "architecture/get-modular/evidence/consumer-module-standard.md", "architecture/get-modular/evidence/a3-cms-pin-review.json", "architecture/get-modular/evidence/a3-cms-pin-delta.diff", "architecture/get-modular/evidence/dynamic-host-cms-pin-review.json", "architecture/get-modular/evidence/dynamic-host-cms-pin-delta.diff", "architecture/get-modular/evidence/sdk-growth-standard-review.json", "architecture/get-modular/evidence/sdk-growth-current-standard.md", "architecture/consumer-module-standard/contained-turn-profile.json", ...contract.inventory.packages.map(pkg => pkg.manifest)]) {
     mkdirSync(dirname(join(directory, path)), { recursive: true });
     cpSync(join(root, path), join(directory, path), { recursive: true });
   }
@@ -200,7 +200,17 @@ test("reject drift in the preserved historical A3 CMS review", t => {
 });
 test("reject the current CMS pin detached from the fresh migration review", t => {
   const directory = fixture(t);
+  mutate(directory, "architecture/get-modular/evidence/dynamic-host-cms-pin-review.json", value => { value.after.sha256 = "0".repeat(64); });
+  assert.throws(() => checkSdkGrowthProfile(directory), /dynamic Host migration must retain the exact current pin/u);
+});
+test("reject historical A3 review drift after the current migration", t => {
+  const directory = fixture(t);
   mutate(directory, "architecture/get-modular/evidence/a3-cms-pin-review.json", value => { value.after.sha256 = "0".repeat(64); });
+  assert.throws(() => checkSdkGrowthProfile(directory), /standard migration review must retain the exact current pin/u);
+});
+test("reject the current CMS pin detached from the reviewed migration", t => {
+  const directory = fixture(t);
+  mutate(directory, "architecture/get-modular/consumer-profile.json", value => { value.standard.commit = "0".repeat(40); });
   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CMS_PIN_DRIFT/u);
 });
 test("reject exported runner omitted from actual package files", t => {

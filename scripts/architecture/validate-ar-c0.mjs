@@ -6,6 +6,9 @@ import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
 import {v2InputPolicy} from './runtime-setup-l0-evidence-v2-inputs.mjs';
 import {
+  standardDeltaPath, standardReviewPath, validateStandardMigration,
+} from './consumer-module-standard-pin.mjs';
+import {
   acceptedA3Revision,
   currentCmsStandard,
   validateCmsProfileTransition as validateCmsProfileTransitionCore,
@@ -383,11 +386,15 @@ function validateContractBytes(c, readBytes, readRevisionBytes) {
   assert.equal(cms.after.commit, 'ac49bb3374946330ec820591f8195a22d2c90900');
   assert.equal(sha256(readRevisionBytes(base, cms.before.evidencePath)), cms.before.sha256, 'historical CMS complete bytes drift');
   assert.equal(sha256(readBytes(cms.after.evidencePath)), cms.after.sha256, 'frozen successor CMS complete bytes drift');
+  const migration = JSON.parse(readBytes(standardReviewPath));
+  validateStandardMigration(migration, readBytes(standardDeltaPath));
+  assert.equal(migration.before.commit, cms.after.commit, 'current CMS migration predecessor drift');
+  assert.equal(migration.before.sha256, cms.after.sha256, 'current CMS migration predecessor bytes drift');
+  assert.equal(migration.after.commit, active.standard.commit, 'current CMS migration successor drift');
+  assert.equal(migration.after.sha256, active.standard.sha256, 'current CMS migration successor bytes drift');
   assert.equal(sha256(readBytes(active.standard.evidencePath)), active.standard.sha256, 'current CMS complete bytes drift');
-  assert.ok(
-    Buffer.from(readBytes(active.standard.evidencePath)).equals(Buffer.from(readBytes(cms.after.evidencePath))),
-    'current CMS evidence differs from frozen authenticated successor bytes',
-  );
+  assert.notEqual(sha256(readBytes(active.standard.evidencePath)), cms.after.sha256,
+    'current CMS evidence still uses frozen C0 successor bytes');
   assert.equal(cms.after.sha256, 'd5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f');
   assert.equal(cms.fullDocumentBytesEqual, false, 'false CMS byte no-op');
   assert.match(cms.normativeContractDelta, /^no-op:/u);

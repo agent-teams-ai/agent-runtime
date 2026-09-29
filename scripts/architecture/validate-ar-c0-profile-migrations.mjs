@@ -28,16 +28,16 @@ const acceptedCmsAuthority = Object.freeze({
     path: 'docs/architecture/common-assembly.md',
     anchor: 'consumer-module-standard',
     decision: 'ADR-0026',
-    commit: 'ac49bb3374946330ec820591f8195a22d2c90900',
-    sha256: 'd5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f',
+    commit: '24d6557a1b04b01a3a73c64b1d9a9afd83d89c8f',
+    sha256: '33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd',
     evidencePath: 'architecture/get-modular/evidence/consumer-module-standard.md',
   },
   currentPendingAuthority: {
     repository: 'agent-teams-ai/get-modular',
     path: 'docs/architecture/common-assembly.md',
     anchor: 'consumer-module-standard',
-    gitCommit: 'ac49bb3374946330ec820591f8195a22d2c90900',
-    sha256: 'd5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f',
+    gitCommit: '24d6557a1b04b01a3a73c64b1d9a9afd83d89c8f',
+    sha256: '33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd',
   },
 });
 
