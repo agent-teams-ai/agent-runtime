@@ -354,14 +354,22 @@ original source closure. Current specification counts cannot redefine that recor
 
 The original `runtime-setup-assembly-adoption-v2-evidence.json` remains retained
 byte-for-byte (SHA-256 `08fef99589d67358f020e3a0b063a44d6c4c99381370f76b2ca200b005d9bf3d`).
-Following the Node 26 compatibility source change, the single current selection is
-`docs/spikes/runtime-setup-assembly-adoption-v2-node26-successor-evidence.json`.
+Following the intentional deterministic held-digest test change at
+`10e974269f622330f4e1b2ee25f8e7364d916a57`, the single current selection is
+`docs/spikes/runtime-setup-assembly-adoption-v2-node26-held-digest-successor-evidence.json`.
+The former successor report remains retained byte-for-byte at
+`docs/spikes/runtime-setup-assembly-adoption-v2-node26-successor-evidence.json`
+(SHA-256 `e261db9b564aa9f012417561584a048666abe2efd92facb792a9956c30b54b87`).
+It binds source `b11fbb42aa6c7082e7f9bc00c758f4007218b8d9` and its 1,977
+inputs; one covered test input changed at `10e9742`, so those paired receipts
+cannot authenticate the new SOURCE revision.
 The prior Node26-named report is retained byte-for-byte at its original path
 (SHA-256 `8ba80a3da8746f8eac5c1d0ac0e8e01e8db5e242ca2f6fead8d8f3e63a021067`).
 Its source revision `1202e278b1605cc6243ceb42944eb30d07270172` has
-1,974 inputs, while the current closure has 1,975. Its authentic paired
+1,974 inputs, while the next historical closure had 1,975. Its authentic paired
 receipts cannot be relabeled for the successor.
-The successor checker pins both older reports, requires both new receipts to
+The successor checker pins all three older v2 reports and retained v1. It
+requires both new receipts to
 match its exact SOURCE revision and inventory, and rejects the former
 release-age compatibility exception. Until capture and delivery, the missing
 successor report fails the current check. V2 binds ADR-0015,
@@ -464,13 +472,20 @@ source checkout:
 ```sh
 node scripts/architecture/runtime-setup-l0-evidence.mjs \
   --merge-adoption-receipts "$LINUX_RECEIPT" "$DARWIN_RECEIPT" \
-  --output docs/spikes/runtime-setup-assembly-adoption-v2-node26-successor-evidence.json
+  --output docs/spikes/runtime-setup-assembly-adoption-v2-node26-held-digest-successor-evidence.json
 node scripts/architecture/runtime-setup-l0-evidence.mjs --check
 ```
 
 Deliver only that newly created report as revision D; all SOURCE inputs must
 still resolve to R. The checker rejects a claimed SOURCE revision that already
-contains the successor report. Do not mutate any retained report or receipt.
+contains the new successor report. Do not mutate any retained report or receipt.
+This is a report selection and evidence retention update. The pinned Consumer
+Module Standard still governs the same passive composition scope; its guidance,
+local adoption profile and accepted ADR bytes are unchanged. The retained
+standard at `24d6557a1b04b01a3a73c64b1d9a9afd83d89c8f` hashes to the
+profile's SHA-256 `33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd`.
+Current upstream could not be reached in this checkout, so this checkpoint
+does not migrate or claim to review a moving upstream revision.
 This Linux x64 host cannot capture the required Darwin arm64 receipt.
 
 The single report embeds each original receipt and every referenced artifact as

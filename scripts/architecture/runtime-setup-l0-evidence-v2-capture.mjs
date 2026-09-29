@@ -10,7 +10,11 @@ import { command, targets, tools, sha256, json, requirePostgres, validateReceipt
 
 // The earlier v2 deliveries stay at their original paths. This is the single
 // current-report selection shared by merge and the default check command.
-export const v2ReportPath = "docs/spikes/runtime-setup-assembly-adoption-v2-node26-successor-evidence.json";
+export const v2ReportPath = "docs/spikes/runtime-setup-assembly-adoption-v2-node26-held-digest-successor-evidence.json";
+export const retainedSuccessor = Object.freeze({
+  path: "docs/spikes/runtime-setup-assembly-adoption-v2-node26-successor-evidence.json",
+  sha256: "e261db9b564aa9f012417561584a048666abe2efd92facb792a9956c30b54b87",
+});
 export const retainedNode26 = Object.freeze({
   path: "docs/spikes/runtime-setup-assembly-adoption-v2-node26-evidence.json",
   sha256: "8ba80a3da8746f8eac5c1d0ac0e8e01e8db5e242ca2f6fead8d8f3e63a021067",
@@ -98,10 +102,11 @@ function reportBody(root, current, references) {
   assert.equal(sha256(readFileSync(resolve(root, retainedV1.path))), retainedV1.sha256, "retained v1 bytes drifted");
   assert.equal(sha256(readFileSync(resolve(root, retainedV2.path))), retainedV2.sha256, "retained original v2 bytes drifted");
   assert.equal(sha256(readFileSync(resolve(root, retainedNode26.path))), retainedNode26.sha256, "retained Node26 v2 bytes drifted");
+  assert.equal(sha256(readFileSync(resolve(root, retainedSuccessor.path))), retainedSuccessor.sha256, "retained successor v2 bytes drifted");
   return {schemaVersion: 2, evidenceKind: "runtime-setup-static-assembly-construction",
     identity: current, authority: adoptionAuthority,
     historical: {revision: historicalSpecRevision, path: adoptionPaths.historical, sha256: retainedHistoricalSha256, sourceRevision: historical.sourceRevision},
-    retainedV1, retainedV2, retainedNode26,
+    retainedV1, retainedV2, retainedNode26, retainedSuccessor,
     construction: adoptionConstruction, requiredTargets: targets, receipts: references,
     scope: "embedded-runtime passive setup",
     limitations: ["hashes-authenticate-bytes-not-independent-execution", "historical-L1-HOLD-unchanged",
