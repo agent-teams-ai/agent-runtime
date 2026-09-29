@@ -353,9 +353,16 @@ original source closure. Current specification counts cannot redefine that recor
 The original `runtime-setup-assembly-adoption-v2-evidence.json` remains retained
 byte-for-byte (SHA-256 `08fef99589d67358f020e3a0b063a44d6c4c99381370f76b2ca200b005d9bf3d`).
 Following the Node 26 compatibility source change, the single current selection is
-`docs/spikes/runtime-setup-assembly-adoption-v2-node26-evidence.json`. Its absence
-fails the current check; the original report never substitutes for it. The
-successor also authenticates the original v2 bytes. V2 binds ADR-0015,
+`docs/spikes/runtime-setup-assembly-adoption-v2-node26-successor-evidence.json`.
+The prior Node26-named report is retained byte-for-byte at its original path
+(SHA-256 `8ba80a3da8746f8eac5c1d0ac0e8e01e8db5e242ca2f6fead8d8f3e63a021067`).
+Its source revision `1202e278b1605cc6243ceb42944eb30d07270172` has
+1,974 inputs, while the current closure has 1,975. Its authentic paired
+receipts cannot be relabeled for the successor.
+The successor checker pins both older reports, requires both new receipts to
+match its exact SOURCE revision and inventory, and rejects the former
+release-age compatibility exception. Until capture and delivery, the missing
+successor report fails the current check. V2 binds ADR-0015,
 the historical records, current construction traces and a bounded tracked Runtime
 Setup input closure to exactly two receipts: Linux x64 and Darwin arm64, both using
 Node `v24.18.0` and pnpm `11.18.0`. The two original explicit Node test argv lists
@@ -393,12 +400,53 @@ Linux PostgreSQL database and uploads each original receipt with its sibling
 artifacts; a failed job cannot supply acceptable evidence. Collect the two
 artifacts from the same source revision and retain their original bytes.
 
-In clean disposable checkouts of the same final implementation commit, install
-with `pnpm install --frozen-lockfile`, then run
-`pnpm --filter './packages/**' -r run clean` and `pnpm product:build` with native
-prerequisites available. Run this command separately on each required target:
+First commit all final SOURCE inputs as revision R. In fresh disposable
+`*-TEST` checkouts of that exact R on Linux x64 and Darwin arm64, use Node
+`v24.18.0` and pnpm `11.18.0`. Confirm `git status --porcelain` is empty and
+`git rev-parse HEAD` equals R on each host, and that
+`node --version`/`pnpm --version` return the pinned versions. Clear
+`NODE_OPTIONS` and `NODE_TEST_CONTEXT`. With native prerequisites available,
+set `SOURCE_REPOSITORY` to the local repository containing R, `SOURCE_R` to its
+full 40-character SHA, and `CAPTURE_TARGET` to `linux-x64` or `darwin-arm64` as
+appropriate. Run this setup separately on each host:
 
 ```sh
+: "${SOURCE_REPOSITORY:?}" "${SOURCE_R:?}" "${CAPTURE_TARGET:?}"
+TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/runtime-successor-TEST.XXXXXX")"
+git clone --no-local "$SOURCE_REPOSITORY" "$TEST_ROOT/checkout-TEST"
+cd "$TEST_ROOT/checkout-TEST"
+git checkout --detach "$SOURCE_R"
+test "$(git rev-parse HEAD)" = "$SOURCE_R"
+test "$(node --version)" = 'v24.18.0'
+test "$(pnpm --version)" = '11.18.0'
+test -z "${NODE_OPTIONS:-}${NODE_TEST_CONTEXT:-}"
+test "$(node -p 'process.platform + "-" + process.arch')" = "$CAPTURE_TARGET"
+test -z "$(git status --porcelain)"
+```
+
+The clone must contain the historical Git objects required by the adoption
+checker; the capture workflow fetches any missing objects before execution.
+Run these repository commands in each disposable checkout:
+
+```sh
+pnpm check:node-compat
+pnpm install --frozen-lockfile --engine-strict --strict-peer-dependencies
+pnpm install --resolution-only --lockfile-only --no-frozen-lockfile --engine-strict --strict-peer-dependencies
+git diff --exit-code -- pnpm-lock.yaml
+pnpm --filter '@agent-teams/embedded-runtime^...' -r run build
+pnpm --filter './packages/**' -r run clean
+pnpm product:build
+test -z "$(git status --porcelain)"
+```
+
+Linux also requires a fresh loopback PostgreSQL
+database named `ar69_pa_test_[a-z0-9]+` and a locally set
+`AE_ACL_POSTGRES_DISPOSABLE_URL`. Run this command separately on each required
+target, with a new absolute receipt path outside each checkout:
+
+```sh
+CAPTURE_OUTPUT="$TEST_ROOT/$CAPTURE_TARGET.json"
+CAPTURE_RUN_ID="$SOURCE_R-$CAPTURE_TARGET-$(date +%s)"
 node scripts/architecture/runtime-setup-l0-evidence.mjs \
   --capture-adoption-receipt --output "$CAPTURE_OUTPUT" --run-id "$CAPTURE_RUN_ID"
 ```
@@ -414,9 +462,14 @@ source checkout:
 ```sh
 node scripts/architecture/runtime-setup-l0-evidence.mjs \
   --merge-adoption-receipts "$LINUX_RECEIPT" "$DARWIN_RECEIPT" \
-  --output docs/spikes/runtime-setup-assembly-adoption-v2-node26-evidence.json
+  --output docs/spikes/runtime-setup-assembly-adoption-v2-node26-successor-evidence.json
 node scripts/architecture/runtime-setup-l0-evidence.mjs --check
 ```
+
+Deliver only that newly created report as revision D; all SOURCE inputs must
+still resolve to R. The checker rejects a claimed SOURCE revision that already
+contains the successor report. Do not mutate any retained report or receipt.
+This Linux x64 host cannot capture the required Darwin arm64 receipt.
 
 The single report embeds each original receipt and every referenced artifact as
 base64 bytes, retaining the original receipt SHA-256 and its artifact hashes.
@@ -501,12 +554,12 @@ bytes, mixed source receipts and changes inside the bounded closure must fail. T
 existing architecture gate runs these fixtures via
 `runtime-setup-l0-evidence-validation.test.mjs`.
 
-The retained v2 report predates this policy and remains stale; its receipts and
-inventories are preserved byte-for-byte, without filtering or relabeling. Current
-paired evidence is pending. After committing the policy and all included inputs,
-run the capture commands above on Linux x64 and Darwin arm64 at that same commit,
-then merge the fresh receipts. This bounded-identity change does not itself
-establish current platform evidence or adoption completion.
+The retained v2 and Node26 reports and their receipts remain byte-for-byte
+historical evidence. Current paired evidence is pending. After committing the
+policy and all included inputs, run the capture commands above on Linux x64 and
+Darwin arm64 at that same commit, then merge the fresh receipts. This
+bounded-identity change does not itself establish current platform evidence or
+adoption completion.
 The bounded-policy review used the then-current retained standard pin
 `669a750d8db451e04f075cdeb36576c6606fba6e`, whose complete bytes match the profile's
 SHA-256 `e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`.

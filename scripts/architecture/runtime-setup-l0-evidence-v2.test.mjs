@@ -12,7 +12,7 @@ import { testProcesses, packagePath, checkStages, reporterArg } from "@agent-tea
 import { targets, tools, command, sha256, json, validateStream, validateReceipt, validateCoverage, requirePostgres, validatePlatformSites } from "./runtime-setup-l0-evidence-v2.mjs";
 
 import {platformSites} from "./runtime-setup-l0-evidence-platform-sites.mjs";
-import {identity as getIdentity, mergeReceipts, checkV2, validateRetainedReceiptCompatibility, v2ReportPath, retainedV2} from "./runtime-setup-l0-evidence-v2-capture.mjs";
+import {identity as getIdentity, mergeReceipts, checkV2, v2ReportPath, retainedV2, retainedNode26} from "./runtime-setup-l0-evidence-v2-capture.mjs";
 
 registerSourceDiscoveryTests();
 
@@ -423,7 +423,20 @@ async function deliveryFixture(t, caller = process.cwd(), env = process.env) {
     writeFileSync(old, bytes);
     deliveredCurrentCheck(consumer);
   });
+  await t.test("Node26 report remains historical at its exact digest", () => {
+    const old = resolve(consumer, retainedNode26.path), bytes = readFileSync(old);
+    assert.equal(sha256(bytes), retainedNode26.sha256);
+    assert.throws(() => deliveredCheck(consumer, old), /source\/input mismatch/);
+    writeFileSync(delivered, bytes);
+    assert.throws(() => deliveredCurrentCheck(consumer), /source\/input mismatch/);
+    writeFileSync(delivered, json(report));
+    writeFileSync(old, Buffer.concat([bytes, Buffer.from(" ")]));
+    assert.throws(() => deliveredCurrentCheck(consumer), /retained Node26 v2 bytes drifted/);
+    writeFileSync(old, bytes);
+    deliveredCurrentCheck(consumer);
+  });
   for (const [name, mutate, reason] of [
+    ["mutated historical pin", r => {r.retainedNode26.sha256 = "0".repeat(64);}, /Expected values to be strictly deep-equal/],
     ["missing receipt", r => {r.receipts.pop();}, /Assertion/],
     ["missing receipt bytes", r => {delete r.receipts[0].receiptBase64;}, /missing base64/],
     ["mutated receipt", r => {r.receipts[0].receiptBase64 = flip(r.receipts[0].receiptBase64);}, /receipt hash mismatch/],
@@ -435,7 +448,7 @@ async function deliveryFixture(t, caller = process.cwd(), env = process.env) {
       const ref = r.receipts[0], receipt = JSON.parse(Buffer.from(ref.receiptBase64, "base64"));
       receipt.identity.sourceRevision = delivery;
       const bytes = Buffer.from(json(receipt)); ref.receiptBase64 = bytes.toString("base64"); ref.sha256 = sha256(bytes);
-    }, /identity mismatch/],
+    }, /successor receipts must bind the exact SOURCE revision and inputs/],
     ["stale current source", r => {r.identity.sourceRevision = "0".repeat(40);}, /./],
   ]) {await t.test(`rejects ${name}`, () => {
     const changed = structuredClone(report); mutate(changed); writeFileSync(delivered, json(changed));
@@ -649,8 +662,10 @@ test("bounded real-source merge/check accepts unrelated and report-only delivery
   for (const path of new Set(paths)) {
     fs.mkdirSync(resolve(source, path, ".."), {recursive: true}); fs.copyFileSync(resolve(path), resolve(source, path));
   }
-  fs.mkdirSync(resolve(source, retainedV2.path, ".."), {recursive: true});
-  fs.copyFileSync(resolve(retainedV2.path), resolve(source, retainedV2.path));
+  for (const retained of [retainedV2, retainedNode26]) {
+    fs.mkdirSync(resolve(source, retained.path, ".."), {recursive: true});
+    fs.copyFileSync(resolve(retained.path), resolve(source, retained.path));
+  }
   writeFileSync(resolve(source, "README.md"), "unrelated tracked file");
   const runGit = gitWithEnv({...process.env, ...callerIdentity(process.cwd())});
   const commit = () => {runGit(source, "add", "-A"); runGit(source, "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "synthetic bounded delivery"); return runGit(source, "rev-parse", "HEAD");};
@@ -679,31 +694,6 @@ test("bounded real-source merge/check accepts unrelated and report-only delivery
   });
   writeFileSync(workspacePath, currentWorkspace);
   const currentRevision = commit(), current = getIdentity(source);
-  assert.doesNotThrow(() => validateRetainedReceiptCompatibility(source, retained, current));
-  for (const [name, mutate, reason] of [
-    ["nonzero current minimumReleaseAge", value => value.replace(/^minimumReleaseAge: 0$/mu, "minimumReleaseAge: 60"), /minimumReleaseAge must be 0/],
-    ["current minimumReleaseAgeStrict", value => `${value}minimumReleaseAgeStrict: true\n`, /minimumReleaseAgeStrict must be absent/],
-    ["current minimumReleaseAgeExclude", value => `${value}minimumReleaseAgeExclude:\n  - synthetic@1.0.0\n`, /minimumReleaseAgeExclude must be absent/],
-    ["other pnpm-workspace policy", value => `${value}sharedWorkspaceLockfile: false\n`, /not limited to release-age policy/],
-  ]) {await t.test(`compatibility rejects ${name}`, () => {
-    writeFileSync(workspacePath, mutate(currentWorkspace)); commit();
-    assert.throws(() => validateRetainedReceiptCompatibility(source, retained, getIdentity(source)), reason);
-    runGit(source, "reset", "--hard", currentRevision);
-  });}
-  await t.test("compatibility rejects every other input digest drift", () => {
-    fs.appendFileSync(resolve(source, ".npmrc"), "\nsynthetic=true\n"); commit();
-    assert.throws(() => validateRetainedReceiptCompatibility(source, retained, getIdentity(source)), /receipt input digest mismatch: \.npmrc/);
-    runGit(source, "reset", "--hard", currentRevision);
-  });
-  for (const [name, mutate, reason] of [
-    ["input path drift", driftedIdentity => {driftedIdentity.inputs[0].path = "renamed-input";}, /receipt input path mismatch/],
-    ["input mode drift", driftedIdentity => {driftedIdentity.inputs[0].mode = driftedIdentity.inputs[0].mode === "100644" ? "100755" : "100644";}, /receipt input mode mismatch/],
-    ["runner identity drift", driftedIdentity => {driftedIdentity.runner.sha256 = "f".repeat(64);}, /receipt runner mismatch/],
-    ["reporter identity drift", driftedIdentity => {driftedIdentity.reporter.path = "renamed-reporter";}, /receipt reporter mismatch/],
-  ]) {await t.test(`compatibility rejects ${name}`, () => {
-    const drifted = structuredClone(current); mutate(drifted);
-    assert.throws(() => validateRetainedReceiptCompatibility(source, retained, drifted), reason);
-  });}
   await t.test("historical provenance ignores replacement refs", () => {
     const original = v2InputsAtRevision(source, retained.sourceRevision);
     fs.appendFileSync(resolve(source, ".npmrc"), "\nreplacement=true\n");
@@ -717,9 +707,42 @@ test("bounded real-source merge/check accepts unrelated and report-only delivery
       runGit(source, "reset", "--hard", currentRevision);
     }
   });
+  // A successor cannot reuse older receipts, even when only the former
+  // release-age exception differs.
+  assert.throws(() => mergeReceipts(source, receipts, resolve(source, v2ReportPath)),
+    /successor receipts must bind the exact SOURCE revision and inputs/);
+  for (const path of receipts) {
+    const receipt = JSON.parse(readFileSync(path));
+    receipt.identity = current;
+    writeFileSync(path, json(receipt));
+  }
   const output = resolve(source, v2ReportPath);
   const report = mergeReceipts(source, receipts, output); checkV2(source, output);
-  commit(); rmSync(captures, {recursive: true});
+  await t.test("mixed receipt revisions and release-age exceptions reject the successor", () => {
+    const changed = structuredClone(report), ref = changed.receipts[0];
+    const receipt = JSON.parse(Buffer.from(ref.receiptBase64, "base64"));
+    receipt.identity = retained;
+    const bytes = Buffer.from(json(receipt));
+    ref.receiptBase64 = bytes.toString("base64"); ref.sha256 = sha256(bytes);
+    writeFileSync(output, json(changed));
+    assert.throws(() => checkV2(source, output), /successor receipts must bind the exact SOURCE revision and inputs/);
+    writeFileSync(output, json(report));
+  });
+  commit();
+  await t.test("SOURCE revision cannot already contain the successor report", () => {
+    const deliveryIdentity = getIdentity(source);
+    for (const path of receipts) {
+      const receipt = JSON.parse(readFileSync(path));
+      receipt.identity = deliveryIdentity;
+      writeFileSync(path, json(receipt));
+    }
+    rmSync(output);
+    try {
+      assert.throws(() => mergeReceipts(source, receipts, output),
+        /successor report must be delivered after the SOURCE revision/);
+    } finally {writeFileSync(output, json(report));}
+  });
+  rmSync(captures, {recursive: true});
   fs.appendFileSync(resolve(source, "README.md"), "changed");
   assert.deepEqual(getIdentity(source, current.sourceRevision), current);
   checkV2(source, output); commit(); checkV2(source, output);
