@@ -1,51 +1,61 @@
 import assert from "node:assert/strict";
 import {once} from "node:events";
-import fs, {chmodSync, closeSync, constants, fstatSync, openSync, readFileSync, statSync, writeSync} from "node:fs";
+import fs, {chmodSync, closeSync, constants, openSync, readFileSync, writeSync} from "node:fs";
 import {syncBuiltinESMExports} from "node:module";
 import {test} from "node:test";
 import {holdDockerCustodyProviderExecutable} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/docker/init/node-docker-custody-init-driver.js";
 import {fixedChild, linux, sandbox} from "./support/docker-native-identity-fixture.ts";
 
-// The writable descriptor is opened only on this disposable copy, before its
-// mode is sealed. It permits an in-place change without replacing the inode.
-test("natural metadata collision cannot authorize changed held executable bytes", linux, async t => {
+// Freeze the observed inode metadata at its held value while changing the real
+// disposable file. Replaying the original bytes then proves the digest readback
+// is the guard that rejects the changed bytes, independent of timestamp granularity.
+test("equal observed metadata cannot authorize changed held executable bytes", linux, async t => {
   const slot = sandbox(t);
   const original = readFileSync(slot.executablePath);
   const offset = original.length - 1;
-  let collision = false;
-  for (let attempt = 0; attempt < 256 && !collision; attempt += 1) {
-    chmodSync(slot.executablePath, 0o755);
-    const writable = openSync(slot.executablePath, constants.O_RDWR);
-    let writableOpen = true;
-    try {
-      chmodSync(slot.executablePath, 0o555);
-      const held = holdDockerCustodyProviderExecutable(slot.executablePath, slot.executableSha256);
-      try {
-        const before = statSync(slot.executablePath, {bigint: true});
-        const changed = Buffer.from([original[offset]! ^ 1]);
-        assert.equal(writeSync(writable, changed, 0, 1, offset), 1);
-        const after = fstatSync(writable, {bigint: true});
-        closeSync(writable); writableOpen = false;
-        collision = before.dev === after.dev && before.ino === after.ino && before.mode === after.mode &&
-          before.nlink === after.nlink && before.size === after.size && before.uid === after.uid &&
-          before.gid === after.gid && before.ctimeNs === after.ctimeNs && before.mtimeNs === after.mtimeNs;
-        if (collision) {
-          const child = fixedChild(t, held.descriptorPath); await once(child, "spawn");
-          assert.equal(held.observeMapping(child), undefined);
-        }
-      } finally {
-        held.close();
-        if (!collision) {
-          chmodSync(slot.executablePath, 0o755);
-          const restore = openSync(slot.executablePath, constants.O_WRONLY);
-          try {assert.equal(writeSync(restore, original, offset, 1, offset), 1);} finally {closeSync(restore);}
-          chmodSync(slot.executablePath, 0o555);
-        }
+  chmodSync(slot.executablePath, 0o755);
+  const writable = openSync(slot.executablePath, constants.O_RDWR);
+  chmodSync(slot.executablePath, 0o555);
+  const held = holdDockerCustodyProviderExecutable(slot.executablePath, slot.executableSha256);
+  try {
+    const descriptor = Number(held.descriptorPath.split("/").at(-1));
+    const originalFstat = fs.fstatSync;
+    const originalRead = fs.readSync;
+    const heldMetadata = originalFstat(descriptor, {bigint: true});
+    try {assert.equal(writeSync(writable, Buffer.from([original[offset]! ^ 1]), 0, 1, offset), 1);} finally {closeSync(writable);}
+    assert.equal(readFileSync(slot.executablePath)[offset], original[offset]! ^ 1);
+    const child = fixedChild(t, held.descriptorPath); await once(child, "spawn");
+    let metadataObservations = 0;
+    let byteReads = 0;
+    let replayOriginal = false;
+    const mockedStat = t.mock.method(fs, "fstatSync", ((...args: Parameters<typeof fs.fstatSync>) => {
+      const actual = originalFstat(...args);
+      if (typeof actual.dev === "bigint" && actual.dev === heldMetadata.dev && actual.ino === heldMetadata.ino) {
+        metadataObservations += 1;
+        return heldMetadata;
       }
-    } finally {if (writableOpen) {closeSync(writable);}}
-  }
-  if (!collision) {t.diagnostic("No natural nanosecond metadata collision in 256 disposable trials; fault-IO tests remain deterministic.");}
-  assert.equal(collision, true, "fixture must exercise an actual metadata collision");
+      return actual;
+    }) as typeof fs.fstatSync);
+    const mockedRead = t.mock.method(fs, "readSync", ((...args: Parameters<typeof fs.readSync>) => {
+      if (args[0] !== descriptor) {return originalRead(...args);}
+      byteReads += 1;
+      if (!replayOriginal) {return originalRead(...args);}
+      const [, buffer, bufferOffset, length, position] = args;
+      assert.equal(typeof position, "number");
+      buffer.set(original.subarray(position, position + length), bufferOffset);
+      return length;
+    }) as typeof fs.readSync);
+    syncBuiltinESMExports();
+    try {
+      assert.equal(held.observeMapping(child), undefined);
+      assert.ok(metadataObservations > 0, "the changed inode must appear to retain held metadata");
+      assert.ok(byteReads > 0, "the held descriptor must be read back");
+      replayOriginal = true;
+      assert.ok(held.observeMapping(child), "replaying original bytes must authorize the same observed metadata");
+    } finally {
+      mockedRead.mock.restore(); mockedStat.mock.restore(); syncBuiltinESMExports();
+    }
+  } finally {held.close();}
 });
 
 for (const fault of ["denied", "short-read", "eof", "changed-bytes"] as const) {
