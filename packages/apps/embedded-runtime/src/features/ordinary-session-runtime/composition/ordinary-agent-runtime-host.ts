@@ -8,6 +8,7 @@ import {createOrdinaryObservationJournal} from "../adapters/ordinary-observation
 import type {OrdinaryRuntimeAssemblyInput} from "../../../composition/runtime-setup-assembly.js";
 import {copyTrustedContainedTurnScope, type TrustedRuntimeAccessScope} from "../../../composition/trusted-runtime-access-scope.js";
 import type {AgentRuntimeHost} from "../../../composition/agent-runtime-host.js";
+import {AgentRuntimeHostCreationError} from "../../../composition/agent-runtime-host-creation-error.js";
 
 export interface OrdinaryAgentRuntimeHostOptions {
   readonly execution: {
@@ -26,9 +27,6 @@ export interface OrdinaryAgentRuntimeHostOptions {
   readonly scope: {readonly tenantId: string; readonly projectId: string};
   readonly signal?: AbortSignal;
 }
-const throwCreationCleanupFailure = (error: unknown, cleanupError: unknown): never => {
-  throw new AggregateError([error, cleanupError], "ordinary_host_creation_cleanup_incomplete", {cause: error});
-};
 function exact(value: unknown, keys: readonly string[]): asserts value is Record<string, unknown> {
   if (value === null || typeof value !== "object" || types.isProxy(value) || Object.getPrototypeOf(value) !== Object.prototype || Reflect.ownKeys(value).some(key => typeof key !== "string" || !keys.includes(key)) || keys.some(key => !Object.hasOwn(value, key))) {throw new TypeError("ordinary_host_options_invalid");}
   for (const key of keys) {const d = Object.getOwnPropertyDescriptor(value, key); if (d === undefined || !("value" in d)) {throw new TypeError("ordinary_host_options_invalid");}}
@@ -108,9 +106,18 @@ export async function createOrdinaryAgentRuntimeHost(input: OrdinaryAgentRuntime
       },
     });
   } catch (error) {
+    if (AgentRuntimeHostCreationError.is(error) && error.cleanupRecovery !== undefined) {
+      // The decorated inner Host may still use these owners and journal. Keep
+      // them alive until its retained recovery proves closure.
+      throw error.withCleanupFailure(error, cleanup);
+    }
     const [result] = await Promise.allSettled([cleanup()]);
     if (result.status === "rejected") {
-      return throwCreationCleanupFailure(error, result.reason);
+      let cancellationObserved = false;
+      try {cancellationObserved = options.signal?.aborted === true;} catch { /* Metadata must not lose cleanup custody. */ }
+      const failure = AgentRuntimeHostCreationError.is(error) ? error
+        : new AgentRuntimeHostCreationError("internal_failure", "run", {cause: error, cancellationObserved});
+      throw failure.withCleanupFailure(result.reason, cleanup);
     }
     throw error;
   }

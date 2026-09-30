@@ -65,3 +65,10 @@ link-loss evidence is in
 `docs/spikes/postgresql-concurrency-results.md`.
 Current local Node Connect timeout, replay, cursor, and slow-consumer evidence
 is in `docs/spikes/connect-replay-results.md`.
+
+Host creation failures with unfinished cleanup retain a cleanup-only
+`cleanupRecovery.recover()` handle. Recovery joins concurrent callers and keeps
+failed owners reachable; nested ordinary construction releases prerequisite
+owners only after inner Host cleanup succeeds. A journal close failure remains
+uncertain and is never retried by fd number. See the current
+[adoption and recovery explanation](docs/architecture/get-modular-adoption.md#creation-failure-cleanup-custody).

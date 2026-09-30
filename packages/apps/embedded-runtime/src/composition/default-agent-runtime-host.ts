@@ -78,8 +78,12 @@ export async function createRuntimeSetupAttempt(
       phase, { cancellationObserved, cause });
     if (ownedHost !== undefined) {
       const host = ownedHost;
-      ownedHost = undefined;
-      try { await host.dispose(); } catch (cleanupCause) { failure = failure.withCleanupFailure(cleanupCause); }
+      try { await host.dispose(); ownedHost = undefined; } catch (cleanupCause) {
+        failure = failure.withCleanupFailure(cleanupCause, async () => {
+          await host.dispose();
+          ownedHost = undefined;
+        });
+      }
     }
     throw failure;
   }

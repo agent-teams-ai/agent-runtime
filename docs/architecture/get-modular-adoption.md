@@ -107,13 +107,13 @@ bounded contract. ADR-0008 and its historical evidence remain immutable;
 ADR-0013 continues to govern exactly its three active FMS features.
 
 The central authority is Get Modular's accepted ADR-0026 and the exact pinned
-[consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/ac49bb3374946330ec820591f8195a22d2c90900/docs/architecture/common-assembly.md#consumer-module-standard).
-The A3 pin migration supersedes the retained merged PR110 revision:
+[consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/9c722ceff4ede307d06d7a4b63fdebe615f54c53/docs/architecture/common-assembly.md#consumer-module-standard).
+The current reviewed migration follows the retained A3 reciprocal revision:
 
 - Repository: `agent-teams-ai/get-modular`.
-- Commit: `ac49bb3374946330ec820591f8195a22d2c90900`.
+- Commit: `9c722ceff4ede307d06d7a4b63fdebe615f54c53`.
 - Path: `docs/architecture/common-assembly.md`; anchor: `consumer-module-standard`.
-- Complete document SHA-256: `d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f`.
+- Complete document SHA-256: `33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd`.
 - Retained bytes are recorded by the consumer profile; they are evidence, not a second authority.
 
 Document identity, package versions/archive integrity, Core compatibility token,
@@ -668,8 +668,8 @@ complete-document SHA-256
 `d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f`.
 Get Modular main was observed at exact source commit
 `6b31f20fe3e5fb8324812aa2ee907905751cde71`; its complete document bytes are
-unchanged from `ac49bb3374946330ec820591f8195a22d2c90900`. The retained current standard
-is byte-identical to that immutable source. Main itself is not the pin.
+unchanged from `ac49bb3374946330ec820591f8195a22d2c90900`. The then-current standard is retained as
+`consumer-module-standard-ac49bb33.md`, byte-identical to that immutable source. Main itself is not the pin.
 
 The [complete byte delta](../../architecture/get-modular/evidence/a3-cms-pin-delta.diff)
 is one replacement hunk: six lines describing Agent Runtime as a planned
@@ -692,3 +692,63 @@ candidate-controlled workflow or passing profile fixture is not this authority.
 Linux portable checks do not establish Darwin qualification; existing paired
 Host evidence and its outstanding work remain separate. K1/A1/A2 and dynamic
 plugins are outside this delivery.
+
+### Creation failure cleanup custody
+
+The September 30 review fixes two owner-local bugs under the existing CMS
+acquisition, cleanup truth and surviving-owner requirements. It introduces no
+shared lifecycle manager, new graph node, provider behavior or package change.
+The ordinary graph keeps its eight nodes. The new finite composition import
+uses the existing Host creation error owner; it is not another composition root.
+
+`AgentRuntimeHostCreationError.cleanupRecovery` is present when creation retains
+unfinished cleanup. Its only method, `recover()`, drives the actual pending
+owner. Concurrent callers join one Promise; rejected cleanup remains reachable
+for a subsequent safe attempt, while settled success is idempotent. The error
+keeps its primary code, phase, cancellation, diagnostics and module ID, plus
+private causes. `cleanupFailed` records historical failure even after recovery.
+JSON includes only the existing metadata projection, never closures or a Host.
+A failed construction never publishes a usable Host or command capability.
+
+Default construction keeps the allocated Host until observed disposal success.
+If inner default disposal fails during ordinary construction, the outer catch
+retains both owners and defers outer cleanup. Recovery first settles inner
+Host/feature work, then releases outer PA/security/provider owners and journal.
+The existing reverse cleanup ledger removes each successful action once and
+stops at unresolved prerequisite debt. Borrowed database pools remain borrowed.
+
+The journal has explicit open, observed-closed and failed-close states. A thrown
+close preserves its first cause, refuses further records and closes, and never
+retries a potentially reused fd. Only observed success is idempotent success.
+Initialization fsync/close failures retain the primary cause with file/directory
+cleanup uncertainty and a non-enumerable cleanup-only holder when needed. That
+holder cannot convert uncertain close into observed physical disposal. No OS
+reconciliation algorithm or live-provider qualification is claimed.
+
+Focused synthetic evidence lives in `ordinary-host-disposal.test.ts`, its
+`ordinary-creation-cleanup.fixture.ts`, and `runtime-setup-assembly.test.ts` with
+`runtime-setup-creation-cleanup.fixture.ts`. Disposable files and fake database
+ports exercise descriptor reuse, record refusal, initialization failures,
+partial allocation before an await, concurrent recovery, failed retry, nested
+dependency ordering, borrowed pools and non-repetition of successful actions.
+
+### Current candidate-only standard pin review
+
+The [review](../../architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json)
+migrates both current consumer profiles from `ac49bb3374946330ec820591f8195a22d2c90900`
+(SHA-256 `d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f`)
+to `9c722ceff4ede307d06d7a4b63fdebe615f54c53`
+(SHA-256 `33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd`).
+The complete-document retained bytes and [two-hunk delta](../../architecture/get-modular/evidence/creation-cleanup-cms-pin-delta.diff)
+add the ADR-0029 relation and 31 lines of optional dynamic Host candidate guidance.
+The staged exact upstream source supplied by orchestration is the reviewed input;
+no moving main is followed. Prior review and full-document evidence are retained.
+
+ADR-0029 does not authorize Agent Runtime dynamic adoption. G1 stays hold;
+contained-turn and SDK external authority retain their pending classifications.
+Existing CMS already assigns acquisition ownership and surviving cleanup custody
+to the Host, so this delivery applies product-specific fd and error recovery
+policy without changing GM semantics, Core, Assembly or lifecycle-kernel. Current
+rejecting checks authenticate both profile identities, full bytes and reviewed
+delta, reject stale pins and preserve the existing adoption states. Accepted ADRs
+and frozen C0 evidence are unchanged.
