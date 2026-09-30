@@ -13,10 +13,15 @@ import { testProcesses, packagePath, checkStages, reporterArg } from "@agent-tea
 import { targets, tools, command, sha256, json, validateStream, validateReceipt, validateCoverage, requirePostgres, validatePlatformSites } from "./runtime-setup-l0-evidence-v2.mjs";
 
 import {platformSites} from "./runtime-setup-l0-evidence-platform-sites.mjs";
-import {identity as getIdentity, mergeReceipts, checkV2, checkCurrentV2, v2ReportPath, retainedV2, retainedNode26, retainedSuccessor, retainedHeldDigest} from "./runtime-setup-l0-evidence-v2-capture.mjs";
+import {identity as getIdentity, mergeReceipts, checkV2, checkCurrentV2, v2ReportPath, retainedV2, retainedNode26, retainedSuccessor, retainedHeldDigest, retainedRuntimePin} from "./runtime-setup-l0-evidence-v2-capture.mjs";
 
-test("runtime-pin successor has a fresh delivery path and authentic retained held-digest predecessor", () => {
-  assert.equal(v2ReportPath, "docs/spikes/runtime-setup-assembly-adoption-v2-node26-runtime-pin-successor-evidence.json");
+test("duplicate-callback successor has a fresh delivery path and authentic retained runtime-pin predecessor", () => {
+  assert.equal(v2ReportPath, "docs/spikes/runtime-setup-assembly-adoption-v2-node26-duplicate-callback-successor-evidence.json");
+  assert.deepEqual(retainedRuntimePin, {
+    path: "docs/spikes/runtime-setup-assembly-adoption-v2-node26-runtime-pin-successor-evidence.json",
+    sha256: "1aa6f17ae933ddfdee2b4ac37c968051d27a2777161114191433bd81a09b5c96",
+  });
+  assert.equal(sha256(readFileSync(resolve(retainedRuntimePin.path))), retainedRuntimePin.sha256);
   assert.equal(retainedHeldDigest.path, "docs/spikes/runtime-setup-assembly-adoption-v2-node26-held-digest-successor-evidence.json");
   assert.equal(sha256(readFileSync(resolve(retainedHeldDigest.path))), retainedHeldDigest.sha256);
 });
@@ -543,11 +548,7 @@ test("Darwin PostgreSQL custody skip requires the successful Linux integration p
 
 registerBoundedInventoryTests({ callerIdentity, gitWithEnv, fixture });
 
-test("bounded real-source merge/check accepts unrelated and report-only delivery", async t => {
-  const root = mkdtempSync(resolve(tmpdir(), "v2-bounded-delivery-"));
-  t.after(() => rmSync(root, {recursive: true, force: true}));
-  const source = resolve(root, "source"), captures = resolve(root, "captures");
-  fs.mkdirSync(source); fs.mkdirSync(captures);
+function copyBoundedDeliverySource(source) {
   const pathspec = [...v2InputPolicy.roots, ...v2InputPolicy.files].map(path => `:(top,literal)${path}`);
   const paths = execFileSync("git", ["ls-files", "-z", "--", ...pathspec], {encoding: "utf8"}).split("\0").filter(Boolean);
   paths.push("scripts/architecture/runtime-setup-l0-evidence-v2-inputs.mjs",
@@ -555,11 +556,19 @@ test("bounded real-source merge/check accepts unrelated and report-only delivery
   for (const path of new Set(paths)) {
     fs.mkdirSync(resolve(source, path, ".."), {recursive: true}); fs.copyFileSync(resolve(path), resolve(source, path));
   }
-  for (const retained of [retainedV2, retainedNode26, retainedSuccessor, retainedHeldDigest]) {
+  for (const retained of [retainedV2, retainedNode26, retainedSuccessor, retainedHeldDigest, retainedRuntimePin]) {
     fs.mkdirSync(resolve(source, retained.path, ".."), {recursive: true});
     fs.copyFileSync(resolve(retained.path), resolve(source, retained.path));
   }
   writeFileSync(resolve(source, "README.md"), "unrelated tracked file");
+}
+
+test("bounded real-source merge/check accepts unrelated and report-only delivery", async t => {
+  const root = mkdtempSync(resolve(tmpdir(), "v2-bounded-delivery-"));
+  t.after(() => rmSync(root, {recursive: true, force: true}));
+  const source = resolve(root, "source"), captures = resolve(root, "captures");
+  fs.mkdirSync(source); fs.mkdirSync(captures);
+  copyBoundedDeliverySource(source);
   const runGit = gitWithEnv({...process.env, ...callerIdentity(process.cwd())});
   const commit = () => {runGit(source, "add", "-A"); runGit(source, "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "synthetic bounded delivery"); return runGit(source, "rev-parse", "HEAD");};
   const workspacePath = resolve(source, "pnpm-workspace.yaml");
@@ -611,13 +620,51 @@ test("bounded real-source merge/check accepts unrelated and report-only delivery
   }
   const output = resolve(source, v2ReportPath);
   const report = mergeReceipts(source, receipts, output); checkV2(source, output);
-  await t.test("missing runtime-pin successor cannot fall back to retained held-digest evidence", () => {
+  await t.test("authentic runtime-pin receipts reject the successor SOURCE before artifact readback", () => {
+    const predecessor = JSON.parse(readFileSync(resolve(source, retainedRuntimePin.path)));
+    for (const ref of predecessor.receipts) {
+      const bytes = Buffer.from(ref.receiptBase64, "base64");
+      assert.equal(sha256(bytes), ref.sha256);
+      assert.throws(() => validateReceipt(JSON.parse(bytes), current,
+        () => assert.fail("stale receipt must reject before artifacts")), /identity mismatch/);
+    }
+  });
+  await t.test("missing duplicate-callback successor cannot fall back to retained runtime-pin evidence", () => {
     rmSync(output);
     try {assert.throws(() => checkCurrentV2(source), /ENOENT/);}
     finally {writeFileSync(output, json(report));}
     checkCurrentV2(source);
   });
-  await t.test("runtime-pin delivery rejects missing or changed held-digest predecessor identity and bytes", () => {
+  await t.test("duplicate-callback delivery rejects missing or changed runtime-pin predecessor identity", () => {
+    for (const mutate of [
+      value => {delete value.retainedRuntimePin;},
+      value => {delete value.retainedRuntimePin.path;},
+      value => {value.retainedRuntimePin.path = retainedHeldDigest.path;},
+      value => {delete value.retainedRuntimePin.sha256;},
+      value => {value.retainedRuntimePin.sha256 = "0".repeat(64);},
+    ]) {
+      const changed = structuredClone(report); mutate(changed);
+      writeFileSync(output, json(changed));
+      try {assert.throws(() => checkCurrentV2(source), /Expected values to be strictly deep-equal/);}
+      finally {writeFileSync(output, json(report));}
+    }
+    checkCurrentV2(source);
+  });
+  await t.test("duplicate-callback delivery rejects missing or altered runtime-pin predecessor bytes", () => {
+    const predecessor = resolve(source, retainedRuntimePin.path), original = readFileSync(predecessor);
+    rmSync(predecessor);
+    try {
+      assert.throws(() => checkCurrentV2(source), /ENOENT.*runtime-pin-successor-evidence/u);
+      assert.throws(() => mergeReceipts(source, receipts, output), /ENOENT.*runtime-pin-successor-evidence/u);
+    } finally {writeFileSync(predecessor, original);}
+    writeFileSync(predecessor, Buffer.concat([original, Buffer.from(" ")]));
+    try {
+      assert.throws(() => checkCurrentV2(source), /retained runtime-pin v2 bytes drifted/);
+      assert.throws(() => mergeReceipts(source, receipts, output), /retained runtime-pin v2 bytes drifted/);
+    } finally {writeFileSync(predecessor, original);}
+    checkCurrentV2(source);
+  });
+  await t.test("successor delivery rejects missing or changed held-digest predecessor identity and bytes", () => {
     for (const mutate of [
       value => {delete value.retainedHeldDigest;},
       value => {value.retainedHeldDigest.sha256 = "0".repeat(64);},

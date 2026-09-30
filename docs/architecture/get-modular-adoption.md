@@ -289,8 +289,8 @@ these tracked inputs and cannot prove this migration. The controller must commit
 all final bounded Runtime Setup inputs, capture new Linux x64 and Darwin arm64 receipts on
 that same commit, merge through the existing command below, and run the required
 gates. Do not edit receipt identities manually or claim full migration completion
-from focused checker results. Preserve the old generated report outside the
-checkout before removing only that output for the merger's exclusive creation.
+from focused checker results. Preserve every historical report in the checkout;
+the current successor uses a fresh output path for the merger's exclusive creation.
 
 ## Evidence and executable references
 
@@ -351,16 +351,26 @@ original source closure. Current specification counts cannot redefine that recor
 
 The original `runtime-setup-assembly-adoption-v2-evidence.json` remains retained
 byte-for-byte (SHA-256 `08fef99589d67358f020e3a0b063a44d6c4c99381370f76b2ca200b005d9bf3d`).
-The runtime package-pin migration, portable TypeScript fixture compilation and
-historical profile resolver changed protected SOURCE inputs. At exact
-`eb7987bd33b82459d4a08459bbdac992f37f7359`, the inventory has 1,982 inputs;
-the former current report binds 1,978 inputs at
-`0b6feb38b243378f4082d3b3ef5d4ef569941fb4`. Its captures remain authentic
-historical evidence and cannot authenticate the changed SOURCE.
+The duplicate-callback clock and external-effect assertions in Agent Execution's
+`claude-agent-sdk-contained-turn-provider-private-execution.test.ts` changed a
+protected SOURCE input after the runtime-pin captures. The runtime-pin report
+authenticates exact SOURCE `1e98e380348b13c1ab9f3559b40044c741a18134` and
+1,982 inputs. Its test SHA-256 is
+`8f2ebe311340ff53e091fa7c0bcb57fc07bb1f2d5dde975a4492a93c4c5b8527`;
+at checkpoint `55e29627be47958015427829dbe3ad675223b1a7`, that test hashes to
+`b58fbd8426b6ee442d68540917035bc3ba9f3aaa7b0fdb3d1cc6fb2ad421dbc0`.
+Those authentic historical receipts cannot authenticate the repaired test or
+the successor selection inputs.
 The single current selection is now
-`docs/spikes/runtime-setup-assembly-adoption-v2-node26-runtime-pin-successor-evidence.json`.
+`docs/spikes/runtime-setup-assembly-adoption-v2-node26-duplicate-callback-successor-evidence.json`.
 Capture and report-only delivery for this successor remain pending. The
-held-digest successor, which followed the intentional deterministic test change
+runtime-pin predecessor remains byte-for-byte at
+`docs/spikes/runtime-setup-assembly-adoption-v2-node26-runtime-pin-successor-evidence.json`
+(SHA-256 `1aa6f17ae933ddfdee2b4ac37c968051d27a2777161114191433bd81a09b5c96`).
+Its earlier package-pin migration, portable TypeScript fixture compilation and
+historical profile resolver transition superseded the 1,978-input capture at
+`0b6feb38b243378f4082d3b3ef5d4ef569941fb4`.
+The held-digest successor, which followed the intentional deterministic test change
 at `10e974269f622330f4e1b2ee25f8e7364d916a57`, remains byte-for-byte at
 `docs/spikes/runtime-setup-assembly-adoption-v2-node26-held-digest-successor-evidence.json`
 (SHA-256 `35cae9d21930fe6e31573e247cdec0c3726f5b85a7ae3cf31e5cf09db99d187c`).
@@ -375,7 +385,7 @@ The prior Node26-named report is retained byte-for-byte at its original path
 Its source revision `1202e278b1605cc6243ceb42944eb30d07270172` has
 1,974 inputs, while the next historical closure had 1,975. Its authentic paired
 receipts cannot be relabeled for the successor.
-The successor checker pins all four older v2 reports and retained v1. It
+The successor checker pins all five older v2 reports and retained v1. It
 requires both new receipts to
 match its exact SOURCE revision and inventory, and rejects the former
 release-age compatibility exception. Until capture and delivery, the missing
@@ -417,7 +427,10 @@ Linux PostgreSQL database and uploads each original receipt with its sibling
 artifacts; a failed job cannot supply acceptable evidence. Collect the two
 artifacts from the same source revision and retain their original bytes.
 
-First commit all final SOURCE inputs as revision R. In fresh disposable
+First commit all final SOURCE inputs as revision R, including the selector,
+predecessor pin, rejecting tests, this guidance and the Agent Execution test fix.
+The new selected report must be absent from R; all historical reports stay
+unchanged. In fresh disposable
 `*-TEST` checkouts of that exact R on Linux x64 and Darwin arm64, use Node
 `v24.18.0` and pnpm `11.18.0`. Confirm `git status --porcelain` is empty and
 `git rev-parse HEAD` equals R on each host, and that
@@ -479,7 +492,7 @@ source checkout:
 ```sh
 node scripts/architecture/runtime-setup-l0-evidence.mjs \
   --merge-adoption-receipts "$LINUX_RECEIPT" "$DARWIN_RECEIPT" \
-  --output docs/spikes/runtime-setup-assembly-adoption-v2-node26-runtime-pin-successor-evidence.json
+  --output docs/spikes/runtime-setup-assembly-adoption-v2-node26-duplicate-callback-successor-evidence.json
 node scripts/architecture/runtime-setup-l0-evidence.mjs --check
 ```
 
@@ -488,7 +501,7 @@ still resolve to R. The checker rejects a claimed SOURCE revision that already
 contains the new successor report. Do not mutate any retained report or receipt.
 The selector, predecessor pin, rejecting tests and this guidance are protected
 SOURCE inputs too. Commit them before capturing R; receipts captured at
-`eb7987bd33b82459d4a08459bbdac992f37f7359` cannot be relabeled for that R.
+`1e98e380348b13c1ab9f3559b40044c741a18134` cannot be relabeled for that R.
 This is a report selection and evidence retention update. The pinned Consumer
 Module Standard still governs the same passive composition scope; its guidance,
 local adoption profile and accepted ADR bytes are unchanged. The retained
