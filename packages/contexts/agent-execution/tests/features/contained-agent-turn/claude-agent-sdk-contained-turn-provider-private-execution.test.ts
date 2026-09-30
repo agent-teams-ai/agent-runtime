@@ -54,15 +54,21 @@ test("current-kernel adapter rejects a resolver result produced without its priv
 });
 
 test("current-kernel adapter makes a duplicate private callback effect-free and indeterminate", async () => {
+  let firstOutcome: unknown;
+  let duplicateOutcome: unknown;
+  let duplicateCalls = 0;
+  let queryCalls = 0;
   let guardianSpawns = 0;
-  const adapter = kernelProvider(spawnedQuery([success("double-private-callback")]), {
+  const adapter = kernelProvider(spawnedQuery([success("double-private-callback")], () => {
+    queryCalls += 1;
+  }), {
     clock: new ManualClock(),
     privateExecutions: {
       consume: async (_request, consume) => {
         const first = await consume(kernelPrivateExecution);
-        assert.deepEqual(first, { kind: "completed", outcome: "succeeded" });
-        const duplicate = await consume(kernelPrivateExecution);
-        assert.equal(duplicate.kind, "indeterminate");
+        firstOutcome = first;
+        duplicateCalls += 1;
+        duplicateOutcome = await consume(kernelPrivateExecution);
         return first;
       },
     },
@@ -75,6 +81,10 @@ test("current-kernel adapter makes a duplicate private callback effect-free and 
     },
   });
   assert.equal((await adapter.execute(kernelInput() as never)).kind, "indeterminate");
+  assert.deepEqual(firstOutcome, { kind: "completed", outcome: "succeeded" });
+  assert.equal(duplicateCalls, 1);
+  assert.partialDeepStrictEqual(duplicateOutcome, { kind: "indeterminate" });
+  assert.equal(queryCalls, 1);
   assert.equal(guardianSpawns, 1);
 });
 
