@@ -351,9 +351,19 @@ original source closure. Current specification counts cannot redefine that recor
 
 The original `runtime-setup-assembly-adoption-v2-evidence.json` remains retained
 byte-for-byte (SHA-256 `08fef99589d67358f020e3a0b063a44d6c4c99381370f76b2ca200b005d9bf3d`).
-Following the intentional deterministic held-digest test change at
-`10e974269f622330f4e1b2ee25f8e7364d916a57`, the single current selection is
-`docs/spikes/runtime-setup-assembly-adoption-v2-node26-held-digest-successor-evidence.json`.
+The runtime package-pin migration, portable TypeScript fixture compilation and
+historical profile resolver changed protected SOURCE inputs. At exact
+`eb7987bd33b82459d4a08459bbdac992f37f7359`, the inventory has 1,982 inputs;
+the former current report binds 1,978 inputs at
+`0b6feb38b243378f4082d3b3ef5d4ef569941fb4`. Its captures remain authentic
+historical evidence and cannot authenticate the changed SOURCE.
+The single current selection is now
+`docs/spikes/runtime-setup-assembly-adoption-v2-node26-runtime-pin-successor-evidence.json`.
+Capture and report-only delivery for this successor remain pending. The
+held-digest successor, which followed the intentional deterministic test change
+at `10e974269f622330f4e1b2ee25f8e7364d916a57`, remains byte-for-byte at
+`docs/spikes/runtime-setup-assembly-adoption-v2-node26-held-digest-successor-evidence.json`
+(SHA-256 `35cae9d21930fe6e31573e247cdec0c3726f5b85a7ae3cf31e5cf09db99d187c`).
 The former successor report remains retained byte-for-byte at
 `docs/spikes/runtime-setup-assembly-adoption-v2-node26-successor-evidence.json`
 (SHA-256 `e261db9b564aa9f012417561584a048666abe2efd92facb792a9956c30b54b87`).
@@ -365,7 +375,7 @@ The prior Node26-named report is retained byte-for-byte at its original path
 Its source revision `1202e278b1605cc6243ceb42944eb30d07270172` has
 1,974 inputs, while the next historical closure had 1,975. Its authentic paired
 receipts cannot be relabeled for the successor.
-The successor checker pins all three older v2 reports and retained v1. It
+The successor checker pins all four older v2 reports and retained v1. It
 requires both new receipts to
 match its exact SOURCE revision and inventory, and rejects the former
 release-age compatibility exception. Until capture and delivery, the missing
@@ -469,20 +479,24 @@ source checkout:
 ```sh
 node scripts/architecture/runtime-setup-l0-evidence.mjs \
   --merge-adoption-receipts "$LINUX_RECEIPT" "$DARWIN_RECEIPT" \
-  --output docs/spikes/runtime-setup-assembly-adoption-v2-node26-held-digest-successor-evidence.json
+  --output docs/spikes/runtime-setup-assembly-adoption-v2-node26-runtime-pin-successor-evidence.json
 node scripts/architecture/runtime-setup-l0-evidence.mjs --check
 ```
 
 Deliver only that newly created report as revision D; all SOURCE inputs must
 still resolve to R. The checker rejects a claimed SOURCE revision that already
 contains the new successor report. Do not mutate any retained report or receipt.
+The selector, predecessor pin, rejecting tests and this guidance are protected
+SOURCE inputs too. Commit them before capturing R; receipts captured at
+`eb7987bd33b82459d4a08459bbdac992f37f7359` cannot be relabeled for that R.
 This is a report selection and evidence retention update. The pinned Consumer
 Module Standard still governs the same passive composition scope; its guidance,
 local adoption profile and accepted ADR bytes are unchanged. The retained
-standard at `24d6557a1b04b01a3a73c64b1d9a9afd83d89c8f` hashes to the
+standard at `9c722ceff4ede307d06d7a4b63fdebe615f54c53` hashes to the
 profile's SHA-256 `33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd`.
-Current upstream could not be reached in this checkout, so this checkpoint
-does not migrate or claim to review a moving upstream revision.
+Its retained migration review is
+`architecture/get-modular/evidence/runtime-profile-cms-pin-review.json`.
+This successor does not migrate or claim to review a moving upstream revision.
 This Linux x64 host cannot capture the required Darwin arm64 receipt.
 
 The single report embeds each original receipt and every referenced artifact as

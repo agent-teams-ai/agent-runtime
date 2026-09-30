@@ -13,12 +13,12 @@ import { testProcesses, packagePath, checkStages, reporterArg } from "@agent-tea
 import { targets, tools, command, sha256, json, validateStream, validateReceipt, validateCoverage, requirePostgres, validatePlatformSites } from "./runtime-setup-l0-evidence-v2.mjs";
 
 import {platformSites} from "./runtime-setup-l0-evidence-platform-sites.mjs";
-import {identity as getIdentity, mergeReceipts, checkV2, v2ReportPath, retainedV2, retainedNode26, retainedSuccessor} from "./runtime-setup-l0-evidence-v2-capture.mjs";
+import {identity as getIdentity, mergeReceipts, checkV2, checkCurrentV2, v2ReportPath, retainedV2, retainedNode26, retainedSuccessor, retainedHeldDigest} from "./runtime-setup-l0-evidence-v2-capture.mjs";
 
-test("held-digest successor has a fresh delivery path and authentic retained predecessor", () => {
-  assert.equal(v2ReportPath, "docs/spikes/runtime-setup-assembly-adoption-v2-node26-held-digest-successor-evidence.json");
-  assert.equal(retainedSuccessor.path, "docs/spikes/runtime-setup-assembly-adoption-v2-node26-successor-evidence.json");
-  assert.equal(sha256(readFileSync(resolve(retainedSuccessor.path))), retainedSuccessor.sha256);
+test("runtime-pin successor has a fresh delivery path and authentic retained held-digest predecessor", () => {
+  assert.equal(v2ReportPath, "docs/spikes/runtime-setup-assembly-adoption-v2-node26-runtime-pin-successor-evidence.json");
+  assert.equal(retainedHeldDigest.path, "docs/spikes/runtime-setup-assembly-adoption-v2-node26-held-digest-successor-evidence.json");
+  assert.equal(sha256(readFileSync(resolve(retainedHeldDigest.path))), retainedHeldDigest.sha256);
 });
 
 registerSourceDiscoveryTests();
@@ -555,7 +555,7 @@ test("bounded real-source merge/check accepts unrelated and report-only delivery
   for (const path of new Set(paths)) {
     fs.mkdirSync(resolve(source, path, ".."), {recursive: true}); fs.copyFileSync(resolve(path), resolve(source, path));
   }
-  for (const retained of [retainedV2, retainedNode26, retainedSuccessor]) {
+  for (const retained of [retainedV2, retainedNode26, retainedSuccessor, retainedHeldDigest]) {
     fs.mkdirSync(resolve(source, retained.path, ".."), {recursive: true});
     fs.copyFileSync(resolve(retained.path), resolve(source, retained.path));
   }
@@ -611,6 +611,28 @@ test("bounded real-source merge/check accepts unrelated and report-only delivery
   }
   const output = resolve(source, v2ReportPath);
   const report = mergeReceipts(source, receipts, output); checkV2(source, output);
+  await t.test("missing runtime-pin successor cannot fall back to retained held-digest evidence", () => {
+    rmSync(output);
+    try {assert.throws(() => checkCurrentV2(source), /ENOENT/);}
+    finally {writeFileSync(output, json(report));}
+    checkCurrentV2(source);
+  });
+  await t.test("runtime-pin delivery rejects missing or changed held-digest predecessor identity and bytes", () => {
+    for (const mutate of [
+      value => {delete value.retainedHeldDigest;},
+      value => {value.retainedHeldDigest.sha256 = "0".repeat(64);},
+    ]) {
+      const changed = structuredClone(report); mutate(changed);
+      writeFileSync(output, json(changed));
+      assert.throws(() => checkV2(source, output), /Expected values to be strictly deep-equal/);
+    }
+    writeFileSync(output, json(report));
+    const predecessor = resolve(source, retainedHeldDigest.path), original = readFileSync(predecessor);
+    writeFileSync(predecessor, Buffer.concat([original, Buffer.from(" ")]));
+    try {assert.throws(() => checkV2(source, output), /retained held-digest v2 bytes drifted/);}
+    finally {writeFileSync(predecessor, original);}
+    checkV2(source, output);
+  });
   await t.test("report rejects a missing or changed b11fbb42 predecessor pin", () => {
     for (const change of [
       value => {delete value.retainedSuccessor;},
