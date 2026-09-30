@@ -68,6 +68,22 @@ function checkRegistryIdentity(activation) {
   }, "SDK_REGISTRY_IDENTITY_DRIFT");
 }
 
+function checkCurrentSdkIdentity(activation, manifest, lock) {
+  assert.equal(activation.qualificationInput.version, "1.7.0", "SDK_EF_VERSION_DRIFT");
+  assert.equal(activation.qualificationInput.packageName, activation.registry.packageName, "SDK_EF_VERSION_DRIFT");
+  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], activation.qualificationInput.version, "SDK_EF_VERSION_DRIFT");
+  assert.equal(lock.importers["."].devDependencies["@agent-teams/engineering-foundation"].specifier, activation.qualificationInput.version, "SDK_EF_LOCK_DRIFT");
+  assert.equal(lock.importers["."].devDependencies["@agent-teams/engineering-foundation"].version, "1.7.0(@types/node@24.13.3)", "SDK_EF_LOCK_DRIFT");
+  assert.equal(lock.packages[`@agent-teams/engineering-foundation@${activation.qualificationInput.version}`].resolution.integrity, activation.qualificationInput.npmIntegrity, "SDK_EF_LOCK_DRIFT");
+  assert.equal(activation.qualificationInput.archiveSha256, activation.registry.tarballSha256, "SDK_EF_ARCHIVE_DRIFT");
+  assert.equal(activation.qualificationInput.npmIntegrity, activation.registry.integrity, "SDK_EF_INTEGRITY_DRIFT");
+  assert.equal(activation.qualificationInput.tarballUrl, activation.registry.tarballUrl, "SDK_EF_URL_DRIFT");
+  assert.equal(activation.qualificationInput.publishedAt, activation.registry.publishedAt, "SDK_EF_PUBLICATION_DRIFT");
+  assert.equal(activation.qualificationInput.sourceMergeCommit, null, "SDK_EF_SOURCE_DRIFT");
+  assert.equal(activation.qualificationInput.sourceReleaseCommit, null, "SDK_EF_SOURCE_DRIFT");
+  assert.equal(activation.qualificationInput.use, "published identity recorded; current qualification and source provenance pending", "SDK_EF_SOURCE_DRIFT");
+}
+
 function checkRootClassification(repository, manifest, activation, json) {
   assert.equal(manifest.name, "@vioxen/agent-runtime");
   assert.equal(manifest.private, true);
@@ -181,19 +197,7 @@ export function checkSdkGrowthProfile(repository = root) {
   for (const path of ["architecture/get-modular/consumer-profile.json", "architecture/consumer-module-standard/contained-turn-profile.json"]) {
     assert.deepEqual(json(path).sdkGrowth, { profile: `${directory}/profile.yaml`, activation: `${directory}/activation.json`, status: activation.status, compositionChange: false }, "SDK_CONSUMER_PROFILE_DRIFT");
   }
-  assert.equal(activation.qualificationInput.version, "1.7.0", "SDK_EF_VERSION_DRIFT");
-  assert.equal(activation.qualificationInput.packageName, activation.registry.packageName, "SDK_EF_VERSION_DRIFT");
-  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], activation.qualificationInput.version, "SDK_EF_VERSION_DRIFT");
-  assert.equal(lock.importers["."].devDependencies["@agent-teams/engineering-foundation"].specifier, activation.qualificationInput.version, "SDK_EF_LOCK_DRIFT");
-  assert.equal(lock.importers["."].devDependencies["@agent-teams/engineering-foundation"].version, "1.7.0(@types/node@24.13.3)", "SDK_EF_LOCK_DRIFT");
-  assert.equal(lock.packages[`@agent-teams/engineering-foundation@${activation.qualificationInput.version}`].resolution.integrity, activation.qualificationInput.npmIntegrity, "SDK_EF_LOCK_DRIFT");
-  assert.equal(activation.qualificationInput.archiveSha256, activation.registry.tarballSha256, "SDK_EF_ARCHIVE_DRIFT");
-  assert.equal(activation.qualificationInput.npmIntegrity, activation.registry.integrity, "SDK_EF_INTEGRITY_DRIFT");
-  assert.equal(activation.qualificationInput.tarballUrl, activation.registry.tarballUrl, "SDK_EF_URL_DRIFT");
-  assert.equal(activation.qualificationInput.publishedAt, activation.registry.publishedAt, "SDK_EF_PUBLICATION_DRIFT");
-  assert.equal(activation.qualificationInput.sourceMergeCommit, null, "SDK_EF_SOURCE_DRIFT");
-  assert.equal(activation.qualificationInput.sourceReleaseCommit, null, "SDK_EF_SOURCE_DRIFT");
-  assert.equal(activation.qualificationInput.use, "published identity recorded; current qualification and source provenance pending", "SDK_EF_SOURCE_DRIFT");
+  checkCurrentSdkIdentity(activation, manifest, lock);
   checkRootClassification(repository, manifest, activation, json);
   for (const pkg of profile.packages) {
     const actual = json(pkg.manifestPath);
