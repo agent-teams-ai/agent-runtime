@@ -41,26 +41,44 @@ test("historical closure authenticates the retained Git bytes independently of m
   assert.deepEqual(await inputs.artifactDigestsAtRevision(report.sourceRevision), report.artifactDigests);
 });
 
-test("retained schema-v1 adoption fixtures stay on historical roots when modern fixtures shrink", async () => {
+test("retained schema-v1 closure uses historical fixtures and package pins after current migration", async () => {
   const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
   const { evidenceRoots, evidenceFiles } = await import("./runtime-setup-l0-evidence-spec.mjs");
   const git = (...args) => execFileSync("git", args, { cwd: repositoryRoot, encoding: "utf8", maxBuffer: 20 * 1024 * 1024 });
   const readRevisionFile = (revision, path) => execFileSync("git", ["show", `${revision}:${path}`], { cwd: repositoryRoot });
   const retained = JSON.parse(await readFile(new URL(`../../${adoptionPaths.report}`, import.meta.url)));
   const profile = JSON.parse(await readFile(new URL("../../architecture/get-modular/consumer-profile.json", import.meta.url)));
-  const { current: modern, retained: retainedFixtures } = createAdoptionEvidenceInputs({
-    repositoryRoot, git, readRevisionFile, evidenceRoots, evidenceFiles, profile,
+  const inputs = read => createAdoptionEvidenceInputs({
+    repositoryRoot, git, readRevisionFile: read, evidenceRoots, evidenceFiles, profile,
   });
-  const modernDigests = await modern.artifactDigestsAtRevision(retained.sourceRevision);
+  const { current: modern, retained: retainedFixtures } = inputs(readRevisionFile);
+  // The migrated 0.2.0 archives are current SOURCE inputs, absent from v1's tree.
+  await assert.rejects(modern.artifactDigestsAtRevision(retained.sourceRevision),
+    /get-modular-core-0\.2\.0\.tgz is missing from historical evidence/u);
   const retainedDigests = await retainedFixtures.artifactDigestsAtRevision(retained.sourceRevision);
-  assert.notEqual(modernDigests.fixtures.fileCount, retained.artifactDigests.fixtures.fileCount);
+  assert.notEqual((await modern.artifactDigests()).fixtures.fileCount, retainedDigests.fixtures.fileCount);
   assert.deepEqual(retainedDigests, retained.artifactDigests);
-  validateAdoptionReport(retained, {
+  const validate = artifactDigests => validateAdoptionReport(retained, {
     sourceRevision: retained.sourceRevision,
     historicalRevision: retained.historical.sourceRevision,
-    artifactDigests: retainedDigests,
+    artifactDigests,
     capture: retained.capture,
   });
+  validate(retainedDigests);
+  await assert.rejects(retainedFixtures.artifactDigestsAtRevision("HEAD"), /exact/u);
+  const archive = "architecture/get-modular/evidence/get-modular-core-0.1.0.tgz";
+  const missing = inputs((revision, path) => {
+    assert.notEqual(path, archive, "missing retained archive");
+    return readRevisionFile(revision, path);
+  });
+  await assert.rejects(missing.retained.artifactDigestsAtRevision(retained.sourceRevision),
+    /missing retained archive/u);
+  // Current bytes must never stand in for retained bytes, even if already acquired.
+  const currentPath = profile.packages.find(pkg => pkg.name === "@get-modular/core").archivePath;
+  const currentArchive = await readFile(new URL(`../../${currentPath}`, import.meta.url));
+  const changed = inputs((revision, path) => path === archive ? currentArchive : readRevisionFile(revision, path));
+  const changedDigests = await changed.retained.artifactDigestsAtRevision(retained.sourceRevision);
+  assert.throws(() => validate(changedDigests), /closure/u);
 });
 
 test("adoption evidence keeps historical HOLD identity separate from current construction", async () => {
