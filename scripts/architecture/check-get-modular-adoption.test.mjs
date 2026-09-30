@@ -388,8 +388,9 @@ test('historical lifecycle clarification review retains its exact immutable iden
   assert.equal(review.migrationStatus, 'reviewed-documentation-migrated');
 });
 
-test('current dynamic Host pin preserves A3 history and rejects prior document bytes', async () => {
+test('current standard pin preserves dynamic Host and A3 history and rejects drift', async () => {
   const review = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/dynamic-host-cms-pin-review.json', import.meta.url)));
+  const current = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/runtime-profile-cms-pin-review.json', import.meta.url)));
   const historical = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/a3-cms-pin-review.json', import.meta.url)));
   const bytes = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard.md', import.meta.url), 'utf8');
   const prior = bytes.replace('  - ADR-0029\n', '').replace(
@@ -417,16 +418,24 @@ legacy conversion and shared checker extraction require separate scope.`;
   const preA3 = prior.replace(added, removed);
   assert.notEqual(preA3, prior, 'fixture must reconstruct the pre-A3 document');
   assert.equal(digest(preA3), historical.before.sha256);
-  assert.equal(pending.standard.commit, review.after.commit);
-  assert.equal(pending.standard.sha256, review.after.sha256);
-  assert.equal(digest(bytes), review.after.sha256);
+  assert.deepEqual(current.before, review.after);
+  assert.equal(current.after.commit, '9c722ceff4ede307d06d7a4b63fdebe615f54c53');
+  assert.equal(current.delta.documentBytesChanged, false);
+  assert.equal(current.after.sha256, review.after.sha256);
+  assert.equal(pending.standard.commit, current.after.commit);
+  assert.equal(pending.standard.sha256, current.after.sha256);
+  assert.equal(digest(bytes), current.after.sha256);
   const {profile, evidence} = fixture();
-  profile.standard.commit = review.after.commit; profile.standard.sha256 = review.after.sha256;
-  evidence.standard = {commit: review.after.commit, bytes};
+  profile.standard.commit = current.after.commit; profile.standard.sha256 = current.after.sha256;
+  evidence.standard = {commit: current.after.commit, bytes};
   assert.equal(verifyAdoption(profile, evidence).status, 'verified-metadata');
   profile.standard.commit = review.before.commit;
   assert.throws(() => verifyAdoption(profile, evidence), /commit drift/);
-  profile.standard.commit = review.after.commit; evidence.standard.bytes = prior;
+  profile.standard.commit = review.after.commit;
+  assert.throws(() => verifyAdoption(profile, evidence), /commit drift/);
+  profile.standard.commit = 'f'.repeat(40);
+  assert.throws(() => verifyAdoption(profile, evidence), /commit drift/);
+  profile.standard.commit = current.after.commit; evidence.standard.bytes = prior;
   assert.throws(() => verifyAdoption(profile, evidence), /bytes drift/);
 });
 
