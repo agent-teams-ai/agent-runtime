@@ -831,4 +831,4 @@ test("independent oracle rejects a materialized wrong-platform planner binding",
 });
 
 // Regression: failed disposal after root allocation discarded the only owner.
-test("failed creation retains single-flight cleanup recovery and primary projection", failedCreationRecovery);
+test("failed creation retains single-flight cleanup recovery and primary projection", {timeout: 5_000}, failedCreationRecovery);

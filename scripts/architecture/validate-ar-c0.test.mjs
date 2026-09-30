@@ -206,6 +206,33 @@ test('rejects an extra current change to an unrelated frozen profile', () => {
     /unrelated frozen profile changed/u,
   );
 });
+// A second dependency, status change, or missing reviewed edge must fail even
+// though the historical C0 bytes remain authentic.
+for (const [name, mutate] of [
+  ['missing creation-cleanup edge', profile => {profile.compositionDependencies = profile.compositionDependencies.filter(edge => !edge.to.endsWith('/agent-runtime-host-creation-error.ts'));}],
+  ['extra ordinary dependency', profile => {profile.compositionDependencies.push({from:'unreviewed.ts',to:'other.ts',kind:'runtime'});}],
+  ['ordinary activation drift', profile => {profile.status = 'pending';}],
+]) {
+  test(`rejects ${name} outside the exact current ordinary migration`, () => {
+    const path = 'architecture/feature-module-standard/ordinary-scope.json';
+    const candidate = JSON.parse(read(path)); mutate(candidate);
+    const bytes = Buffer.from(`${JSON.stringify(candidate,null,2)}\n`);
+    assert.throws(() => validateProfileMigrations(original, {readCurrentBytes:currentRead(new Map([[path,bytes]]))}),
+      /differs from the reviewed creation-cleanup dependency/u);
+  });
+}
+test('rejects changing the reviewed current CMS migration', () => {
+  const path = 'architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json';
+  const candidate = JSON.parse(read(path)); candidate.after.commit = '0'.repeat(40);
+  const bytes = Buffer.from(`${JSON.stringify(candidate,null,2)}\n`);
+  assert.throws(() => validateCmsProfileTransition(original, {readCurrentBytes:currentRead(new Map([[path,bytes]]))}),
+    /exact current pin/u);
+});
+test('rejects corrupt retained CMS predecessor bytes after the current migration', () => {
+  const path = 'architecture/get-modular/evidence/consumer-module-standard-ac49bb33.md';
+  assert.throws(() => validateContract(original,receipt,{readBytes:currentRead(new Map([[path,Buffer.from('drift\n')]]))}),
+    /retained CMS predecessor/u);
+});
 test('rejects wrong current CMS authority while leaving non-CMS profile evolution to its owning gates', () => {
   const path = 'architecture/get-modular/consumer-profile.json';
   const candidate = JSON.parse(read(path));
@@ -321,8 +348,9 @@ test('rejects actual plan/source byte drift, not just changed contract strings',
   );
 
 });
-test('independent source oracle proves exact shared owner identity and existing wait facade', () => {
-  const source=id=>read(original.evidence[id].path).toString();
+test('independent retained source oracle proves exact shared owner identity and existing wait facade', () => {
+  const retained = revisionRead();
+  const source=id=>retained(expectedBase, original.evidence[id].path).toString();
   assert.match(source('assembly'), /\}, dependencies\["ordinary-turn"\]\);/u);
   assert.match(source('assembly'), /ordinary\.decorateHost\(rawHost, dependencies\["ordinary-turn"\]\)/u);
   assert.match(source('host'), /\(\) => ordinaryOwner\.dispose\(\)/u);

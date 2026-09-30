@@ -34,7 +34,7 @@ cleanup-only authority. It exposes no Host or commands. Concurrent calls join;
 failed attempts retain their owners, and successful actions are not repeated.
 Inner Host/feature recovery must succeed before outer prerequisite owners and
 the journal are released. `cleanupFailed` remains true after recovery as history;
-JSON projects creation metadata without causes, closures or Host references.
+`toJSON()` projects creation metadata without causes, closures or Host references.
 
 The journal tracks open, observed closed, and failed-close states. After a close
 throws, further close and record calls reject with the first failure. It never

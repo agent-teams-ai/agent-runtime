@@ -747,11 +747,14 @@ add the ADR-0029 relation and 31 lines of optional dynamic Host candidate guidan
 The staged exact upstream source supplied by orchestration is the reviewed input;
 no moving main is followed. Prior review and full-document evidence are retained.
 
-ADR-0029 does not authorize Agent Runtime dynamic adoption. G1 stays hold;
+ADR-0029 does not authorize Agent Runtime dynamic adoption. G1 remains on hold;
 contained-turn and SDK external authority retain their pending classifications.
 Existing CMS already assigns acquisition ownership and surviving cleanup custody
 to the Host, so this delivery applies product-specific fd and error recovery
 policy without changing GM semantics, Core, Assembly or lifecycle-kernel. Current
 rejecting checks authenticate both profile identities, full bytes and reviewed
 delta, reject stale pins and preserve the existing adoption states. Accepted ADRs
-and frozen C0 evidence are unchanged.
+and frozen C0 evidence are unchanged. C0 authenticates its source oracle from
+its retained base revision, not current production bytes. The current ordinary
+profile permits exactly the reviewed creation-error composition dependency;
+all other frozen fields remain enforced, alongside the current CMS pin review.

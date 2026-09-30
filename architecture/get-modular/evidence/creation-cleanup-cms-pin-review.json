@@ -27,7 +27,7 @@
     "summary": "ADR-0029 relation and optional dynamic Host lifecycle candidate guidance only."
   },
   "behavioralContractChange": false,
-  "scopeDisposition": "ADR-0029 admits only an optional lifecycle-kernel candidate; it does not authorize Agent Runtime dynamic adoption. Existing CMS acquisition ownership, cleanup truth and surviving owner requirements already govern this bug fix. Product-specific uncertain fd closure and retained creation cleanup belong to Agent Runtime; no shared semantics, Core, Assembly, lifecycle-kernel, package identity, capability or graph change. Eight ordinary graph nodes remain; G1 stays hold.",
+  "scopeDisposition": "ADR-0029 admits only an optional lifecycle-kernel candidate; it does not authorize Agent Runtime dynamic adoption. Existing CMS acquisition ownership, cleanup truth and surviving owner requirements already govern this bug fix. Product-specific uncertain fd closure and retained creation cleanup belong to Agent Runtime; no shared semantics, Core, Assembly, lifecycle-kernel, package identity, capability or graph change. Eight ordinary graph nodes remain; G1 remains on hold.",
   "adoption": {
     "passiveAndOrdinary": "active",
     "containedTurn": "pending",

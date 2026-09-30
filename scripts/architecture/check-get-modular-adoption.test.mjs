@@ -431,6 +431,12 @@ test('current candidate-only pin rejects prior identities and prior complete byt
   const prior = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard-ac49bb33.md', import.meta.url), 'utf8');
   assert.equal(digest(prior), review.before.sha256);
   assert.equal(digest(bytes), review.after.sha256);
+  const relationLine = '  - ADR-0029\n';
+  const start = bytes.indexOf('### Optional dynamic Host lifecycle candidate');
+  const end = bytes.indexOf('| Use | Reject | Evidence |', start);
+  assert.ok(start >= 0 && end > start, 'reviewed candidate addition must be present');
+  const reconstructed = bytes.replace(relationLine, '').replace(bytes.slice(start, end), '');
+  assert.equal(reconstructed, prior, 'reviewed additions must exactly bridge prior and current bytes');
   assert.equal(pending.standard.commit, review.after.commit);
   assert.equal(pending.standard.sha256, review.after.sha256);
   const {profile, evidence} = fixture();

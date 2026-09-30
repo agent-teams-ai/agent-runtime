@@ -7,7 +7,6 @@ import {resolve} from 'node:path';
 import {v2InputPolicy} from './runtime-setup-l0-evidence-v2-inputs.mjs';
 import {
   acceptedA3Revision,
-  currentCmsStandard,
   validateCmsProfileTransition as validateCmsProfileTransitionCore,
   validateProfileMigrations as validateProfileMigrationsCore,
 } from './validate-ar-c0-profile-migrations.mjs';
@@ -378,15 +377,15 @@ function validateContractBytes(c, readBytes, readRevisionBytes) {
   const cms = c.cms, active = JSON.parse(readBytes(cms.activeProfile));
   const historicalActive = JSON.parse(readRevisionBytes(base, cms.activeProfile));
   assert.deepEqual(cms.before, historicalActive.standard, 'frozen historical CMS authority drift');
-  assert.deepEqual(active.standard, currentCmsStandard, 'current CMS authority drift');
   assert.equal(cms.before.commit, '669a750d8db451e04f075cdeb36576c6606fba6e');
   assert.equal(cms.after.commit, 'ac49bb3374946330ec820591f8195a22d2c90900');
   assert.equal(sha256(readRevisionBytes(base, cms.before.evidencePath)), cms.before.sha256, 'historical CMS complete bytes drift');
   assert.equal(sha256(readBytes(cms.after.evidencePath)), cms.after.sha256, 'frozen successor CMS complete bytes drift');
   assert.equal(sha256(readBytes(active.standard.evidencePath)), active.standard.sha256, 'current CMS complete bytes drift');
   assert.ok(
-    Buffer.from(readBytes(active.standard.evidencePath)).equals(Buffer.from(readBytes(cms.after.evidencePath))),
-    'current CMS evidence differs from frozen authenticated successor bytes',
+    Buffer.from(readBytes('architecture/get-modular/evidence/consumer-module-standard-ac49bb33.md'))
+      .equals(Buffer.from(readBytes(cms.after.evidencePath))),
+    'retained CMS predecessor differs from frozen authenticated successor bytes',
   );
   assert.equal(cms.after.sha256, 'd5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f');
   assert.equal(cms.fullDocumentBytesEqual, false, 'false CMS byte no-op');
