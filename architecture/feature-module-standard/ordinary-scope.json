@@ -107,6 +107,11 @@
       "kind": "type"
     },
     {
+      "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
+      "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-creation-error.ts",
+      "kind": "runtime"
+    },
+    {
       "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
       "to": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
       "kind": "type"

@@ -60,12 +60,12 @@ function fixture() {
   const validate = () => {reseal(); return validateReceipt(receipt, identity, name => Buffer.from(artifacts[name]));};
   return {identity, artifacts, receipt, validate};
 }
-test("original argv lists and accepted native authority and ordinary assembly tests are preserved exactly", () => {
+test("original argv lists and accepted authority tests are preserved with the journal feature regression", () => {
   const original = JSON.parse(execFileSync("git", ["show", "08fb1a71b75134b43af52579e8de86a44b2a3815:packages/apps/embedded-runtime/package.json"], {encoding: "utf8"}));
   const expected = original.scripts.test.split(" && ").map(s => s.split(" ").slice(1));
   expected[0].splice(2, 0, "tests/darwin-native-attempt-authority-join.test.ts");
   expected[0].splice(47, 0, "tests/opaque-reference-digest.test.ts");
-  expected[0].splice(6, 0, "tests/ordinary-runtime-assembly.test.ts", "tests/ordinary-host-disposal.test.ts");
+  expected[0].splice(6, 0, "tests/ordinary-runtime-assembly.test.ts", "tests/ordinary-host-disposal.test.ts", "tests/features/ordinary-session-runtime/ordinary-observation-journal.unit.test.ts");
   const relocated = new Map([
     ["tests/contained-turn-cancellation-proof.unit.test.ts", "tests/features/contained-turn-cancellation-proof/contained-turn-cancellation-proof.unit.test.ts"],
     ["tests/contained-turn-construction-failure.unit.test.ts", "tests/features/contained-turn-construction-failure/contained-turn-construction-failure.unit.test.ts"],
@@ -134,7 +134,7 @@ test("original argv lists and accepted native authority and ordinary assembly te
   assert.deepEqual(testProcesses, expected);
 });
 test("complete receipts require both entire manifest processes", () => {
-  const f = fixture(); assert.equal(f.validate().length, 61);
+  const f = fixture(); assert.equal(f.validate().length, 62);
 });
 for (const [name, mutate] of [
   ["missing first process", f => {f.artifacts["processes.json"] = json(JSON.parse(f.artifacts["processes.json"]).slice(1));}],

@@ -87,16 +87,21 @@ test("held object survives a same-digest pathname replacement but replacement ma
   } finally {held.close();}
 });
 
-test("symlinked slots fail before native launch and same-size content mutation invalidates the held digest", linux, async t => {
+test("symlinked slots fail before native launch and changed metadata after same-size mutation invalidates held identity", linux, async t => {
   const slot = sandbox(t); const moved = join(slot.directory, "moved");
   renameSync(slot.executablePath, moved); symlinkSync(moved, slot.executablePath);
   assert.throws(() => holdDockerCustodyProviderExecutable(slot.executablePath, slot.executableSha256));
   fs.unlinkSync(slot.executablePath); renameSync(moved, slot.executablePath);
   const held = holdDockerCustodyProviderExecutable(slot.executablePath, slot.executableSha256);
   try {
+    const heldStat = statSync(held.descriptorPath, {bigint: true});
     const bytes = readFileSync(slot.executablePath);
     bytes[bytes.length - 1] = bytes[bytes.length - 1]! ^ 1;
     chmodSync(slot.executablePath, 0o755); writeFileSync(slot.executablePath, bytes); chmodSync(slot.executablePath, 0o555);
+    // Same-size writes can share an inode timestamp tick; make this metadata guard's negative control explicit.
+    fs.utimesSync(slot.executablePath, Number(heldStat.atimeNs) / 1e9, Number(heldStat.mtimeNs) / 1e9 - 60);
+    assert.notEqual(statSync(held.descriptorPath, {bigint: true}).mtimeNs, heldStat.mtimeNs);
+    assert.notEqual(hash(readFileSync(held.descriptorPath)), slot.executableSha256);
     const child = fixedChild(t, held.descriptorPath); await once(child, "spawn");
     assert.equal(held.observeMapping(child), undefined);
   } finally {held.close();}

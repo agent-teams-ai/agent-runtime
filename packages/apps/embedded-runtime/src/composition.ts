@@ -5,6 +5,7 @@ export {
   type AgentRuntimeHostCreationErrorDetails,
   type AgentRuntimeHostCreationPhase,
   type RuntimeSetupModuleId,
+  type HostCreationCleanupRecovery,
 } from "./composition/agent-runtime-host-creation-error.js";
 export {
   AgentRuntimeHostDisposalIncompleteError,

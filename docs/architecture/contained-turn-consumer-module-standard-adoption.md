@@ -22,17 +22,18 @@ code_anchors:
 Agent Runtime's passive setup adopts the Get Modular Consumer Module Standard
 under ADR-0015 and the active `architecture/get-modular/consumer-profile.json`.
 This separate contained-turn profile pins the same reviewed standard at commit
-`ac49bb3374946330ec820591f8195a22d2c90900` and complete-document SHA-256
-`d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f`.
+`9c722ceff4ede307d06d7a4b63fdebe615f54c53` and complete-document SHA-256
+`33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd`.
 ADR-0016 proposes only the contained-turn seven-port classification as pending.
 It does not weaken or duplicate the active passive setup Assembly claim.
 
-The [A3 migration record](get-modular-adoption.md#a3-consumer-module-standard-pin-migration)
-reviews the exact reciprocal-adoption byte delta and shared retained evidence.
-It adds no behavioral contract and does not adopt contained-turn or confer
-readiness. Existing Host owners retain cleanup authority. The immediately prior
-shared pin was `669a750d8db451e04f075cdeb36576c6606fba6e`; its document SHA-256 was
-`e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`.
+The [current migration record](get-modular-adoption.md#current-candidate-only-standard-pin-review)
+reviews the exact ADR-0029 candidate-only byte delta and shared retained evidence.
+It does not authorize dynamic Agent Runtime adoption, adopt contained-turn or
+confer readiness; G1 stays hold. Existing Host owners retain cleanup authority.
+The immediately prior shared pin was `ac49bb3374946330ec820591f8195a22d2c90900`;
+its document SHA-256 was
+`d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f`.
 The enforcing checker compares both current profile identities, hashes the
 shared retained bytes and exact delta, and preserves this profile as pending.
 Current paired migration evidence remains outstanding.

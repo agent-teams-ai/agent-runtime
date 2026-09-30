@@ -145,6 +145,9 @@ export const createRuntimeSetupFactories = (platform: NodeJS.Platform) => ({
   claudePlanner: async () => createClaudeCodeSetupInspectionPlanner(platform),
   host: (dependencies: AgentRuntimeHostDependencies, ordinaryOwner?: OrdinaryFeature) => createAgentRuntimeHost(dependencies, ordinaryOwner),
 });
+// Trusted owner-local factories must return Hosts satisfying the repeatable
+// disposal observation contract, including synthetic substitutes. Structural
+// typing does not authorize a weaker resource-owner implementation.
 export type RuntimeSetupFactories = ReturnType<typeof createRuntimeSetupFactories>;
 
 // Fixed owner-local completion seam for synthetic envelope/ownership tests.

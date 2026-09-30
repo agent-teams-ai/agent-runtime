@@ -388,9 +388,9 @@ test('historical lifecycle clarification review retains its exact immutable iden
   assert.equal(review.migrationStatus, 'reviewed-documentation-migrated');
 });
 
-test('current A3 reciprocal pin rejects the prior commit and prior document bytes', async () => {
+test('historical A3 reciprocal pin rejects the prior commit and prior document bytes', async () => {
   const review = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/a3-cms-pin-review.json', import.meta.url)));
-  const bytes = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard.md', import.meta.url), 'utf8');
+  const bytes = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard-ac49bb33.md', import.meta.url), 'utf8');
   const added = `Agent Runtime has accepted static Core/Assembly adoption for passive setup and
 ordinary-session composition in [Agent Runtime PR #168](https://github.com/agent-teams-ai/agent-runtime/pull/168),
 merged as \`3cd722f607e1643b809f6946ee303a5a94469171\`. This reciprocal reference
@@ -411,17 +411,6 @@ legacy conversion and shared checker extraction require separate scope.`;
   const prior = bytes.replace(added, removed);
   assert.notEqual(prior, bytes, 'fixture must reconstruct the exact prior document');
   assert.equal(digest(prior), review.before.sha256);
-  assert.equal(pending.standard.commit, review.after.commit);
-  assert.equal(pending.standard.sha256, review.after.sha256);
-  assert.equal(digest(bytes), review.after.sha256);
-  const {profile, evidence} = fixture();
-  profile.standard.commit = review.after.commit; profile.standard.sha256 = review.after.sha256;
-  evidence.standard = {commit: review.after.commit, bytes};
-  assert.equal(verifyAdoption(profile, evidence).status, 'verified-metadata');
-  profile.standard.commit = review.before.commit;
-  assert.throws(() => verifyAdoption(profile, evidence), /commit drift/);
-  profile.standard.commit = review.after.commit; evidence.standard.bytes = prior;
-  assert.throws(() => verifyAdoption(profile, evidence), /bytes drift/);
 });
 
 // Additive ADR-0090 scope and graph rejecting evidence remains in the canonical gate.
@@ -432,4 +421,30 @@ test('renumbered ordinary decisions retain both immutable pre-merge byte sets', 
     ['architecture/decisions/evidence/ordinary-session-adr0020-premerge.md', '1cd51ba204d7de2dd085913afde8e9349104895e1ad607c10cfe769eaeb0a35e'],
     ['architecture/decisions/evidence/ordinary-session-adr0021-premerge.md', '421a30eab66bd177a8a68e603d9a005e4ec946c3dc2beb8a0e9b48ad02f867fa'],
   ]) {assert.equal(digest(await readFile(new URL('../../' + path, import.meta.url))), expected, path);}
+});
+
+// Regression: advancing only the retained bytes leaves stale profile pins, or a
+// stale retained document could still satisfy an identity-only migration check.
+test('current candidate-only pin rejects prior identities and prior complete bytes', async () => {
+  const review = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json', import.meta.url)));
+  const bytes = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard.md', import.meta.url), 'utf8');
+  const prior = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard-ac49bb33.md', import.meta.url), 'utf8');
+  assert.equal(digest(prior), review.before.sha256);
+  assert.equal(digest(bytes), review.after.sha256);
+  const relationLine = '  - ADR-0029\n';
+  const start = bytes.indexOf('### Optional dynamic Host lifecycle candidate');
+  const end = bytes.indexOf('| Use | Reject | Evidence |', start);
+  assert.ok(start >= 0 && end > start, 'reviewed candidate addition must be present');
+  const reconstructed = bytes.replace(relationLine, '').replace(bytes.slice(start, end), '');
+  assert.equal(reconstructed, prior, 'reviewed additions must exactly bridge prior and current bytes');
+  assert.equal(pending.standard.commit, review.after.commit);
+  assert.equal(pending.standard.sha256, review.after.sha256);
+  const {profile, evidence} = fixture();
+  profile.standard.commit = review.after.commit; profile.standard.sha256 = review.after.sha256;
+  evidence.standard = {commit: review.after.commit, bytes};
+  assert.equal(verifyAdoption(profile, evidence).status, 'verified-metadata');
+  profile.standard.commit = review.before.commit;
+  assert.throws(() => verifyAdoption(profile, evidence), /commit drift/);
+  profile.standard.commit = review.after.commit; evidence.standard.bytes = prior;
+  assert.throws(() => verifyAdoption(profile, evidence), /bytes drift/);
 });

@@ -96,11 +96,26 @@ export interface AgentRuntimeHostCreationErrorDetails {
   readonly cause?: unknown;
   readonly cleanupCauses?: readonly unknown[];
   readonly moduleId?: RuntimeSetupModuleId | undefined;
+  readonly cleanupRecovery?: HostCreationCleanupRecovery | undefined;
+}
+
+/** Cleanup authority only; no Host, command or capability is published. */
+export interface HostCreationCleanupRecovery { recover(): Promise<void>; }
+
+function retainCleanup(action: () => Promise<void>): HostCreationCleanupRecovery {
+  let pending: (() => Promise<void>) | undefined = action;
+  let flight: Promise<void> | undefined;
+  return Object.freeze({recover: (): Promise<void> => flight ??= Promise.resolve().then(async () => {
+    await pending?.();
+    pending = undefined;
+    return;
+  }).catch((error: unknown) => {flight = undefined; throw error;})});
 }
 
 export class AgentRuntimeHostCreationError extends Error {
   readonly #privateCause: unknown;
   readonly #cleanupCauses: readonly unknown[];
+  readonly #cleanupRecovery: HostCreationCleanupRecovery | undefined;
   readonly cancellationObserved: boolean;
   readonly cleanupFailed: boolean;
   readonly diagnostics: readonly string[];
@@ -118,17 +133,29 @@ export class AgentRuntimeHostCreationError extends Error {
     this.moduleId = details.moduleId;
     this.#privateCause = details.cause;
     this.#cleanupCauses = details.cleanupCauses ?? [];
+    this.#cleanupRecovery = details.cleanupRecovery;
+  }
+  get cleanupRecovery(): HostCreationCleanupRecovery | undefined {return this.#cleanupRecovery;}
+  static is(value: unknown): value is AgentRuntimeHostCreationError {
+    return value !== null && typeof value === "object" && #privateCause in value;
   }
   toJSON() {
     return { name: this.name, code: this.code, phase: this.phase,
       cancellationObserved: this.cancellationObserved, cleanupFailed: this.cleanupFailed,
       diagnostics: this.diagnostics, moduleId: this.moduleId };
   }
-  withCleanupFailure(cause: unknown): AgentRuntimeHostCreationError {
+  withCleanupFailure(cause: unknown, cleanup?: () => Promise<void>): AgentRuntimeHostCreationError {
+    const previous = this.#cleanupRecovery;
     return new AgentRuntimeHostCreationError(this.code, this.phase, {
       cancellationObserved: this.cancellationObserved, cleanupFailed: true,
       diagnostics: this.diagnostics, cause: this.#privateCause,
       cleanupCauses: [...this.#cleanupCauses, cause], moduleId: this.moduleId,
+      cleanupRecovery: cleanup === undefined ? previous : retainCleanup(async () => {
+        // Inner owners must settle before releasing their prerequisites. A
+        // successful earlier recovery is idempotent across outer retries.
+        await previous?.recover();
+        await cleanup();
+      }),
     });
   }
 }
