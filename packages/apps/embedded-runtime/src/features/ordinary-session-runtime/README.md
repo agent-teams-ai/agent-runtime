@@ -41,7 +41,9 @@ throws, further close and record calls reject with the first failure. It never
 retries that fd number, since the OS outcome is uncertain and the number may be
 reused. Successful close is idempotent. Initialization fsync failures preserve
 the primary cause and any file/directory close uncertainty; an initialization
-AggregateError retains a non-enumerable cleanup-only recovery holder. Uncertain
+AggregateError retains a non-enumerable cleanup-only recovery holder. Public Host
+creation wraps that owner-local failure in `AgentRuntimeHostCreationError`, keeps
+its raw causes private and reports historical `cleanupFailed: true`. Uncertain
 close debt remains failed and needs owner-specific reconciliation outside this
 bounded fix; repeated recovery does not claim physical release.
 Observed ordinary metadata is additive and cannot be interpreted as custody

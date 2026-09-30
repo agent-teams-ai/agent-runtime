@@ -721,8 +721,11 @@ The journal has explicit open, observed-closed and failed-close states. A thrown
 close preserves its first cause, refuses further records and closes, and never
 retries a potentially reused fd. Only observed success is idempotent success.
 Initialization fsync/close failures retain the primary cause with file/directory
-cleanup uncertainty and a non-enumerable cleanup-only holder when needed. That
-holder cannot convert uncertain close into observed physical disposal. No OS
+cleanup uncertainty and a non-enumerable cleanup-only holder when needed. Public
+Host creation retains that holder through `AgentRuntimeHostCreationError`, with
+private causes and historical `cleanupFailed: true`, including failures before
+Assembly construction begins. That holder cannot convert uncertain close into
+observed physical disposal. No OS
 reconciliation algorithm or live-provider qualification is claimed.
 
 Focused synthetic evidence lives in `ordinary-host-disposal.test.ts`, its

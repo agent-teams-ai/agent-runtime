@@ -22,6 +22,22 @@ function descriptorOwner(fd: number) {
     },
   };
 }
+
+/** Owner-local handoff of initialization uncertainty to Host composition. */
+export class OrdinaryJournalInitializationError extends AggregateError {
+  readonly #recovery: {recover(): Promise<void>};
+  constructor(primary: unknown, cleanupCauses: readonly unknown[], release: () => void) {
+    super([primary, ...cleanupCauses], "ordinary_journal_initialization_cleanup_incomplete", {cause: primary});
+    let flight: Promise<void> | undefined;
+    this.#recovery = Object.freeze({
+      recover: (): Promise<void> => flight ??= Promise.resolve().then(release).catch((cause: unknown) => {flight = undefined; throw cause;}),
+    });
+  }
+  get cleanupRecovery(): {recover(): Promise<void>} {return this.#recovery;}
+  static is(value: unknown): value is OrdinaryJournalInitializationError {
+    return value !== null && typeof value === "object" && #recovery in value;
+  }
+}
 /** Owner-local synchronous, non-secret evidence. No provider content or credentials are accepted. */
 export function createOrdinaryObservationJournal(root: string) {
   if (resolve(root) !== root) {throw new Error("ordinary_evidence_path_invalid");}
@@ -51,14 +67,9 @@ export function createOrdinaryObservationJournal(root: string) {
     };
     try {release();} catch (cause) {errors.push(cause);}
     if (errors.length === 0) {throw error;}
-    const failure = new AggregateError([error, ...errors], "ordinary_journal_initialization_cleanup_incomplete", {cause: error});
-    let flight: Promise<void> | undefined;
     // Failed initialization publishes only retained cleanup custody. Causes
     // and the descriptor owners remain absent from JSON/enumerable fields.
-    Object.defineProperty(failure, "cleanupRecovery", {value: Object.freeze({
-      recover: (): Promise<void> => flight ??= Promise.resolve().then(release).catch((cause: unknown) => {flight = undefined; throw cause;}),
-    })});
-    throw failure;
+    throw new OrdinaryJournalInitializationError(error, errors, release);
   }
   return Object.freeze({
     record(event: OrdinarySessionObservation): void {

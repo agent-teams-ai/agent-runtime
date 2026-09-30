@@ -4,7 +4,7 @@ import {applyOrdinaryPostgresSchema, PostgresOrdinaryOperationStore, ORDINARY_PR
 import {createPostgresOrdinaryProviderAccessOwner} from "@agent-teams/provider-access/composition";
 import {createOrdinarySecurityOwner} from "@agent-teams/runtime-security/composition";
 import {bindOrdinaryProviderAccessOwner, bindOrdinarySecurityOwner} from "../adapters/ordinary-owner-acl.js";
-import {createOrdinaryObservationJournal} from "../adapters/ordinary-observation-journal.js";
+import {createOrdinaryObservationJournal, OrdinaryJournalInitializationError} from "../adapters/ordinary-observation-journal.js";
 import type {OrdinaryRuntimeAssemblyInput} from "../../../composition/runtime-setup-assembly.js";
 import {copyTrustedContainedTurnScope, type TrustedRuntimeAccessScope} from "../../../composition/trusted-runtime-access-scope.js";
 import type {AgentRuntimeHost} from "../../../composition/agent-runtime-host.js";
@@ -44,7 +44,15 @@ function captureOptions(value: OrdinaryAgentRuntimeHostOptions): OrdinaryAgentRu
 /** One Assembly root constructs passive setup and active ordinary execution. Auth remains lazy until submit. */
 export async function createOrdinaryAgentRuntimeHost(input: OrdinaryAgentRuntimeHostOptions, construct: (signal: AbortSignal | undefined, ordinary: OrdinaryRuntimeAssemblyInput) => Promise<AgentRuntimeHost>): Promise<AgentRuntimeHost> {
   const options = captureOptions(input); options.signal?.throwIfAborted();
-  const journal = createOrdinaryObservationJournal(options.execution.evidenceRoot);
+  let journal: ReturnType<typeof createOrdinaryObservationJournal>;
+  try {journal = createOrdinaryObservationJournal(options.execution.evidenceRoot);} catch (cause) {
+    if (!OrdinaryJournalInitializationError.is(cause)) {throw cause;}
+    let cancellationObserved = false;
+    try {cancellationObserved = options.signal?.aborted === true;} catch { /* Keep the acquired journal owner reachable. */ }
+    throw new AgentRuntimeHostCreationError("internal_failure", "run", {
+      cause, cancellationObserved, cleanupFailed: true, cleanupRecovery: cause.cleanupRecovery,
+    });
+  }
   const cleanups: (() => void | Promise<void>)[] = [() => { journal.close(); }];
   let cleanupPromise: Promise<void> | undefined;
   const cleanup = (): Promise<void> => cleanupPromise ??= (async () => {
