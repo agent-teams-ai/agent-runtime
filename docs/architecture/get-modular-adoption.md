@@ -752,7 +752,7 @@ checkpoint, the repository dependency and lock used the exact published EF
 `842f81ca68e9c3207a0da967eb599229d4d30ea32cd69a9a1686f2eb240f54eb`, npm
 integrity `sha512-E6ytO+3xhZsaPTo49DRuhldQBRMFlF06EGqqERuGHrc4q11eLssTA9fsbEGCm1e4B8n/i8AsMt2ZkQklFeolWA==`,
 and publication time `2026-09-24T00:19:03.115Z`. Dist metadata, provenance and
-the release tag resolve to the identities in the activation record. The public
+the release tag resolve to the identities in the retained qualification record. The public
 `sdk-growth-authority` export imports from those published bytes, and a frozen
 install succeeds in a fresh disposable project. No local dependency or
 published baseline is introduced.
@@ -774,7 +774,11 @@ qualification record for traceability.
 
 The retained EF 1.6.0 package membership and public imports were qualified
 against that published artifact. The direct development pin now targets EF
-1.7.0; the retained 1.6.0 qualification does not qualify that new release.
+1.7.0. The active activation record pins its verified archive SHA-256
+`fbd1234c6f7e3c38546eaac67619348f103870b461df5ea9d12e43c9cb232ba6`,
+publication time `2026-09-29T17:54:07.257Z`, and lockfile integrity. Its
+source commits and current public authority import remain pending. The retained
+1.6.0 qualification bytes do not qualify that new release.
 Current source-bound typed observation and strict extraction are still pending
 in the admission record. No source-local command may convert
 that pending status into a trusted grant. The external authority is uninvoked,

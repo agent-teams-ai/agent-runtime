@@ -16,7 +16,7 @@ const contract = JSON.parse(readFileSync(join(root, contractPath), "utf8"));
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), "ar-sdk-profile-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  for (const path of [contractPath, "architecture/c0/ar-owned-lifetime/identity.json", "architecture/c0/ar-owned-lifetime/evidence/common-assembly-ac49bb33.md", ".github/workflows/ci.yml", "pnpm-workspace.yaml", "architecture/sdk-growth", "architecture/get-modular/consumer-profile.json", "architecture/get-modular/evidence/consumer-module-standard.md", "architecture/get-modular/evidence/a3-cms-pin-review.json", "architecture/get-modular/evidence/a3-cms-pin-delta.diff", "architecture/get-modular/evidence/dynamic-host-cms-pin-review.json", "architecture/get-modular/evidence/dynamic-host-cms-pin-delta.diff", "architecture/get-modular/evidence/sdk-growth-standard-review.json", "architecture/get-modular/evidence/sdk-growth-current-standard.md", "architecture/consumer-module-standard/contained-turn-profile.json", ...contract.inventory.packages.map(pkg => pkg.manifest)]) {
+  for (const path of [contractPath, "architecture/c0/ar-owned-lifetime/identity.json", "architecture/c0/ar-owned-lifetime/evidence/common-assembly-ac49bb33.md", ".github/workflows/ci.yml", "pnpm-workspace.yaml", "pnpm-lock.yaml", "architecture/sdk-growth", "architecture/get-modular/consumer-profile.json", "architecture/get-modular/evidence/consumer-module-standard.md", "architecture/get-modular/evidence/a3-cms-pin-review.json", "architecture/get-modular/evidence/a3-cms-pin-delta.diff", "architecture/get-modular/evidence/dynamic-host-cms-pin-review.json", "architecture/get-modular/evidence/dynamic-host-cms-pin-delta.diff", "architecture/get-modular/evidence/runtime-profile-cms-pin-review.json", "architecture/get-modular/evidence/sdk-growth-standard-review.json", "architecture/get-modular/evidence/sdk-growth-current-standard.md", "architecture/consumer-module-standard/contained-turn-profile.json", ...contract.inventory.packages.map(pkg => pkg.manifest)]) {
     mkdirSync(dirname(join(directory, path)), { recursive: true });
     cpSync(join(root, path), join(directory, path), { recursive: true });
   }
@@ -29,7 +29,7 @@ function mutate(directory, path, change) {
   writeFileSync(destination, path.endsWith(".yaml") ? stringify(value) : `${JSON.stringify(value, null, 2)}\n`);
 }
 
-test("exact EF 1.6.0 package enrollment keeps historical EF 1.5.1 observation separate and current admission blocked", t => {
+test("active EF 1.7.0 identity preserves EF 1.6.0 qualification and blocked admission", t => {
   assert.deepEqual(checkSdkGrowthProfile(fixture(t)), { status: "pending-authority-qualification", packages: 6, metadataRoots: 1, releaseEligible: false });
 });
 for (const script of ["sdk-growth:profile", "test:sdk-growth:profile", "test:sdk-growth:packed"]) {
@@ -237,6 +237,36 @@ test("reject published registry identity drift", t => {
   const directory = fixture(t);
   mutate(directory, "architecture/sdk-growth/activation.json", value => { value.registry.version = "1.5.1"; });
   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_REGISTRY_IDENTITY_DRIFT/u);
+});
+test("reject historical EF 1.6.0 qualification relabeled as EF 1.7.0", t => {
+  const directory = fixture(t);
+  mutate(directory, "architecture/sdk-growth/qualification.json", value => { value.registryQualification.version = "1.7.0"; });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_REGISTRY_QUALIFICATION_DRIFT/u);
+});
+test("reject forged historical qualification content", t => {
+  const directory = fixture(t);
+  mutate(directory, "architecture/sdk-growth/qualification.json", value => { value.scope = "EF 1.7.0 qualified"; });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_HISTORICAL_QUALIFICATION_DRIFT/u);
+});
+test("reject forged current EF archive identity", t => {
+  const directory = fixture(t);
+  mutate(directory, "architecture/sdk-growth/activation.json", value => { value.registry.tarballSha256 = "0".repeat(64); });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_REGISTRY_IDENTITY_DRIFT/u);
+});
+test("reject forged EF source provenance", t => {
+  const directory = fixture(t);
+  mutate(directory, "architecture/sdk-growth/activation.json", value => { value.qualificationInput.sourceReleaseCommit = "0".repeat(40); });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_EF_SOURCE_DRIFT/u);
+});
+test("reject EF lock integrity detached from active identity", t => {
+  const directory = fixture(t);
+  mutate(directory, "pnpm-lock.yaml", value => { value.packages["@agent-teams/engineering-foundation@1.7.0"].resolution.integrity = "sha512-forged"; });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_EF_LOCK_DRIFT/u);
+});
+test("reject EF lock importer redirected to a different resolution", t => {
+  const directory = fixture(t);
+  mutate(directory, "pnpm-lock.yaml", value => { value.importers["."].devDependencies["@agent-teams/engineering-foundation"].version = "1.7.0(@types/node@0.0.0)"; });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_EF_LOCK_DRIFT/u);
 });
 test("reject root EF pin detached from the exact registry artifact", t => {
   const directory = fixture(t);
