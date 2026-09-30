@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 
 export const historicalReviewPath = "architecture/get-modular/evidence/a3-cms-pin-review.json";
 export const historicalDeltaPath = "architecture/get-modular/evidence/a3-cms-pin-delta.diff";
-export const standardReviewPath = "architecture/get-modular/evidence/dynamic-host-cms-pin-review.json";
+export const standardReviewPath = "architecture/get-modular/evidence/runtime-profile-cms-pin-review.json";
+export const historicalDynamicReviewPath = "architecture/get-modular/evidence/dynamic-host-cms-pin-review.json";
 export const standardDeltaPath = "architecture/get-modular/evidence/dynamic-host-cms-pin-delta.diff";
 
 const expected = Object.freeze({
@@ -124,4 +125,35 @@ export const validateStandardMigration = (review, deltaBytes) => {
   }, "dynamic Host migration cannot promote unsupported scope");
   assert.equal(review.historicalReview, historicalReviewPath,
     "dynamic Host migration must preserve the historical A3 review");
+};
+
+export const validateCurrentStandardMigration = review => {
+  assert.deepEqual(review, {
+    schemaVersion: 1,
+    reviewedOn: "2026-09-30",
+    repository: "agent-teams-ai/get-modular",
+    path: "docs/architecture/common-assembly.md",
+    anchor: "consumer-module-standard",
+    before: {
+      commit: "24d6557a1b04b01a3a73c64b1d9a9afd83d89c8f",
+      sha256: "33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd",
+      byteLength: 24312,
+      evidencePath: "architecture/get-modular/evidence/consumer-module-standard.md",
+    },
+    after: {
+      commit: "9c722ceff4ede307d06d7a4b63fdebe615f54c53",
+      sha256: "33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd",
+      byteLength: 24312,
+      evidencePath: "architecture/get-modular/evidence/consumer-module-standard.md",
+    },
+    delta: { documentBytesChanged: false, hunks: 0, removedLines: 0, addedLines: 0 },
+    scopeDisposition: {
+      passiveAndOrdinary: "active-unchanged",
+      containedTurn: "pending-unchanged",
+      dynamicAgentRuntime: "not-certified",
+      sdkExternalAuthority: "pending-authority-qualification",
+    },
+    review: "The canonical full document is byte-identical at both exact commits. No Consumer Module Standard semantic or behavioral delta is admitted. The release pin migration changes package artifacts and tooling pins without expanding composition scope.",
+    historicalReview: historicalDynamicReviewPath,
+  }, "current standard pin review drift");
 };

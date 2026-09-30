@@ -6,7 +6,8 @@ import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
 import {v2InputPolicy} from './runtime-setup-l0-evidence-v2-inputs.mjs';
 import {
-  standardDeltaPath, standardReviewPath, validateStandardMigration,
+  historicalDynamicReviewPath, standardDeltaPath, standardReviewPath,
+  validateCurrentStandardMigration, validateStandardMigration,
 } from './consumer-module-standard-pin.mjs';
 import {
   acceptedA3Revision,
@@ -386,10 +387,14 @@ function validateContractBytes(c, readBytes, readRevisionBytes) {
   assert.equal(cms.after.commit, 'ac49bb3374946330ec820591f8195a22d2c90900');
   assert.equal(sha256(readRevisionBytes(base, cms.before.evidencePath)), cms.before.sha256, 'historical CMS complete bytes drift');
   assert.equal(sha256(readBytes(cms.after.evidencePath)), cms.after.sha256, 'frozen successor CMS complete bytes drift');
+  const historicalMigration = JSON.parse(readBytes(historicalDynamicReviewPath));
+  validateStandardMigration(historicalMigration, readBytes(standardDeltaPath));
+  assert.equal(historicalMigration.before.commit, cms.after.commit, 'historical CMS migration predecessor drift');
+  assert.equal(historicalMigration.before.sha256, cms.after.sha256, 'historical CMS migration predecessor bytes drift');
   const migration = JSON.parse(readBytes(standardReviewPath));
-  validateStandardMigration(migration, readBytes(standardDeltaPath));
-  assert.equal(migration.before.commit, cms.after.commit, 'current CMS migration predecessor drift');
-  assert.equal(migration.before.sha256, cms.after.sha256, 'current CMS migration predecessor bytes drift');
+  validateCurrentStandardMigration(migration);
+  assert.equal(migration.before.commit, historicalMigration.after.commit, 'current CMS migration predecessor drift');
+  assert.equal(migration.before.sha256, historicalMigration.after.sha256, 'current CMS migration predecessor bytes drift');
   assert.equal(migration.after.commit, active.standard.commit, 'current CMS migration successor drift');
   assert.equal(migration.after.sha256, active.standard.sha256, 'current CMS migration successor bytes drift');
   assert.equal(sha256(readBytes(active.standard.evidencePath)), active.standard.sha256, 'current CMS complete bytes drift');

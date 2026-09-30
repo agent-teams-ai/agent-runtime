@@ -107,37 +107,34 @@ bounded contract. ADR-0008 and its historical evidence remain immutable;
 ADR-0013 continues to govern exactly its three active FMS features.
 
 The central authority is Get Modular's accepted ADR-0026 and the exact pinned
-[consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/24d6557a1b04b01a3a73c64b1d9a9afd83d89c8f/docs/architecture/common-assembly.md#consumer-module-standard).
-The reviewed dynamic Host pin migration supersedes the A3 pin; the A3 review
-remains historical:
+[consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/9c722ceff4ede307d06d7a4b63fdebe615f54c53/docs/architecture/common-assembly.md#consumer-module-standard).
+The [current zero-delta review](../../architecture/get-modular/evidence/runtime-profile-cms-pin-review.json)
+supersedes the dynamic Host pin review; earlier reviews remain historical:
 
 - Repository: `agent-teams-ai/get-modular`.
-- Commit: `24d6557a1b04b01a3a73c64b1d9a9afd83d89c8f`.
+- Commit: `9c722ceff4ede307d06d7a4b63fdebe615f54c53`.
 - Path: `docs/architecture/common-assembly.md`; anchor: `consumer-module-standard`.
 - Complete document SHA-256: `33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd`.
 - Retained bytes are recorded by the consumer profile; they are evidence, not a second authority.
 
 Document identity, package versions/archive integrity, Core compatibility token,
 and local adoption authority are distinct. The profile retains the approved published
-Core and Assembly 0.1.0 archives, verifies their SHA-256 and lock integrity,
+Core and Assembly 0.2.0 archives, verifies their SHA-256 and lock integrity,
 and requires exact catalog versions. It records actual blocking commands,
-without `conformant: true` for the repository. The A3 migration from the
-merged PR110 document remains reviewed below. The current dynamic Host
-migration is reviewed separately against exact upstream bytes; no moving main
-is consumed.
+without `conformant: true` for the repository. The A3 and dynamic Host migrations
+remain reviewed below. The current standard revision has identical canonical
+document bytes to the previous pin; no moving main is consumed.
 
-The consumed release sources are distinct from the standard pin:
+The consumed release archives are distinct from the standard pin:
 
-| Published root | Version | Release source commit | Retained archive SHA-256 |
-| --- | --- | --- | --- |
-| `@get-modular/core` | `0.1.0` | `bbc5053c2f2f96e7c524bd65c42288fc88cd7358` | `50803ea69e2fb4078013a897f858908b4d73d26296336ab155a6118809dfb8ba` |
-| `@get-modular/assembly` | `0.1.0` | `41d72bfb266048e6893078cf39f813e08dea2550` | `e89207171e44afd5e813aa5e7a0db8abc999b42338559d38b44b4db71da228ab` |
+| Published root | Version | Retained archive SHA-256 |
+| --- | --- | --- |
+| `@get-modular/core` | `0.2.0` | `dd4cb159c839fbbf38512d1f66aa8ff5019123a6981ca553ba640d423ae67b58` |
+| `@get-modular/assembly` | `0.2.0` | `86b26f860ec4eaeeb143cde553deca74acafe89a856d74ea3e62e4a2531fddfa` |
 
-The Core generated stage1 subject is the complete published archive above.
-Its `dist/composition/generated/stage1.js` entry has SHA-256
-`93438ec6c300bad642dde280070cabe1f4df2ea07d30176b368f2cee311acf54`;
-this entry digest is not the digest of the complete subject. The consumer
-profile retains both archives and exact lockfile integrity.
+The consumer profile retains both complete published archives and exact
+lockfile integrity. The historical 0.1.0 stage1 entry digest belongs to its
+earlier release evidence and does not identify the current archive.
 The [packed consumer test](../../packages/apps/embedded-runtime/tests/package/assembly-packed-consumer.test.ts)
 installs declared production roots and checks passive behavior and typings.
 These identities do not assert whole-runtime conformance.
@@ -749,8 +746,9 @@ identity and workflow; its rejecting tests verify the retained Git bytes and
 reject later contract or provenance mutations. This rebind does not add SDK
 admission evidence.
 
-SDK authority activation remains pending. The repository dependency and lock now
-use the exact published EF 1.6.0 artifact: tarball SHA-256
+SDK authority activation remains pending. At the retained SDK enrollment
+checkpoint, the repository dependency and lock used the exact published EF
+1.6.0 artifact: tarball SHA-256
 `842f81ca68e9c3207a0da967eb599229d4d30ea32cd69a9a1686f2eb240f54eb`, npm
 integrity `sha512-E6ytO+3xhZsaPTo49DRuhldQBRMFlF06EGqqERuGHrc4q11eLssTA9fsbEGCm1e4B8n/i8AsMt2ZkQklFeolWA==`,
 and publication time `2026-09-24T00:19:03.115Z`. Dist metadata, provenance and
@@ -774,9 +772,11 @@ reported 446 `ae-forgotten-export` diagnostics. Its source, lock and tool digest
 cannot qualify EF 1.6.0. The historical audit and counts remain in the
 qualification record for traceability.
 
-EF 1.6.0 package membership and public imports are qualified against the
-published artifact. Current source-bound typed observation and strict extraction
-are still pending in the admission record. No source-local command may convert
+The retained EF 1.6.0 package membership and public imports were qualified
+against that published artifact. The direct development pin now targets EF
+1.7.0; the retained 1.6.0 qualification does not qualify that new release.
+Current source-bound typed observation and strict extraction are still pending
+in the admission record. No source-local command may convert
 that pending status into a trusted grant. The external authority is uninvoked,
 and no baseline, trusted history, owner decision, grant, completion or receipt
 is fabricated for these initial-unreleased packages.
@@ -853,3 +853,16 @@ The SDK profile gate checks the new reviewed pin after authenticating the A3
 review and frozen A3 bytes. The C0 gate authenticates its frozen `ac49bb33`
 successor separately, then checks this reviewed current transition and both
 current profile authority slots without changing the C0 contract or verdicts.
+
+## Current standard and dependency pin review
+
+At exact Get Modular commit `9c722ceff4ede307d06d7a4b63fdebe615f54c53`,
+the canonical full-document SHA-256 remains
+`33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd`,
+identical to the previous `24d6557a1b04b01a3a73c64b1d9a9afd83d89c8f` pin.
+The [retained review](../../architecture/get-modular/evidence/runtime-profile-cms-pin-review.json)
+records zero document delta and keeps passive and ordinary adoption active,
+contained-turn adoption pending, and dynamic scope uncertified. Core and Assembly
+move to exact published 0.2.0 archives; Docs Protocol 0.6.2, Docs Protocol Agent
+Teams 0.2.13, and Engineering Foundation 1.7.0 are direct development pins.
+Historical reviews, C0 evidence, and accepted ADR bytes remain unchanged.

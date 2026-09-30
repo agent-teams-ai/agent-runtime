@@ -216,6 +216,16 @@ test('rejects wrong current CMS authority while leaving non-CMS profile evolutio
     /current active CMS authority drift/u,
   );
 });
+test('rejects drift in the current published Get Modular archive pins', () => {
+  const path = 'architecture/get-modular/consumer-profile.json';
+  const candidate = JSON.parse(read(path));
+  candidate.packages[0].version = '0.1.0';
+  const bytes = Buffer.from(`${JSON.stringify(candidate,null,2)}\n`);
+  assert.throws(
+    () => validateCmsProfileTransition(original, {readCurrentBytes:currentRead(new Map([[path,bytes]]))}),
+    /current published Get Modular package pins drift/u,
+  );
+});
 test('rejects a pending profile left on the historical A3 pin', () => {
   const path = 'architecture/consumer-module-standard/contained-turn-profile.json';
   const candidate = JSON.parse(read(path));
@@ -234,7 +244,7 @@ test('rejects an unreviewed current authority change outside the delegated CMS s
   const bytes = Buffer.from(`${JSON.stringify(candidate,null,2)}\n`);
   assert.throws(
     () => validateCmsProfileTransition(original, {readCurrentBytes:currentRead(new Map([[path,bytes]]))}),
-    /outside delegated CMS and source relationships/u,
+    /outside delegated CMS, package pins and source relationships/u,
   );
 });
 test('rejects drift in historical CMS bytes authenticated from the retained revision', () => {

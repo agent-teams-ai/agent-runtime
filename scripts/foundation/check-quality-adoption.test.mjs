@@ -14,7 +14,7 @@ const mutations = {
   "stale coverage schema": value => { value.profile.schemaVersion = 1; },
   "wrong bridge admissions": value => { value.profile.bridgeAdmissionsPath = "other.json"; },
   "wrong authority": value => { value.profile.featureProfilePath = "other.json"; },
-  "wrong pin": value => { value.manifest.devDependencies["@agent-teams/engineering-foundation"] = "^1.6.0"; },
+  "wrong pin": value => { value.manifest.devDependencies["@agent-teams/engineering-foundation"] = "^1.7.0"; },
   "stale pin": value => { value.manifest.devDependencies["@agent-teams/engineering-foundation"] = "1.5.1"; },
   "missing typed lint companion": value => { delete value.manifest.devDependencies["oxlint-tsgolint"]; },
   "no-op scope": value => { value.manifest.scripts["quality:coverage:scope"] = "true"; },

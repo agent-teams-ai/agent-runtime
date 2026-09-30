@@ -97,9 +97,9 @@
   "devDependencies": {
     "@agent-teams/agent-execution": "workspace:*",
     "@agent-teams/embedded-runtime": "workspace:*",
-    "@agent-teams/docs-protocol": "0.6.1",
-    "@agent-teams/docs-protocol-agent-teams": "0.2.11",
-    "@agent-teams/engineering-foundation": "1.6.0",
+    "@agent-teams/docs-protocol": "0.6.2",
+    "@agent-teams/docs-protocol-agent-teams": "0.2.13",
+    "@agent-teams/engineering-foundation": "1.7.0",
     "@agentclientprotocol/sdk": "catalog:",
     "@opencode-ai/plugin": "catalog:",
     "@types/node": "catalog:",

@@ -6,10 +6,12 @@ import { fileURLToPath } from "node:url";
 import { parseSync, Visitor } from "oxc-parser";
 import {
   historicalDeltaPath,
+  historicalDynamicReviewPath,
   historicalReviewPath,
   standardDeltaPath,
   standardReviewPath,
   validateHistoricalA3Migration,
+  validateCurrentStandardMigration,
   validateStandardMigration,
 } from "./consumer-module-standard-pin.mjs";
 
@@ -35,7 +37,7 @@ export const EXPECTED_PROFILE = Object.freeze({
       repository: "agent-teams-ai/get-modular",
       path: "docs/architecture/common-assembly.md",
       anchor: "consumer-module-standard",
-      gitCommit: "24d6557a1b04b01a3a73c64b1d9a9afd83d89c8f",
+      gitCommit: "9c722ceff4ede307d06d7a4b63fdebe615f54c53",
       sha256: "33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd",
     },
     featureModuleStandard: {
@@ -111,6 +113,7 @@ const requiredPaths = Object.freeze([
   decisionPath,
   "docs/architecture/contained-turn-consumer-module-standard-adoption.md",
   standardReviewPath,
+  historicalDynamicReviewPath,
   standardDeltaPath,
   historicalReviewPath,
   historicalDeltaPath,
@@ -377,6 +380,7 @@ export async function loadConsumerModuleStandardInputs(root = repositoryRoot) {
   const standardBytes = await readFile(resolve(root,
     "architecture/get-modular/evidence/consumer-module-standard.md"));
   const standardReview = JSON.parse(await readFile(resolve(root, standardReviewPath), "utf8"));
+  const historicalDynamicReview = JSON.parse(await readFile(resolve(root, historicalDynamicReviewPath), "utf8"));
   const standardDeltaBytes = await readFile(resolve(root, standardDeltaPath));
   const historicalReview = JSON.parse(await readFile(resolve(root, historicalReviewPath), "utf8"));
   const historicalDeltaBytes = await readFile(resolve(root, historicalDeltaPath));
@@ -391,7 +395,7 @@ export async function loadConsumerModuleStandardInputs(root = repositoryRoot) {
     catch { return [path, false]; }
   })));
   return { decisionBytes, decisionRegistry, packageManifest, passiveProfile, pathExistence, profile, sources,
-    standardBytes, standardDeltaBytes, standardReview, historicalReview, historicalDeltaBytes };
+    standardBytes, standardDeltaBytes, standardReview, historicalDynamicReview, historicalReview, historicalDeltaBytes };
 }
 
 const validatePendingDecision = inputs => {
@@ -423,7 +427,8 @@ export function validateConsumerModuleStandard(inputs) {
     "standard evidence path must remain shared");
   assert.equal(createHash("sha256").update(inputs.standardBytes).digest("hex"),
     standard.sha256, "retained standard bytes must match the reviewed pin");
-  validateStandardMigration(inputs.standardReview, inputs.standardDeltaBytes);
+  validateCurrentStandardMigration(inputs.standardReview);
+  validateStandardMigration(inputs.historicalDynamicReview, inputs.standardDeltaBytes);
   validateHistoricalA3Migration(inputs.historicalReview, inputs.historicalDeltaBytes);
 
   for (const path of requiredPaths) {

@@ -18,6 +18,7 @@ const fresh = async () => {
     passiveProfile: structuredClone(inputs.passiveProfile),
     historicalDeltaBytes: Buffer.from(inputs.historicalDeltaBytes),
     historicalReview: structuredClone(inputs.historicalReview),
+    historicalDynamicReview: structuredClone(inputs.historicalDynamicReview),
     standardBytes: Buffer.from(inputs.standardBytes),
     standardDeltaBytes: Buffer.from(inputs.standardDeltaBytes),
     standardReview: structuredClone(inputs.standardReview),
@@ -73,22 +74,22 @@ test("rejects stale merged pins, split profile identities and retained byte drif
 test("rejects stale or rewritten current migration evidence and historical A3 drift", async () => {
   const stale = await fresh();
   stale.standardReview.after.commit = stale.standardReview.before.commit;
-  assert.throws(() => validateConsumerModuleStandard(stale), /exact current pin/u);
+  assert.throws(() => validateConsumerModuleStandard(stale), /current standard pin review drift/u);
 
   const unsupported = await fresh();
   unsupported.standardReview.scopeDisposition.dynamicAgentRuntime = "active";
-  assert.throws(() => validateConsumerModuleStandard(unsupported), /cannot promote unsupported scope/u);
+  assert.throws(() => validateConsumerModuleStandard(unsupported), /current standard pin review drift/u);
 
   const expanded = await fresh();
   expanded.standardReview.scopeDisposition.containedTurn = "active";
-  assert.throws(() => validateConsumerModuleStandard(expanded), /cannot promote unsupported scope/u);
+  assert.throws(() => validateConsumerModuleStandard(expanded), /current standard pin review drift/u);
 
   const missingAuthority = await fresh();
-  delete missingAuthority.standardReview.upstreamDecision;
+  missingAuthority.historicalDynamicReview.upstreamDecision = undefined;
   assert.throws(() => validateConsumerModuleStandard(missingAuthority), /accepted upstream authority/u);
 
   const wrongSource = await fresh();
-  wrongSource.standardReview.consumerSourceCommit = "moving-head";
+  wrongSource.historicalDynamicReview.consumerSourceCommit = "moving-head";
   assert.throws(() => validateConsumerModuleStandard(wrongSource), /source identity drift/u);
 
   const history = await fresh();
@@ -107,7 +108,7 @@ test("rejects missing governed paths and proposed decision lifecycle drift", asy
 
   const missingMigration = await fresh();
   missingMigration.pathExistence.set(
-    "architecture/get-modular/evidence/dynamic-host-cms-pin-review.json", false);
+    "architecture/get-modular/evidence/runtime-profile-cms-pin-review.json", false);
   assert.throws(() => validateConsumerModuleStandard(missingMigration),
     /required adoption path is missing/u);
 

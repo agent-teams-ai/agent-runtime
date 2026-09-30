@@ -35,9 +35,9 @@ test("projected direct tooling pins and disabled release-age waiting preserve th
   const manifest = await json("package.json"), workspace = await yaml("pnpm-workspace.yaml");
   assert.equal(manifest.packageManager, "pnpm@11.18.0");
   assert.deepEqual(manifest.engines, { node: ">=24.18.0 <25 || >=26.10.0 <27", pnpm: "11.18.0" });
-  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.6.0");
-  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol"], "0.6.1");
-  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol-agent-teams"], "0.2.11");
+  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.7.0");
+  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol"], "0.6.2");
+  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol-agent-teams"], "0.2.13");
   for (const section of ["dependencies", "optionalDependencies", "peerDependencies"]) {
     assert.equal(Object.hasOwn(manifest[section] ?? {}, "@agent-teams/docs-protocol-agent-teams"), false);
   }
@@ -51,11 +51,13 @@ test("projected direct tooling pins and disabled release-age waiting preserve th
   assert.deepEqual(workspace.minimumReleaseAgeExclude, [
     "@agent-teams/repository-mutation@0.2.1",
     "@agent-teams/document-authoring@0.3.1",
-    "@agent-teams/docs-protocol@0.6.1",
-    "@agent-teams/docs-protocol-agent-teams@0.2.11",
-    "@agent-teams/engineering-foundation@1.6.0",
+    "@agent-teams/docs-protocol@0.6.2",
+    "@agent-teams/docs-protocol-agent-teams@0.2.13",
+    "@agent-teams/engineering-foundation@1.7.0",
+    "@get-modular/core@0.2.0",
+    "@get-modular/assembly@0.2.0",
   ]);
-  assert.match(await read("scripts/architecture/feature-module-config.mjs"), /const FOUNDATION_VERSION = "1\.6\.0";/u);
+  assert.match(await read("scripts/architecture/feature-module-config.mjs"), /const FOUNDATION_VERSION = "1\.7\.0";/u);
 });
 
 test("managed Skill remains byte-exact with the selected installed Cohort", async () => {

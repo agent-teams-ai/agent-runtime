@@ -29,8 +29,8 @@ catalog:
   xstate: "5.32.5"
   yaml: "2.9.0"
   zod: "4.4.3"
-  '@get-modular/core': 0.1.0
-  '@get-modular/assembly': 0.1.0
+  '@get-modular/core': 0.2.0
+  '@get-modular/assembly': 0.2.0
 allowBuilds:
   msgpackr-extract: false
   opencode-ai: true
@@ -38,6 +38,8 @@ minimumReleaseAge: 0
 minimumReleaseAgeExclude:
   - "@agent-teams/repository-mutation@0.2.1"
   - "@agent-teams/document-authoring@0.3.1"
-  - "@agent-teams/docs-protocol@0.6.1"
-  - "@agent-teams/docs-protocol-agent-teams@0.2.11"
-  - "@agent-teams/engineering-foundation@1.6.0"
+  - "@agent-teams/docs-protocol@0.6.2"
+  - "@agent-teams/docs-protocol-agent-teams@0.2.13"
+  - "@agent-teams/engineering-foundation@1.7.0"
+  - "@get-modular/core@0.2.0"
+  - "@get-modular/assembly@0.2.0"

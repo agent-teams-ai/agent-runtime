@@ -41,8 +41,8 @@ test("canonical qualification v2 covers every Runtime authorable type exactly on
     contractPath: "architecture/foundation/docs-protocol-qualification.json",
     gateCommand: "pnpm docs:protocol:check"
   });
-  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol"], "0.6.1");
-  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.6.0");
+  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol"], "0.6.2");
+  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.7.0");
   assert.match(protocolProfileSource, /^schemaVersion: 3$/mu);
   assert.match(protocolProfileSource, /^  path: architecture\/foundation\/document-authoring\.yaml$/mu);
   assert.match(protocolProfileSource, /^  schemaVersion: 3$/mu);

@@ -90,7 +90,7 @@ const consumePackedArchives = async (root: string, dependencies: Record<string, 
     packageManager: "pnpm@11.18.0", dependencies,
     devDependencies: { typescript: "7.0.2", "@types/node": "24.13.3" },
   }));
-  await writeFile(join(consumer, "pnpm-workspace.yaml"), JSON.stringify({ overrides: dependencies, minimumReleaseAgeExclude: ["@get-modular/core@0.1.0", "@get-modular/assembly@0.1.0"] }));
+  await writeFile(join(consumer, "pnpm-workspace.yaml"), JSON.stringify({ overrides: dependencies, minimumReleaseAgeExclude: ["@get-modular/core@0.2.0", "@get-modular/assembly@0.2.0"] }));
   // Core/Assembly and all local roots use the exact disposable archives.
   // Only remaining declared dependencies require registry retrieval.
   run("pnpm", ["install", "--ignore-scripts", "--config.node-linker=hoisted"], consumer);
@@ -126,7 +126,7 @@ const consumePackedArchives = async (root: string, dependencies: Record<string, 
     const installed = await realpath(join(consumer, "node_modules", name));
     assert.ok(installed.startsWith(`${installedConsumer}${sep}`), `${name} escaped disposable install`);
     const manifest = JSON.parse(await readFile(join(installed, "package.json"), "utf8"));
-    if (name.startsWith("@get-modular/")) { assert.equal(manifest.version, "0.1.0"); }
+    if (name.startsWith("@get-modular/")) { assert.equal(manifest.version, "0.2.0"); }
     for (const value of Object.values(manifest.dependencies ?? {})) {
       assert.doesNotMatch(String(value), /^(?:workspace:|link:|catalog:)/u);
     }

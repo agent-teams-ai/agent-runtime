@@ -28,7 +28,7 @@ const acceptedCmsAuthority = Object.freeze({
     path: 'docs/architecture/common-assembly.md',
     anchor: 'consumer-module-standard',
     decision: 'ADR-0026',
-    commit: '24d6557a1b04b01a3a73c64b1d9a9afd83d89c8f',
+    commit: '9c722ceff4ede307d06d7a4b63fdebe615f54c53',
     sha256: '33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd',
     evidencePath: 'architecture/get-modular/evidence/consumer-module-standard.md',
   },
@@ -36,7 +36,7 @@ const acceptedCmsAuthority = Object.freeze({
     repository: 'agent-teams-ai/get-modular',
     path: 'docs/architecture/common-assembly.md',
     anchor: 'consumer-module-standard',
-    gitCommit: '24d6557a1b04b01a3a73c64b1d9a9afd83d89c8f',
+    gitCommit: '9c722ceff4ede307d06d7a4b63fdebe615f54c53',
     sha256: '33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd',
   },
 });
@@ -47,6 +47,7 @@ const canonicalJsonBytes = value => Buffer.from(`${JSON.stringify(value,null,2)}
 const nonDelegatedActiveProfile = profile => {
   const projected = structuredClone(profile);
   delete projected.standard;
+  delete projected.packages;
   for (const boundary of projected.boundaries) {delete boundary.relationships;}
   return projected;
 };
@@ -131,10 +132,22 @@ export function validateCmsProfileTransition(c, context) {
   assert.deepEqual(activeAtEnrollment.standard, c.cms.before, 'CMS active predecessor is not frozen C0 authority');
   const currentActive = JSON.parse(readCurrentBytes(activeProfile));
   assert.deepEqual(currentActive.standard, acceptedCmsAuthority.currentStandard, 'current active CMS authority drift');
+  assert.deepEqual(currentActive.packages, [
+    {
+      name: '@get-modular/core', version: '0.2.0',
+      archiveSha256: 'dd4cb159c839fbbf38512d1f66aa8ff5019123a6981ca553ba640d423ae67b58',
+      archivePath: 'architecture/get-modular/evidence/get-modular-core-0.2.0.tgz',
+    },
+    {
+      name: '@get-modular/assembly', version: '0.2.0',
+      archiveSha256: '86b26f860ec4eaeeb143cde553deca74acafe89a856d74ea3e62e4a2531fddfa',
+      archivePath: 'architecture/get-modular/evidence/get-modular-assembly-0.2.0.tgz',
+    },
+  ], 'current published Get Modular package pins drift');
   assert.deepEqual(
     nonDelegatedActiveProfile(currentActive),
     nonDelegatedActiveProfile(activeAtEnrollment),
-    'current active profile changed outside delegated CMS and source relationships',
+    'current active profile changed outside delegated CMS, package pins and source relationships',
   );
 
   const pendingAtEnrollment = JSON.parse(readRevisionBytes(acceptedSdkEnrollment.revision, pendingProfile));
