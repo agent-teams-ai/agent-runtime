@@ -29,7 +29,8 @@
   },
   "devDependencies": {
     "@types/pg": "catalog:",
-    "oxc-parser": "catalog:"
+    "oxc-parser": "catalog:",
+    "typescript": "catalog:"
   },
   "files": [
     "dist"

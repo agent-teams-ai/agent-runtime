@@ -200,6 +200,9 @@ importers:
       oxc-parser:
         specifier: 'catalog:'
         version: 0.147.0
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
 
   packages/contexts/provider-access:
     devDependencies:
