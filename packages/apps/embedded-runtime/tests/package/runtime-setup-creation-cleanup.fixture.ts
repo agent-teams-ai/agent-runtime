@@ -39,3 +39,30 @@ export async function failedCreationRecovery() {
   assert.equal(attempts, 3); assert.equal(earlierSuccesses, 1);
   assert.equal(JSON.stringify(failure), projection, "cleanupFailed remains a historical fact");
 }
+
+// A conforming owner can preserve terminal release uncertainty indefinitely.
+// Recovery must keep rejecting rather than convert that observation to success.
+export async function terminalCreationCleanupUncertainty() {
+  const uncertainty = new Error("TEST terminal release uncertainty");
+  let releases = 0; let disposal: Promise<void> | undefined;
+  let failure!: AgentRuntimeHostCreationError;
+  await assert.rejects(createRuntimeSetupAttempt(undefined, platform => {
+    const factories = createRuntimeSetupFactories(platform);
+    return {...factories, host: dependencies => {
+      const host = factories.host(dependencies);
+      return {...host, dispose: () => disposal ??= Promise.resolve().then(async () => {
+        await host.dispose(); releases += 1; throw uncertainty;
+      })};
+    }};
+  }, {completeRoot: async () => {throw new Error("TEST original construction cause");}}), error => {
+    assert.ok(error instanceof AgentRuntimeHostCreationError); failure = error; return true;
+  });
+  assert.equal(failure.cleanupFailed, true); assert.ok(failure.cleanupRecovery);
+  const projection = JSON.stringify(failure);
+  const first = failure.cleanupRecovery.recover(); const joined = failure.cleanupRecovery.recover();
+  assert.equal(first, joined);
+  await assert.rejects(first, error => error === uncertainty);
+  await assert.rejects(failure.cleanupRecovery.recover(), error => error === uncertainty);
+  assert.equal(releases, 1, "terminal uncertainty cannot repeat physical release");
+  assert.equal(JSON.stringify(failure), projection, "failed release cannot falsely settle historical debt");
+}

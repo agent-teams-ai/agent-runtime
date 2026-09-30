@@ -57,6 +57,13 @@ export interface AgentRuntimeHostDependencies {
 
 export interface AgentRuntimeHost extends AsyncDisposable {
   bindAccess(scope: TrustedRuntimeAccessScope): RuntimeAccessHandle;
+  /**
+   * Observation is repeatable, including after rejection. Join concurrent calls
+   * and retain cleanup custody and successful actions. A rejected observation
+   * permits another physical attempt only when that resource owner proves it
+   * safe. Uncertain release stays rejected or needs owner-specific reconciliation;
+   * it must never become success or blindly repeat a raw release.
+   */
   dispose(): Promise<void>;
 }
 

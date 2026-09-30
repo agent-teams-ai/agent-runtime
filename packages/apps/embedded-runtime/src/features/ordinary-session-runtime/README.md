@@ -27,11 +27,14 @@ observation type. Existing outer composition entrypoints select the construction
 handoff and return the public Host.
 
 The Host joins the ordinary feature before disposing its owned PA/RS/provider
-resources and journal. Failed construction attempts release of resources already created;
+resources and journal. On failed construction, cleanup attempts to release resources
+already created;
 uncertain workspace recovery inputs remain owned by their filesystem owner.
 A creation error with unfinished cleanup retains `cleanupRecovery.recover()` as
 cleanup-only authority. It exposes no Host or commands. Concurrent calls join;
-failed attempts retain their owners, and successful actions are not repeated.
+failed observations retain their owners, and successful actions are not repeated.
+Host disposers must make repeated observations safe. Physical release can repeat
+only with proof from its resource owner; terminal uncertainty keeps rejecting.
 Inner Host/feature recovery must succeed before outer prerequisite owners and
 the journal are released. `cleanupFailed` remains true after recovery as history;
 `toJSON()` projects creation metadata without causes, closures or Host references.

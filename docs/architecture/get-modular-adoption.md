@@ -709,6 +709,12 @@ keeps its primary code, phase, cancellation, diagnostics and module ID, plus
 private causes. `cleanupFailed` records historical failure even after recovery.
 JSON includes only the existing metadata projection, never closures or a Host.
 A failed construction never publishes a usable Host or command capability.
+Every trusted Host factory, including an owner-local test substitute, must honor
+`AgentRuntimeHost.dispose()` as repeatable observation: join concurrent calls,
+retain successful actions and unsettled custody, and repeat physical release only
+when its resource owner proves that safe. A terminal uncertain release retains
+its first rejection or requires owner-specific reconciliation. A structural Host
+shape does not authorize an arbitrary non-idempotent raw release as recovery.
 
 Default construction keeps the allocated Host until observed disposal success.
 If inner default disposal fails during ordinary construction, the outer catch
