@@ -63,6 +63,7 @@ export interface AgentRuntimeHost extends AsyncDisposable {
    * permits another physical attempt only when that resource owner proves it
    * safe. Uncertain release stays rejected or needs owner-specific reconciliation;
    * it must never become success or blindly repeat a raw release.
+   * Symbol.asyncDispose must preserve the same observation semantics.
    */
   dispose(): Promise<void>;
 }

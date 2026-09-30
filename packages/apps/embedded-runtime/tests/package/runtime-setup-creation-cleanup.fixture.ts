@@ -12,12 +12,13 @@ export async function failedCreationRecovery() {
     const factories = createRuntimeSetupFactories(platform);
     return {...factories, host: dependencies => {
       const host = factories.host(dependencies);
-      return {...host, dispose: async () => {
+      const dispose = async () => {
         attempts += 1;
         if (!released) {await host.dispose(); released = true; earlierSuccesses += 1;}
         if (attempts === 2) {entered.resolve(); await finish.promise;}
         if (!ready) {throw new Error("TEST cleanup private cause");}
-      }};
+      };
+      return {...host, dispose, [Symbol.asyncDispose]: dispose};
     }};
   }, {completeRoot: async () => {throw new Error("TEST primary private cause");}}), error => {
     assert.ok(error instanceof AgentRuntimeHostCreationError); failure = error; return true;
@@ -45,14 +46,18 @@ export async function failedCreationRecovery() {
 export async function terminalCreationCleanupUncertainty() {
   const uncertainty = new Error("TEST terminal release uncertainty");
   let releases = 0; let disposal: Promise<void> | undefined;
+  let lexicalDispose!: () => Promise<void>;
   let failure!: AgentRuntimeHostCreationError;
   await assert.rejects(createRuntimeSetupAttempt(undefined, platform => {
     const factories = createRuntimeSetupFactories(platform);
     return {...factories, host: dependencies => {
       const host = factories.host(dependencies);
-      return {...host, dispose: () => disposal ??= Promise.resolve().then(async () => {
+      const dispose = () => disposal ??= Promise.resolve().then(async () => {
         await host.dispose(); releases += 1; throw uncertainty;
-      })};
+      });
+      const product = {...host, dispose, [Symbol.asyncDispose]: dispose};
+      lexicalDispose = () => product[Symbol.asyncDispose]();
+      return product;
     }};
   }, {completeRoot: async () => {throw new Error("TEST original construction cause");}}), error => {
     assert.ok(error instanceof AgentRuntimeHostCreationError); failure = error; return true;
@@ -63,6 +68,7 @@ export async function terminalCreationCleanupUncertainty() {
   assert.equal(first, joined);
   await assert.rejects(first, error => error === uncertainty);
   await assert.rejects(failure.cleanupRecovery.recover(), error => error === uncertainty);
+  await assert.rejects(lexicalDispose(), error => error === uncertainty);
   assert.equal(releases, 1, "terminal uncertainty cannot repeat physical release");
   assert.equal(JSON.stringify(failure), projection, "failed release cannot falsely settle historical debt");
 }
