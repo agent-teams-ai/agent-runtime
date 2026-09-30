@@ -142,9 +142,14 @@ test("reject a broken historical-to-current CMS migration chain", t => {
   mutate(directory, "architecture/get-modular/evidence/a3-cms-pin-review.json", value => { value.after.commit = "0".repeat(40); });
   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CMS_REVIEW_DRIFT/u);
 });
-test("reject the current CMS pin detached from the fresh migration review", t => {
+test("reject the historical A3 digest detached from its successor review", t => {
   const directory = fixture(t);
   mutate(directory, "architecture/get-modular/evidence/a3-cms-pin-review.json", value => { value.after.sha256 = "0".repeat(64); });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CMS_REVIEW_DRIFT/u);
+});
+test("reject the current CMS pin detached from the fresh migration review", t => {
+  const directory = fixture(t);
+  mutate(directory, "architecture/get-modular/consumer-profile.json", value => { value.standard.sha256 = "0".repeat(64); });
   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CMS_PIN_DRIFT/u);
 });
 test("reject exported runner omitted from actual package files", t => {
