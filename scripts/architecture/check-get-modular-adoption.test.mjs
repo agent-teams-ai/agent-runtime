@@ -140,7 +140,19 @@ architecture/get-modular/consumer-profile.json
   profile.sourceCensus = { packageRoots: census.packageRoots, featureRoots: census.featureRoots };
   profile.boundaries.forEach(b => { b.relationships = census.relationships[b.id]; });
   for (const pkg of profile.packages) { await write(pkg.archivePath, 'synthetic archive'); }
-  await write(profile.standard.evidencePath, evidence.standard.bytes);
+  // The filesystem fixture uses real reviewed CMS identity with synthetic graphs.
+  profile.standard.commit = pending.standard.commit;
+  profile.standard.sha256 = pending.standard.sha256;
+  await write(profile.standard.evidencePath, await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard.md', import.meta.url), 'utf8'));
+  for (const name of [
+    'a3-cms-pin-review.json', 'a3-cms-pin-delta.diff',
+    'dynamic-host-cms-pin-review.json', 'dynamic-host-cms-pin-delta.diff',
+    'runtime-profile-cms-pin-review.json', 'creation-cleanup-cms-pin-review.json',
+    'creation-cleanup-cms-pin-delta.diff',
+  ]) {
+    const path = 'architecture/get-modular/evidence/' + name;
+    await write(path, await readFile(new URL('../../' + path, import.meta.url), 'utf8'));
+  }
   await write('architecture/get-modular/consumer-profile.json', profile);
   return { root, profile, lock, write };
 }
@@ -447,4 +459,42 @@ test('renumbered ordinary decisions retain both immutable pre-merge byte sets', 
     ['architecture/decisions/evidence/ordinary-session-adr0020-premerge.md', '1cd51ba204d7de2dd085913afde8e9349104895e1ad607c10cfe769eaeb0a35e'],
     ['architecture/decisions/evidence/ordinary-session-adr0021-premerge.md', '421a30eab66bd177a8a68e603d9a005e4ec946c3dc2beb8a0e9b48ad02f867fa'],
   ]) {assert.equal(digest(await readFile(new URL('../../' + path, import.meta.url))), expected, path);}
+});
+
+// Regression: advancing only the retained bytes leaves stale profile pins, or a
+// stale retained document could still satisfy an identity-only migration check.
+test('current candidate-only pin rejects prior identities and prior complete bytes', async () => {
+  const review = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json', import.meta.url)));
+  const bytes = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard.md', import.meta.url), 'utf8');
+  const prior = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard-ac49bb33.md', import.meta.url), 'utf8');
+  assert.equal(digest(prior), review.before.sha256);
+  assert.equal(digest(bytes), review.after.sha256);
+  const relationLine = '  - ADR-0029\n';
+  const start = bytes.indexOf('### Optional dynamic Host lifecycle candidate');
+  const end = bytes.indexOf('| Use | Reject | Evidence |', start);
+  assert.ok(start >= 0 && end > start, 'reviewed candidate addition must be present');
+  const reconstructed = bytes.replace(relationLine, '').replace(bytes.slice(start, end), '');
+  assert.equal(reconstructed, prior, 'reviewed additions must exactly bridge prior and current bytes');
+  assert.equal(pending.standard.commit, review.after.commit);
+  assert.equal(pending.standard.sha256, review.after.sha256);
+  const {profile, evidence} = fixture();
+  profile.standard.commit = review.after.commit; profile.standard.sha256 = review.after.sha256;
+  evidence.standard = {commit: review.after.commit, bytes};
+  assert.equal(verifyAdoption(profile, evidence).status, 'verified-metadata');
+  profile.standard.commit = review.before.commit;
+  assert.throws(() => verifyAdoption(profile, evidence), /commit drift/);
+  profile.standard.commit = review.after.commit; evidence.standard.bytes = prior;
+  assert.throws(() => verifyAdoption(profile, evidence), /bytes drift/);
+});
+
+// Old merge-red: the ordinary gate previously did not authenticate CMS reviews.
+test('ordinary loader rejects losing either reviewed CMS branch', async t => {
+  const f = await diskFixture(t);
+  for (const name of ['dynamic-host-cms-pin-review.json', 'creation-cleanup-cms-pin-review.json']) {
+    const path = 'architecture/get-modular/evidence/' + name;
+    const bytes = await readFile(join(f.root, path));
+    await rm(join(f.root, path));
+    try {await assert.rejects(checkAdoption(f.root), /ENOENT/u);}
+    finally {await f.write(path, bytes.toString('utf8'));}
+  }
 });

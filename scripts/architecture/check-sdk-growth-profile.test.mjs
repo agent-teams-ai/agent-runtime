@@ -16,7 +16,7 @@ const contract = JSON.parse(readFileSync(join(root, contractPath), "utf8"));
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), "ar-sdk-profile-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  for (const path of [contractPath, "architecture/c0/ar-owned-lifetime/identity.json", "architecture/c0/ar-owned-lifetime/evidence/common-assembly-ac49bb33.md", ".github/workflows/ci.yml", "pnpm-workspace.yaml", "pnpm-lock.yaml", "architecture/sdk-growth", "architecture/get-modular/consumer-profile.json", "architecture/get-modular/evidence/consumer-module-standard.md", "architecture/get-modular/evidence/a3-cms-pin-review.json", "architecture/get-modular/evidence/a3-cms-pin-delta.diff", "architecture/get-modular/evidence/dynamic-host-cms-pin-review.json", "architecture/get-modular/evidence/dynamic-host-cms-pin-delta.diff", "architecture/get-modular/evidence/runtime-profile-cms-pin-review.json", "architecture/get-modular/evidence/sdk-growth-standard-review.json", "architecture/get-modular/evidence/sdk-growth-current-standard.md", "architecture/consumer-module-standard/contained-turn-profile.json", ...contract.inventory.packages.map(pkg => pkg.manifest)]) {
+  for (const path of [contractPath, "architecture/c0/ar-owned-lifetime/identity.json", "architecture/c0/ar-owned-lifetime/evidence/common-assembly-ac49bb33.md", ".github/workflows/ci.yml", "pnpm-workspace.yaml", "pnpm-lock.yaml", "architecture/sdk-growth", "architecture/get-modular/consumer-profile.json", "architecture/get-modular/evidence/consumer-module-standard.md", "architecture/get-modular/evidence/a3-cms-pin-review.json", "architecture/get-modular/evidence/a3-cms-pin-delta.diff", "architecture/get-modular/evidence/dynamic-host-cms-pin-review.json", "architecture/get-modular/evidence/dynamic-host-cms-pin-delta.diff", "architecture/get-modular/evidence/runtime-profile-cms-pin-review.json", "architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json", "architecture/get-modular/evidence/creation-cleanup-cms-pin-delta.diff", "architecture/get-modular/evidence/sdk-growth-standard-review.json", "architecture/get-modular/evidence/sdk-growth-current-standard.md", "architecture/consumer-module-standard/contained-turn-profile.json", ...contract.inventory.packages.map(pkg => pkg.manifest)]) {
     mkdirSync(dirname(join(directory, path)), { recursive: true });
     cpSync(join(root, path), join(directory, path), { recursive: true });
   }
@@ -198,7 +198,14 @@ test("reject drift in the preserved historical A3 CMS review", t => {
   mutate(directory, "architecture/get-modular/evidence/sdk-growth-standard-review.json", value => { value.activeSha256 = "0".repeat(64); });
   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CMS_REVIEW_DRIFT/u);
 });
-test("reject the current CMS pin detached from the fresh migration review", t => {
+// Regression: a historical A3 review can no longer supply the current pin;
+// its successor must retain the same prior commit and digest.
+test("reject a broken historical-to-current CMS migration chain", t => {
+  const directory = fixture(t);
+  mutate(directory, "architecture/get-modular/evidence/a3-cms-pin-review.json", value => { value.after.commit = "0".repeat(40); });
+  assert.throws(() => checkSdkGrowthProfile(directory), /standard migration review must retain the exact current pin/u);
+});
+test("reject the historical A3 digest detached from its successor review", t => {
   const directory = fixture(t);
   mutate(directory, "architecture/get-modular/evidence/dynamic-host-cms-pin-review.json", value => { value.after.sha256 = "0".repeat(64); });
   assert.throws(() => checkSdkGrowthProfile(directory), /dynamic Host migration must retain the exact current pin/u);
@@ -316,4 +323,11 @@ test("reject nondeterministic rich models", t => {
   const directory = fixture(t);
   mutate(directory, "architecture/sdk-growth/qualification.json", value => { value.historicalCandidateQualification.richModelsDeterministic = false; });
   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_TYPED_ENTRYPOINT_AUDIT_DRIFT/u);
+});
+
+test("reject cleanup CMS history drift without substituting the PR review", t => {
+  const directory = fixture(t);
+  mutate(directory, "architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json",
+    value => {value.before.commit = "moving-main";});
+  assert.throws(() => checkSdkGrowthProfile(directory), /standard migration review must retain the exact prior pin/u);
 });

@@ -4,7 +4,7 @@ import { writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// The two original manifest argv lists, in their original order. No discovery/filtering.
+// Explicit test argv lists. Keep feature tests at their owning boundary; no discovery/filtering.
 export const testProcesses = [
   [
     "--test",
@@ -15,6 +15,7 @@ export const testProcesses = [
     "tests/package/runtime-setup-assembly.test.ts",
     "tests/package/ordinary-runtime-assembly.test.ts",
     "tests/package/ordinary-host-disposal.test.ts",
+    "tests/features/ordinary-session-runtime/ordinary-observation-journal.unit.test.ts",
     "tests/package/capability-bundle-contract.test.ts",
     "tests/package/codex-setup.e2e.test.ts",
     "tests/package/claude-code-setup.e2e.test.ts",

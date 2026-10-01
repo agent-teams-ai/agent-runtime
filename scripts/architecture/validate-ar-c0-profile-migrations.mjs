@@ -1,4 +1,10 @@
 import assert from 'node:assert/strict';
+import {
+  historicalReviewPath, historicalDeltaPath, historicalDynamicReviewPath,
+  standardReviewPath, standardDeltaPath, creationCleanupReviewPath, creationCleanupDeltaPath,
+  validateHistoricalA3Migration, validateStandardMigration, validateCurrentStandardMigration,
+  validateParallelStandardMigrations,
+} from './consumer-module-standard-pin.mjs';
 
 // Rebased enrollment 712a retains the five exact artifact bytes from 417126.
 const acceptedSdkEnrollment = Object.freeze({
@@ -42,7 +48,6 @@ const acceptedCmsAuthority = Object.freeze({
 });
 
 export const acceptedA3Revision = acceptedSdkEnrollment.revision;
-export const currentCmsStandard = acceptedCmsAuthority.currentStandard;
 const canonicalJsonBytes = value => Buffer.from(`${JSON.stringify(value,null,2)}\n`);
 const nonDelegatedActiveProfile = profile => {
   const projected = structuredClone(profile);
@@ -58,9 +63,9 @@ const nonCmsPendingProfile = profile => {
 };
 
 // C0 owns the frozen base and the exact historical SDK-enrollment transition.
-// It freezes current bytes only for profiles outside the two independently
-// governed adoption profiles; their current non-CMS content belongs to the
-// source-census, SDK-growth, and adoption gates.
+// Current adoption slots evolve only through reviewed migrations. The ordinary
+// scope adds exactly one reviewed creation-error composition dependency; every
+// other field and unrelated profile remains byte-for-byte frozen here.
 export function validateProfileMigrations(c, context) {
   const {baseRevision, readCurrentBytes, readRevisionBytes, sha256} = context;
   const changed = [];
@@ -83,10 +88,26 @@ export function validateProfileMigrations(c, context) {
         Buffer.from(acceptedBytes).equals(Buffer.from(retainedBytes)),
         `unreviewed r117 profile migration: ${record.path}`,
       );
-      assert.ok(
-        Buffer.from(readCurrentBytes(record.path)).equals(Buffer.from(retainedBytes)),
-        `unrelated frozen profile changed: ${record.path}`,
-      );
+      if (record.path === 'architecture/feature-module-standard/ordinary-scope.json') {
+        const expected = structuredClone(retained);
+        const priorEdge = expected.compositionDependencies.findIndex(edge =>
+          edge.from === 'packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts'
+          && edge.to === 'packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts'
+          && edge.kind === 'type');
+        assert.ok(priorEdge >= 0, 'retained ordinary Host dependency missing');
+        expected.compositionDependencies.splice(priorEdge + 1, 0, {
+          from: 'packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts',
+          to: 'packages/apps/embedded-runtime/src/composition/agent-runtime-host-creation-error.ts',
+          kind: 'runtime',
+        });
+        assert.ok(Buffer.from(readCurrentBytes(record.path)).equals(canonicalJsonBytes(expected)),
+          'current ordinary profile differs from the reviewed creation-cleanup dependency');
+      } else {
+        assert.ok(
+          Buffer.from(readCurrentBytes(record.path)).equals(Buffer.from(retainedBytes)),
+          `unrelated frozen profile changed: ${record.path}`,
+        );
+      }
     }
   }
   assert.deepEqual(changed, acceptedSdkEnrollment.profiles, 'accepted r117 SDK profile migration set drift');
@@ -130,6 +151,16 @@ export function validateCmsProfileTransition(c, context) {
 
   const activeAtEnrollment = JSON.parse(readRevisionBytes(acceptedSdkEnrollment.revision, activeProfile));
   assert.deepEqual(activeAtEnrollment.standard, c.cms.before, 'CMS active predecessor is not frozen C0 authority');
+  const historical = JSON.parse(readCurrentBytes(historicalReviewPath));
+  validateHistoricalA3Migration(historical, readCurrentBytes(historicalDeltaPath));
+  const dynamic = JSON.parse(readCurrentBytes(historicalDynamicReviewPath));
+  validateStandardMigration(dynamic, readCurrentBytes(standardDeltaPath));
+  const review = JSON.parse(readCurrentBytes(standardReviewPath));
+  validateCurrentStandardMigration(review);
+  validateParallelStandardMigrations(historical, dynamic, review,
+    JSON.parse(readCurrentBytes(creationCleanupReviewPath)), readCurrentBytes(creationCleanupDeltaPath));
+  assert.equal(dynamic.before.commit, c.cms.after.commit, 'current CMS migration predecessor commit drift');
+  assert.equal(dynamic.before.sha256, c.cms.after.sha256, 'current CMS migration predecessor digest drift');
   const currentActive = JSON.parse(readCurrentBytes(activeProfile));
   assert.deepEqual(currentActive.standard, acceptedCmsAuthority.currentStandard, 'current active CMS authority drift');
   assert.deepEqual(currentActive.packages, [
@@ -164,7 +195,7 @@ export function validateCmsProfileTransition(c, context) {
   const currentPending = JSON.parse(readCurrentBytes(pendingProfile));
   assert.deepEqual(
     currentPending.authority.consumerModuleStandard,
-    acceptedCmsAuthority.currentPendingAuthority,
+    {...acceptedCmsAuthority.currentPendingAuthority, gitCommit: review.after.commit, sha256: review.after.sha256},
     'current pending CMS authority drift',
   );
   assert.deepEqual(

@@ -2480,6 +2480,11 @@
         },
         {
           "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-creation-error.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
           "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
           "mode": "type-only"
         },

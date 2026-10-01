@@ -1,6 +1,8 @@
 import {ordinaryHostOwnershipRetry} from "./ordinary-host-ownership.fixture.ts";
 import {ordinaryHostProviderOwnerRetry} from "./ordinary-host-pa-owner-disposal.fixture.ts";
 import fs from "node:fs";
+import {spawnSync} from "node:child_process";
+import {fileURLToPath} from "node:url";
 import {syncBuiltinESMExports} from "node:module";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -65,7 +67,6 @@ test("ordinary Host retains owners and writable journal until retry proves featu
 
 test('real auth helper indeterminate cleanup remains owned through Host disposal', async () => {
   const {execFileSync} = await import('node:child_process');
-  const {fileURLToPath} = await import('node:url');
   execFileSync(process.execPath, ['--experimental-test-module-mocks', '--test', fileURLToPath(new URL('./ordinary-auth-host-disposal.fixture.ts', import.meta.url))], {timeout: 10000, stdio: 'pipe'});
 });
 
@@ -73,3 +74,60 @@ test("real Host releases proven ordinary ownership after retry while durable sta
 for (const boundary of ["retirement", "capture"] as const) {
   test(`real Host pending capture failure does not starve PA owner ${boundary} retries or independent capture disposal`, () => ordinaryHostProviderOwnerRetry(boundary));
 }
+
+import {AgentRuntimeHostCreationError} from '../../dist/composition.js';
+
+// Regression: partial creation with journal debt had no surviving cleanup
+// holder; an unsafe repeated close could then be reported as recovered.
+test('ordinary creation failure retains terminal journal uncertainty', async t => {
+  const root = await mkdtemp(join(await realpath(tmpdir()), 'ordinary-journal-debt-TEST-'));
+  t.after(() => rm(root, {recursive: true, force: true}));
+  const rawClose = fs.closeSync; let calls = 0;
+  const primary = new AgentRuntimeHostCreationError('factory_failed', 'run', {moduleId: 'ordinary/security', diagnostics: ['TEST'], cancellationObserved: true, cause: new Error('TEST private primary')});
+  let failure!: AgentRuntimeHostCreationError;
+  await assert.rejects(createOrdinaryAgentRuntimeHost({execution: {provider: 'codex', executablePath: join(root, 'absent-TEST'), authSourceDirectory: root, privateRoot: root, evidenceRoot: root, sourceDirectory: root, workspaceRoot: root, artifactRoot: root, sourceRevision: 'TEST'}, storage: {pool: {connect: forbidden}}, scope: {tenantId: 'test', projectId: 'TEST'}}, async () => {
+    t.mock.method(fs, 'closeSync', (fd: number) => {calls += 1; rawClose(fd); throw new Error('TEST uncertain journal close');});
+    syncBuiltinESMExports(); throw primary;
+  }), error => {assert.ok(AgentRuntimeHostCreationError.is(error)); failure = error; return true;});
+  t.after(() => {t.mock.restoreAll(); syncBuiltinESMExports();});
+  assert.ok(failure.cleanupRecovery);
+  for (let i = 0; i < 2; i += 1) {await assert.rejects(failure.cleanupRecovery.recover(), /ordinary_host_cleanup_incomplete/);}
+  assert.equal(calls, 1); assert.equal(failure.code, primary.code); assert.equal(failure.moduleId, primary.moduleId);
+  assert.deepEqual(failure.diagnostics, primary.diagnostics); assert.equal(failure.cancellationObserved, true); assert.equal(failure.cleanupFailed, true);
+  assert.doesNotMatch(JSON.stringify(failure), /private primary|uncertain journal|recover|dispose/);
+});
+
+// Regression: ordinary and default recovery may each work alone while nested
+// cleanup violates dependency ordering or loses a partially acquired owner.
+test('ordinary creation cleanup retains partial and nested owners', () => {
+  const {status, stdout, stderr, error} = spawnSync(process.execPath, ['--experimental-test-module-mocks', '--test', fileURLToPath(new URL('./ordinary-creation-cleanup.fixture.ts', import.meta.url))], {encoding: 'utf8', timeout: 10000});
+  assert.equal(error, undefined); assert.equal(status, 0, stdout + stderr);
+});
+
+// Regression: journal initialization bypassed the Host failure projection,
+// exposing raw causes and omitting historical cleanupFailed despite retained debt.
+test('public failed journal initialization retains private cleanup-only truth', async t => {
+  const root = await mkdtemp(join(await realpath(tmpdir()), 'ordinary-public-init-TEST-'));
+  t.after(() => rm(root, {recursive: true, force: true}));
+  const {createAgentRuntimeHost: createOrdinaryHost} = await import('../../dist/composition.js');
+  const rawClose = fs.closeSync; let closes = 0; let connections = 0; let ended = 0;
+  const primary = new Error('TEST private initialization primary');
+  t.mock.method(fs, 'fsyncSync', () => {throw primary;});
+  t.mock.method(fs, 'closeSync', (fd: number) => {closes += 1; rawClose(fd); throw new Error('TEST private close uncertainty');});
+  syncBuiltinESMExports(); t.after(() => {t.mock.restoreAll(); syncBuiltinESMExports();});
+  const pool = {async connect(): Promise<never> {connections += 1; throw new Error('TEST storage must stay passive');}, async end() {ended += 1;}};
+  let failure!: AgentRuntimeHostCreationError;
+  await assert.rejects(createOrdinaryHost({execution: {provider: 'codex', executablePath: join(root, 'absent-TEST'), authSourceDirectory: root, privateRoot: root, evidenceRoot: root, sourceDirectory: root, workspaceRoot: root, artifactRoot: root, sourceRevision: 'TEST'}, storage: {pool}, scope: {tenantId: 'test', projectId: 'TEST'}}), error => {
+    assert.ok(AgentRuntimeHostCreationError.is(error)); failure = error; return true;
+  });
+  assert.equal(failure.cleanupFailed, true); assert.equal(Object.hasOwn(failure, 'cause'), false);
+  assert.ok(failure.cleanupRecovery); assert.deepEqual(Object.keys(failure.cleanupRecovery), ['recover']);
+  assert.equal('bindAccess' in failure, false); assert.equal('dispose' in failure, false);
+  const projection = JSON.stringify(failure);
+  assert.doesNotMatch(projection, /private initialization|close uncertainty|recover|bindAccess/);
+  const first = failure.cleanupRecovery.recover(); assert.equal(first, failure.cleanupRecovery.recover());
+  await assert.rejects(first, /ordinary_journal_cleanup_uncertain/);
+  await assert.rejects(failure.cleanupRecovery.recover(), /ordinary_journal_cleanup_uncertain/);
+  assert.equal(closes, 1); assert.equal(connections, 0); assert.equal(ended, 0);
+  assert.equal(JSON.stringify(failure), projection);
+});

@@ -1,3 +1,4 @@
+import {failedCreationRecovery, terminalCreationCleanupUncertainty} from './runtime-setup-creation-cleanup.fixture.ts';
 import { compileComposition, defineModule } from "@get-modular/core";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -828,3 +829,8 @@ test("independent oracle rejects a materialized wrong-platform planner binding",
   await assert.rejects(host.bindAccess(fixtureScope(root)).codexSetup.inspect({}),
     { code: "ERR_ASSERTION", message: /complete direct\/Assembly observable parity/u });
 });
+
+// Regression: failed disposal after root allocation discarded the only owner.
+test("failed creation retains single-flight cleanup recovery and primary projection", {timeout: 5_000}, failedCreationRecovery);
+
+test("failed creation preserves terminal cleanup uncertainty across recovery observations", {timeout: 5_000}, terminalCreationCleanupUncertainty);

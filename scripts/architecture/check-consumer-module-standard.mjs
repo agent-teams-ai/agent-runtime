@@ -5,6 +5,9 @@ import { dirname, posix, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseSync, Visitor } from "oxc-parser";
 import {
+  creationCleanupReviewPath,
+  creationCleanupDeltaPath,
+  validateParallelStandardMigrations,
   historicalDeltaPath,
   historicalDynamicReviewPath,
   historicalReviewPath,
@@ -113,6 +116,8 @@ const requiredPaths = Object.freeze([
   decisionPath,
   "docs/architecture/contained-turn-consumer-module-standard-adoption.md",
   standardReviewPath,
+  creationCleanupReviewPath,
+  creationCleanupDeltaPath,
   historicalDynamicReviewPath,
   standardDeltaPath,
   historicalReviewPath,
@@ -380,6 +385,8 @@ export async function loadConsumerModuleStandardInputs(root = repositoryRoot) {
   const standardBytes = await readFile(resolve(root,
     "architecture/get-modular/evidence/consumer-module-standard.md"));
   const standardReview = JSON.parse(await readFile(resolve(root, standardReviewPath), "utf8"));
+  const cleanupReview = JSON.parse(await readFile(resolve(root, creationCleanupReviewPath), "utf8"));
+  const cleanupDeltaBytes = await readFile(resolve(root, creationCleanupDeltaPath));
   const historicalDynamicReview = JSON.parse(await readFile(resolve(root, historicalDynamicReviewPath), "utf8"));
   const standardDeltaBytes = await readFile(resolve(root, standardDeltaPath));
   const historicalReview = JSON.parse(await readFile(resolve(root, historicalReviewPath), "utf8"));
@@ -395,7 +402,8 @@ export async function loadConsumerModuleStandardInputs(root = repositoryRoot) {
     catch { return [path, false]; }
   })));
   return { decisionBytes, decisionRegistry, packageManifest, passiveProfile, pathExistence, profile, sources,
-    standardBytes, standardDeltaBytes, standardReview, historicalDynamicReview, historicalReview, historicalDeltaBytes };
+    standardBytes, standardDeltaBytes, standardReview, historicalDynamicReview, historicalReview, historicalDeltaBytes,
+    cleanupReview, cleanupDeltaBytes };
 }
 
 const validatePendingDecision = inputs => {
@@ -430,6 +438,8 @@ export function validateConsumerModuleStandard(inputs) {
   validateCurrentStandardMigration(inputs.standardReview);
   validateStandardMigration(inputs.historicalDynamicReview, inputs.standardDeltaBytes);
   validateHistoricalA3Migration(inputs.historicalReview, inputs.historicalDeltaBytes);
+  validateParallelStandardMigrations(inputs.historicalReview, inputs.historicalDynamicReview,
+    inputs.standardReview, inputs.cleanupReview, inputs.cleanupDeltaBytes);
 
   for (const path of requiredPaths) {
     assert.equal(inputs.pathExistence.get(path), true, `required adoption path is missing: ${path}`);

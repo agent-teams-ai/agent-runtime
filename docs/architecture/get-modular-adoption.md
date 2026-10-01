@@ -109,7 +109,10 @@ ADR-0013 continues to govern exactly its three active FMS features.
 The central authority is Get Modular's accepted ADR-0026 and the exact pinned
 [consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/9c722ceff4ede307d06d7a4b63fdebe615f54c53/docs/architecture/common-assembly.md#consumer-module-standard).
 The [current zero-delta review](../../architecture/get-modular/evidence/runtime-profile-cms-pin-review.json)
-supersedes the dynamic Host pin review; earlier reviews remain historical:
+retains the PR dynamic Host history alongside the parallel
+[creation-cleanup review](../../architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json).
+Both branches select the same exact pin and complete-document bytes; neither
+review replaces the other branch history:
 
 - Repository: `agent-teams-ai/get-modular`.
 - Commit: `9c722ceff4ede307d06d7a4b63fdebe615f54c53`.
@@ -496,6 +499,19 @@ node scripts/architecture/runtime-setup-l0-evidence.mjs \
 node scripts/architecture/runtime-setup-l0-evidence.mjs --check
 ```
 
+The merged chronology retains the PR's original v2 and four Node26 reports,
+including the runtime-pin predecessor, and main's independent cleanup-custody
+capture. Main's original-path v2 bytes are mechanically archived at
+[cleanup-custody evidence](../spikes/runtime-setup-assembly-adoption-v2-cleanup-custody-evidence.json),
+SHA-256 `5cc5ef40c1d74e5f38f76a19a1c83e1cddee7c268b5043ed558620b13f80fbee`.
+Their source is main `b0bcb265d1466da3272078f9dfdb7c6784624283`, original path
+`docs/spikes/runtime-setup-assembly-adoption-v2-evidence.json`. The PR original
+at that pathname retains SHA-256
+`08fef99589d67358f020e3a0b063a44d6c4c99381370f76b2ca200b005d9bf3d`.
+The new report authenticates both predecessor branches without rewriting either.
+The orchestrator creates the verified owner two-parent merge from this resolved
+tree before fresh paired SOURCE capture; the synthetic preview is not that merge.
+
 Deliver only that newly created report as revision D; all SOURCE inputs must
 still resolve to R. The checker rejects a claimed SOURCE revision that already
 contains the new successor report. Do not mutate any retained report or receipt.
@@ -664,11 +680,13 @@ contained-turn or introduce shared lifecycle machinery on this evidence.
 Release disposition remains pending. Retention requires a reasoned owner
 benefit/cost decision, reviewed external consumer/callsite and package-release
 provenance, and the exact final evidence and gates. The retained v2 report
-records its own exact source identity and platform receipts. Before delivery,
-validate that report against the complete implementation and documentation
-checkpoint with `pnpm architecture:runtime-setup-l0-evidence`. If tracked inputs
-in the bounded Runtime Setup closure have changed, refresh the supported paired
-capture. A report-only commit may
+records its own exact source identity and platform receipts. The merged SOURCE
+requires fresh Linux x64 and Darwin arm64 receipts for the
+complete implementation and documentation checkpoint. Deliver the selected
+duplicate-callback successor report separately, then validate it with
+`pnpm architecture:runtime-setup-l0-evidence`. Keep every retained report byte
+unchanged; prior captures cannot be relabeled as merged SOURCE evidence.
+A report-only commit may
 reuse the authenticated source only under the existing validator rules.
 
 A consumer-local rollback must be one governed release replacement. Restore one
@@ -831,7 +849,8 @@ complete-document SHA-256
 Get Modular main was observed at exact source commit
 `6b31f20fe3e5fb8324812aa2ee907905751cde71`; its complete document bytes are
 unchanged from `ac49bb3374946330ec820591f8195a22d2c90900`. The retained standard
-at that checkpoint was byte-identical to that immutable source. Main itself was not the pin.
+at that checkpoint was byte-identical to that immutable source and remains retained
+as `consumer-module-standard-ac49bb33.md`. Main itself was not the pin.
 
 The [complete byte delta](../../architecture/get-modular/evidence/a3-cms-pin-delta.diff)
 is one replacement hunk: six lines describing Agent Runtime as a planned
@@ -897,3 +916,75 @@ contained-turn adoption pending, and dynamic scope uncertified. Core and Assembl
 move to exact published 0.2.0 archives; Docs Protocol 0.6.2, Docs Protocol Agent
 Teams 0.2.13, and Engineering Foundation 1.7.0 are direct development pins.
 Historical reviews, C0 evidence, and accepted ADR bytes remain unchanged.
+
+### Creation failure cleanup custody
+
+The September 30 review fixes two owner-local bugs under the existing CMS
+acquisition, cleanup truth and surviving-owner requirements. It introduces no
+shared lifecycle manager, new graph node, provider behavior or package change.
+The ordinary graph keeps its eight nodes. The new finite composition import
+uses the existing Host creation error owner; it is not another composition root.
+
+`AgentRuntimeHostCreationError.cleanupRecovery` is present when creation retains
+unfinished cleanup. Its only method, `recover()`, drives the actual pending
+owner. Concurrent callers join one Promise; rejected cleanup remains reachable
+for a subsequent safe attempt, while settled success is idempotent. The error
+keeps its primary code, phase, cancellation, diagnostics and module ID, plus
+private causes. `cleanupFailed` records historical failure even after recovery.
+JSON includes only the existing metadata projection, never closures or a Host.
+A failed construction never publishes a usable Host or command capability.
+Every trusted Host factory, including an owner-local test substitute, must honor
+`AgentRuntimeHost.dispose()` as repeatable observation: join concurrent calls,
+retain successful actions and unsettled custody, and repeat physical release only
+when its resource owner proves that safe. A terminal uncertain release retains
+its first rejection or requires owner-specific reconciliation. A structural Host
+shape does not authorize an arbitrary non-idempotent raw release as recovery.
+
+Default construction keeps the allocated Host until observed disposal success.
+If inner default disposal fails during ordinary construction, the outer catch
+retains both owners and defers outer cleanup. Recovery first settles inner
+Host/feature work, then releases outer PA/security/provider owners and journal.
+The existing reverse cleanup ledger removes each successful action once and
+stops at unresolved prerequisite debt. Borrowed database pools remain borrowed.
+
+The journal has explicit open, observed-closed and failed-close states. A thrown
+close preserves its first cause, refuses further records and closes, and never
+retries a potentially reused fd. Only observed success is idempotent success.
+Initialization fsync/close failures retain the primary cause with file/directory
+cleanup uncertainty and a non-enumerable cleanup-only holder when needed. Public
+Host creation retains that holder through `AgentRuntimeHostCreationError`, with
+private causes and historical `cleanupFailed: true`, including failures before
+Assembly construction begins. That holder cannot convert uncertain close into
+observed physical disposal. No OS
+reconciliation algorithm or live-provider qualification is claimed.
+
+Focused synthetic evidence lives in `ordinary-host-disposal.test.ts`, its
+`ordinary-creation-cleanup.fixture.ts`, and `runtime-setup-assembly.test.ts` with
+`runtime-setup-creation-cleanup.fixture.ts`. Disposable files and fake database
+ports exercise descriptor reuse, record refusal, initialization failures,
+partial allocation before an await, concurrent recovery, failed retry, nested
+dependency ordering, borrowed pools and non-repetition of successful actions.
+
+### Current candidate-only standard pin review
+
+The [review](../../architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json)
+migrates both current consumer profiles from `ac49bb3374946330ec820591f8195a22d2c90900`
+(SHA-256 `d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f`)
+to `9c722ceff4ede307d06d7a4b63fdebe615f54c53`
+(SHA-256 `33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd`).
+The complete-document retained bytes and [two-hunk delta](../../architecture/get-modular/evidence/creation-cleanup-cms-pin-delta.diff)
+add the ADR-0029 relation and 31 lines of optional dynamic Host candidate guidance.
+The staged exact upstream source supplied by orchestration is the reviewed input;
+no moving main is followed. Prior review and full-document evidence are retained.
+
+ADR-0029 does not authorize Agent Runtime dynamic adoption. G1 remains on hold;
+contained-turn and SDK external authority retain their pending classifications.
+Existing CMS already assigns acquisition ownership and surviving cleanup custody
+to the Host, so this delivery applies product-specific fd and error recovery
+policy without changing GM semantics, Core, Assembly or lifecycle-kernel. Current
+rejecting checks authenticate both profile identities, full bytes and reviewed
+delta, reject stale pins and preserve the existing adoption states. Accepted ADRs
+and frozen C0 evidence are unchanged. C0 authenticates its source oracle from
+its retained base revision, not current production bytes. The current ordinary
+profile permits exactly the reviewed creation-error composition dependency;
+all other frozen fields remain enforced, alongside the current CMS pin review.

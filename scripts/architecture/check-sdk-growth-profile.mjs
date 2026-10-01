@@ -5,6 +5,7 @@ import { posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 import {
+  creationCleanupReviewPath, creationCleanupDeltaPath, validateParallelStandardMigrations,
   historicalDeltaPath, standardDeltaPath, validateHistoricalA3Migration,
   validateCurrentStandardMigration, validateStandardMigration,
 } from "./consumer-module-standard-pin.mjs";
@@ -174,6 +175,8 @@ export function checkSdkGrowthProfile(repository = root) {
   validateHistoricalA3Migration(historicalMigration, readFileSync(resolve(repository, historicalDeltaPath)));
   validateStandardMigration(migrationReview, readFileSync(resolve(repository, standardDeltaPath)));
   validateCurrentStandardMigration(currentReview);
+  validateParallelStandardMigrations(historicalMigration, migrationReview, currentReview,
+    json(creationCleanupReviewPath), readFileSync(resolve(repository, creationCleanupDeltaPath)));
   assert.equal(historicalMigration.historicalReview,
     "architecture/get-modular/evidence/sdk-growth-standard-review.json", "SDK_CMS_REVIEW_DRIFT");
   assert.equal(review.activeCommit, historicalMigration.before.commit, "SDK_CMS_REVIEW_DRIFT");
@@ -189,7 +192,7 @@ export function checkSdkGrowthProfile(repository = root) {
   assert.equal(consumerProfile.standard.commit, currentReview.after.commit, "SDK_CMS_PIN_DRIFT");
   assert.equal(consumerProfile.standard.sha256, currentReview.after.sha256, "SDK_CMS_PIN_DRIFT");
   assert.equal(createHash("sha256").update(readFileSync(resolve(repository,
-    consumerProfile.standard.evidencePath))).digest("hex"), migrationReview.after.sha256, "SDK_CMS_PIN_DRIFT");
+    consumerProfile.standard.evidencePath))).digest("hex"), currentReview.after.sha256, "SDK_CMS_PIN_DRIFT");
   assert.equal(review.suppliedCurrentCommit, null, "SDK_CMS_CURRENT_IDENTITY_UNPROVEN");
   assert.equal(createHash("sha256").update(readFileSync(resolve(repository,
     review.suppliedCurrentEvidencePath))).digest("hex"), review.suppliedCurrentSha256,

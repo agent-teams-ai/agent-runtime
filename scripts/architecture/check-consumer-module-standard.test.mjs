@@ -16,6 +16,8 @@ const fresh = async () => {
     pathExistence: new Map(inputs.pathExistence),
     profile: structuredClone(inputs.profile),
     passiveProfile: structuredClone(inputs.passiveProfile),
+    cleanupReview: structuredClone(inputs.cleanupReview),
+    cleanupDeltaBytes: Buffer.from(inputs.cleanupDeltaBytes),
     historicalDeltaBytes: Buffer.from(inputs.historicalDeltaBytes),
     historicalReview: structuredClone(inputs.historicalReview),
     historicalDynamicReview: structuredClone(inputs.historicalDynamicReview),
@@ -304,4 +306,20 @@ test("rejects stale legacy records, exceptions, and forbidden layer imports", as
   sideEffect.sources.set("packages/contexts/agent-execution/src/application/side-effect-core.ts",
     'import/* comment */ "@get-modular/core";\n');
   assert.throws(() => validateConsumerModuleStandard(sideEffect), /forbidden Get Modular layer import/u);
+});
+
+// Old merge-red: keeping either branch alone loses independent review custody.
+test("rejects missing, relabeled or changed cleanup CMS history alongside PR history", async () => {
+  const missing = await fresh();
+  missing.pathExistence.set("architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json", false);
+  assert.throws(() => validateConsumerModuleStandard(missing), /required adoption path is missing/u);
+  for (const mutate of [
+    value => {value.cleanupReview.before = value.historicalReview.before;},
+    value => {value.cleanupReview.after.commit = value.historicalDynamicReview.after.commit;},
+    value => {value.cleanupReview.adoption.containedTurn = "active";},
+    value => {value.cleanupDeltaBytes = Buffer.from("rewritten delta");},
+  ]) {
+    const inputs = await fresh(); mutate(inputs);
+    assert.throws(() => validateConsumerModuleStandard(inputs), /standard migration/u);
+  }
 });

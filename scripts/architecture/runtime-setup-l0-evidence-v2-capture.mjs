@@ -31,6 +31,14 @@ export const retainedV2 = Object.freeze({
   path: "docs/spikes/runtime-setup-assembly-adoption-v2-evidence.json",
   sha256: "08fef99589d67358f020e3a0b063a44d6c4c99381370f76b2ca200b005d9bf3d",
 });
+// Main's independent cleanup capture was archived mechanically before merging.
+// Preserve its original Git custody as well as its current retained pathname.
+export const retainedCleanupCustody = Object.freeze({
+  path: "docs/spikes/runtime-setup-assembly-adoption-v2-cleanup-custody-evidence.json",
+  sourceRevision: "b0bcb265d1466da3272078f9dfdb7c6784624283",
+  sourcePath: "docs/spikes/runtime-setup-assembly-adoption-v2-evidence.json",
+  sha256: "5cc5ef40c1d74e5f38f76a19a1c83e1cddee7c268b5043ed558620b13f80fbee",
+});
 export const retainedV1 = Object.freeze({
   revision: "08fb1a71b75134b43af52579e8de86a44b2a3815", path: adoptionPaths.report,
   sha256: "4432ad0a6b23a8f99fa37183da5270ec312f83056d0de62d8da117d6566777ac",
@@ -39,7 +47,8 @@ const runner = "packages/apps/embedded-runtime/scripts/run-package-tests.mjs";
 const reporter = "packages/apps/embedded-runtime/scripts/adoption-test-reporter.mjs";
 const git = (root, ...args) => execFileSync("git", args, {cwd: root, encoding: "utf8",
   env: {...process.env, GIT_NO_LAZY_FETCH: "1", GIT_NO_REPLACE_OBJECTS: "1", GIT_OPTIONAL_LOCKS: "0"}}).trimEnd();
-const revisionBytes = (root, revision, path) => execFileSync("git", ["show", `${revision}:${path}`], {cwd: root,
+// Bundled historical reports exceed the default 1 MiB child-process buffer.
+const revisionBytes = (root, revision, path) => execFileSync("git", ["show", `${revision}:${path}`], {cwd: root, maxBuffer: 256 * 1024 * 1024,
   env: {...process.env, GIT_NO_LAZY_FETCH: "1", GIT_NO_REPLACE_OBJECTS: "1", GIT_OPTIONAL_LOCKS: "0"}});
 export function identity(root, sourceRevision = git(root, "rev-parse", "HEAD")) {
   assert.match(sourceRevision, /^[a-f0-9]{40}$/u);
@@ -113,10 +122,14 @@ function reportBody(root, current, references) {
   assert.equal(sha256(readFileSync(resolve(root, retainedSuccessor.path))), retainedSuccessor.sha256, "retained successor v2 bytes drifted");
   assert.equal(sha256(readFileSync(resolve(root, retainedHeldDigest.path))), retainedHeldDigest.sha256, "retained held-digest v2 bytes drifted");
   assert.equal(sha256(readFileSync(resolve(root, retainedRuntimePin.path))), retainedRuntimePin.sha256, "retained runtime-pin v2 bytes drifted");
+  assert.equal(sha256(readFileSync(resolve(root, retainedCleanupCustody.path))), retainedCleanupCustody.sha256,
+    "retained cleanup-custody v2 bytes drifted");
+  assert.equal(sha256(revisionBytes(root, current.sourceRevision, retainedCleanupCustody.path)), retainedCleanupCustody.sha256,
+    "SOURCE must retain the authenticated cleanup-custody archive");
   return {schemaVersion: 2, evidenceKind: "runtime-setup-static-assembly-construction",
     identity: current, authority: adoptionAuthority,
     historical: {revision: historicalSpecRevision, path: adoptionPaths.historical, sha256: retainedHistoricalSha256, sourceRevision: historical.sourceRevision},
-    retainedV1, retainedV2, retainedNode26, retainedSuccessor, retainedHeldDigest, retainedRuntimePin,
+    retainedV1, retainedV2, retainedNode26, retainedSuccessor, retainedHeldDigest, retainedRuntimePin, retainedCleanupCustody,
     construction: adoptionConstruction, requiredTargets: targets, receipts: references,
     scope: "embedded-runtime passive setup",
     limitations: ["hashes-authenticate-bytes-not-independent-execution", "historical-L1-HOLD-unchanged",

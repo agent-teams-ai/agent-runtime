@@ -13,7 +13,7 @@ import { testProcesses, packagePath, checkStages, reporterArg } from "@agent-tea
 import { targets, tools, command, sha256, json, validateStream, validateReceipt, validateCoverage, requirePostgres, validatePlatformSites } from "./runtime-setup-l0-evidence-v2.mjs";
 
 import {platformSites} from "./runtime-setup-l0-evidence-platform-sites.mjs";
-import {identity as getIdentity, mergeReceipts, checkV2, checkCurrentV2, v2ReportPath, retainedV2, retainedNode26, retainedSuccessor, retainedHeldDigest, retainedRuntimePin} from "./runtime-setup-l0-evidence-v2-capture.mjs";
+import {identity as getIdentity, mergeReceipts, checkV2, checkCurrentV2, v2ReportPath, retainedV2, retainedNode26, retainedSuccessor, retainedHeldDigest, retainedRuntimePin, retainedCleanupCustody} from "./runtime-setup-l0-evidence-v2-capture.mjs";
 
 test("duplicate-callback successor has a fresh delivery path and authentic retained runtime-pin predecessor", () => {
   assert.equal(v2ReportPath, "docs/spikes/runtime-setup-assembly-adoption-v2-node26-duplicate-callback-successor-evidence.json");
@@ -149,12 +149,12 @@ function fixture() {
   const validate = () => {reseal(); return validateReceipt(receipt, identity, name => Buffer.from(artifacts[name]));};
   return {identity, artifacts, receipt, validate};
 }
-test("original argv lists and accepted native authority and ordinary assembly tests are preserved exactly", () => {
+test("original argv lists and accepted authority tests are preserved with the journal feature regression", () => {
   const original = JSON.parse(execFileSync("git", ["show", "08fb1a71b75134b43af52579e8de86a44b2a3815:packages/apps/embedded-runtime/package.json"], {encoding: "utf8"}));
   const expected = original.scripts.test.split(" && ").map(s => s.split(" ").slice(1));
   expected[0].splice(2, 0, "tests/darwin-native-attempt-authority-join.test.ts");
   expected[0].splice(47, 0, "tests/opaque-reference-digest.test.ts");
-  expected[0].splice(6, 0, "tests/ordinary-runtime-assembly.test.ts", "tests/ordinary-host-disposal.test.ts");
+  expected[0].splice(6, 0, "tests/ordinary-runtime-assembly.test.ts", "tests/ordinary-host-disposal.test.ts", "tests/features/ordinary-session-runtime/ordinary-observation-journal.unit.test.ts");
   const relocated = new Map([
     ["tests/contained-turn-cancellation-proof.unit.test.ts", "tests/features/contained-turn-cancellation-proof/contained-turn-cancellation-proof.unit.test.ts"],
     ["tests/contained-turn-construction-failure.unit.test.ts", "tests/features/contained-turn-construction-failure/contained-turn-construction-failure.unit.test.ts"],
@@ -223,7 +223,7 @@ test("original argv lists and accepted native authority and ordinary assembly te
   assert.deepEqual(testProcesses, expected);
 });
 test("complete receipts require both entire manifest processes", () => {
-  const f = fixture(); assert.equal(f.validate().length, 61);
+  const f = fixture(); assert.equal(f.validate().length, 62);
 });
 for (const [name, mutate] of [
   ["missing first process", f => {f.artifacts["processes.json"] = json(JSON.parse(f.artifacts["processes.json"]).slice(1));}],
@@ -551,51 +551,47 @@ registerBoundedInventoryTests({ callerIdentity, gitWithEnv, fixture });
 function copyBoundedDeliverySource(source) {
   const pathspec = [...v2InputPolicy.roots, ...v2InputPolicy.files].map(path => `:(top,literal)${path}`);
   const paths = execFileSync("git", ["ls-files", "-z", "--", ...pathspec], {encoding: "utf8"}).split("\0").filter(Boolean);
-  paths.push("scripts/architecture/runtime-setup-l0-evidence-v2-inputs.mjs",
-    "scripts/architecture/runtime-setup-l0-evidence-v2-inventory.test.mjs");
+  paths.push("scripts/architecture/runtime-setup-l0-evidence-v2-inputs.mjs", "scripts/architecture/runtime-setup-l0-evidence-v2-inventory.test.mjs");
   for (const path of new Set(paths)) {
     fs.mkdirSync(resolve(source, path, ".."), {recursive: true}); fs.copyFileSync(resolve(path), resolve(source, path));
   }
-  for (const retained of [retainedV2, retainedNode26, retainedSuccessor, retainedHeldDigest, retainedRuntimePin]) {
-    fs.mkdirSync(resolve(source, retained.path, ".."), {recursive: true});
-    fs.copyFileSync(resolve(retained.path), resolve(source, retained.path));
+  for (const retained of [retainedV2, retainedNode26, retainedSuccessor, retainedHeldDigest, retainedRuntimePin, retainedCleanupCustody]) {
+    fs.mkdirSync(resolve(source, retained.path, ".."), {recursive: true}); fs.copyFileSync(resolve(retained.path), resolve(source, retained.path));
   }
   writeFileSync(resolve(source, "README.md"), "unrelated tracked file");
 }
 
-test("bounded real-source merge/check accepts unrelated and report-only delivery", async t => {
+function boundedDeliveryFixture(t) {
   const root = mkdtempSync(resolve(tmpdir(), "v2-bounded-delivery-"));
   t.after(() => rmSync(root, {recursive: true, force: true}));
   const source = resolve(root, "source"), captures = resolve(root, "captures");
-  fs.mkdirSync(source); fs.mkdirSync(captures);
-  copyBoundedDeliverySource(source);
+  fs.mkdirSync(source); fs.mkdirSync(captures); copyBoundedDeliverySource(source);
   const runGit = gitWithEnv({...process.env, ...callerIdentity(process.cwd())});
   const commit = () => {runGit(source, "add", "-A"); runGit(source, "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "synthetic bounded delivery"); return runGit(source, "rev-parse", "HEAD");};
   const workspacePath = resolve(source, "pnpm-workspace.yaml");
   // This fixture models the earlier release-age cleanup independently of the
   // current managed Docs package pins, which may need their own exclusions.
-  const currentWorkspace = readFileSync(workspacePath, "utf8").replace(
-    /^minimumReleaseAgeExclude:\n(?:[ \t]+-[^\n]*\n)+/mu, "");
-  assert.match(currentWorkspace, /^minimumReleaseAge: 0$/mu);
-  assert.doesNotMatch(currentWorkspace, /^minimumReleaseAgeExclude:/mu);
+  const currentWorkspace = readFileSync(workspacePath, "utf8").replace(/^minimumReleaseAgeExclude:\n(?:[ \t]+-[^\n]*\n)+/mu, "");
+  assert.match(currentWorkspace, /^minimumReleaseAge: 0$/mu); assert.doesNotMatch(currentWorkspace, /^minimumReleaseAgeExclude:/mu);
   writeFileSync(workspacePath, currentWorkspace.replace(/^minimumReleaseAge: 0$/mu,
     'minimumReleaseAgeExclude:\n  - "@agent-teams/engineering-foundation@1.3.3"\n\n  - "@agent-teams/docs-protocol-agent-teams@0.2.8"'));
-  runGit(source, "init", "--quiet"); commit();
-  const retained = getIdentity(source);
+  runGit(source, "init", "--quiet"); commit(); const retained = getIdentity(source);
   const receipts = targets.map(target => {
     const f = fixture(); f.receipt.identity = retained; f.receipt.target = target;
     [f.receipt.platform, f.receipt.architecture] = target.split("-");
     f.receipt.postgres = {required: target === "linux-x64", configured: target === "linux-x64"};
-    f.receipt.artifactDirectory = `${target}.artifacts`;
-    fs.mkdirSync(resolve(captures, f.receipt.artifactDirectory));
+    f.receipt.artifactDirectory = `${target}.artifacts`; fs.mkdirSync(resolve(captures, f.receipt.artifactDirectory));
     for (const [name, bytes] of Object.entries(f.artifacts)) {
-      writeFileSync(resolve(captures, f.receipt.artifactDirectory, name), bytes);
-      f.receipt.artifacts[name] = sha256(bytes);
+      writeFileSync(resolve(captures, f.receipt.artifactDirectory, name), bytes); f.receipt.artifacts[name] = sha256(bytes);
     }
     const path = resolve(captures, `${target}.json`); writeFileSync(path, json(f.receipt)); return path;
   });
-  writeFileSync(workspacePath, currentWorkspace);
-  const currentRevision = commit(), current = getIdentity(source);
+  writeFileSync(workspacePath, currentWorkspace); const currentRevision = commit(), current = getIdentity(source);
+  return {root, source, captures, runGit, commit, retained, receipts, currentRevision, current};
+}
+
+test("bounded real-source merge/check accepts unrelated and report-only delivery", async t => {
+  const {root, source, captures, runGit, commit, retained, receipts, currentRevision, current} = boundedDeliveryFixture(t);
   await t.test("historical provenance ignores replacement refs", () => {
     const original = v2InputsAtRevision(source, retained.sourceRevision);
     fs.appendFileSync(resolve(source, ".npmrc"), "\nreplacement=true\n");
@@ -633,6 +629,32 @@ test("bounded real-source merge/check accepts unrelated and report-only delivery
     rmSync(output);
     try {assert.throws(() => checkCurrentV2(source), /ENOENT/);}
     finally {writeFileSync(output, json(report));}
+    checkCurrentV2(source);
+  });
+  await t.test("merged delivery rejects missing or changed cleanup branch identity and custody", () => {
+    for (const mutate of [
+      value => {delete value.retainedCleanupCustody;},
+      value => {value.retainedCleanupCustody.path = retainedV2.path;},
+      value => {value.retainedCleanupCustody.sourceRevision = "d6b1311c411d3f4e576a324cb38df9fa81047f29";},
+      value => {value.retainedCleanupCustody.sourcePath = retainedRuntimePin.path;},
+      value => {value.retainedCleanupCustody.sha256 = retainedV2.sha256;},
+    ]) {
+      const changed = structuredClone(report); mutate(changed);
+      writeFileSync(output, json(changed));
+      try {assert.throws(() => checkCurrentV2(source), /Expected values to be strictly deep-equal/u);}
+      finally {writeFileSync(output, json(report));}
+    }
+    const archive = resolve(source, retainedCleanupCustody.path), original = readFileSync(archive);
+    rmSync(archive);
+    try {
+      assert.throws(() => checkCurrentV2(source), /ENOENT.*cleanup-custody-evidence/u);
+      assert.throws(() => mergeReceipts(source, receipts, output), /ENOENT.*cleanup-custody-evidence/u);
+    } finally {writeFileSync(archive, original);}
+    writeFileSync(archive, Buffer.concat([original, Buffer.from(" ")]));
+    try {
+      assert.throws(() => checkCurrentV2(source), /retained cleanup-custody v2 bytes drifted/u);
+      assert.throws(() => mergeReceipts(source, receipts, output), /retained cleanup-custody v2 bytes drifted/u);
+    } finally {writeFileSync(archive, original);}
     checkCurrentV2(source);
   });
   await t.test("duplicate-callback delivery rejects missing or changed runtime-pin predecessor identity", () => {

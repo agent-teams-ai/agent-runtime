@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "reviewedOn": "2026-09-30",
+  "repository": "agent-teams-ai/get-modular",
+  "path": "docs/architecture/common-assembly.md",
+  "anchor": "consumer-module-standard",
+  "before": {
+    "commit": "ac49bb3374946330ec820591f8195a22d2c90900",
+    "sha256": "d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f",
+    "byteLength": 22337
+  },
+  "after": {
+    "commit": "9c722ceff4ede307d06d7a4b63fdebe615f54c53",
+    "sha256": "33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd",
+    "byteLength": 24312,
+    "evidencePath": "architecture/get-modular/evidence/consumer-module-standard.md"
+  },
+  "sourceMainCommit": "9c722ceff4ede307d06d7a4b63fdebe615f54c53",
+  "sourceMainDocumentCommit": "9c722ceff4ede307d06d7a4b63fdebe615f54c53",
+  "sourceMainSha256": "33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd",
+  "delta": {
+    "path": "architecture/get-modular/evidence/creation-cleanup-cms-pin-delta.diff",
+    "sha256": "04d1793e4312f39612a304400032ed6f3b19a3b15cfb9c24e706b87e0789c425",
+    "hunks": 2,
+    "removedLines": 0,
+    "addedLines": 32,
+    "summary": "ADR-0029 relation and optional dynamic Host lifecycle candidate guidance only."
+  },
+  "behavioralContractChange": false,
+  "scopeDisposition": "ADR-0029 admits only an optional lifecycle-kernel candidate; it does not authorize Agent Runtime dynamic adoption. Existing CMS acquisition ownership, cleanup truth and surviving owner requirements already govern this bug fix. Product-specific uncertain fd closure and retained creation cleanup belong to Agent Runtime; no shared semantics, Core, Assembly, lifecycle-kernel, package identity, capability or graph change. Eight ordinary graph nodes remain; G1 remains on hold.",
+  "adoption": {
+    "passiveAndOrdinary": "active",
+    "containedTurn": "pending",
+    "sdkExternalAuthority": "pending-authority-qualification"
+  },
+  "historicalReview": "architecture/get-modular/evidence/a3-cms-pin-review.json",
+  "historicalReviewDisposition": "Preserved as history, not current upstream authority and is not used for this pin. Its exact prior document bytes are retained separately in consumer-module-standard-ac49bb33.md.",
+  "checks": [
+    "pnpm test:get-modular-adoption",
+    "pnpm architecture:get-modular-adoption",
+    "pnpm test:consumer-modules",
+    "pnpm architecture:consumer-modules"
+  ]
+}

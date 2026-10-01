@@ -27,8 +27,28 @@ observation type. Existing outer composition entrypoints select the construction
 handoff and return the public Host.
 
 The Host joins the ordinary feature before disposing its owned PA/RS/provider
-resources and journal. Failed construction releases resources already created;
+resources and journal. On failed construction, cleanup attempts to release resources
+already created;
 uncertain workspace recovery inputs remain owned by their filesystem owner.
+A creation error with unfinished cleanup retains `cleanupRecovery.recover()` as
+cleanup-only authority. It exposes no Host or commands. Concurrent calls join;
+failed observations retain their owners, and successful actions are not repeated.
+Host disposers must make repeated observations safe. Physical release can repeat
+only with proof from its resource owner; terminal uncertainty keeps rejecting.
+Inner Host/feature recovery must succeed before outer prerequisite owners and
+the journal are released. `cleanupFailed` remains true after recovery as history;
+`toJSON()` projects creation metadata without causes, closures or Host references.
+
+The journal tracks open, observed closed, and failed-close states. After a close
+throws, further close and record calls reject with the first failure. It never
+retries that fd number, since the OS outcome is uncertain and the number may be
+reused. Successful close is idempotent. Initialization fsync failures preserve
+the primary cause and any file/directory close uncertainty; an initialization
+AggregateError retains a non-enumerable cleanup-only recovery holder. Public Host
+creation wraps that owner-local failure in `AgentRuntimeHostCreationError`, keeps
+its raw causes private and reports historical `cleanupFailed: true`. Uncertain
+close debt remains failed and needs owner-specific reconciliation outside this
+bounded fix; repeated recovery does not claim physical release.
 Observed ordinary metadata is additive and cannot be interpreted as custody
 proof. These are cooperative same-user guarantees, not hostile same-uid
 containment. No root, sudo, account fallback, resume or automatic second attempt
