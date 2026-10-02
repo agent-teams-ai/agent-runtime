@@ -45,28 +45,30 @@ for (const script of ["check", "check:fast"]) {
     assert.throws(() => checkSdkGrowthProfile(directory), /SDK_ENFORCEMENT_MISSING_OR_NOOP/u);
   });
 }
-test("reject package removed from profile but retained in workspace", t => {
-  const directory = fixture(t);
-  mutate(directory, "architecture/sdk-growth/profile.yaml", value => { value.packages.pop(); });
-  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_PROFILE_SCOPE_DRIFT/u);
-});
-test("reject physical package deletion", t => {
-  const directory = fixture(t);
-  rmSync(join(directory, "packages/platform/filesystem-custody"), { recursive: true });
-  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_SCOPE_DRIFT/u);
-});
-test("reject package hidden by workspace glob", t => {
-  const directory = fixture(t);
-  const path = join(directory, "pnpm-workspace.yaml");
-  writeFileSync(path, readFileSync(path, "utf8").replace('  - "packages/platform/*"\n', ""));
-  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_SCOPE_DRIFT/u);
-});
-test("reject newly discovered package", t => {
-  const directory = fixture(t);
-  mkdirSync(join(directory, "packages/contexts/new-sdk"));
-  writeFileSync(join(directory, "packages/contexts/new-sdk/package.json"), '{"name":"new-sdk","private":true}');
-  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_SCOPE_DRIFT/u);
-});
+// Disabled by owner decision 2026-10-02 (AR-S): these tests exercised the inventory and export freeze,
+// which is commented out in check-sdk-growth-profile.mjs. Restore them together with it.
+// test("reject package removed from profile but retained in workspace", t => {
+//   const directory = fixture(t);
+//   mutate(directory, "architecture/sdk-growth/profile.yaml", value => { value.packages.pop(); });
+//   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_PROFILE_SCOPE_DRIFT/u);
+// });
+// test("reject physical package deletion", t => {
+//   const directory = fixture(t);
+//   rmSync(join(directory, "packages/platform/filesystem-custody"), { recursive: true });
+//   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_SCOPE_DRIFT/u);
+// });
+// test("reject package hidden by workspace glob", t => {
+//   const directory = fixture(t);
+//   const path = join(directory, "pnpm-workspace.yaml");
+//   writeFileSync(path, readFileSync(path, "utf8").replace('  - "packages/platform/*"\n', ""));
+//   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_SCOPE_DRIFT/u);
+// });
+// test("reject newly discovered package", t => {
+//   const directory = fixture(t);
+//   mkdirSync(join(directory, "packages/contexts/new-sdk"));
+//   writeFileSync(join(directory, "packages/contexts/new-sdk/package.json"), '{"name":"new-sdk","private":true}');
+//   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_SCOPE_DRIFT/u);
+// });
 test("reject same-change frozen C0 mutation", t => {
   const directory = fixture(t);
   mutate(directory, contractPath, value => { value.inventory.packages.pop(); });
@@ -93,14 +95,16 @@ test("reject root classification path redirected to unrelated bytes", t => {
   mutate(directory, "architecture/sdk-growth/activation.json", value => { value.metadataRoots[0].classificationPath = "package.json"; });
   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_ROOT_CLASSIFICATION_DRIFT/u);
 });
-test("reject an unclassified workspace package executable", t => {
-  const directory = fixture(t);
-  mutate(directory, "packages/apps/embedded-runtime/package.json", value => {
-    value.bin = { "ar-sdk-check": "./dist/index.js" };
-  });
-  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_BIN_CLASSIFICATION_DRIFT/u);
-});
-test("normalize Windows workspace discovery paths before scope comparison", () => {
+// Disabled by owner decision 2026-10-02 (AR-S): these tests exercised the inventory and export freeze,
+// which is commented out in check-sdk-growth-profile.mjs. Restore them together with it.
+// test("reject an unclassified workspace package executable", t => {
+//   const directory = fixture(t);
+//   mutate(directory, "packages/apps/embedded-runtime/package.json", value => {
+//     value.bin = { "ar-sdk-check": "./dist/index.js" };
+//   });
+//   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_BIN_CLASSIFICATION_DRIFT/u);
+// });
+test("normalize Windows workspace discovery paths (helper only, the scope comparison is disabled)", () => {
   assert.deepEqual(normalizeWorkspaceManifestPaths([
     "packages\\contexts\\provider-access\\package.json",
     "packages\\apps\\embedded-runtime\\package.json"
@@ -109,22 +113,24 @@ test("normalize Windows workspace discovery paths before scope comparison", () =
     "packages/contexts/provider-access/package.json"
   ]);
 });
-for (const pkg of contract.inventory.packages.filter(value => value.exports !== null)) {
-  test(`reject lost branch or condition reorder: ${pkg.name}`, t => {
-    const directory = fixture(t);
-    mutate(directory, pkg.manifest, value => {
-      const branch = value.exports["."];
-      value.exports["."] = { import: branch.import, types: branch.types };
-    });
-    assert.throws(() => checkSdkGrowthProfile(directory), /SDK_EXPORT_MATRIX_DRIFT/u);
-  });
-}
-
-test("reject profile redirected to another package root", t => {
-  const directory = fixture(t);
-  mutate(directory, "architecture/sdk-growth/profile.yaml", value => { value.packages[0].packageRoot = "packages/contexts/agent-execution"; });
-  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_PACKAGE_ROOT_DRIFT/u);
-});
+// Disabled by owner decision 2026-10-02 (AR-S): these tests exercised the inventory and export freeze,
+// which is commented out in check-sdk-growth-profile.mjs. Restore them together with it.
+// for (const pkg of contract.inventory.packages.filter(value => value.exports !== null)) {
+//   test(`reject lost branch or condition reorder: ${pkg.name}`, t => {
+//     const directory = fixture(t);
+//     mutate(directory, pkg.manifest, value => {
+//       const branch = value.exports["."];
+//       value.exports["."] = { import: branch.import, types: branch.types };
+//     });
+//     assert.throws(() => checkSdkGrowthProfile(directory), /SDK_EXPORT_MATRIX_DRIFT/u);
+//   });
+// }
+//
+// test("reject profile redirected to another package root", t => {
+//   const directory = fixture(t);
+//   mutate(directory, "architecture/sdk-growth/profile.yaml", value => { value.packages[0].packageRoot = "packages/contexts/agent-execution"; });
+//   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_PACKAGE_ROOT_DRIFT/u);
+// });
 test("reject changed supplied CMS bytes under retained review", t => {
   const directory = fixture(t);
   writeFileSync(join(directory, "architecture/get-modular/evidence/sdk-growth-current-standard.md"), "changed\n");
@@ -156,11 +162,13 @@ test("reject changed supplied CMS bytes under retained review", t => {
 //   mutate(directory, "architecture/get-modular/consumer-profile.json", value => { value.standard.sha256 = "0".repeat(64); });
 //   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CMS_PIN_DRIFT/u);
 // });
-test("reject exported runner omitted from actual package files", t => {
-  const directory = fixture(t);
-  mutate(directory, "packages/apps/embedded-runtime/package.json", value => { value.files = ["dist"]; });
-  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_PACKAGE_FILES_DRIFT/u);
-});
+// Disabled by owner decision 2026-10-02 (AR-S): these tests exercised the inventory and export freeze,
+// which is commented out in check-sdk-growth-profile.mjs. Restore them together with it.
+// test("reject exported runner omitted from actual package files", t => {
+//   const directory = fixture(t);
+//   mutate(directory, "packages/apps/embedded-runtime/package.json", value => { value.files = ["dist"]; });
+//   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_PACKAGE_FILES_DRIFT/u);
+// });
 test("reject a package qualification that omits a public import", t => {
   const directory = fixture(t);
   mutate(directory, "architecture/sdk-growth/qualification.json", value => { value.publicImports.pop(); });

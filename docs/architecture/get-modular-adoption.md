@@ -319,7 +319,7 @@ dispatch, and CI no longer fetches the retained evidence commits. Paired
 receipts had to be recaptured on most commits to main and blocked the Get
 Modular 0.3.0 migration. Two CI jobs take over what the receipts ran. The
 `runtime-macos` job checks every package on macos-15 for every pull request; it
-is not a required check yet. The required `postgres-durability` job runs the
+is a required check on main since 2026-10-02. The required `postgres-durability` job runs the
 Linux `postgres-authority-join.test.ts` (Agent Execution, Provider Access and
 Runtime Security on a disposable PostgreSQL database) and fails if that test is
 skipped. The checker, its tests and all retained L0/v1/v2 reports stay unchanged
@@ -636,8 +636,10 @@ packed artifact. No runtime contract, composition node or lifecycle owner change
 Both active and pending consumer profiles reference the same
 [activation record](../../architecture/sdk-growth/activation.json).
 `pnpm sdk-growth:profile` and `pnpm test:sdk-growth:profile` enforce the frozen
-consumer enrollment in fast/full gates. These checks reject scope and command
-changes but do not perform EF SDK comparison or grant trusted admission.
+consumer enrollment in fast/full gates. These checks no longer reject workspace
+membership or package inventory changes while the AR-S freeze is disabled (see
+below). They still reject changes to the C0 contract hash, `contractRevision`,
+the registry and root classification, the evidence and the command, but do not perform EF SDK comparison or grant trusted admission.
 SDK authority activation remains pending. The repository dependency and lock now
 use the exact published EF 1.6.0 artifact: tarball SHA-256
 `842f81ca68e9c3207a0da967eb599229d4d30ea32cd69a9a1686f2eb240f54eb`, npm
@@ -647,6 +649,20 @@ the release tag resolve to the identities in the activation record. The public
 `sdk-growth-authority` export imports from those published bytes, and a frozen
 install succeeds in a fresh disposable project. No local dependency or
 published baseline is introduced.
+
+The package inventory and export freeze is disabled by owner decision
+2026-10-02 (AR-S). `pnpm sdk-growth:profile` no longer compares the workspace
+package list, package identity, `private`, `version`, `bin`, `files`, `exports`
+or entrypoints against the frozen C0 inventory, and the matching rejecting tests
+are commented out in the same change. The frozen C0 contract hash, the EF
+registry identity, the root classification and the qualification evidence
+checks still run. The reason is that the Get Modular 0.3.0 migration replaces
+the frozen package inventory and the freeze would block package growth such as
+new workspace packages. A new public import such as `./testing` on the six
+qualified packages still requires requalification
+(`SDK_PUBLIC_IMPORT_QUALIFICATION_DRIFT` stays enabled). The disabled code stays in
+`scripts/architecture/check-sdk-growth-profile.mjs`; it may return only together
+with the generated SDK surface report that replaces it (SDK-growth rework lane).
 
 The [package qualification](../../architecture/sdk-growth/qualification.json)
 records six real packed archives and successful imports of all thirteen public
