@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 
+// Disabled by owner decision 2026-10-02 (AR-0): `validateStandardMigration` and
+// its hardcoded chain constants no longer run in `pnpm check`, because each pin
+// step had to rewrite them. check-cms-pin.mjs verifies the current step without
+// commit literals. This module stays as the record of the 9c722ce step; its
+// path constants still mark that review and delta as required files, and the
+// disabled C0 validator still imports it. Re-enable the calls only if the whole
+// pin history must be proved again rather than the current step.
 export const standardReviewPath = "architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json";
 export const standardDeltaPath = "architecture/get-modular/evidence/creation-cleanup-cms-pin-delta.diff";
 

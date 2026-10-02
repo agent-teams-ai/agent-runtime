@@ -33,7 +33,7 @@ test("pending contained-turn profile matches the exact legacy boundary", async (
 test("rejects central pin drift and an unsupported active claim", async () => {
   const pin = await fresh();
   pin.profile.authority.consumerModuleStandard.gitCommit = "moving-main";
-  assert.throws(() => validateConsumerModuleStandard(pin), /reviewed pending-adoption record/u);
+  assert.throws(() => validateConsumerModuleStandard(pin), /standard pins must agree/u);
 
   const active = await fresh();
   active.profile.status = "active";
@@ -47,7 +47,7 @@ test("rejects stale merged pins, split profile identities and retained byte drif
   ]) {
     const stale = await fresh();
     stale.profile.authority.consumerModuleStandard[field] = value;
-    assert.throws(() => validateConsumerModuleStandard(stale), /reviewed pending-adoption record/u);
+    assert.throws(() => validateConsumerModuleStandard(stale), /standard pins must agree/u);
   }
   for (const [field, value] of [
     ["commit", "ac49bb3374946330ec820591f8195a22d2c90900"],
@@ -68,23 +68,36 @@ test("rejects stale merged pins, split profile identities and retained byte drif
   assert.throws(() => validateConsumerModuleStandard(bytes), /retained standard bytes/u);
 });
 
-test("rejects stale or rewritten candidate-only pin migration evidence", async () => {
+test("rejects a pin review or delta detached from the pinned standard", async () => {
   const stale = await fresh();
   stale.standardReview.after.commit = stale.standardReview.before.commit;
-  assert.throws(() => validateConsumerModuleStandard(stale), /exact current pin/u);
-
-  const movingMain = await fresh();
-  movingMain.standardReview.sourceMainCommit = "main";
-  assert.throws(() => validateConsumerModuleStandard(movingMain), /source main commit drift/u);
-
-  const expanded = await fresh();
-  expanded.standardReview.adoption.containedTurn = "active";
-  assert.throws(() => validateConsumerModuleStandard(expanded), /preserve scoped adoption states/u);
+  assert.throws(() => validateConsumerModuleStandard(stale), /review must end at the pinned standard/u);
 
   const delta = await fresh();
   delta.standardDeltaBytes = Buffer.concat([delta.standardDeltaBytes, Buffer.from("drift")]);
-  assert.throws(() => validateConsumerModuleStandard(delta), /exact byte delta drift/u);
+  assert.throws(() => validateConsumerModuleStandard(delta), /delta must match its review digest/u);
 });
+
+// AR-0 (owner decision 2026-10-02): validateStandardMigration and its hardcoded
+// chain no longer run, so the source-main and adoption-state rejections below
+// are disabled with it. Restore this test together with the chain.
+// test("rejects stale or rewritten candidate-only pin migration evidence", async () => {
+//   const stale = await fresh();
+//   stale.standardReview.after.commit = stale.standardReview.before.commit;
+//   assert.throws(() => validateConsumerModuleStandard(stale), /exact current pin/u);
+//
+//   const movingMain = await fresh();
+//   movingMain.standardReview.sourceMainCommit = "main";
+//   assert.throws(() => validateConsumerModuleStandard(movingMain), /source main commit drift/u);
+//
+//   const expanded = await fresh();
+//   expanded.standardReview.adoption.containedTurn = "active";
+//   assert.throws(() => validateConsumerModuleStandard(expanded), /preserve scoped adoption states/u);
+//
+//   const delta = await fresh();
+//   delta.standardDeltaBytes = Buffer.concat([delta.standardDeltaBytes, Buffer.from("drift")]);
+//   assert.throws(() => validateConsumerModuleStandard(delta), /exact byte delta drift/u);
+// });
 
 test("rejects missing governed paths and proposed decision lifecycle drift", async () => {
   const missing = await fresh();

@@ -42,7 +42,7 @@
     "architecture:feature-modules:active": "node scripts/architecture/check-feature-modules.mjs --require-active",
     "test:feature-modules": "node --test scripts/architecture/check-feature-modules.test.mjs",
     "architecture:consumer-modules": "node scripts/architecture/check-consumer-module-standard.mjs",
-    "test:consumer-modules": "node --test scripts/architecture/check-consumer-module-standard.test.mjs",
+    "test:consumer-modules": "node --test scripts/architecture/check-consumer-module-standard.test.mjs scripts/architecture/check-cms-pin.test.mjs",
     "architecture:runtime-setup-l0-evidence": "node --test scripts/architecture/runtime-setup-l0-evidence-validation.test.mjs scripts/architecture/runtime-setup-l0-evidence-inputs.test.mjs && node scripts/architecture/runtime-setup-l0-evidence.mjs --check",
     "architecture:runtime-setup-l0-evidence:capture": "node scripts/architecture/runtime-setup-l0-evidence.mjs --capture",
     "architecture:ar2-contract": "node scripts/architecture/validate-ar2-contract-artifacts.mjs",
