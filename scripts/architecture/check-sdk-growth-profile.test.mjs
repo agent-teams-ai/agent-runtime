@@ -104,7 +104,7 @@ test("reject root classification path redirected to unrelated bytes", t => {
 //   });
 //   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_BIN_CLASSIFICATION_DRIFT/u);
 // });
-test("normalize Windows workspace discovery paths before scope comparison", () => {
+test("normalize Windows workspace discovery paths (helper only, the scope comparison is disabled)", () => {
   assert.deepEqual(normalizeWorkspaceManifestPaths([
     "packages\\contexts\\provider-access\\package.json",
     "packages\\apps\\embedded-runtime\\package.json"

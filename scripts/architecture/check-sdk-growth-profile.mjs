@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 // globSync and posix are only used by the inventory freeze disabled below (AR-S).
+// import { globSync } from "node:fs";
 import { readFileSync } from "node:fs";
+// import { posix } from "node:path";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
@@ -98,8 +100,9 @@ export function checkSdkGrowthProfile(repository = root) {
   const frozen = json("architecture/c0/ar-owned-lifetime/contract.json");
   const manifest = json("package.json");
   // Disabled by owner decision 2026-10-02 (AR-S): the inventory and export freeze blocks package growth such as
-  // new workspace packages and ./testing subpaths. Restore only together with the generated SDK surface report
-  // that replaces it (SDK-growth rework lane).
+  // new workspace packages. A new public import such as ./testing on the six qualified packages still requires
+  // requalification (SDK_PUBLIC_IMPORT_QUALIFICATION_DRIFT stays enabled). Restore only together with the
+  // generated SDK surface report that replaces it (SDK-growth rework lane).
   // const workspace = parse(readFileSync(resolve(repository, "pnpm-workspace.yaml"), "utf8"));
   // const discovered = normalizeWorkspaceManifestPaths(
   //   globSync(workspace.packages.map(pattern => `${pattern}/package.json`), { cwd: repository })
@@ -153,8 +156,9 @@ export function checkSdkGrowthProfile(repository = root) {
   assert.equal(activation.qualificationInput.sourceReleaseCommit, "852cd5130cad84d750788b080f0e358ac5210355", "SDK_EF_SOURCE_DRIFT");
   checkRootClassification(repository, manifest, activation, json);
   // Disabled by owner decision 2026-10-02 (AR-S): the inventory and export freeze blocks package growth such as
-  // new workspace packages and ./testing subpaths. Restore only together with the generated SDK surface report
-  // that replaces it (SDK-growth rework lane).
+  // new workspace packages. A new public import such as ./testing on the six qualified packages still requires
+  // requalification (SDK_PUBLIC_IMPORT_QUALIFICATION_DRIFT stays enabled). Restore only together with the
+  // generated SDK surface report that replaces it (SDK-growth rework lane).
   // for (const pkg of profile.packages) {
   //   const actual = json(pkg.manifestPath);
   //   const prior = accepted.find(entry => entry.manifest === pkg.manifestPath);
