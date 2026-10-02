@@ -2994,10 +2994,12 @@ boundaries:
   dependencyMode: runtime
   roots:
   - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/ordinary-security-grant-store.ts
   - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts
   - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts
   entrypoints:
   - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/ordinary-security-grant-store.ts
   - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts
   - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts
   allow:
