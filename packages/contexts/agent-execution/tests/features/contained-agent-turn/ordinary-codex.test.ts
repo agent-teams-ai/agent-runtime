@@ -2,8 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {OrdinaryCodexItems} from "../../../dist/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-items.js";
 import {OrdinaryCodexProtocol, OrdinaryCodexTurnEvents} from "../../../dist/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.js";
+import {createOrdinaryCodexAdapter, type OrdinaryCodexObservation} from "../../../dist/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.js";
+import {sealOrdinaryChannel} from "../../../dist/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.js";
 
 const cwd = "/ordinary-codex-TEST/workspace";
+const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);
+/** A sealed channel whose stdout arrives as the given chunks; `state.clean` records the framing EOF confirmation. */
+const channel = (chunks: Uint8Array[], state: {writes: Uint8Array[]; clean: boolean; closed: boolean} = {writes: [], clean: false, closed: false}) => ({
+  state,
+  transport: sealOrdinaryChannel({
+    read: async () => chunks.shift(), write: async data => {state.writes.push(data);},
+    closeInput: async () => {state.closed = true;}, confirmCleanFraming: () => {state.clean = true;},
+  }),
+});
+const protocolOver = (chunks: Uint8Array[]) => {const {state, transport} = channel(chunks); return {state, protocol: new OrdinaryCodexProtocol(transport, performance.now() + 500, new AbortController().signal)};};
 const notify = (method: string, params: Record<string, unknown>) => ({method, params});
 const turn = (status = "inProgress") => ({id: "01a09662-a294-74f2-8672-91eef1cde972", status, items: [], itemsView: "notLoaded", error: null,
   startedAt: 1, completedAt: status === "inProgress" ? null : 2, durationMs: status === "inProgress" ? null : 1000});
@@ -83,19 +95,69 @@ test("provider systemError is observed before a failed terminal and cannot becom
 
 test("JSONL rejects duplicate decoded property names and RPC never retries an unknown reply", async () => {
   for (const response of ['{"id":"request","id":"request","result":{}}', '{"id":"request","re\\u0073ult":{},"result":{}}', '{"id":"foreign","result":{}}']) {
-    const writes: string[] = [];
-    const protocol = new OrdinaryCodexProtocol({lines: {async *[Symbol.asyncIterator]() {yield response;}},
-      write: async message => {writes.push(message);}, closeInput: async () => {}}, performance.now() + 500, new AbortController().signal);
+    const {state, protocol} = protocolOver([bytes(`${response}\n`)]);
     await assert.rejects(protocol.request("request", "turn/start", {}));
-    assert.equal(writes.length, 1);
+    assert.equal(state.writes.length, 1);
   }
 });
 
 test("aborted request writes zero protocol commands", async () => {
-  const controller = new AbortController(); controller.abort(); let writes = 0;
-  const protocol = new OrdinaryCodexProtocol({lines: {async *[Symbol.asyncIterator]() {}},
-    write: async () => {writes += 1;}, closeInput: async () => {}}, performance.now() + 500, controller.signal);
-  await assert.rejects(protocol.request("request", "turn/start", {})); assert.equal(writes, 0);
+  const controller = new AbortController(); controller.abort();
+  const {state, transport} = channel([]);
+  const protocol = new OrdinaryCodexProtocol(transport, performance.now() + 500, controller.signal);
+  await assert.rejects(protocol.request("request", "turn/start", {})); assert.equal(state.writes.length, 0);
+});
+
+test("a handle that was not sealed by the ordinary process owner is refused", () => {
+  assert.throws(() => new OrdinaryCodexProtocol(Object.freeze({}) as never, performance.now() + 500, new AbortController().signal), /EVIDENCE_REJECTED/u);
+});
+
+test("single framing pass strips CR, skips empty lines and confirms a clean EOF only after the last byte", async () => {
+  const {state, protocol} = protocolOver([bytes('\r\n{"a":1}\r\n\n{"b"'), bytes(':2}\n')]);
+  assert.deepEqual(await protocol.next(), {a: 1}); assert.equal(state.clean, false);
+  assert.deepEqual(await protocol.next(), {b: 2}); assert.equal(state.clean, false);
+  assert.equal(await protocol.next(), undefined); assert.equal(state.clean, true);
+});
+
+test("framing refuses an unterminated tail on EOF and never confirms a clean EOF", async () => {
+  const {state, protocol} = protocolOver([bytes('{"a":1}\n{"tail":')]);
+  assert.deepEqual(await protocol.next(), {a: 1});
+  await assert.rejects(protocol.next(), /unterminated/u); assert.equal(state.clean, false);
+});
+
+test("framing refuses malformed UTF-8, over-long lines and non-object messages", async () => {
+  for (const chunk of [Uint8Array.from([0x7b, 0xff, 0x7d, 0x0a]), bytes(`${"a".repeat(262_145)}\n`), bytes("a".repeat(262_145)), bytes("[1]\n")]) {
+    const {state, protocol} = protocolOver([chunk]);
+    await assert.rejects(protocol.next()); assert.equal(state.clean, false);
+  }
+});
+
+test("the 2048 message bound refuses the next message", async () => {
+  const {protocol} = protocolOver([bytes('{"n":1}\n'.repeat(2049))]);
+  for (let index = 0; index < 2048; index += 1) {assert.deepEqual(await protocol.next(), {n: 1});}
+  await assert.rejects(protocol.next(), /EVIDENCE_REJECTED/u);
+});
+
+test("the 1 MiB JSON byte bound refuses the message that crosses it", async () => {
+  const line = `${JSON.stringify({text: "x".repeat(200_000)})}\n`;
+  const {protocol} = protocolOver([bytes(line.repeat(6))]);
+  for (let index = 0; index < 5; index += 1) {await protocol.next();}
+  await assert.rejects(protocol.next(), /EVIDENCE_REJECTED/u);
+});
+
+test("provider needs no prepared state: a fresh adapter runs from explicit credential facts and refuses after dispose", async () => {
+  const observed: OrdinaryCodexObservation[] = [];
+  const adapter = createOrdinaryCodexAdapter({executable: "/TEST/never-executed", record: event => {observed.push(event);}});
+  const operation = {operationId: "operation:synthetic", attemptId: "attempt:synthetic", executionProfile: "user-session-v1", capabilityManifestRevision: "ordinary-codex-macos-arm64-0.153.4-v1"};
+  const run = (state: ReturnType<typeof channel>) => adapter.provider.execute({operation, transport: state.transport, workspace: {workspaceId: "workspace:synthetic", cwd, homeDirectory: "/ordinary-codex-TEST/home"},
+    credential: {brokerEndpoint: "http://127.0.0.1:1/v1", materializationId: "material:synthetic", generation: 1}, signal: new AbortController().signal, deadline: performance.now() + 500, emit: async () => {}} as never);
+  const first = channel([]);
+  await assert.rejects(run(first), /EVIDENCE_REJECTED/u);
+  assert.equal(first.state.writes.length, 1); assert.ok(observed.some(event => event.stage === "initialize_request"));
+  adapter.dispose();
+  const second = channel([]);
+  await assert.rejects(run(second), /EVIDENCE_REJECTED/u);
+  assert.equal(second.state.writes.length, 0);
 });
 
 

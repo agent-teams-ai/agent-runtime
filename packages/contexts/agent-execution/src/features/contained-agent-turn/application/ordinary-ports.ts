@@ -38,11 +38,22 @@ export interface OrdinaryWorkspacePort {
   close(workspace: OrdinaryWorkspaceHandle): Promise<void>;
 }
 export interface OrdinaryArtifactsPort {publish(operation: OrdinaryOperation, snapshot: OrdinaryWorkspaceSnapshot): Promise<OrdinaryReceiptOf<"artifact_published">>}
-export interface OrdinaryTransport {
-  readonly lines: AsyncIterable<string>;
-  write(message: string): Promise<void>;
-  closeInput(): Promise<void>;
+declare const ordinaryTransportBrand: unique symbol;
+/**
+ * Opaque handle from the process owner to the provider. The engine only passes it through;
+ * its structure is a contract between those two outer bindings and is not readable here.
+ */
+export interface OrdinaryTransport {readonly [ordinaryTransportBrand]: true}
+export interface OrdinaryLaunchSpecification {
+  readonly executable: string;
+  readonly arguments: readonly string[];
+  readonly cwd: string;
+  readonly environment: Readonly<Record<string, string>>;
 }
+/** Trusted launch recipe selected by outer composition, never by submit. */
+export type OrdinaryLaunchRecipe = (input: Parameters<OrdinaryProcessPort["reserve"]>[0]) => Promise<OrdinaryLaunchSpecification>;
+/** Non-confidential facts about the materialized credential. The environment never leaves the process reservation. */
+export type OrdinaryCredentialFacts = Pick<OrdinaryCredentialMaterial, "brokerEndpoint" | "materializationId" | "generation">;
 export interface OrdinaryProcessReservation {
   readonly reservationId: string;
   start(claim: OrdinaryReceiptOf<"dispatch_claim">, signal: AbortSignal): Promise<OrdinaryTransport>;
@@ -54,7 +65,7 @@ export interface OrdinaryProcessPort {
 }
 export interface OrdinaryProviderPort {
   readonly supported: {readonly provider: string; readonly mode: "workspace-write"; readonly executionProfile: "user-session-v1"; readonly capabilityManifestRevision: "ordinary-codex-macos-arm64-0.153.4-v1"};
-  execute(input: {readonly operation: OrdinaryOperation; readonly transport: OrdinaryTransport; readonly workspace: OrdinaryWorkspaceHandle; readonly signal: AbortSignal; readonly deadline: number; readonly emit: (output: Omit<OrdinaryOutput, "cursor">) => Promise<void>}): Promise<OrdinaryReceiptOf<"provider_terminal">>;
+  execute(input: {readonly operation: OrdinaryOperation; readonly transport: OrdinaryTransport; readonly credential: OrdinaryCredentialFacts; readonly workspace: OrdinaryWorkspaceHandle; readonly signal: AbortSignal; readonly deadline: number; readonly emit: (output: Omit<OrdinaryOutput, "cursor">) => Promise<void>}): Promise<OrdinaryReceiptOf<"provider_terminal">>;
 }
 export interface OrdinaryTurnDependencies {
   readonly operationStore: OrdinaryOperationStore;

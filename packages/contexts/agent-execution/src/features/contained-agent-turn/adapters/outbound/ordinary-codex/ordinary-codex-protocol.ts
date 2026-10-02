@@ -1,26 +1,28 @@
-import {isCodexRecord as isRecord, type CodexJsonRecord, BoundedCodexJsonLineReader, CODEX_APP_SERVER_TIMEOUT, decodeCodexResponseEnvelope} from "../codex-app-server/codex-app-server-jsonl.js";
+import {isCodexRecord as isRecord, type CodexJsonRecord, CODEX_APP_SERVER_TIMEOUT, decodeCodexResponseEnvelope} from "../codex-app-server/codex-app-server-jsonl.js";
 import type {OrdinaryTransport} from "../../../application/ordinary-ports.js";
+import {openOrdinaryChannel, type OrdinaryByteChannel} from "../ordinary-channel/ordinary-byte-channel.js";
 import {ordinaryCodexRefusal as refuse, ordinaryJson} from "./ordinary-codex-config.js";
 import {type OrdinaryCodexItemRule, OrdinaryCodexItems} from "./ordinary-codex-items.js";
+import {OrdinaryJsonLineFraming} from "./ordinary-framing.js";
 
 const exact = (value: CodexJsonRecord, keys: readonly string[]): boolean => Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
 export const isOrdinaryCodexId = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(value);
+const openChannel = (transport: OrdinaryTransport): OrdinaryByteChannel => {
+  try {return openOrdinaryChannel(transport);} catch {return refuse();}
+};
 export class OrdinaryCodexProtocol {
-  readonly #transport: OrdinaryTransport;
-  readonly #reader: BoundedCodexJsonLineReader;
+  readonly #framing: OrdinaryJsonLineFraming;
   readonly #deadline: number;
   readonly #signal: AbortSignal;
   #bytes = 0; #messages = 0;
   public readonly pending: CodexJsonRecord[] = [];
   public constructor(transport: OrdinaryTransport, deadline: number, signal: AbortSignal) {
-    this.#transport = transport; this.#deadline = deadline; this.#signal = signal;
-    this.#reader = new BoundedCodexJsonLineReader({async *[Symbol.asyncIterator]() {
-      for await (const line of transport.lines) {yield Buffer.from(`${line}\n`, "utf8");}
-    }}, 262_144);
+    this.#deadline = deadline; this.#signal = signal;
+    this.#framing = new OrdinaryJsonLineFraming(openChannel(transport), 262_144);
   }
   public async next(): Promise<CodexJsonRecord | undefined> {
     this.#signal.throwIfAborted();
-    const value = await this.#reader.read(this.#deadline);
+    const value = await this.#framing.read(this.#deadline);
     if (value === CODEX_APP_SERVER_TIMEOUT) {return refuse();}
     if (value !== undefined) {
       this.#messages += 1; this.#bytes += Buffer.byteLength(JSON.stringify(value));
@@ -28,10 +30,11 @@ export class OrdinaryCodexProtocol {
     }
     return value;
   }
-  public async notify(method: string): Promise<void> {await this.#transport.write(`${JSON.stringify({method})}\n`);}
+  public async notify(method: string): Promise<void> {await this.#framing.write(`${JSON.stringify({method})}\n`);}
+  public closeInput(): Promise<void> {return this.#framing.closeInput();}
   public async request(id: string, method: string, params: CodexJsonRecord): Promise<unknown> {
     this.#signal.throwIfAborted();
-    await this.#transport.write(`${JSON.stringify({id, method, params})}\n`);
+    await this.#framing.write(`${JSON.stringify({id, method, params})}\n`);
     for (;;) {
       const message = await this.next();
       if (message === undefined) {return refuse();}
