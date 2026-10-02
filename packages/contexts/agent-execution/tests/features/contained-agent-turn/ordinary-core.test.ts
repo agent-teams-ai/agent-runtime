@@ -101,7 +101,7 @@ test("engine passes the opaque channel through and gives the provider only non-c
   await feature.dispose();
 });
 for (const outcome of ["unknownClaim", "cancelBeforeClaim"] as const) {
-  test(`a ${outcome} failed claim leaves no provider-held credential state and never reaches the provider`, async () => {
+  test(`a ${outcome} failed claim never reaches the provider and never starts a process`, async () => {
     const f = fixture({[outcome]: true}); const feature = createOrdinaryTurnFeature(f.dependencies);
     await feature.submit.execute(input);
     assert.equal(f.executions.length, 0); assert.equal(f.counts().providerCalls, 0); assert.equal(f.counts().starts, 0);

@@ -221,11 +221,11 @@ for (const overflow of ['chunk', 'line', 'partial', 'stderr'] as const) {
     if (overflow === 'stderr') {child.stderr.emit('data', Buffer.alloc(1_048_577, 97));}
     else {
       const bytes = overflow === 'chunk' ? Buffer.alloc(1_048_577, 97)
-        : Buffer.from('a'.repeat(262_145) + (overflow === 'line' ? '\n' : ''));
+        : Buffer.from(`{"t":"${'x'.repeat(262_137)}"}${overflow === 'line' ? '\n' : ''}`);
       child.stdout.emit('data', bytes);
     }
     child.stdout.emit('end'); child.stderr.emit('end'); child.emit('exit', 0); child.emit('close', 0);
-    await assert.rejects(drain(transport));
+    await assert.rejects(drain(transport), overflow === 'line' || overflow === 'partial' ? /exceeds the configured bound/u : /ORDINARY_PROCESS_UNCONFIRMED/u);
     await assert.rejects(reservation.close(0), /ORDINARY_PROCESS_UNCONFIRMED/);
     await assert.rejects(reservation.close(0), /ORDINARY_PROCESS_UNCONFIRMED/);
     assert.equal(observations.includes('closed'), false);
@@ -242,15 +242,17 @@ async function mockedProcess(t: import("node:test").TestContext) {
   const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
   Object.defineProperty(process, "platform", {...platform, value: "darwin"});
   t.mock.method(process, "getuid", () => 1000);
-  t.mock.method(childProcess.default, "spawn", () => child);
-  t.mock.method(process, "kill", () => {throw Object.assign(new Error("TEST group absent"), {code: "ESRCH"});});
+  const observed = {spawns: 0, signals: [] as (string | number | undefined)[]};
+  t.mock.method(childProcess.default, "spawn", () => {observed.spawns += 1; return child;});
+  t.mock.method(process, "kill", (_pid: number, signal?: string | number) => {observed.signals.push(signal); throw Object.assign(new Error("TEST group absent"), {code: "ESRCH"});});
   syncBuiltinESMExports();
   t.after(() => {Object.defineProperty(process, "platform", platform); t.mock.restoreAll(); syncBuiltinESMExports();});
   const owner = createNodeOrdinaryProcess({prepareLaunch: async () => ({executable: "/TEST/never-executed", arguments: [], cwd: "/TEST", environment: {}})});
   const reservation = await owner.reserve({binding, workspace: {workspaceId: "workspace:synthetic", cwd: "/TEST", homeDirectory: "/TEST"}, credential: {materializationId: "material:synthetic", generation: 1, environment: {}, brokerEndpoint: "http://127.0.0.1:1"}, deadline: performance.now() + 5000});
-  const transport = await reservation.start(claim(reservation.reservationId), new AbortController().signal);
+  const controller = new AbortController();
+  const transport = await reservation.start(claim(reservation.reservationId), controller.signal);
   const finish = () => {child.stdout.emit("end"); child.stderr.emit("end"); child.emit("exit", 0); child.emit("close", 0);};
-  return {child, reservation, transport, finish};
+  return {child, reservation, transport, finish, controller, observed};
 }
 
 test("stdout and stderr share one 1 MiB budget", async t => {
@@ -303,7 +305,33 @@ test("CR is stripped and empty lines are skipped before a clean drain is certifi
   assert.ok(Array.isArray(receipts)); assert.equal(receipts[0].finalSequence, 2);
 });
 
-test("an oversized write is refused before it reaches the child", async t => {
+test("the channel carries non-confidential launch facts and never the environment", async t => {
+  const {transport, finish} = await mockedProcess(t);
+  const {launch} = openOrdinaryChannel(transport);
+  assert.deepEqual({...launch, deadline: typeof launch.deadline}, {binding, workspaceId: "workspace:synthetic", cwd: "/TEST", homeDirectory: "/TEST", deadline: "number",
+    credential: {brokerEndpoint: "http://127.0.0.1:1", materializationId: "material:synthetic", generation: 1}});
+  finish();
+});
+
+test("a second start before close is refused and never spawns again", async t => {
+  const {reservation, controller, observed, finish} = await mockedProcess(t);
+  await assert.rejects(reservation.start(claim(reservation.reservationId), controller.signal), /ORDINARY_PROCESS_UNCONFIRMED/u);
+  assert.equal(observed.spawns, 1);
+  finish();
+  await reservation.close(0).catch(() => {});
+});
+
+test("after the leader exit is observed, abort, overflow and close never signal the group", async t => {
+  const {child, reservation, controller, observed} = await mockedProcess(t);
+  child.emit("exit", 0);
+  controller.abort();
+  child.stdout.emit("data", Buffer.alloc(1_048_577, 32));
+  child.stdout.emit("end"); child.stderr.emit("end"); child.emit("close", 0);
+  await assert.rejects(reservation.close(0), /ORDINARY_PROCESS_UNCONFIRMED/u);
+  assert.deepEqual(observed.signals.filter(signal => signal !== 0), []);
+});
+
+test("an oversized write is refused before it reaches the child", {timeout: 5000}, async t => {
   const {transport, finish} = await mockedProcess(t);
   await assert.rejects(openOrdinaryChannel(transport).write(new Uint8Array(262_145)), /ORDINARY_PROCESS_UNCONFIRMED/u);
   finish();

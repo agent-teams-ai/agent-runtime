@@ -2,19 +2,33 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {OrdinaryCodexItems} from "../../../dist/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-items.js";
 import {OrdinaryCodexProtocol, OrdinaryCodexTurnEvents} from "../../../dist/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.js";
+import {ORDINARY_CODEX_DISABLED, ordinaryCodexUserConfig} from "../../../dist/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.js";
 import {createOrdinaryCodexAdapter, type OrdinaryCodexObservation} from "../../../dist/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.js";
-import {sealOrdinaryChannel} from "../../../dist/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.js";
+import type {OrdinaryTransport} from "../../../dist/features/contained-agent-turn/application/ordinary-ports.js";
+import {sealOrdinaryChannel, openOrdinaryChannel, type OrdinaryLaunchFacts} from "../../../dist/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.js";
 
 const cwd = "/ordinary-codex-TEST/workspace";
+const home = "/ordinary-codex-TEST/home";
+const brokerEndpoint = "http://127.0.0.1:1/v1";
+const operation = {operationId: "operation:synthetic", attemptId: "attempt:synthetic", executionProfile: "user-session-v1", capabilityManifestRevision: "ordinary-codex-macos-arm64-0.153.4-v1"} as const;
+const providerDeadline = performance.now() + 60_000;
+const launchFacts = (): OrdinaryLaunchFacts => ({binding: operation, workspaceId: "workspace:synthetic", cwd, homeDirectory: home, deadline: providerDeadline,
+  credential: {brokerEndpoint, materializationId: "material:synthetic", generation: 1}});
 const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);
 /** A sealed channel whose stdout arrives as the given chunks; `state.clean` records the framing EOF confirmation. */
-const channel = (chunks: Uint8Array[], state: {writes: Uint8Array[]; clean: boolean; closed: boolean} = {writes: [], clean: false, closed: false}) => ({
+const channel = (chunks: Uint8Array[], state: {writes: Uint8Array[]; clean: boolean; closed: boolean} = {writes: [], clean: false, closed: false},
+  launch: OrdinaryLaunchFacts = launchFacts()) => ({
   state,
   transport: sealOrdinaryChannel({
+    launch,
     read: async () => chunks.shift(), write: async data => {state.writes.push(data);},
     closeInput: async () => {state.closed = true;}, confirmCleanFraming: () => {state.clean = true;},
   }),
 });
+const executeInput = (transport: OrdinaryTransport, overrides: Record<string, unknown> = {}) => ({operation, transport,
+  workspace: {workspaceId: "workspace:synthetic", cwd, homeDirectory: home},
+  credential: {brokerEndpoint, materializationId: "material:synthetic", generation: 1},
+  signal: new AbortController().signal, deadline: providerDeadline, emit: async () => {}, ...overrides}) as never;
 const protocolOver = (chunks: Uint8Array[]) => {const {state, transport} = channel(chunks); return {state, protocol: new OrdinaryCodexProtocol(transport, performance.now() + 500, new AbortController().signal)};};
 const notify = (method: string, params: Record<string, unknown>) => ({method, params});
 const turn = (status = "inProgress") => ({id: "01a09662-a294-74f2-8672-91eef1cde972", status, items: [], itemsView: "notLoaded", error: null,
@@ -148,9 +162,7 @@ test("the 1 MiB JSON byte bound refuses the message that crosses it", async () =
 test("provider needs no prepared state: a fresh adapter runs from explicit credential facts and refuses after dispose", async () => {
   const observed: OrdinaryCodexObservation[] = [];
   const adapter = createOrdinaryCodexAdapter({executable: "/TEST/never-executed", record: event => {observed.push(event);}});
-  const operation = {operationId: "operation:synthetic", attemptId: "attempt:synthetic", executionProfile: "user-session-v1", capabilityManifestRevision: "ordinary-codex-macos-arm64-0.153.4-v1"};
-  const run = (state: ReturnType<typeof channel>) => adapter.provider.execute({operation, transport: state.transport, workspace: {workspaceId: "workspace:synthetic", cwd, homeDirectory: "/ordinary-codex-TEST/home"},
-    credential: {brokerEndpoint: "http://127.0.0.1:1/v1", materializationId: "material:synthetic", generation: 1}, signal: new AbortController().signal, deadline: performance.now() + 500, emit: async () => {}} as never);
+  const run = (state: ReturnType<typeof channel>) => adapter.provider.execute(executeInput(state.transport));
   const first = channel([]);
   await assert.rejects(run(first), /EVIDENCE_REJECTED/u);
   assert.equal(first.state.writes.length, 1); assert.ok(observed.some(event => event.stage === "initialize_request"));
@@ -251,4 +263,68 @@ test("plan completion requires exact streamed text including when no delta was o
   assert.throws(() => items.complete({...plan, text: "Step 1: verify."}), /EVIDENCE_REJECTED/u);
   items.complete({...plan, text: "Step 1"});
   assert.equal(items.terminal(turn("completed")), "");
+});
+
+const jsonLine = (size: number) => `{"t":"${"x".repeat(size - 8)}"}`;
+test("the 262144-byte line bound accepts the limit and refuses one byte more, even for valid JSON", async () => {
+  assert.deepEqual(Object.keys((await protocolOver([bytes(`${jsonLine(262_144)}\n`)]).protocol.next())!), ["t"]);
+  await assert.rejects(protocolOver([bytes(`${jsonLine(262_145)}\n`)]).protocol.next(), /exceeds the configured bound/u);
+  await assert.rejects(protocolOver([bytes(jsonLine(262_145))]).protocol.next(), /exceeds the configured bound/u);
+});
+
+const line = (value: unknown) => bytes(`${JSON.stringify(value)}\n`);
+const configFor = (endpoint: string) => {
+  const expected = ordinaryCodexUserConfig(home, endpoint);
+  const features = Object.fromEntries(ORDINARY_CODEX_DISABLED.map(key => [key, false]));
+  return {config: {...expected, features: {...(expected.features as Record<string, unknown> | undefined), ...features}, mcp_servers: {}, plugins: {}, marketplaces: {},
+    model_catalog_json: null, model_instructions_file: null, developer_instructions: null, instructions: null},
+  layers: [{name: {type: "user", file: `${home}/config.toml`}, config: expected}, {name: {type: "sessionFlags"}, config: {features}}]};
+};
+const startupFor = (configured: string): Uint8Array[] => [
+  line({id: "initialize", result: {codexHome: home, platformFamily: "unix", platformOs: "macos", userAgent: "agent-runtime-ordinary/0.153.4 (Mac OS 15.5.0; arm64) synthetic"}}),
+  line({id: "config", result: configFor(configured)}),
+];
+const executeOver = async (chunks: Uint8Array[], overrides: Record<string, unknown> = {}, launch: OrdinaryLaunchFacts = launchFacts()) => {
+  const stages: string[] = [];
+  const adapter = createOrdinaryCodexAdapter({executable: "/TEST/never-executed", record: event => {stages.push(event.stage ?? event.kind);}});
+  const sealed = channel(chunks, undefined, launch);
+  await assert.rejects(adapter.provider.execute(executeInput(sealed.transport, overrides)));
+  const written = sealed.state.writes.map(data => new TextDecoder().decode(data));
+  return {stages, written, threadWritten: written.some(text => text.includes('"thread/start"'))};
+};
+
+test("a broker endpoint that differs from the granted credential facts is refused before thread/start", async () => {
+  const refused = await executeOver(startupFor("http://127.0.0.1:1111/v1"));
+  assert.equal(refused.threadWritten, false); assert.equal(refused.stages.at(-1), "config_validation");
+  const control = await executeOver(startupFor(brokerEndpoint));
+  assert.equal(control.threadWritten, true);
+});
+
+test("launch facts sealed in the channel must match the operation, workspace, deadline and credential before any write", async () => {
+  const mismatches: Record<string, Record<string, unknown>> = {
+    operationId: {operation: {...operation, operationId: "operation:other"}},
+    attemptId: {operation: {...operation, attemptId: "attempt:other"}},
+    workspaceId: {workspace: {workspaceId: "workspace:other", cwd, homeDirectory: home}},
+    cwd: {workspace: {workspaceId: "workspace:synthetic", cwd: "/other", homeDirectory: home}},
+    homeDirectory: {workspace: {workspaceId: "workspace:synthetic", cwd, homeDirectory: "/other-home"}},
+    deadline: {deadline: providerDeadline + 1},
+    brokerEndpoint: {credential: {brokerEndpoint: "http://127.0.0.1:2/v1", materializationId: "material:synthetic", generation: 1}},
+    materializationId: {credential: {brokerEndpoint, materializationId: "material:other", generation: 1}},
+    generation: {credential: {brokerEndpoint, materializationId: "material:synthetic", generation: 2}},
+  };
+  for (const [field, overrides] of Object.entries(mismatches)) {
+    const refused = await executeOver(startupFor(brokerEndpoint), overrides);
+    assert.deepEqual(refused.written, [], field); assert.equal(refused.stages.at(-1), "binding", field);
+  }
+});
+
+test("a channel has one consumer: a second open or a second protocol on the same transport is refused without a write", async () => {
+  const sealed = channel([]);
+  openOrdinaryChannel(sealed.transport);
+  assert.throws(() => openOrdinaryChannel(sealed.transport), /ORDINARY_CHANNEL_FOREIGN/u);
+  const other = channel([]);
+  const first = new OrdinaryCodexProtocol(other.transport, providerDeadline, new AbortController().signal);
+  assert.equal(first.launch.workspaceId, "workspace:synthetic");
+  assert.throws(() => new OrdinaryCodexProtocol(other.transport, providerDeadline, new AbortController().signal), /EVIDENCE_REJECTED/u);
+  assert.equal(other.state.writes.length, 0);
 });
