@@ -248,8 +248,8 @@ jobs:
   # L0 receipt, which ran `pnpm --filter @agent-teams/embedded-runtime check`;
   # the linux-x64 PostgreSQL half runs in postgres-durability above.
   # `pnpm product:check` cleans, builds (the same tsc project as typecheck) and
-  # tests every package, embedded-runtime included. Not a required check yet;
-  # the owner adds it to the main ruleset after one green week on main.
+  # tests every package, embedded-runtime included. Required on main since
+  # 2026-10-02.
   runtime-macos:
     name: runtime-macos
     runs-on: macos-15

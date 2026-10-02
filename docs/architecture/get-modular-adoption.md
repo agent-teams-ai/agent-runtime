@@ -648,6 +648,18 @@ the release tag resolve to the identities in the activation record. The public
 install succeeds in a fresh disposable project. No local dependency or
 published baseline is introduced.
 
+The package inventory and export freeze is disabled by owner decision
+2026-10-02 (AR-S). `pnpm sdk-growth:profile` no longer compares the workspace
+package list, package identity, `private`, `version`, `bin`, `files`, `exports`
+or entrypoints against the frozen C0 inventory, and the matching rejecting tests
+are commented out in the same change. The frozen C0 contract hash, the EF
+registry identity, the root classification and the qualification evidence
+checks still run. The reason is that the Get Modular 0.3.0 migration replaces
+the frozen package inventory and the freeze would block package growth such as
+new workspace packages and `./testing` subpaths. The disabled code stays in
+`scripts/architecture/check-sdk-growth-profile.mjs`; it may return only together
+with the generated SDK surface report that replaces it (SDK-growth rework lane).
+
 The [package qualification](../../architecture/sdk-growth/qualification.json)
 records six real packed archives and successful imports of all thirteen public
 subpaths in disposable Linux consumers. Two correct-toolchain pack runs produce
