@@ -69,6 +69,14 @@ test("rejects a review that does not end at the pinned standard", async () => {
   }
 });
 
+test("rejects the retained standard presented as its own delta", async () => {
+  const inputs = await fresh();
+  inputs.review.delta = { ...inputs.review.delta, path: inputs.standard.evidencePath,
+    sha256: sha256(inputs.standardBytes) };
+  inputs.deltaBytes = inputs.standardBytes;
+  assert.throws(() => verifyCmsPin(inputs), /delta cannot be the retained standard itself/u);
+});
+
 test("rejects a delta detached from its review digest", async () => {
   for (const mutate of [
     inputs => { inputs.deltaBytes = Buffer.concat([inputs.deltaBytes, Buffer.from("drift")]); },

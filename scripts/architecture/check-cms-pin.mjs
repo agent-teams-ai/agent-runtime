@@ -40,6 +40,7 @@ export function verifyCmsPin({ standard, contained = {}, standardBytes, review, 
   const after = review.after ?? {};
   assert.deepEqual({ ...identity(review), commit: after.commit, sha256: after.sha256, evidencePath: after.evidencePath },
     { ...pinned, evidencePath: standard.evidencePath }, "CMS pin review must end at the pinned standard");
+  assert.notEqual(review.delta?.path, standard.evidencePath, "CMS pin delta cannot be the retained standard itself");
   assert.equal(sha256(deltaBytes), review.delta?.sha256, "retained CMS pin delta must match its review digest");
   return Object.freeze({ commit: standard.commit, sha256: standard.sha256 });
 }
