@@ -15,6 +15,6 @@ export interface OrdinarySecurityGrantStore {
   /** Stores the record unless one exists for its key; `existing` returns the stored record unchanged. */
   insertIfAbsent(record: OrdinarySecurityGrantRecord): Promise<OrdinarySecurityInsertResult>;
   observe(key: OrdinarySecurityKey): Promise<OrdinarySecurityGrantRecord | undefined>;
-  /** Idempotent for the same disposition; `conflict` for another one or for a settlement of a different grant. */
+  /** Idempotent for the same disposition; `conflict` for another one or for a settlement of a different grant; `missing` when no record exists for the key. */
   settle(key: OrdinarySecurityKey, settlement: OrdinarySecuritySettlement): Promise<OrdinarySecurityStoreSettleResult>;
 }

@@ -54,8 +54,10 @@ test("ordinary security consume is idempotent within the TTL and refused after s
   assert.equal((await owner.resolveAndConsume(input)).authority.grantId, first.authority.grantId);
   assert.equal(calls.observe, 0);
   assert.equal(first.admitOutput("safe"), false, "admission needs registered secrets first");
+  assert.equal(owner.registerSecrets(input.operationId, ["secret-token"]), true);
+  assert.equal(first.admitOutput("safe"), true);
   advance(policy.ttlMs);
-  assert.equal(first.admitOutput("late"), false);
+  assert.equal(first.admitOutput("late"), false, "admission ends at expiresAt");
   await assert.rejects(owner.resolveAndConsume(input), /ORDINARY_SECURITY_DENIED/u);
   const settled = fixture(); const grant = await settled.owner.resolveAndConsume(input);
   await grant.settle("claim_committed");

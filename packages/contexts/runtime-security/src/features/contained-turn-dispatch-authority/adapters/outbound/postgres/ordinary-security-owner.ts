@@ -1,4 +1,4 @@
-import {createHash} from "node:crypto";
+import {createHash, randomUUID} from "node:crypto";
 import type {OrdinarySecurityGrantStore, OrdinarySecurityInsertResult, OrdinarySecurityStoreSettleResult} from "../../../application/ports/ordinary-security-grant-store.js";
 import {captureOrdinarySecurityPolicy, captureOrdinarySecurityScope, decideOrdinarySecuritySettle, ordinarySecurityDenied, ordinarySecurityKeyOf, parseOrdinarySecurityRecord, serializeOrdinarySecurityRecord, type OrdinarySecurityGrantRecord, type OrdinarySecurityKey, type OrdinarySecurityPolicy, type OrdinarySecurityScope, type OrdinarySecuritySettlement} from "../../../domain/ordinary-security-policy.js";
 import type {DispatchPgPool, DispatchPgTransaction} from "./transaction.js";
@@ -11,6 +11,7 @@ export interface PostgresOrdinarySecurityGrantStore extends OrdinarySecurityGran
 }
 /** Canonical sha256 over the JSON text of a value; over a string this is the digest of the exact stored `state` text. */
 export const ordinarySecurityDigest = (value: unknown): string => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+export const newOrdinarySecurityId = (): string => randomUUID();
 const table = "runtime_security_ordinary_grants_v1";
 const values = (key: OrdinarySecurityKey): unknown[] => [key.tenantId, key.projectId, key.operationId];
 

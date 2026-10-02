@@ -17,9 +17,10 @@ const slot = (values: unknown[] | undefined) => (values ?? []).slice(0, 3).join(
 /** Single-table stand-in for the statements this store issues; the real database is covered by the postgres gate. */
 const fakePool = () => {
   const table = new Map<string, {state: string; state_digest: string}>();
-  const control = {failCommit: false, failQuery: false, hang: false, released: [] as boolean[], hangingQueries: 0};
+  const control = {failCommit: false, failQuery: false, hang: false, released: [] as boolean[], hangingQueries: 0, statements: [] as string[]};
   const pool = {connect: async () => ({
     query: async (sql: string, values?: unknown[]) => {
+      control.statements.push(sql);
       if (sql === "COMMIT" && control.failCommit) {throw new Error("synthetic lost acknowledgement");}
       if (/^(SELECT|INSERT|UPDATE)/u.test(sql) && control.failQuery) {throw new Error("synthetic driver failure");}
       if (sql.startsWith("SELECT state")) {
@@ -63,6 +64,8 @@ test("ordinary security store refuses tampered rows, another policy and a foreig
   await assert.rejects(store.observe(key), /ORDINARY_SECURITY_DENIED/u);
   row.state = original.state; row.state_digest = original.state_digest;
   assert.ok(await store.observe(key));
+  table.set("TEST/TEST/operation:OTHER", {...original});
+  await assert.rejects(store.observe({...key, operationId: "operation:OTHER"}), /ORDINARY_SECURITY_DENIED/u, "a row filed under another key is refused");
 });
 
 test("ordinary security store settle is idempotent for one disposition and a conflict for another", async () => {
@@ -85,6 +88,7 @@ test("ordinary security store classifies commit-unknown and unavailable and neve
   await assert.rejects(store.insertIfAbsent(candidate(1)), OrdinarySecurityCommitUnknownError);
   assert.equal(lost.table.size, 1, "the write happened; only the acknowledgement was lost");
   assert.equal(lost.control.released.at(-1), true, "a connection with an unknown commit is discarded");
+  assert.equal(lost.control.statements.at(-1), "COMMIT", "nothing is read back after the lost acknowledgement");
   lost.control.failCommit = false; lost.control.failQuery = true;
   await assert.rejects(store.observe(key), OrdinarySecurityStoreUnavailableError);
 });
