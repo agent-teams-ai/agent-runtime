@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { globSync, readFileSync } from "node:fs";
-import { posix, resolve } from "node:path";
+// globSync and posix are only used by the inventory freeze disabled below (AR-S).
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 // Disabled with the hardcoded CMS pin chain by owner decision 2026-10-02 (AR-0).
@@ -96,13 +97,16 @@ export function checkSdkGrowthProfile(repository = root) {
   assert.equal(createHash("sha256").update(readFileSync(resolve(repository, "architecture/c0/ar-owned-lifetime/contract.json"))).digest("hex"), "4c88c378c6d54303fd4910f521480e6fe120743dfcdc618007efb1395a684c05", "SDK_C0_BASE_MUTATION");
   const frozen = json("architecture/c0/ar-owned-lifetime/contract.json");
   const manifest = json("package.json");
-  const workspace = parse(readFileSync(resolve(repository, "pnpm-workspace.yaml"), "utf8"));
-  const discovered = normalizeWorkspaceManifestPaths(
-    globSync(workspace.packages.map(pattern => `${pattern}/package.json`), { cwd: repository })
-  );
-  const accepted = frozen.inventory.packages.filter(pkg => pkg.manifest !== "package.json");
-  assert.deepEqual(discovered, accepted.map(pkg => pkg.manifest).toSorted(), "SDK_SCOPE_DRIFT");
-  assert.deepEqual(profile.packages.map(pkg => pkg.manifestPath).toSorted(), discovered, "SDK_PROFILE_SCOPE_DRIFT");
+  // Disabled by owner decision 2026-10-02 (AR-S): the inventory and export freeze blocks package growth such as
+  // new workspace packages and ./testing subpaths. Restore only together with the generated SDK surface report
+  // that replaces it (SDK-growth rework lane).
+  // const workspace = parse(readFileSync(resolve(repository, "pnpm-workspace.yaml"), "utf8"));
+  // const discovered = normalizeWorkspaceManifestPaths(
+  //   globSync(workspace.packages.map(pattern => `${pattern}/package.json`), { cwd: repository })
+  // );
+  // const accepted = frozen.inventory.packages.filter(pkg => pkg.manifest !== "package.json");
+  // assert.deepEqual(discovered, accepted.map(pkg => pkg.manifest).toSorted(), "SDK_SCOPE_DRIFT");
+  // assert.deepEqual(profile.packages.map(pkg => pkg.manifestPath).toSorted(), discovered, "SDK_PROFILE_SCOPE_DRIFT");
   assert.equal(profile.schemaVersion, 2);
   assert.equal(profile.sdkGrowth.contractRevision, "foundation:sdk-growth:c0:5");
   assert.equal(profile.sdkGrowth.policyVersion, "foundation:sdk-growth:policy:1");
@@ -148,22 +152,25 @@ export function checkSdkGrowthProfile(repository = root) {
   assert.equal(activation.qualificationInput.sourceMergeCommit, "49402509372e3f4a96c534401636fb12ff5dbee2", "SDK_EF_SOURCE_DRIFT");
   assert.equal(activation.qualificationInput.sourceReleaseCommit, "852cd5130cad84d750788b080f0e358ac5210355", "SDK_EF_SOURCE_DRIFT");
   checkRootClassification(repository, manifest, activation, json);
-  for (const pkg of profile.packages) {
-    const actual = json(pkg.manifestPath);
-    const prior = accepted.find(entry => entry.manifest === pkg.manifestPath);
-    assert.equal(pkg.packageRoot, posix.dirname(prior.manifest), "SDK_PACKAGE_ROOT_DRIFT");
-    assert.equal(pkg.packageName, prior.name, "SDK_PACKAGE_IDENTITY_DRIFT");
-    assert.equal(actual.name, prior.name, "SDK_PACKAGE_IDENTITY_DRIFT");
-    assert.equal(actual.private, true);
-    assert.equal(actual.version, "0.0.0");
-    assert.deepEqual(actual.bin ?? null, prior.bin, "SDK_BIN_CLASSIFICATION_DRIFT");
-    const runnerFiles = actual.name === "@agent-teams/embedded-runtime" ? ["scripts/run-package-tests.mjs"] : [];
-    assert.deepEqual(actual.files, [...prior.files, ...runnerFiles], "SDK_PACKAGE_FILES_DRIFT");
-    assert.equal(JSON.stringify(actual.exports), JSON.stringify(prior.exports), "SDK_EXPORT_MATRIX_DRIFT");
-    assert.deepEqual(pkg.entrypoints, [".", "./composition"].map(exportPath => ({ exportPath, declarationEntryPoint: `${pkg.packageRoot}/${actual.exports[exportPath].types.slice(2)}` })));
-    assert.deepEqual(pkg.nonTypeExports, actual.name === "@agent-teams/embedded-runtime" ? [{ exportPath: "./scripts/run-package-tests.mjs", kind: "runtime" }] : []);
-    assert.equal(pkg.tsconfigPath, `${pkg.packageRoot}/tsconfig.json`);
-  }
+  // Disabled by owner decision 2026-10-02 (AR-S): the inventory and export freeze blocks package growth such as
+  // new workspace packages and ./testing subpaths. Restore only together with the generated SDK surface report
+  // that replaces it (SDK-growth rework lane).
+  // for (const pkg of profile.packages) {
+  //   const actual = json(pkg.manifestPath);
+  //   const prior = accepted.find(entry => entry.manifest === pkg.manifestPath);
+  //   assert.equal(pkg.packageRoot, posix.dirname(prior.manifest), "SDK_PACKAGE_ROOT_DRIFT");
+  //   assert.equal(pkg.packageName, prior.name, "SDK_PACKAGE_IDENTITY_DRIFT");
+  //   assert.equal(actual.name, prior.name, "SDK_PACKAGE_IDENTITY_DRIFT");
+  //   assert.equal(actual.private, true);
+  //   assert.equal(actual.version, "0.0.0");
+  //   assert.deepEqual(actual.bin ?? null, prior.bin, "SDK_BIN_CLASSIFICATION_DRIFT");
+  //   const runnerFiles = actual.name === "@agent-teams/embedded-runtime" ? ["scripts/run-package-tests.mjs"] : [];
+  //   assert.deepEqual(actual.files, [...prior.files, ...runnerFiles], "SDK_PACKAGE_FILES_DRIFT");
+  //   assert.equal(JSON.stringify(actual.exports), JSON.stringify(prior.exports), "SDK_EXPORT_MATRIX_DRIFT");
+  //   assert.deepEqual(pkg.entrypoints, [".", "./composition"].map(exportPath => ({ exportPath, declarationEntryPoint: `${pkg.packageRoot}/${actual.exports[exportPath].types.slice(2)}` })));
+  //   assert.deepEqual(pkg.nonTypeExports, actual.name === "@agent-teams/embedded-runtime" ? [{ exportPath: "./scripts/run-package-tests.mjs", kind: "runtime" }] : []);
+  //   assert.equal(pkg.tsconfigPath, `${pkg.packageRoot}/tsconfig.json`);
+  // }
   assert.deepEqual(activation.packageQualification, { status: "passed-membership-and-imports", evidencePath: `${directory}/qualification.json`, cleanRegistryInstall: true }, "SDK_PACKAGE_QUALIFICATION_DRIFT");
   assert.deepEqual(activation.sdkAdmission, { status: "blocked-current-typed-observation", releaseEligible: false }, "SDK_ADMISSION_OVERCLAIM");
   const qualification = json(activation.packageQualification.evidencePath);
