@@ -2,7 +2,7 @@ import {spawn, type ChildProcessWithoutNullStreams} from "node:child_process";
 import {randomUUID} from "node:crypto";
 import type {OrdinaryLaunchRecipe, OrdinaryProcessPort, OrdinaryProcessReservation} from "../../../application/ordinary-ports.js";
 import type {OrdinaryBinding, OrdinaryReceiptOf} from "../../../domain/ordinary-model.js";
-import {sealOrdinaryChannel, type OrdinaryByteChannel} from "../ordinary-channel/ordinary-byte-channel.js";
+import {sealOrdinaryChannel, type OrdinaryByteChannel, type OrdinaryLaunchFacts} from "../ordinary-channel/ordinary-byte-channel.js";
 
 export type {OrdinaryLaunchSpecification} from "../../../application/ordinary-ports.js";
 export type OrdinaryProcessObservation = OrdinaryBinding & {readonly reservationId: string} & (
@@ -40,6 +40,30 @@ const writeMessage = async (child: ChildProcessWithoutNullStreams, message: Uint
     });
   });
 
+const launchFacts = (input: Parameters<OrdinaryProcessPort["reserve"]>[0], binding: OrdinaryBinding): OrdinaryLaunchFacts => Object.freeze({
+  binding, workspaceId: input.workspace.workspaceId, cwd: input.workspace.cwd, homeDirectory: input.workspace.homeDirectory,
+  deadline: input.deadline,
+  credential: Object.freeze({brokerEndpoint: input.credential.brokerEndpoint,
+    materializationId: input.credential.materializationId, generation: input.credential.generation}),
+});
+/** The shared 1 MiB stream budget bounds memory: one fixed buffer holds all stdout, so no queue can grow. */
+const createStdoutBuffer = () => {
+  const bytes = Buffer.alloc(1_048_576);
+  let received = 0;
+  let consumed = 0;
+  return {
+    push(chunk: Buffer): void { chunk.copy(bytes, received); received += chunk.length; },
+    take(): Uint8Array | undefined {
+      if (consumed >= received) { return undefined; }
+      const next = bytes.subarray(consumed, received);
+      consumed = received;
+      return next;
+    },
+    unread: (): number => received - consumed,
+    discard(): void { consumed = received; bytes.fill(0); },
+  };
+};
+
 const assertClosure = (facts: Readonly<{
   journalFailed: boolean; streamInvalid: boolean; closed: boolean; exited: boolean;
   stdoutClosed: boolean; stderrClosed: boolean; unread: number; framingClean: boolean; pid: number; finalSequence: number;
@@ -60,6 +84,9 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
     const executable = launch.executable;
     const processArguments = Array.from<string>(launch.arguments);
     const environment = {...launch.environment};
+    const cwd = launch.cwd;
+    const deadline = input.deadline;
+    const facts = launchFacts(input, binding);
     const reservationId = randomUUID();
     const ownershipToken = randomUUID();
     let attempted = false;
@@ -86,9 +113,7 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
     let resolveClosure!: () => void;
     const closure = new Promise<void>(resolve => { resolveClosure = resolve; });
     let closePromise: ReturnType<OrdinaryProcessReservation["close"]> | undefined;
-    // Unread stdout bytes can never exceed the shared 1 MiB budget, which is the bound on this queue.
-    const chunks: Buffer[] = [];
-    let unreadBytes = 0;
+    const stdout = createStdoutBuffer();
     const stderrDecoder = new TextDecoder("utf-8", {fatal: true});
     let totalBytes = 0;
     let abortSignal: AbortSignal | undefined;
@@ -102,20 +127,20 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
     const onData = (bytes: Buffer) => {
       totalBytes += bytes.length;
       if (totalBytes > 1_048_576) { streamInvalid = true; interrupt(); return; }
-      chunks.push(bytes);
-      unreadBytes += bytes.length;
+      stdout.push(bytes);
       wake?.();
     };
     // Framing, UTF-8 and line bounds belong to the consumer; this side only bounds and hands over bytes.
     const channel: OrdinaryByteChannel = Object.freeze({
+      launch: facts,
       async read() {
         if (reading) {throw refusal();}
         reading = true;
         try {
           for (;;) {
             if (failure !== undefined) { throw failure; }
-            const next = chunks.shift();
-            if (next !== undefined) { unreadBytes -= next.length; return next; }
+            const next = stdout.take();
+            if (next !== undefined) { return next; }
             if (stdoutClosed) { return; }
             await new Promise<void>(resolve => { wake = resolve; });
             wake = undefined;
@@ -140,12 +165,12 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
         if (claimBinding.kind !== "dispatch_claim" || claim.reservationId !== reservationId ||
             claim.operationId !== binding.operationId || claim.attemptId !== binding.attemptId ||
             claimBinding.executionProfile !== binding.executionProfile || claimBinding.capabilityManifestRevision !== binding.capabilityManifestRevision ||
-            isAborted(signal) || performance.now() >= input.deadline) { throw refusal(); }
+            isAborted(signal) || performance.now() >= deadline) { throw refusal(); }
         abortSignal = signal;
         record({...binding, reservationId, kind: "launch_requested"});
         spawnInvoked = true;
         // Node installs the new session/process group before exec; no shell, uid/gid or inherited extras.
-        child = spawn(executable, processArguments, {cwd: launch.cwd, env: environment, detached: true, stdio: ["pipe", "pipe", "pipe"]});
+        child = spawn(executable, processArguments, {cwd, env: environment, detached: true, stdio: ["pipe", "pipe", "pipe"]});
         child.once("error", fail);
         child.once("exit", () => { exited = true; if (child?.pid !== undefined) {try {record({...binding, reservationId, kind: "exited", pid: child.pid, processGroupId: child.pid});} catch {fail();}} });
         child.once("close", () => { closed = true; resolveClosure(); wake?.(); });
@@ -157,7 +182,7 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
         child.stderr.on("data", (bytes: Buffer) => { totalBytes += bytes.length; try {stderrDecoder.decode(bytes, {stream: true});} catch {streamInvalid = true; interrupt();} bytes.fill(0); if (totalBytes > 1_048_576) { streamInvalid = true; interrupt(); } });
         child.stderr.once("end", () => {try {stderrDecoder.decode();} catch {streamInvalid = true; fail();} stderrClosed = true;});
         signal.addEventListener("abort", interrupt, {once: true});
-        deadlineTimer = setTimeout(interrupt, Math.max(1, input.deadline - performance.now()));
+        deadlineTimer = setTimeout(interrupt, Math.max(1, deadline - performance.now()));
         if (isAborted(signal)) { interrupt(); }
         if (child.pid !== undefined) {try {record({...binding, reservationId, kind: "started", pid: child.pid, processGroupId: child.pid});} catch {interrupt(); throw refusal();}}
         return transport;
@@ -177,11 +202,11 @@ export function createNodeOrdinaryProcess(options: NodeOrdinaryProcessOptions): 
               await within(closure, 1000);
             }
           }
-          const unread = unreadBytes;
+          const unread = stdout.unread();
           // Discarding bytes, or ending without a clean framing EOF, is permanent loss even if EOF arrives on a later retry.
+          // `unread !== 0` is subsumed by `framingClean` but kept as a direct physical fact.
           if (unread !== 0 || !framingClean) {streamInvalid = true;}
-          chunks.length = 0;
-          unreadBytes = 0;
+          stdout.discard();
           for (const key of Object.keys(environment)) {delete environment[key];}
           assertClosure({journalFailed, streamInvalid, closed, exited, stdoutClosed, stderrClosed, unread, framingClean, pid: child.pid, finalSequence});
           record({...binding, reservationId, kind: "closed", pid: child.pid, processGroupId: child.pid});

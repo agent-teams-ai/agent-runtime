@@ -1,6 +1,6 @@
 import {isCodexRecord as isRecord, type CodexJsonRecord, CODEX_APP_SERVER_TIMEOUT, decodeCodexResponseEnvelope} from "../codex-app-server/codex-app-server-jsonl.js";
 import type {OrdinaryTransport} from "../../../application/ordinary-ports.js";
-import {openOrdinaryChannel, type OrdinaryByteChannel} from "../ordinary-channel/ordinary-byte-channel.js";
+import {openOrdinaryChannel, type OrdinaryByteChannel, type OrdinaryLaunchFacts} from "../ordinary-channel/ordinary-byte-channel.js";
 import {ordinaryCodexRefusal as refuse, ordinaryJson} from "./ordinary-codex-config.js";
 import {type OrdinaryCodexItemRule, OrdinaryCodexItems} from "./ordinary-codex-items.js";
 import {OrdinaryJsonLineFraming} from "./ordinary-framing.js";
@@ -16,9 +16,13 @@ export class OrdinaryCodexProtocol {
   readonly #signal: AbortSignal;
   #bytes = 0; #messages = 0;
   public readonly pending: CodexJsonRecord[] = [];
+  /** Facts the process owner sealed at reserve; compared with the operation before the first write. */
+  public readonly launch: OrdinaryLaunchFacts;
   public constructor(transport: OrdinaryTransport, deadline: number, signal: AbortSignal) {
     this.#deadline = deadline; this.#signal = signal;
-    this.#framing = new OrdinaryJsonLineFraming(openChannel(transport), 262_144);
+    const channel = openChannel(transport);
+    this.launch = channel.launch;
+    this.#framing = new OrdinaryJsonLineFraming(channel, 262_144);
   }
   public async next(): Promise<CodexJsonRecord | undefined> {
     this.#signal.throwIfAborted();

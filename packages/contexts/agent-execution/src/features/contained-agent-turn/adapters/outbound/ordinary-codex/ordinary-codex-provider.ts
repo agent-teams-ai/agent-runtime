@@ -1,6 +1,7 @@
 import type {OrdinaryProviderPort, OrdinaryLaunchRecipe} from "../../../application/ordinary-ports.js";
 import type {OrdinaryBinding, OrdinaryReceiptOf} from "../../../domain/ordinary-model.js";
 import {ORDINARY_PROFILE} from "../../../domain/ordinary-model.js";
+import type {OrdinaryLaunchFacts} from "../ordinary-channel/ordinary-byte-channel.js";
 import {isCodexRecord as isRecord} from "../codex-app-server/codex-app-server-jsonl.js";
 import {createOrdinaryCodexLaunchRecipe, ORDINARY_CODEX_MODEL, ORDINARY_CODEX_PROVIDER, ORDINARY_CODEX_PERMISSION,
   ordinaryCodexRefusal as refuse, ordinaryJson, validateOrdinaryCodexConfig} from "./ordinary-codex-config.js";
@@ -66,6 +67,7 @@ export function createOrdinaryCodexAdapter(options: OrdinaryCodexAdapterOptions)
         if (disposed) {return refuse();}
         const identity = binding(input.operation);
         const protocol = new OrdinaryCodexProtocol(input.transport, input.deadline, input.signal);
+        assertLaunchFacts(protocol.launch, input);
         stage("initialize_request");
         const initialized = await protocol.request("initialize", "initialize", {
           clientInfo: {name: "agent-runtime-ordinary", version: "1"}, capabilities: {experimentalApi: true},
@@ -132,6 +134,16 @@ export function createOrdinaryCodexAdapter(options: OrdinaryCodexAdapterOptions)
     },
   };
   return Object.freeze({prepareLaunch, provider, dispose() {disposed = true;}});
+}
+
+function assertLaunchFacts(launch: OrdinaryLaunchFacts, input: Parameters<OrdinaryProviderPort["execute"]>[0]): void {
+  const expected = binding(input.operation);
+  const {workspace, credential} = input;
+  if (!equal(binding(launch.binding), expected) || launch.workspaceId !== workspace.workspaceId ||
+      launch.cwd !== workspace.cwd || launch.homeDirectory !== workspace.homeDirectory || launch.deadline !== input.deadline ||
+      launch.credential.brokerEndpoint !== credential.brokerEndpoint ||
+      launch.credential.materializationId !== credential.materializationId ||
+      launch.credential.generation !== credential.generation) {refuse();}
 }
 
 function validateInitialize(initialized: unknown, homeDirectory: string): void {

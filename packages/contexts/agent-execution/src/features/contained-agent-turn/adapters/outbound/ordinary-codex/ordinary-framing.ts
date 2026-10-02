@@ -1,6 +1,8 @@
 import {BoundedCodexJsonLineReader, type CodexReadOutcome} from "../codex-app-server/codex-app-server-jsonl.js";
 import type {OrdinaryByteChannel} from "../ordinary-channel/ordinary-byte-channel.js";
 
+const encoder = new TextEncoder();
+
 /**
  * The single framing pass for the ordinary channel: bytes in, JSON objects out. Fatal UTF-8, line bound,
  * CR stripping, empty-line skipping, duplicate decoded keys and an unterminated tail on EOF are all
@@ -24,6 +26,6 @@ export class OrdinaryJsonLineFraming {
     if (outcome === undefined) {this.#channel.confirmCleanFraming();}
     return outcome;
   }
-  public write(message: string): Promise<void> {return this.#channel.write(new TextEncoder().encode(message));}
+  public write(message: string): Promise<void> {return this.#channel.write(encoder.encode(message));}
   public closeInput(): Promise<void> {return this.#channel.closeInput();}
 }

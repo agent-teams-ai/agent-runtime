@@ -1255,6 +1255,11 @@
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-ports.ts",
           "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-model.ts",
+          "mode": "type-only"
         }
       ]
     },
@@ -1458,6 +1463,11 @@
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-model.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts",
           "mode": "type-only"
         },
         {
