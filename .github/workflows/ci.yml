@@ -209,6 +209,32 @@ jobs:
           RS_POSTGRES_DISPOSABLE_URL: postgresql://postgres:postgres@127.0.0.1:5434/ar69_rs_test_ci
         run: pnpm --filter @agent-teams/runtime-security test:postgres
 
+      # Since AR-0 (owner decision 2026-10-02) this replaces the linux-x64 half
+      # of the paired L0 receipt: the joined AE, PA and RS test on a real
+      # PostgreSQL database is skipped without a disposable URL, so it must run
+      # here and must not report any skipped, todo, failed or cancelled test.
+      - name: Build Embedded Runtime PostgreSQL authority join target
+        run: pnpm --filter "@agent-teams/embedded-runtime..." build
+
+      - name: Create disposable Embedded Runtime authority join database
+        env:
+          PA_POSTGRES_CONTAINER: ${{ job.services.provider-access-postgres.id }}
+        run: docker exec "$PA_POSTGRES_CONTAINER" createdb -U postgres ar69_pa_test_aejoinci
+
+      - name: Run disposable Embedded Runtime PostgreSQL authority join gate
+        shell: bash
+        working-directory: packages/apps/embedded-runtime
+        env:
+          AE_ACL_POSTGRES_DISPOSABLE_URL: postgresql://postgres:postgres@127.0.0.1:5433/ar69_pa_test_aejoinci
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/postgres-authority-join.tap"
+          node --test --test-reporter=tap tests/package/postgres-authority-join.test.ts | tee "$report"
+          for line in '# fail 0' '# cancelled 0' '# skipped 0' '# todo 0'; do
+            grep -Fqx "$line" "$report" || { echo "::error::authority join gate incomplete: missing '$line'"; exit 1; }
+          done
+          grep -Eqx '# pass [1-9][0-9]*' "$report" || { echo "::error::authority join gate ran no passing test"; exit 1; }
+
       - name: Run disposable ordinary PostgreSQL gate
         shell: bash
         env:
@@ -218,8 +244,9 @@ jobs:
           bash scripts/ci/ordinary-postgres-disposable.sh
 
   # Darwin coverage for every PR, merge queue run and main push. Since AR-0
-  # (owner decision 2026-10-02) it replaces the paired darwin-arm64 L0 receipt,
-  # which ran `pnpm --filter @agent-teams/embedded-runtime check`.
+  # (owner decision 2026-10-02) it replaces the darwin-arm64 half of the paired
+  # L0 receipt, which ran `pnpm --filter @agent-teams/embedded-runtime check`;
+  # the linux-x64 PostgreSQL half runs in postgres-durability above.
   # `pnpm product:check` cleans, builds (the same tsc project as typecheck) and
   # tests every package, embedded-runtime included. Not a required check yet;
   # the owner adds it to the main ruleset after one green week on main.

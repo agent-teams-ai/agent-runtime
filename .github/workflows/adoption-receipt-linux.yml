@@ -6,10 +6,13 @@ name: adoption-receipt-linux
 # Safe to delete once the receipt has been captured and merged.
 
 # Disabled by owner decision 2026-10-02 (AR-0). Paired L0 receipts are no
-# longer part of `pnpm check`; the runtime-macos job in ci.yml runs the package
-# checks on macos-15 for every PR instead. Manual capture stays available through
-# workflow_dispatch. Restore the push triggers only if runtime-macos misses a
-# Darwin regression that a receipt would have caught, or if receipts can be
+# longer part of `pnpm check`. In ci.yml, runtime-macos runs the package checks
+# on macos-15 for every PR and postgres-durability runs the Linux PostgreSQL
+# authority join test the linux-x64 receipt used to cover. A manual
+# workflow_dispatch run captures linux-x64 on any branch; the matrix below adds
+# darwin-arm64 only for its four hardcoded branches, so a new paired capture
+# also needs that expression updated. Restore the push triggers only if these
+# jobs miss a regression that a receipt would have caught, or if receipts can be
 # captured without committing about 4.9 MB of evidence per refresh.
 on:
   workflow_dispatch:

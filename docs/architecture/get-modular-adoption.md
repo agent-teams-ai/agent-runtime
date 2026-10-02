@@ -317,12 +317,15 @@ Status since 2026-10-02 (owner decision, AR-0): disabled as a gate.
 `pnpm check:fast`, the `adoption-receipt-linux` workflow runs only on manual
 dispatch, and CI no longer fetches the retained evidence commits. Paired
 receipts had to be recaptured on most commits to main and blocked the Get
-Modular 0.3.0 migration. The `runtime-macos` CI job now checks every package on
-macos-15 for every pull request; it is not a required check yet. The checker,
-its tests and all retained L0/v1/v2 reports stay unchanged and can still be run
-by hand. Put the gate back if `runtime-macos` misses a Darwin regression that a
-receipt would have caught, or once receipts no longer require committing about
-4.9 MB per refresh. The rest of this section describes the gate as it was
+Modular 0.3.0 migration. Two CI jobs take over what the receipts ran. The
+`runtime-macos` job checks every package on macos-15 for every pull request; it
+is not a required check yet. The required `postgres-durability` job runs the
+Linux `postgres-authority-join.test.ts` (Agent Execution, Provider Access and
+Runtime Security on a disposable PostgreSQL database) and fails if that test is
+skipped. The checker, its tests and all retained L0/v1/v2 reports stay unchanged
+and can still be run by hand. Put the gate back if these jobs miss a regression
+that a receipt would have caught, or once receipts no longer require committing
+about 4.9 MB per refresh. The rest of this section describes the gate as it was
 enforced before AR-0.
 
 The gate was `architecture:runtime-setup-l0-evidence`, backed by
