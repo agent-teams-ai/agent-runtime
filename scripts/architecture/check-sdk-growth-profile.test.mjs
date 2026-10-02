@@ -130,28 +130,32 @@ test("reject changed supplied CMS bytes under retained review", t => {
   writeFileSync(join(directory, "architecture/get-modular/evidence/sdk-growth-current-standard.md"), "changed\n");
   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CMS_REVIEW_DRIFT/u);
 });
-test("reject drift in the preserved historical A3 CMS review", t => {
-  const directory = fixture(t);
-  mutate(directory, "architecture/get-modular/evidence/sdk-growth-standard-review.json", value => { value.activeSha256 = "0".repeat(64); });
-  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CMS_REVIEW_DRIFT/u);
-});
-// Regression: a historical A3 review can no longer supply the current pin;
-// its successor must retain the same prior commit and digest.
-test("reject a broken historical-to-current CMS migration chain", t => {
-  const directory = fixture(t);
-  mutate(directory, "architecture/get-modular/evidence/a3-cms-pin-review.json", value => { value.after.commit = "0".repeat(40); });
-  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CMS_REVIEW_DRIFT/u);
-});
-test("reject the historical A3 digest detached from its successor review", t => {
-  const directory = fixture(t);
-  mutate(directory, "architecture/get-modular/evidence/a3-cms-pin-review.json", value => { value.after.sha256 = "0".repeat(64); });
-  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CMS_REVIEW_DRIFT/u);
-});
-test("reject the current CMS pin detached from the fresh migration review", t => {
-  const directory = fixture(t);
-  mutate(directory, "architecture/get-modular/consumer-profile.json", value => { value.standard.sha256 = "0".repeat(64); });
-  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CMS_PIN_DRIFT/u);
-});
+// AR-0 (owner decision 2026-10-02): the CMS pin chain assertions these tests
+// exercised are disabled in check-sdk-growth-profile.mjs. check-cms-pin.test.mjs
+// rejects a pin detached from its review instead. Restore these tests together
+// with the chain.
+// test("reject drift in the preserved historical A3 CMS review", t => {
+//   const directory = fixture(t);
+//   mutate(directory, "architecture/get-modular/evidence/sdk-growth-standard-review.json", value => { value.activeSha256 = "0".repeat(64); });
+//   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CMS_REVIEW_DRIFT/u);
+// });
+// // Regression: a historical A3 review can no longer supply the current pin;
+// // its successor must retain the same prior commit and digest.
+// test("reject a broken historical-to-current CMS migration chain", t => {
+//   const directory = fixture(t);
+//   mutate(directory, "architecture/get-modular/evidence/a3-cms-pin-review.json", value => { value.after.commit = "0".repeat(40); });
+//   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CMS_REVIEW_DRIFT/u);
+// });
+// test("reject the historical A3 digest detached from its successor review", t => {
+//   const directory = fixture(t);
+//   mutate(directory, "architecture/get-modular/evidence/a3-cms-pin-review.json", value => { value.after.sha256 = "0".repeat(64); });
+//   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CMS_REVIEW_DRIFT/u);
+// });
+// test("reject the current CMS pin detached from the fresh migration review", t => {
+//   const directory = fixture(t);
+//   mutate(directory, "architecture/get-modular/consumer-profile.json", value => { value.standard.sha256 = "0".repeat(64); });
+//   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CMS_PIN_DRIFT/u);
+// });
 test("reject exported runner omitted from actual package files", t => {
   const directory = fixture(t);
   mutate(directory, "packages/apps/embedded-runtime/package.json", value => { value.files = ["dist"]; });

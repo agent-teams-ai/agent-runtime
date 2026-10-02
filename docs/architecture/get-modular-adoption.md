@@ -292,6 +292,8 @@ that same commit, merge through the existing command below, and run the required
 gates. Do not edit receipt identities manually or claim full migration completion
 from focused checker results. Preserve the old generated report outside the
 checkout before removing only that output for the merger's exclusive creation.
+Since AR-0 this paired capture is no longer a `pnpm check` gate; see the L0
+checker section below.
 
 ## Evidence and executable references
 
@@ -310,7 +312,23 @@ TEST projects and passive temporary filesystem fixtures, never live providers.
 
 ## Implemented L0 checker transition
 
-The current gate is `architecture:runtime-setup-l0-evidence`, backed by
+Status since 2026-10-02 (owner decision, AR-0): disabled as a gate.
+`architecture:runtime-setup-l0-evidence` is no longer part of `pnpm check` or
+`pnpm check:fast`, the `adoption-receipt-linux` workflow runs only on manual
+dispatch, and CI no longer fetches the retained evidence commits. Paired
+receipts had to be recaptured on most commits to main and blocked the Get
+Modular 0.3.0 migration. Two CI jobs take over what the receipts ran. The
+`runtime-macos` job checks every package on macos-15 for every pull request; it
+is not a required check yet. The required `postgres-durability` job runs the
+Linux `postgres-authority-join.test.ts` (Agent Execution, Provider Access and
+Runtime Security on a disposable PostgreSQL database) and fails if that test is
+skipped. The checker, its tests and all retained L0/v1/v2 reports stay unchanged
+and can still be run by hand. Put the gate back if these jobs miss a regression
+that a receipt would have caught, or once receipts no longer require committing
+about 4.9 MB per refresh. The rest of this section describes the gate as it was
+enforced before AR-0.
+
+The gate was `architecture:runtime-setup-l0-evidence`, backed by
 `scripts/architecture/runtime-setup-l0-evidence.mjs` and its spec, inputs,
 validation modules and tests. The additive implementation preserves the
 following bounded transition contract:
@@ -528,7 +546,9 @@ validate that report against the complete implementation and documentation
 checkpoint with `pnpm architecture:runtime-setup-l0-evidence`. If tracked inputs
 in the bounded Runtime Setup closure have changed, refresh the supported paired
 capture. A report-only commit may
-reuse the authenticated source only under the existing validator rules.
+reuse the authenticated source only under the existing validator rules. While
+the L0 gate is disabled (AR-0), this validation is manual and does not block
+delivery.
 
 A consumer-local rollback must be one governed release replacement. Restore one
 async direct default at the existing private entrypoint, retain the internal

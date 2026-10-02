@@ -5,75 +5,85 @@ name: adoption-receipt-linux
 # runbook in docs/architecture/get-modular-adoption.md. No pull_request/main push.
 # Safe to delete once the receipt has been captured and merged.
 
+# Disabled by owner decision 2026-10-02 (AR-0). Paired L0 receipts are no
+# longer part of `pnpm check`. In ci.yml, runtime-macos runs the package checks
+# on macos-15 for every PR and postgres-durability runs the Linux PostgreSQL
+# authority join test the linux-x64 receipt used to cover. A manual
+# workflow_dispatch run captures linux-x64 on any branch; the matrix below adds
+# darwin-arm64 only for its four hardcoded branches, so a new paired capture
+# also needs that expression updated. Restore the push triggers only if these
+# jobs miss a regression that a receipt would have caught, or if receipts can be
+# captured without committing about 4.9 MB of evidence per refresh.
 on:
-  push:
-    branches:
-      - feat/async-assembly-adapter
-      - refactor/fms-runtime-security-setup-authorization
-      - refactor/fms-contained-turn-egress
-      - refactor/fms-host-boundaries
-      - refactor/fms-final-integration
-      - refactor/fms-rs-egress-primitives
-      - refactor/fms-runtime-configuration-entrypoints
-      - refactor/fms-rc-feature-tests
-      - fix/contained-turn-final-qualification
-      - cursor/fms-rs-v1-mapper-split-7d17
-      - cursor/fms-host-runtime-access-7d17
-      - cursor/fms-host-http-pa-7d17
-      - cursor/fms-host-pa-rs-7d17
-      - refactor/fms-host-pa-rs
-      - cursor/fms-host-validation-7d17
-      - refactor/fms-host-validation
-      - refactor/fms-host-runtime-validation
-      - refactor/fms-host-http-egress
-      - chore/classify-native-helper-test
-      - cursor/fms-linux-deploy-7d17
-      - cursor/fms-host-leftover-7d17
-      - cursor/fms-setup-views-linux-7d17
-      - cursor/fms-runtime-access-linux-7d17
-      - cursor/fms-rc-layer-linux-7d17
-      - cursor/fms-rs-barrels-linux-7d17
-      - cursor/fms-rc-package-arch-load-7d17
-      - cursor/fms-rc-activation-linux-7d17
-      - cursor/fms-rs-activation-linux-7d17
-      - cursor/fms-host-assembly-grammar-7d17
-      - cursor/fms-host-readmes-7d17
-      - cursor/fms-host-feature-tests-7d17
-      - cursor/fms-host-package-tests-7d17
-      - cursor/fms-host-mixed-package-7d17
-      - cursor/fms-host-rsa-package-7d17
-      - cursor/fms-host-assembly-ref-7d17
-      - cursor/fms-host-multi-package-7d17
-      - cursor/fms-host-assembly-grammar-edges-7d17
-      - docs/sr-contained-turn-anti-patterns
-      - refactor/fms-host-access-invariants
-      - refactor/fms-host-darwin-deployment
-      - test/get-modular-abort-cleanup-r4
-      - cursor/fms-host-root-tests-7d17
-      - cursor/fms-host-packed-consumer-7d17
-      - cursor/fms-host-recipe-owners-7d17
-      - cursor/fms-host-live-selection-7d17
-      - cursor/fms-host-live-admin-7d17
-      - cursor/fms-host-live-admin-setup-7d17
-      - cursor/fms-host-live-bootstrap-7d17
-      - cursor/fms-host-live-canary-7d17
-      - cursor/fms-host-live-darwin-infra-7d17
-      - feat/foundation-contained-turn-quality
-      - feat/runtime-configuration-public-api-closure
-      - feat/sdk-growth-a3-activation
-      - cursor/fms-host-live-darwin-activation-7d17
-      - cursor/fms-host-live-darwin-verification-7d17
-      - cursor/fms-host-live-darwin-launcher-7d17
-      - cursor/fms-host-live-mac-pa-auth-7d17
-      - cursor/fms-host-package-helpers-7d17
-      - cursor/fms-host-package-support-7d17
-      - cursor/fms-host-package-fixtures-7d17
-      - cursor/fms-host-package-external-pa-rs-7d17
-      - cursor/fms-host-package-external-ae-top-7d17
-      - cursor/fms-host-package-external-ae-fixtures-7d17
-      - cursor/fms-host-package-external-ae-features-support-7d17
-      - cursor/fms-host-package-external-ae-features-remainder-7d17
-      - cursor/fms-host-activation-7d17
+  workflow_dispatch:
+  # push:
+  #   branches:
+  #     - feat/async-assembly-adapter
+  #     - refactor/fms-runtime-security-setup-authorization
+  #     - refactor/fms-contained-turn-egress
+  #     - refactor/fms-host-boundaries
+  #     - refactor/fms-final-integration
+  #     - refactor/fms-rs-egress-primitives
+  #     - refactor/fms-runtime-configuration-entrypoints
+  #     - refactor/fms-rc-feature-tests
+  #     - fix/contained-turn-final-qualification
+  #     - cursor/fms-rs-v1-mapper-split-7d17
+  #     - cursor/fms-host-runtime-access-7d17
+  #     - cursor/fms-host-http-pa-7d17
+  #     - cursor/fms-host-pa-rs-7d17
+  #     - refactor/fms-host-pa-rs
+  #     - cursor/fms-host-validation-7d17
+  #     - refactor/fms-host-validation
+  #     - refactor/fms-host-runtime-validation
+  #     - refactor/fms-host-http-egress
+  #     - chore/classify-native-helper-test
+  #     - cursor/fms-linux-deploy-7d17
+  #     - cursor/fms-host-leftover-7d17
+  #     - cursor/fms-setup-views-linux-7d17
+  #     - cursor/fms-runtime-access-linux-7d17
+  #     - cursor/fms-rc-layer-linux-7d17
+  #     - cursor/fms-rs-barrels-linux-7d17
+  #     - cursor/fms-rc-package-arch-load-7d17
+  #     - cursor/fms-rc-activation-linux-7d17
+  #     - cursor/fms-rs-activation-linux-7d17
+  #     - cursor/fms-host-assembly-grammar-7d17
+  #     - cursor/fms-host-readmes-7d17
+  #     - cursor/fms-host-feature-tests-7d17
+  #     - cursor/fms-host-package-tests-7d17
+  #     - cursor/fms-host-mixed-package-7d17
+  #     - cursor/fms-host-rsa-package-7d17
+  #     - cursor/fms-host-assembly-ref-7d17
+  #     - cursor/fms-host-multi-package-7d17
+  #     - cursor/fms-host-assembly-grammar-edges-7d17
+  #     - docs/sr-contained-turn-anti-patterns
+  #     - refactor/fms-host-access-invariants
+  #     - refactor/fms-host-darwin-deployment
+  #     - test/get-modular-abort-cleanup-r4
+  #     - cursor/fms-host-root-tests-7d17
+  #     - cursor/fms-host-packed-consumer-7d17
+  #     - cursor/fms-host-recipe-owners-7d17
+  #     - cursor/fms-host-live-selection-7d17
+  #     - cursor/fms-host-live-admin-7d17
+  #     - cursor/fms-host-live-admin-setup-7d17
+  #     - cursor/fms-host-live-bootstrap-7d17
+  #     - cursor/fms-host-live-canary-7d17
+  #     - cursor/fms-host-live-darwin-infra-7d17
+  #     - feat/foundation-contained-turn-quality
+  #     - feat/runtime-configuration-public-api-closure
+  #     - feat/sdk-growth-a3-activation
+  #     - cursor/fms-host-live-darwin-activation-7d17
+  #     - cursor/fms-host-live-darwin-verification-7d17
+  #     - cursor/fms-host-live-darwin-launcher-7d17
+  #     - cursor/fms-host-live-mac-pa-auth-7d17
+  #     - cursor/fms-host-package-helpers-7d17
+  #     - cursor/fms-host-package-support-7d17
+  #     - cursor/fms-host-package-fixtures-7d17
+  #     - cursor/fms-host-package-external-pa-rs-7d17
+  #     - cursor/fms-host-package-external-ae-top-7d17
+  #     - cursor/fms-host-package-external-ae-fixtures-7d17
+  #     - cursor/fms-host-package-external-ae-features-support-7d17
+  #     - cursor/fms-host-package-external-ae-features-remainder-7d17
+  #     - cursor/fms-host-activation-7d17
 
 permissions:
   contents: read

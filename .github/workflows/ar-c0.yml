@@ -1,11 +1,18 @@
 name: AR C0 retained evidence
 
+# Disabled by owner decision 2026-10-02 (AR-0). The frozen C0 contract belongs
+# to the closed SDK/owned-lifetime plan and blocks the Get Modular 0.3.0
+# migration; it was never a required check. Validators, tests and
+# architecture/c0/** stay unchanged. Restore the triggers below only through a
+# new AR decision that makes C0 an active contract again; that decision must
+# re-baseline validate-ar-c0.mjs, which pins the bytes of this file.
 on:
-  pull_request:
-  merge_group:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
+  # pull_request:
+  # merge_group:
+  # push:
+  #   branches:
+  #     - main
 
 permissions:
   contents: read
