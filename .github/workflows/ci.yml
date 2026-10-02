@@ -25,7 +25,8 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-          # L0 regression authenticates retained historical Git objects.
+          # Full history: Git-reading checks such as the SDK growth source
+          # collector tests resolve retained commits on main.
           fetch-depth: 0
 
       - name: Verify checkout revision
@@ -47,35 +48,39 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Fetch exact retained evidence commits
-        shell: bash
-        run: |
-          node --input-type=module <<'NODE'
-          import assert from 'node:assert/strict';
-          import { execFileSync, spawnSync } from 'node:child_process';
-          import { readFileSync } from 'node:fs';
-          import { changes } from './scripts/architecture/runtime-setup-l0-evidence-spec.mjs';
-          const readEvidence = name => JSON.parse(readFileSync(`docs/spikes/${name}.json`, 'utf8'));
-          const historical = readEvidence('runtime-setup-l0-dogfooding-evidence');
-          const adoption = readEvidence('runtime-setup-assembly-adoption-evidence');
-          const adoptionV2 = readEvidence('runtime-setup-assembly-adoption-v2-evidence');
-          const revisions = [...new Set([
-            ...changes.map(({ revision }) => revision),
-            ...historical.historicalChanges.map(({ revision }) => revision),
-            historical.sourceRevision, adoption.sourceRevision,
-            adoptionV2.historical.revision, adoptionV2.retainedV1.revision,
-            adoptionV2.identity.sourceRevision,
-          ])];
-          for (const revision of revisions) assert.match(revision, /^[a-f0-9]{40}$/u);
-          const hasTrees = revision => [revision, `${revision}^`].every(ref =>
-            spawnSync('git', ['cat-file', '-e', `${ref}^{tree}`]).status === 0);
-          const missing = revisions.filter(revision => !hasTrees(revision));
-          if (missing.length) execFileSync('git', [
-            'fetch', '--no-tags', '--no-write-fetch-head',
-            'https://github.com/agent-teams-ai/agent-runtime.git', ...missing,
-          ], { stdio: 'inherit', timeout: 120_000 });
-          for (const revision of revisions) assert.ok(hasTrees(revision), `Missing retained trees: ${revision}`);
-          NODE
+      # Disabled by owner decision 2026-10-02 (AR-0): only the L0 receipt
+      # regression and the frozen C0 validator need these unreachable commits,
+      # and neither runs in `pnpm check` any more. Restore this step together
+      # with `architecture:runtime-setup-l0-evidence` in `check`.
+      # - name: Fetch exact retained evidence commits
+      #   shell: bash
+      #   run: |
+      #     node --input-type=module <<'NODE'
+      #     import assert from 'node:assert/strict';
+      #     import { execFileSync, spawnSync } from 'node:child_process';
+      #     import { readFileSync } from 'node:fs';
+      #     import { changes } from './scripts/architecture/runtime-setup-l0-evidence-spec.mjs';
+      #     const readEvidence = name => JSON.parse(readFileSync(`docs/spikes/${name}.json`, 'utf8'));
+      #     const historical = readEvidence('runtime-setup-l0-dogfooding-evidence');
+      #     const adoption = readEvidence('runtime-setup-assembly-adoption-evidence');
+      #     const adoptionV2 = readEvidence('runtime-setup-assembly-adoption-v2-evidence');
+      #     const revisions = [...new Set([
+      #       ...changes.map(({ revision }) => revision),
+      #       ...historical.historicalChanges.map(({ revision }) => revision),
+      #       historical.sourceRevision, adoption.sourceRevision,
+      #       adoptionV2.historical.revision, adoptionV2.retainedV1.revision,
+      #       adoptionV2.identity.sourceRevision,
+      #     ])];
+      #     for (const revision of revisions) assert.match(revision, /^[a-f0-9]{40}$/u);
+      #     const hasTrees = revision => [revision, `${revision}^`].every(ref =>
+      #       spawnSync('git', ['cat-file', '-e', `${ref}^{tree}`]).status === 0);
+      #     const missing = revisions.filter(revision => !hasTrees(revision));
+      #     if (missing.length) execFileSync('git', [
+      #       'fetch', '--no-tags', '--no-write-fetch-head',
+      #       'https://github.com/agent-teams-ai/agent-runtime.git', ...missing,
+      #     ], { stdio: 'inherit', timeout: 120_000 });
+      #     for (const revision of revisions) assert.ok(hasTrees(revision), `Missing retained trees: ${revision}`);
+      #     NODE
 
       - name: Run quality gate
         # Identity for disposable Git evidence fixtures only.
@@ -212,6 +217,12 @@ jobs:
           export POSTGRES_TEST_IMAGE="$(docker inspect --format '{{.Config.Image}}' "$POSTGRES_SERVICE")"
           bash scripts/ci/ordinary-postgres-disposable.sh
 
+  # Darwin coverage for every PR, merge queue run and main push. Since AR-0
+  # (owner decision 2026-10-02) it replaces the paired darwin-arm64 L0 receipt,
+  # which ran `pnpm --filter @agent-teams/embedded-runtime check`.
+  # `pnpm product:check` cleans, builds (the same tsc project as typecheck) and
+  # tests every package, embedded-runtime included. Not a required check yet;
+  # the owner adds it to the main ruleset after one green week on main.
   runtime-macos:
     name: runtime-macos
     runs-on: macos-15
