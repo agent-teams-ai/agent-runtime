@@ -2678,11 +2678,13 @@ boundaries:
   dependencyMode: runtime
   roots:
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-framing.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-items.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts
   entrypoints:
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-framing.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-items.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts
@@ -2691,13 +2693,25 @@ boundaries:
     - core.agent-execution.contained-turn
     - adapter.agent-execution.codex-primitives-leaves
     - adapter.agent-execution.codex-app-server
-    - adapter.agent-execution.ordinary-process
+    - adapter.agent-execution.ordinary-channel
     packages: []
     builtins:
     - node:crypto
     - node:fs
     - node:fs/promises
     - node:path
+    runtimeReferences: []
+- id: adapter.agent-execution.ordinary-channel
+  dependencyMode: runtime
+  roots:
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts
+  entrypoints:
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts
+  allow:
+    boundaries:
+    - core.agent-execution.contained-turn
+    packages: []
+    builtins: []
     runtimeReferences: []
 - id: adapter.agent-execution.ordinary-filesystem
   dependencyMode: runtime
@@ -2728,6 +2742,7 @@ boundaries:
   allow:
     boundaries:
     - core.agent-execution.contained-turn
+    - adapter.agent-execution.ordinary-channel
     packages: []
     builtins:
     - node:child_process
