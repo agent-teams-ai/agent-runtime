@@ -326,8 +326,9 @@ test("after the leader exit is observed, abort, overflow and close never signal 
   child.emit("exit", 0);
   controller.abort();
   child.stdout.emit("data", Buffer.alloc(1_048_577, 32));
+  const closing = assert.rejects(reservation.close(0), /ORDINARY_PROCESS_UNCONFIRMED/u);
+  await closing;
   child.stdout.emit("end"); child.stderr.emit("end"); child.emit("close", 0);
-  await assert.rejects(reservation.close(0), /ORDINARY_PROCESS_UNCONFIRMED/u);
   assert.deepEqual(observed.signals.filter(signal => signal !== 0), []);
 });
 
