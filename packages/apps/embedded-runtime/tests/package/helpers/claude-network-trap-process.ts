@@ -129,7 +129,7 @@ try {
     parser: configurationComposition.createStrictClaudeCodeJsonParser(),
     semanticClassifier: configurationComposition.createClaudeCodeConfigurationSemanticClassifierV2(),
     sourceIdentityKey: new Uint8Array(32).fill(5),
-    sourceReader: configurationComposition.createClaudeCodeConfigurationSourceReaderAdapter(sourceReader),
+    sourceReader: configurationComposition.createClaudeCodeConfigurationSourceReaderAdapter(),
   });
 
   const host = (await import("../../../dist/composition/agent-runtime-host.js")).createAgentRuntimeHost({
