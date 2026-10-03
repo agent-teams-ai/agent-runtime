@@ -6,7 +6,7 @@ import {ordinaryPreparationDigest, ordinaryTerminalStatus, validateOrdinaryOpera
 import {encodeOrdinaryState, decodeOrdinaryState} from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/ordinary-state-codec.js";
 import {decodeContainedTurnState} from "../../../dist/features/contained-agent-turn/adapters/outbound/postgres/contained-turn-state-codec.js";
 import {createOrdinaryTurnFeature} from "../../../dist/features/contained-agent-turn/composition/ordinary-feature-factory.js";
-import type {OrdinaryTurnDependencies, OrdinaryOperationStore} from "../../../dist/features/contained-agent-turn/application/ordinary-ports.js";
+import type {OrdinaryTurnDependencies, OrdinaryOperationStore, OrdinaryTransport} from "../../../dist/features/contained-agent-turn/application/ordinary-ports.js";
 
 const hash = "a".repeat(64);
 const input = {commandId: "test-command", expectedProvider: "codex", intent: {mode: "workspace-write", prompt: "Read TASK.md and write result.txt"}, scope: {projectId: "ordinary-test", tenantId: "test"}} as const;
@@ -52,6 +52,8 @@ test("terminal output drain and canonical artifact must match durable state", ()
 
 const fixture = (options: {unknownClaim?: boolean; missingClosure?: boolean; cancelBeforeClaim?: boolean} = {}) => {
   let operation: OrdinaryOperation | undefined; let starts = 0; let providerCalls = 0; let closedWorkspaces = 0;
+  const channel = Object.freeze({}) as OrdinaryTransport;
+  const executions: Parameters<OrdinaryTurnDependencies["provider"]["execute"]>[0][] = [];
   let prepared = preparation();
   const state = (): OrdinaryOperation => {assert.ok(operation); return operation;};
   const store: OrdinaryOperationStore = {
@@ -72,14 +74,14 @@ const fixture = (options: {unknownClaim?: boolean; missingClosure?: boolean; can
   const receipt = <K extends OrdinaryReceipt["kind"]>(kind: K): Extract<OrdinaryReceipt, {kind: K}> => {const found = closure(prepared).find(item => item.kind === kind); assert.ok(found); return found as Extract<OrdinaryReceipt, {kind: K}>;};
   const dependencies: OrdinaryTurnDependencies = {
     operationStore: store,
-    providerAccess: {resolveAndConsume: async () => {const snapshot = authority("provider_access"); return {grantId: snapshot.grantId, expiresAt: snapshot.expiresAt, authority: snapshot, materialize: async () => ({brokerEndpoint: "http://127.0.0.1:1234", materializationId: "material:test", generation: 1, environment: {}}), retire: async () => receipt("credential_retired"), settle: async disposition => ({...receipt("provider_grant_settled"), disposition})};}},
+    providerAccess: {resolveAndConsume: async () => {const snapshot = authority("provider_access"); return {grantId: snapshot.grantId, expiresAt: snapshot.expiresAt, authority: snapshot, materialize: async () => ({brokerEndpoint: "http://127.0.0.1:1234", materializationId: "material:test", generation: 1, environment: {SYNTHETIC_CAPABILITY: "synthetic-secret-TEST"}}), retire: async () => receipt("credential_retired"), settle: async disposition => ({...receipt("provider_grant_settled"), disposition})};}},
     security: {resolveAndConsume: async () => {const snapshot = authority("runtime_security"); return {grantId: snapshot.grantId, expiresAt: snapshot.expiresAt, authority: snapshot, admitOutput: async () => true, admitArtifact: async () => true, settle: async disposition => ({...receipt("security_grant_settled"), disposition})};}},
     workspace: {prepare: async () => ({workspaceId: "workspace:test", cwd: "/test", homeDirectory: "/test/home"}), snapshot: async () => ({receipt: receipt("workspace_snapshot"), resultBytes: new Uint8Array([1, 2, 3])}), close: async () => {closedWorkspaces += 1;}},
     artifacts: {publish: async () => receipt("artifact_published")},
-    process: {reserve: async (request) => {assert.ok(request.deadline > performance.now() && request.deadline <= performance.now() + 45000); return ({reservationId: "reservation:test", start: async () => {starts += 1; assert.equal(state().status, "running"); return {lines: (async function* () {})(), write: async () => {}, closeInput: async () => {}};}, close: async (finalSequence) => {if (!starts) {return {kind: "not_started", reservationId: "reservation:test"};} if (options.missingClosure) {throw new Error("unclosed group");} return [{...receipt("output_drain"), finalSequence}, receipt("process_group_closed")];}});}},
-    provider: {supported: {provider: "codex", mode: "workspace-write", executionProfile: ORDINARY_PROFILE.executionProfile, capabilityManifestRevision: ORDINARY_PROFILE.capabilityManifestRevision}, execute: async () => {providerCalls += 1; return receipt("provider_terminal");}},
+    process: {reserve: async (request) => {assert.ok(request.deadline > performance.now() && request.deadline <= performance.now() + 45000); return ({reservationId: "reservation:test", start: async () => {starts += 1; assert.equal(state().status, "running"); return channel;}, close: async (finalSequence) => {if (!starts) {return {kind: "not_started", reservationId: "reservation:test"};} if (options.missingClosure) {throw new Error("unclosed group");} return [{...receipt("output_drain"), finalSequence}, receipt("process_group_closed")];}});}},
+    provider: {supported: {provider: "codex", mode: "workspace-write", executionProfile: ORDINARY_PROFILE.executionProfile, capabilityManifestRevision: ORDINARY_PROFILE.capabilityManifestRevision}, execute: async request => {providerCalls += 1; executions.push(request); return receipt("provider_terminal");}},
   };
-  return {dependencies, state, counts: () => ({starts, providerCalls, closedWorkspaces})};
+  return {dependencies, state, channel, executions, counts: () => ({starts, providerCalls, closedWorkspaces})};
 };
 test("concurrent duplicate submission runs one provider; conflicting payload never redispatches", async () => {
   const f = fixture(); const feature = createOrdinaryTurnFeature(f.dependencies);
@@ -89,6 +91,23 @@ test("concurrent duplicate submission runs one provider; conflicting payload nev
   assert.deepEqual(await feature.submit.execute({...input, intent: {...input.intent, prompt: "different"}}), {status: "conflict", code: "command_fingerprint_conflict"});
   await feature.dispose();
 });
+test("engine passes the opaque channel through and gives the provider only non-confidential credential facts", async () => {
+  const f = fixture(); const feature = createOrdinaryTurnFeature(f.dependencies);
+  await feature.submit.execute(input);
+  assert.equal(f.executions.length, 1);
+  assert.equal(f.executions[0]!.transport, f.channel);
+  assert.deepEqual(f.executions[0]!.credential, {brokerEndpoint: "http://127.0.0.1:1234", materializationId: "material:test", generation: 1});
+  assert.equal(JSON.stringify(f.executions[0]).includes("synthetic-secret-TEST"), false);
+  await feature.dispose();
+});
+for (const outcome of ["unknownClaim", "cancelBeforeClaim"] as const) {
+  test(`a ${outcome} failed claim never reaches the provider and never starts a process`, async () => {
+    const f = fixture({[outcome]: true}); const feature = createOrdinaryTurnFeature(f.dependencies);
+    await feature.submit.execute(input);
+    assert.equal(f.executions.length, 0); assert.equal(f.counts().providerCalls, 0); assert.equal(f.counts().starts, 0);
+    await feature.dispose();
+  });
+}
 test("unknown acknowledged-lost claim never launches even when readback shows claim", async () => {
   const f = fixture({unknownClaim: true}); const feature = createOrdinaryTurnFeature(f.dependencies);
   await feature.submit.execute(input); assert.equal(f.counts().starts, 0); assert.equal(f.state().status, "reconcile_required");

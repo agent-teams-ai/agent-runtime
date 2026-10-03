@@ -1239,6 +1239,31 @@
       ]
     },
     {
+      "id": "adapter.agent-execution.ordinary-channel",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "ADR-0090 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
+      "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
+      "relationships": [
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-ports.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-model.ts",
+          "mode": "type-only"
+        }
+      ]
+    },
+    {
       "id": "adapter.agent-execution.ordinary-filesystem",
       "owner": "agent-execution",
       "roots": [
@@ -1349,6 +1374,11 @@
       "relationships": [
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-process/node-ordinary-process.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-process/node-ordinary-process.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-ports.ts",
           "mode": "type-only"
         },
@@ -1366,13 +1396,15 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-items.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts"
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-framing.ts"
       ],
       "entrypoints": [
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-items.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts"
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-framing.ts"
       ],
       "status": "not-adopted",
       "rationale": "ADR-0090 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
@@ -1382,11 +1414,6 @@
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
           "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-process/node-ordinary-process.ts",
-          "mode": "type-only"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts",
@@ -1410,6 +1437,11 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-ports.ts",
           "mode": "type-only"
         },
@@ -1431,6 +1463,21 @@
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-model.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-framing.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-framing.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts",
           "mode": "type-only"
         }
       ]

@@ -109,7 +109,7 @@ const executeOrdinaryOperation = async (dependencies: OrdinaryTurnDependencies, 
       }, () => {uncertainty = true; controller.abort();}).finally(() => {polling = undefined;});
     }, 250);
     try {
-    const terminal = await dependencies.provider.execute({operation, transport, workspace, signal: controller.signal, deadline, emit: async output => {
+    const terminal = await dependencies.provider.execute({operation, transport, credential: Object.freeze({brokerEndpoint: credential.brokerEndpoint, materializationId: credential.materializationId, generation: credential.generation}), workspace, signal: controller.signal, deadline, emit: async output => {
       if (security === undefined || !await security.admitOutput(output)) {controller.abort(); throw new Error("ordinary output admission rejected");}
       operation = await dependencies.operationStore.append(operation, output);
     }});
