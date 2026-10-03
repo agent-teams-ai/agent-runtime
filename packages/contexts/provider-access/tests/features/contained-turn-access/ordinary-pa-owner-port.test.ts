@@ -32,7 +32,7 @@ function memoryGrants(options: { lose?: 'insertGrant' | 'retire' | 'settle'; rej
       return { kind: 'inserted', snapshot: current };
     },
     async observe() { calls.push('observe'); return current; },
-    async retire(_binding, retiredAt) { current = { ...current!, retiredAt: current!.retiredAt ?? retiredAt }; lose('retire'); return current; },
+    async retire() { current = { ...current!, retiredAt: current!.retiredAt ?? new Date().toISOString() }; lose('retire'); return current; },
     async settle(_binding, disposition, settlementId) {
       current = { ...current!, disposition, settlementReceiptId: settlementId }; lose('settle'); return current;
     },
@@ -70,7 +70,8 @@ test('owner accepts a lost retire or settle acknowledgement only when the stored
   } finally { await settling.dispose(); }
 
   // A readback that does not show the requested disposition must not be accepted.
-  const mismatch = memoryGrants(), mismatched = owner({ ...mismatch.store, async settle() { throw new Error('synthetic lost acknowledgement'); } });
+  const mismatch = memoryGrants(), mismatched = owner({ ...mismatch.store,
+    async settle(exact, _disposition, settlementId) { await mismatch.store.settle(exact, 'claim_committed', settlementId); throw new Error('synthetic lost acknowledgement'); } });
   try {
     const grant = await mismatched.consume(binding, capture().value, new AbortController().signal);
     await grant.retire();

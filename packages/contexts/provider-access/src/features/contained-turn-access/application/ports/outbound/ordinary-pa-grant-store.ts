@@ -5,8 +5,9 @@ export type OrdinaryPaInsertGrantResult =
   | { readonly kind: "rejected" };
 
 /**
- * Durable ordinary grant and broker request journal. Every method throws `OrdinaryPaUnavailable`
- * when the store cannot prove the outcome, and no implementation retries or reads back by itself.
+ * Durable ordinary grant and broker request journal. Every method throws when the store cannot prove
+ * the outcome (a refusal with code `ORDINARY_PA_UNAVAILABLE`, a driver error or an indeterminate COMMIT),
+ * and no implementation retries or reads back by itself.
  * A lost COMMIT acknowledgement therefore always surfaces as a throw; only the owner may read back,
  * and only after `retire` or `settle`.
  */
@@ -19,8 +20,11 @@ export interface OrdinaryPaGrantStore {
   insertGrant(grant: OrdinaryPaGrantRecord): Promise<OrdinaryPaInsertGrantResult>;
   /** Resolves `undefined` for an unknown binding and throws for a stored row that disagrees with `binding`. */
   observe(binding: OrdinaryPaBinding): Promise<OrdinaryPaSnapshot | undefined>;
-  /** Idempotent: a repeat returns the first `retiredAt`. Throws while any started request is not ended. */
-  retire(binding: OrdinaryPaBinding, retiredAt: string): Promise<OrdinaryPaSnapshot>;
+  /**
+   * Idempotent: a repeat returns the first `retiredAt`. Throws while any started request is not ended.
+   * The store stamps `retiredAt` from its own clock after taking the row lock.
+   */
+  retire(binding: OrdinaryPaBinding): Promise<OrdinaryPaSnapshot>;
   /** Throws before retirement. The same disposition is idempotent and keeps the first `settlementId`; another one throws. */
   settle(binding: OrdinaryPaBinding, disposition: OrdinaryPaDisposition, settlementId: string): Promise<OrdinaryPaSnapshot>;
   /** Resolves the new request sequence: monotonic, one request in flight, at most 64, unique body digest. */

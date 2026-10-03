@@ -62,6 +62,7 @@ export const ordinaryPaMaxGrantLifetimeMs = 60_000;
 
 const dispositions: readonly string[] = ['claim_committed', 'abandoned_without_claim'];
 export const isOrdinaryPaDisposition = (value: unknown): value is OrdinaryPaDisposition => typeof value === 'string' && dispositions.includes(value);
+export const isOrdinaryPaRequestOutcome = (value: unknown): value is OrdinaryPaRequestOutcome => value === 'completed' || value === 'failed';
 
 /** Exact non-secret facts the adapter persists for one consumed grant. */
 export interface OrdinaryPaGrantRecord {

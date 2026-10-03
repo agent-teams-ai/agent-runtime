@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { OrdinaryPaUnavailable, type OrdinaryPaBinding, type OrdinaryPaAuthority, type OrdinaryPaSnapshot } from '../../../contracts/ordinary-provider-access.js';
 import type { OrdinaryPaGrantStore, OrdinaryPaInsertGrantResult } from '../../../application/ports/outbound/ordinary-pa-grant-store.js';
 import { decideOrdinaryPaBeginRequest, decideOrdinaryPaEndRequest, decideOrdinaryPaRetire, decideOrdinaryPaSettle, deriveOrdinaryPaAuthority,
-  isOrdinaryPaDisposition, sameOrdinaryPaBinding, snapshotOrdinaryPaBinding, snapshotOrdinaryPaRequest,
+  isOrdinaryPaDisposition, isOrdinaryPaRequestOutcome, ordinaryPaMaxRequests, sameOrdinaryPaBinding, snapshotOrdinaryPaBinding, snapshotOrdinaryPaRequest,
   type OrdinaryPaBrokerRequest, type OrdinaryPaDisposition, type OrdinaryPaGrantRecord, type OrdinaryPaRequestOutcome } from '../../../domain/ordinary-provider-access.js';
 import { MaterializationPostgresTransactions, type MaterializationPostgresClient, type MaterializationPostgresPool } from './materialization-postgres-transactions.js';
 import { assertOrdinaryPaSchema, migrateOrdinaryPaSchema } from './ordinary-pa-schema.js';
@@ -41,7 +41,7 @@ function decodeRow(row: Record<string, unknown>, binding: OrdinaryPaBinding): Or
   const settlementReceiptId = row.settlement_id === null ? null : text(row.settlement_id);
   if ((disposition === null) !== (settlementReceiptId === null)) { return fail(); }
   const requestsStarted = integer(row.requests_started), requestsCompleted = integer(row.requests_completed), requestsFailed = integer(row.requests_failed);
-  if (requestsStarted > 64 || requestsCompleted + requestsFailed > requestsStarted) { return fail(); }
+  if (requestsStarted > ordinaryPaMaxRequests || requestsCompleted + requestsFailed > requestsStarted) { return fail(); }
   return Object.freeze({ authority: expected, generation, accountId, materializationId: text(base.materializationId), retiredAt,
     disposition, settlementReceiptId, requestsStarted, requestsCompleted, requestsFailed });
 }
@@ -52,7 +52,8 @@ const select = async (client: MaterializationPostgresClient, binding: OrdinaryPa
 };
 export type PostgresOrdinaryPaGrantStore = Readonly<OrdinaryPaGrantStore & { migrate(): Promise<void>; dispose(): void }>;
 /** Additive ordinary namespace. A duplicate insert or unknown COMMIT never issues a fresh grant. */
-export function createOrdinaryPaStore(pool: MaterializationPostgresPool): PostgresOrdinaryPaGrantStore {
+export function createOrdinaryPaStore(pool: MaterializationPostgresPool, options: { readonly now?: () => number } = {}): PostgresOrdinaryPaGrantStore {
+  const now = options.now ?? Date.now;
   const transactions = new MaterializationPostgresTransactions(pool, { connectionMs: 1000, statementMs: 2000, transactionMs: 4000 });
   const transaction = <T>(work: (client: MaterializationPostgresClient) => Promise<T>) => transactions.write(async client => {
     await assertOrdinaryPaSchema(client); return work(client);
@@ -62,21 +63,21 @@ export function createOrdinaryPaStore(pool: MaterializationPostgresPool): Postgr
     dispose: () => {transactions.dispose(); },
     observe: (input: OrdinaryPaBinding) => { const binding = snapshotOrdinaryPaBinding(input); return transaction(client => select(client, binding)); },
     async insertGrant(grant: OrdinaryPaGrantRecord): Promise<OrdinaryPaInsertGrantResult> {
-      const binding = snapshotOrdinaryPaBinding(grant.binding);
+      const binding = snapshotOrdinaryPaBinding(grant.binding), snapshot = JSON.stringify(grant.snapshot), expiresAt = grant.expiresAt;
       return transaction(async client => {
         const inserted = await client.query(`INSERT INTO provider_access.ordinary_grant(operation_key,binding,snapshot,expires_at)
           SELECT $1,$2::jsonb,$3::jsonb,$4::bigint WHERE $4::bigint>extract(epoch from clock_timestamp())*1000 AND $4::bigint<=extract(epoch from clock_timestamp())*1000+60000
-          ON CONFLICT (operation_key) DO NOTHING`, [operationKey(binding), JSON.stringify(binding), JSON.stringify(grant.snapshot), grant.expiresAt]);
+          ON CONFLICT (operation_key) DO NOTHING`, [operationKey(binding), JSON.stringify(binding), snapshot, expiresAt]);
         if (inserted.rowCount !== 1) { return Object.freeze({ kind: 'rejected' } as const); }
         return Object.freeze({ kind: 'inserted', snapshot: await select(client, binding) ?? fail() } as const);
       });
     },
-    async retire(input: OrdinaryPaBinding, retiredAt: string): Promise<OrdinaryPaSnapshot> {
-      const binding = snapshotOrdinaryPaBinding(input), stamp = text(retiredAt);
+    async retire(input: OrdinaryPaBinding): Promise<OrdinaryPaSnapshot> {
+      const binding = snapshotOrdinaryPaBinding(input);
       return transaction(async client => {
         const decision = decideOrdinaryPaRetire(await select(client, binding, true));
         if (decision.kind === 'refused') { return fail(); }
-        if (decision.kind === 'write') { await client.query('UPDATE provider_access.ordinary_grant SET retired_at=$2 WHERE operation_key=$1', [operationKey(binding), stamp]); }
+        if (decision.kind === 'write') { await client.query('UPDATE provider_access.ordinary_grant SET retired_at=$2 WHERE operation_key=$1', [operationKey(binding), new Date(now()).toISOString()]); }
         return await select(client, binding) ?? fail();
       });
     },
@@ -93,7 +94,7 @@ export function createOrdinaryPaStore(pool: MaterializationPostgresPool): Postgr
     async beginRequest(input: OrdinaryPaBinding, requestInput: OrdinaryPaBrokerRequest): Promise<number> {
       const binding = snapshotOrdinaryPaBinding(input), request = snapshotOrdinaryPaRequest(requestInput);
       return transaction(async client => {
-        const decision = decideOrdinaryPaBeginRequest(await select(client, binding, true), Date.now());
+        const decision = decideOrdinaryPaBeginRequest(await select(client, binding, true), now());
         if (decision.kind === 'refused') { return fail(); }
         await client.query("INSERT INTO provider_access.ordinary_request(operation_key,sequence,body_digest,byte_length,outcome) VALUES ($1,$2,$3,$4,'started')", [operationKey(binding), decision.sequence, request.bodyDigest, request.byteLength]);
         await client.query('UPDATE provider_access.ordinary_grant SET requests_started=$2 WHERE operation_key=$1', [operationKey(binding), decision.sequence]);
@@ -102,7 +103,7 @@ export function createOrdinaryPaStore(pool: MaterializationPostgresPool): Postgr
     },
     async endRequest(input: OrdinaryPaBinding, sequence: number, outcome: OrdinaryPaRequestOutcome): Promise<void> {
       const binding = snapshotOrdinaryPaBinding(input);
-      if (outcome !== 'completed' && outcome !== 'failed') { return fail(); }
+      if (!isOrdinaryPaRequestOutcome(outcome)) { return fail(); }
       await transaction(async client => {
         if (decideOrdinaryPaEndRequest(await select(client, binding, true), sequence).kind === 'refused') { return fail(); }
         const updated = await client.query("UPDATE provider_access.ordinary_request SET outcome=$3 WHERE operation_key=$1 AND sequence=$2 AND outcome='started'",

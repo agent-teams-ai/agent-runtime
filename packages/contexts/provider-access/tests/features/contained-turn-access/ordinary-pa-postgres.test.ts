@@ -15,6 +15,9 @@ const binding = (operationId: string): OrdinaryPaBinding => ({ operationId, atte
 const facts = () => ({ generation: 1, accountId: 'synthetic-account', expiresAt: Date.now() + 59000 });
 const grantFor = (exact: OrdinaryPaBinding, selected: { generation: number; accountId: string; expiresAt: number } = facts()) =>
   newOrdinaryPaGrant(exact, selected, { now: Date.now(), newId: randomUUID, digest: ordinaryPaDigest });
+/** A self-consistent grant built against a skewed application clock, so only the database clock can refuse it. */
+const skewed = (target: OrdinaryPaBinding, expiresAt: number, now: number) =>
+  newOrdinaryPaGrant(target, { generation: 1, accountId: 'synthetic-account', expiresAt }, { now, newId: randomUUID, digest: ordinaryPaDigest });
 const inserted = (results: PromiseSettledResult<{ kind: string }>[]) => results.filter(result => result.status === 'fulfilled' && result.value.kind === 'inserted').length;
 
 test('ordinary PA PostgreSQL grants, counters, retirement and original rendering authority', { skip: !url, timeout: 60000 }, async t => {
@@ -37,16 +40,16 @@ test('ordinary PA PostgreSQL grants, counters, retirement and original rendering
   assert.equal(await two.observe({ ...exact, tenantId: 'foreign-tenant' }), undefined);
   const first = await one.beginRequest(exact, { bodyDigest: ordinaryPaDigest('first'), byteLength: 5 });
   await assert.rejects(two.beginRequest(exact, { bodyDigest: ordinaryPaDigest('next'), byteLength: 4 }));
-  await assert.rejects(one.retire(exact));
+  await assert.rejects(one.retire(exact), 'retire refuses while a request is open');
+  assert.equal((await one.observe(exact))!.retiredAt, null);
   await one.endRequest(exact, first, 'completed');
   await assert.rejects(two.endRequest(exact, first, 'completed'), 'a request ends only once');
   await assert.rejects(two.beginRequest(exact, { bodyDigest: ordinaryPaDigest('first'), byteLength: 5 }), 'body digest is unique per grant');
   const second = await two.beginRequest(exact, { bodyDigest: ordinaryPaDigest('next'), byteLength: 4 }); assert.equal(second, first + 1);
   await assert.rejects(one.endRequest(exact, first, 'failed'), 'only the newest request can end');
   await two.endRequest(exact, second, 'completed');
-  const stamp = new Date().toISOString();
-  const retired = await one.retire(exact, stamp); assert.equal(retired.retiredAt, stamp);
-  assert.equal((await two.retire(exact, new Date(Date.now() + 5000).toISOString())).retiredAt, stamp, 'a repeat keeps the first retirement');
+  const retired = await one.retire(exact); assert.ok(retired.retiredAt);
+  assert.equal((await two.retire(exact)).retiredAt, retired.retiredAt, 'a repeat keeps the first retirement');
   await assert.rejects(two.beginRequest(exact, { bodyDigest: ordinaryPaDigest('after retire'), byteLength: 5 }), 'no request after retirement');
   const settled = await one.settle(exact, 'claim_committed', randomUUID());
   assert.equal((await two.settle(exact, 'claim_committed', randomUUID())).settlementReceiptId, settled.settlementReceiptId);
@@ -74,11 +77,17 @@ test('ordinary PA PostgreSQL grants, counters, retirement and original rendering
     } finally { token.fill(0); accountId.fill(0); }
   });
   await t.test('database clock refuses an expiry window the application would accept', async () => {
-    const stale = grantFor(binding('operation-window-past')), far = grantFor(binding('operation-window-far'));
-    assert.equal((await one.insertGrant({ ...stale, expiresAt: Date.now() - 1000 })).kind, 'rejected');
-    assert.equal((await one.insertGrant({ ...far, expiresAt: Date.now() + 120000 })).kind, 'rejected');
+    const realNow = Date.now();
+    assert.equal((await one.insertGrant(skewed(binding('operation-window-past'), realNow - 1000, realNow - 30_000))).kind, 'rejected');
+    assert.equal((await one.insertGrant(skewed(binding('operation-window-far'), realNow + 120_000, realNow + 90_000))).kind, 'rejected');
     assert.equal(await one.observe(binding('operation-window-past')), undefined);
     assert.equal(await one.observe(binding('operation-window-far')), undefined);
+  });
+  await t.test('an expired grant refuses a new request', async () => {
+    const short = binding('operation-request-expired');
+    assert.equal((await one.insertGrant(grantFor(short, { generation: 1, accountId: 'synthetic-account', expiresAt: Date.now() + 1000 }))).kind, 'inserted');
+    await new Promise<void>(resolve => { setTimeout(resolve, 1100); });
+    await assert.rejects(one.beginRequest(short, { bodyDigest: ordinaryPaDigest('expired'), byteLength: 5 }), 'no request after expiry');
   });
   await t.test('settle needs retirement, a failed request closes the grant and the 65th request is refused', async () => {
     const early = binding('operation-settle-early'); await one.insertGrant(grantFor(early));

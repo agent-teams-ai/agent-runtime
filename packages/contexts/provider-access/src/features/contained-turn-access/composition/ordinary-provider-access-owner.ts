@@ -66,7 +66,6 @@ export function createOrdinaryProviderAccessOwner(ports: OrdinaryProviderAccessO
   let disposal: Promise<void> | undefined;
   const check = () => { if (ownerState.disposed) { throw new OrdinaryPaUnavailable(); } };
   return Object.freeze({
-
     observe: async (binding: OrdinaryPaBinding): Promise<OrdinaryPaSnapshot | undefined> => {try {return await grantStore.observe(binding);} catch {throw new OrdinaryPaUnavailable();}},
     async consume(input: OrdinaryPaBinding, capture: OrdinaryCodexAuthCapture, signal: AbortSignal): Promise<OrdinaryPaGrant> {
       const isAborted = () => signal.aborted;
@@ -127,7 +126,7 @@ export function createOrdinaryProviderAccessOwner(ports: OrdinaryProviderAccessO
           const errors = results.filter(result => result.status === 'rejected').map((result): unknown => result.reason);
           if (errors.length > 0) {throw new AggregateError(errors, 'ORDINARY_PA_UNAVAILABLE', {cause: errors[0]});}
           await capture.settled;
-          const retirement = await grantStore.retire(binding, new Date().toISOString()).catch(async () => {
+          const retirement = await grantStore.retire(binding).catch(async () => {
             const observed = await grantStore.observe(binding);
             if (!observed || observed.retiredAt === null) { throw new OrdinaryPaUnavailable(); }
             return observed;
