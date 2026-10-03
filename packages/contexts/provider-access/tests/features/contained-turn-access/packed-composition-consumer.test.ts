@@ -122,7 +122,7 @@ void dispatchOwner;
 `);
   const compiler = join(repositoryRoot, "node_modules", "typescript", "bin", "tsc");
   try {
-    execFileSync(process.execPath, [compiler, "--noEmit", "--strict", "--target", "ES2022", "--module", "NodeNext",
+    execFileSync(process.execPath, [compiler, "--ignoreConfig", "--noEmit", "--strict", "--target", "ES2022", "--module", "NodeNext",
       "--moduleResolution", "NodeNext", "--skipLibCheck", "false", "--types", "node",
       "--typeRoots", join(consumer, "node_modules", "@types"), fixture], { cwd: consumer, encoding: "utf8" });
   } catch (error) {

@@ -71,7 +71,7 @@ test("Node 26 lane explicitly rejects incompatible engine and peer fixtures with
   assert.match(workflow, /pnpm install --frozen-lockfile --engine-strict --strict-peer-dependencies/u);
   const fixture = mkdtempSync(join(tmpdir(), "node-engine-pnpm-strict-"));
   t.after(() => rmSync(fixture, {recursive: true, force: true}));
-  const install = directory => spawnSync("pnpm", ["--dir", directory, "install", "--offline", "--ignore-scripts", "--engine-strict", "--strict-peer-dependencies", "--store-dir", join(fixture, "store")], {
+  const install = directory => spawnSync("pnpm", ["--dir", directory, "install", "--ignore-workspace", "--offline", "--ignore-scripts", "--engine-strict", "--strict-peer-dependencies", "--store-dir", join(fixture, "store")], {
     encoding: "utf8", env: {...process.env, CI: "true"},
   });
 

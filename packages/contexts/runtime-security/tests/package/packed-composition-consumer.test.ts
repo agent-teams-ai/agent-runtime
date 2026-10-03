@@ -117,6 +117,7 @@ void invalidChange;
   try {
     execFileSync(process.execPath, [
       compiler,
+      "--ignoreConfig",
       "--noEmit",
       "--strict",
       "--target", "ES2022",
