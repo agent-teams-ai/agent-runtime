@@ -6,7 +6,7 @@
   "type": "module",
   "packageManager": "pnpm@11.18.0",
   "engines": {
-    "node": ">=24.18.0 <25",
+    "node": ">=24.21.0 <25",
     "pnpm": "11.18.0"
   },
   "scripts": {
@@ -42,7 +42,7 @@
     "architecture:feature-modules:active": "node scripts/architecture/check-feature-modules.mjs --require-active",
     "test:feature-modules": "node --test scripts/architecture/check-feature-modules.test.mjs",
     "architecture:consumer-modules": "node scripts/architecture/check-consumer-module-standard.mjs",
-    "test:consumer-modules": "node --test scripts/architecture/check-consumer-module-standard.test.mjs scripts/architecture/check-cms-pin.test.mjs",
+    "test:consumer-modules": "node --test scripts/architecture/check-consumer-module-standard.test.mjs && agent-teams-node-test --contract architecture/foundation/mandatory-node-tests.json -- scripts/architecture/check-cms-pin.test.mjs",
     "architecture:runtime-setup-l0-evidence": "node --test scripts/architecture/runtime-setup-l0-evidence-validation.test.mjs scripts/architecture/runtime-setup-l0-evidence-inputs.test.mjs && node scripts/architecture/runtime-setup-l0-evidence.mjs --check",
     "architecture:runtime-setup-l0-evidence:capture": "node scripts/architecture/runtime-setup-l0-evidence.mjs --capture",
     "architecture:ar2-contract": "node scripts/architecture/validate-ar2-contract-artifacts.mjs",
@@ -81,7 +81,7 @@
     "quality:coverage:scope": "agent-teams-foundation quality check --consumer . --scope-only",
     "lint:typed": "agent-teams-foundation quality check --consumer .",
     "quality:native": "node scripts/foundation/check-native-quality.mjs",
-    "quality:adoption": "node scripts/foundation/check-quality-adoption.mjs && node --test scripts/foundation/check-quality-adoption.test.mjs",
+    "quality:adoption": "node scripts/foundation/check-quality-adoption.mjs && node --test scripts/foundation/check-quality-adoption.test.mjs && node --test scripts/foundation/source-inputs.test.mjs",
     "sdk-growth:profile": "node scripts/architecture/check-sdk-growth-profile.mjs",
     "test:sdk-growth:profile": "node --test scripts/architecture/check-sdk-growth-profile.test.mjs",
     "test:sdk-growth:packed": "node --test scripts/architecture/qualify-sdk-packages.test.mjs",
@@ -94,9 +94,9 @@
   "devDependencies": {
     "@agent-teams/agent-execution": "workspace:*",
     "@agent-teams/embedded-runtime": "workspace:*",
-    "@agent-teams/docs-protocol": "0.6.1",
-    "@agent-teams/docs-protocol-agent-teams": "0.2.11",
-    "@agent-teams/engineering-foundation": "1.6.0",
+    "@agent-teams/docs-protocol": "0.6.2",
+    "@agent-teams/docs-protocol-agent-teams": "0.3.2",
+    "@agent-teams/engineering-foundation": "1.7.2",
     "@agentclientprotocol/sdk": "catalog:",
     "@opencode-ai/plugin": "catalog:",
     "@types/node": "catalog:",

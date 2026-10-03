@@ -43,7 +43,7 @@
     "candidateWorkflowIsAuthority": false
   },
   "pending": [
-    "Capture source-bound EF 1.6.0 typed observation and strict extraction for all twelve current entrypoints; historical EF 1.5.1 diagnostics are not current evidence.",
+    "Capture source-bound EF 1.7.2 typed observation and strict extraction for all twelve current entrypoints; retained EF 1.6.0 package qualification and EF 1.5.1 diagnostics are historical evidence.",
     "After strict extraction passes, generate trusted histories, owner decisions, grant, completion, receipt and admitted report through the external authority.",
     "Activate SDK admission only after every required authority phase and rejecting mutation passes."
   ],
@@ -60,6 +60,15 @@
   },
   "sdkAdmission": {
     "status": "blocked-current-typed-observation",
+    "releaseEligible": false
+  },
+  "installedTooling": {
+    "version": "1.7.2",
+    "npmIntegrity": "sha512-2wmq4g8rWgXQ2qBVY2Tb7HVP9LFsuBAUMcDhgCqixLA0RA9H3OrwXy7b7jK2gS6SggK9XCplNb03mVLR2EyzRg==",
+    "sourceBase": "a196056fddb01936f16d0d21211e296fc4e06d56",
+    "typedObservationStatus": "not-captured",
+    "strictExtractionStatus": "not-captured",
+    "authorityStatus": "not-invoked-current-typed-observation-pending",
     "releaseEligible": false
   }
 }

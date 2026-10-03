@@ -204,7 +204,7 @@ jobs:
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
           assert.equal(`${process.platform}-${process.arch}`, process.env.CAPTURE_TARGET);
-          assert.equal(process.version, 'v24.18.0');
+          assert.equal(process.version, 'v24.21.0');
           NODE
           test "$(pnpm --version)" = "11.18.0"
 

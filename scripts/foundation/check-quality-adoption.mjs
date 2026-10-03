@@ -4,8 +4,21 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { parse } from "yaml";
 
-export function assertQualityAdoption({ manifest, foundation, profile }) {
-  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.6.0");
+export function assertQualityAdoption({ manifest, foundation, profile, nodeTestContract }) {
+  assert.equal(manifest.scripts["test:consumer-modules"],
+    "node --test scripts/architecture/check-consumer-module-standard.test.mjs && agent-teams-node-test --contract architecture/foundation/mandatory-node-tests.json -- scripts/architecture/check-cms-pin.test.mjs");
+  assert.ok(manifest.scripts["quality:adoption"].split(/\s*&&\s*/u)
+    .includes("node --test scripts/foundation/source-inputs.test.mjs"));
+  assert.deepEqual(nodeTestContract, {
+    schemaVersion: 1,
+    required: [
+      "rejects split profile pins",
+      "rejects retained standard bytes that differ from the pin",
+      "rejects a delta detached from its review digest"
+    ].map(name => ({ file: "scripts/architecture/check-cms-pin.test.mjs", names: [name], kind: "test" })),
+    exceptions: []
+  });
+  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.7.2");
   assert.equal(manifest.devDependencies["oxlint-tsgolint"], "catalog:");
   assert.equal(foundation.schemaVersion, 2);
   assert.deepEqual(foundation.capabilities["quality.source-coverage"], {
@@ -33,7 +46,8 @@ export async function readQualityAdoption(root = new URL("../../", import.meta.u
   return {
     manifest: JSON.parse(await read("package.json")),
     foundation: parse(await read("foundation.config.yaml")),
-    profile: parse(await read("architecture/foundation/quality-source-coverage.yaml"))
+    profile: parse(await read("architecture/foundation/quality-source-coverage.yaml")),
+    nodeTestContract: JSON.parse(await read("architecture/foundation/mandatory-node-tests.json"))
   };
 }
 

@@ -147,7 +147,16 @@ export function checkSdkGrowthProfile(repository = root) {
     assert.deepEqual(json(path).sdkGrowth, { profile: `${directory}/profile.yaml`, activation: `${directory}/activation.json`, status: activation.status, compositionChange: false }, "SDK_CONSUMER_PROFILE_DRIFT");
   }
   assert.equal(activation.qualificationInput.version, "1.6.0", "SDK_EF_VERSION_DRIFT");
-  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], activation.qualificationInput.version, "SDK_EF_VERSION_DRIFT");
+  // Retained qualificationInput/registry receipts authenticate EF 1.6.0 only.
+  // A tooling upgrade does not qualify the new SDK surface or grant authority.
+  assert.deepEqual(activation.installedTooling, {
+    version: "1.7.2",
+    npmIntegrity: "sha512-2wmq4g8rWgXQ2qBVY2Tb7HVP9LFsuBAUMcDhgCqixLA0RA9H3OrwXy7b7jK2gS6SggK9XCplNb03mVLR2EyzRg==",
+    sourceBase: "a196056fddb01936f16d0d21211e296fc4e06d56",
+    typedObservationStatus: "not-captured", strictExtractionStatus: "not-captured",
+    authorityStatus: "not-invoked-current-typed-observation-pending", releaseEligible: false
+  }, "SDK_INSTALLED_TOOLING_DRIFT");
+  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], activation.installedTooling.version, "SDK_EF_VERSION_DRIFT");
   assert.equal(activation.qualificationInput.archiveSha256, activation.registry.tarballSha256, "SDK_EF_ARCHIVE_DRIFT");
   assert.equal(activation.qualificationInput.npmIntegrity, activation.registry.integrity, "SDK_EF_INTEGRITY_DRIFT");
   assert.equal(activation.qualificationInput.tarballUrl, activation.registry.tarballUrl, "SDK_EF_URL_DRIFT");
