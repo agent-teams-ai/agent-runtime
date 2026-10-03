@@ -42,6 +42,22 @@ const MAX_EXECUTABLE_PATH_BYTES = 4_096;
 const MAX_EXECUTABLE_BYTES = 256 * 1_024 * 1_024;
 const PROVIDER_EXECUTABLE_SLOT = "provider-entrypoint";
 
+/** Read only the already held file object; a short or failed read cannot prove its bytes. */
+const digestHeldExecutable = (descriptor: number, size: bigint): string => {
+  if (size < 0n || size > BigInt(MAX_EXECUTABLE_BYTES)) {throw new Error("provider executable size is not bounded");}
+  const digest = createHash("sha256");
+  const buffer = Buffer.allocUnsafe(64 * 1_024);
+  let position = 0;
+  while (position < Number(size)) {
+    const length = Math.min(buffer.byteLength, Number(size) - position);
+    const bytesRead = readSync(descriptor, buffer, 0, length, position);
+    if (bytesRead !== length) {throw new Error("provider executable descriptor readback is incomplete");}
+    digest.update(buffer.subarray(0, bytesRead));
+    position += bytesRead;
+  }
+  return digest.digest("hex");
+};
+
 export interface HeldDockerCustodyProviderExecutable {
   readonly descriptorPath: string;
   close(): void;
@@ -79,7 +95,7 @@ const mappedExecutable = (directory: string): BigIntStats => {
  * This proves the sampled mapping only, not absence of later exec or whole-lifetime containment.
  */
 const observeExecutableMapping = (child: ChildProcessWithoutNullStreams, descriptor: number,
-  expected: BigIntStats): DockerCustodyExecutableMapping | undefined => {
+  expected: BigIntStats, acceptedSha256: string): DockerCustodyExecutableMapping | undefined => {
   const pid = child.pid;
   if (process.platform !== "linux" || pid === undefined || !Number.isSafeInteger(pid) || pid < 2 || !liveChild(child, pid)) {return undefined;}
   let procDirectory: number | undefined;
@@ -91,6 +107,7 @@ const observeExecutableMapping = (child: ChildProcessWithoutNullStreams, descrip
     if (statfsSync(directory).type !== 0x9fa0) {return undefined;}
     const startTimeTicks = childStartTime(directory, pid);
     if (!sameExecutable(expected, fstatSync(descriptor, {bigint: true})) ||
+        !equalDigest(digestHeldExecutable(descriptor, expected.size), acceptedSha256) ||
         !sameExecutable(expected, mappedExecutable(directory)) ||
         !sameExecutable(expected, mappedExecutable(directory)) ||
         !sameExecutable(expected, fstatSync(descriptor, {bigint: true})) ||
@@ -128,21 +145,13 @@ export const holdDockerCustodyProviderExecutable = (
       (before.mode & 0o111n) === 0n || (before.mode & 0o222n) !== 0n) {
       throw new Error("provider executable slot is not one private executable regular file");
     }
-    const digest = createHash("sha256");
-    const buffer = Buffer.allocUnsafe(64 * 1_024);
-    let position = 0;
-    while (position < Number(before.size)) {
-      const bytesRead = readSync(descriptor, buffer, 0, Math.min(buffer.byteLength, Number(before.size) - position), position);
-      if (bytesRead === 0) {throw new Error("provider executable descriptor was truncated while hashing");}
-      digest.update(buffer.subarray(0, bytesRead));
-      position += bytesRead;
-    }
+    const digest = digestHeldExecutable(descriptor, before.size);
     const after = fstatSync(descriptor, {bigint: true});
-    if (!sameExecutable(before, after) || !equalDigest(digest.digest("hex"), expectedSha256)) {
+    if (!sameExecutable(before, after) || !equalDigest(digest, expectedSha256)) {
       throw new Error("provider executable descriptor identity does not match authority");
     }
     return Object.freeze({close, descriptorPath: `/proc/self/fd/${descriptor}`,
-      observeMapping: (child: ChildProcessWithoutNullStreams) => closed ? undefined : observeExecutableMapping(child, descriptor, after)});
+      observeMapping: (child: ChildProcessWithoutNullStreams) => closed ? undefined : observeExecutableMapping(child, descriptor, after, expectedSha256)});
   } catch (error) {close(); throw error;}
 };
 

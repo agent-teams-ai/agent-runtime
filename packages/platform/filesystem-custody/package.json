@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=24.18.0 <25 || >=26.10.0 <27"
+  },
   "scripts": {
     "build": "tsc --project tsconfig.json --pretty false && node scripts/build-native-helper.mjs",
     "check": "pnpm run clean && pnpm run typecheck && pnpm run build && pnpm run test",

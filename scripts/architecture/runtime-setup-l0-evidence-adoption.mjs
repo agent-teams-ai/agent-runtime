@@ -68,12 +68,21 @@ export const adoptionEvidenceFiles = Object.freeze([
 export const createAdoptionEvidenceInputs = ({
   repositoryRoot, git, readRevisionFile, evidenceRoots, evidenceFiles, profile,
 }) => {
-  const files = { ...evidenceFiles, sources: [...evidenceFiles.sources, ...adoptionEvidenceFiles,
-    profile.standard.evidencePath, ...profile.packages.map(pkg => pkg.archivePath)] };
+  const filesForProfile = selectedProfile => ({ ...evidenceFiles,
+    sources: [...evidenceFiles.sources, ...adoptionEvidenceFiles,
+      selectedProfile.standard.evidencePath, ...selectedProfile.packages.map(pkg => pkg.archivePath)] });
   return {
-    current: createEvidenceInputs({ repositoryRoot, git, readRevisionFile, files }),
-    retained: createEvidenceInputs({ repositoryRoot, git, readRevisionFile,
-      roots: retainedAdoptionEvidenceRoots(evidenceRoots), files }),
+    current: createEvidenceInputs({ repositoryRoot, git, readRevisionFile, files: filesForProfile(profile) }),
+    retained: {
+      artifactDigestsAtRevision: async revision => {
+        assert.match(revision, /^[a-f0-9]{40}$/u, "historical revision must be exact");
+        // Archive paths belong to the retained source profile, not today's pin.
+        const retainedProfile = JSON.parse(readRevisionFile(revision, adoptionPaths.profile));
+        return createEvidenceInputs({ repositoryRoot, git, readRevisionFile,
+          roots: retainedAdoptionEvidenceRoots(evidenceRoots), files: filesForProfile(retainedProfile),
+        }).artifactDigestsAtRevision(revision);
+      },
+    },
   };
 };
 

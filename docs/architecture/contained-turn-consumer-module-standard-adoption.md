@@ -27,15 +27,20 @@ This separate contained-turn profile pins the same reviewed standard at commit
 ADR-0016 proposes only the contained-turn seven-port classification as pending.
 It does not weaken or duplicate the active passive setup Assembly claim.
 
-The [current migration record](get-modular-adoption.md#current-candidate-only-standard-pin-review)
-reviews the exact ADR-0029 candidate-only byte delta and shared retained evidence.
-It does not authorize dynamic Agent Runtime adoption, adopt contained-turn or
-confer readiness; G1 stays hold. Existing Host owners retain cleanup authority.
-The immediately prior shared pin was `ac49bb3374946330ec820591f8195a22d2c90900`;
-its document SHA-256 was
-`d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f`.
-The enforcing checker compares both current profile identities, hashes the
-shared retained bytes and exact delta, and preserves this profile as pending.
+The merged chronology retains two authentic review branches from the A3 pin
+`ac49bb3374946330ec820591f8195a22d2c90900`, document SHA-256
+`d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f`:
+the PR's [dynamic Host review](get-modular-adoption.md#reviewed-optional-dynamic-host-standard-pin-migration)
+and subsequent zero-byte-delta pin review, and main's
+[creation-cleanup review](get-modular-adoption.md#current-candidate-only-standard-pin-review).
+Both select the shared exact `9c722` pin and complete-document bytes. The A3
+reciprocal review and both exact deltas remain independently enforced history.
+This does not adopt contained-turn or certify dynamic scope; G1 remains on hold,
+passive and ordinary adoption stay active, and SDK external authority is pending.
+Existing Host owners retain cleanup authority. The checker compares both current
+profile identities, hashes the retained bytes, and authenticates both histories.
+Fresh paired capture must bind the resolved SOURCE; historical reports remain
+byte-identical on both branches.
 Current paired migration evidence remains outstanding.
 
 ## Ownership boundary

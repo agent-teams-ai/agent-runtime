@@ -99,6 +99,11 @@ export function checkSdkGrowthProfile(repository = root) {
   assert.equal(createHash("sha256").update(readFileSync(resolve(repository, "architecture/c0/ar-owned-lifetime/contract.json"))).digest("hex"), "4c88c378c6d54303fd4910f521480e6fe120743dfcdc618007efb1395a684c05", "SDK_C0_BASE_MUTATION");
   const frozen = json("architecture/c0/ar-owned-lifetime/contract.json");
   const manifest = json("package.json");
+  const lock = parse(readFileSync(resolve(repository, "pnpm-lock.yaml"), "utf8"));
+  const identity = json("architecture/c0/ar-owned-lifetime/identity.json");
+  assert.equal(identity.artifact, "architecture/c0/ar-owned-lifetime/contract.json", "SDK_C0_IDENTITY_DRIFT");
+  assert.equal(identity.sha256, createHash("sha256").update(readFileSync(resolve(repository, identity.artifact))).digest("hex"), "SDK_C0_IDENTITY_DRIFT");
+  assert.equal(identity.contractRevision, frozen.contractRevision, "SDK_C0_IDENTITY_DRIFT");
   // Disabled by owner decision 2026-10-02 (AR-S): the inventory and export freeze blocks package growth such as
   // new workspace packages. A new public import such as ./testing on the six qualified packages still requires
   // requalification (SDK_PUBLIC_IMPORT_QUALIFICATION_DRIFT stays enabled). Restore only together with the
@@ -157,6 +162,11 @@ export function checkSdkGrowthProfile(repository = root) {
     authorityStatus: "not-invoked-current-typed-observation-pending", releaseEligible: false
   }, "SDK_INSTALLED_TOOLING_DRIFT");
   assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], activation.installedTooling.version, "SDK_EF_VERSION_DRIFT");
+  const selected = lock.importers["."].devDependencies;
+  const foundation = selected["@agent-teams/engineering-foundation"];
+  assert.equal(foundation.specifier, activation.installedTooling.version, "SDK_EF_LOCK_DRIFT");
+  assert.equal(foundation.version, `${activation.installedTooling.version}(@types/node@${selected["@types/node"].version})`, "SDK_EF_LOCK_DRIFT");
+  assert.equal(lock.packages[`@agent-teams/engineering-foundation@${activation.installedTooling.version}`].resolution.integrity, activation.installedTooling.npmIntegrity, "SDK_EF_LOCK_DRIFT");
   assert.equal(activation.qualificationInput.archiveSha256, activation.registry.tarballSha256, "SDK_EF_ARCHIVE_DRIFT");
   assert.equal(activation.qualificationInput.npmIntegrity, activation.registry.integrity, "SDK_EF_INTEGRITY_DRIFT");
   assert.equal(activation.qualificationInput.tarballUrl, activation.registry.tarballUrl, "SDK_EF_URL_DRIFT");
@@ -248,6 +258,8 @@ export function checkSdkGrowthProfile(repository = root) {
     distMetadataMatched: true, publicAuthorityImport: "passed",
     networkRegistryInstall: "passed-fresh-sandbox", retainedRegistryArtifactInstall: "passed"
   }, "SDK_REGISTRY_QUALIFICATION_DRIFT");
+  assert.equal(createHash("sha256").update(readFileSync(resolve(repository, activation.packageQualification.evidencePath))).digest("hex"),
+    "94d0858d39c182479874e0b883272741bda713c62e9b35efb7dfb9b0f59bdb28", "SDK_HISTORICAL_QUALIFICATION_DRIFT");
   assert.deepEqual(profile.sdkGrowth.comparison.released.map(entry => [entry.packageName, entry.kind]).toSorted(), profile.packages.map(pkg => [pkg.packageName, "initial-unreleased"]).toSorted());
   assert.equal(manifest.scripts["sdk-growth:profile"], command, "SDK_ENFORCEMENT_MISSING_OR_NOOP");
   assert.equal(manifest.scripts["test:sdk-growth:profile"], "node --test scripts/architecture/check-sdk-growth-profile.test.mjs", "SDK_ENFORCEMENT_MISSING_OR_NOOP");

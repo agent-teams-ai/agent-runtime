@@ -3027,7 +3027,8 @@ boundaries:
 - id: tooling.ordinary-postgres-ci
   dependencyMode: development
   roots:
-  - scripts/ci
+  - scripts/ci/run-ordinary-postgres.mjs
+  - scripts/ci/run-ordinary-postgres.test.mjs
   entrypoints: []
   allow:
     boundaries: []
@@ -3038,4 +3039,27 @@ boundaries:
     - node:path
     - node:test
     - node:url
+    runtimeReferences: []
+- id: tooling.node-compatibility-ci
+  dependencyMode: development
+  roots:
+  - scripts/ci/audit-node-engine-compatibility.mjs
+  - scripts/ci/node-engine-compatibility.test.mjs
+  - scripts/ci/node-runtime-compatibility.test.mjs
+  entrypoints: []
+  allow:
+    boundaries: []
+    packages: []
+    builtins:
+    - node:assert/strict
+    - node:child_process
+    - node:crypto
+    - node:fs
+    - node:fs/promises
+    - node:module
+    - node:os
+    - node:path
+    - node:test
+    - node:url
+    - node:util
     runtimeReferences: []

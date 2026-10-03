@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { stripTypeScriptTypes } from "node:module";
 import { join } from "node:path";
 import type { TestContext } from "node:test";
+import { transformTypeScriptFixture } from "./support/transform-typescript-fixture.ts";
 
 export const configuration = {
   allowedEnvironmentNames: ["HOME", "PATH"],
@@ -19,7 +19,7 @@ export const configuration = {
   },
 };
 
-// Source-loaded synthetic fixtures only: fixed file list, built-in TS transform, no bundling or image claim.
+// Source-loaded synthetic fixtures only: fixed file list, pinned TS compiler, no bundling or image claim.
 export const prepareBootstrapProject = async (t: Pick<TestContext, "after">): Promise<string> => {
   const root = await mkdtemp("/tmp/ar69-init-bootstrap-test-");
   t.after(() => rm(root, {recursive: true, force: true}));
@@ -36,7 +36,7 @@ export const prepareBootstrapProject = async (t: Pick<TestContext, "after">): Pr
   ];
   for (const file of files) {
     const code = await readFile(new URL(`${file}.ts`, source), "utf8");
-    await writeFile(join(root, `${file}.js`), stripTypeScriptTypes(code, {mode: "transform"}));
+    await writeFile(join(root, `${file}.js`), transformTypeScriptFixture(code));
   }
   return root;
 };

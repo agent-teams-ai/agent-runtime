@@ -14,7 +14,8 @@ if (!databaseUrl || process.env.AR69_POSTGRES_HTTP_JOINED !== "1") {
   assert.equal(process.platform, "linux");
   assert.equal(process.arch, "x64");
   assert.equal(process.geteuid?.(), 0);
-  assert.equal(Number(process.versions.node.split(".")[0]), 24);
+  const [nodeMajor, nodeMinor] = process.versions.node.split(".").map(Number);
+  assert.ok(nodeMajor === 24 || (nodeMajor === 26 && nodeMinor >= 10));
   assert.notEqual(await readlink("/proc/self/ns/net"), await readlink("/proc/1/ns/net"),
     "Must enter a fresh disposable outer network namespace before running");
   assert.ok(["/usr/lib/systemd/systemd", "/lib/systemd/systemd"].includes(await realpath("/proc/1/exe")),

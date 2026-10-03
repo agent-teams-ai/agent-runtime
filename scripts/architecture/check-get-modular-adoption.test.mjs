@@ -140,7 +140,19 @@ architecture/get-modular/consumer-profile.json
   profile.sourceCensus = { packageRoots: census.packageRoots, featureRoots: census.featureRoots };
   profile.boundaries.forEach(b => { b.relationships = census.relationships[b.id]; });
   for (const pkg of profile.packages) { await write(pkg.archivePath, 'synthetic archive'); }
-  await write(profile.standard.evidencePath, evidence.standard.bytes);
+  // The filesystem fixture uses real reviewed CMS identity with synthetic graphs.
+  profile.standard.commit = pending.standard.commit;
+  profile.standard.sha256 = pending.standard.sha256;
+  await write(profile.standard.evidencePath, await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard.md', import.meta.url), 'utf8'));
+  for (const name of [
+    'a3-cms-pin-review.json', 'a3-cms-pin-delta.diff',
+    'dynamic-host-cms-pin-review.json', 'dynamic-host-cms-pin-delta.diff',
+    'runtime-profile-cms-pin-review.json', 'creation-cleanup-cms-pin-review.json',
+    'creation-cleanup-cms-pin-delta.diff',
+  ]) {
+    const path = 'architecture/get-modular/evidence/' + name;
+    await write(path, await readFile(new URL('../../' + path, import.meta.url), 'utf8'));
+  }
   await write('architecture/get-modular/consumer-profile.json', profile);
   return { root, profile, lock, write };
 }
@@ -388,9 +400,16 @@ test('historical lifecycle clarification review retains its exact immutable iden
   assert.equal(review.migrationStatus, 'reviewed-documentation-migrated');
 });
 
-test('historical A3 reciprocal pin rejects the prior commit and prior document bytes', async () => {
-  const review = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/a3-cms-pin-review.json', import.meta.url)));
-  const bytes = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard-ac49bb33.md', import.meta.url), 'utf8');
+test('current standard pin preserves dynamic Host and A3 history and rejects drift', async () => {
+  const review = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/dynamic-host-cms-pin-review.json', import.meta.url)));
+  const current = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/runtime-profile-cms-pin-review.json', import.meta.url)));
+  const historical = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/a3-cms-pin-review.json', import.meta.url)));
+  const bytes = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard.md', import.meta.url), 'utf8');
+  const prior = bytes.replace('  - ADR-0029\n', '').replace(
+    /### Optional dynamic Host lifecycle candidate\n[\s\S]*?(?=\| Use \| Reject \| Evidence \|)/u, '');
+  assert.notEqual(prior, bytes, 'fixture must reconstruct the exact A3 document');
+  assert.equal(digest(prior), review.before.sha256);
+  assert.equal(review.before.sha256, historical.after.sha256);
   const added = `Agent Runtime has accepted static Core/Assembly adoption for passive setup and
 ordinary-session composition in [Agent Runtime PR #168](https://github.com/agent-teams-ai/agent-runtime/pull/168),
 merged as \`3cd722f607e1643b809f6946ee303a5a94469171\`. This reciprocal reference
@@ -408,9 +427,28 @@ production consumers. No consumer ledger entry or repository-wide conformance is
 created by this decision. Record reciprocal consumer evidence only after that
 consumer's exact scoped acceptance gates pass. Contained-turn migration, full
 legacy conversion and shared checker extraction require separate scope.`;
-  const prior = bytes.replace(added, removed);
-  assert.notEqual(prior, bytes, 'fixture must reconstruct the exact prior document');
-  assert.equal(digest(prior), review.before.sha256);
+  const preA3 = prior.replace(added, removed);
+  assert.notEqual(preA3, prior, 'fixture must reconstruct the pre-A3 document');
+  assert.equal(digest(preA3), historical.before.sha256);
+  assert.deepEqual(current.before, review.after);
+  assert.equal(current.after.commit, '9c722ceff4ede307d06d7a4b63fdebe615f54c53');
+  assert.equal(current.delta.documentBytesChanged, false);
+  assert.equal(current.after.sha256, review.after.sha256);
+  assert.equal(pending.standard.commit, current.after.commit);
+  assert.equal(pending.standard.sha256, current.after.sha256);
+  assert.equal(digest(bytes), current.after.sha256);
+  const {profile, evidence} = fixture();
+  profile.standard.commit = current.after.commit; profile.standard.sha256 = current.after.sha256;
+  evidence.standard = {commit: current.after.commit, bytes};
+  assert.equal(verifyAdoption(profile, evidence).status, 'verified-metadata');
+  profile.standard.commit = review.before.commit;
+  assert.throws(() => verifyAdoption(profile, evidence), /commit drift/);
+  profile.standard.commit = review.after.commit;
+  assert.throws(() => verifyAdoption(profile, evidence), /commit drift/);
+  profile.standard.commit = 'f'.repeat(40);
+  assert.throws(() => verifyAdoption(profile, evidence), /commit drift/);
+  profile.standard.commit = current.after.commit; evidence.standard.bytes = prior;
+  assert.throws(() => verifyAdoption(profile, evidence), /bytes drift/);
 });
 
 // Additive ADR-0090 scope and graph rejecting evidence remains in the canonical gate.
@@ -447,4 +485,16 @@ test('current candidate-only pin rejects prior identities and prior complete byt
   assert.throws(() => verifyAdoption(profile, evidence), /commit drift/);
   profile.standard.commit = review.after.commit; evidence.standard.bytes = prior;
   assert.throws(() => verifyAdoption(profile, evidence), /bytes drift/);
+});
+
+// Old merge-red: the ordinary gate previously did not authenticate CMS reviews.
+test('ordinary loader rejects losing either reviewed CMS branch', async t => {
+  const f = await diskFixture(t);
+  for (const name of ['dynamic-host-cms-pin-review.json', 'creation-cleanup-cms-pin-review.json']) {
+    const path = 'architecture/get-modular/evidence/' + name;
+    const bytes = await readFile(join(f.root, path));
+    await rm(join(f.root, path));
+    try {await assert.rejects(checkAdoption(f.root), /ENOENT/u);}
+    finally {await f.write(path, bytes.toString('utf8'));}
+  }
 });

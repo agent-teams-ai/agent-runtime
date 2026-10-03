@@ -459,7 +459,7 @@ const validateStoredReport = async (report, historical = false) => {
   );
 };
 
-const {captureReceipt, mergeReceipts, checkV2, v2ReportPath, retainedV1} = await import("./runtime-setup-l0-evidence-v2-capture.mjs");
+const {captureReceipt, mergeReceipts, checkV2, checkCurrentV2, v2ReportPath, retainedV1} = await import("./runtime-setup-l0-evidence-v2-capture.mjs");
 const option = name => {const index = process.argv.indexOf(name); return index < 0 ? undefined : process.argv[index + 1];};
 const mode = process.argv[2] ?? "--check";
 assert.ok(["--check", "--capture", "--capture-adoption-receipt", "--merge-adoption-receipts"].includes(mode), `Unsupported mode: ${mode}`);
@@ -520,7 +520,7 @@ if (adoption) {
     assert.ok(option("--output"), "merge --output is required");
     mergeReceipts(repositoryRoot, paths, output);
   } else {
-    await checkV2(repositoryRoot, output);
+    await (option("--output") ? checkV2(repositoryRoot, output) : checkCurrentV2(repositoryRoot));
   }
 } else {
   await verifyCurrentArchitecture();

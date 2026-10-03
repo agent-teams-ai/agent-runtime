@@ -1,3 +1,9 @@
+import {
+  historicalReviewPath, historicalDeltaPath, historicalDynamicReviewPath,
+  standardReviewPath, standardDeltaPath, creationCleanupReviewPath, creationCleanupDeltaPath,
+  validateHistoricalA3Migration, validateStandardMigration, validateCurrentStandardMigration,
+  validateParallelStandardMigrations,
+} from './consumer-module-standard-pin.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFile, realpath, stat } from 'node:fs/promises';
@@ -160,6 +166,16 @@ export async function checkAdoption(root) {
   const profile = await json('architecture/get-modular/consumer-profile.json');
   const status = validateProfile(profile);
   if (status.status === 'pending') { return status; }
+  const historical = await json(historicalReviewPath);
+  const dynamic = await json(historicalDynamicReviewPath);
+  const current = await json(standardReviewPath);
+  validateHistoricalA3Migration(historical, await bytes(historicalDeltaPath));
+  validateStandardMigration(dynamic, await bytes(standardDeltaPath));
+  validateCurrentStandardMigration(current);
+  validateParallelStandardMigrations(historical, dynamic, current,
+    await json(creationCleanupReviewPath), await bytes(creationCleanupDeltaPath));
+  assert.equal(profile.standard.commit, current.after.commit, 'reviewed current CMS commit drift');
+  assert.equal(profile.standard.sha256, current.after.sha256, 'reviewed current CMS bytes drift');
   const { loadCapabilityConfig } = await import(foundationModule('dist/capabilities/source-dependencies/adapters/inbound/configuration/load-capability-config.js'));
   const { readAcceptedArchitectureDecisionEvidence } = await import(foundationModule('dist/capabilities/governance-architecture-decisions/module.js'));
   const { loadStrictYamlFile } = await import(foundationModule('dist/features/configuration-input/node.js'));

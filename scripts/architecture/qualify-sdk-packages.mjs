@@ -56,7 +56,7 @@ export function assertPrivateDeepPathsRejected(consumer, packageNames, compiler)
   }
   const fixture = join(consumer, "private-deep-paths.mts");
   writeFileSync(fixture, `${imports.map(specifier => `import type {} from ${JSON.stringify(specifier)};`).join("\n")}\n`);
-  const result = spawnSync(process.execPath, [compiler, "--noEmit", "--strict", "--skipLibCheck",
+  const result = spawnSync(process.execPath, [compiler, "--ignoreConfig", "--noEmit", "--strict", "--skipLibCheck",
     "--target", "ES2022", "--module", "NodeNext", "--moduleResolution", "NodeNext", fixture],
   { cwd: consumer, encoding: "utf8", timeout: 300_000 });
   assert.notEqual(result.status, 0, "Private type paths were importable");

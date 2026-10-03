@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdk-c0-ci-timeout-contract-rebind",
+  "contractRevision": "ar-c0-c0dc683e-r3",
+  "contract": {
+    "path": "architecture/c0/ar-owned-lifetime/contract.json",
+    "beforeCommit": "a1a18eb50af0d890487c5388fc1688c67caadec9",
+    "beforeSha256": "4c88c378c6d54303fd4910f521480e6fe120743dfcdc618007efb1395a684c05",
+    "afterCommit": "8e5e859d10981e1623d0617e933afc68a9e8770c",
+    "afterSha256": "549d4fb14ae2f2ccae3697bc3c60a4c784e47b1895366423f28d498c59fe923a",
+    "onlyChangedField": "ci.sha256"
+  },
+  "workflow": {
+    "path": ".github/workflows/ci.yml",
+    "beforeCommit": "075e838cc68f135505c71b7ce9aeee60e1044828",
+    "beforeSha256": "79a3d062c473cdd4a3188cdc8da27e7de33d6b64e847e885047ba0dbcadfe9f4",
+    "afterCommit": "a1a18eb50af0d890487c5388fc1688c67caadec9",
+    "afterSha256": "efcc166d1526ee15b5ac4cc017854b3da037432e01eba9272835c23c674b69fb",
+    "onlyChangedField": "jobs.check.timeout-minutes",
+    "beforeMinutes": 35,
+    "afterMinutes": 60
+  },
+  "identityPath": "architecture/c0/ar-owned-lifetime/identity.json",
+  "admission": "pending-authority-qualification",
+  "validatorPath": "scripts/architecture/validate-ar-c0.mjs"
+}

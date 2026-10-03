@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { parse, stringify } from "yaml";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,12 +10,13 @@ import { test } from "node:test";
 import { checkSdkGrowthProfile, normalizeWorkspaceManifestPaths } from "./check-sdk-growth-profile.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
+const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 const contractPath = "architecture/c0/ar-owned-lifetime/contract.json";
 const contract = JSON.parse(readFileSync(join(root, contractPath), "utf8"));
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), "ar-sdk-profile-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  for (const path of [contractPath, "pnpm-workspace.yaml", "architecture/sdk-growth", "architecture/get-modular/consumer-profile.json", "architecture/get-modular/evidence/consumer-module-standard.md", "architecture/get-modular/evidence/a3-cms-pin-review.json", "architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json", "architecture/get-modular/evidence/creation-cleanup-cms-pin-delta.diff", "architecture/get-modular/evidence/sdk-growth-standard-review.json", "architecture/get-modular/evidence/sdk-growth-current-standard.md", "architecture/consumer-module-standard/contained-turn-profile.json", ...contract.inventory.packages.map(pkg => pkg.manifest)]) {
+  for (const path of [contractPath, "architecture/c0/ar-owned-lifetime/identity.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "architecture/sdk-growth", "architecture/get-modular/consumer-profile.json", "architecture/get-modular/evidence/consumer-module-standard.md", "architecture/get-modular/evidence/a3-cms-pin-review.json", "architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json", "architecture/get-modular/evidence/creation-cleanup-cms-pin-delta.diff", "architecture/get-modular/evidence/sdk-growth-standard-review.json", "architecture/get-modular/evidence/sdk-growth-current-standard.md", "architecture/consumer-module-standard/contained-turn-profile.json", ...contract.inventory.packages.map(pkg => pkg.manifest)]) {
     mkdirSync(dirname(join(directory, path)), { recursive: true });
     cpSync(join(root, path), join(directory, path), { recursive: true });
   }
@@ -26,7 +29,7 @@ function mutate(directory, path, change) {
   writeFileSync(destination, path.endsWith(".yaml") ? stringify(value) : `${JSON.stringify(value, null, 2)}\n`);
 }
 
-test("EF 1.7.1 tooling retains EF 1.6.0 qualification and historical EF 1.5.1 observation with admission blocked", t => {
+test("EF 1.7.2 tooling retains EF 1.6.0 qualification and historical EF 1.5.1 observation with admission blocked", t => {
   assert.deepEqual(checkSdkGrowthProfile(fixture(t)), { status: "pending-authority-qualification", packages: 6, metadataRoots: 1, releaseEligible: false });
 });
 for (const script of ["sdk-growth:profile", "test:sdk-growth:profile", "test:sdk-growth:packed"]) {
@@ -249,3 +252,87 @@ for (const [name, change] of [
     assert.throws(() => checkSdkGrowthProfile(directory), /SDK_INSTALLED_TOOLING_DRIFT/u);
   });
 }
+
+test("reject detached C0 identity digest", t => {
+  const directory = fixture(t);
+  mutate(directory, "architecture/c0/ar-owned-lifetime/identity.json", value => { value.sha256 = "0".repeat(64); });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_C0_IDENTITY_DRIFT/u);
+});
+
+test("reject historical EF 1.6.0 qualification relabeled as EF 1.7.2", t => {
+  const directory = fixture(t);
+  mutate(directory, "architecture/sdk-growth/qualification.json", value => { value.registryQualification.version = "1.7.2"; });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_REGISTRY_QUALIFICATION_DRIFT/u);
+});
+
+test("reject forged historical qualification content", t => {
+  const directory = fixture(t);
+  mutate(directory, "architecture/sdk-growth/qualification.json", value => { value.scope = "EF 1.7.2 qualified"; });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_HISTORICAL_QUALIFICATION_DRIFT/u);
+});
+
+test("reject forged retained EF archive identity", t => {
+  const directory = fixture(t);
+  mutate(directory, "architecture/sdk-growth/activation.json", value => { value.registry.tarballSha256 = "0".repeat(64); });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_REGISTRY_IDENTITY_DRIFT/u);
+});
+
+test("reject forged EF source provenance", t => {
+  const directory = fixture(t);
+  mutate(directory, "architecture/sdk-growth/activation.json", value => { value.qualificationInput.sourceReleaseCommit = "0".repeat(40); });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_EF_SOURCE_DRIFT/u);
+});
+
+test("reject EF lock integrity detached from active identity", t => {
+  const directory = fixture(t);
+  mutate(directory, "pnpm-lock.yaml", value => { value.packages["@agent-teams/engineering-foundation@1.7.2"].resolution.integrity = "sha512-forged"; });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_EF_LOCK_DRIFT/u);
+});
+
+test("reject EF lock importer redirected to a different resolution", t => {
+  const directory = fixture(t);
+  mutate(directory, "pnpm-lock.yaml", value => { value.importers["."].devDependencies["@agent-teams/engineering-foundation"].version = "1.7.2(@types/node@0.0.0)"; });
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_EF_LOCK_DRIFT/u);
+});
+
+// This authenticates retained PR history, not the accepted current C0 or CI postimage.
+test("historical PR C0 transition matches exact Git bytes and only the authorized timeout/digest fields", () => {
+  const transition = JSON.parse(readFileSync(join(root, "architecture/sdk-growth/evidence/c0-ci-timeout-transition.json"), "utf8"));
+  const gitBytes = (commit, path) => execFileSync("git", ["show", `${commit}:${path}`], { cwd: root });
+  const gitText = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+  assert.equal(gitText("rev-parse", `${transition.contract.afterCommit}^`), transition.contract.beforeCommit);
+  assert.equal(gitText("rev-parse", `${transition.workflow.afterCommit}^`), transition.workflow.beforeCommit);
+  assert.deepEqual(gitText("diff-tree", "--no-commit-id", "--name-only", "-r", transition.contract.afterCommit).split("\n").toSorted(),
+    [transition.contract.path, transition.identityPath, transition.validatorPath].toSorted());
+  assert.deepEqual(gitText("diff-tree", "--no-commit-id", "--name-only", "-r", transition.workflow.afterCommit).split("\n"),
+    [transition.workflow.path]);
+  const beforeContractBytes = gitBytes(transition.contract.beforeCommit, transition.contract.path);
+  const afterContractBytes = gitBytes(transition.contract.afterCommit, transition.contract.path);
+  const beforeWorkflowBytes = gitBytes(transition.workflow.beforeCommit, transition.workflow.path);
+  const afterWorkflowBytes = gitBytes(transition.workflow.afterCommit, transition.workflow.path);
+  assert.equal(digest(beforeContractBytes), transition.contract.beforeSha256);
+  assert.equal(digest(afterContractBytes), transition.contract.afterSha256);
+  assert.equal(digest(beforeWorkflowBytes), transition.workflow.beforeSha256);
+  assert.equal(digest(afterWorkflowBytes), transition.workflow.afterSha256);
+  const beforeContract = JSON.parse(beforeContractBytes);
+  const afterContract = JSON.parse(afterContractBytes);
+  assert.equal(beforeContract.ci.sha256, transition.workflow.beforeSha256);
+  assert.equal(afterContract.ci.sha256, transition.workflow.afterSha256);
+  beforeContract.ci.sha256 = afterContract.ci.sha256;
+  assert.deepEqual(beforeContract, afterContract);
+  const beforeIdentity = JSON.parse(gitBytes(transition.contract.beforeCommit, transition.identityPath));
+  const afterIdentity = JSON.parse(gitBytes(transition.contract.afterCommit, transition.identityPath));
+  assert.equal(beforeIdentity.sha256, transition.contract.beforeSha256);
+  assert.equal(afterIdentity.sha256, transition.contract.afterSha256);
+  beforeIdentity.sha256 = afterIdentity.sha256;
+  assert.deepEqual(beforeIdentity, afterIdentity);
+  assert.equal(
+    gitBytes(transition.contract.beforeCommit, transition.validatorPath).toString("utf8")
+      .replace(`"sha256": "${transition.workflow.beforeSha256}"`, `"sha256": "${transition.workflow.afterSha256}"`),
+    gitBytes(transition.contract.afterCommit, transition.validatorPath).toString("utf8")
+  );
+  assert.equal(
+    beforeWorkflowBytes.toString("utf8").replace("    timeout-minutes: 35\n", "    timeout-minutes: 60\n"),
+    afterWorkflowBytes.toString("utf8")
+  );
+});

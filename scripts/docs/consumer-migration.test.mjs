@@ -7,6 +7,9 @@ import { parseDocument } from "yaml";
 const root = new URL("../../", import.meta.url);
 const read = path => readFile(new URL(path, root), "utf8");
 const json = async path => JSON.parse(await read(path));
+const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
+const objectId = (type, bytes) => createHash("sha1")
+  .update(Buffer.from(`${type} ${bytes.length}\0`)).update(bytes).digest("hex");
 const yaml = async path => {
   const document = parseDocument(await read(path), { uniqueKeys: true });
   assert.deepEqual(document.errors, []);
@@ -31,7 +34,7 @@ test("portable v3 preserves strict Authoring v3 authority and both semantic vali
 test("projected direct tooling pins and disabled release-age waiting preserve the package manager", async () => {
   const manifest = await json("package.json"), workspace = await yaml("pnpm-workspace.yaml");
   assert.equal(manifest.packageManager, "pnpm@11.18.0");
-  assert.deepEqual(manifest.engines, { node: ">=24.21.0 <25", pnpm: "11.18.0" });
+  assert.deepEqual(manifest.engines, { node: ">=24.21.0 <25 || >=26.10.0 <27", pnpm: "11.18.0" });
   assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.7.2");
   assert.equal(manifest.devDependencies["@agent-teams/docs-protocol"], "0.6.2");
   assert.equal(manifest.devDependencies["@agent-teams/docs-protocol-agent-teams"], "0.3.2");
@@ -51,6 +54,8 @@ test("projected direct tooling pins and disabled release-age waiting preserve th
     "@agent-teams/docs-protocol@0.6.2",
     "@agent-teams/docs-protocol-agent-teams@0.3.2",
     "@agent-teams/engineering-foundation@1.7.2",
+    "@get-modular/core@0.2.0",
+    "@get-modular/assembly@0.2.0",
   ]);
   assert.match(await read("scripts/architecture/feature-module-config.mjs"), /const FOUNDATION_VERSION = "1\.7\.2";/u);
 });
@@ -121,15 +126,127 @@ test("stable31 managed bytes stay exact and the current Foundation source policy
   }
   // Stable28's source-policy receipt remains historical at the exact upgrade base.
   // Current consumer-owned test roots are checked freshly by installed Foundation;
-  // this new expected-input pin does not relabel any retained Cohort or receipt.
+  // the integrated expected-input pin does not relabel any retained Cohort or receipt.
   const historicalSourcePolicy = "073d904b6ed55ac5ae8d0738d2b50762cc65ef653ed647aa28e98b5d574370b0";
   const currentSourcePolicy = createHash("sha256").update(await read("architecture/foundation/source-dependencies.yaml")).digest("hex");
   assert.notEqual(currentSourcePolicy, historicalSourcePolicy);
-  assert.equal(currentSourcePolicy, "0cd9bb78dc381386cbf452f6198544fad253e3fa478c769d4532b627fc9814bf");
+  assert.equal(currentSourcePolicy, "7796f9ee6d1c7711745afb6630bf0bc943518482ea406749ced4374b619ce0c6");
   const scenarios = await json("architecture/foundation/docs-protocol-qualification.json");
   assert.equal(scenarios.schemaVersion, 2);
   assert.equal(scenarios.scenarios.length, 5);
   const suite = await read("scripts/docs/docs-protocol-adoption.test.mjs");
   assert.doesNotMatch(suite, /Reflect\.get|runDocsProtocolQualificationV2/u);
   assert.match(suite, /for \(const scenario of scenarioContract\.scenarios\)/u);
+});
+
+test("scoped source policy retains both historic edges and its committed amendment", async () => {
+  const policyPath = "architecture/foundation/source-dependencies.yaml";
+  const receipt = await json("architecture/foundation/source-policy-node-compatibility-evolution.json");
+  assert.deepEqual(receipt, {
+    schemaVersion: 1,
+    predecessor: {
+      revision: "ab8efe2874c0600ea3930b4fe72bfc68d173543d",
+      blob: "ae4dd7771d60aaa7ba24bf1e56f553f9826d7a77",
+      sha256: "073d904b6ed55ac5ae8d0738d2b50762cc65ef653ed647aa28e98b5d574370b0",
+    },
+    successor: {
+      revision: "98b75f694a0c72ad26d2cab19ff56713676b56a6",
+      blob: "0f633e5fc2d2bad14a08ea5467bc0a07d6bad682",
+      sha256: "a8ab641089abd81b0bb4387ef47ecf63a193aba2051d6ed87a3b5e2c8fca1c4c",
+    },
+    committedAmendment: {
+      revision: "8b104417d51fe95d77c7dfff623fb484ce3e759b",
+      blob: "9beef0450e9f3e86e2819e874faf06e0f94efe5e",
+      sha256: "85f4235863df10f71610f21a1ea3854253f19078b0af8b502875c27ddacf6610",
+    },
+  });
+  // Retain the small Git commit/tree path proof because the Docs Protocol checkout is depth 1.
+  // Git object hashes authenticate each retained object's bytes and bind each policy blob to its commit.
+  const fixture = await json("scripts/docs/fixtures/source-policy-historic-git-objects.json");
+  assert.equal(fixture.schemaVersion, 1);
+  const historicObject = (type, id) => {
+    const object = fixture.objects[id];
+    assert.equal(object?.type, type, id);
+    const bytes = Buffer.from(object.bytes, "base64");
+    assert.equal(objectId(type, bytes), id, id);
+    return bytes;
+  };
+  const commitHeader = id => historicObject("commit", id).toString("utf8").split("\n\n", 1)[0];
+  const parent = id => {
+    const parents = [...commitHeader(id).matchAll(/^parent ([0-9a-f]{40})$/gmu)];
+    assert.equal(parents.length, 1, id);
+    return parents[0][1];
+  };
+  const intermediate1 = parent(receipt.committedAmendment.revision);
+  const intermediate2 = parent(intermediate1);
+  assert.equal(parent(intermediate2), receipt.successor.revision);
+  assert.equal(parent(receipt.successor.revision), receipt.predecessor.revision);
+  const treeEntry = (treeId, name, mode) => {
+    const tree = historicObject("tree", treeId);
+    const matches = [];
+    for (let offset = 0; offset < tree.length;) {
+      const space = tree.indexOf(0x20, offset);
+      const nul = tree.indexOf(0, space + 1);
+      assert.ok(space > offset && nul > space && nul + 21 <= tree.length, treeId);
+      const entryMode = tree.toString("ascii", offset, space);
+      const entryName = tree.toString("utf8", space + 1, nul);
+      if (entryName === name) {
+        matches.push({ mode: entryMode, id: tree.subarray(nul + 1, nul + 21).toString("hex") });
+      }
+      offset = nul + 21;
+    }
+    assert.equal(matches.length, 1, `${treeId}:${name}`);
+    assert.equal(matches[0].mode, mode, `${treeId}:${name}`);
+    return matches[0].id;
+  };
+  const verifyEdge = (name, edge, bytes) => {
+    const tree = /^tree ([0-9a-f]{40})$/mu.exec(commitHeader(edge.revision));
+    assert.ok(tree, name);
+    const architecture = treeEntry(tree[1], "architecture", "40000");
+    const foundation = treeEntry(architecture, "foundation", "40000");
+    assert.equal(treeEntry(foundation, "source-dependencies.yaml", "100644"), edge.blob, name);
+    assert.equal(objectId("blob", bytes), edge.blob, name);
+    assert.equal(sha256(bytes), edge.sha256, name);
+    return bytes;
+  };
+  // Authenticate the retained amendment rather than deriving history from live
+  // Main, which adds independent Foundation source-input coverage.
+  const amendmentBytes = historicObject("blob", receipt.committedAmendment.blob);
+  const amendment = amendmentBytes.toString("utf8");
+  const marker = "- id: tooling.node-compatibility-ci";
+  const markerIndex = amendment.indexOf(marker);
+  assert.ok(markerIndex > 0);
+  const amendmentLine = "    - node:assert/strict\n    - node:child_process\n";
+  assert.equal(amendment.slice(markerIndex).split(amendmentLine).length, 2);
+  const successor = amendment.slice(0, markerIndex) + amendment.slice(markerIndex)
+    .replace(amendmentLine, "    - node:assert/strict\n");
+  const scopedRoots = "  - scripts/ci/run-ordinary-postgres.mjs\n  - scripts/ci/run-ordinary-postgres.test.mjs\n";
+  assert.equal(successor.slice(0, markerIndex).split(scopedRoots).length, 2);
+  const predecessor = successor.slice(0, markerIndex).replace(scopedRoots, "  - scripts/ci\n");
+  const committedBytes = {
+    predecessor: verifyEdge("predecessor", receipt.predecessor, Buffer.from(predecessor)),
+    successor: verifyEdge("successor", receipt.successor, Buffer.from(successor)),
+    committedAmendment: verifyEdge("committed amendment", receipt.committedAmendment, amendmentBytes),
+  };
+  assert.throws(() => verifyEdge("changed successor digest", {
+    ...receipt.successor, sha256: receipt.predecessor.sha256,
+  }, committedBytes.successor));
+  assert.throws(() => verifyEdge("changed amendment blob", {
+    ...receipt.committedAmendment, blob: receipt.successor.blob,
+  }, committedBytes.committedAmendment));
+  assert.throws(() => verifyEdge("changed historical bytes", receipt.predecessor,
+    Buffer.from(predecessor.replace("  - scripts/ci\n", "  - scripts/ci/altered\n"))));
+  assert.notEqual(sha256(committedBytes.predecessor), receipt.successor.sha256);
+  assert.notEqual(sha256(committedBytes.successor), receipt.committedAmendment.sha256);
+  const policy = await yaml(policyPath);
+  const byId = new Map(policy.boundaries.map(boundary => [boundary.id, boundary]));
+  assert.deepEqual(byId.get("tooling.ordinary-postgres-ci")?.roots, [
+    "scripts/ci/run-ordinary-postgres.mjs",
+    "scripts/ci/run-ordinary-postgres.test.mjs",
+  ]);
+  assert.deepEqual(byId.get("tooling.node-compatibility-ci")?.roots, [
+    "scripts/ci/audit-node-engine-compatibility.mjs",
+    "scripts/ci/node-engine-compatibility.test.mjs",
+    "scripts/ci/node-runtime-compatibility.test.mjs",
+  ]);
 });

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "predecessor": {
+    "revision": "ab8efe2874c0600ea3930b4fe72bfc68d173543d",
+    "blob": "ae4dd7771d60aaa7ba24bf1e56f553f9826d7a77",
+    "sha256": "073d904b6ed55ac5ae8d0738d2b50762cc65ef653ed647aa28e98b5d574370b0"
+  },
+  "successor": {
+    "revision": "98b75f694a0c72ad26d2cab19ff56713676b56a6",
+    "blob": "0f633e5fc2d2bad14a08ea5467bc0a07d6bad682",
+    "sha256": "a8ab641089abd81b0bb4387ef47ecf63a193aba2051d6ed87a3b5e2c8fca1c4c"
+  },
+  "committedAmendment": {
+    "revision": "8b104417d51fe95d77c7dfff623fb484ce3e759b",
+    "blob": "9beef0450e9f3e86e2819e874faf06e0f94efe5e",
+    "sha256": "85f4235863df10f71610f21a1ea3854253f19078b0af8b502875c27ddacf6610"
+  }
+}

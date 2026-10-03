@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { registerHooks, stripTypeScriptTypes } from "node:module";
+import { registerHooks } from "node:module";
 import { existsSync, readFileSync, mkdtempSync, mkdirSync, rmSync, openSync, closeSync, fstatSync, lstatSync, realpathSync, constants } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as synthetic from "./synthetic-native-custody-producer.fixture.ts";
+import { transformTypeScriptFixture } from "./support/transform-typescript-fixture.ts";
 
 const linuxTest = process.platform === "linux" ? test : test.skip;
 
@@ -49,7 +50,7 @@ registerHooks({resolve(specifier, context, next) {
   return next(specifier, context);
 }, load(url, context, next) {
   if (url.includes("/agent-execution/src/") && url.endsWith(".ts")) {
-    return {format: "module", source: stripTypeScriptTypes(readFileSync(new URL(url), "utf8"), {mode: "transform"}), shortCircuit: true};
+    return {format: "module", source: transformTypeScriptFixture(readFileSync(new URL(url), "utf8")), shortCircuit: true};
   }
   return next(url, context);
 }});

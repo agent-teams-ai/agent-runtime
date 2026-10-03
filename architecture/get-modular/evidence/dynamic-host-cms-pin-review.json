@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "reviewedOn": "2026-09-29",
+  "repository": "agent-teams-ai/get-modular",
+  "path": "docs/architecture/common-assembly.md",
+  "anchor": "consumer-module-standard",
+  "before": {
+    "commit": "ac49bb3374946330ec820591f8195a22d2c90900",
+    "sha256": "d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f",
+    "byteLength": 22337,
+    "evidencePath": "architecture/get-modular/evidence/consumer-module-standard.md"
+  },
+  "after": {
+    "commit": "24d6557a1b04b01a3a73c64b1d9a9afd83d89c8f",
+    "sha256": "33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd",
+    "byteLength": 24312,
+    "evidencePath": "architecture/get-modular/evidence/consumer-module-standard.md"
+  },
+  "upstreamDecision": {
+    "id": "ADR-0029",
+    "path": "docs/decisions/0029-admit-an-optional-lifecycle-kernel-candidate.md",
+    "sha256": "9247eb2c2eb70cbbc215426446101314b1085d1d03fee02b6dc0467a737eac00",
+    "status": "accepted"
+  },
+  "delta": {
+    "path": "architecture/get-modular/evidence/dynamic-host-cms-pin-delta.diff",
+    "sha256": "68ae0186812b6f6d8615bd064f0b523537ba07b0f547336e28ca34b78a7eac8b",
+    "hunks": 2,
+    "removedLines": 0,
+    "addedLines": 32,
+    "summary": "Adds ADR-0029 to related decisions and 31 lines for an optional dynamic Host lifecycle candidate."
+  },
+  "review": "Upstream main at the exact after commit adds an optional dynamic Host lifecycle candidate under accepted ADR-0029. It requires whole-graph pre-import rejection, Host-owned attempt/custody, post-await effect authority checks, and source/archive/standard evidence for explicitly adopted dynamic scopes. Its own text disclaims passive composition changes and Agent Runtime dynamic certification. No Agent Runtime dynamic Host or package is adopted by this pin migration.",
+  "scopeDisposition": {
+    "passiveAndOrdinary": "active-unchanged",
+    "containedTurn": "pending-unchanged",
+    "dynamicAgentRuntime": "not-certified",
+    "packageUpgrade": "none",
+    "sdkExternalAuthority": "pending-authority-qualification"
+  },
+  "historicalReview": "architecture/get-modular/evidence/a3-cms-pin-review.json",
+  "consumerSourceCommit": "be0a811288da4261d26063790c9f7924991523fe"
+}

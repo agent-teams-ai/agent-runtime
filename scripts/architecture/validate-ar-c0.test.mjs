@@ -243,6 +243,27 @@ test('rejects wrong current CMS authority while leaving non-CMS profile evolutio
     /current active CMS authority drift/u,
   );
 });
+test('rejects drift in the current published Get Modular archive pins', () => {
+  const path = 'architecture/get-modular/consumer-profile.json';
+  const candidate = JSON.parse(read(path));
+  candidate.packages[0].version = '0.1.0';
+  const bytes = Buffer.from(`${JSON.stringify(candidate,null,2)}\n`);
+  assert.throws(
+    () => validateCmsProfileTransition(original, {readCurrentBytes:currentRead(new Map([[path,bytes]]))}),
+    /current published Get Modular package pins drift/u,
+  );
+});
+test('rejects a pending profile left on the historical A3 pin', () => {
+  const path = 'architecture/consumer-module-standard/contained-turn-profile.json';
+  const candidate = JSON.parse(read(path));
+  candidate.authority.consumerModuleStandard.gitCommit = original.cms.after.commit;
+  candidate.authority.consumerModuleStandard.sha256 = original.cms.after.sha256;
+  const bytes = Buffer.from(`${JSON.stringify(candidate,null,2)}\n`);
+  assert.throws(
+    () => validateCmsProfileTransition(original, {readCurrentBytes:currentRead(new Map([[path,bytes]]))}),
+    /current pending CMS authority drift/u,
+  );
+});
 test('rejects an unreviewed current authority change outside the delegated CMS slot', () => {
   const path = 'architecture/get-modular/consumer-profile.json';
   const candidate = JSON.parse(read(path));
@@ -250,7 +271,7 @@ test('rejects an unreviewed current authority change outside the delegated CMS s
   const bytes = Buffer.from(`${JSON.stringify(candidate,null,2)}\n`);
   assert.throws(
     () => validateCmsProfileTransition(original, {readCurrentBytes:currentRead(new Map([[path,bytes]]))}),
-    /outside delegated CMS and source relationships/u,
+    /outside delegated CMS, package pins and source relationships/u,
   );
 });
 test('rejects drift in historical CMS bytes authenticated from the retained revision', () => {
@@ -260,6 +281,28 @@ test('rejects drift in historical CMS bytes authenticated from the retained revi
     () => validateContract(original,receipt,{readRevisionBytes:revisionRead(revisions)}),
     /historical CMS complete bytes drift/u,
   );
+});
+test('rejects rewritten frozen C0 successor bytes after the current pin migration', () => {
+  const path = original.cms.after.evidencePath;
+  assert.throws(
+    () => validateContract(original,receipt,{readBytes:p => p === path ? Buffer.from('drift\n') : read(p)}),
+    /frozen successor CMS complete bytes drift/u,
+  );
+});
+test('rejects current CMS migration review or delta drift', () => {
+  const reviewPath = 'architecture/get-modular/evidence/dynamic-host-cms-pin-review.json';
+  const deltaPath = 'architecture/get-modular/evidence/dynamic-host-cms-pin-delta.diff';
+  const review = JSON.parse(read(reviewPath));
+  review.after.sha256 = '0'.repeat(64);
+  for (const [path, bytes, error] of [
+    [reviewPath, Buffer.from(`${JSON.stringify(review,null,2)}\n`), /dynamic Host migration must retain the exact current pin/u],
+    [deltaPath, Buffer.from('drift\n'), /dynamic Host migration exact byte delta drift/u],
+  ]) {
+    assert.throws(
+      () => validateContract(original,receipt,{readBytes:p => p === path ? bytes : read(p)}),
+      error,
+    );
+  }
 });
 const cases = [
   ['unsupported schema revision', c => {c.schemaVersion=2;}, /schema revision/],
@@ -448,3 +491,21 @@ test('retained CMS delta is the exact complete-document comparison', () => {
     assert.equal(compared.stdout.toString().replace(/^ +$/gmu, ''), read(original.cms.deltaPath).toString(), 'retained CMS diff differs from the pinned document comparison');
   } finally {rmSync(cwd, {recursive:true, force:true});}
 });
+
+// Old merge-red: either unmerged validator loses the other reviewed branch.
+for (const [name, path, mutate, expected] of [
+  ['historical A3 relabeled as cleanup', 'architecture/get-modular/evidence/a3-cms-pin-review.json',
+    review => {review.reviewedOn = '2026-09-30';}, /standard migration review identity drift/u],
+  ['dynamic branch changed', 'architecture/get-modular/evidence/dynamic-host-cms-pin-review.json',
+    review => {review.after.commit = '9c722ceff4ede307d06d7a4b63fdebe615f54c53';}, /dynamic Host migration must retain the exact current pin/u],
+  ['zero-delta branch detached', 'architecture/get-modular/evidence/runtime-profile-cms-pin-review.json',
+    review => {review.before.commit = original.cms.after.commit;}, /current standard pin review drift/u],
+  ['cleanup branch promoted', 'architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json',
+    review => {review.adoption.containedTurn = 'active';}, /preserve scoped adoption states/u],
+]) {
+  test(`C0 rejects ${name} while retaining both authentic histories`, () => {
+    const candidate = JSON.parse(read(path)); mutate(candidate);
+    const bytes = Buffer.from(`${JSON.stringify(candidate,null,2)}\n`);
+    assert.throws(() => validateCmsProfileTransition(original, {readCurrentBytes:currentRead(new Map([[path,bytes]]))}), expected);
+  });
+}

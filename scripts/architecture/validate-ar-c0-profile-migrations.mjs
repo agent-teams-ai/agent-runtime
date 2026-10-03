@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
-import {standardReviewPath, standardDeltaPath, validateStandardMigration} from './consumer-module-standard-pin.mjs';
+import {
+  historicalReviewPath, historicalDeltaPath, historicalDynamicReviewPath,
+  standardReviewPath, standardDeltaPath, creationCleanupReviewPath, creationCleanupDeltaPath,
+  validateHistoricalA3Migration, validateStandardMigration, validateCurrentStandardMigration,
+  validateParallelStandardMigrations,
+} from './consumer-module-standard-pin.mjs';
 
 // Rebased enrollment 712a retains the five exact artifact bytes from 417126.
 const acceptedSdkEnrollment = Object.freeze({
@@ -29,16 +34,16 @@ const acceptedCmsAuthority = Object.freeze({
     path: 'docs/architecture/common-assembly.md',
     anchor: 'consumer-module-standard',
     decision: 'ADR-0026',
-    commit: 'ac49bb3374946330ec820591f8195a22d2c90900',
-    sha256: 'd5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f',
+    commit: '9c722ceff4ede307d06d7a4b63fdebe615f54c53',
+    sha256: '33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd',
     evidencePath: 'architecture/get-modular/evidence/consumer-module-standard.md',
   },
   currentPendingAuthority: {
     repository: 'agent-teams-ai/get-modular',
     path: 'docs/architecture/common-assembly.md',
     anchor: 'consumer-module-standard',
-    gitCommit: 'ac49bb3374946330ec820591f8195a22d2c90900',
-    sha256: 'd5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f',
+    gitCommit: '9c722ceff4ede307d06d7a4b63fdebe615f54c53',
+    sha256: '33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd',
   },
 });
 
@@ -47,6 +52,7 @@ const canonicalJsonBytes = value => Buffer.from(`${JSON.stringify(value,null,2)}
 const nonDelegatedActiveProfile = profile => {
   const projected = structuredClone(profile);
   delete projected.standard;
+  delete projected.packages;
   for (const boundary of projected.boundaries) {delete boundary.relationships;}
   return projected;
 };
@@ -145,20 +151,34 @@ export function validateCmsProfileTransition(c, context) {
 
   const activeAtEnrollment = JSON.parse(readRevisionBytes(acceptedSdkEnrollment.revision, activeProfile));
   assert.deepEqual(activeAtEnrollment.standard, c.cms.before, 'CMS active predecessor is not frozen C0 authority');
+  const historical = JSON.parse(readCurrentBytes(historicalReviewPath));
+  validateHistoricalA3Migration(historical, readCurrentBytes(historicalDeltaPath));
+  const dynamic = JSON.parse(readCurrentBytes(historicalDynamicReviewPath));
+  validateStandardMigration(dynamic, readCurrentBytes(standardDeltaPath));
   const review = JSON.parse(readCurrentBytes(standardReviewPath));
-  validateStandardMigration(review, readCurrentBytes(standardDeltaPath));
-  assert.equal(review.before.commit, c.cms.after.commit, 'current CMS migration predecessor commit drift');
-  assert.equal(review.before.sha256, c.cms.after.sha256, 'current CMS migration predecessor digest drift');
+  validateCurrentStandardMigration(review);
+  validateParallelStandardMigrations(historical, dynamic, review,
+    JSON.parse(readCurrentBytes(creationCleanupReviewPath)), readCurrentBytes(creationCleanupDeltaPath));
+  assert.equal(dynamic.before.commit, c.cms.after.commit, 'current CMS migration predecessor commit drift');
+  assert.equal(dynamic.before.sha256, c.cms.after.sha256, 'current CMS migration predecessor digest drift');
   const currentActive = JSON.parse(readCurrentBytes(activeProfile));
-  assert.deepEqual(currentActive.standard, {
-    ...acceptedCmsAuthority.currentStandard,
-    commit: review.after.commit,
-    sha256: review.after.sha256,
-  }, 'current active CMS authority drift');
+  assert.deepEqual(currentActive.standard, acceptedCmsAuthority.currentStandard, 'current active CMS authority drift');
+  assert.deepEqual(currentActive.packages, [
+    {
+      name: '@get-modular/core', version: '0.2.0',
+      archiveSha256: 'dd4cb159c839fbbf38512d1f66aa8ff5019123a6981ca553ba640d423ae67b58',
+      archivePath: 'architecture/get-modular/evidence/get-modular-core-0.2.0.tgz',
+    },
+    {
+      name: '@get-modular/assembly', version: '0.2.0',
+      archiveSha256: '86b26f860ec4eaeeb143cde553deca74acafe89a856d74ea3e62e4a2531fddfa',
+      archivePath: 'architecture/get-modular/evidence/get-modular-assembly-0.2.0.tgz',
+    },
+  ], 'current published Get Modular package pins drift');
   assert.deepEqual(
     nonDelegatedActiveProfile(currentActive),
     nonDelegatedActiveProfile(activeAtEnrollment),
-    'current active profile changed outside delegated CMS and source relationships',
+    'current active profile changed outside delegated CMS, package pins and source relationships',
   );
 
   const pendingAtEnrollment = JSON.parse(readRevisionBytes(acceptedSdkEnrollment.revision, pendingProfile));

@@ -108,7 +108,11 @@ ADR-0013 continues to govern exactly its three active FMS features.
 
 The central authority is Get Modular's accepted ADR-0026 and the exact pinned
 [consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/9c722ceff4ede307d06d7a4b63fdebe615f54c53/docs/architecture/common-assembly.md#consumer-module-standard).
-The current reviewed migration follows the retained A3 reciprocal revision:
+The [current zero-delta review](../../architecture/get-modular/evidence/runtime-profile-cms-pin-review.json)
+retains the PR dynamic Host history alongside the parallel
+[creation-cleanup review](../../architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json).
+Both branches select the same exact pin and complete-document bytes; neither
+review replaces the other branch history:
 
 - Repository: `agent-teams-ai/get-modular`.
 - Commit: `9c722ceff4ede307d06d7a4b63fdebe615f54c53`.
@@ -118,24 +122,22 @@ The current reviewed migration follows the retained A3 reciprocal revision:
 
 Document identity, package versions/archive integrity, Core compatibility token,
 and local adoption authority are distinct. The profile retains the approved published
-Core and Assembly 0.1.0 archives, verifies their SHA-256 and lock integrity,
+Core and Assembly 0.2.0 archives, verifies their SHA-256 and lock integrity,
 and requires exact catalog versions. It records actual blocking commands,
-without `conformant: true` for the repository. The exact A3 migration from the
-merged PR110 document is reviewed below against immutable commit and document
-identities; no moving main is consumed.
+without `conformant: true` for the repository. The A3 and dynamic Host migrations
+remain reviewed below. The current standard revision has identical canonical
+document bytes to the previous pin; no moving main is consumed.
 
-The consumed release sources are distinct from the standard pin:
+The consumed release archives are distinct from the standard pin:
 
-| Published root | Version | Release source commit | Retained archive SHA-256 |
-| --- | --- | --- | --- |
-| `@get-modular/core` | `0.1.0` | `bbc5053c2f2f96e7c524bd65c42288fc88cd7358` | `50803ea69e2fb4078013a897f858908b4d73d26296336ab155a6118809dfb8ba` |
-| `@get-modular/assembly` | `0.1.0` | `41d72bfb266048e6893078cf39f813e08dea2550` | `e89207171e44afd5e813aa5e7a0db8abc999b42338559d38b44b4db71da228ab` |
+| Published root | Version | Retained archive SHA-256 |
+| --- | --- | --- |
+| `@get-modular/core` | `0.2.0` | `dd4cb159c839fbbf38512d1f66aa8ff5019123a6981ca553ba640d423ae67b58` |
+| `@get-modular/assembly` | `0.2.0` | `86b26f860ec4eaeeb143cde553deca74acafe89a856d74ea3e62e4a2531fddfa` |
 
-The Core generated stage1 subject is the complete published archive above.
-Its `dist/composition/generated/stage1.js` entry has SHA-256
-`93438ec6c300bad642dde280070cabe1f4df2ea07d30176b368f2cee311acf54`;
-this entry digest is not the digest of the complete subject. The consumer
-profile retains both archives and exact lockfile integrity.
+The consumer profile retains both complete published archives and exact
+lockfile integrity. The historical 0.1.0 stage1 entry digest belongs to its
+earlier release evidence and does not identify the current archive.
 The [packed consumer test](../../packages/apps/embedded-runtime/tests/package/assembly-packed-consumer.test.ts)
 installs declared production roots and checks passive behavior and typings.
 These identities do not assert whole-runtime conformance.
@@ -285,15 +287,12 @@ moves and source census, and historical evidence remain unchanged.
 Contained-turn remains pending with empty active wiring and adopted boundaries;
 the seven-port direct Pure DI boundary remains `not-adopted`.
 
-Current paired evidence remains outstanding: the retained v2 receipt predates
-these tracked inputs and cannot prove this migration. The controller must commit
-all final bounded Runtime Setup inputs, capture new Linux x64 and Darwin arm64 receipts on
-that same commit, merge through the existing command below, and run the required
-gates. Do not edit receipt identities manually or claim full migration completion
-from focused checker results. Preserve the old generated report outside the
-checkout before removing only that output for the merger's exclusive creation.
-Since AR-0 this paired capture is no longer a `pnpm check` gate; see the L0
-checker section below.
+The retained paired evidence predates these tracked inputs and cannot prove
+this migration. Since AR-0, paired L0 capture is manual historical evidence,
+separate from the required macOS package and PostgreSQL authority-join gates.
+Its pending successor is not a prerequisite for those current gates. Preserve
+every historical report and receipt identity; focused checker results do not
+establish migration completion. See the L0 checker disposition below.
 
 ## Evidence and executable references
 
@@ -323,7 +322,12 @@ is a required check on main since 2026-10-02. The required `postgres-durability`
 Linux `postgres-authority-join.test.ts` (Agent Execution, Provider Access and
 Runtime Security on a disposable PostgreSQL database) and fails if that test is
 skipped. The checker, its tests and all retained L0/v1/v2 reports stay unchanged
-and can still be run by hand. Put the gate back if these jobs miss a regression
+and can still be run by hand. The current default is Node `24.21.0` with pnpm
+`11.18.0`. The head-only `runtime-current-adoption-capture` automatic workflow
+is retired in this integration, matching main's existing disposition. Its
+`v24.18.0` assertion and capture contract cannot qualify the current default;
+no successor capture route is authorized here. Put the gate back if these jobs
+miss a regression
 that a receipt would have caught, or once receipts no longer require committing
 about 4.9 MB per refresh. The rest of this section describes the gate as it was
 enforced before AR-0.
@@ -368,15 +372,61 @@ original source closure. Current specification counts cannot redefine that recor
 
 ### Paired adoption capture v2
 
-The current gate requires a new `runtime-setup-assembly-adoption-v2-evidence.json`
-under `docs/spikes`. Its absence keeps current evidence pending. V2 binds ADR-0015,
+This section retains the historical capture contract and manual recipe. The
+`adoption-receipt-linux` workflow remains manual-only; neither it nor the
+retained helper is a current required gate. Historical Node `v24.18.0` receipts
+retain that identity. Use their exact historical SOURCE for manual validation;
+do not change the current `24.21.0` default or relabel those receipts.
+
+The original `runtime-setup-assembly-adoption-v2-evidence.json` remains retained
+byte-for-byte (SHA-256 `08fef99589d67358f020e3a0b063a44d6c4c99381370f76b2ca200b005d9bf3d`).
+The duplicate-callback clock and external-effect assertions in Agent Execution's
+`claude-agent-sdk-contained-turn-provider-private-execution.test.ts` changed a
+protected SOURCE input after the runtime-pin captures. The runtime-pin report
+authenticates exact SOURCE `1e98e380348b13c1ab9f3559b40044c741a18134` and
+1,982 inputs. Its test SHA-256 is
+`8f2ebe311340ff53e091fa7c0bcb57fc07bb1f2d5dde975a4492a93c4c5b8527`;
+at checkpoint `55e29627be47958015427829dbe3ad675223b1a7`, that test hashes to
+`b58fbd8426b6ee442d68540917035bc3ba9f3aaa7b0fdb3d1cc6fb2ad421dbc0`.
+Those authentic historical receipts cannot authenticate the repaired test or
+the successor selection inputs.
+The retained manual checker selects
+`docs/spikes/runtime-setup-assembly-adoption-v2-node26-duplicate-callback-successor-evidence.json`.
+Historical capture and report-only delivery for this successor remain pending
+outside the current required CI gates. The
+runtime-pin predecessor remains byte-for-byte at
+`docs/spikes/runtime-setup-assembly-adoption-v2-node26-runtime-pin-successor-evidence.json`
+(SHA-256 `1aa6f17ae933ddfdee2b4ac37c968051d27a2777161114191433bd81a09b5c96`).
+Its earlier package-pin migration, portable TypeScript fixture compilation and
+historical profile resolver transition superseded the 1,978-input capture at
+`0b6feb38b243378f4082d3b3ef5d4ef569941fb4`.
+The held-digest successor, which followed the intentional deterministic test change
+at `10e974269f622330f4e1b2ee25f8e7364d916a57`, remains byte-for-byte at
+`docs/spikes/runtime-setup-assembly-adoption-v2-node26-held-digest-successor-evidence.json`
+(SHA-256 `35cae9d21930fe6e31573e247cdec0c3726f5b85a7ae3cf31e5cf09db99d187c`).
+The former successor report remains retained byte-for-byte at
+`docs/spikes/runtime-setup-assembly-adoption-v2-node26-successor-evidence.json`
+(SHA-256 `e261db9b564aa9f012417561584a048666abe2efd92facb792a9956c30b54b87`).
+It binds source `b11fbb42aa6c7082e7f9bc00c758f4007218b8d9` and its 1,977
+inputs; one covered test input changed at `10e9742`, so those paired receipts
+cannot authenticate the new SOURCE revision.
+The prior Node26-named report is retained byte-for-byte at its original path
+(SHA-256 `8ba80a3da8746f8eac5c1d0ac0e8e01e8db5e242ca2f6fead8d8f3e63a021067`).
+Its source revision `1202e278b1605cc6243ceb42944eb30d07270172` has
+1,974 inputs, while the next historical closure had 1,975. Its authentic paired
+receipts cannot be relabeled for the successor.
+The successor checker pins all five older v2 reports and retained v1. It
+requires both new receipts to
+match its exact SOURCE revision and inventory, and rejects the former
+release-age compatibility exception. Until capture and delivery, the missing
+successor report fails the manual checker. V2 binds ADR-0015,
 the historical records, current construction traces and a bounded tracked Runtime
 Setup input closure to exactly two receipts: Linux x64 and Darwin arm64, both using
 Node `v24.18.0` and pnpm `11.18.0`. The two original explicit Node test argv lists
 are retained in the package-local `scripts/run-package-tests.mjs`; ordinary
 package checks and capture share that launcher. It runs clean, typecheck, build
 and both test processes, stopping on failure. No test subset or alternative
-legacy capture path can satisfy this gate.
+legacy capture path can satisfy that historical validator.
 
 Each receipt retains job/run identity, observed target and tools, start/end times,
 exit/signal, command ledger and hashed stdout/stderr artifacts. The Node reporter
@@ -401,12 +451,62 @@ Darwin skips this exact registration with the explicit Linux descriptor-custody
 reason; the merger requires the successful Linux counterpart. Connection URLs
 accept only `127.0.0.1` or `[::1]`, with no query or fragment.
 
-In clean disposable checkouts of the same final implementation commit, install
-with `pnpm install --frozen-lockfile`, then run
-`pnpm --filter './packages/**' -r run clean` and `pnpm product:build` with native
-prerequisites available. Run this command separately on each required target:
+The former automatic workflow is retained only in PR184 history at
+`f7b7e098cf20be65cfb711b42ca7e05e85d9407b`. Current CI uses `runtime-macos`
+and the non-skipping `postgres-durability` authority join instead of that route.
+The manual workflow and capture helpers remain for historical use; this
+integration neither captures new evidence nor revives L0 enforcement.
+
+The recipe below documents the historical Node `v24.18.0`/pnpm `11.18.0`
+contract. R denotes an exact historical SOURCE admitting those tools, with its
+selected report absent and its predecessor reports unchanged. It does not
+apply to the current checkout, whose Node floor is `24.21.0`. In disposable
+`*-TEST` checkouts of that historical R on Linux x64 and Darwin arm64, the
+recipe required `git status --porcelain` to be empty,
+`git rev-parse HEAD` to equal R on each host, and
+`node --version`/`pnpm --version` to return the pinned versions. Clear
+`NODE_OPTIONS` and `NODE_TEST_CONTEXT`. With native prerequisites available,
+set `SOURCE_REPOSITORY` to the local repository containing R, `SOURCE_R` to its
+full 40-character SHA, and `CAPTURE_TARGET` to `linux-x64` or `darwin-arm64` as
+appropriate. Run this setup separately on each host:
 
 ```sh
+: "${SOURCE_REPOSITORY:?}" "${SOURCE_R:?}" "${CAPTURE_TARGET:?}"
+TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/runtime-successor-TEST.XXXXXX")"
+git clone --no-local "$SOURCE_REPOSITORY" "$TEST_ROOT/checkout-TEST"
+cd "$TEST_ROOT/checkout-TEST"
+git checkout --detach "$SOURCE_R"
+test "$(git rev-parse HEAD)" = "$SOURCE_R"
+test "$(node --version)" = 'v24.18.0'
+test "$(pnpm --version)" = '11.18.0'
+test -z "${NODE_OPTIONS:-}${NODE_TEST_CONTEXT:-}"
+test "$(node -p 'process.platform + "-" + process.arch')" = "$CAPTURE_TARGET"
+test -z "$(git status --porcelain)"
+```
+
+Historical manual validation requires the exact Git object closure for R and
+its retained predecessors. The former recipe ran these commands in each
+disposable historical checkout; they are not current capture instructions:
+
+```sh
+pnpm check:node-compat
+pnpm install --frozen-lockfile --engine-strict --strict-peer-dependencies
+pnpm install --resolution-only --lockfile-only --no-frozen-lockfile --engine-strict --strict-peer-dependencies
+git diff --exit-code -- pnpm-lock.yaml
+pnpm --filter '@agent-teams/embedded-runtime^...' -r run build
+pnpm --filter './packages/**' -r run clean
+pnpm product:build
+test -z "$(git status --porcelain)"
+```
+
+Linux also requires a fresh loopback PostgreSQL
+database named `ar69_pa_test_[a-z0-9]+` and a locally set
+`AE_ACL_POSTGRES_DISPOSABLE_URL`. Run this command separately on each required
+target, with a new absolute receipt path outside each checkout:
+
+```sh
+CAPTURE_OUTPUT="$TEST_ROOT/$CAPTURE_TARGET.json"
+CAPTURE_RUN_ID="$SOURCE_R-$CAPTURE_TARGET-$(date +%s)"
 node scripts/architecture/runtime-setup-l0-evidence.mjs \
   --capture-adoption-receipt --output "$CAPTURE_OUTPUT" --run-id "$CAPTURE_RUN_ID"
 ```
@@ -422,9 +522,39 @@ source checkout:
 ```sh
 node scripts/architecture/runtime-setup-l0-evidence.mjs \
   --merge-adoption-receipts "$LINUX_RECEIPT" "$DARWIN_RECEIPT" \
-  --output docs/spikes/runtime-setup-assembly-adoption-v2-evidence.json
+  --output docs/spikes/runtime-setup-assembly-adoption-v2-node26-duplicate-callback-successor-evidence.json
 node scripts/architecture/runtime-setup-l0-evidence.mjs --check
 ```
+
+The merged chronology retains the PR's original v2 and four Node26 reports,
+including the runtime-pin predecessor, and main's independent cleanup-custody
+capture. Main's original-path v2 bytes are mechanically archived at
+[cleanup-custody evidence](../spikes/runtime-setup-assembly-adoption-v2-cleanup-custody-evidence.json),
+SHA-256 `5cc5ef40c1d74e5f38f76a19a1c83e1cddee7c268b5043ed558620b13f80fbee`.
+Their source is main `b0bcb265d1466da3272078f9dfdb7c6784624283`, original path
+`docs/spikes/runtime-setup-assembly-adoption-v2-evidence.json`. The PR original
+at that pathname retains SHA-256
+`08fef99589d67358f020e3a0b063a44d6c4c99381370f76b2ca200b005d9bf3d`.
+The retained report contract authenticates both predecessor branches without
+rewriting either. Its capture protocol required a verified owner merge before
+paired SOURCE capture; a static preview is not that merge.
+
+Under that historical protocol, delivery revision D added only the new report;
+all SOURCE inputs still had to resolve to R. The checker rejects a claimed
+SOURCE revision that already
+contains the new successor report. Do not mutate any retained report or receipt.
+The selector, predecessor pin, rejecting tests and this guidance are protected
+SOURCE inputs too. Historical capture bound them to R; receipts captured at
+`1e98e380348b13c1ab9f3559b40044c741a18134` cannot be relabeled for that R.
+This is a report selection and evidence retention update. The pinned Consumer
+Module Standard still governs the same passive composition scope; its guidance,
+local adoption profile and accepted ADR bytes are unchanged. The retained
+standard at `9c722ceff4ede307d06d7a4b63fdebe615f54c53` hashes to the
+profile's SHA-256 `33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd`.
+Its retained migration review is
+`architecture/get-modular/evidence/runtime-profile-cms-pin-review.json`.
+This successor does not migrate or claim to review a moving upstream revision.
+This Linux x64 host cannot capture the required Darwin arm64 receipt.
 
 The single report embeds each original receipt and every referenced artifact as
 base64 bytes, retaining the original receipt SHA-256 and its artifact hashes.
@@ -432,11 +562,11 @@ Receipt paths and execution directories remain provenance metadata only: checks
 decode the bundled bytes and run the existing strict receipt, stream and paired
 coverage validators without reading external capture paths. Hashes authenticate
 retained bytes, not independent execution. No external artifact service or
-additional input exclusion is required.
+additional input exclusion is required for historical verification. The former
+PR workflow used short-lived artifacts only to transfer the original captures.
 
-Commit the complete implementation as source revision R before either final
-capture. Capture both targets at R, then create delivery revision D by adding
-only the report. The development-only
+The historical protocol captured both targets at the same committed SOURCE R,
+then added only the report at delivery revision D. The development-only
 [`runtime-setup-l0-evidence-v2-inputs.mjs`](../../scripts/architecture/runtime-setup-l0-evidence-v2-inputs.mjs)
 owns policy `runtime-setup-v2-inputs/1`, shared by capture, merge and check.
 It covers all six evidence package roots, including sources, tests, launcher,
@@ -446,8 +576,21 @@ lock/workspace/tool and TypeScript configuration; architecture evidence/checker
 helpers (including platform-site and AR-2 custody); consumer profiles, schema,
 retained standard/package archives; FMS/source policy, authority registry and
 explicit accepted authority inputs; this adoption record (read by the checker);
-qualification/readiness and retained L0/v1 reports. Architecture checker and
-authority dependencies are enumerated as files, not directory-wide roots.
+qualification/readiness and retained L0/v1 reports. The capture CLI runs the
+adoption checker synchronously before capture. Its live ADR governance catalog
+therefore binds the `docs/decisions` root, including the decision index and
+accepted decision bytes. Foundation source diagnostics bind the governed
+`experiments` and tooling roots (`scripts/architecture`, `scripts/ci`,
+`scripts/docs`, `scripts/foundation`, `scripts/native-helper`, and
+`scripts/sdk-growth-source`). These roots also cover future files read by the
+same configured source census. Package roots already cover its package sources
+and scripts. Authority and configuration paths outside those roots remain
+explicit files.
+The former capture workflow's `check:node-compat` prerequisite bound its engine
+audit implementation, both executed compatibility tests, the Node 26 workflow
+asserted by the engine test, and the retained Linux containment record read by
+the runtime test. These files are SOURCE inputs even though the capture receipt
+records the later embedded-runtime check command.
 The policy declares required roots and files explicitly. New dependencies outside
 these roots require a reviewed policy update before capture.
 
@@ -457,26 +600,48 @@ file's path, Git mode and SHA-256. Missing required inputs, symlinks, submodules
 additions, removals, renames and mode/byte changes reject evidence. Git diff
 status 0 accepts equality, status 1 rejects drift; other Git errors propagate as
 infrastructure failures. Receipt inventories cannot omit or add inputs, and old
-or mixed policy identities cannot satisfy the current gate.
+or mixed policy identities cannot satisfy the historical manual validator.
+The physical discovery check also walks the configured Foundation governed
+source roots and selected package roots for source files and nested manifests,
+the live decision catalog for Markdown, and the observed ancestor manifest
+slots up to the repository root. Manifest slots bind absence, regular-file
+identity and committed bytes at the selected revision. The pnpm workspace
+reader traverses directories from the repository root before applying its four
+bounded glob patterns. SOURCE therefore rejects unsafe entry names and portable
+case or NFC directory collisions throughout that traversal, including empty
+and ignored directories, and portable source-file collisions inside selected
+source trees. A discovered source or observed manifest outside the
+exact revision's selected inventory rejects capture or delivery even when
+`.gitignore` hides it. A newly discovered workspace sibling is rejected until
+a reviewed SOURCE policy and owner boundary include it. The accepted plain-list
+workspace patterns and governed roots are read from the bound configuration
+bytes; changed discovery syntax or patterns fail closed for policy review.
+Ordinary unrelated files remain outside the inventory.
+
+Generated `dist` and `coverage` beneath a direct child of a selected package
+root are excluded only when that child has package authority. A manifest whose
+sole key is valid `type` (`module` or `commonjs`) establishes a module scope,
+not package authority; source files under its generated-named directories stay
+in SOURCE discovery. Genuine package roots still exclude generated output.
 
 The generated v2 report is outside the closure to avoid self-reference.
-Unrelated tracked files (for example the root README and unrelated files inside
-`scripts/architecture` or `docs/decisions`), unrelated untracked files
-and report-only edits/commits do not invalidate an otherwise identical capture.
-Repository-wide Foundation governance checks remain independent and unchanged.
-Clean CI still needs the report and Git object closure for R and the required
-historical revisions; bundled receipts do not replace historical source readback.
+Unrelated tracked files outside the selected roots and explicit files (for
+example the root README), unrelated untracked files and report-only edits/commits
+do not invalidate an otherwise identical capture. The live adoption and
+Foundation source checks are capture prerequisites and their repository-owned
+inputs are part of SOURCE identity.
+Manual historical validation still needs the report and Git object closure for
+R and its predecessors; bundled receipts do not replace source readback.
 The rejecting fixtures deliver a report-only commit into a fresh clone, delete
 the original capture tree and validate against R. Missing or mutated bundled
 bytes, mixed source receipts and changes inside the bounded closure must fail. The
 existing architecture gate runs these fixtures via
 `runtime-setup-l0-evidence-validation.test.mjs`.
 
-The retained v2 report predates this policy and remains stale; its receipts and
-inventories are preserved byte-for-byte, without filtering or relabeling. Current
-paired evidence is pending. After committing the policy and all included inputs,
-run the capture commands above on Linux x64 and Darwin arm64 at that same commit,
-then merge the fresh receipts. This bounded-identity change does not itself
+The retained v2 and Node26 reports and their receipts remain byte-for-byte
+historical evidence. Its paired successor remains pending under the manual
+contract, outside current required CI. The recipes above do not authorize a
+capture against the current default. This bounded-identity history does not
 establish current platform evidence or adoption completion.
 The bounded-policy review used the then-current retained standard pin
 `669a750d8db451e04f075cdeb36576c6606fba6e`, whose complete bytes match the profile's
@@ -486,8 +651,8 @@ is `610e595fe1f2e893d01ee44ceecd6349b5a3c8ce`, four commits ahead of the retaine
 pin. The only `common-assembly.md` delta is the reciprocal Agent Runtime
 PR #168 ledger paragraph, which explicitly retained consumer standard revision
 `669a750d` and limited accepted passive scope. That historical evidence-policy
-patch required no pin migration or shared-behavior change. Adoption remains
-pending for fresh Linux x64 and Darwin arm64 receipts.
+patch required no pin migration or shared-behavior change. The historical
+paired evidence obligation remains pending under the manual disposition.
 
 Implementation review re-read the pinned Consumer Module Standard and compared
 it with the locally retained upstream `03a7df64bc5e9939f7b51694a80a7f3d61453f98`
@@ -541,14 +706,16 @@ contained-turn or introduce shared lifecycle machinery on this evidence.
 Release disposition remains pending. Retention requires a reasoned owner
 benefit/cost decision, reviewed external consumer/callsite and package-release
 provenance, and the exact final evidence and gates. The retained v2 report
-records its own exact source identity and platform receipts. Before delivery,
-validate that report against the complete implementation and documentation
-checkpoint with `pnpm architecture:runtime-setup-l0-evidence`. If tracked inputs
-in the bounded Runtime Setup closure have changed, refresh the supported paired
-capture. A report-only commit may
-reuse the authenticated source only under the existing validator rules. While
-the L0 gate is disabled (AR-0), this validation is manual and does not block
-delivery.
+records its own exact source identity and platform receipts. The merged SOURCE
+requires fresh Linux x64 and Darwin arm64 receipts for the
+complete implementation and documentation checkpoint. Deliver the selected
+duplicate-callback successor report separately, then validate it with
+`pnpm architecture:runtime-setup-l0-evidence`. Keep every retained report byte
+unchanged; prior captures cannot be relabeled as merged SOURCE evidence.
+A report-only commit may
+reuse the authenticated source only under the existing validator rules.
+While the L0 gate is disabled (AR-0), this validation is manual and does not
+block delivery.
 
 A consumer-local rollback must be one governed release replacement. Restore one
 async direct default at the existing private entrypoint, retain the internal
@@ -640,12 +807,11 @@ consumer enrollment in fast/full gates. These checks no longer reject workspace
 membership or package inventory changes while the AR-S freeze is disabled (see
 below). They still reject changes to the C0 contract hash, `contractRevision`,
 the registry and root classification, the evidence and the command, but do not perform EF SDK comparison or grant trusted admission.
-SDK authority activation remains pending. The repository dependency and lock now
-use the exact published EF 1.6.0 artifact: tarball SHA-256
+SDK authority activation remains pending. The retained qualification used the exact published EF 1.6.0 artifact: tarball SHA-256
 `842f81ca68e9c3207a0da967eb599229d4d30ea32cd69a9a1686f2eb240f54eb`, npm
 integrity `sha512-E6ytO+3xhZsaPTo49DRuhldQBRMFlF06EGqqERuGHrc4q11eLssTA9fsbEGCm1e4B8n/i8AsMt2ZkQklFeolWA==`,
 and publication time `2026-09-24T00:19:03.115Z`. Dist metadata, provenance and
-the release tag resolve to the identities in the activation record. The public
+the release tag resolve to the identities in the retained qualification record. The public
 `sdk-growth-authority` export imports from those published bytes, and a frozen
 install succeeds in a fresh disposable project. No local dependency or
 published baseline is introduced.
@@ -679,9 +845,14 @@ reported 446 `ae-forgotten-export` diagnostics. Its source, lock and tool digest
 cannot qualify EF 1.6.0. The historical audit and counts remain in the
 qualification record for traceability.
 
-EF 1.6.0 package membership and public imports are qualified against the
-published artifact. Current source-bound typed observation and strict extraction
-are still pending in the admission record. No source-local command may convert
+The retained EF 1.6.0 package membership and public imports were qualified
+against that published artifact. Accepted current main selects Foundation
+1.7.2 for development tooling. The activation's `installedTooling` record
+retains its exact npm integrity and source checkpoint, with typed observation,
+strict extraction and external authority still pending. The retained 1.6.0
+qualification bytes do not qualify the current tooling release.
+Current source-bound typed observation and strict extraction are still pending
+in the admission record. No source-local command may convert
 that pending status into a trusted grant. The external authority is uninvoked,
 and no baseline, trusted history, owner decision, grant, completion or receipt
 is fabricated for these initial-unreleased packages.
@@ -704,8 +875,9 @@ complete-document SHA-256
 `d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f`.
 Get Modular main was observed at exact source commit
 `6b31f20fe3e5fb8324812aa2ee907905751cde71`; its complete document bytes are
-unchanged from `ac49bb3374946330ec820591f8195a22d2c90900`. The then-current standard is retained as
-`consumer-module-standard-ac49bb33.md`, byte-identical to that immutable source. Main itself is not the pin.
+unchanged from `ac49bb3374946330ec820591f8195a22d2c90900`. The retained standard
+at that checkpoint was byte-identical to that immutable source and remains retained
+as `consumer-module-standard-ac49bb33.md`. Main itself was not the pin.
 
 The [complete byte delta](../../architecture/get-modular/evidence/a3-cms-pin-delta.diff)
 is one replacement hunk: six lines describing Agent Runtime as a planned
@@ -728,6 +900,58 @@ candidate-controlled workflow or passing profile fixture is not this authority.
 Linux portable checks do not establish Darwin qualification; existing paired
 Host evidence and its outstanding work remain separate. K1/A1/A2 and dynamic
 plugins are outside this delivery.
+
+## Reviewed optional dynamic Host standard pin migration
+
+At exact Agent Runtime source `be0a811288da4261d26063790c9f7924991523fe`,
+the [new migration review](../../architecture/get-modular/evidence/dynamic-host-cms-pin-review.json)
+compares historical A3 pin `ac49bb3374946330ec820591f8195a22d2c90900`
+(SHA-256 `d5bb71e5a700014f9f0a09b17d1f33d24b30b66c49b273c9fb65584672c51e4f`)
+with exact Get Modular main `24d6557a1b04b01a3a73c64b1d9a9afd83d89c8f`
+(SHA-256 `33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd`).
+The [retained delta](../../architecture/get-modular/evidence/dynamic-host-cms-pin-delta.diff)
+adds ADR-0029 to related authority and an optional dynamic Host lifecycle
+candidate section. The supplied accepted ADR-0029 bytes have SHA-256
+`9247eb2c2eb70cbbc215426446101314b1085d1d03fee02b6dc0467a737eac00`.
+The earlier [A3 review](../../architecture/get-modular/evidence/a3-cms-pin-review.json)
+and its delta remain historical and are still enforced by the checker.
+
+The new section requires whole selected graph rejection before dynamic candidate
+imports, Host-owned construction and acquisition custody, and authority checks
+after awaits before effects. It describes bookkeeping call and custody leases,
+retirement limits, and exact evidence for an explicitly adopted dynamic scope.
+Its own text says passive composition scope is unchanged and Agent Runtime
+dynamic adoption is not certified. No lifecycle kernel package is added here;
+Core and Assembly archive pins stay fixed. Passive setup and ordinary-session
+scope remain active, contained-turn remains pending, and SDK external authority
+remains pending qualification. Current profile and retained bytes use the exact
+new pin. This migration alone supplies no dynamic production adoption evidence.
+These migration reviews remain retained history. Since AR-0, the consumer
+gate verifies the current pin step through `check-cms-pin.mjs`; the SDK gate
+keeps its accepted registry, C0 and pending-observation protections. The manual
+C0 checker authenticates its frozen `ac49bb33` successor separately without
+changing the accepted C0 contract or verdicts.
+
+## Current standard and dependency pin review
+
+The supplied current upstream document at `3c23` and the retained `9c722ce`
+document are independently byte-identical: complete-document SHA-256
+`33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd`.
+There is no standard delta or new composition boundary in this integration,
+so the exact existing `9c722ceff4ede307d06d7a4b63fdebe615f54c53` pin remains.
+
+
+At exact Get Modular commit `9c722ceff4ede307d06d7a4b63fdebe615f54c53`,
+the canonical full-document SHA-256 remains
+`33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd`,
+identical to the previous `24d6557a1b04b01a3a73c64b1d9a9afd83d89c8f` pin.
+The [retained review](../../architecture/get-modular/evidence/runtime-profile-cms-pin-review.json)
+records zero document delta and keeps passive and ordinary adoption active,
+contained-turn adoption pending, and dynamic scope uncertified. Core and Assembly
+move to exact published 0.2.0 archives. Accepted current main supplies the
+stable31 generation-2 managed selection: Docs Protocol 0.6.2, Docs Protocol
+Agent Teams 0.3.2 and Engineering Foundation 1.7.2. Historical reviews, C0
+evidence and accepted ADR bytes remain unchanged.
 
 ### Creation failure cleanup custody
 

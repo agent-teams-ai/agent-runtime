@@ -6290,15 +6290,15 @@
   "packages": [
     {
       "name": "@get-modular/core",
-      "version": "0.1.0",
-      "archiveSha256": "50803ea69e2fb4078013a897f858908b4d73d26296336ab155a6118809dfb8ba",
-      "archivePath": "architecture/get-modular/evidence/get-modular-core-0.1.0.tgz"
+      "version": "0.2.0",
+      "archiveSha256": "dd4cb159c839fbbf38512d1f66aa8ff5019123a6981ca553ba640d423ae67b58",
+      "archivePath": "architecture/get-modular/evidence/get-modular-core-0.2.0.tgz"
     },
     {
       "name": "@get-modular/assembly",
-      "version": "0.1.0",
-      "archiveSha256": "e89207171e44afd5e813aa5e7a0db8abc999b42338559d38b44b4db71da228ab",
-      "archivePath": "architecture/get-modular/evidence/get-modular-assembly-0.1.0.tgz"
+      "version": "0.2.0",
+      "archiveSha256": "86b26f860ec4eaeeb143cde553deca74acafe89a856d74ea3e62e4a2531fddfa",
+      "archivePath": "architecture/get-modular/evidence/get-modular-assembly-0.2.0.tgz"
     }
   ],
   "enforcement": {
