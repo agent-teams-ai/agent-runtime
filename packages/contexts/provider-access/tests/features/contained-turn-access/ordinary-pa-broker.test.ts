@@ -32,11 +32,11 @@ async function fixture(upstream: OrdinaryPaUpstream, failBegin = false) {
       async authorize(input) { const result = await renderer.authorization.authorize(input); if (result.kind === 'authorized') { original = result.receipt; } return result; },
     }, rendering: { render(receipt) { assert.equal(receipt, original, 'renderer requires original authority identity'); return renderer.rendering.render(receipt); } } },
     store: {
-      async beginRequest(_binding, digest) {
+      async beginRequest(_binding, { bodyDigest: digest }) {
         if (failBegin || digests.has(digest)) { throw new Error('synthetic consume refused'); }
         digests.add(digest); return ++count;
       },
-      async endRequest(_binding, sequence, success) { ended.push({ sequence, success }); },
+      async endRequest(_binding, sequence, outcome) { ended.push({ sequence, success: outcome === 'completed' }); },
     },
   });
   return { broker, ended, async close() { await broker.close(); renderer.dispose(); guard.dispose(); capability.fill(0); } };
