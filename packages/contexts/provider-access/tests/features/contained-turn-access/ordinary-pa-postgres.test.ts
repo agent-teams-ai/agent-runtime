@@ -1,7 +1,9 @@
 import { createOrdinaryAuthMetadata } from '../../../dist/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-capture.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { randomUUID } from 'node:crypto';
 import { createOrdinaryPaStore, ordinaryPaDigest } from '../../../dist/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-store.js';
+import { newOrdinaryPaGrant } from '../../../dist/features/contained-turn-access/domain/ordinary-provider-access.js';
 import { OrdinaryPaUnavailable, createPostgresOrdinaryProviderAccessOwner } from '../../../dist/composition.js';
 import { createPostgresCredentialRenderingOwner } from '../../../dist/features/contained-turn-access/composition/postgres-credential-rendering-owner.js';
 import type { OrdinaryPaBinding, OrdinaryCodexAuthCapture, MaterializationPostgresPool } from '../../../dist/composition.js';
@@ -11,6 +13,12 @@ const binding = (operationId: string): OrdinaryPaBinding => ({ operationId, atte
   executionProfile: 'user-session-v1', effectClass: 'ordinary_user_session_effect', capabilityManifestRevision: 'ordinary-codex-macos-arm64-0.153.4-v1' });
 
 const facts = () => ({ generation: 1, accountId: 'synthetic-account', expiresAt: Date.now() + 59000 });
+const grantFor = (exact: OrdinaryPaBinding, selected: { generation: number; accountId: string; expiresAt: number } = facts()) =>
+  newOrdinaryPaGrant(exact, selected, { now: Date.now(), newId: randomUUID, digest: ordinaryPaDigest });
+/** A self-consistent grant built against a skewed application clock, so only the database clock can refuse it. */
+const skewed = (target: OrdinaryPaBinding, expiresAt: number, now: number) =>
+  newOrdinaryPaGrant(target, { generation: 1, accountId: 'synthetic-account', expiresAt }, { now, newId: randomUUID, digest: ordinaryPaDigest });
+const inserted = (results: PromiseSettledResult<{ kind: string }>[]) => results.filter(result => result.status === 'fulfilled' && result.value.kind === 'inserted').length;
 
 test('ordinary PA PostgreSQL grants, counters, retirement and original rendering authority', { skip: !url, timeout: 60000 }, async t => {
   const parsed = new URL(url!);
@@ -23,23 +31,31 @@ test('ordinary PA PostgreSQL grants, counters, retirement and original rendering
   t.after(() => { one.dispose(); two.dispose(); });
   await Promise.all([one.migrate(), two.migrate()]);
   const exact = binding('operation-race'), selected = facts();
-  const results = await Promise.allSettled(Array.from({ length: 8 }, (_, index) => (index % 2 ? one : two).consume(exact, selected)));
-  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1, results.map(result => result.status === 'rejected' ? String(result.reason) : 'fulfilled').join('; '));
+  const results = await Promise.allSettled(Array.from({ length: 8 }, (_, index) => (index % 2 ? one : two).insertGrant(grantFor(exact, selected))));
+  assert.equal(inserted(results), 1, results.map(result => result.status === 'rejected' ? String(result.reason) : result.value.kind).join('; '));
+  assert.ok(results.every(result => result.status === 'fulfilled'), 'losers are refused, not thrown');
   const original = await one.observe(exact); assert.ok(original);
   assert.equal((await two.observe(exact))!.authority.ownerReceiptId, original.authority.ownerReceiptId);
   await assert.rejects(two.observe({ ...exact, attemptId: 'foreign-attempt' }));
   assert.equal(await two.observe({ ...exact, tenantId: 'foreign-tenant' }), undefined);
-  const first = await one.beginRequest(exact, ordinaryPaDigest('first'), 5);
-  await assert.rejects(two.beginRequest(exact, ordinaryPaDigest('next'), 4));
-  await assert.rejects(one.retire(exact));
-  await one.endRequest(exact, first, true);
-  await assert.rejects(two.beginRequest(exact, ordinaryPaDigest('first'), 5));
-  const second = await two.beginRequest(exact, ordinaryPaDigest('next'), 4); await two.endRequest(exact, second, true);
+  const first = await one.beginRequest(exact, { bodyDigest: ordinaryPaDigest('first'), byteLength: 5 });
+  await assert.rejects(two.beginRequest(exact, { bodyDigest: ordinaryPaDigest('next'), byteLength: 4 }));
+  await assert.rejects(one.retire(exact), 'retire refuses while a request is open');
+  assert.equal((await one.observe(exact))!.retiredAt, null);
+  await one.endRequest(exact, first, 'completed');
+  await assert.rejects(two.endRequest(exact, first, 'completed'), 'a request ends only once');
+  await assert.rejects(two.beginRequest(exact, { bodyDigest: ordinaryPaDigest('first'), byteLength: 5 }), 'body digest is unique per grant');
+  const second = await two.beginRequest(exact, { bodyDigest: ordinaryPaDigest('next'), byteLength: 4 }); assert.equal(second, first + 1);
+  await assert.rejects(one.endRequest(exact, first, 'failed'), 'only the newest request can end');
+  await two.endRequest(exact, second, 'completed');
   const retired = await one.retire(exact); assert.ok(retired.retiredAt);
-  const settled = await one.settle(exact, 'claim_committed');
-  assert.equal((await two.settle(exact, 'claim_committed')).settlementReceiptId, settled.settlementReceiptId);
-  await assert.rejects(two.settle(exact, 'abandoned_without_claim'));
-  await assert.rejects(two.beginRequest(exact, ordinaryPaDigest('later'), 5));
+  assert.equal((await two.retire(exact)).retiredAt, retired.retiredAt, 'a repeat keeps the first retirement');
+  await assert.rejects(two.beginRequest(exact, { bodyDigest: ordinaryPaDigest('after retire'), byteLength: 5 }), 'no request after retirement');
+  const settled = await one.settle(exact, 'claim_committed', randomUUID());
+  assert.equal((await two.settle(exact, 'claim_committed', randomUUID())).settlementReceiptId, settled.settlementReceiptId);
+  await assert.rejects(two.settle(exact, 'abandoned_without_claim', randomUUID()));
+  await assert.rejects(two.beginRequest(exact, { bodyDigest: ordinaryPaDigest('later'), byteLength: 5 }));
+  assert.equal((await two.insertGrant(grantFor(exact))).kind, 'rejected', 'consume stays one-shot after settlement');
   const observed = await two.observe(exact); assert.equal(observed!.requestsStarted, 2); assert.equal(observed!.requestsCompleted, 2);
   await assert.rejects(pool.query("UPDATE provider_access.ordinary_grant SET snapshot='{}'::jsonb"), /immutable/);
   await assert.rejects(pool.query('DELETE FROM provider_access.ordinary_grant'), /immutable/);
@@ -55,9 +71,38 @@ test('ordinary PA PostgreSQL grants, counters, retirement and original rendering
         sourceIdentity: 'synthetic-source', deadline: monotonicNow + 49000.625 }, now, monotonicNow);
       assert.equal(metadata.expiresAt, now + 49000);
       assert.ok(metadata.expiresAt <= now + 60000);
-      const saved = await one.consume(binding('operation-fractional-capture'), metadata);
-      assert.equal(saved.authority.expiresAt, metadata.expiresAt);
+      const saved = await one.insertGrant(grantFor(binding('operation-fractional-capture'), metadata));
+      assert.equal(saved.kind, 'inserted');
+      assert.equal(saved.kind === 'inserted' && saved.snapshot.authority.expiresAt, metadata.expiresAt);
     } finally { token.fill(0); accountId.fill(0); }
+  });
+  await t.test('database clock refuses an expiry window the application would accept', async () => {
+    const realNow = Date.now();
+    assert.equal((await one.insertGrant(skewed(binding('operation-window-past'), realNow - 1000, realNow - 30_000))).kind, 'rejected');
+    assert.equal((await one.insertGrant(skewed(binding('operation-window-far'), realNow + 120_000, realNow + 90_000))).kind, 'rejected');
+    assert.equal(await one.observe(binding('operation-window-past')), undefined);
+    assert.equal(await one.observe(binding('operation-window-far')), undefined);
+  });
+  await t.test('an expired grant refuses a new request', async () => {
+    const short = binding('operation-request-expired');
+    assert.equal((await one.insertGrant(grantFor(short, { generation: 1, accountId: 'synthetic-account', expiresAt: Date.now() + 1000 }))).kind, 'inserted');
+    await new Promise<void>(resolve => { setTimeout(resolve, 1100); });
+    await assert.rejects(one.beginRequest(short, { bodyDigest: ordinaryPaDigest('expired'), byteLength: 5 }), 'no request after expiry');
+  });
+  await t.test('settle needs retirement, a failed request closes the grant and the 65th request is refused', async () => {
+    const early = binding('operation-settle-early'); await one.insertGrant(grantFor(early));
+    await assert.rejects(one.settle(early, 'claim_committed', randomUUID()), 'settle before retire');
+    const failed = binding('operation-request-failed'); await one.insertGrant(grantFor(failed));
+    const sequence = await one.beginRequest(failed, { bodyDigest: ordinaryPaDigest('failing'), byteLength: 5 });
+    await one.endRequest(failed, sequence, 'failed');
+    await assert.rejects(one.beginRequest(failed, { bodyDigest: ordinaryPaDigest('after failure'), byteLength: 5 }), 'no request after a failed one');
+    const busy = binding('operation-request-cap'); await one.insertGrant(grantFor(busy, { generation: 1, accountId: 'synthetic-account', expiresAt: Date.now() + 59000 }));
+    for (let index = 1; index <= 64; index += 1) {
+      assert.equal(await one.beginRequest(busy, { bodyDigest: ordinaryPaDigest(['cap', index]), byteLength: 5 }), index);
+      await one.endRequest(busy, index, 'completed');
+    }
+    await assert.rejects(one.beginRequest(busy, { bodyDigest: ordinaryPaDigest(['cap', 65]), byteLength: 5 }), 'request 65');
+    assert.equal((await one.observe(busy))!.requestsStarted, 64);
   });
   await t.test('lost consume COMMIT returns no fresh grant and readback preserves one pending grant', async () => {
     let lost = false;
@@ -66,8 +111,8 @@ test('ordinary PA PostgreSQL grants, counters, retirement and original rendering
       return { async query(sql, values) { const result = await client.query(sql, values); if (sql === 'COMMIT' && !lost) { lost = true; throw new Error('synthetic lost ack'); } return result; }, release: discard => client.release(discard) };
     } };
     const uncertain = createOrdinaryPaStore(wrapped); const unknown = binding('operation-unknown');
-    try { await assert.rejects(uncertain.consume(unknown, facts())); } finally { uncertain.dispose(); }
-    assert.ok(await two.observe(unknown)); await assert.rejects(two.consume(unknown, facts()));
+    try { await assert.rejects(uncertain.insertGrant(grantFor(unknown))); } finally { uncertain.dispose(); }
+    assert.ok(await two.observe(unknown)); assert.equal((await two.insertGrant(grantFor(unknown))).kind, 'rejected');
     const untouched = await two.observe(unknown); assert.equal(untouched!.requestsStarted, 0); assert.equal(untouched!.retiredAt, null);
   });
   await t.test('genuine PA renderer authority is identity-bearing across durable owner readbacks', async () => {

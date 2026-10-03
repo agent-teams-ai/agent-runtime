@@ -1,8 +1,10 @@
 import { intrinsicMethod } from "../adapters/provider-access-data.js";
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { types } from 'node:util';
-import { OrdinaryPaUnavailable, type OrdinaryPaBinding, type OrdinaryPaGrant, type OrdinaryPaRetirement } from '../contracts/ordinary-provider-access.js';
-import { snapshotOrdinaryPaBinding } from '../domain/ordinary-provider-access.js';
+import { OrdinaryPaUnavailable, type OrdinaryPaBinding, type OrdinaryPaGrant, type OrdinaryPaRetirement, type OrdinaryPaSnapshot } from '../contracts/ordinary-provider-access.js';
+import { newOrdinaryPaGrant, snapshotOrdinaryPaBinding } from '../domain/ordinary-provider-access.js';
+import type { OrdinaryPaGrantStore } from '../application/ports/outbound/ordinary-pa-grant-store.js';
+import type { OrdinaryPaMaterializationStores, OrdinaryPaOperationMaterialization } from '../adapters/outbound/ordinary-pa-materialization-stores.js';
 import type { OrdinaryCodexAuthCapture } from '../adapters/outbound/ordinary-codex-auth-contracts.js';
 import { createOrdinaryPaStore, ordinaryPaDigest } from '../adapters/outbound/postgres/ordinary-pa-store.js';
 import type { MaterializationPostgresPool } from '../adapters/outbound/postgres/materialization-postgres-transactions.js';
@@ -32,16 +34,30 @@ function createCaptureDisposer(settledCaptures: WeakSet<OrdinaryCodexAuthCapture
   };
 }
 
+type OrdinaryPaSecretSink = (operationId: string, tokens: readonly string[]) => boolean;
+const assertSecretSink = (registerSecrets: unknown): OrdinaryPaSecretSink => {
+  if (typeof registerSecrets !== 'function' || types.isAsyncFunction(registerSecrets)) { throw new OrdinaryPaUnavailable(); }
+  return registerSecrets as OrdinaryPaSecretSink;
+};
 export interface OrdinaryProviderAccessOwnerOptions {
   readonly pool: MaterializationPostgresPool;
   /** Trusted ER/RS sink. Receives exactly one complete inventory before dispatch. */
   readonly registerSecrets: (operationId: string, tokens: readonly string[]) => boolean;
 }
-/** Ordinary grant and credential authorities stay inside PA; Host borrows only closed capabilities. */
-export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProviderAccessOwnerOptions) {
-  if (typeof options.registerSecrets !== 'function' || types.isAsyncFunction(options.registerSecrets)) { throw new OrdinaryPaUnavailable(); }
-  const pool = options.pool, registerSecrets = options.registerSecrets;
-  const store = createOrdinaryPaStore(pool), grants = new Set<OrdinaryPaGrant>();
+export interface OrdinaryProviderAccessOwnerPorts {
+  readonly grants: OrdinaryPaGrantStore;
+  /** Only while contained-turn materialization is alive; the grant store never touches those tables. */
+  readonly materialization: OrdinaryPaMaterializationStores;
+  /** Trusted ER/RS sink. Receives exactly one complete inventory before dispatch. */
+  readonly registerSecrets: (operationId: string, tokens: readonly string[]) => boolean;
+}
+/**
+ * Ordinary grant and credential authorities stay inside PA; Host borrows only closed capabilities.
+ * The caller owns the lifetime of both stores and releases them after `dispose()` resolves.
+ */
+export function createOrdinaryProviderAccessOwner(ports: OrdinaryProviderAccessOwnerPorts) {
+  const registerSecrets = assertSecretSink(ports.registerSecrets);
+  const grantStore = ports.grants, grants = new Set<OrdinaryPaGrant>();
   const pendingConsumptions = new Map<OrdinaryCodexAuthCapture, Promise<void>>();
   const pendingCaptures = new Set<OrdinaryCodexAuthCapture>();
   const settledCaptures = new WeakSet<OrdinaryCodexAuthCapture>();
@@ -50,12 +66,7 @@ export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProvi
   let disposal: Promise<void> | undefined;
   const check = () => { if (ownerState.disposed) { throw new OrdinaryPaUnavailable(); } };
   return Object.freeze({
-    async migrate() {
-      check(); await store.migrate();
-      const materialization = createPostgresMaterializationRepository(pool);
-      try { await materialization.migrate(); } finally { materialization.dispose(); }
-    },
-    observe: async (binding: OrdinaryPaBinding) => {try {return await store.observe(binding);} catch {throw new OrdinaryPaUnavailable();}},
+    observe: async (binding: OrdinaryPaBinding): Promise<OrdinaryPaSnapshot | undefined> => {try {return await grantStore.observe(binding);} catch {throw new OrdinaryPaUnavailable();}},
     async consume(input: OrdinaryPaBinding, capture: OrdinaryCodexAuthCapture, signal: AbortSignal): Promise<OrdinaryPaGrant> {
       const isAborted = () => signal.aborted;
       check();
@@ -68,11 +79,16 @@ export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProvi
       pendingConsumptions.set(capture, new Promise<void>(resolve => {complete = resolve;}));
       try {
       let metadata: Awaited<ReturnType<OrdinaryCodexAuthCapture['capture']>>;
-      let consumed: Awaited<ReturnType<typeof store.consume>>;
+      let consumed: OrdinaryPaSnapshot;
       try {
         metadata = await capture.capture(); check();
         if (isAborted()) { throw new OrdinaryPaUnavailable(); }
-        consumed = await store.consume(binding, { generation: metadata.generation, accountId: metadata.accountId, expiresAt: metadata.expiresAt });
+        const candidate = newOrdinaryPaGrant(binding, { generation: metadata.generation, accountId: metadata.accountId, expiresAt: metadata.expiresAt },
+          { now: Date.now(), newId: randomUUID, digest: ordinaryPaDigest });
+        const inserted = await grantStore.insertGrant(candidate);
+        // An unknown COMMIT throws out of insertGrant; either way no second grant is attempted.
+        if (inserted.kind !== 'inserted') { throw new OrdinaryPaUnavailable(); }
+        consumed = inserted.snapshot;
       } catch { await disposeCapture(capture); pendingCaptures.delete(capture); throw new OrdinaryPaUnavailable(); }
       pendingCaptures.delete(capture);
       const selection: CredentialRenderingSelection = Object.freeze({ operationRef: binding.operationId, recipe: 'codex-chatgpt',
@@ -83,7 +99,7 @@ export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProvi
           providerAccountRef: metadata.accountId, providerRouteRef: 'ordinary-codex-chatgpt-responses-v1', revocation: 'active',
           scopeDigest: ordinaryPaDigest(binding), tenantId: binding.tenantId }) });
       const guard = createOrdinaryPaSecretGuard();
-      let rendering: ReturnType<typeof createPostgresCredentialRenderingOwner> | undefined;
+      let rendering: OrdinaryPaOperationMaterialization | undefined;
       let broker: Awaited<ReturnType<typeof createOrdinaryPaBroker>> | undefined;
       let capability: Buffer | undefined;
       let brokerClosed = false, renderingDisposed = false, captureDisposed = false, guardDisposed = false, capabilityErased = false;
@@ -110,8 +126,8 @@ export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProvi
           const errors = results.filter(result => result.status === 'rejected').map((result): unknown => result.reason);
           if (errors.length > 0) {throw new AggregateError(errors, 'ORDINARY_PA_UNAVAILABLE', {cause: errors[0]});}
           await capture.settled;
-          const retirement = await store.retire(binding).catch(async () => {
-            const observed = await store.observe(binding);
+          const retirement = await grantStore.retire(binding).catch(async () => {
+            const observed = await grantStore.observe(binding);
             if (!observed || observed.retiredAt === null) { throw new OrdinaryPaUnavailable(); }
             return observed;
           });
@@ -129,7 +145,7 @@ export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProvi
           construction = new Promise<void>(resolve => {constructed = resolve;});
           try {
             try {
-            check(); rendering = createPostgresCredentialRenderingOwner(pool, selection);
+            check(); rendering = ports.materialization.forOperation(selection);
             if (await rendering.control.replaceBinding(selection.binding, 0) !== 1 || !rendering.control.materialAdmission) { throw new OrdinaryPaUnavailable(); }
             check(); if (retirementHasStarted()) {throw new OrdinaryPaUnavailable();}
             const random = randomBytes(32);
@@ -145,7 +161,7 @@ export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProvi
               return accepted === true;
             });
             capture.admit(selection, rendering.control.materialAdmission);
-            broker = await createOrdinaryPaBroker({ binding, selection, renderer: rendering.owner, store,
+            broker = await createOrdinaryPaBroker({ binding, selection, renderer: rendering.owner, store: grantStore,
               upstream: createOrdinaryPaUpstream(), capability, secretGuard: guard });
             check();
             if (retirementHasStarted() || isAborted() || performance.now() >= metadata.deadline) { throw new OrdinaryPaUnavailable(); }
@@ -156,8 +172,8 @@ export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProvi
         },
         retire,
         async settle(disposition) {
-          const settlement = await store.settle(binding, disposition).catch(async () => {
-            const observed = await store.observe(binding);
+          const settlement = await grantStore.settle(binding, disposition, randomUUID()).catch(async () => {
+            const observed = await grantStore.observe(binding);
             if (!observed || observed.disposition !== disposition) { throw new OrdinaryPaUnavailable(); }
             return observed;
           });
@@ -183,9 +199,38 @@ export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProvi
         results.push(...await Promise.allSettled([...grants].map(async grant => {await grant.retire(); grants.delete(grant);})));
         const errors = results.filter(result => result.status === 'rejected').map((result): unknown => result.reason);
         if (errors.length > 0) {throw new AggregateError(errors, 'ORDINARY_PA_UNAVAILABLE', {cause: errors[0]});}
-        store.dispose();
       })().catch((error: unknown) => {disposal = undefined; throw error;}); return disposal;
 
+    },
+  });
+}
+
+/** Postgres composition: the grant store and the per-operation materialization share the borrowed pool. */
+export function createPostgresOrdinaryProviderAccessOwner(options: OrdinaryProviderAccessOwnerOptions) {
+  const registerSecrets = assertSecretSink(options.registerSecrets);
+  const pool = options.pool, store = createOrdinaryPaStore(pool);
+  const materialization: OrdinaryPaMaterializationStores = Object.freeze({
+    forOperation(selection: CredentialRenderingSelection): OrdinaryPaOperationMaterialization {
+      const created = createPostgresCredentialRenderingOwner(pool, selection);
+      return Object.freeze({ owner: created.owner, control: Object.freeze({ replaceBinding: created.control.replaceBinding,
+        ...(created.control.materialAdmission ? { materialAdmission: created.control.materialAdmission } : {}) }) });
+    },
+  });
+  const owner = createOrdinaryProviderAccessOwner({ grants: store, materialization, registerSecrets });
+  let closing = false, disposal: Promise<void> | undefined;
+  return Object.freeze({
+    async migrate() {
+      if (closing) { throw new OrdinaryPaUnavailable(); }
+      await store.migrate();
+      const repository = createPostgresMaterializationRepository(pool);
+      try { await repository.migrate(); } finally { repository.dispose(); }
+    },
+    observe: owner.observe,
+    consume: owner.consume,
+    dispose(): Promise<void> {
+      if (disposal) { return disposal; } closing = true;
+      disposal = (async () => { await owner.dispose(); store.dispose(); })().catch((error: unknown) => {disposal = undefined; throw error;});
+      return disposal;
     },
   });
 }

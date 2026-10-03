@@ -6,7 +6,7 @@ import { OrdinaryPaUnavailable, type OrdinaryPaBinding } from '../../contracts/o
 import type { CredentialRenderingOwner, CredentialRenderingSelection } from './credential-rendering-contracts.js';
 import { authorizationRequestPayload } from '../../domain/materialization-authorization.js';
 import { parseAuthFrame } from './ordinary-codex-auth-json.js';
-import type { OrdinaryPaStore } from './postgres/ordinary-pa-store.js';
+import type { OrdinaryPaGrantStore } from '../../application/ports/outbound/ordinary-pa-grant-store.js';
 import type { OrdinaryPaSecretGuard } from './ordinary-pa-secret-guard.js';
 import type { OrdinaryPaUpstream } from './ordinary-pa-upstream.js';
 
@@ -14,7 +14,7 @@ export interface OrdinaryPaBrokerOptions {
   readonly binding: OrdinaryPaBinding;
   readonly selection: CredentialRenderingSelection;
   readonly renderer: CredentialRenderingOwner;
-  readonly store: Pick<OrdinaryPaStore, 'beginRequest' | 'endRequest'>;
+  readonly store: Pick<OrdinaryPaGrantStore, 'beginRequest' | 'endRequest'>;
   readonly upstream: OrdinaryPaUpstream;
   readonly capability: Buffer;
   readonly secretGuard: OrdinaryPaSecretGuard;
@@ -112,7 +112,7 @@ export async function createOrdinaryPaBroker(input: OrdinaryPaBrokerOptions) {
       body = await boundedBytes(request, 1_048_576); check();
       admitRequestBody(body, input.secretGuard);
       const bodyDigest = 'sha256:' + createHash('sha256').update(body).digest('hex');
-      sequence = await input.store.beginRequest(input.binding, bodyDigest, body.length); check();
+      sequence = await input.store.beginRequest(input.binding, { bodyDigest, byteLength: body.length }); check();
       const unsigned = { ...input.selection.binding, authorizationRequestId: `${input.binding.operationId}:ordinary-http:${sequence}`,
         purpose: 'contained-turn.credential-materialization-authorization/v1' as const, schemaVersion: 1 as const };
       const authorized = await input.renderer.authorization.authorize({ ...unsigned, requestDigest: 'sha256:' + createHash('sha256').update(authorizationRequestPayload(unsigned)).digest('hex') });
@@ -130,7 +130,7 @@ export async function createOrdinaryPaBroker(input: OrdinaryPaBrokerOptions) {
       output = await boundedBytes(upstream.body, 2_097_152);
       totalResponseBytes += output.length;
       if (totalResponseBytes > 8_388_608 || !responseSafe(output, input.secretGuard, semantic)) { throw refused(); }
-      check(); await input.store.endRequest(input.binding, sequence, true); sequence = undefined;
+      check(); await input.store.endRequest(input.binding, sequence, 'completed'); sequence = undefined;
       response.writeHead(upstream.status, { 'content-type': 'text/event-stream', connection: 'close' }); response.end(output);
       // end() may retain bytes until its callback; wait for finish/close before zeroization.
       await new Promise<void>((resolve, reject) => {
@@ -141,7 +141,7 @@ export async function createOrdinaryPaBroker(input: OrdinaryPaBrokerOptions) {
       });
     } catch {
       failed = true;
-      if (sequence !== undefined) { try { await input.store.endRequest(input.binding, sequence, false); } catch { /* pending request remains reconciliation evidence */ } }
+      if (sequence !== undefined) { try { await input.store.endRequest(input.binding, sequence, 'failed'); } catch { /* pending request remains reconciliation evidence */ } }
       replyFailure(response);
     } finally {
       local.abort(); upstream?.close();
