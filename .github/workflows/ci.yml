@@ -25,7 +25,8 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-          # L0 regression authenticates retained historical Git objects.
+          # Full history: Git-reading checks such as the SDK growth source
+          # collector tests resolve retained commits on main.
           fetch-depth: 0
 
       - name: Verify checkout revision
@@ -47,35 +48,39 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Fetch exact retained evidence commits
-        shell: bash
-        run: |
-          node --input-type=module <<'NODE'
-          import assert from 'node:assert/strict';
-          import { execFileSync, spawnSync } from 'node:child_process';
-          import { readFileSync } from 'node:fs';
-          import { changes } from './scripts/architecture/runtime-setup-l0-evidence-spec.mjs';
-          const readEvidence = name => JSON.parse(readFileSync(`docs/spikes/${name}.json`, 'utf8'));
-          const historical = readEvidence('runtime-setup-l0-dogfooding-evidence');
-          const adoption = readEvidence('runtime-setup-assembly-adoption-evidence');
-          const adoptionV2 = readEvidence('runtime-setup-assembly-adoption-v2-evidence');
-          const revisions = [...new Set([
-            ...changes.map(({ revision }) => revision),
-            ...historical.historicalChanges.map(({ revision }) => revision),
-            historical.sourceRevision, adoption.sourceRevision,
-            adoptionV2.historical.revision, adoptionV2.retainedV1.revision,
-            adoptionV2.identity.sourceRevision,
-          ])];
-          for (const revision of revisions) assert.match(revision, /^[a-f0-9]{40}$/u);
-          const hasTrees = revision => [revision, `${revision}^`].every(ref =>
-            spawnSync('git', ['cat-file', '-e', `${ref}^{tree}`]).status === 0);
-          const missing = revisions.filter(revision => !hasTrees(revision));
-          if (missing.length) execFileSync('git', [
-            'fetch', '--no-tags', '--no-write-fetch-head',
-            'https://github.com/agent-teams-ai/agent-runtime.git', ...missing,
-          ], { stdio: 'inherit', timeout: 120_000 });
-          for (const revision of revisions) assert.ok(hasTrees(revision), `Missing retained trees: ${revision}`);
-          NODE
+      # Disabled by owner decision 2026-10-02 (AR-0): only the L0 receipt
+      # regression and the frozen C0 validator need these unreachable commits,
+      # and neither runs in `pnpm check` any more. Restore this step together
+      # with `architecture:runtime-setup-l0-evidence` in `check`.
+      # - name: Fetch exact retained evidence commits
+      #   shell: bash
+      #   run: |
+      #     node --input-type=module <<'NODE'
+      #     import assert from 'node:assert/strict';
+      #     import { execFileSync, spawnSync } from 'node:child_process';
+      #     import { readFileSync } from 'node:fs';
+      #     import { changes } from './scripts/architecture/runtime-setup-l0-evidence-spec.mjs';
+      #     const readEvidence = name => JSON.parse(readFileSync(`docs/spikes/${name}.json`, 'utf8'));
+      #     const historical = readEvidence('runtime-setup-l0-dogfooding-evidence');
+      #     const adoption = readEvidence('runtime-setup-assembly-adoption-evidence');
+      #     const adoptionV2 = readEvidence('runtime-setup-assembly-adoption-v2-evidence');
+      #     const revisions = [...new Set([
+      #       ...changes.map(({ revision }) => revision),
+      #       ...historical.historicalChanges.map(({ revision }) => revision),
+      #       historical.sourceRevision, adoption.sourceRevision,
+      #       adoptionV2.historical.revision, adoptionV2.retainedV1.revision,
+      #       adoptionV2.identity.sourceRevision,
+      #     ])];
+      #     for (const revision of revisions) assert.match(revision, /^[a-f0-9]{40}$/u);
+      #     const hasTrees = revision => [revision, `${revision}^`].every(ref =>
+      #       spawnSync('git', ['cat-file', '-e', `${ref}^{tree}`]).status === 0);
+      #     const missing = revisions.filter(revision => !hasTrees(revision));
+      #     if (missing.length) execFileSync('git', [
+      #       'fetch', '--no-tags', '--no-write-fetch-head',
+      #       'https://github.com/agent-teams-ai/agent-runtime.git', ...missing,
+      #     ], { stdio: 'inherit', timeout: 120_000 });
+      #     for (const revision of revisions) assert.ok(hasTrees(revision), `Missing retained trees: ${revision}`);
+      #     NODE
 
       - name: Run quality gate
         # Identity for disposable Git evidence fixtures only.
@@ -204,6 +209,32 @@ jobs:
           RS_POSTGRES_DISPOSABLE_URL: postgresql://postgres:postgres@127.0.0.1:5434/ar69_rs_test_ci
         run: pnpm --filter @agent-teams/runtime-security test:postgres
 
+      # Since AR-0 (owner decision 2026-10-02) this replaces the linux-x64 half
+      # of the paired L0 receipt: the joined AE, PA and RS test on a real
+      # PostgreSQL database is skipped without a disposable URL, so it must run
+      # here and must not report any skipped, todo, failed or cancelled test.
+      - name: Build Embedded Runtime PostgreSQL authority join target
+        run: pnpm --filter "@agent-teams/embedded-runtime..." build
+
+      - name: Create disposable Embedded Runtime authority join database
+        env:
+          PA_POSTGRES_CONTAINER: ${{ job.services.provider-access-postgres.id }}
+        run: docker exec "$PA_POSTGRES_CONTAINER" createdb -U postgres ar69_pa_test_aejoinci
+
+      - name: Run disposable Embedded Runtime PostgreSQL authority join gate
+        shell: bash
+        working-directory: packages/apps/embedded-runtime
+        env:
+          AE_ACL_POSTGRES_DISPOSABLE_URL: postgresql://postgres:postgres@127.0.0.1:5433/ar69_pa_test_aejoinci
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/postgres-authority-join.tap"
+          node --test --test-reporter=tap tests/package/postgres-authority-join.test.ts | tee "$report"
+          for line in '# fail 0' '# cancelled 0' '# skipped 0' '# todo 0'; do
+            grep -Fqx "$line" "$report" || { echo "::error::authority join gate incomplete: missing '$line'"; exit 1; }
+          done
+          grep -Eqx '# pass [1-9][0-9]*' "$report" || { echo "::error::authority join gate ran no passing test"; exit 1; }
+
       - name: Run disposable ordinary PostgreSQL gate
         shell: bash
         env:
@@ -212,6 +243,13 @@ jobs:
           export POSTGRES_TEST_IMAGE="$(docker inspect --format '{{.Config.Image}}' "$POSTGRES_SERVICE")"
           bash scripts/ci/ordinary-postgres-disposable.sh
 
+  # Darwin coverage for every PR, merge queue run and main push. Since AR-0
+  # (owner decision 2026-10-02) it replaces the darwin-arm64 half of the paired
+  # L0 receipt, which ran `pnpm --filter @agent-teams/embedded-runtime check`;
+  # the linux-x64 PostgreSQL half runs in postgres-durability above.
+  # `pnpm product:check` cleans, builds (the same tsc project as typecheck) and
+  # tests every package, embedded-runtime included. Required on main since
+  # 2026-10-02.
   runtime-macos:
     name: runtime-macos
     runs-on: macos-15

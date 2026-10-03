@@ -2,8 +2,7 @@ import {constants} from "node:fs";
 import {lstat, open, realpath, writeFile, mkdir} from "node:fs/promises";
 import {createHash} from "node:crypto";
 import {join} from "node:path";
-import type {OrdinaryProcessPort} from "../../../application/ordinary-ports.js";
-import type {OrdinaryLaunchSpecification} from "../ordinary-process/node-ordinary-process.js";
+import type {OrdinaryLaunchRecipe} from "../../../application/ordinary-ports.js";
 import {isCodexRecord as isRecord} from "../codex-app-server/codex-app-server-jsonl.js";
 
 export const ORDINARY_CODEX_MODEL = "gpt-5.3-codex-spark";
@@ -69,7 +68,7 @@ export async function verifyOrdinaryCodexExecutable(executable: string): Promise
   } finally {await handle.close();}
 }
 
-export function createOrdinaryCodexLaunchRecipe(executable: string): (input: Parameters<OrdinaryProcessPort["reserve"]>[0]) => Promise<OrdinaryLaunchSpecification> {
+export function createOrdinaryCodexLaunchRecipe(executable: string): OrdinaryLaunchRecipe {
   return async input => {
     await verifyOrdinaryCodexExecutable(executable);
     const home = input.workspace.homeDirectory;

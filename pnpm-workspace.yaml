@@ -36,10 +36,10 @@ allowBuilds:
   opencode-ai: true
 minimumReleaseAge: 0
 minimumReleaseAgeExclude:
-  - "@agent-teams/repository-mutation@0.2.1"
-  - "@agent-teams/document-authoring@0.3.1"
+  - "@agent-teams/repository-mutation@0.2.2"
+  - "@agent-teams/document-authoring@0.3.2"
   - "@agent-teams/docs-protocol@0.6.2"
-  - "@agent-teams/docs-protocol-agent-teams@0.2.13"
-  - "@agent-teams/engineering-foundation@1.7.0"
+  - "@agent-teams/docs-protocol-agent-teams@0.3.2"
+  - "@agent-teams/engineering-foundation@1.7.2"
   - "@get-modular/core@0.2.0"
   - "@get-modular/assembly@0.2.0"

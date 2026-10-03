@@ -1,21 +1,15 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, posix, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseSync, Visitor } from "oxc-parser";
+import { cmsPinReviewPath, retainedEvidencePath, verifyCmsPin } from "./check-cms-pin.mjs";
 import {
-  creationCleanupReviewPath,
-  creationCleanupDeltaPath,
-  validateParallelStandardMigrations,
-  historicalDeltaPath,
-  historicalDynamicReviewPath,
-  historicalReviewPath,
   standardDeltaPath,
   standardReviewPath,
-  validateHistoricalA3Migration,
-  validateCurrentStandardMigration,
-  validateStandardMigration,
+  // Disabled with the hardcoded pin chain by owner decision 2026-10-02 (AR-0);
+  // check-cms-pin.mjs verifies the current step instead.
+  // validateStandardMigration,
 } from "./consumer-module-standard-pin.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -40,8 +34,12 @@ export const EXPECTED_PROFILE = Object.freeze({
       repository: "agent-teams-ai/get-modular",
       path: "docs/architecture/common-assembly.md",
       anchor: "consumer-module-standard",
-      gitCommit: "9c722ceff4ede307d06d7a4b63fdebe615f54c53",
-      sha256: "33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd",
+      // AR-0 (owner decision 2026-10-02): the commit and digest come from the
+      // passive profile after check-cms-pin.mjs verifies it, so a pin migration
+      // no longer edits this record. Restore the literals only if the whole pin
+      // history must be proved again rather than the current step.
+      // gitCommit: "9c722ceff4ede307d06d7a4b63fdebe615f54c53",
+      // sha256: "33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd",
     },
     featureModuleStandard: {
       repository: "agent-teams-ai/.github",
@@ -108,7 +106,7 @@ export const EXPECTED_PROFILE = Object.freeze({
 const expectedScripts = Object.freeze({
   "architecture:consumer-modules": "node scripts/architecture/check-consumer-module-standard.mjs",
   "foundation:check": "agent-teams-foundation check && pnpm foundation:boundaries:negative && pnpm foundation:assert-dev-only && pnpm foundation:assert-registry && pnpm quality:adoption",
-  "test:consumer-modules": "node --test scripts/architecture/check-consumer-module-standard.test.mjs",
+  "test:consumer-modules": "node --test scripts/architecture/check-consumer-module-standard.test.mjs && agent-teams-node-test --contract architecture/foundation/mandatory-node-tests.json -- scripts/architecture/check-cms-pin.test.mjs",
 });
 const gateChain = "pnpm test:consumer-modules && pnpm architecture:consumer-modules";
 const requiredPaths = Object.freeze([
@@ -116,18 +114,15 @@ const requiredPaths = Object.freeze([
   decisionPath,
   "docs/architecture/contained-turn-consumer-module-standard-adoption.md",
   standardReviewPath,
-  creationCleanupReviewPath,
-  creationCleanupDeltaPath,
-  historicalDynamicReviewPath,
   standardDeltaPath,
-  historicalReviewPath,
-  historicalDeltaPath,
   entrypointPath,
   declarationPath,
   factoryPath,
   "scripts/architecture/consumer-module-standard-pin.mjs",
   "scripts/architecture/check-consumer-module-standard.mjs",
   "scripts/architecture/check-consumer-module-standard.test.mjs",
+  "scripts/architecture/check-cms-pin.mjs",
+  "scripts/architecture/check-cms-pin.test.mjs",
 ]);
 
 const occurrences = (source, pattern) => [...source.matchAll(pattern)].length;
@@ -384,13 +379,8 @@ export async function loadConsumerModuleStandardInputs(root = repositoryRoot) {
     "architecture/get-modular/consumer-profile.json"), "utf8"));
   const standardBytes = await readFile(resolve(root,
     "architecture/get-modular/evidence/consumer-module-standard.md"));
-  const standardReview = JSON.parse(await readFile(resolve(root, standardReviewPath), "utf8"));
-  const cleanupReview = JSON.parse(await readFile(resolve(root, creationCleanupReviewPath), "utf8"));
-  const cleanupDeltaBytes = await readFile(resolve(root, creationCleanupDeltaPath));
-  const historicalDynamicReview = JSON.parse(await readFile(resolve(root, historicalDynamicReviewPath), "utf8"));
-  const standardDeltaBytes = await readFile(resolve(root, standardDeltaPath));
-  const historicalReview = JSON.parse(await readFile(resolve(root, historicalReviewPath), "utf8"));
-  const historicalDeltaBytes = await readFile(resolve(root, historicalDeltaPath));
+  const standardReview = JSON.parse(await readFile(resolve(root, cmsPinReviewPath), "utf8"));
+  const standardDeltaBytes = await readFile(resolve(root, retainedEvidencePath(standardReview.delta?.path)));
   const packageManifest = JSON.parse(await readFile(resolve(root, packagePath), "utf8"));
   const decisionRegistry = JSON.parse(await readFile(resolve(root, decisionRegistryPath), "utf8"));
   const decisionBytes = await readFile(resolve(root, decisionPath));
@@ -402,8 +392,7 @@ export async function loadConsumerModuleStandardInputs(root = repositoryRoot) {
     catch { return [path, false]; }
   })));
   return { decisionBytes, decisionRegistry, packageManifest, passiveProfile, pathExistence, profile, sources,
-    standardBytes, standardDeltaBytes, standardReview, historicalDynamicReview, historicalReview, historicalDeltaBytes,
-    cleanupReview, cleanupDeltaBytes };
+    standardBytes, standardDeltaBytes, standardReview };
 }
 
 const validatePendingDecision = inputs => {
@@ -420,26 +409,31 @@ const validatePendingDecision = inputs => {
 
 };
 
-export function validateConsumerModuleStandard(inputs) {
-  assert.deepEqual(inputs.profile, EXPECTED_PROFILE,
-    "consumer profile must equal the reviewed pending-adoption record");
+const expectedProfile = pin => ({
+  ...EXPECTED_PROFILE,
+  authority: {
+    ...EXPECTED_PROFILE.authority,
+    consumerModuleStandard: {
+      ...EXPECTED_PROFILE.authority.consumerModuleStandard, gitCommit: pin.commit, sha256: pin.sha256,
+    },
+  },
+});
 
-  const standard = inputs.profile.authority.consumerModuleStandard;
+export function validateConsumerModuleStandard(inputs) {
   const passive = inputs.passiveProfile.standard;
-  assert.deepEqual({
-    repository: passive.repository, path: passive.path, anchor: passive.anchor,
-    gitCommit: passive.commit, sha256: passive.sha256,
-  }, standard, "passive and contained-turn standard pins must agree");
   assert.equal(passive.evidencePath,
     "architecture/get-modular/evidence/consumer-module-standard.md",
     "standard evidence path must remain shared");
-  assert.equal(createHash("sha256").update(inputs.standardBytes).digest("hex"),
-    standard.sha256, "retained standard bytes must match the reviewed pin");
-  validateCurrentStandardMigration(inputs.standardReview);
-  validateStandardMigration(inputs.historicalDynamicReview, inputs.standardDeltaBytes);
-  validateHistoricalA3Migration(inputs.historicalReview, inputs.historicalDeltaBytes);
-  validateParallelStandardMigrations(inputs.historicalReview, inputs.historicalDynamicReview,
-    inputs.standardReview, inputs.cleanupReview, inputs.cleanupDeltaBytes);
+  // AR-0 (owner decision 2026-10-02): one generic check of the current pin step
+  // replaces the hardcoded migration chain below. It also covers the profile
+  // agreement and retained byte assertions that used to live here.
+  const pin = verifyCmsPin({
+    standard: passive, contained: inputs.profile.authority?.consumerModuleStandard,
+    standardBytes: inputs.standardBytes, review: inputs.standardReview, deltaBytes: inputs.standardDeltaBytes,
+  });
+  // validateStandardMigration(inputs.standardReview, inputs.standardDeltaBytes);
+  assert.deepEqual(inputs.profile, expectedProfile(pin),
+    "consumer profile must equal the reviewed pending-adoption record");
 
   for (const path of requiredPaths) {
     assert.equal(inputs.pathExistence.get(path), true, `required adoption path is missing: ${path}`);

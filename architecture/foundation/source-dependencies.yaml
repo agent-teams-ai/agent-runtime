@@ -993,13 +993,20 @@ boundaries:
   dependencyMode: development
   roots:
   - scripts/foundation/check-quality-adoption.test.mjs
+  - scripts/foundation/source-inputs.test.mjs
   entrypoints: []
   allow:
     boundaries:
     - tooling.foundation-quality
-    packages: []
+    packages:
+    - "@agent-teams/engineering-foundation"
     builtins:
     - node:assert/strict
+    - node:url
+    - node:path
+    - node:child_process
+    - node:os
+    - node:fs
     - node:test
     runtimeReferences: []
 - id: adapter.agent-execution.codex-data
@@ -2671,11 +2678,13 @@ boundaries:
   dependencyMode: runtime
   roots:
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-framing.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-items.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts
   entrypoints:
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-framing.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-items.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts
@@ -2684,13 +2693,25 @@ boundaries:
     - core.agent-execution.contained-turn
     - adapter.agent-execution.codex-primitives-leaves
     - adapter.agent-execution.codex-app-server
-    - adapter.agent-execution.ordinary-process
+    - adapter.agent-execution.ordinary-channel
     packages: []
     builtins:
     - node:crypto
     - node:fs
     - node:fs/promises
     - node:path
+    runtimeReferences: []
+- id: adapter.agent-execution.ordinary-channel
+  dependencyMode: runtime
+  roots:
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts
+  entrypoints:
+  - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts
+  allow:
+    boundaries:
+    - core.agent-execution.contained-turn
+    packages: []
+    builtins: []
     runtimeReferences: []
 - id: adapter.agent-execution.ordinary-filesystem
   dependencyMode: runtime
@@ -2721,6 +2742,7 @@ boundaries:
   allow:
     boundaries:
     - core.agent-execution.contained-turn
+    - adapter.agent-execution.ordinary-channel
     packages: []
     builtins:
     - node:child_process
@@ -2768,6 +2790,7 @@ boundaries:
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-json.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-protocol.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-broker.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-materialization-stores.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-secret-guard.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-upstream.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-schema.ts
@@ -2810,6 +2833,7 @@ boundaries:
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-json.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-protocol.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-broker.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-materialization-stores.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-secret-guard.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-upstream.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-schema.ts
@@ -2916,6 +2940,7 @@ boundaries:
   - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.conformance.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-digest.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/ordinary-pa-grant-store.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-repository.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/application/resolve-contained-turn-provider-access.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/application/revalidate-contained-turn-provider-access.ts
@@ -2936,6 +2961,7 @@ boundaries:
   - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.conformance.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-digest.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/ordinary-pa-grant-store.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-repository.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/application/resolve-contained-turn-provider-access.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/application/revalidate-contained-turn-provider-access.ts
@@ -2972,10 +2998,12 @@ boundaries:
   dependencyMode: runtime
   roots:
   - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/ordinary-security-grant-store.ts
   - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts
   - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts
   entrypoints:
   - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts
+  - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/ordinary-security-grant-store.ts
   - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts
   - packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts
   allow:

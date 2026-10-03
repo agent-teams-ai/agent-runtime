@@ -1239,6 +1239,31 @@
       ]
     },
     {
+      "id": "adapter.agent-execution.ordinary-channel",
+      "owner": "agent-execution",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "ADR-0090 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
+      "reviewTrigger": "Any new independently composed capability or changed relationship requires reviewed scoped adoption before merge.",
+      "relationships": [
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-ports.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-model.ts",
+          "mode": "type-only"
+        }
+      ]
+    },
+    {
       "id": "adapter.agent-execution.ordinary-filesystem",
       "owner": "agent-execution",
       "roots": [
@@ -1349,6 +1374,11 @@
       "relationships": [
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-process/node-ordinary-process.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-process/node-ordinary-process.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-ports.ts",
           "mode": "type-only"
         },
@@ -1366,13 +1396,15 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-items.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts"
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-framing.ts"
       ],
       "entrypoints": [
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-items.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.ts",
-        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts"
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-framing.ts"
       ],
       "status": "not-adopted",
       "rationale": "ADR-0090 ordinary owner-local fixed implementation; the eight independently composed capabilities are selected at the adopted ordinary Runtime Assembly root. This classification does not exempt source from FMS or Foundation checks.",
@@ -1382,11 +1414,6 @@
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
           "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-process/node-ordinary-process.ts",
-          "mode": "type-only"
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-config.ts",
@@ -1410,6 +1437,11 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-protocol.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-ports.ts",
           "mode": "type-only"
         },
@@ -1431,6 +1463,21 @@
         {
           "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts",
           "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/ordinary-model.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-codex-provider.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-framing.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-jsonl.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-framing.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.ts",
           "mode": "type-only"
         }
       ]
@@ -1502,6 +1549,7 @@
         "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-json.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-protocol.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-broker.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-materialization-stores.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-secret-guard.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-upstream.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-schema.ts",
@@ -1545,6 +1593,7 @@
         "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-json.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-protocol.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-broker.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-materialization-stores.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-secret-guard.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-upstream.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-schema.ts",
@@ -1790,6 +1839,11 @@
           "mode": "runtime"
         },
         {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-broker.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/ordinary-pa-grant-store.ts",
+          "mode": "type-only"
+        },
+        {
           "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-secret-guard.ts",
           "to": "packages/contexts/provider-access/src/features/contained-turn-access/contracts/ordinary-provider-access.ts",
           "mode": "runtime"
@@ -1890,6 +1944,11 @@
           "mode": "runtime"
         },
         {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-store.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/ordinary-pa-grant-store.ts",
+          "mode": "type-only"
+        },
+        {
           "from": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/route-selection-data.ts",
           "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-repository.ts",
           "mode": "type-only"
@@ -1955,16 +2014,21 @@
       "relationships": [
         {
           "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-owner.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/ordinary-security-grant-store.ts",
           "mode": "type-only"
         },
         {
           "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-owner.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-owner.ts",
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-transactions.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/ordinary-security-grant-store.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-transactions.ts",
           "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts",
           "mode": "runtime"
         }
@@ -3644,6 +3708,16 @@
           "mode": "runtime"
         },
         {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-materialization-stores.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts",
+          "to": "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/ordinary-pa-grant-store.ts",
+          "mode": "type-only"
+        },
+        {
           "from": "packages/contexts/provider-access/src/features/contained-turn-access/composition/package-composition.ts",
           "to": "packages/contexts/provider-access/src/features/contained-turn-access/adapters/dispatch-consumption-data.ts",
           "mode": "runtime"
@@ -3856,6 +3930,11 @@
         {
           "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/ordinary-security-factory.ts",
           "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/ordinary-security-factory.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts",
           "mode": "type-only"
         },
         {
@@ -3956,6 +4035,7 @@
         "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-digest.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-repository.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/ordinary-pa-grant-store.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/application/resolve-contained-turn-provider-access.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/application/revalidate-contained-turn-provider-access.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/contracts/contained-turn-provider-access.ts",
@@ -3977,6 +4057,7 @@
         "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-digest.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-repository.ts",
+        "packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/ordinary-pa-grant-store.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/application/resolve-contained-turn-provider-access.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/application/revalidate-contained-turn-provider-access.ts",
         "packages/contexts/provider-access/src/features/contained-turn-access/contracts/contained-turn-provider-access.ts",
@@ -4026,11 +4107,13 @@
       "owner": "runtime-security",
       "roots": [
         "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/ordinary-security-grant-store.ts",
         "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts",
         "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts"
       ],
       "entrypoints": [
         "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/ordinary-security-grant-store.ts",
         "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts",
         "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts"
       ],

@@ -14,6 +14,7 @@ import { NodeProviderProcessCustody as BaseNodeProviderProcessCustody } from "..
 import { createStaticHostCustodyLaunchPlanResolver } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/static-host-custody-launch-plan-resolver.js";
 import { terminateCooperativeProcessGroup } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-stdio.js";
 import {
+  isolatedTestExecutable,
   syntheticResidueAuthorityFactory,
   trackSyntheticProcessGroup,
 } from "../../host-custody-test-fixture.ts";
@@ -101,7 +102,9 @@ const launchPlan = async (
   script: string,
   options: { readonly arguments?: readonly string[]; readonly executablePath?: string } = {},
 ) => {
-  const executablePath = await realpath(options.executablePath ?? process.execPath);
+  const executablePath = options.executablePath === undefined
+    ? await isolatedTestExecutable(workspaceRef)
+    : await realpath(options.executablePath);
   const privateRootPath = join(dirname(workspaceRef), `${basename(workspaceRef)}-host-private`);
   const providerConfig = join(privateRootPath, "provider-config");
   const home = join(privateRootPath, "home");

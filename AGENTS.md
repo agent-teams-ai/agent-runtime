@@ -61,6 +61,13 @@ or adding a baseline:
 
 Verification workflow:
 
+- Tooling uses the pinned Node 24.21.0+ patch in `.node-version` and pnpm
+  11.18.0. Keep Node 26 inactive and historical runtime receipts unchanged.
+- `test:consumer-modules` uses installed `agent-teams-node-test` for the
+  exact CMS pin identities and selected entry file in the current
+  Foundation adoption. `quality:adoption` rejects selection drift; preserve
+  separate product, native and PostgreSQL runner contracts.
+
 - Run `pnpm check:changed` during implementation for Foundation-routed feedback
   on the current Git delta.
 - Run `pnpm check:fast` before handoff.

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 
+// Historical PR migration helpers remain for their existing Get Modular and C0 readers.
+// AR-0 current-step enforcement in consumer/SDK gates uses check-cms-pin.mjs.
 export const historicalReviewPath = "architecture/get-modular/evidence/a3-cms-pin-review.json";
 export const historicalDeltaPath = "architecture/get-modular/evidence/a3-cms-pin-delta.diff";
 export const standardReviewPath = "architecture/get-modular/evidence/runtime-profile-cms-pin-review.json";

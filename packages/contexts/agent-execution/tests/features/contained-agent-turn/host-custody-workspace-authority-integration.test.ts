@@ -9,6 +9,8 @@ import { NodeProviderProcessCustody } from "../../../dist/composition.js";
 import { createClaudeAgentSdkPrivateProjection } from "../../../dist/features/contained-agent-turn/adapters/outbound/claude-agent-sdk/claude-agent-sdk-launch-plan.js";
 import { privateHostCustodyReservationTestSupport } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/private-host-custody-reservation.js";
 
+import { isolatedTestExecutable } from "../../host-custody-test-fixture.ts";
+
 test("raw Host reservation rejects a replaced filesystem descriptor before launch effects", {
   skip: process.platform === "linux" ? false : "descriptor-bound production Host Custody is Linux-only",
 }, async () => {
@@ -66,11 +68,12 @@ test("raw Host reservation rejects exact path, device and inode on a substituted
       const projection = createClaudeAgentSdkPrivateProjection({
         configRoot, homeRoot, projectionRef: "projection:mount-substitution", tempRoot: temp, workspaceRef,
       });
+      const executablePath = await isolatedTestExecutable(workspaceRef);
       const plan = Object.freeze({
         arguments: Object.freeze([]), binaryRevision: "binary:synthetic-host-mount-test",
         containmentProfile: "strict-linux-cgroup-v2" as const, environment: projection.environment,
-        executablePath: process.execPath,
-        executableSha256: createHash("sha256").update(await readFile(process.execPath)).digest("hex"),
+        executablePath,
+        executableSha256: createHash("sha256").update(await readFile(executablePath)).digest("hex"),
         intentMode: "analysis" as const, privateRootPath,
         provider: "claude" as const, spawnMode: "sdk-delegated" as const,
       });

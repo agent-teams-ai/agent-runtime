@@ -6,14 +6,14 @@
   "profile": "architecture/sdk-growth/profile.yaml",
   "qualificationInput": {
     "packageName": "@agent-teams/engineering-foundation",
-    "version": "1.7.0",
-    "npmIntegrity": "sha512-gc9ImQJa/6vgKz+kWda7qg0YCzFUy+5WmMiV01I98scOlUjs2dQQsPUlQ4JpzjUhpVfNip4kndakAj9cudHn4g==",
-    "archiveSha256": "fbd1234c6f7e3c38546eaac67619348f103870b461df5ea9d12e43c9cb232ba6",
-    "tarballUrl": "https://registry.npmjs.org/@agent-teams/engineering-foundation/-/engineering-foundation-1.7.0.tgz",
-    "publishedAt": "2026-09-29T17:54:07.257Z",
-    "sourceMergeCommit": null,
-    "sourceReleaseCommit": null,
-    "use": "published identity recorded; current qualification and source provenance pending"
+    "version": "1.6.0",
+    "npmIntegrity": "sha512-E6ytO+3xhZsaPTo49DRuhldQBRMFlF06EGqqERuGHrc4q11eLssTA9fsbEGCm1e4B8n/i8AsMt2ZkQklFeolWA==",
+    "archiveSha256": "842f81ca68e9c3207a0da967eb599229d4d30ea32cd69a9a1686f2eb240f54eb",
+    "tarballUrl": "https://registry.npmjs.org/@agent-teams/engineering-foundation/-/engineering-foundation-1.6.0.tgz",
+    "publishedAt": "2026-09-24T00:19:03.115Z",
+    "sourceMergeCommit": "49402509372e3f4a96c534401636fb12ff5dbee2",
+    "sourceReleaseCommit": "852cd5130cad84d750788b080f0e358ac5210355",
+    "use": "exact npm registry artifact; disposable qualification only"
   },
   "metadataRoots": [
     {
@@ -28,13 +28,13 @@
   "registry": {
     "status": "published-exact",
     "packageName": "@agent-teams/engineering-foundation",
-    "version": "1.7.0",
-    "tarballSha256": "fbd1234c6f7e3c38546eaac67619348f103870b461df5ea9d12e43c9cb232ba6",
-    "integrity": "sha512-gc9ImQJa/6vgKz+kWda7qg0YCzFUy+5WmMiV01I98scOlUjs2dQQsPUlQ4JpzjUhpVfNip4kndakAj9cudHn4g==",
-    "tarballUrl": "https://registry.npmjs.org/@agent-teams/engineering-foundation/-/engineering-foundation-1.7.0.tgz",
-    "publishedAt": "2026-09-29T17:54:07.257Z",
-    "distMetadataRetained": false,
-    "publicAuthorityImport": "pending-current-verification"
+    "version": "1.6.0",
+    "tarballSha256": "842f81ca68e9c3207a0da967eb599229d4d30ea32cd69a9a1686f2eb240f54eb",
+    "integrity": "sha512-E6ytO+3xhZsaPTo49DRuhldQBRMFlF06EGqqERuGHrc4q11eLssTA9fsbEGCm1e4B8n/i8AsMt2ZkQklFeolWA==",
+    "tarballUrl": "https://registry.npmjs.org/@agent-teams/engineering-foundation/-/engineering-foundation-1.6.0.tgz",
+    "publishedAt": "2026-09-24T00:19:03.115Z",
+    "distMetadataRetained": true,
+    "publicAuthorityImport": "passed"
   },
   "authority": {
     "protocol": "reviewrouter:sdk-growth-authority:3",
@@ -43,7 +43,7 @@
     "candidateWorkflowIsAuthority": false
   },
   "pending": [
-    "Verify EF 1.7.0 source provenance and public authority import, then capture source-bound typed observation and strict extraction for all twelve current entrypoints; EF 1.6.0 package qualification and EF 1.5.1 diagnostics are historical only.",
+    "Capture source-bound EF 1.7.2 typed observation and strict extraction for all twelve current entrypoints; retained EF 1.6.0 package qualification and EF 1.5.1 diagnostics are historical evidence.",
     "After strict extraction passes, generate trusted histories, owner decisions, grant, completion, receipt and admitted report through the external authority.",
     "Activate SDK admission only after every required authority phase and rejecting mutation passes."
   ],
@@ -54,13 +54,21 @@
     "dynamic-plugins"
   ],
   "packageQualification": {
-    "status": "historical-membership-and-imports",
-    "version": "1.6.0",
+    "status": "passed-membership-and-imports",
     "evidencePath": "architecture/sdk-growth/qualification.json",
     "cleanRegistryInstall": true
   },
   "sdkAdmission": {
     "status": "blocked-current-typed-observation",
+    "releaseEligible": false
+  },
+  "installedTooling": {
+    "version": "1.7.2",
+    "npmIntegrity": "sha512-2wmq4g8rWgXQ2qBVY2Tb7HVP9LFsuBAUMcDhgCqixLA0RA9H3OrwXy7b7jK2gS6SggK9XCplNb03mVLR2EyzRg==",
+    "sourceBase": "a196056fddb01936f16d0d21211e296fc4e06d56",
+    "typedObservationStatus": "not-captured",
+    "strictExtractionStatus": "not-captured",
+    "authorityStatus": "not-invoked-current-typed-observation-pending",
     "releaseEligible": false
   }
 }

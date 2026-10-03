@@ -1,6 +1,12 @@
+import {OrdinarySecurityCommitUnknownError, OrdinarySecurityStoreUnavailableError} from "../../../application/ports/ordinary-security-grant-store.js";
+import {OrdinarySecurityDeniedError} from "../../../domain/ordinary-security-policy.js";
 import type {DispatchPgPool, DispatchPgClient, DispatchPgTransaction} from "./transaction.js";
-const unavailable = (): Error => new Error("ORDINARY_SECURITY_DATABASE_UNAVAILABLE");
-/** Ordinary supports PG14+. Server statement bounds plus one owned overall timer bound the transaction. */
+const unavailable = (): Error => new OrdinarySecurityStoreUnavailableError();
+/**
+ * Ordinary supports PG14+. Server statement bounds plus one owned overall timer bound the transaction.
+ * A failure after COMMIT was sent is commit-unknown; a refusal thrown by `work` passes through
+ * unchanged; every other failure is unavailable. Nothing here retries or reads back.
+ */
 export const createOrdinarySecurityTransactions = (pool: DispatchPgPool) => {
   let closed = false;
   const active = new Set<AbortController>();
@@ -13,7 +19,7 @@ export const createOrdinarySecurityTransactions = (pool: DispatchPgPool) => {
       let complete!: () => void;
       const completion = new Promise<void>(resolve => {complete = resolve;}); completions.add(completion);
       const timer = setTimeout(() => {controller.abort();}, 10000);
-      let client: DispatchPgClient | undefined; let broken = false; let committing = false;
+      let client: DispatchPgClient | undefined; let broken = false; let committing = false; let commitSent = false;
       const assertOpen = (): void => {if (closed || controller.signal.aborted) {throw unavailable();}};
       const bounded = <V>(start: () => Promise<V>): Promise<V> => new Promise((resolve, reject) => {
         try {assertOpen();} catch {reject(unavailable()); return;}
@@ -38,10 +44,12 @@ export const createOrdinarySecurityTransactions = (pool: DispatchPgPool) => {
         committing = true; await query("BEGIN"); committing = false;
         await query("SELECT set_config('statement_timeout','5000',true), set_config('idle_in_transaction_session_timeout','10000',true)");
         const result = await work({query, assertOpen}); assertOpen();
-        committing = true; await query("COMMIT"); return result;
-      } catch {
+        committing = true; commitSent = true; await query("COMMIT"); return result;
+      } catch (error) {
         if (committing || controller.signal.aborted) {broken = true;}
         else if (client !== undefined) {try {await query("ROLLBACK");} catch {broken = true;}}
+        if (commitSent) {throw new OrdinarySecurityCommitUnknownError();}
+        if (error instanceof OrdinarySecurityDeniedError && !controller.signal.aborted) {throw error;}
         throw unavailable();
       } finally {clearTimeout(timer); active.delete(controller); try {client?.release(broken || closed);} finally {completions.delete(completion); complete();}}
     },

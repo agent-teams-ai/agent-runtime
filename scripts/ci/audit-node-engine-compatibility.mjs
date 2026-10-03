@@ -3,7 +3,7 @@ import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
-const supportedTargets = ["24.18.0", "26.10.0"];
+const supportedTargets = ["24.21.0", "26.10.0"];
 const versionPattern = /^v?(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?$/u;
 const comparatorPattern = /^(>=|<=|>|<|=|\^|~)?v?(\d+)(?:\.(\d+|x|\*))?(?:\.(\d+|x|\*))?(?:-[0-9A-Za-z.-]+)?$/u;
 

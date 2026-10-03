@@ -1,3 +1,13 @@
+// Disabled in `pnpm check` and `pnpm check:fast` by owner decision 2026-10-02
+// (AR-0). Paired Linux/Darwin receipts had to be recaptured on most commits to
+// main and blocked the Get Modular 0.3.0 migration. In CI, runtime-macos covers
+// Darwin on every PR and postgres-durability runs the Linux PostgreSQL authority
+// join test that only the receipt ran before. The checker, its tests and the
+// retained L0/v1/v2 reports stay in place and still run by hand through
+// `pnpm architecture:runtime-setup-l0-evidence`; a manual run is expected to
+// report stale inputs until a fresh paired capture. Put it back into both gates
+// if those jobs miss a regression that a receipt would have caught, or once
+// receipts no longer require committing about 4.9 MB per refresh.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";

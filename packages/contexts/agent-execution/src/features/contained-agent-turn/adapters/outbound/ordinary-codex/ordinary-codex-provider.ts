@@ -1,6 +1,7 @@
-import type {OrdinaryProviderPort, OrdinaryProcessPort} from "../../../application/ordinary-ports.js";
+import type {OrdinaryProviderPort, OrdinaryLaunchRecipe} from "../../../application/ordinary-ports.js";
 import type {OrdinaryBinding, OrdinaryReceiptOf} from "../../../domain/ordinary-model.js";
 import {ORDINARY_PROFILE} from "../../../domain/ordinary-model.js";
+import type {OrdinaryLaunchFacts} from "../ordinary-channel/ordinary-byte-channel.js";
 import {isCodexRecord as isRecord} from "../codex-app-server/codex-app-server-jsonl.js";
 import {createOrdinaryCodexLaunchRecipe, ORDINARY_CODEX_MODEL, ORDINARY_CODEX_PROVIDER, ORDINARY_CODEX_PERMISSION,
   ordinaryCodexRefusal as refuse, ordinaryJson, validateOrdinaryCodexConfig} from "./ordinary-codex-config.js";
@@ -35,23 +36,18 @@ function validateThread(result: unknown, cwd: string): string {
   return result.thread.id;
 }
 
-/** Recipe and provider share only immutable operation-scoped launch observations. */
+/** Recipe and provider share no per-operation state; the engine hands the credential facts to `execute`. */
 export function createOrdinaryCodexAdapter(options: OrdinaryCodexAdapterOptions) {
-  const prepared = new Map<string, Parameters<OrdinaryProcessPort["reserve"]>[0]>();
   const recipe = createOrdinaryCodexLaunchRecipe(options.executable);
   let disposed = false;
-  const prepareLaunch: ReturnType<typeof createOrdinaryCodexLaunchRecipe> = async input => {
-    if (disposed || prepared.has(input.workspace.workspaceId)) {return refuse();}
-    const launch = await recipe(input);
-    prepared.set(input.workspace.workspaceId, input);
-    return launch;
+  const prepareLaunch: OrdinaryLaunchRecipe = async input => {
+    if (disposed) {return refuse();}
+    return recipe(input);
   };
   const provider: OrdinaryProviderPort = {
     supported: {provider: "codex", mode: "workspace-write", executionProfile: ORDINARY_PROFILE.executionProfile,
       capabilityManifestRevision: ORDINARY_PROFILE.capabilityManifestRevision},
     async execute(input): Promise<OrdinaryReceiptOf<"provider_terminal">> {
-      const expected = prepared.get(input.workspace.workspaceId);
-      prepared.delete(input.workspace.workspaceId);
       let currentStage: NonNullable<OrdinaryCodexObservation["stage"]> = "binding";
       let events: OrdinaryCodexTurnEvents | undefined;
       const recordStage = (): void => {options.record({...binding(input.operation), kind: "provider_stage", stage: currentStage});};
@@ -68,11 +64,10 @@ export function createOrdinaryCodexAdapter(options: OrdinaryCodexAdapterOptions)
       };
       try {
         stage("binding");
-        if (disposed || !expected || !equal(expected.binding, binding(input.operation)) ||
-            expected.workspace.cwd !== input.workspace.cwd || expected.workspace.homeDirectory !== input.workspace.homeDirectory ||
-            expected.deadline !== input.deadline) {return refuse();}
+        if (disposed) {return refuse();}
         const identity = binding(input.operation);
         const protocol = new OrdinaryCodexProtocol(input.transport, input.deadline, input.signal);
+        assertLaunchFacts(protocol.launch, input);
         stage("initialize_request");
         const initialized = await protocol.request("initialize", "initialize", {
           clientInfo: {name: "agent-runtime-ordinary", version: "1"}, capabilities: {experimentalApi: true},
@@ -84,7 +79,7 @@ export function createOrdinaryCodexAdapter(options: OrdinaryCodexAdapterOptions)
         stage("config_request");
         const config = await protocol.request("config", "config/read", {cwd: input.workspace.cwd, includeLayers: true});
         stage("config_validation");
-        if (validateOrdinaryCodexConfig(config, input.workspace.homeDirectory) !== expected.credential.brokerEndpoint) {refuse();}
+        if (validateOrdinaryCodexConfig(config, input.workspace.homeDirectory) !== input.credential.brokerEndpoint) {refuse();}
         options.record({...identity, kind: "thread_start"});
         stage("thread_request");
         const threadResult = await protocol.request("thread", "thread/start", {
@@ -118,7 +113,7 @@ export function createOrdinaryCodexAdapter(options: OrdinaryCodexAdapterOptions)
         options.record({...identity, kind: "terminal", threadId, turnId});
         if (startup.has("warning")) {options.record({...identity, kind: "model_metadata_defaulted", threadId, turnId});}
         stage("input_close");
-        await input.transport.closeInput();
+        await protocol.closeInput();
         for (;;) {
           stage("drain_read");
           const message = await protocol.next();
@@ -138,7 +133,17 @@ export function createOrdinaryCodexAdapter(options: OrdinaryCodexAdapterOptions)
       }
     },
   };
-  return Object.freeze({prepareLaunch, provider, dispose() {disposed = true; prepared.clear();}});
+  return Object.freeze({prepareLaunch, provider, dispose() {disposed = true;}});
+}
+
+function assertLaunchFacts(launch: OrdinaryLaunchFacts, input: Parameters<OrdinaryProviderPort["execute"]>[0]): void {
+  const expected = binding(input.operation);
+  const {workspace, credential} = input;
+  if (!equal(binding(launch.binding), expected) || launch.workspaceId !== workspace.workspaceId ||
+      launch.cwd !== workspace.cwd || launch.homeDirectory !== workspace.homeDirectory || launch.deadline !== input.deadline ||
+      launch.credential.brokerEndpoint !== credential.brokerEndpoint ||
+      launch.credential.materializationId !== credential.materializationId ||
+      launch.credential.generation !== credential.generation) {refuse();}
 }
 
 function validateInitialize(initialized: unknown, homeDirectory: string): void {

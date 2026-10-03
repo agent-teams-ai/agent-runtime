@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { constants } from "node:fs";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -16,6 +17,7 @@ class NodeProviderProcessCustody extends BaseNodeProviderProcessCustody {
 
 export const roots: string[] = [];
 export const childrenToStop = new Set<number>();
+const testExecutables = new Map<string, Promise<string>>();
 
 export const trackSyntheticProcessGroup = (pid: number): void => {
   childrenToStop.add(pid);
@@ -65,6 +67,23 @@ export const disposableRoot = async (): Promise<string> => {
   return root;
 };
 
+// Host tooling may be hardlinked or writable by its installation group.
+// Keep the default TEST image private, stable per workspace and outside mutable roots.
+export const isolatedTestExecutable = (workspaceRef: string): Promise<string> => {
+  const retained = testExecutables.get(workspaceRef);
+  if (retained !== undefined) {return retained;}
+  const created = (async () => {
+    const root = await realpath(await mkdtemp(join(dirname(workspaceRef), `${basename(workspaceRef)}-TEST-node-`)));
+    roots.push(root);
+    const executablePath = join(root, "node");
+    await copyFile(await realpath(process.execPath), executablePath, constants.COPYFILE_EXCL);
+    await chmod(executablePath, 0o755);
+    return executablePath;
+  })();
+  testExecutables.set(workspaceRef, created);
+  return created;
+};
+
 const executionStopped = async (pid: number): Promise<boolean> => {
   try {
     const statText = await readFile(`/proc/${pid}/stat`, "utf8");
@@ -94,6 +113,7 @@ afterEach(async () => {
     remaining = observed;
   } while (remaining.length > 0 && performance.now() < cleanupDeadline);
   childrenToStop.clear();
+  testExecutables.clear();
   await Promise.all(roots.splice(0).map(root => rm(root, { force: true, recursive: true })));
   if (remaining.length > 0) {
     throw new Error(`synthetic Host Custody children survived cleanup: ${remaining.join(",")}`);
@@ -178,7 +198,9 @@ export const launchPlan = async (input: {
   readonly workspaceRef: string;
 }) => {
   const providerBinding = input.binding ?? binding;
-  const executablePath = await realpath(input.executablePath ?? process.execPath);
+  const executablePath = input.executablePath === undefined
+    ? await isolatedTestExecutable(input.workspaceRef)
+    : await realpath(input.executablePath);
   const launchArguments = Object.freeze(["-e", input.script ?? fixtureScript]);
   const privatePaths = await privatePathsFor(input.workspaceRef, providerBinding.provider);
   return Object.freeze({
