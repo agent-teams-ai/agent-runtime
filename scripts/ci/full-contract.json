@@ -1,7 +1,12 @@
 {
-  "baseCommit": "ccf6d6f8dc025d6aa81ab2109a9ccc37b0dece15",
-  "packageSha256": "88837bba7d6623a000aa9156ef6722dd537efce0b904f855c87d823d8b427318",
+  "baseCommit": "df9260b0062dcb445c3cf75ce76f8539a2b32c03",
+  "packageSha256": "10f22f2c8bca04bbb803dae11a765164ff650218ba7c546fd994ca61f8734c1f",
   "sourcePolicySha256": "7796f9ee6d1c7711745afb6630bf0bc943518482ea406749ced4374b619ce0c6",
+  "predecessor": {
+    "baseCommit": "ccf6d6f8dc025d6aa81ab2109a9ccc37b0dece15",
+    "packageSha256": "88837bba7d6623a000aa9156ef6722dd537efce0b904f855c87d823d8b427318",
+    "sourcePolicySha256": "7796f9ee6d1c7711745afb6630bf0bc943518482ea406749ced4374b619ce0c6"
+  },
   "scripts": {
     "check": "pnpm lint && pnpm check:node-compat && pnpm sdk-growth:profile && pnpm test:sdk-growth:profile && pnpm test:sdk-growth:packed && pnpm test:sdk-growth:source && pnpm architecture:get-modular-adoption && pnpm test:get-modular-adoption && pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm test:consumer-modules && pnpm architecture:consumer-modules && pnpm test:ar2-contract && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:check && pnpm typecheck && pnpm test && pnpm lint:typed && pnpm quality:native",
     "check:changed": "agent-teams-foundation agent-workflow changed --consumer .",
@@ -16,7 +21,7 @@
     "docs:info": "agent-teams-docs info --consumer . --profile architecture/foundation/docs-protocol.yaml",
     "docs:new": "agent-teams-docs new --consumer . --profile architecture/foundation/docs-protocol.yaml",
     "docs:protocol:check": "pnpm docs:check && pnpm docs:governance && pnpm docs:qualification",
-    "docs:qualification": "node --test --test-concurrency=1 scripts/docs/docs-protocol-adoption.test.mjs scripts/docs/consumer-migration.test.mjs scripts/docs/managed-target-contract.test.mjs scripts/docs/managed-installed-target.test.mjs",
+    "docs:qualification": "pnpm docs:qualification:typecheck && pnpm docs:qualification:serial && pnpm docs:qualification:portable",
     "docs:recover": "agent-teams-docs recover --consumer . --profile architecture/foundation/docs-protocol.yaml",
     "foundation:assert-dev-only": "agent-teams-foundation assert-dev-only",
     "foundation:assert-registry": "agent-teams-foundation assert-registry",
@@ -82,7 +87,10 @@
     "test:sdk-growth:profile": "node --test scripts/architecture/check-sdk-growth-profile.test.mjs",
     "test:sdk-growth:packed": "node --test scripts/architecture/qualify-sdk-packages.test.mjs",
     "test:sdk-growth:source": "node --test scripts/sdk-growth-source/collector.test.mjs",
-    "sdk-growth:pack": "pnpm product:build && node scripts/architecture/qualify-sdk-packages.mjs"
+    "sdk-growth:pack": "pnpm product:build && node scripts/architecture/qualify-sdk-packages.mjs",
+    "docs:qualification:typecheck": "tsc --project tsconfig.docs-qualification.json --noEmit --pretty false",
+    "docs:qualification:serial": "node --test --test-concurrency=1 scripts/docs/docs-protocol-adoption.test.mjs scripts/docs/consumer-migration.test.mjs scripts/docs/managed-target-contract.test.mjs scripts/docs/managed-installed-target.test.mjs scripts/docs/portable-authoring-policy.test.mts",
+    "docs:qualification:portable": "node --import=./scripts/docs/portable-authoring-policy.mts --test --test-concurrency=2 --test-reporter=tap --test-reporter=./scripts/docs/portable-authoring-reporter.mts --test-reporter-destination=stdout --test-reporter-destination=stderr scripts/docs/portable-authoring-index.test.mts scripts/docs/portable-authoring-architecture.test.mts scripts/docs/portable-authoring-adr.test.mts scripts/docs/portable-authoring-evidence.test.mts scripts/docs/portable-authoring-qualification-plan.test.mts"
   },
   "inventory": [
     {"script": "lint", "command": "oxlint --config .oxlintrc.json --deny-warnings --disable-nested-config ."},
@@ -104,7 +112,9 @@
     {"script": "foundation:scaffold:check", "command": "node scripts/foundation/verify-scaffolding.mjs"},
     {"script": "docs:check", "command": "agent-teams-docs check --consumer . --profile architecture/foundation/docs-protocol.yaml"},
     {"script": "docs:governance", "command": "node --test scripts/docs/verify-frozen-document-bytes.test.mjs"},
-    {"script": "docs:qualification", "command": "node --test --test-concurrency=1 scripts/docs/docs-protocol-adoption.test.mjs scripts/docs/consumer-migration.test.mjs scripts/docs/managed-target-contract.test.mjs scripts/docs/managed-installed-target.test.mjs"},
+    {"script": "docs:qualification:typecheck", "command": "tsc --project tsconfig.docs-qualification.json --noEmit --pretty false"},
+    {"script": "docs:qualification:serial", "command": "node --test --test-concurrency=1 scripts/docs/docs-protocol-adoption.test.mjs scripts/docs/consumer-migration.test.mjs scripts/docs/managed-target-contract.test.mjs scripts/docs/managed-installed-target.test.mjs scripts/docs/portable-authoring-policy.test.mts"},
+    {"script": "docs:qualification:portable", "command": "node --import=./scripts/docs/portable-authoring-policy.mts --test --test-concurrency=2 --test-reporter=tap --test-reporter=./scripts/docs/portable-authoring-reporter.mts --test-reporter-destination=stdout --test-reporter-destination=stderr scripts/docs/portable-authoring-index.test.mts scripts/docs/portable-authoring-architecture.test.mts scripts/docs/portable-authoring-adr.test.mts scripts/docs/portable-authoring-evidence.test.mts scripts/docs/portable-authoring-qualification-plan.test.mts"},
     {"script": "test:feature-modules", "command": "node --test scripts/architecture/check-feature-modules.test.mjs"},
     {"script": "architecture:feature-modules:active", "command": "node scripts/architecture/check-feature-modules.mjs --require-active"},
     {"script": "test:consumer-modules", "command": "node --test scripts/architecture/check-consumer-module-standard.test.mjs"},

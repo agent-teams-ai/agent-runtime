@@ -139,17 +139,43 @@ export async function conformance(root: string): Promise<void> {
   const scripts = await readScripts(resolve(root, 'package.json'));
   assert.equal((await read('.node-version')).trim(), '24.21.0');
   validateBenchmark(parse(await read('.github/workflows/ci-benchmark.yml')));
-  const baseline: { baseCommit: string; packageSha256: string; sourcePolicySha256: string; scripts: Scripts; inventory: unknown } = JSON.parse(await read('scripts/ci/full-contract.json'));
-  assert.equal(baseline.baseCommit, 'ccf6d6f8dc025d6aa81ab2109a9ccc37b0dece15');
+  type Snapshot = { baseCommit: string; packageSha256: string; sourcePolicySha256: string };
+  const baseline: Snapshot & { predecessor: Snapshot; scripts: Scripts; inventory: unknown } = JSON.parse(await read('scripts/ci/full-contract.json'));
+  // Advance the frozen serial-root baseline only for the immutable Docs split;
+  // retain its predecessor rather than accepting CI routing or a moving main.
+  assert.equal(baseline.baseCommit, 'df9260b0062dcb445c3cf75ce76f8539a2b32c03');
+  assert.deepEqual(baseline.predecessor, {
+    baseCommit: 'ccf6d6f8dc025d6aa81ab2109a9ccc37b0dece15',
+    packageSha256: '88837bba7d6623a000aa9156ef6722dd537efce0b904f855c87d823d8b427318',
+    sourcePolicySha256: '7796f9ee6d1c7711745afb6630bf0bc943518482ea406749ced4374b619ce0c6',
+  });
+  execFileSync('git', ['merge-base', '--is-ancestor', baseline.predecessor.baseCommit, baseline.baseCommit], { cwd: root });
+  const predecessorPackage = execFileSync('git', ['show', `${baseline.predecessor.baseCommit}:package.json`], { cwd: root });
+  assert.equal(createHash('sha256').update(predecessorPackage).digest('hex'), baseline.predecessor.packageSha256, 'predecessor package bytes');
   const originalPackage = execFileSync('git', ['show', `${baseline.baseCommit}:package.json`], { cwd: root });
   assert.equal(createHash('sha256').update(originalPackage).digest('hex'), baseline.packageSha256, 'original package bytes');
   const originalManifest = JSON.parse(originalPackage.toString('utf8'));
+  const predecessorManifest = JSON.parse(predecessorPackage.toString('utf8'));
+  const { scripts: originalScripts, ...originalMetadata } = originalManifest;
+  const { scripts: predecessorScripts, ...predecessorMetadata } = predecessorManifest;
+  assert.deepEqual(originalMetadata, predecessorMetadata, 'Docs baseline migration preserves all package metadata and dependencies');
+  const docsMigrationScripts = new Set(['docs:qualification', 'docs:qualification:typecheck', 'docs:qualification:serial', 'docs:qualification:portable']);
+  const nonDocsScripts = (value: Scripts) => Object.fromEntries(Object.entries(value).filter(([name]) => !docsMigrationScripts.has(name)));
+  assert.deepEqual(nonDocsScripts(originalScripts), nonDocsScripts(predecessorScripts), 'Docs baseline migration preserves all non-Docs scripts');
+  assert.notEqual(originalScripts['docs:qualification'], predecessorScripts['docs:qualification'], 'Docs qualification split is explicit');
+  for (const name of ['docs:qualification:typecheck', 'docs:qualification:serial', 'docs:qualification:portable']) {
+    assert.equal(predecessorScripts[name], undefined, `${name} is introduced only by Docs migration`);
+    assert.equal(typeof originalScripts[name], 'string', `${name} is retained by Docs migration`);
+  }
   const currentManifest = JSON.parse(await read('package.json'));
   for (const key of ['engines', 'packageManager', 'dependencies', 'devDependencies']) { assert.deepEqual(currentManifest[key], originalManifest[key], `current-main ${key}`); }
   assert.deepEqual(baseline.scripts, originalManifest.scripts, 'original current-main scripts');
   assert.deepEqual(baseline.inventory, commandInventory(baseline.scripts, 'check'), 'original current-main leaf inventory');
   const originalPolicy = execFileSync('git', ['show', `${baseline.baseCommit}:architecture/foundation/source-dependencies.yaml`], { cwd: root });
   assert.equal(createHash('sha256').update(originalPolicy).digest('hex'), baseline.sourcePolicySha256, 'original source policy bytes');
+  const predecessorPolicy = execFileSync('git', ['show', `${baseline.predecessor.baseCommit}:architecture/foundation/source-dependencies.yaml`], { cwd: root });
+  assert.equal(createHash('sha256').update(predecessorPolicy).digest('hex'), baseline.predecessor.sourcePolicySha256, 'predecessor source policy bytes');
+  assert.deepEqual(originalPolicy, predecessorPolicy, 'Docs baseline migration preserves source-policy scope');
   assertFullInventory(scripts, baseline.scripts);
   const platform: Record<string, string> = JSON.parse(await read('scripts/ci/platform-contract.json'));
   validateWorkflow(parse(await read('.github/workflows/ci.yml')), parse(await read('.github/workflows/ci-lane.yml')), platform);
