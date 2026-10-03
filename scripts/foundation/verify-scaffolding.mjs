@@ -126,11 +126,15 @@ const main = async () => {
     );
     await writeFile(join(temporaryRoot, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
     await writeFile(join(temporaryRoot, "pnpm-lock.yaml"), stringify(lock));
-    await run(
-      process.execPath,
-      [pnpmEntrypoint, "install", "--frozen-lockfile", "--ignore-scripts"],
-      temporaryRoot,
-    );
+    // Pass the caller's cache and offline bootstrap explicitly to disposable installs.
+    const installArgs = [pnpmEntrypoint, "install", "--frozen-lockfile", "--ignore-scripts"];
+    if (process.env.npm_config_store_dir) {
+      installArgs.push("--store-dir", process.env.npm_config_store_dir);
+    }
+    if (process.env.npm_config_offline === "true") {
+      installArgs.push("--offline");
+    }
+    await run(process.execPath, installArgs, temporaryRoot);
     for (const targetId of targetIds) {
       await checkGeneratedPackage(temporaryRoot, targetId);
     }

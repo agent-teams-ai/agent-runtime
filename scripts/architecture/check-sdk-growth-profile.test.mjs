@@ -26,7 +26,7 @@ function mutate(directory, path, change) {
   writeFileSync(destination, path.endsWith(".yaml") ? stringify(value) : `${JSON.stringify(value, null, 2)}\n`);
 }
 
-test("exact EF 1.6.0 package enrollment keeps historical EF 1.5.1 observation separate and current admission blocked", t => {
+test("EF 1.7.1 tooling retains EF 1.6.0 qualification and historical EF 1.5.1 observation with admission blocked", t => {
   assert.deepEqual(checkSdkGrowthProfile(fixture(t)), { status: "pending-authority-qualification", packages: 6, metadataRoots: 1, releaseEligible: false });
 });
 for (const script of ["sdk-growth:profile", "test:sdk-growth:profile", "test:sdk-growth:packed"]) {
@@ -238,3 +238,14 @@ test("reject nondeterministic rich models", t => {
   mutate(directory, "architecture/sdk-growth/qualification.json", value => { value.historicalCandidateQualification.richModelsDeterministic = false; });
   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_TYPED_ENTRYPOINT_AUDIT_DRIFT/u);
 });
+
+for (const [name, change] of [
+  ["stale installed tooling", value => { value.installedTooling.version = "1.6.0"; }],
+  ["unearned installed authority", value => { value.installedTooling.releaseEligible = true; }]
+]) {
+  test(`reject ${name}`, t => {
+    const directory = fixture(t);
+    mutate(directory, "architecture/sdk-growth/activation.json", change);
+    assert.throws(() => checkSdkGrowthProfile(directory), /SDK_INSTALLED_TOOLING_DRIFT/u);
+  });
+}

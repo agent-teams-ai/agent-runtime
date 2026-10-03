@@ -31,10 +31,10 @@ test("portable v3 preserves strict Authoring v3 authority and both semantic vali
 test("projected direct tooling pins and disabled release-age waiting preserve the package manager", async () => {
   const manifest = await json("package.json"), workspace = await yaml("pnpm-workspace.yaml");
   assert.equal(manifest.packageManager, "pnpm@11.18.0");
-  assert.deepEqual(manifest.engines, { node: ">=24.18.0 <25", pnpm: "11.18.0" });
-  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.6.0");
-  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol"], "0.6.1");
-  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol-agent-teams"], "0.2.11");
+  assert.deepEqual(manifest.engines, { node: ">=24.21.0 <25", pnpm: "11.18.0" });
+  assert.equal(manifest.devDependencies["@agent-teams/engineering-foundation"], "1.7.2");
+  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol"], "0.6.2");
+  assert.equal(manifest.devDependencies["@agent-teams/docs-protocol-agent-teams"], "0.3.2");
   for (const section of ["dependencies", "optionalDependencies", "peerDependencies"]) {
     assert.equal(Object.hasOwn(manifest[section] ?? {}, "@agent-teams/docs-protocol-agent-teams"), false);
   }
@@ -46,13 +46,13 @@ test("projected direct tooling pins and disabled release-age waiting preserve th
   assert.equal(workspace.minimumReleaseAge, 0);
   assert.equal(Object.hasOwn(workspace, "minimumReleaseAgeStrict"), false);
   assert.deepEqual(workspace.minimumReleaseAgeExclude, [
-    "@agent-teams/repository-mutation@0.2.1",
-    "@agent-teams/document-authoring@0.3.1",
-    "@agent-teams/docs-protocol@0.6.1",
-    "@agent-teams/docs-protocol-agent-teams@0.2.11",
-    "@agent-teams/engineering-foundation@1.6.0",
+    "@agent-teams/repository-mutation@0.2.2",
+    "@agent-teams/document-authoring@0.3.2",
+    "@agent-teams/docs-protocol@0.6.2",
+    "@agent-teams/docs-protocol-agent-teams@0.3.2",
+    "@agent-teams/engineering-foundation@1.7.2",
   ]);
-  assert.match(await read("scripts/architecture/feature-module-config.mjs"), /const FOUNDATION_VERSION = "1\.6\.0";/u);
+  assert.match(await read("scripts/architecture/feature-module-config.mjs"), /const FOUNDATION_VERSION = "1\.7\.2";/u);
 });
 
 test("managed Skill remains byte-exact with the selected installed Cohort", async () => {
@@ -109,17 +109,23 @@ test("Source Dependencies uses schema v3 with root package and every workspace p
   assert.match(source, /"architecture\.source-dependencies", "--consumer", root, "--json"/u);
 });
 
-test("qualified stable28 managed state and scoped source policy retain exact bytes", async () => {
+test("stable31 managed bytes stay exact and the current Foundation source policy retains reviewed scope", async () => {
   const expected = {
-    "architecture/foundation/docs-consumer-integration.json": "1fc8cb4431b20d2e51cfb54194ba98fc121cd417bb42541e0bdf87040f759720",
-    "architecture/foundation/docs-protocol-managed-state.json": "7b0f900339030d7aab0f17d5b84612d3f5ee35b457283d2755994c4284f36159",
+    "architecture/foundation/docs-consumer-integration.json": "d6f71aa0f662c7cca716799258430732493229e7deb1d71c8d6d61bcc40f8dd8",
+    "architecture/foundation/docs-protocol-managed-state.json": "e359a5dc89e5cc49d4bee0830e686b8f314fd39b564c9dd88d71144e07bed0c6",
     "architecture/foundation/docs-protocol-qualification.json": "1f7e50ec5b0e6ecc991668b83790b2367062240043c4b885c58377855968969b",
     "architecture/foundation/document-authoring.yaml": "d6f5ba4b178e742e122f6711c9d989d52a77768eb68527b0ecdf3c9a9699c6d2",
-    "architecture/foundation/source-dependencies.yaml": "073d904b6ed55ac5ae8d0738d2b50762cc65ef653ed647aa28e98b5d574370b0",
   };
   for (const [path, digest] of Object.entries(expected)) {
     assert.equal(createHash("sha256").update(await read(path)).digest("hex"), digest, path);
   }
+  // Stable28's source-policy receipt remains historical at the exact upgrade base.
+  // Current consumer-owned test roots are checked freshly by installed Foundation;
+  // this new expected-input pin does not relabel any retained Cohort or receipt.
+  const historicalSourcePolicy = "073d904b6ed55ac5ae8d0738d2b50762cc65ef653ed647aa28e98b5d574370b0";
+  const currentSourcePolicy = createHash("sha256").update(await read("architecture/foundation/source-dependencies.yaml")).digest("hex");
+  assert.notEqual(currentSourcePolicy, historicalSourcePolicy);
+  assert.equal(currentSourcePolicy, "ad45384e6647aa365a8936e6c88bece46a3b856e190456b5aff08fb8d0d59ecc");
   const scenarios = await json("architecture/foundation/docs-protocol-qualification.json");
   assert.equal(scenarios.schemaVersion, 2);
   assert.equal(scenarios.scenarios.length, 5);

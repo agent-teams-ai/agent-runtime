@@ -993,13 +993,20 @@ boundaries:
   dependencyMode: development
   roots:
   - scripts/foundation/check-quality-adoption.test.mjs
+  - scripts/foundation/source-inputs.test.mjs
   entrypoints: []
   allow:
     boundaries:
     - tooling.foundation-quality
-    packages: []
+    packages:
+    - "@agent-teams/engineering-foundation"
     builtins:
     - node:assert/strict
+    - node:url
+    - node:path
+    - node:child_process
+    - node:os
+    - node:fs
     - node:test
     runtimeReferences: []
 - id: adapter.agent-execution.codex-data

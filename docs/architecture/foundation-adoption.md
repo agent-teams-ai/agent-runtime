@@ -15,7 +15,7 @@ code_anchors:
 
 # Engineering Foundation adoption
 
-Status: active consumer policy backed by the current exact registry dependency.
+Status: active consumer policy; the Foundation 1.7.2 source upgrade remains preliminary. Installed and full qualification are pending.
 
 Agent Runtime uses Engineering Foundation only as development tooling. Runtime
 code must not import it. Installation alone never enables policy: every active
@@ -32,9 +32,10 @@ capability below has an AR-owned configuration and executes in `pnpm check`.
 | `quality.executable-specifications` | enabled for synthetic architecture evidence | The ADR-0006 JSON oracle, ADR-0010 disposition, independent evaluator, property/mutation checks, and XState path evidence support accepted ADR-0009 and ADR-0010 authority; they do not bind or implement a production runtime or establish implementation/deployment qualification |
 | `documentation.local-references` | enabled | Local links and GitHub anchors under `docs`; the root README only points into that governed tree |
 | `governance.architecture-decisions` | enabled | Stable ADR frontmatter, lifecycle index, and immutable accepted baseline |
-| unified documentation protocol | stable28 installed | Portable profile v3, strict frozen-document sidecar, executable portable Skill and byte-preservation gate; published Foundation 1.6.0 / Docs 0.6.1 / managed adapter 0.2.11 are pinned in the manifest and registry lockfile. The stable28 managed state is current; retained stable23 upgrade evidence remains historical. |
+| unified documentation protocol | portable activation retained; official stable31 migration applied | Portable profile v3, strict frozen-document sidecar, executable portable Skill and byte-preservation gate; Foundation 1.7.2 / Docs 0.6.2 / managed adapter 0.3.2 are exact development pins. The public adapter applied stable31 against Central `9625c6e6a73555d747cc4b0ba99a29549a75f107`; its after-check returned current. Retained stable28 receipts remain historical. Final installed/full qualification is pending. |
 | `quality.suppression-governance` | enabled | Inline suppressions require exact, expiring AR-owned waivers; security and access-control suppressions are non-waivable |
 | `quality.source-coverage` and canonical type-aware lint | enabled | The public Foundation route checks exact production selection, compiler coverage, protected rules, suppression governance and native gate reachability without a baseline or weakened production override |
+| execution-backed mandatory Node tests | configured for the critical CMS pin gate; 1.7.2 qualification pending | `test:consumer-modules` retains the public `agent-teams-node-test` CLI and `architecture/foundation/mandatory-node-tests.json`; `quality:adoption` binds the exact selected CMS file. Earlier public-CLI evidence does not qualify the new release. |
 | TypeScript and Oxlint base presets | enabled | Existing Node correctness and consumer-owned production/test maintainability budgets remain blocking |
 | deterministic scaffolding | configured and consumer-qualified | Four exact bounded-context package identities are owned by immutable ADR-0005; synthetic Plan, Apply, and generated-package checks are blocking |
 | `package.public-api-compatibility` | A3 enrollment, trusted activation pending | Six private package archives and public imports are qualified against EF 1.6.0; source-bound typed observation, released history and external authority grant remain pending. The local SDK profile gate cannot authorize a release. |
@@ -127,3 +128,61 @@ metadata. Their metadata is merged from the strict path sidecar and
 `pnpm docs:governance` independently verifies all 36 retained byte digests.
 Package scripts remain pinned to exact reviewed registry releases; local links
 and unpublished packages are not qualification evidence.
+
+## Foundation 1.7.2 source upgrade
+
+The exact root development dependency and regenerated frozen registry lock
+select 1.7.2 after the official stable31 migration. The tooling floor
+is Node 24.21.0, selected by `.node-version` and the root manifest; required
+CI already consumes that file. Product package engines retain their Node 24
+family. Node 26 is not activated. Historical platform and cohort receipts keep
+their original toolchain and source identities.
+
+The public execution-backed command protects three important existing Node test
+identities in the existing CMS pin entry file. Its contract alone protects only selected
+files; `quality:adoption` also rejects changing that exact command or dropping a
+selected file. The consumer contract has no OS exceptions because these tests
+use portable disposable fixtures. Disposable public-CLI fixtures admit only an exact
+identity, status and proper OS subset; omission, skip, todo, failure, duplicate
+identity and blanket OS exceptions reject. Existing product, native and
+PostgreSQL integration runners retain their separate contracts.
+
+All source boundaries, coverage roots, six compiler projects, maintainability
+budgets and the exact unknown-assertion admissions remain enforced. Missing or
+unreadable declared inputs and explicitly governed generated directories cannot
+be made invisible to obtain a pass. The public typed route retains the default
+unknown-assertion bridge gate; there is no blanket opt-out.
+
+The current Consumer Module Standard pin remains document commit
+`9c722ceff4ede307d06d7a4b63fdebe615f54c53`, SHA-256
+`33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd`.
+The supplied upstream snapshot `4b56072ec6ca269fb16e3fdf131d31423af804bd`
+has identical bytes. The retained ac49bb33-to-9c722cef review adds only the
+ADR-0029 relation and optional dynamic Host candidate guidance; it does not
+expand Agent Runtime composition. Both current profiles already carry this pin.
+No accepted ADR or retained standard bytes change.
+
+SDK enrollment remains `pending-authority-qualification` with
+`releaseEligible: false`. Its current `installedTooling` source record selects 1.7.2
+without relabeling the retained 1.6.0 registry/package qualification or 1.5.1
+typed observations. Current SDK strict extraction, histories, owner decisions
+and external authority remain pending. Native and scaffolding checks retain
+existing owners and disposable mechanisms; plugin/runtime platform adoption
+remains outside this upgrade.
+
+The retained preliminary 1.7.1 lock failed the Docs adapter 0.2.11 public
+`observeDocsProtocolQualificationV3Lockfile` boundary with
+`DOCS_CONSUMER_DUPLICATE_COHORT_RESOLUTION`. Supplied operator evidence reports
+Foundation 1.7.2 and managed adapter 0.3.2 as public, with the exact five-package
+registry/SRI/Sigstore audit passed; this source delta performs no independent
+registry audit. The public adapter has now migrated the authentic stable28 origin
+to stable31 against protected Central revision `9625c6e6a73555d747cc4b0ba99a29549a75f107`.
+The after-check returned current and the regenerated lock passes frozen install.
+Final consumer qualification and delivery remain pending; retained old managed
+receipts and separate custody/coordinator prerequisites remain historical or pending.
+
+Foundation #363's nested `NODE_TEST_CONTEXT` CLI defect was fixed and released
+in Foundation 1.7.2 through #365. The earlier failure remains historical. This
+consumer retains the public command and adds no environment scrubber or alternate
+runner. Final installed public-CLI and full consumer qualification remain
+pending; earlier 1.7.1 source gates are not 1.7.2 success evidence.

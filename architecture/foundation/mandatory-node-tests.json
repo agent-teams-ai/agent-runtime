@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "required": [
+    {
+      "file": "scripts/architecture/check-cms-pin.test.mjs",
+      "names": [
+        "rejects split profile pins"
+      ],
+      "kind": "test"
+    },
+    {
+      "file": "scripts/architecture/check-cms-pin.test.mjs",
+      "names": [
+        "rejects retained standard bytes that differ from the pin"
+      ],
+      "kind": "test"
+    },
+    {
+      "file": "scripts/architecture/check-cms-pin.test.mjs",
+      "names": [
+        "rejects a delta detached from its review digest"
+      ],
+      "kind": "test"
+    }
+  ],
+  "exceptions": []
+}
