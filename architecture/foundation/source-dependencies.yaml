@@ -2790,6 +2790,7 @@ boundaries:
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-json.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-protocol.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-broker.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-materialization-stores.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-secret-guard.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-upstream.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-schema.ts
@@ -2832,6 +2833,7 @@ boundaries:
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-json.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-protocol.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-broker.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-materialization-stores.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-secret-guard.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-pa-upstream.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/postgres/ordinary-pa-schema.ts
@@ -2938,6 +2940,7 @@ boundaries:
   - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.conformance.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-digest.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/ordinary-pa-grant-store.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-repository.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/application/resolve-contained-turn-provider-access.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/application/revalidate-contained-turn-provider-access.ts
@@ -2958,6 +2961,7 @@ boundaries:
   - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.conformance.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/dispatch-consumption-repository.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-digest.ts
+  - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/ordinary-pa-grant-store.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/application/ports/outbound/materialization-authorization-repository.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/application/resolve-contained-turn-provider-access.ts
   - packages/contexts/provider-access/src/features/contained-turn-access/application/revalidate-contained-turn-provider-access.ts
