@@ -260,15 +260,20 @@ test("Node permissions do not follow imports moved into core or undeclared adapt
     "packages/apps/embedded-runtime/src/adapters/undeclared/moved-node-dependency.ts",
   ];
   for (const builtin of ["node:buffer", "node:timers", "node:util"]) {
+    const diagnostics = await analyzeFixture(Object.fromEntries(
+      [...classified, ...unclassified].map(path => [path, `import '${builtin}';\n`]),
+    ));
+    assert.equal(diagnostics.length, 6, builtin);
     for (const path of classified) {
-      const diagnostics = await analyzeFixture({ [path]: `import '${builtin}';\n` });
-      assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.forbidden-builtin-dependency"], path);
-      assert.equal(diagnostics[0].location.path, path);
-      assert.deepEqual(diagnostics[0].evidence, [{ kind: "specifier", value: builtin }]);
+      const sourceDiagnostics = diagnostics.filter(diagnostic => diagnostic.location.path === path);
+      assert.equal(sourceDiagnostics.length, 1, `${builtin}: ${path}`);
+      assert.deepEqual(rules(sourceDiagnostics), ["architecture.source-dependencies.forbidden-builtin-dependency"], path);
+      assert.deepEqual(sourceDiagnostics[0].evidence, [{ kind: "specifier", value: builtin }]);
     }
     for (const path of unclassified) {
-      const diagnostics = await analyzeFixture({ [path]: `import '${builtin}';\n` });
-      assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.unclassified-source-file"], path);
+      const sourceDiagnostics = diagnostics.filter(diagnostic => diagnostic.location.path === path);
+      assert.equal(sourceDiagnostics.length, 1, `${builtin}: ${path}`);
+      assert.deepEqual(rules(sourceDiagnostics), ["architecture.source-dependencies.unclassified-source-file"], path);
     }
   }
 });
