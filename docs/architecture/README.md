@@ -62,6 +62,9 @@ Documents:
 - [Managed agent runtime installation plan](managed-agent-runtime-installation-plan.md):
   deferred implementation plan for safe, recoverable, cross-platform runtime
   installation and updates after higher-priority MVP capabilities.
+- [Agent Runtime Architecture Program Plan](agent-runtime-architecture-program-plan.md):
+  owner decisions, target architecture, lanes, task cards and parallel waves for
+  the Codex boundaries, libraries and storage program.
 - [Legacy feature inventory](legacy-feature-inventory.json): commit-pinned,
   structured legacy/current/authority/implementation/qualification/backlog
   traceability. Its validator permits additions and uses explicit
