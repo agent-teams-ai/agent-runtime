@@ -2393,6 +2393,7 @@ boundaries:
     boundaries:
     - tooling.sdk-growth-source.adapters
     - tooling.sdk-growth-source.policy
+    - tooling.ci-full-gate
     packages: []
     builtins:
     - node:assert/strict
@@ -3034,7 +3035,8 @@ boundaries:
   - scripts/ci/run-ordinary-postgres.test.mjs
   entrypoints: []
   allow:
-    boundaries: []
+    boundaries:
+    - tooling.ci-full-gate
     packages: []
     builtins:
     - node:assert/strict

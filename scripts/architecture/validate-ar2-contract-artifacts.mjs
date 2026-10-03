@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { isAbsolute, resolve, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
+import { routedScripts } from "../ci/script-routing.ts";
 
 import { ar2InventoryExecutes, readAr2TestExecutionInventory } from "./ar2-test-execution-inventory.mjs";
 
@@ -484,9 +485,10 @@ export const validateAr2ContractArtifacts = async () => {
     negativeGroups: negativeFixtures.groups,
     ...coverageEvidence,
   });
-  const checkInvocations = rootPackage.scripts.check.match(/pnpm test:ar2-contract/gu) ?? [];
+  const checkSteps = routedScripts(rootPackage.scripts, "check");
+  const checkInvocations = checkSteps.filter(command => command === "pnpm test:ar2-contract");
   assert.equal(checkInvocations.length, 1, "pnpm check runs the AR-2 test exactly once");
-  assert.match(rootPackage.scripts.check, /\bpnpm product:check\b/u, "pnpm check runs package tests");
+  assert.ok(checkSteps.includes("pnpm product:check"), "pnpm check runs package tests");
   assert.match(rootPackage.scripts["product:check"], /\brun test\b/u, "product check executes package test scripts");
   assert.equal(JSON.stringify(freeze).includes("interactive-shell"), false);
   assert.equal(JSON.stringify(freeze).includes("managed-settings.json"), false);

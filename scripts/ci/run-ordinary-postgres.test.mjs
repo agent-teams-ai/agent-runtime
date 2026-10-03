@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import {test} from "node:test";
 import {ordinaryPostgresEnvironment, runOrdinaryPostgres} from "./run-ordinary-postgres.mjs";
+import {commandInventory, routedScripts} from "./script-routing.ts";
 
 const url = "postgresql://postgres@localhost/postgres?host=/tmp/ordinary-pa-pg-TEST-unit";
 const environment = {ORDINARY_TEST_POSTGRES_URL: url, ORDINARY_PA_TEST_POSTGRES_URL: url};
@@ -57,5 +58,10 @@ test("mandatory PostgreSQL CI invokes the disposable ordinary gate and its rejec
   assert.match(workflow, /Run disposable ordinary PostgreSQL gate/u);
   assert.match(workflow, /bash scripts\/ci\/ordinary-postgres-disposable\.sh/u);
   assert.ok(manifest.scripts["foundation:boundaries:negative"].includes("scripts/ci/run-ordinary-postgres.test.mjs"));
-  for (const gate of ["check", "check:fast"]) {assert.ok(manifest.scripts[gate].includes("pnpm foundation:check"));}
+  for (const gate of ["check", "check:fast"]) {
+    assert.equal(routedScripts(manifest.scripts, gate).filter(command => command === "pnpm foundation:check").length, 1);
+    const negatives = commandInventory(manifest.scripts, gate).filter(command => command.script === "foundation:boundaries:negative");
+    assert.equal(negatives.length, 1, `${gate} must run the negative suite exactly once`);
+    assert.ok(negatives[0].command.includes("scripts/ci/run-ordinary-postgres.test.mjs"));
+  }
 });

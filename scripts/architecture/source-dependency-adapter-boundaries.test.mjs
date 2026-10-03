@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { parseDocument } from "yaml";
+import { commandInventory, routedScripts } from "../ci/script-routing.ts";
 
 import { parseSync } from "oxc-parser";
 
@@ -147,21 +148,33 @@ const analyzeFixture = async files => {
 const rules = diagnostics => diagnostics.map(diagnostic => diagnostic.ruleId);
 
 test("the named negative suite runs exactly once through every Foundation gate", () => {
-  assert.equal(
-    manifest.scripts["foundation:boundaries:negative"],
-    "node --test scripts/architecture/source-dependency-adapter-boundaries.test.mjs scripts/docs/runtime-builtin-permissions.test.mjs scripts/ci/run-ordinary-postgres.test.mjs",
-  );
-  assert.equal(
-    manifest.scripts["foundation:check"].split("pnpm foundation:boundaries:negative").length - 1,
-    1,
-  );
-  for (const script of ["check", "check:fast"]) {
-    assert.equal(manifest.scripts[script].split(" && ")[0], "pnpm lint", script);
-    assert.equal(manifest.scripts[script].split(" && ").filter(command => command === "pnpm lint").length, 1, script);
-    assert.equal(manifest.scripts[script].split("pnpm foundation:check").length - 1, 1, script);
+  const negativeCommand = "node --test scripts/architecture/source-dependency-adapter-boundaries.test.mjs scripts/docs/runtime-builtin-permissions.test.mjs scripts/ci/run-ordinary-postgres.test.mjs";
+  const verify = scripts => {
+    assert.equal(scripts["foundation:boundaries:negative"], negativeCommand);
+    for (const script of ["foundation:check", "check", "check:fast"]) {
+      assert.deepEqual(commandInventory(scripts, script).filter(command => command.script === "foundation:boundaries:negative"), [
+        { script: "foundation:boundaries:negative", command: negativeCommand }
+      ], `${script} must run the real negative suite exactly once`);
+    }
+    for (const script of ["check", "check:fast"]) {
+      const chain = routedScripts(scripts, script);
+      assert.equal(chain[0], "pnpm lint", script);
+      for (const command of ["pnpm lint", "pnpm foundation:check"]) {
+        assert.equal(chain.filter(step => step === command).length, 1, `${script} must reach ${command} exactly once`);
+      }
+    }
+    assert.ok(!scripts["foundation:check"].includes("|| true"));
+    assert.ok(!scripts["foundation:check"].includes("allow-diagnostics"));
+  };
+  verify(manifest.scripts);
+  for (const scripts of [
+    { ...manifest.scripts, check: manifest.scripts.check.replace(" && pnpm check:ci:foundation", "") },
+    { ...manifest.scripts, "check:ci:foundation": `${manifest.scripts["check:ci:foundation"]} && pnpm foundation:check` },
+    { ...manifest.scripts, "foundation:check": manifest.scripts["foundation:check"].replace(" && pnpm foundation:boundaries:negative", "") },
+    { ...manifest.scripts, "foundation:boundaries:negative": "true" }
+  ]) {
+    assert.throws(() => verify(scripts));
   }
-  assert.ok(!manifest.scripts["foundation:check"].includes("|| true"));
-  assert.ok(!manifest.scripts["foundation:check"].includes("allow-diagnostics"));
 });
 
 test("contained-turn domain and application remain dependency-free core", async () => {
