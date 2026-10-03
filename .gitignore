@@ -6,6 +6,7 @@ node_modules/
 coverage/
 *.log
 *.tsbuildinfo
+tmp/root-export-evidence/
 packages/apps/embedded-runtime/tests/live/mac-pa-auth/helper-attempts.jsonl
 **/.cache/
 tmp/root-export-evidence/ar-ci-docs-implementation-20261003/

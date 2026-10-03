@@ -15,12 +15,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  quick:
+    uses: ./.github/workflows/ci-lane.yml
+    with:
+      script: check:ci:quick
+      artifact: quick
+      revision: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+  foundation:
+    uses: ./.github/workflows/ci-lane.yml
+    with:
+      script: check:ci:foundation
+      artifact: foundation
+      revision: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+  architecture:
+    uses: ./.github/workflows/ci-lane.yml
+    with:
+      script: check:ci:architecture
+      artifact: architecture
+      revision: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+  docs:
+    uses: ./.github/workflows/ci-lane.yml
+    with:
+      script: check:ci:docs
+      artifact: docs
+      revision: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+  product:
+    uses: ./.github/workflows/ci-lane.yml
+    with:
+      script: check:ci:product
+      artifact: product
+      revision: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
   check:
     name: check
+    if: ${{ always() }}
+    needs: [quick, foundation, architecture, docs, product]
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 5
     steps:
-      - name: Checkout repository
+      - name: Checkout event revision
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
@@ -29,72 +66,19 @@ jobs:
           # collector tests resolve retained commits on main, including the
           # original PR184 C0 transition 8e5e859d10981e1623d0617e933afc68a9e8770c.
           fetch-depth: 0
-
       - name: Verify checkout revision
         shell: bash
         env:
           EXPECTED_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_REVISION"
-
-      - name: Setup Node.js
+      - name: Setup pinned Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
-
-      - name: Enable pinned pnpm
-        run: |
-          corepack enable
-          corepack install --global pnpm@11.18.0
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # Disabled by owner decision 2026-10-02 (AR-0): only the L0 receipt
-      # regression and the frozen C0 validator need these unreachable commits,
-      # and neither runs in `pnpm check` any more. Restore this step together
-      # with `architecture:runtime-setup-l0-evidence` in `check`.
-      # - name: Fetch exact retained evidence commits
-      #   shell: bash
-      #   run: |
-      #     node --input-type=module <<'NODE'
-      #     import assert from 'node:assert/strict';
-      #     import { execFileSync, spawnSync } from 'node:child_process';
-      #     import { readFileSync } from 'node:fs';
-      #     import { changes } from './scripts/architecture/runtime-setup-l0-evidence-spec.mjs';
-      #     const readEvidence = name => JSON.parse(readFileSync(`docs/spikes/${name}.json`, 'utf8'));
-      #     const historical = readEvidence('runtime-setup-l0-dogfooding-evidence');
-      #     const adoption = readEvidence('runtime-setup-assembly-adoption-evidence');
-      #     const adoptionV2 = readEvidence('runtime-setup-assembly-adoption-v2-evidence');
-      #     const revisions = [...new Set([
-      #       ...changes.map(({ revision }) => revision),
-      #       ...historical.historicalChanges.map(({ revision }) => revision),
-      #       historical.sourceRevision, adoption.sourceRevision,
-      #       adoptionV2.historical.revision, adoptionV2.retainedV1.revision,
-      #       adoptionV2.identity.sourceRevision,
-      #     ])];
-      #     for (const revision of revisions) assert.match(revision, /^[a-f0-9]{40}$/u);
-      #     const hasTrees = revision => [revision, `${revision}^`].every(ref =>
-      #       spawnSync('git', ['cat-file', '-e', `${ref}^{tree}`]).status === 0);
-      #     const missing = revisions.filter(revision => !hasTrees(revision));
-      #     if (missing.length) execFileSync('git', [
-      #       'fetch', '--no-tags', '--no-write-fetch-head',
-      #       'https://github.com/agent-teams-ai/agent-runtime.git', ...missing,
-      #     ], { stdio: 'inherit', timeout: 120_000 });
-      #     for (const revision of revisions) assert.ok(hasTrees(revision), `Missing retained trees: ${revision}`);
-      #     NODE
-
-      - name: Run quality gate
-        # Identity for disposable Git evidence fixtures only.
+      - name: Require every full lane to succeed
         env:
-          GIT_AUTHOR_NAME: Synthetic Evidence Test
-          GIT_AUTHOR_EMAIL: test@example.invalid
-          GIT_COMMITTER_NAME: Synthetic Evidence Test
-          GIT_COMMITTER_EMAIL: test@example.invalid
-        run: pnpm check
-
-      - name: Run advisory quality diagnostics
-        continue-on-error: true
-        run: pnpm quality:diagnostic
+          NEEDS: ${{ toJSON(needs) }}
+        run: node scripts/ci/gate.ts aggregate
 
   postgres-durability:
     name: postgres-durability

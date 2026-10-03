@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
+import { routedScripts } from '../ci/script-routing.ts';
 // Disabled with the hardcoded CMS pin chain by owner decision 2026-10-02 (AR-0).
 // import { standardReviewPath, standardDeltaPath, validateStandardMigration } from "./consumer-module-standard-pin.mjs";
 
@@ -265,7 +266,7 @@ export function checkSdkGrowthProfile(repository = root) {
   assert.equal(manifest.scripts["test:sdk-growth:profile"], "node --test scripts/architecture/check-sdk-growth-profile.test.mjs", "SDK_ENFORCEMENT_MISSING_OR_NOOP");
   assert.equal(manifest.scripts["test:sdk-growth:packed"], "node --test scripts/architecture/qualify-sdk-packages.test.mjs", "SDK_ENFORCEMENT_MISSING_OR_NOOP");
   for (const name of ["check", "check:fast"]) {
-    const chain = manifest.scripts[name].split(/\s*&&\s*/u);
+    const chain = routedScripts(manifest.scripts, name);
     for (const step of ["pnpm sdk-growth:profile", "pnpm test:sdk-growth:profile", "pnpm test:sdk-growth:packed"]) {
       assert.ok(chain.includes(step), "SDK_ENFORCEMENT_MISSING_OR_NOOP");
     }

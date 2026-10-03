@@ -3,6 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { repositoryRoot, disposableRepository, docs } from "./portable-authoring-test-support.mts";
+import { routedScripts } from "../ci/script-routing.ts";
 
 test("canonical qualification v2 covers every Runtime authorable type exactly once", async () => {
   const [integration, qualification, protocolProfileSource, authoringProfileSource, manifest] = await Promise.all([
@@ -63,7 +64,16 @@ test("keeps protocol and frozen-document governance in every repository gate", a
     "node --test scripts/docs/verify-frozen-document-bytes.test.mjs"
   );
   for (const gate of ["check", "check:fast"]) {
-    assert.match(manifest.scripts[gate], /pnpm docs:protocol:check/u);
+    const steps = routedScripts(manifest.scripts, gate);
+    for (const command of [
+      "pnpm docs:check",
+      "pnpm docs:governance",
+      "pnpm docs:qualification:typecheck",
+      "pnpm docs:qualification:serial",
+      "pnpm docs:qualification:portable",
+    ]) {
+      assert.equal(steps.filter(step => step === command).length, 1, `${gate} runs ${command} exactly once`);
+    }
   }
   assert.equal(manifest.scripts["check:changed"], "agent-teams-foundation agent-workflow changed --consumer .");
 });
