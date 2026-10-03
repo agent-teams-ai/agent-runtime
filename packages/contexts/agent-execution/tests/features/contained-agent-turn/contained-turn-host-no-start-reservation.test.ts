@@ -19,6 +19,8 @@ import {
   providerAccessSnapshot,
 } from "../../contained-turn-kernel-fixtures.ts";
 
+import { isolatedTestExecutable } from "../../host-custody-test-fixture.ts";
+
 const disposableRoots: string[] = [];
 
 afterEach(async () => {
@@ -64,7 +66,7 @@ const createFixture = async (spawnMode: HostCustodyLaunchPlan["spawnMode"], refu
     identity: Object.freeze({dev: workspaceIdentity.dev, ino: workspaceIdentity.ino, mountId}),
   });
   const marker = join(root, "provider-executed");
-  const executablePath = await realpath(process.execPath);
+  const executablePath = await isolatedTestExecutable(workspaceRef);
   const launchArguments = Object.freeze([
     "-e",
     `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "executed"); setInterval(() => {}, 1000);`,

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, realpath, writeFile } from "node:fs/promises";
+import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test as nodeTest } from "node:test";
 
@@ -40,7 +40,7 @@ class NodeProviderProcessCustody extends BaseNodeProviderProcessCustody {
 
 test("concurrent open publishes one reservation before one acknowledged spawn", async () => {
   const workspaceRef = await disposableRoot();
-  const { custody } = await createCustody({ workspaceRef });
+  const { custody, executablePath } = await createCustody({ workspaceRef });
   const request = {
     attemptId: "attempt:concurrent-open",
     operationId: "operation:concurrent-open",
@@ -62,7 +62,7 @@ test("concurrent open publishes one reservation before one acknowledged spawn", 
   assert.equal(evidence?.fingerprint.binaryRevision, binding.binaryRevision);
   assert.equal(evidence?.fingerprint.workspaceSha256, sha256(workspaceRef));
   assert.equal(evidence?.fingerprint.containmentProfile, "strict-linux-cgroup-v2");
-  assert.equal(evidence?.fingerprint.executablePathSha256, sha256(await realpath(process.execPath)));
+  assert.equal(evidence?.fingerprint.executablePathSha256, sha256(executablePath));
   assert.doesNotMatch(JSON.stringify(evidence), new RegExp(workspaceRef, "u"));
   assert.equal(evidence?.fingerprint.spawnMode, "eager");
   assert.equal(evidence?.fingerprint.providerBindingSha256.length, 64);
