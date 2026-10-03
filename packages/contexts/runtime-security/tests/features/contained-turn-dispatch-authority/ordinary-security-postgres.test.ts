@@ -3,6 +3,8 @@ import {randomUUID} from "node:crypto";
 import test from "node:test";
 import {Pool} from "pg";
 import {createOrdinarySecurityOwner} from "../../../dist/composition.js";
+import {createPostgresOrdinarySecurityGrantStore, ordinarySecurityDigest} from "../../../dist/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-owner.js";
+import {captureOrdinarySecurityInput, newOrdinarySecurityRecord, ordinarySecurityKeyOf, ordinarySecuritySettlementFor} from "../../../dist/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.js";
 const connectionString = process.env.ORDINARY_TEST_POSTGRES_URL;
 test("ordinary security durable consumed identity, unknown-commit readback, settlement and no persisted secrets", {skip: connectionString === undefined}, async () => {
   const schema = `ordinary_rs_test_${randomUUID().replaceAll("-", "")}`;
@@ -32,4 +34,29 @@ test("ordinary security durable consumed identity, unknown-commit readback, sett
     assert.equal(rows.rowCount, 1); assert.equal(JSON.stringify(rows.rows).includes("secret-token"), false);
     await owner.dispose(); assert.equal((await pool.query("SELECT 1 AS alive")).rows[0].alive, 1);
   } finally {await owner.dispose(); await pool.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end();}
+});
+
+test("ordinary security grant store keeps one record under parallel insertIfAbsent and refuses another policy and a conflicting settle", {skip: connectionString === undefined}, async () => {
+  const schema = `ordinary_rs_store_test_${randomUUID().replaceAll("-", "")}`;
+  const admin = new Pool({connectionString, max: 1}); const pool = new Pool({connectionString, options: `-c search_path=${schema}`, max: 8});
+  const policy = {provider: "codex", mode: "workspace-write", executionProfile: "user-session-v1", effectClass: "ordinary_user_session_effect", capabilityManifestRevision: "ordinary-codex-macos-arm64-0.153.4-v1", ttlMs: 60000, maxOutputBytes: 2000000, maxArtifactBytes: 2000000} as const;
+  const allowedScope = {tenantId: "TEST", projectId: "TEST"};
+  const input = captureOrdinarySecurityInput({operationId: "operation:TEST", attemptId: "attempt:TEST", scope: allowedScope, provider: policy.provider, mode: policy.mode, executionProfile: policy.executionProfile, effectClass: policy.effectClass, capabilityManifestRevision: policy.capabilityManifestRevision}, allowedScope, policy);
+  const key = ordinarySecurityKeyOf(input);
+  const candidate = () => newOrdinarySecurityRecord(input, policy, {grantId: `ordinary-security-grant:${randomUUID()}`, ownerReceiptId: `ordinary-security-consumption:${randomUUID()}`}, Date.now(), ordinarySecurityDigest);
+  const store = createPostgresOrdinarySecurityGrantStore({pool, allowedScope, policy});
+  try {
+    await admin.query(`CREATE SCHEMA ${schema}`); await store.migrate();
+    const results = await Promise.all(Array.from({length: 8}, () => store.insertIfAbsent(candidate())));
+    assert.equal(results.filter(result => result.kind === "inserted").length, 1);
+    assert.equal(new Set(results.map(result => result.record.authority.grantId)).size, 1);
+    assert.equal((await pool.query("SELECT 1 FROM runtime_security_ordinary_grants_v1")).rowCount, 1);
+    await assert.rejects(createPostgresOrdinarySecurityGrantStore({pool, allowedScope, policy: {...policy, ttlMs: 30000}}).observe(key), /ORDINARY_SECURITY_DENIED/u);
+    const stored = results[0].record;
+    const claim = ordinarySecuritySettlementFor(stored.authority, "claim_committed", ordinarySecurityDigest);
+    assert.equal((await store.settle(key, claim)).kind, "settled");
+    assert.equal((await store.settle(key, claim)).kind, "already");
+    assert.equal((await store.settle(key, ordinarySecuritySettlementFor(stored.authority, "abandoned_without_claim", ordinarySecurityDigest))).kind, "conflict");
+    assert.equal((await store.observe(key))?.settlement?.disposition, "claim_committed");
+  } finally {await store.close(); await pool.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end();}
 });

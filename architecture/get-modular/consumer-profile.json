@@ -2002,16 +2002,21 @@
       "relationships": [
         {
           "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-owner.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/ordinary-security-grant-store.ts",
           "mode": "type-only"
         },
         {
           "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-owner.ts",
-          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts",
           "mode": "runtime"
         },
         {
-          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-owner.ts",
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-transactions.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/ordinary-security-grant-store.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/adapters/outbound/postgres/ordinary-security-transactions.ts",
           "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts",
           "mode": "runtime"
         }
@@ -3903,6 +3908,11 @@
         {
           "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/ordinary-security-factory.ts",
           "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/composition/ordinary-security-factory.ts",
+          "to": "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts",
           "mode": "type-only"
         },
         {
@@ -4073,11 +4083,13 @@
       "owner": "runtime-security",
       "roots": [
         "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/ordinary-security-grant-store.ts",
         "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts",
         "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts"
       ],
       "entrypoints": [
         "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts",
+        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ports/ordinary-security-grant-store.ts",
         "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts",
         "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/dispatch-exact-record.ts"
       ],
