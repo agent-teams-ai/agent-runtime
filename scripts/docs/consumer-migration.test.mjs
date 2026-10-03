@@ -125,7 +125,7 @@ test("stable31 managed bytes stay exact and the current Foundation source policy
   const historicalSourcePolicy = "073d904b6ed55ac5ae8d0738d2b50762cc65ef653ed647aa28e98b5d574370b0";
   const currentSourcePolicy = createHash("sha256").update(await read("architecture/foundation/source-dependencies.yaml")).digest("hex");
   assert.notEqual(currentSourcePolicy, historicalSourcePolicy);
-  assert.equal(currentSourcePolicy, "ad45384e6647aa365a8936e6c88bece46a3b856e190456b5aff08fb8d0d59ecc");
+  assert.equal(currentSourcePolicy, "d0d90e06bf792fc1e8927b7ae072d54cb3afd4e5dfb3de26880aa52d55e600e8");
   const scenarios = await json("architecture/foundation/docs-protocol-qualification.json");
   assert.equal(scenarios.schemaVersion, 2);
   assert.equal(scenarios.scenarios.length, 5);
