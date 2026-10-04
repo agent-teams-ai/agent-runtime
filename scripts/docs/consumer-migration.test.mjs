@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import test from "node:test";
+import { assertPortableCommand, portableFiles } from "./portable-authoring-policy.mts";
 import { parseDocument } from "yaml";
 
 const root = new URL("../../", import.meta.url);
@@ -136,7 +137,19 @@ test("stable31 managed bytes stay exact and the current Foundation source policy
   assert.equal(scenarios.scenarios.length, 5);
   const suite = await read("scripts/docs/docs-protocol-adoption.test.mjs");
   assert.doesNotMatch(suite, /Reflect\.get|runDocsProtocolQualificationV2/u);
-  assert.match(suite, /for \(const scenario of scenarioContract\.scenarios\)/u);
+  const support = await read("scripts/docs/portable-authoring-test-support.mts");
+  assert.doesNotMatch(support, /Reflect\.get|runDocsProtocolQualificationV2/u);
+  assert.match(support, /docsQualification\.runDocsProtocolQualification\(/u);
+  const manifest = await json("package.json");
+  assertPortableCommand(manifest.scripts["docs:qualification:portable"]);
+  assert.equal(manifest.scripts["docs:qualification"], "pnpm docs:qualification:typecheck && pnpm docs:qualification:serial && pnpm docs:qualification:portable");
+  assert.equal(manifest.scripts["docs:qualification:typecheck"], "tsc --project tsconfig.docs-qualification.json --noEmit --pretty false");
+  assert.equal(manifest.scripts["docs:qualification:serial"], "node --test --test-concurrency=1 scripts/docs/docs-protocol-adoption.test.mjs scripts/docs/consumer-migration.test.mjs scripts/docs/managed-target-contract.test.mjs scripts/docs/managed-installed-target.test.mjs scripts/docs/portable-authoring-policy.test.mts");
+  for (const file of portableFiles) {
+    const entry = await read(file);
+    assert.match(entry, /test\("portable authoring preserves runtime-/u);
+    assert.match(entry, /runPortableAuthoringScenario\("runtime-/u);
+  }
 });
 
 test("scoped source policy retains both historic edges and its committed amendment", async () => {
