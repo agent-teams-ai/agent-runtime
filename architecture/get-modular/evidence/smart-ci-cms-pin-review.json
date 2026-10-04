@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "reviewedOn": "2026-10-04",
+  "repository": "agent-teams-ai/get-modular",
+  "path": "docs/architecture/common-assembly.md",
+  "anchor": "consumer-module-standard",
+  "before": {
+    "commit": "9c722ceff4ede307d06d7a4b63fdebe615f54c53",
+    "sha256": "33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd",
+    "byteLength": 24312,
+    "evidencePath": "architecture/get-modular/evidence/consumer-module-standard-9c722ce.md"
+  },
+  "after": {
+    "commit": "81063add7de50ffe2b91cc74bf7271b298624c21",
+    "sha256": "49d08b6d1762e94308157fb59b3aa82ac1630c91f529f6efcd4915dfffee7ba7",
+    "byteLength": 47402,
+    "evidencePath": "architecture/get-modular/evidence/consumer-module-standard.md"
+  },
+  "predecessorReview": {
+    "path": "architecture/get-modular/evidence/runtime-profile-cms-pin-review.json",
+    "sha256": "60a19f779c298a013eced3bd3fa57d0bf7bdc878b19a62a59baeb080f509ed37"
+  },
+  "provenance": {
+    "supplier": "Root",
+    "retrieval": "supplied-source-packets",
+    "independentRetrieval": false,
+    "beforeCommit": "9c722ceff4ede307d06d7a4b63fdebe615f54c53",
+    "afterCommit": "81063add7de50ffe2b91cc74bf7271b298624c21",
+    "runtime": {
+      "repository": "agent-teams-ai/agent-runtime",
+      "baseCommit": "0ace1cce19ce8d1b5b7640b421b3b19c1ab212e2",
+      "baseTree": "0dd29d5ab93b68dace14666ed400c1010caa7bae"
+    },
+    "review": "Root fetched primary source packets; this worker verified their complete bytes and reviewed the delta offline. Retrieval provenance is supplied, not independent live retrieval or conformance execution."
+  },
+  "delta": {
+    "path": "architecture/get-modular/evidence/smart-ci-cms-pin-delta.diff",
+    "sha256": "670810e035da54ae00b1b7f45c5516851232439e58673fecc12a83b129be2c99",
+    "byteLength": 36534,
+    "hunks": 17,
+    "addedLines": 432,
+    "removedLines": 31,
+    "format": "Git no-index, text, full index, myers, indent heuristic, three context lines, a/ and b/ prefixes, suppressBlankEmpty=true; regenerated from retained bytes in a disposable TEST directory."
+  },
+  "documentNormativeChange": true,
+  "consumerBehaviorChanged": false,
+  "successorProductionConformance": "not-established",
+  "applicability": {
+    "status": "APPLICABLE_MIGRATION_REQUIRED",
+    "passiveCiHelpers": {
+      "descriptors": false,
+      "resources": false,
+      "runInputs": false,
+      "lifecycle": false
+    }
+  },
+  "adoption": {
+    "passiveAndOrdinary": "active",
+    "containedTurn": "pending",
+    "dynamicAgentRuntime": "not-certified",
+    "sdkExternalAuthority": "pending-authority-qualification"
+  },
+  "scope": "Only coupled current document pins, evidence, current rejecting loaders, fingerprints and mutable guidance. Fixed passive CI helpers remain feature-local development tooling. No new production boundary or wiring.",
+  "outstandingWork": [
+    "Production declarations still spell raw compatibility literals; successor descriptor/builder conformance is not established.",
+    "Production owner.authority labels differ from the first moduleId namespace segment.",
+    "Passive and ordinary declarations share an implementationId despite different slot sets; successor release-wide identity conformance is not established.",
+    "Successor module contract suites and per-root conformance-kit preparation/failure/cancellation checks have not been adopted or executed here.",
+    "Contained-turn Assembly migration, dynamic Host qualification and SDK external authority remain pending under their existing owners."
+  ],
+  "checksPlanned": [
+    "git diff --check",
+    "pnpm typecheck:ci",
+    "pnpm test:ci",
+    "pnpm test:consumer-modules",
+    "pnpm architecture:consumer-modules",
+    "pnpm test:get-modular-adoption",
+    "pnpm architecture:get-modular-adoption",
+    "pnpm foundation:check",
+    "pnpm docs:protocol:check",
+    "pnpm check:changed",
+    "pnpm check:fast",
+    "pnpm check"
+  ],
+  "checkDisposition": "Planned verification is not a claim of execution. Actual results and limitations belong to the delivery report; no successor compiler or conformance CLI receipt is asserted.",
+  "supportingGateAdjustment": {
+    "path": "scripts/docs/consumer-migration.test.mjs",
+    "reason": "Required Docs qualification froze the current CI source-policy bytes, roots and public entries. Preserve that fixed predecessor digest by reconstructing only the two added tooling roots and one entry; update its exact live boundary oracle. No Cohort/caller/history bytes change."
+  }
+}

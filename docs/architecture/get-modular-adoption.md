@@ -107,17 +107,17 @@ bounded contract. ADR-0008 and its historical evidence remain immutable;
 ADR-0013 continues to govern exactly its three active FMS features.
 
 The central authority is Get Modular's accepted ADR-0026 and the exact pinned
-[consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/9c722ceff4ede307d06d7a4b63fdebe615f54c53/docs/architecture/common-assembly.md#consumer-module-standard).
-The [current zero-delta review](../../architecture/get-modular/evidence/runtime-profile-cms-pin-review.json)
-retains the PR dynamic Host history alongside the parallel
-[creation-cleanup review](../../architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json).
-Both branches select the same exact pin and complete-document bytes; neither
-review replaces the other branch history:
+[consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/81063add7de50ffe2b91cc74bf7271b298624c21/docs/architecture/common-assembly.md#consumer-module-standard).
+The [current successor review](../../architecture/get-modular/evidence/smart-ci-cms-pin-review.json)
+bridges the historical `9c722` head to this reviewed document. Both the
+[zero-delta review](../../architecture/get-modular/evidence/runtime-profile-cms-pin-review.json)
+and parallel [creation-cleanup review](../../architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json)
+remain independently enforced history against retained predecessor bytes.
 
 - Repository: `agent-teams-ai/get-modular`.
-- Commit: `9c722ceff4ede307d06d7a4b63fdebe615f54c53`.
+- Commit: `81063add7de50ffe2b91cc74bf7271b298624c21`.
 - Path: `docs/architecture/common-assembly.md`; anchor: `consumer-module-standard`.
-- Complete document SHA-256: `33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd`.
+- Complete document SHA-256: `49d08b6d1762e94308157fb59b3aa82ac1630c91f529f6efcd4915dfffee7ba7` (47,402 bytes).
 - Retained bytes are recorded by the consumer profile; they are evidence, not a second authority.
 
 Document identity, package versions/archive integrity, Core compatibility token,
@@ -125,8 +125,9 @@ and local adoption authority are distinct. The profile retains the approved publ
 Core and Assembly 0.2.0 archives, verifies their SHA-256 and lock integrity,
 and requires exact catalog versions. It records actual blocking commands,
 without `conformant: true` for the repository. The A3 and dynamic Host migrations
-remain reviewed below. The current standard revision has identical canonical
-document bytes to the previous pin; no moving main is consumed.
+remain reviewed below. The historical zero-delta review applies to retained
+predecessor bytes; the current revision has the separately reviewed successor
+delta linked above. No moving main is consumed.
 
 The consumed release archives are distinct from the standard pin:
 
@@ -932,7 +933,7 @@ keeps its accepted registry, C0 and pending-observation protections. The manual
 C0 checker authenticates its frozen `ac49bb33` successor separately without
 changing the accepted C0 contract or verdicts.
 
-## Current standard and dependency pin review
+## Historical standard and dependency pin review
 
 The supplied current upstream document at `3c23` and the retained `9c722ce`
 document are independently byte-identical: complete-document SHA-256
@@ -1001,7 +1002,7 @@ ports exercise descriptor reuse, record refusal, initialization failures,
 partial allocation before an await, concurrent recovery, failed retry, nested
 dependency ordering, borrowed pools and non-repetition of successful actions.
 
-### Current candidate-only standard pin review
+### Historical candidate-only standard pin review
 
 The [review](../../architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json)
 migrates both current consumer profiles from `ac49bb3374946330ec820591f8195a22d2c90900`
@@ -1024,3 +1025,37 @@ and frozen C0 evidence are unchanged. C0 authenticates its source oracle from
 its retained base revision, not current production bytes. The current ordinary
 profile permits exactly the reviewed creation-error composition dependency;
 all other frozen fields remain enforced, alongside the current CMS pin review.
+
+## Reviewed Smart CI prerequisite successor checkpoint
+
+Root supplied exact before/after source packets; this worker verified their
+hashes and byte lengths and reviewed their complete delta offline. This is not
+independent live source retrieval. Runtime base is
+`0ace1cce19ce8d1b5b7640b421b3b19c1ab212e2`, tree
+`0dd29d5ab93b68dace14666ed400c1010caa7bae`.
+The [predecessor](../../architecture/get-modular/evidence/consumer-module-standard-9c722ce.md)
+retains SHA-256 `33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd`
+and 24,312 bytes. The [exact Git delta](../../architecture/get-modular/evidence/smart-ci-cms-pin-delta.diff)
+contains 17 hunks, +432/−31 lines, 36,534 bytes, SHA-256
+`670810e035da54ae00b1b7f45c5516851232439e58673fecc12a83b129be2c99`.
+The one-step current checker regenerates it in a disposable TEST directory,
+checks predecessor linkage and provenance, and rejects unsupported scope claims.
+Historical validators keep their fixed identities and retained documents.
+
+The successor changes normative guidance for descriptors and capability revisions,
+module resource scopes, prepared-template run inputs, namespaces and conformance
+suites. Fixed passive CI helpers are feature-local development tooling under
+“New composition boundaries”; they require no descriptor, resources, run-input
+or lifecycle adoption. No Smart CI applicability or acceleration is activated here.
+Passive and ordinary adoption remain active under their existing acceptance;
+contained-turn stays pending with empty active wiring and adopted boundaries,
+dynamic scope stays uncertified, and SDK external authority stays pending.
+
+Successor-wide production conformance is **not established**. Existing
+`runtime-setup-assembly.ts` declarations still use raw compatibility literals,
+owner labels that differ from module namespace prefixes, and one implementation
+ID with different passive/ordinary slot sets. Descriptor migration, release-wide
+identity review and successor module/root conformance evidence remain with their
+owners. No successor compiler or conformance CLI execution is claimed; the packet
+names library conformance-kit APIs. This checkpoint changes no production wiring,
+package/archive pins, accepted decisions, C0 evidence or frozen check inventory.
