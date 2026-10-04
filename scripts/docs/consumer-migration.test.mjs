@@ -61,12 +61,14 @@ test("projected direct tooling pins and disabled release-age waiting preserve th
   assert.match(await read("scripts/architecture/feature-module-config.mjs"), /const FOUNDATION_VERSION = "1\.7\.2";/u);
 });
 
-test("managed Skill remains byte-exact with the selected installed Cohort", async () => {
+test("managed Skill remains byte-exact with the selected installed Cohort and semantic gate", async () => {
   const integration = await json("architecture/foundation/docs-consumer-integration.json");
   const skillDigest = `sha256:${createHash("sha256").update(await read(integration.skillPath)).digest("hex")}`;
   assert.equal(skillDigest, integration.cohort.assets.skillDigest);
   const manifest = await json("package.json");
-  assert.equal(manifest.scripts["docs:protocol:check"], "pnpm docs:check && pnpm docs:governance && pnpm docs:qualification");
+  assert.equal(manifest.scripts["docs:protocol:check"], "pnpm docs:check && pnpm docs:governance");
+  assert.equal(manifest.scripts["check:ci:docs"], "pnpm docs:protocol:check && pnpm docs:qualification");
+  assert.match(manifest.scripts["check:fast"], /(?:^| && )pnpm docs:protocol:check && pnpm docs:qualification(?: && |$)/u);
 });
 
 test("Source Dependencies uses schema v3 with root package and every workspace package", async () => {

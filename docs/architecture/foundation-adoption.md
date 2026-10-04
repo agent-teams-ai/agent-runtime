@@ -181,6 +181,20 @@ metadata. Their metadata is merged from the strict path sidecar and
 Package scripts remain pinned to exact reviewed registry releases; local links
 and unpublished packages are not qualification evidence.
 
+`pnpm docs:protocol:check` is the consumer semantic gate: it runs `docs:check`
+followed by `docs:governance`. The full Docs lane, `pnpm check:ci:docs`, runs
+that gate followed by `pnpm docs:qualification`, exactly once each.
+`pnpm check:fast` also runs qualification immediately after the semantic gate;
+`pnpm check` retains all five unconditional lanes.
+
+Runtime qualification remains typechecking, serial adoption and migration
+checks, and the five portable authoring scenarios for index, architecture,
+ADR, evidence and qualification-plan documents. It retains crash/recovery
+and source-immutability checks. Central SDK qualification of the profile and
+trusted lock graph does not replace these consumer scenarios. The frozen CI
+contract retains its historical nesting; routing conformance compares expanded
+leaf commands and their multiplicity to preserve its complete inventory.
+
 ## Foundation 1.7.2 source upgrade
 
 The exact root development dependency and regenerated frozen registry lock

@@ -29,7 +29,7 @@ export const groups = {
     'test:feature-modules', 'architecture:feature-modules:active', 'test:consumer-modules',
     'architecture:consumer-modules', 'test:ar2-contract', 'architecture:registry',
     'architecture:operation-oracle'],
-  docs: ['docs:protocol:check'],
+  docs: ['docs:protocol:check', 'docs:qualification'],
   product: Object.keys(productPhases),
 } as const satisfies Record<Group, readonly string[]>;
 
@@ -53,11 +53,20 @@ const identities = (entries: readonly Command[]) => entries.map(entry => JSON.st
 export function assertFullInventory(scripts: Scripts, baseline: Scripts): void {
   assert.equal(scripts['typecheck:ci'], 'tsc --project scripts/ci/tsconfig.json --noEmit --pretty false', 'CI helper typechecking must remain blocking');
   assert.equal(scripts['test:ci'], 'node --test scripts/ci/contracts.test.ts && node scripts/ci/conformance.ts', 'CI policy enforcement must remain blocking');
+  assert.equal(scripts['docs:protocol:check'], 'pnpm docs:check && pnpm docs:governance', 'Docs semantic gate retains check and governance');
+  assert.equal(scripts['docs:qualification'], baseline['docs:qualification'], 'Docs qualification retains typecheck, serial and portable routing');
+  const fastRoutes = scripts['check:fast']?.split(' && ') ?? [];
+  const semanticIndex = fastRoutes.indexOf('pnpm docs:protocol:check');
+  assert.ok(semanticIndex >= 0, 'fast gate explicitly runs Docs semantics');
+  assert.equal(fastRoutes[semanticIndex + 1], 'pnpm docs:qualification', 'fast gate qualifies Docs immediately after semantics');
+  assert.equal(fastRoutes.filter(command => command === 'pnpm docs:qualification').length, 1, 'fast gate qualifies Docs exactly once');
   assert.equal(scripts.check, requiredJobs.map(group => `pnpm check:ci:${group}`).join(' && '));
   for (const [group, commands] of Object.entries({ ...groups, ...productPhases })) {
     assert.equal(scripts[group.startsWith('check:ci:') ? group : `check:ci:${group}`], commands.map(name => `pnpm ${name}`).join(' && '),
       `lane inventory: ${group}`);
   }
+  // The frozen contract retains the predecessor's nesting. Compare expanded
+  // terminal commands, including multiplicity, to preserve every reviewed leaf.
   const expected = commandInventory(baseline, 'check');
   const actual = commandInventory(scripts, 'check').filter(entry =>
     entry.script !== 'typecheck:ci' && entry.script !== 'test:ci');
