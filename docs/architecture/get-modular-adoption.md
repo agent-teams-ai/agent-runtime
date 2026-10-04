@@ -125,8 +125,9 @@ and local adoption authority are distinct. The profile retains the approved publ
 Core and Assembly 0.2.0 archives, verifies their SHA-256 and lock integrity,
 and requires exact catalog versions. It records actual blocking commands,
 without `conformant: true` for the repository. The A3 and dynamic Host migrations
-remain reviewed below. The current standard revision has identical canonical
-document bytes to the previous pin; no moving main is consumed.
+remain reviewed below. The historical zero-delta review applies to retained
+predecessor bytes; the current revision has the separately reviewed successor
+delta linked above. No moving main is consumed.
 
 The consumed release archives are distinct from the standard pin:
 
