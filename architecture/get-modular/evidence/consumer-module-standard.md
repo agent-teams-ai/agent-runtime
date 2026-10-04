@@ -8,6 +8,10 @@ related:
   - ADR-0023
   - ADR-0026
   - ADR-0029
+  - ADR-0030
+  - ADR-0031
+  - ADR-0032
+  - ADR-0033
   - ARCH-CURRENT-CONTRACT
   - ARCH-MVP-IMPLEMENTATION-ROADMAP
 ---
@@ -18,10 +22,12 @@ related:
 
 The owner approved a thin optional `@get-modular/assembly` package. Core remains
 pure and unchanged. Assembly depends only on the public Core root; Host supplies
-already selected and authorized factory functions and its capability types.
+already selected and authorized factory functions; capability types come from
+contract descriptors ([ADR-0032](../decisions/0032-give-assembly-an-authoring-builder-and-capability-scoped-handles.md)).
 Construction success does not establish readiness, trust or permissions.
 
-One construction feature owns handles, preparation and sequential execution.
+One construction feature owns handles, preparation, sequential execution and the
+authoring builder.
 No service locator, global service registry, discovery, dynamic imports,
 scheduler, retry, automatic rollback, disposal, readiness, generations or hot
 replacement. The internal Core emitter remains private and required-only.
@@ -44,7 +50,8 @@ The linked local profile maps Get Modular itself, not all consumers.
 
 The [current contract](current-contract.md) and this Assembly contract own graph
 compilation, exact bindings, preparation and construction handoff. Host owns
-permissions, resources, readiness and lifecycle. The local accepted adoption
+permissions, readiness, lifecycle decisions and cleanup authority; modules
+register their own cleanup through the optional resources package. The local accepted adoption
 ADR and consumer profile own concrete roots, composition owners, package pins,
 legacy boundaries, exceptions and actual verification commands. None may weaken
 organization rules or infer repository-wide conformance from one adopted slice.
@@ -85,7 +92,9 @@ There is one production composition authority: the profile selects bindings,
 owner-local factories materialize capabilities, and Host receives closed roots.
 Do not retain a second direct production assembly, instance fallback, string
 lookup, mutable registry, global container or registration-order semantics.
-Keep IDs and compatibility tokens in one local typed source. Preserve literal
+Keep capability IDs and revisions in contract descriptors owned by the contract
+owner ([ADR-0032](../decisions/0032-give-assembly-an-authoring-builder-and-capability-scoped-handles.md));
+declarations reference descriptors and never spell compatibility. Preserve literal
 inference; production wiring must not use `any`, double casts through `unknown`
 or broad casts to hide capability, token or slot mismatches. A justified exact
 exception needs an accepted rationale and a rejecting test; it cannot authorize
@@ -93,7 +102,9 @@ a false type claim.
 
 Construction may be async without making domain APIs async. Preserve Host-owned
 cleanup, the created journal and untransferred returned-product handoff. Do not
-introduce a generic lifecycle manager for passive construction.
+introduce a generic lifecycle manager for passive construction. Module-registered
+cleanup uses the optional resources package; see
+[Module resource scopes](#module-resource-scopes).
 
 ### Optional dynamic Host lifecycle candidate
 
@@ -118,8 +129,7 @@ An observer timeout never releases held work or proves physical disposal.
 Record source SHA, exact package/archive hashes, this standard's full-document
 SHA-256 and retained copy, TEST/production classification and real rejecting
 commands in the consumer profile. A synthetic TEST Host can demonstrate these
-races but cannot
-meet ADR-0028's two production ownership scopes or G1 public qualification.
+races but cannot establish production adoption or G1 public qualification.
 Until those gates and a product's local adoption decision pass, classify the
 dynamic boundary as pending. Retained consumers that initiate **new** calls
 after owner retirement are outside the first kernel contract; supporting them
@@ -132,8 +142,373 @@ than treating custody as invocation authority.
 | Exact implementation and capability | Instance fallback or second resolver | Independent mapping and zero-call negative tests |
 | Local private parser or helper | Node per class or endpoint | Positive fixture and semantic review |
 | Composition adapter imports | Assembly inside domain/application | Existing source policy and negative import fixture |
-| Existing Host cleanup | Duplicate disposal through shared capabilities | Failure, cancellation and handoff tests |
+| Host cleanup for what the Host itself acquires | Duplicate disposal through shared capabilities | Failure, cancellation and handoff tests |
 | Independent direct test reference | Production fallback or oracle derived from profile | Binding mutant and parity test |
+| Module resources through `setup`/`use` | Host-written cleanup lists for module-acquired resources | [`tests/resources/assembly-scope.test.mjs`](../../tests/resources/assembly-scope.test.mjs) |
+| One scope per run through `scoped()` | Parent scope captured at bind time | Same file, two concurrent runs |
+| Declared run inputs | Closures captured at bind time | [`tests/assembly/inputs.test.mjs`](../../tests/assembly/inputs.test.mjs) |
+| Descriptors and `declareModule` | Hand-written compatibility literals | [`tests/assembly/builder-types.ts`](../../tests/assembly/builder-types.ts) |
+
+### Module resource scopes
+
+[ADR-0030](../decisions/0030-admit-the-module-resource-scope-package.md) admits
+the optional `@get-modular/resources` package. It is a cleanup mechanism: a
+module registers how to release what it acquired, and the Host decides when a
+scope closes, how long to wait, when to escalate or abandon, whether to retry
+and how to report health. Core and Assembly do not import it. Pure and
+borrow-only modules need nothing.
+
+A scope is cooperative cleanup of trusted in-process code. `complete: true`
+means every registered cleanup callback returned without throwing; it is not
+proof of physical release. `Debt.path` is an array; join it only for display.
+
+Module authors:
+
+1. Acquire through `resources.setup`, or pass a value already in hand to
+   `resources.use`. Acquire asynchronously only inside `setup`: after a close is
+   requested `use()` throws and the value stays with you. Never close a
+   dependency received through a slot; it is borrowed.
+2. Name every entry and child scope. Names form the debt paths that Hosts
+   alert on.
+3. Everything a cleanup needs is a declared slot or the module's own resource.
+   Hidden dependencies break the order; independent modules are ordered by
+   implementation ID, not by intent.
+4. Give a child scope only ports whose setup completed before the child was
+   created. Never pass `Resources` of an ancestor or any `ScopeControl` down.
+5. When subscribing to a provider, register the returned disposer in your own
+   scope.
+6. Running work is not a resource. Register dependencies, then the drain set,
+   then the subscription, so release runs unsubscribe, drain, close; or make
+   each operation a `child()`.
+7. A domain shutdown protocol, such as retire, settle and delete in a fixed
+   order, stays inside one cleanup. A scope orders independent entries; it
+   does not replace an authority sequence.
+8. A cleanup throws only when its resource may still be held. Its `escalate`
+   signal asks for a faster release; it never permits skipping one.
+9. `use()` releases bluntly: `Writable` is destroyed, `ChildProcess` only
+   receives SIGTERM, `http.Server` waits for active requests. Use the README
+   recipes that react to the escalation signal.
+10. Wrap a thenable resource: `setup: () => ({ proc: execa(...) })`.
+11. Domain and application code never sees `Resources`; only the composition or
+    adapter layer of the module does. Only `scoped()` reads `FactoryContext.scope`;
+    never cast it.
+12. Never await `close()` of your own or an ancestor scope inside a cleanup.
+13. A cleanup that must not run twice guards itself; the Host may retry.
+
+Host template (policy belongs to the Host, not to the library):
+
+<!-- consumer-standard-example: host -->
+
+```ts
+import { assemblyFor, declareModule, defineContract, type Assembly, type CapabilitiesOf, type ModuleFactory } from "@get-modular/assembly";
+import { required } from "@get-modular/core";
+import { scoped, type CloseReport, type ModuleContext, type Resources, type ScopeControl } from "@get-modular/resources";
+
+// Contract owners publish one descriptor per capability.
+export const Db = defineContract<DbPort>()({ id: "acme/db", revision: 1 });
+export const Orders = defineContract<OrdersPort>()({ id: "acme/orders", revision: 1 });
+
+// A module package: no wire literals, typed only by the contracts it uses.
+export const ordersDeclaration = declareModule({
+  moduleId: "acme/orders", implementationId: "acme/orders/default",
+  owner: { authority: "acme", path: ["orders"] },
+  provides: [Orders.provide()], slots: [Db.slot("db", required())],
+});
+export const createOrders: ModuleFactory<
+  CapabilitiesOf<typeof Db | typeof Orders>, typeof ordersDeclaration, Connection, ModuleContext
+> = async (deps, { resources }) => {
+  const conn = await resources.setup({
+    name: "conn",
+    setup: ({ signal }) => connect(url, { signal }),
+    cleanup: (c) => c.close(),
+  });
+  return { instance: conn, capabilities: { "acme/orders": createOrdersPort(deps.db, conn) } };
+};
+
+// The Host: policy belongs here, not in the library.
+export async function closeWithin(
+  control: ScopeControl, graceMs: number, abandonMs: number,
+): Promise<CloseReport> {
+  const escalate = new AbortController();
+  const abandon = new AbortController();
+  // Referenced timers keep the process alive until the Host has a report.
+  // Abandon ends only this wait: the scope keeps releasing in order.
+  const toEscalate = setTimeout(() => { escalate.abort(); }, graceMs);
+  const toAbandon = setTimeout(() => { abandon.abort(); }, graceMs + abandonMs);
+  try {
+    return await control.close({ escalate: escalate.signal, abandon: abandon.signal });
+  } finally {
+    clearTimeout(toEscalate);
+    clearTimeout(toAbandon);
+  }
+}
+
+// The composition root is a function of Assembly, so `smoke` can pass its own api.
+export function composeOrders(api: Assembly<CapabilitiesOf<typeof Db | typeof Orders>>) {
+  // A Host-local stand-in; module packages export their factory as createOrders does.
+  const database = api.bindFactory(declareModule({
+    moduleId: "acme/db", implementationId: "acme/db/pg",
+    owner: { authority: "acme", path: ["db"] }, provides: [Db.provide()], slots: [],
+  }), async () => ({ instance: undefined, capabilities: { "acme/db": { query: () => 0 } } }));
+  const orders = api.bindFactory(ordersDeclaration, scoped(ordersDeclaration.implementationId, createOrders));
+  return api.prepare({ composition, factories: [database, orders], roots: { orders } });
+}
+// Bind and prepare once; every run gets its own scope.
+const preparation = await composeOrders(assemblyFor<CapabilitiesOf<typeof Db | typeof Orders>>());
+if (preparation.status === "failed") { throw new ConstructionFailed(preparation); }
+const { prepared } = preparation;
+
+export async function construct(host: Resources, signal: AbortSignal) {
+  const attempt = host.child({ name: "attempt" });
+  const outcome = await prepared.run({ signal, scope: attempt.resources });
+  if (outcome.status !== "succeeded") { // run() has settled: no factory is running
+    throw new ConstructionFailed(outcome, await closeWithin(attempt.control, 5_000, 5_000));
+  }
+  return { roots: outcome.roots, lifetime: attempt.control }; // transfer ownership with control
+}
+```
+
+Host rules:
+
+- Wrap owning factories with `scoped(implementationId, factory)` and pass one
+  scope per run: `run({ signal, scope: attempt.resources })`, never the `Scope`
+  itself. Never capture a scope when binding factories. Close the attempt only
+  after `run()` settles. Load exactly one copy of `@get-modular/resources` per
+  Host.
+- Pass construction cancellation to `run({ signal })`. `scoped()` stops a
+  module's setups when it aborts, until the factory settles.
+- Keep singletons shared across attempts in the Host scope.
+- Use one deadline at the root: escalate first, then abandon, with referenced
+  timers. Abandon never means released; the snapshot has `settled: false`,
+  debts stay in the scope, and a later `close()` after the flight completed is
+  an explicit retry.
+- Release continues past a failed entry. When a cleanup may need a provider
+  again on retry, such as an audit log that cleanups write to, keep
+  that provider in an outer scope and close the outer scope only after the
+  inner report is complete.
+- Use `child({ order: "concurrent" })` only for a scope whose entries are
+  independent peers, such as sessions, turns or instances; everything else
+  stays in reverse order.
+- Drain or stop running work before closing the scope that holds its
+  resources; deciding that work has stopped is Host policy.
+- Transfer ownership by transferring `control`.
+- A dynamic Host that uses the lifecycle kernel (candidate, ADR-0029) retains
+  custody before `child()` and releases it only after the child's report is
+  complete.
+
+Out of scope: release order derived from the graph, reference-counted sharing,
+durable recovery, dependency-loss health contracts, lifecycle hooks, plugin
+managers and process or worker control.
+
+### Dynamic instances
+
+[ADR-0031](../decisions/0031-pass-a-per-run-scope-and-declared-inputs-to-assembly-runs.md)
+lets one prepared assembly, called a template below, serve many instances. Get Modular has no live graph
+mutation, rebinding, hot replacement or code unloading.
+
+- An instance is one `run()` of a prepared template under its own scope with
+  its own inputs. Prepare a template once and keep it at the highest level that
+  outlives all its runs; it holds no run state. Key a cached template by the
+  plan digest together with the identity of its factory set; the digest alone
+  does not cover factories.
+- Reserve an instance synchronously by creating its scope with `child()` before
+  the first await, then run with that scope's `resources`. Close the instance
+  scope after a failed or cancelled `run()` settles. Publish roots only after a
+  successful run and transfer the instance's lifetime by transferring its
+  `control`.
+- Replace an instance by running a new one, switching the owner's pointer and
+  closing the old one. A change of any module inside an instance rebuilds the
+  whole instance; split an instance that is too coarse into nested templates.
+- Pass per-instance data and parent ports as inputs: declarations without
+  slots bound with `bindInput`, one capability each. Each run supplies them in
+  `run({ inputs })` as plain records keyed by capability ID; a value may be a
+  port. Never pass them through closures captured at bind time. An input must
+  outlive every instance that received it. Roots of an instance do not escape
+  its owner except through a facade.
+- The factory context stays closed: `{ signal, scope }` from Assembly and
+  `{ signal, resources }` inside `scoped()`. An input is data or one narrow
+  port, never a registry with `get(key)` or a bundle of parent services. More
+  than about eight inputs on one template is a reason to review its boundary.
+- Keep instances that share a key in a Host map with single-flight creation;
+  eviction is Host policy. Hold many independent instances under a parent
+  scope created with `order: "concurrent"`.
+- Tenant variants keep one stable base template; a variant lives in a nested
+  template with its own inputs.
+- Callers outside the owner reach a replaceable instance through one facade
+  capability: begin a call, invoke, release, and refuse with an explicit
+  unavailable result after retirement. Do not wrap ports in a generic Proxy.
+  With the lifecycle kernel candidate, activate the new instance, switch the
+  route and quiesce the old one in one synchronous step, drain by the Host's
+  deadline, retire and close it, and release kernel custody only when the
+  close report is complete.
+
+<!-- consumer-standard-example: instances -->
+
+```ts
+import { assemblyFor, declareModule, defineContract, type Assembly, type CapabilitiesOf, type ModuleFactory } from "@get-modular/assembly";
+import { required } from "@get-modular/core";
+import { scoped, type ModuleContext, type Resources } from "@get-modular/resources";
+
+const SessionId = defineContract<{ readonly id: string }>()({ id: "acme/session-id", revision: 1 });
+const Chat = defineContract<ChatPort>()({ id: "acme/chat", revision: 1 });
+interface Capabilities extends CapabilitiesOf<typeof SessionId | typeof Chat> {}
+
+const sessionInput = declareModule({
+  moduleId: "acme/session", implementationId: "acme/session/input",
+  owner: { authority: "acme", path: ["session"] }, provides: [SessionId.provide()], slots: [],
+});
+export const chatDeclaration = declareModule({
+  moduleId: "acme/chat", implementationId: "acme/chat/default",
+  owner: { authority: "acme", path: ["chat"] },
+  provides: [Chat.provide()], slots: [SessionId.slot("session", required())],
+});
+
+export const createChat: ModuleFactory<Capabilities, typeof chatDeclaration, ChatPort, ModuleContext> = async (deps, { resources }) => {
+  const lease = await resources.setup({
+    name: "lease", setup: () => acquireLease(deps.session.id), cleanup: (held) => held.release(),
+  });
+  const port = createChatPort(lease);
+  return { instance: port, capabilities: { "acme/chat": port } };
+};
+
+// The template root is a function of Assembly, so `smoke` can pass its own api.
+export function composeSessions(api: Assembly<Capabilities>) {
+  const session = api.bindInput(sessionInput);
+  const chat = api.bindFactory(chatDeclaration, scoped(chatDeclaration.implementationId, createChat));
+  return api.prepare({ composition, factories: [chat], roots: { chat }, inputs: { session } });
+}
+// Prepared once; each session is one run with its own scope and input.
+const preparation = await composeSessions(assemblyFor<Capabilities>());
+if (preparation.status === "failed") { throw new ConstructionFailed(preparation); }
+const { prepared } = preparation;
+
+// `sessions` is host.child({ name: "sessions", order: "concurrent" }).
+export async function openSession(sessions: Resources, id: string, signal: AbortSignal) {
+  const instance = sessions.child({ name: "session:" + id }); // reserved before the first await
+  const outcome = await prepared.run({
+    signal, scope: instance.resources, inputs: { session: { "acme/session-id": { id } } },
+  });
+  if (outcome.status !== "succeeded") { // closeWithin is the Host deadline helper from Module resource scopes
+    throw new ConstructionFailed(outcome, await closeWithin(instance.control, 5_000, 5_000));
+  }
+  return { chat: outcome.roots.chat, lifetime: instance.control }; // the caller owns the instance
+}
+```
+
+### Module packages and contracts
+
+[ADR-0032](../decisions/0032-give-assembly-an-authoring-builder-and-capability-scoped-handles.md)
+gives Assembly the authoring builder.
+
+Contracts:
+
+- A contract owner publishes one descriptor per capability with
+  `defineContract<Value>()({ id, revision })` from a contract package that
+  holds descriptors and port types, not implementations.
+- Raise `revision` with every change of the value type, additive changes
+  included, and never change what a published revision means. A capability ID
+  is permanent: do not start a parallel line such as an ID ending in `/v2`.
+- In the current wire generation a provider and every consumer of a capability
+  use the same revision, and Core rejects a mismatch as
+  `binding.compatibility-mismatch`. A later generation adds a window of
+  consumer revisions that a provider still serves; declarations and maps
+  written with the builder keep working, only the builder and Core change.
+- A module package lists the contract packages it provides or consumes as
+  ordinary dependencies; that version fixes the revision the module was built
+  against. Whenever a contract package raises a revision, it releases a version
+  that a caret range does not accept: a new minor while it is 0.x, a new major
+  from 1.0.
+- Declare port members as function-typed properties, not methods: TypeScript
+  checks method parameters bivariantly and accepts a breaking change silently.
+
+Module packages:
+
+- Declarations use `declareModule` with `Contract.provide()` and
+  `Contract.slot(slotId, cardinality)`. Never write `kind`, `schemaVersion` or a
+  `compatibility` literal by hand; the builder emits the current wire
+  generation.
+- A module package exports its declaration and an unbound factory typed
+  `ModuleFactory<CapabilitiesOf<its contracts>, typeof declaration, Instance, ModuleContext>`;
+  the composition root binds it. It never imports the Host's map.
+- Name a map derived from many contracts as an interface:
+  `interface HostCapabilities extends CapabilitiesOf<typeof A | typeof B> {}`.
+  A type alias over hundreds of contracts multiplies check time and reaches
+  TS2589 on TypeScript 5.8.3.
+- A Host prepares with a map that contains every capability any handle uses,
+  with the identical contract.
+- Module packages list Get Modular packages only in `peerDependencies`, with a
+  range of one 0.x minor such as `^0.3.0`, and pin exact versions in
+  `devDependencies` for their own tests. A Host installs one copy of each Get
+  Modular package. Widen a range only when the release notes of the newer
+  minor say that the authoring surface did not change.
+- Identify errors by `code`, never by class or message:
+  `assembly.<area>.<reason>`, `resources.<area>.<reason>` and
+  `conformance.<area>.<reason>`. Core diagnostics carry their catalog codes in
+  `Diagnostic.code`.
+
+### Identity and namespaces
+
+Core validates identity syntax and rejects collisions inside one compilation;
+it authenticates nothing.
+
+1. A namespace is one or more leading whole segments of a portable ID.
+   Membership holds only at a segment boundary,
+   `id === namespace || id.startsWith(namespace + "/")`, so `agent` never covers
+   `agent-runtime/x`.
+2. `moduleId` and `implementationId` lie in the namespace of the product that
+   supplies the code. Within one release of that product, declarations with
+   different slots or provides never share an `implementationId`, even in
+   different compositions. A module keeps its `implementationId` across
+   releases, also when a later release changes its slots or provides, and
+   raising a contract revision keeps every `implementationId` that uses it.
+3. A `capabilityId` lies in the namespace of the contract owner, the product or
+   context that defines the port, not of the provider. The owner publishes the
+   descriptor and, for a contract that others implement, its suite and fake.
+4. A namespace names a stable semantic owner, a product or bounded context,
+   not a team, repository, package or directory. Inside it, use
+   paths such as `<product>/<context>/<name>`.
+5. IDs are immutable and never reused. A renamed module or contract is a new
+   identity migrated through complete profiles. Core and Assembly have no
+   aliases and no override by ID.
+6. `owner.authority` is a navigation label equal to the first segment of
+   `moduleId`. It confers no ownership or permission.
+7. Session, tenant and instance IDs never enter module IDs; they name scopes
+   or run inputs.
+
+### Testing modules
+
+[ADR-0033](../decisions/0033-admit-the-module-conformance-kit.md) admits the
+kit `@get-modular/conformance`.
+
+1. Export each module factory as a named `ModuleFactory` typed by the module's
+   own contract map, and bind the same function in production, wrapped with
+   `scoped()` when it registers resources.
+2. Type fakes with `FactoryDependencies<C, typeof declaration>`. No `any`,
+   `as never` or double cast on a dependency record.
+3. The contract owner keeps one fake per contract that others implement and a
+   suite created with `contractSuite(contract, cases)`, published from an
+   entrypoint that production code does not import. The fake and every
+   implementation pass that suite through `runContractSuite`, which takes any
+   `(name, body)` registrar as `test`, such as `node:test` `test` or Vitest `it`.
+   From inside a `node:test` test, pass `(name, body) => t.test(name, body)`; an
+   unbound `t.test` crashes. A suite covers errors and cancellation,
+   not only success, and is required once a capability has two implementations,
+   the fake included.
+4. Test one module with `isolate(api, { declaration, factory, dependencies })`
+   and release it with `await using`; a debt fails the test.
+5. Write each production composition root as a function of `Assembly<C>`. One
+   `smoke` test per root prepares it once, fails and aborts construction at
+   every module and requires every attempt scope to close complete. Bind every
+   factory of the root through the `api` that `smoke` passes to `compose`:
+   `smoke` rejects when a factory is bound elsewhere, because it never sees an
+   injection. Effectful leaves use their owners' fakes.
+6. `smoke` does not prove wiring. Keep the independent binding oracle from the
+   table above, and never derive expected bindings from the profile or the
+   implementation.
+7. `guardHandles` is a per-file diagnostic, and `complete` is not proof of
+   physical release. Check real adapters in disposable TEST projects.
+8. Close every scope a test creates. No sleeps; use the test runner's
+   timeouts and mock timers for deadlines.
 
 ### Scoped acceptance and evidence
 
@@ -182,8 +557,13 @@ required, optional and ordered-many bindings, sharing and Host cleanup.
 [Preparation regressions](../../tests/assembly/preparation.test.mjs)
 check invalid wiring before effects; [typed fixtures](../../tests/assembly/types.test.mjs)
 and the [packed consumer](../../tests/assembly/packed-consumer.mjs)
-cover the public carrier. These belong to the existing `pnpm assembly:test`
-command, invoked by both fast and full gates, after `pnpm assembly:build`.
+cover the public carrier. The [resource scope tests](../../tests/resources/assembly-scope.test.mjs),
+[input tests](../../tests/assembly/inputs.test.mjs), [builder tests](../../tests/assembly/builder.test.mjs),
+the [template compile test](../../tests/assembly/consumer-standard-examples.test.mjs)
+for the examples of this document and the [packed conformance consumer](../../packages/conformance/tests/packed-root.test.mjs)
+extend them. These belong to the existing `pnpm assembly:test`, `pnpm resources:check`
+and `pnpm conformance:check` commands, invoked by both fast and full gates, after
+`pnpm assembly:build`.
 Consumers must additionally link their own executable slice and independent
 binding oracle; copied Markdown examples do not count as evidence.
 
@@ -191,9 +571,8 @@ Agent Runtime has accepted static Core/Assembly adoption for passive setup and
 ordinary-session composition in [Agent Runtime PR #168](https://github.com/agent-teams-ai/agent-runtime/pull/168),
 merged as `3cd722f607e1643b809f6946ee303a5a94469171`. This reciprocal reference
 records only that accepted passive scope; contained-turn and dynamic plugin
-runtime scope are not admitted. The consumer retains standard revision
-`669a750d` with complete-document byte SHA-256
-`e6cd8d26b4317bf5f94ddd22f6e36bf25e90548f72265d94808eaf20b947e553`.
+runtime scope are not admitted. The consumer records its current standard pin
+in its own profile.
 Core self-composition and synthetic/packed Hosts remain library evidence, not
 independent production consumers. This reference does not establish
 repository-wide conformance. Full legacy conversion and shared checker
@@ -201,8 +580,9 @@ extraction require separate scope.
 
 ## API and metadata ownership
 
-`assemblyFor<C>()` selects Host-owned capability value and exact compatibility
-identities at type level. It stores no service registrations or instances.
+`assemblyFor<C>()` selects capability value and compatibility identities at type
+level; `C` is a Host map or a module's own map, usually derived with
+`CapabilitiesOf`. It stores no service registrations or instances.
 `bindFactory(declaration, asyncFactory)` returns an identity-authenticated handle.
 A private WeakMap holds handle metadata; copying descriptors, symbols or prototype
 cannot forge a handle. This is identity checking, not code authorization.
@@ -213,17 +593,26 @@ Preparation and execution use this same snapshot. Mutation from required to many
 must never change an existing callback's injection contract. Malformed metadata
 causes a stable binding error before any factory call; Core owns semantic rules.
 
-`prepare({ composition, factories, roots })` accepts a successful Core result,
-the exact selected handles, and an alias-to-root-handle mapping. Handles must be
-unique and cover every selection exactly once. Each root has exactly one alias
-and refers to the same supplied handle. No extra handles or alias getters.
+`prepare({ composition, factories, roots, inputs })` accepts a successful Core
+result, the exact selected factory handles, an alias-to-root-handle mapping and an
+alias-to-input-handle mapping. Factory and input handles together are unique and
+cover every selection exactly once; an input handle appears only in `inputs`,
+under one alias, and is never a root (`assembly.prepare.input-handles`); an uncovered
+selection stays `assembly.prepare.handles`. Each root
+has exactly one alias and refers to the same supplied handle. No extra handles or
+alias getters.
 
-`C` is invariant across handles. Literal declaration inference is controlled by
+A handle is invariant in the capabilities its declaration uses: preparation
+accepts it only when each of them has the identical value and compatibility type
+in the preparing map, and every capability any handle uses is part of that map.
+Literal declaration inference is controlled by
 the declaration, not widened by the callback. Required slots yield `T`, optional
 slots an own field `T | undefined`, and many slots a frozen `readonly T[]`.
 Widened declarations do not confer a statically precise injection contract.
 
-Factories receive only their closed dependency record and `{ signal }`. Each
+Factories receive only their closed dependency record and `{ signal, scope }`.
+`scope` is the value passed to `run()`; Assembly delivers it unchanged and never
+inspects, awaits, freezes or disposes it. Each
 fulfills with `{ instance, capabilities }`. Instance is for Host, including roots
 without provides. Capabilities has exactly the declaration's own capability keys.
 Injection selects by provider implementation ID AND capability ID, never instance
@@ -232,16 +621,16 @@ key. Different capabilities and instance may be three different objects.
 
 ## Preparation and resource envelope
 
-Before the first await, capture the successful result, handle list and root map.
+Before the first await, capture the successful result, handle list, root map and input map.
 Inspect own data descriptors, dense arrays and exact shapes without invoking
 getters. Pre-count individual and aggregate sizes before proportional copying.
 Reject unexpected keys before projecting the supplied plan into a profile.
 
-The local carrier ceiling for supported Core 0.1 is: 4096 handles, selections and
+The local carrier ceiling for the supported Core pair is: 4096 handles, selections and
 order entries; 1024 roots; 65536 bindings; 1024 providers per row; 262144 provider
 occurrences overall. Declarations have at most 64 provides and 128 slots each,
 65536 of each overall; owner paths at most 8 segments. Every metadata identifier
-has at most 128 UTF-8 bytes. Root aliases are bounded to 128 UTF-8 bytes and 1024
+has at most 128 UTF-8 bytes. Root and input aliases are each bounded to 128 UTF-8 bytes and 1024
 entries. Validate alias own-key counts too. These are structural allocation
 ceilings, not another graph engine. No private Core imports. Changes to supported
 Core require rechecking this table against its successful-plan envelope.
@@ -263,8 +652,10 @@ is misrepresented as an enriched plan ceiling.
 
 ## Execution and Promise carrier
 
-`prepared.run({ signal })` is async and sequential in dependencyOrder. Exactly
-one invocation per selected implementation per attempt. Many injection preserves
+`prepared.run({ signal, scope, inputs })` is async and sequential in
+dependencyOrder. Every input is checked before the first factory. Exactly one
+invocation per selected non-input implementation per attempt; an input value is
+borrowed for the attempt. Many injection preserves
 providerImplementationIds order. Diamond consumers share capability references
 within an attempt; repeats, concurrent and finite nested runs have separate maps,
 ordered journals and cursors. Host factories may themselves return singletons;
@@ -293,8 +684,10 @@ no-assimilation promise.
 Outcomes are closed unions: succeeded with typed roots and created; failed with
 phase, stable code, implementation ID when applicable, original cause and created;
 cancelled with reason and created. A failed outcome separately records observed
-cancellation. Each created entry carries module ID, implementation ID, instance
-and a snapshot of its capabilities, in creation order.
+cancellation. Phase `inputs` reports invalid run inputs
+(`assembly.run.invalid-inputs`) before any factory call. Inputs never appear in
+created. Each created entry carries module ID, implementation ID, instance and a
+snapshot of its capabilities, in creation order.
 
 Immediately after fulfillment, retain the raw current product until its journal
 entry is committed. Malformed completion or an internal error in this interval
@@ -304,7 +697,9 @@ cleanup runs after failure. Memory exhaustion preventing the failure result itse
 and process termination are outside this handoff guarantee.
 
 Resources not returned by a rejected factory belong to that factory or its
-Host-owned resource owner. Host defines cleanup policy. A journal entry is not a
+Host-owned resource owner. Host defines cleanup policy. The optional resources
+package gives that owner an ordered mechanism; Assembly still performs no
+disposal. A journal entry is not a
 claim of independent resource ownership: do not dispose the same shared resource
 through provider, consumers and multiple capability references.
 The resource owner is known before construction handoff and registers cleanup
@@ -364,7 +759,10 @@ historical evidence and is not overwritten.
 - Positive typed consumer uses no wiring casts/any; negative fixtures reject wrong
   capability/compatibility, undeclared slots, mutable many, widened declarations,
   callback inference widening and incompatible mappings. Test minimum TS 5.8.3 and
-  pinned build compiler, resolver modes, and a large literal declaration fixture.
+  pinned build compiler, resolver modes, and a large literal declaration fixture;
+  builder-generated declarations, fragment handles bound under different maps,
+  rejection of unknown capabilities, and a 500-handle fragment fixture on both
+  compilers.
 - Packed-root consumer installs only supported files/dependencies and runs the
   synthetic Host. Core never imports assembly; no development tooling leaks.
 - Focused assembly gates, check:changed, check:fast, one final full check and
@@ -393,3 +791,6 @@ Public Assembly 0.1.0 admission additionally authenticates
 [ADR-0025](../decisions/0025-publish-assembly-0-1-0-with-core-0-1-0.md).
 Historical private admission retains its original authority. Publication follows
 retained-byte and registry consumer checks; admission alone proves no release.
+Public 0.2.0 and 0.3.0 pair admission additionally authenticates
+[ADR-0027](../decisions/0027-admit-the-core-and-assembly-0-2-0-correction-pair.md) and
+[ADR-0031](../decisions/0031-pass-a-per-run-scope-and-declared-inputs-to-assembly-runs.md) respectively.

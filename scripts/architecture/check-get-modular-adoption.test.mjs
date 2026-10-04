@@ -13,6 +13,7 @@ const { loadCapabilityConfig } = await import(foundationModule('dist/capabilitie
 const { loadStrictYamlFile } = await import(foundationModule('dist/features/configuration-input/node.js'));
 const { assertSchema } = await import(foundationModule('dist/schema-catalog.js'));
 import { checkAdoption, digest, validateProfile, verifyAdoption } from './check-get-modular-adoption.mjs';
+import { loadCmsPinInputs, verifyCmsPin } from './check-cms-pin.mjs';
 
 const loadSourcePolicy = (root, configPath = 'architecture/foundation/source-dependencies.yaml') =>
   loadCapabilityConfig({ readYaml: loadStrictYamlFile, assertSchema }, root, configPath);
@@ -143,16 +144,21 @@ architecture/get-modular/consumer-profile.json
   // The filesystem fixture uses real reviewed CMS identity with synthetic graphs.
   profile.standard.commit = pending.standard.commit;
   profile.standard.sha256 = pending.standard.sha256;
+  profile.standard.evidencePath = pending.standard.evidencePath;
   await write(profile.standard.evidencePath, await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard.md', import.meta.url), 'utf8'));
   for (const name of [
     'a3-cms-pin-review.json', 'a3-cms-pin-delta.diff',
     'dynamic-host-cms-pin-review.json', 'dynamic-host-cms-pin-delta.diff',
     'runtime-profile-cms-pin-review.json', 'creation-cleanup-cms-pin-review.json',
     'creation-cleanup-cms-pin-delta.diff',
+    'consumer-module-standard-9c722ce.md', 'smart-ci-cms-pin-review.json', 'smart-ci-cms-pin-delta.diff',
   ]) {
     const path = 'architecture/get-modular/evidence/' + name;
     await write(path, await readFile(new URL('../../' + path, import.meta.url), 'utf8'));
   }
+  await write('architecture/consumer-module-standard/contained-turn-profile.json',
+    await readFile(new URL('../../architecture/consumer-module-standard/contained-turn-profile.json', import.meta.url), 'utf8'));
+  profile.sdkGrowth = pending.sdkGrowth;
   await write('architecture/get-modular/consumer-profile.json', profile);
   return { root, profile, lock, write };
 }
@@ -166,7 +172,7 @@ test('actual filesystem loader and CLI validate offline retained identities', as
   assert.equal(JSON.parse(output).status, 'verified');
 });
 for (const [name, mutate, pattern] of [
-  ['retained central bytes', f => f.write(f.profile.standard.evidencePath, 'drift'), /central bytes drift/],
+  ['retained central bytes', f => f.write(f.profile.standard.evidencePath, 'drift'), /retained standard bytes/],
   ['accepted ADR immutable bytes', f => f.write(f.profile.authority.path, 'rewritten'), /immutable governance catalog/],
   ['manifest exact version', f => f.write('packages/apps/embedded-runtime/package.json', { dependencies: {} }), /manifest version drift/],
   ['lock exact version', f => { f.lock.importers['packages/apps/embedded-runtime'].dependencies['@get-modular/core'].version = '0.2.0'; return f.write('pnpm-lock.yaml', f.lock); }, /lock version drift/],
@@ -404,7 +410,7 @@ test('current standard pin preserves dynamic Host and A3 history and rejects dri
   const review = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/dynamic-host-cms-pin-review.json', import.meta.url)));
   const current = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/runtime-profile-cms-pin-review.json', import.meta.url)));
   const historical = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/a3-cms-pin-review.json', import.meta.url)));
-  const bytes = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard.md', import.meta.url), 'utf8');
+  const bytes = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard-9c722ce.md', import.meta.url), 'utf8');
   const prior = bytes.replace('  - ADR-0029\n', '').replace(
     /### Optional dynamic Host lifecycle candidate\n[\s\S]*?(?=\| Use \| Reject \| Evidence \|)/u, '');
   assert.notEqual(prior, bytes, 'fixture must reconstruct the exact A3 document');
@@ -434,8 +440,11 @@ legacy conversion and shared checker extraction require separate scope.`;
   assert.equal(current.after.commit, '9c722ceff4ede307d06d7a4b63fdebe615f54c53');
   assert.equal(current.delta.documentBytesChanged, false);
   assert.equal(current.after.sha256, review.after.sha256);
-  assert.equal(pending.standard.commit, current.after.commit);
-  assert.equal(pending.standard.sha256, current.after.sha256);
+  const step = await loadCmsPinInputs(); verifyCmsPin(step);
+  assert.equal(step.review.before.commit, current.after.commit);
+  assert.equal(step.review.before.sha256, current.after.sha256);
+  assert.equal(pending.standard.commit, step.review.after.commit);
+  assert.equal(pending.standard.sha256, step.review.after.sha256);
   assert.equal(digest(bytes), current.after.sha256);
   const {profile, evidence} = fixture();
   profile.standard.commit = current.after.commit; profile.standard.sha256 = current.after.sha256;
@@ -465,7 +474,7 @@ test('renumbered ordinary decisions retain both immutable pre-merge byte sets', 
 // stale retained document could still satisfy an identity-only migration check.
 test('current candidate-only pin rejects prior identities and prior complete bytes', async () => {
   const review = JSON.parse(await readFile(new URL('../../architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json', import.meta.url)));
-  const bytes = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard.md', import.meta.url), 'utf8');
+  const bytes = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard-9c722ce.md', import.meta.url), 'utf8');
   const prior = await readFile(new URL('../../architecture/get-modular/evidence/consumer-module-standard-ac49bb33.md', import.meta.url), 'utf8');
   assert.equal(digest(prior), review.before.sha256);
   assert.equal(digest(bytes), review.after.sha256);
@@ -475,8 +484,11 @@ test('current candidate-only pin rejects prior identities and prior complete byt
   assert.ok(start >= 0 && end > start, 'reviewed candidate addition must be present');
   const reconstructed = bytes.replace(relationLine, '').replace(bytes.slice(start, end), '');
   assert.equal(reconstructed, prior, 'reviewed additions must exactly bridge prior and current bytes');
-  assert.equal(pending.standard.commit, review.after.commit);
-  assert.equal(pending.standard.sha256, review.after.sha256);
+  const step = await loadCmsPinInputs(); verifyCmsPin(step);
+  assert.equal(step.review.before.commit, review.after.commit);
+  assert.equal(step.review.before.sha256, review.after.sha256);
+  assert.equal(pending.standard.commit, step.review.after.commit);
+  assert.equal(pending.standard.sha256, step.review.after.sha256);
   const {profile, evidence} = fixture();
   profile.standard.commit = review.after.commit; profile.standard.sha256 = review.after.sha256;
   evidence.standard = {commit: review.after.commit, bytes};
@@ -497,4 +509,32 @@ test('ordinary loader rejects losing either reviewed CMS branch', async t => {
     try {await assert.rejects(checkAdoption(f.root), /ENOENT/u);}
     finally {await f.write(path, bytes.toString('utf8'));}
   }
+});
+
+test('ordinary loader rejects missing successor evidence, stale coupled pins and false review claims', async t => {
+  const f = await diskFixture(t);
+  for (const name of ['smart-ci-cms-pin-review.json', 'smart-ci-cms-pin-delta.diff', 'consumer-module-standard-9c722ce.md']) {
+    const path = 'architecture/get-modular/evidence/' + name, bytes = await readFile(join(f.root, path));
+    await rm(join(f.root, path));
+    try { await assert.rejects(checkAdoption(f.root), /ENOENT/u); }
+    finally { await f.write(path, bytes.toString('utf8')); }
+  }
+  const path = 'architecture/get-modular/evidence/smart-ci-cms-pin-review.json';
+  const original = await readFile(join(f.root, path), 'utf8');
+  for (const mutate of [
+    x => { x.before.commit = 'f'.repeat(40); },
+    x => { x.before.evidencePath = '../outside.md'; },
+    x => { x.adoption.dynamicAgentRuntime = 'certified'; },
+  ]) {
+    const review = JSON.parse(original); mutate(review); await f.write(path, review);
+    try { await assert.rejects(checkAdoption(f.root)); }
+    finally { await f.write(path, original); }
+  }
+  const before = JSON.parse(original).before;
+  Object.assign(f.profile.standard, { commit: before.commit, sha256: before.sha256 });
+  await f.write('architecture/get-modular/consumer-profile.json', f.profile);
+  await f.write('architecture/consumer-module-standard/contained-turn-profile.json', {
+    status: 'pending', authority: { consumerModuleStandard: { ...f.profile.standard, gitCommit: f.profile.standard.commit } },
+  });
+  await assert.rejects(checkAdoption(f.root), /retained standard bytes/u);
 });

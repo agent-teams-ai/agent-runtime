@@ -67,6 +67,10 @@ const protectedCmsNames = ['rejects split profile pins', 'rejects retained stand
 const cmsInputPaths = [cmsFile, cmsContract, 'scripts/architecture/check-cms-pin.mjs',
   'architecture/get-modular/consumer-profile.json', 'architecture/consumer-module-standard/contained-turn-profile.json',
   'architecture/get-modular/evidence/consumer-module-standard.md',
+  'architecture/get-modular/evidence/consumer-module-standard-9c722ce.md',
+  'architecture/get-modular/evidence/smart-ci-cms-pin-review.json',
+  'architecture/get-modular/evidence/smart-ci-cms-pin-delta.diff',
+  'architecture/get-modular/evidence/runtime-profile-cms-pin-review.json',
   'architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json',
   'architecture/get-modular/evidence/creation-cleanup-cms-pin-delta.diff'];
 const hash = (bytes: string | Buffer) => createHash('sha256').update(bytes).digest('hex');
@@ -199,7 +203,8 @@ export const inputPaths = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yam
   'scripts/ci/full-contract.json', 'experiments/rust-system-boundaries/rust-toolchain.toml',
   'experiments/rust-system-boundaries/Cargo.lock', 'scripts/ci/measure.ts', 'scripts/ci/compare.ts',
   'scripts/ci/policy.ts', 'scripts/ci/script-routing.ts', 'scripts/ci/conformance.ts', 'scripts/ci/gate.ts',
-  'scripts/ci/inventory.ts', 'scripts/ci/contracts.test.ts', 'scripts/ci/tsconfig.json'] as const;
+  'scripts/ci/inventory.ts', 'scripts/ci/contracts.test.ts', 'scripts/ci/tsconfig.json',
+  'scripts/ci/cms-pin-review.ts', 'scripts/ci/cms-pin-review.test.ts'] as const;
 
 export function toolchainKeys(entry: string): string[] {
   return entry === 'check' || /^check:ci:product(?::(?:packages|root|native))?$/u.test(entry)

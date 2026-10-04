@@ -3080,8 +3080,11 @@ boundaries:
   - scripts/ci/conformance.ts
   - scripts/ci/compare.ts
   - scripts/ci/contracts.test.ts
+  - scripts/ci/cms-pin-review.ts
+  - scripts/ci/cms-pin-review.test.ts
   entrypoints:
   - scripts/ci/script-routing.ts
+  - scripts/ci/cms-pin-review.ts
   allow:
     boundaries: []
     packages:

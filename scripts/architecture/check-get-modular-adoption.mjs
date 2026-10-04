@@ -11,6 +11,7 @@ import { resolve, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv';
 import { routedScripts } from '../ci/script-routing.ts';
+import { loadCmsPinInputs, verifyCmsPin } from './check-cms-pin.mjs';
 import {ordinaryCompositionPath, ordinaryAuthorityPath, verifyOrdinaryGraph, verifyOrdinaryHostOwnership} from './ordinary-composition-evidence.mjs';
 import {checkOrdinaryFeatureScope} from './check-ordinary-feature-scope.mjs';
 import { foundationModule, readSourceCensus, requireSourceDiagnostics, verifySourceCensus } from './get-modular-source-census.mjs';
@@ -177,8 +178,11 @@ export async function checkAdoption(root) {
   validateCurrentStandardMigration(current);
   validateParallelStandardMigrations(historical, dynamic, current,
     await json(creationCleanupReviewPath), await bytes(creationCleanupDeltaPath));
-  assert.equal(profile.standard.commit, current.after.commit, 'reviewed current CMS commit drift');
-  assert.equal(profile.standard.sha256, current.after.sha256, 'reviewed current CMS bytes drift');
+  const cms = await loadCmsPinInputs(consumerRoot);
+  verifyCmsPin(cms);
+  assert.deepEqual({ commit: cms.review.before.commit, sha256: cms.review.before.sha256,
+    byteLength: cms.review.before.byteLength }, { commit: current.after.commit, sha256: current.after.sha256,
+    byteLength: current.after.byteLength }, 'reviewed historical CMS head must bridge the current step');
   const { loadCapabilityConfig } = await import(foundationModule('dist/capabilities/source-dependencies/adapters/inbound/configuration/load-capability-config.js'));
   const { readAcceptedArchitectureDecisionEvidence } = await import(foundationModule('dist/capabilities/governance-architecture-decisions/module.js'));
   const { loadStrictYamlFile } = await import(foundationModule('dist/features/configuration-input/node.js'));

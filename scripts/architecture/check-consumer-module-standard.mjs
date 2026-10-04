@@ -4,7 +4,7 @@ import { dirname, posix, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseSync, Visitor } from "oxc-parser";
 import { routedScripts } from '../ci/script-routing.ts';
-import { cmsPinReviewPath, retainedEvidencePath, verifyCmsPin } from "./check-cms-pin.mjs";
+import { loadCmsPinInputs, verifyCmsPin } from "./check-cms-pin.mjs";
 import {
   standardDeltaPath,
   standardReviewPath,
@@ -378,10 +378,7 @@ export async function loadConsumerModuleStandardInputs(root = repositoryRoot) {
   const profile = JSON.parse(await readFile(resolve(root, profilePath), "utf8"));
   const passiveProfile = JSON.parse(await readFile(resolve(root,
     "architecture/get-modular/consumer-profile.json"), "utf8"));
-  const standardBytes = await readFile(resolve(root,
-    "architecture/get-modular/evidence/consumer-module-standard.md"));
-  const standardReview = JSON.parse(await readFile(resolve(root, cmsPinReviewPath), "utf8"));
-  const standardDeltaBytes = await readFile(resolve(root, retainedEvidencePath(standardReview.delta?.path)));
+  const cmsPinInputs = await loadCmsPinInputs(root);
   const packageManifest = JSON.parse(await readFile(resolve(root, packagePath), "utf8"));
   const decisionRegistry = JSON.parse(await readFile(resolve(root, decisionRegistryPath), "utf8"));
   const decisionBytes = await readFile(resolve(root, decisionPath));
@@ -393,7 +390,8 @@ export async function loadConsumerModuleStandardInputs(root = repositoryRoot) {
     catch { return [path, false]; }
   })));
   return { decisionBytes, decisionRegistry, packageManifest, passiveProfile, pathExistence, profile, sources,
-    standardBytes, standardDeltaBytes, standardReview };
+    cmsPinInputs, standardBytes: cmsPinInputs.standardBytes, standardDeltaBytes: cmsPinInputs.deltaBytes,
+    standardReview: cmsPinInputs.review };
 }
 
 const validatePendingDecision = inputs => {
@@ -429,6 +427,7 @@ export function validateConsumerModuleStandard(inputs) {
   // replaces the hardcoded migration chain below. It also covers the profile
   // agreement and retained byte assertions that used to live here.
   const pin = verifyCmsPin({
+    ...inputs.cmsPinInputs,
     standard: passive, contained: inputs.profile.authority?.consumerModuleStandard,
     standardBytes: inputs.standardBytes, review: inputs.standardReview, deltaBytes: inputs.standardDeltaBytes,
   });

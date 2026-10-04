@@ -78,6 +78,17 @@ test("rejects a pin review or delta detached from the pinned standard", async ()
   assert.throws(() => validateConsumerModuleStandard(delta), /delta must match its review digest/u);
 });
 
+test("pending consumer gate rejects successor scope promotion and false predecessor linkage", async () => {
+  for (const mutate of [
+    x => { x.standardReview.adoption.containedTurn = "active"; },
+    x => { x.standardReview.before.commit = "f".repeat(40); },
+    x => { x.standardReview.provenance.afterCommit = "main"; },
+  ]) {
+    const inputs = await fresh(); mutate(inputs);
+    assert.throws(() => validateConsumerModuleStandard(inputs));
+  }
+});
+
 // AR-0 (owner decision 2026-10-02): validateStandardMigration and its hardcoded
 // chain no longer run, so the source-main and adoption-state rejections below
 // are disabled with it. Restore this test together with the chain.
