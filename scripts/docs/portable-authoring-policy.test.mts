@@ -35,15 +35,26 @@ test("portable inventory refuses missing, duplicate, nonpassing and overlapping 
 test("actual Node reporter refuses an empty entry and a passing test without real qualification evidence", async () => {
   // A deleted registration or early-return helper otherwise produces a green Node command.
   const root = await mkdtemp(join(tmpdir(), "dq-refusal-"));
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "NODE_TEST_CONTEXT"));
+  const runner = ["--import=" + fileURLToPath(new URL("./portable-authoring-policy.mts", import.meta.url)),
+    "--test", "--test-concurrency=2", "--test-reporter=" + fileURLToPath(new URL("./portable-authoring-reporter.mts", import.meta.url))];
   try {
-    const file = join(root, "no-op.test.mts");
-    for (const source of ["", 'import test from "node:test"; test("portable authoring preserves runtime-index", () => {});',
-      'import test from "node:test";\n' + portableScenarioIds.map(id => `test("portable authoring preserves ${id}", () => {});`).join("\n")]) {
-      await writeFile(file, source);
-      const result = spawnSync(process.execPath, ["--import=" + new URL("./portable-authoring-policy.mts", import.meta.url).pathname, "--test", "--test-reporter=" + new URL("./portable-authoring-reporter.mts", import.meta.url).pathname, file], { encoding: "utf8", env: Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "NODE_TEST_CONTEXT")) });
-      assert.notEqual(result.status, 0, result.stdout + result.stderr);
-      assert.match(result.stderr, /missing, duplicate or unexpected portable test|missing or duplicate real qualification scope|unexpected portable test identity|foreign Node entry file/u);
+    const emptyFile = join(root, portableFiles[0]!);
+    await mkdir(dirname(emptyFile), { recursive: true });
+    await writeFile(emptyFile, "");
+    const empty = spawnSync(process.execPath, [...runner, portableFiles[0]!], { encoding: "utf8", cwd: root, env });
+    assert.notEqual(empty.status, 0, empty.stdout + empty.stderr);
+    assert.match(empty.stderr, /missing, duplicate or unexpected portable test|unexpected portable test identity/u);
+
+    for (const [index, id] of portableScenarioIds.entries()) {
+      const file = join(root, portableFiles[index]!);
+      await mkdir(dirname(file), { recursive: true });
+      await writeFile(file, `import test from "node:test"; test("portable authoring preserves ${id}", () => {});\n`);
     }
+    // Canonical entries and passing names must reach the missing-scope check.
+    const noOp = spawnSync(process.execPath, [...runner, ...portableFiles], { encoding: "utf8", cwd: root, env });
+    assert.notEqual(noOp.status, 0, noOp.stdout + noOp.stderr);
+    assert.match(noOp.stderr, /missing or duplicate real qualification scope/u);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
