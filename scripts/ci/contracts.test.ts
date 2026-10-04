@@ -233,7 +233,9 @@ test('paired evidence rejects missing phases, missing test identities, new skips
   assert.ok(cmsPhase); cmsPhase.cms = independentlyObserved; cmsPhase.tests = independentlyObserved.direct.tests;
   compare(serial, parallel);
   console.log('Actual direct CMS Node events:', JSON.stringify(cms.direct.tests));
-  console.log('Independent mandatory CLI process:', JSON.stringify({ code: cms.mandatory?.code, signal: cms.mandatory?.signal, summaries: cms.mandatory?.summaries }));
+  const mandatoryDiagnostic = `Independent mandatory CLI process: ${JSON.stringify({ code: cms.mandatory?.code, signal: cms.mandatory?.signal, summaries: cms.mandatory?.summaries })}`;
+  assert.equal(mandatoryRunnerSummary(mandatoryDiagnostic), undefined, 'quoted test:ci evidence is not standalone mandatory runner output');
+  console.log(mandatoryDiagnostic);
   if (process.env.CI_FOCUSED_EVIDENCE_DIR) { await writeFile(join(process.env.CI_FOCUSED_EVIDENCE_DIR, 'cms-public-observation.json'), `${JSON.stringify({ serialFixture: cms, parallelFixture: independentlyObserved }, null, 2)}\n`); }
   const faults: Array<(value: Receipt[]) => void> = [
     value => { value.pop(); },

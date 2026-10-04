@@ -136,7 +136,10 @@ async function cmsProcess(command: string, direct: boolean) {
     if (line.startsWith('CI_NODE_EVENT ')) { tests.push(JSON.parse(line.slice(14)) as TestResult); }
     else if (line.startsWith('CI_NODE_SUMMARY ')) { nodeSummaries.push(JSON.parse(line.slice(16)) as NodeSummary); }
     else { const result = observe(line); if (result) { tests.push(result); } }
-    if (line.startsWith('Mandatory Node tests:')) { summaries.push(line); }
+    if (command === cmsMandatoryCommand) {
+      const summary = mandatoryRunnerSummary(line);
+      if (summary) { summaries.push(summary); }
+    }
   });
   const outcome = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
     child.once('error', reject);
@@ -219,7 +222,7 @@ function observedToolchain(entry: string): Record<string, string> {
 }
 
 export function mandatoryRunnerSummary(line: string): string | undefined {
-  return /Mandatory Node tests: [1-9][0-9]* required identities completed or exactly excepted/u.exec(line)?.[0];
+  return /^Mandatory Node tests: [1-9][0-9]* required identities completed or exactly excepted$/u.exec(line)?.[0];
 }
 
 export function assertPhaseTestExecution(phase: { script: string; commands: readonly Command[];
