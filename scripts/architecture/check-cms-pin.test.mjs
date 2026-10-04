@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 
 import { exactCmsDelta, loadCmsPinInputs, retainedEvidencePath, verifyCmsPin } from "./check-cms-pin.mjs";
@@ -20,6 +21,35 @@ const fresh = async () => {
 test("accepts the retained pin and returns the passive profile identity", async () => {
   const inputs = await fresh();
   assert.deepEqual(verifyCmsPin(inputs), { commit: inputs.standard.commit, sha256: inputs.standard.sha256 });
+});
+
+test("retains exact CMS delta bytes under conflicting Git inter-hunk context", () => {
+  const env = { ...process.env, GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "diff.interHunkContext", GIT_CONFIG_VALUE_0: "10000" };
+  delete env.NODE_TEST_CONTEXT;
+  const result = spawnSync(process.execPath, ["--input-type=module", "--eval", `
+    import assert from "node:assert/strict";
+    import { createHash } from "node:crypto";
+    const { loadCmsPinInputs, verifyCmsPin } = await import(${JSON.stringify(new URL("./check-cms-pin.mjs", import.meta.url).href)});
+    const inputs = await loadCmsPinInputs();
+    const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
+    const digest = "670810e035da54ae00b1b7f45c5516851232439e58673fecc12a83b129be2c99";
+    console.log(JSON.stringify({ byteLength: inputs.exactDeltaBytes.length,
+      hunks: inputs.exactDeltaBytes.toString("utf8").split("\\n").filter(line => line.startsWith("@@ ")).length,
+      sha256: sha256(inputs.exactDeltaBytes) }));
+    assert.equal(inputs.deltaBytes.length, 36534);
+    assert.equal(sha256(inputs.deltaBytes), digest, "independent retained delta digest");
+    assert.equal(sha256(inputs.exactDeltaBytes), digest, "Git must preserve the retained delta digest");
+    assert.deepEqual(inputs.exactDeltaBytes, inputs.deltaBytes);
+    assert.deepEqual(verifyCmsPin(inputs), {
+      commit: "81063add7de50ffe2b91cc74bf7271b298624c21",
+      sha256: "49d08b6d1762e94308157fb59b3aa82ac1630c91f529f6efcd4915dfffee7ba7",
+    });
+  `], { env, encoding: "utf8", timeout: 30_000, maxBuffer: 1024 * 1024 });
+  assert.equal(result.error, undefined);
+  assert.equal(result.signal, null);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  console.log(result.stdout.trim());
 });
 
 test("accepts a later pin step without any checker edit", async () => {

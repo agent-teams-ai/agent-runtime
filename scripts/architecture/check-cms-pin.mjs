@@ -58,7 +58,7 @@ export async function exactCmsDelta(beforePath, afterPath, beforeBytes, afterByt
     await writeFile(join(root, before), beforeBytes);
     await writeFile(join(root, after), afterBytes);
     const result = spawnSync("git", ["--no-pager", "-c", "diff.suppressBlankEmpty=true", "diff", "--no-index", "--no-ext-diff", "--no-textconv",
-      "--no-color", "--no-renames", "--text", "--full-index", "--diff-algorithm=myers", "--indent-heuristic", "--unified=3",
+      "--no-color", "--no-renames", "--text", "--full-index", "--diff-algorithm=myers", "--indent-heuristic", "--unified=3", "--inter-hunk-context=0",
       "--src-prefix=a/", "--dst-prefix=b/", "--", before, after], { cwd: root, maxBuffer: 1024 * 1024 });
     assert.ok(!result.error && result.signal === null && [0, 1].includes(result.status), "CMS Git delta generation failed");
     return result.stdout;
