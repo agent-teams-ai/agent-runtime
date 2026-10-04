@@ -82,5 +82,9 @@
     "pnpm check:fast",
     "pnpm check"
   ],
-  "checkDisposition": "Planned verification is not a claim of execution. Actual results and limitations belong to the delivery report; no successor compiler or conformance CLI receipt is asserted."
+  "checkDisposition": "Planned verification is not a claim of execution. Actual results and limitations belong to the delivery report; no successor compiler or conformance CLI receipt is asserted.",
+  "supportingGateAdjustment": {
+    "path": "scripts/docs/consumer-migration.test.mjs",
+    "reason": "Required Docs qualification froze the current CI source-policy bytes, roots and public entries. Preserve that fixed predecessor digest by reconstructing only the two added tooling roots and one entry; update its exact live boundary oracle. No Cohort/caller/history bytes change."
+  }
 }
