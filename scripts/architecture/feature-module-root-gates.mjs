@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { routedScripts } from "../ci/script-routing.ts";
 
 import { parseDeterministicJson } from "./feature-module-config.mjs";
 import { CHECKER_LIMITS } from "./feature-module-limits.mjs";
@@ -15,7 +16,7 @@ export const activeGateIssues = async ({ profile, root, issue }) => {
     const manifest = parseDeterministicJson(await readFile(inspected.absolutePath, "utf8"));
     const requiredPair = ["pnpm test:feature-modules", "pnpm architecture:feature-modules:active"];
     const invalid = ["check", "check:fast"].some((name) => {
-      const steps = typeof manifest?.scripts?.[name] === "string" ? manifest.scripts[name].split(" && ") : [];
+      const steps = routedScripts(manifest?.scripts, name);
       const fixtureIndex = steps.indexOf(requiredPair[0]);
       return fixtureIndex < 0
         || steps.lastIndexOf(requiredPair[0]) !== fixtureIndex

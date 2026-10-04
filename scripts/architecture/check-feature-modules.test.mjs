@@ -27,6 +27,10 @@ const baseFiles = {
     scripts: {
       check: "pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm fixture:check",
       "check:fast": "pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm fixture:fast",
+      "test:feature-modules": "node --test scripts/architecture/check-feature-modules.test.mjs",
+      "architecture:feature-modules:active": "node scripts/architecture/check-feature-modules.mjs --require-active",
+      "fixture:check": "node src/features/alpha/domain/value.ts",
+      "fixture:fast": "node src/features/alpha/domain/value.ts",
     },
     agentTeamsArchitecture: { role: "bounded-context", ownerDocument: "ADR-0005" },
     exports: {
@@ -183,7 +187,8 @@ const fixtureDecisionFiles = (fixture) => fixture.acceptActivationAdr ? {
 const applyFixtureRootScripts = (files, scripts) => {
   if (!scripts) {return;}
   const manifest = JSON.parse(files["package.json"]);
-  manifest.scripts = scripts;
+  const leaves = Object.fromEntries(Object.entries(manifest.scripts).filter(([name]) => name !== "check" && name !== "check:fast"));
+  manifest.scripts = { ...leaves, ...scripts };
   files["package.json"] = `${JSON.stringify(manifest)}\n`;
 };
 

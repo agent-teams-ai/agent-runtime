@@ -979,7 +979,8 @@ boundaries:
   entrypoints:
   - scripts/foundation/check-quality-adoption.mjs
   allow:
-    boundaries: []
+    boundaries:
+    - tooling.ci-full-gate
     packages:
     - yaml
     builtins:
@@ -2392,6 +2393,7 @@ boundaries:
     boundaries:
     - tooling.sdk-growth-source.adapters
     - tooling.sdk-growth-source.policy
+    - tooling.ci-full-gate
     packages: []
     builtins:
     - node:assert/strict
@@ -2412,6 +2414,7 @@ boundaries:
   entrypoints: []
   allow:
     boundaries:
+    - tooling.ci-full-gate
     - adapter.agent-execution.claude-agent-sdk
     - adapter.agent-execution.codex-app-server
     - adapter.agent-execution.codex-data
@@ -2539,6 +2542,7 @@ boundaries:
   entrypoints: []
   allow:
     boundaries:
+    - tooling.ci-full-gate
     - adapter.agent-execution.claude-agent-sdk
     - adapter.agent-execution.codex-app-server
     - adapter.agent-execution.codex-data
@@ -3031,7 +3035,8 @@ boundaries:
   - scripts/ci/run-ordinary-postgres.test.mjs
   entrypoints: []
   allow:
-    boundaries: []
+    boundaries:
+    - tooling.ci-full-gate
     packages: []
     builtins:
     - node:assert/strict
@@ -3062,4 +3067,35 @@ boundaries:
     - node:test
     - node:url
     - node:util
+    runtimeReferences: []
+
+- id: tooling.ci-full-gate
+  dependencyMode: development
+  roots:
+  - scripts/ci/script-routing.ts
+  - scripts/ci/policy.ts
+  - scripts/ci/gate.ts
+  - scripts/ci/inventory.ts
+  - scripts/ci/measure.ts
+  - scripts/ci/conformance.ts
+  - scripts/ci/compare.ts
+  - scripts/ci/contracts.test.ts
+  entrypoints:
+  - scripts/ci/script-routing.ts
+  allow:
+    boundaries: []
+    packages:
+    - yaml
+    builtins:
+    - node:assert/strict
+    - node:child_process
+    - node:crypto
+    - node:fs/promises
+    - node:os
+    - node:path
+    - node:perf_hooks
+    - node:readline
+    - node:test
+    - node:test/reporters
+    - node:url
     runtimeReferences: []

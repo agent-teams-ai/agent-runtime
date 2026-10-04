@@ -8,6 +8,7 @@ import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import test from "node:test";
+import { commandInventory, routedScripts } from "../ci/script-routing.ts";
 import { inspectArchive, readBoundedArchive } from "./archive.mjs";
 import { assertExternalOutput, collect, git, inspectSource, installedFiles, inventoryKey } from "./collect.mjs";
 import { run, writeProtectedOutput } from "./index.mjs";
@@ -366,7 +367,11 @@ test("focused check remains blocking in changed, fast and full routes", () => {
   const packageScripts = JSON.parse(readFileSync(join(repository, "package.json"), "utf8")).scripts;
   assert.equal(packageScripts["test:sdk-growth:source"], "node --test scripts/sdk-growth-source/collector.test.mjs");
   for (const gate of ["check:fast", "check"]) {
-    assert.ok(packageScripts[gate].includes("pnpm test:sdk-growth:source &&"), `${gate} must block on source check`);
+    assert.equal(routedScripts(packageScripts, gate).filter(command => command === "pnpm test:sdk-growth:source").length,
+      1, `${gate} must block exactly once on source check`);
+    assert.deepEqual(commandInventory(packageScripts, gate).filter(command => command.script === "test:sdk-growth:source"), [
+      { script: "test:sdk-growth:source", command: "node --test scripts/sdk-growth-source/collector.test.mjs" }
+    ], `${gate} must reach the real source check`);
   }
   const workflow = readFileSync(join(repository, "architecture/foundation/repository-agent-workflow.yaml"), "utf8");
   assert.match(workflow, /- id: sdk-growth-source\n\s+script: test:sdk-growth:source\n\s+extensions: \[\.mjs, \.tgz\]\n\s+passPaths: false\n/u);
@@ -403,8 +408,13 @@ test("scoped tooling feature has exact FMS ownership, census and blocking Founda
     assert.equal(routes["test:sdk-growth:source"], "node --test scripts/sdk-growth-source/collector.test.mjs");
     assert.equal(routes["check:changed"], "agent-teams-foundation agent-workflow changed --consumer .");
     for (const gate of ["check", "check:fast"]) {
-      assert.ok(routes[gate].includes("pnpm test:sdk-growth:source &&"));
-      assert.ok(routes[gate].includes("pnpm foundation:check &&"));
+      const chain = routedScripts(routes, gate);
+      for (const command of ["pnpm test:sdk-growth:source", "pnpm foundation:check"]) {
+        assert.equal(chain.filter(step => step === command).length, 1, `${gate} must reach ${command} exactly once`);
+      }
+      assert.deepEqual(commandInventory(routes, gate).filter(command => command.script === "test:sdk-growth:source"), [
+        { script: "test:sdk-growth:source", command: "node --test scripts/sdk-growth-source/collector.test.mjs" }
+      ]);
     }
   };
   verify(profile);
@@ -412,8 +422,11 @@ test("scoped tooling feature has exact FMS ownership, census and blocking Founda
   assert.throws(() => verify(profile, noOp));
   const removed = { ...scripts, "check:fast": scripts["check:fast"].replace("pnpm foundation:check && ", "") };
   assert.throws(() => verify(profile, removed));
-  const removedFull = { ...scripts, check: scripts.check.replace("pnpm test:sdk-growth:source && ", "") };
+  const removedFull = { ...scripts, "check:ci:architecture": scripts["check:ci:architecture"].replace("pnpm test:sdk-growth:source && ", "") };
+  assert.notEqual(removedFull["check:ci:architecture"], scripts["check:ci:architecture"]);
   assert.throws(() => verify(profile, removedFull));
+  const duplicatedFull = { ...scripts, "check:ci:architecture": `pnpm test:sdk-growth:source && ${scripts["check:ci:architecture"]}` };
+  assert.throws(() => verify(profile, duplicatedFull));
   const removedChanged = { ...scripts, "check:changed": "true" };
   assert.throws(() => verify(profile, removedChanged));
   const stale = structuredClone(profile);

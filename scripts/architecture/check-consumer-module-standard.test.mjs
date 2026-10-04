@@ -128,7 +128,8 @@ test("rejects removed, reordered, and no-op gate commands", async () => {
   assert.throws(() => validateConsumerModuleStandard(removed), /reviewed command/u);
 
   const reordered = await fresh();
-  reordered.packageManifest.scripts.check = reordered.packageManifest.scripts.check.replace(
+  const routedGate = reordered.packageManifest.scripts['check:ci:architecture'] === undefined ? 'check' : 'check:ci:architecture';
+  reordered.packageManifest.scripts[routedGate] = reordered.packageManifest.scripts[routedGate].replace(
     "pnpm test:consumer-modules && pnpm architecture:consumer-modules",
     "pnpm architecture:consumer-modules && pnpm test:consumer-modules",
   );

@@ -1,0 +1,112 @@
+name: CI scheduling benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: Exact SHA of this orchestration workflow; both arms use this same SHA
+        required: true
+        type: string
+      arm:
+        type: choice
+        required: true
+        options: [serial, parallel]
+      pair:
+        description: Controller runs at most three pairs, alternating arm order
+        type: choice
+        required: true
+        options: ['1', '2', '3']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmark-${{ github.workflow_sha }}-${{ inputs.pair }}-${{ inputs.arm }}
+  cancel-in-progress: false
+
+jobs:
+  serial:
+    name: benchmark-serial-serial
+    if: ${{ inputs.arm == 'serial' }}
+    uses: ./.github/workflows/ci-lane.yml
+    with:
+      script: check
+      artifact: benchmark-serial-serial
+      revision: ${{ inputs.revision }}
+      arm: serial
+
+  quick:
+    name: benchmark-parallel-quick
+    if: ${{ inputs.arm == 'parallel' }}
+    uses: ./.github/workflows/ci-lane.yml
+    with:
+      script: check:ci:quick
+      artifact: benchmark-parallel-quick
+      revision: ${{ inputs.revision }}
+      arm: parallel
+
+  foundation:
+    name: benchmark-parallel-foundation
+    if: ${{ inputs.arm == 'parallel' }}
+    uses: ./.github/workflows/ci-lane.yml
+    with:
+      script: check:ci:foundation
+      artifact: benchmark-parallel-foundation
+      revision: ${{ inputs.revision }}
+      arm: parallel
+
+  architecture:
+    name: benchmark-parallel-architecture
+    if: ${{ inputs.arm == 'parallel' }}
+    uses: ./.github/workflows/ci-lane.yml
+    with:
+      script: check:ci:architecture
+      artifact: benchmark-parallel-architecture
+      revision: ${{ inputs.revision }}
+      arm: parallel
+
+  docs:
+    name: benchmark-parallel-docs
+    if: ${{ inputs.arm == 'parallel' }}
+    uses: ./.github/workflows/ci-lane.yml
+    with:
+      script: check:ci:docs
+      artifact: benchmark-parallel-docs
+      revision: ${{ inputs.revision }}
+      arm: parallel
+
+  product:
+    name: benchmark-parallel-product
+    if: ${{ inputs.arm == 'parallel' }}
+    uses: ./.github/workflows/ci-lane.yml
+    with:
+      script: check:ci:product
+      artifact: benchmark-parallel-product
+      revision: ${{ inputs.revision }}
+      arm: parallel
+
+  benchmark-completeness:
+    name: benchmark-completeness
+    if: ${{ always() }}
+    needs: [serial, quick, foundation, architecture, docs, product]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify benchmark controller revision
+        shell: bash
+        env:
+          EXPECTED_REVISION: ${{ github.workflow_sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_REVISION"
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+      - name: Check selected scheduling arm only
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          BENCHMARK_ARM: ${{ inputs.arm }}
+        run: node scripts/ci/gate.ts benchmark

@@ -3,6 +3,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, posix, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseSync, Visitor } from "oxc-parser";
+import { routedScripts } from '../ci/script-routing.ts';
 import { cmsPinReviewPath, retainedEvidencePath, verifyCmsPin } from "./check-cms-pin.mjs";
 import {
   standardDeltaPath,
@@ -106,7 +107,7 @@ export const EXPECTED_PROFILE = Object.freeze({
 const expectedScripts = Object.freeze({
   "architecture:consumer-modules": "node scripts/architecture/check-consumer-module-standard.mjs",
   "foundation:check": "agent-teams-foundation check && pnpm foundation:boundaries:negative && pnpm foundation:assert-dev-only && pnpm foundation:assert-registry && pnpm quality:adoption",
-  "test:consumer-modules": "node --test scripts/architecture/check-consumer-module-standard.test.mjs && agent-teams-node-test --contract architecture/foundation/mandatory-node-tests.json -- scripts/architecture/check-cms-pin.test.mjs",
+  "test:consumer-modules": "node --test scripts/architecture/check-consumer-module-standard.test.mjs && node --test scripts/architecture/check-cms-pin.test.mjs && agent-teams-node-test --contract architecture/foundation/mandatory-node-tests.json -- scripts/architecture/check-cms-pin.test.mjs",
 });
 const gateChain = "pnpm test:consumer-modules && pnpm architecture:consumer-modules";
 const requiredPaths = Object.freeze([
@@ -445,8 +446,7 @@ export function validateConsumerModuleStandard(inputs) {
     assert.equal(inputs.packageManifest.scripts?.[name], command, `${name} must execute the reviewed command`);
   }
   for (const gate of EXPECTED_PROFILE.enforcement.gates) {
-    const command = inputs.packageManifest.scripts?.[gate];
-    assert.equal(typeof command, "string", `${gate} must exist`);
+    const command = routedScripts(inputs.packageManifest.scripts, gate).join(' && ');
     assert.equal(occurrences(command, new RegExp(gateChain.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "gu")), 1,
       `${gate} must execute fixtures then the checker exactly once`);
     const topologyIndex = command.indexOf(EXPECTED_PROFILE.enforcement.topology);

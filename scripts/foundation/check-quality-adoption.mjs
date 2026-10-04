@@ -3,10 +3,11 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { parse } from "yaml";
+import { routedScripts } from '../ci/script-routing.ts';
 
 export function assertQualityAdoption({ manifest, foundation, profile, nodeTestContract }) {
   assert.equal(manifest.scripts["test:consumer-modules"],
-    "node --test scripts/architecture/check-consumer-module-standard.test.mjs && agent-teams-node-test --contract architecture/foundation/mandatory-node-tests.json -- scripts/architecture/check-cms-pin.test.mjs");
+    "node --test scripts/architecture/check-consumer-module-standard.test.mjs && node --test scripts/architecture/check-cms-pin.test.mjs && agent-teams-node-test --contract architecture/foundation/mandatory-node-tests.json -- scripts/architecture/check-cms-pin.test.mjs");
   assert.ok(manifest.scripts["quality:adoption"].split(/\s*&&\s*/u)
     .includes("node --test scripts/foundation/source-inputs.test.mjs"));
   assert.deepEqual(nodeTestContract, {
@@ -37,7 +38,7 @@ export function assertQualityAdoption({ manifest, foundation, profile, nodeTestC
   assert.equal(manifest.scripts[profile.scripts.scope], "agent-teams-foundation quality check --consumer . --scope-only");
   assert.equal(manifest.scripts[profile.scripts.typed], "agent-teams-foundation quality check --consumer .");
   for (const [entry, target] of [["check:fast", "quality:coverage:scope"], ["check", "lint:typed"]]) {
-    assert.ok(manifest.scripts[entry].split(/\s*&&\s*/u).includes(`pnpm ${target}`));
+    assert.ok(routedScripts(manifest.scripts, entry).includes(`pnpm ${target}`));
   }
 }
 

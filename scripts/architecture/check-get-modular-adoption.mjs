@@ -10,6 +10,7 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import { resolve, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv';
+import { routedScripts } from '../ci/script-routing.ts';
 import {ordinaryCompositionPath, ordinaryAuthorityPath, verifyOrdinaryGraph, verifyOrdinaryHostOwnership} from './ordinary-composition-evidence.mjs';
 import {checkOrdinaryFeatureScope} from './check-ordinary-feature-scope.mjs';
 import { foundationModule, readSourceCensus, requireSourceDiagnostics, verifySourceCensus } from './get-modular-source-census.mjs';
@@ -121,7 +122,9 @@ export function verifyAdoption(profile, evidence) {
     if (executable) {get(executable);}
     for (const root of profile.enforcement.roots) {
       assert.match(scripts[root] ?? '', /^pnpm [\w:-]+(?: && pnpm [\w:-]+)*$/, `nonblocking root command: ${root}`);
-      assert.ok(scripts[root]?.split(' && ').includes(`pnpm ${name}`), `root gate missing: ${root}/${name}`);
+      let reached = false;
+      try { reached = routedScripts(scripts, root).includes(`pnpm ${name}`); } catch { /* Invalid chains fail closed below. */ }
+      assert.ok(reached, `root gate missing: ${root}/${name}`);
     }
   }
   return { status: 'verified-metadata', scope: profile.authority.scope, boundaries: boundaries.length,

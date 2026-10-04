@@ -131,7 +131,22 @@ test("stable31 managed bytes stay exact and the current Foundation source policy
   const historicalSourcePolicy = "073d904b6ed55ac5ae8d0738d2b50762cc65ef653ed647aa28e98b5d574370b0";
   const currentSourcePolicy = createHash("sha256").update(await read("architecture/foundation/source-dependencies.yaml")).digest("hex");
   assert.notEqual(currentSourcePolicy, historicalSourcePolicy);
-  assert.equal(currentSourcePolicy, "7796f9ee6d1c7711745afb6630bf0bc943518482ea406749ced4374b619ce0c6");
+  assert.equal(currentSourcePolicy, "692d442aa3c6cc9755a9a7d25f9546722f72e18436ec9f8ca333b6c90b89596b");
+  // Authenticate only the reversible CI addition to current Main, not historical Node receipts.
+  const baseline = await json("scripts/ci/full-contract.json");
+  const policyBytes = await read("architecture/foundation/source-dependencies.yaml");
+  const pieces = policyBytes.split("\n\n- id: tooling.ci-full-gate\n");
+  assert.equal(pieces.length, 2);
+  const original = `${pieces[0]}\n`
+    .replaceAll("    boundaries:\n    - tooling.ci-full-gate\n    packages:", "    boundaries: []\n    packages:")
+    .replaceAll("    - tooling.ci-full-gate\n", "");
+  assert.equal(sha256(original), baseline.sourcePolicySha256, "CI source-policy delta must preserve current-main scope");
+  const policy = await yaml("architecture/foundation/source-dependencies.yaml");
+  const boundary = policy.boundaries.find(value => value.id === "tooling.ci-full-gate");
+  assert.deepEqual(boundary.roots, ["scripts/ci/script-routing.ts", "scripts/ci/policy.ts", "scripts/ci/gate.ts", "scripts/ci/inventory.ts", "scripts/ci/measure.ts", "scripts/ci/conformance.ts", "scripts/ci/compare.ts", "scripts/ci/contracts.test.ts"]);
+  assert.equal(boundary.dependencyMode, "development");
+  assert.deepEqual(boundary.entrypoints, ["scripts/ci/script-routing.ts"]);
+  assert.deepEqual(boundary.allow.boundaries, []);
   const scenarios = await json("architecture/foundation/docs-protocol-qualification.json");
   assert.equal(scenarios.schemaVersion, 2);
   assert.equal(scenarios.scenarios.length, 5);
