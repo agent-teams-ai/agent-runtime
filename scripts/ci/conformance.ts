@@ -24,12 +24,43 @@ function steps(value: unknown): Record<string, unknown>[] {
   return value.map(object);
 }
 
+const schedulingGroup = 'check-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}';
+const schedulingCancellation = "${{ github.event_name == 'pull_request' }}";
+
+function validateScheduling(value: unknown): void {
+  assert.deepEqual(value, { group: schedulingGroup, 'cancel-in-progress': schedulingCancellation },
+    'CI scheduling must isolate workflow/event/non-PR SHA and cancel only within a stable PR identity');
+}
+
+export type SchedulingEvent = { workflow: string; sha: string } & (
+  { eventName: 'pull_request'; pullRequestNumber: number }
+  | { eventName: 'push' | 'merge_group'; pullRequestNumber?: never }
+);
+
+// A closed projection of the admitted template, not a general Actions expression
+// evaluator or evidence of hosted scheduling. || uses the positive PR number,
+// falling back to github.sha when that event-specific property is undefined.
+export function schedulingForEvent(value: unknown, event: SchedulingEvent): { group: string; cancelInProgress: boolean } {
+  validateScheduling(value);
+  if (event.eventName === 'pull_request') {
+    assert.ok(Number.isSafeInteger(event.pullRequestNumber) && event.pullRequestNumber > 0, 'positive PR identity');
+  }
+  const group = object(value).group;
+  assert.ok(typeof group === 'string');
+  return {
+    group: group.replace('${{ github.workflow }}', () => event.workflow)
+      .replace('${{ github.event_name }}', () => event.eventName)
+      .replace('${{ github.event.pull_request.number || github.sha }}', () => String(event.pullRequestNumber || event.sha)),
+    cancelInProgress: event.eventName === 'pull_request',
+  };
+}
+
 export function validateWorkflow(main: unknown, reusable: unknown, platform: Record<string, string>): void {
   const workflow = object(main);
   assert.deepEqual(workflow.permissions, { contents: 'read' });
   assert.deepEqual(Object.keys(object(workflow.on)).toSorted(), ['merge_group', 'pull_request', 'push']);
   assert.deepEqual(object(workflow.on).push, { branches: ['main'] });
-  assert.deepEqual(workflow.concurrency, { group: 'check-${{ github.workflow }}-${{ github.ref }}', 'cancel-in-progress': true });
+  validateScheduling(workflow.concurrency);
   const jobs = object(workflow.jobs);
   assert.deepEqual(Object.keys(jobs).toSorted(), [...requiredJobs, 'check', 'postgres-durability', 'runtime-macos'].toSorted());
   for (const name of requiredJobs) {
