@@ -81,6 +81,65 @@ test('event checkout binding rejects a wrong, absent or moving revision', () => 
   }
 });
 
+test('Docs successor rejects semantic bypasses, qualification drift and lost Runtime scopes', async t => {
+  assertFullInventory(scripts, baseline.scripts);
+  const faults: Array<[string, (value: Record<string, string>) => void]> = [
+    ['semantic gate omits docs check', value => { value['docs:protocol:check'] = 'pnpm docs:governance'; }],
+    ['semantic gate omits governance', value => { value['docs:protocol:check'] = 'pnpm docs:check'; }],
+    ['semantic gate becomes a no-op', value => { value['docs:protocol:check'] = 'true'; }],
+    ['semantic gate reverses check and governance with identical leaves', value => {
+      value['docs:protocol:check'] = 'pnpm docs:governance && pnpm docs:check';
+    }],
+    ['qualification changes phase order with identical leaves', value => {
+      value['docs:qualification'] = 'pnpm docs:qualification:serial && pnpm docs:qualification:portable && pnpm docs:qualification:typecheck';
+    }],
+    ['semantic gate retains predecessor nesting', value => {
+      value['docs:protocol:check'] += ' && pnpm docs:qualification';
+      for (const gate of ['check:ci:docs', 'check:fast']) {
+        value[gate] = value[gate]!.replace(' && pnpm docs:qualification', '');
+      }
+    }],
+    ['fast gate qualifies before semantics with identical leaves', value => {
+      value['check:fast'] = value['check:fast']!.replace(
+        'pnpm docs:protocol:check && pnpm docs:qualification',
+        'pnpm docs:qualification && pnpm docs:protocol:check');
+    }],
+    ['fast gate delays qualification with identical leaves', value => {
+      value['check:fast'] = value['check:fast']!.replace(' && pnpm docs:qualification', '') + ' && pnpm docs:qualification';
+    }],
+  ];
+  for (const gate of ['check:ci:docs', 'check:fast']) {
+    faults.push([`${gate} omits qualification`, value => {
+      value[gate] = value[gate]!.replace(' && pnpm docs:qualification', '');
+    }], [`${gate} duplicates qualification`, value => { value[gate] += ' && pnpm docs:qualification'; }]);
+  }
+  for (const phase of ['typecheck', 'serial', 'portable']) {
+    const command = `pnpm docs:qualification:${phase}`;
+    faults.push([`qualification omits ${phase}`, value => {
+      value['docs:qualification'] = value['docs:qualification']!.split(' && ').filter(step => step !== command).join(' && ');
+    }], [`qualification duplicates ${phase}`, value => { value['docs:qualification'] += ` && ${command}`; }]);
+  }
+  for (const scope of ['index', 'architecture', 'adr', 'evidence', 'qualification-plan']) {
+    faults.push([`portable qualification omits ${scope}`, value => {
+      value['docs:qualification:portable'] = value['docs:qualification:portable']!.replace(
+        ` scripts/docs/portable-authoring-${scope}.test.mts`, '');
+    }]);
+  }
+  for (const leaf of ['docs:check', 'docs:governance', 'docs:qualification:typecheck', 'docs:qualification:serial', 'docs:qualification:portable']) {
+    faults.push([`${leaf} becomes a successful Node no-op`, value => { value[leaf] = "node -e 'process.exit(0)'"; }]);
+  }
+  for (const leaf of ['docs:qualification:typecheck', 'docs:qualification:serial', 'docs:qualification:portable']) {
+    faults.push([`${leaf} duplicates its terminal command`, value => { value[leaf] += ` && ${value[leaf]}`; }]);
+  }
+  for (const [name, mutate] of faults) {
+    await t.test(name, () => {
+      const changed = { ...scripts };
+      mutate(changed);
+      assert.throws(() => assertFullInventory(changed, baseline.scripts), name);
+    });
+  }
+});
+
 test('real workflow policy rejects omitted jobs, wrong PR checkout, shallow history and platform drift', async () => {
   const main: unknown = parse(await readFile(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8'));
   const lane: unknown = parse(await readFile(new URL('../../.github/workflows/ci-lane.yml', import.meta.url), 'utf8'));

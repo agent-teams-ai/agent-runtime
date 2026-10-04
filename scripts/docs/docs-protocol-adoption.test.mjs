@@ -53,17 +53,22 @@ test("canonical qualification v2 covers every Runtime authorable type exactly on
   );
 });
 
-test("keeps protocol and frozen-document governance in every repository gate", async () => {
+test("keeps semantic governance and separate qualification in every full repository gate", async () => {
   const manifest = JSON.parse(await readFile(join(repositoryRoot, "package.json"), "utf8"));
   assert.equal(
     manifest.scripts["docs:protocol:check"],
-    "pnpm docs:check && pnpm docs:governance && pnpm docs:qualification"
+    "pnpm docs:check && pnpm docs:governance"
   );
   assert.equal(
     manifest.scripts["docs:governance"],
     "node --test scripts/docs/verify-frozen-document-bytes.test.mjs"
   );
-  for (const gate of ["check", "check:fast"]) {
+  assert.deepEqual(routedScripts(manifest.scripts, "docs:protocol:check"), [
+    "pnpm docs:check", "pnpm docs:governance",
+  ]);
+  assert.equal(manifest.scripts["check:ci:docs"], "pnpm docs:protocol:check && pnpm docs:qualification");
+  assert.match(manifest.scripts["check:fast"], /(?:^| && )pnpm docs:protocol:check && pnpm docs:qualification(?: && |$)/u);
+  for (const gate of ["check", "check:fast", "check:ci:docs"]) {
     const steps = routedScripts(manifest.scripts, gate);
     for (const command of [
       "pnpm docs:check",
