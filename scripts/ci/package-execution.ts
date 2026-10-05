@@ -5,7 +5,7 @@ import { glob, lstat, mkdir, readFile, readdir, realpath, writeFile } from 'node
 import { basename, join, relative, resolve } from 'node:path';
 import type { TestEvent } from 'node:test/reporters';
 import { fileURLToPath } from 'node:url';
-import { observeEmbeddedProcesses } from './er-process-observer.ts';
+import { observeEmbeddedProcesses, captureStream, assertCapturedIdentity } from './er-process-observer.ts';
 
 const build = 'tsc --project tsconfig.json --pretty false';
 const clean = 'node -e "const fs=require(\'node:fs\'); for (const path of [\'dist\',\'.cache\']) fs.rmSync(path, { recursive: true, force: true })"';
@@ -226,44 +226,8 @@ function summary(record: Record<string, unknown>): Summary {
   return { tests: Number(record.tests), passed: Number(record.passed), failed: Number(record.failed),
     cancelled: Number(record.cancelled), skipped: Number(record.skipped), todo: Number(record.todo), success: record.success === true };
 }
-function captured(stdout: string, stderr: string, index: number, original: Record<string, unknown> | null, rawIdentity: string | null = null): Observation {
-  const observation = emptyObservation(), identities: Record<string, unknown>[] = [];
-  if (original) {
-    assert.ok(rawIdentity, 'actual ER process sidecar required');
-    const record = object(json(rawIdentity)); assert.equal(record.index, index); assert.equal(record.summary, undefined);
-    identities.push(record);
-  } else { assert.equal(rawIdentity, null); }
-  let begin = 0, end = 0;
-  for (const line of [...stdout.split('\n'), ...stderr.split('\n')]) {
-    if (line.startsWith('PACKAGE_NODE_PROCESS ')) {
-      assert.equal(original, null, 'ER reporter injection');
-      const record = object(json(line.slice(21)));
-      assert.ok(Number.isSafeInteger(record.pid) && Number(record.pid) > 0);
-      assert.equal(typeof record.executable, 'string'); assert.equal(typeof record.cwd, 'string');
-      assert.ok(Array.isArray(record.argv) && record.argv.every(v => typeof v === 'string'));
-      identities.push(record);
-    } else { observeLine(line, observation); }
-    if (line.startsWith('{')) {
-      let record: Record<string, unknown>; try { record = object(json(line)); } catch { continue; }
-      if (record.kind === 'begin') { begin++; } if (record.kind === 'end') { end++; }
-    }
-  }
-  assert.equal(identities.length, 1, 'one actual Node process envelope per stream');
-  const identity = identities[0]!;
-  assert.ok(Number.isSafeInteger(identity.pid) && Number(identity.pid) > 0);
-  assert.equal(typeof identity.executable, 'string'); assert.equal(typeof identity.cwd, 'string');
-  assert.ok(Array.isArray(identity.argv) && identity.argv.every(v => typeof v === 'string'));
-  if (original) { assert.equal(observation.summaries.length, 1, 'one original ER summary per stream'); }
-  const node: NodeProcessObservation = { pid: Number(identity.pid), executable: String(identity.executable),
-    cwd: String(identity.cwd), argv: identity.argv as string[],
-    summary: original ? observation.summaries[0]! : summary(object(identity.summary)) };
-  if (original) {
-    assert.equal(begin, 1, 'missing/duplicate ER begin'); assert.equal(end, 1, 'missing/duplicate ER end');
-    for (const event of observation.events) { event.observerPid = node.pid; }
-  }
-  observation.streams.push({ index, node, stdout, stderr, original, identity: rawIdentity });
-  return observation;
-}
+const captured = (stdout: string, stderr: string, index: number, original: Record<string, unknown> | null, rawIdentity: string | null = null): Observation =>
+  captureStream(stdout, stderr, index, original, {rawIdentity, observeLine, summary});
 export interface CommandResult { executable: string; argv: string[]; cwd: string; pid: number | null; start: string; end: string; wallMs: number; exitCode: number | null; signal: NodeJS.Signals | null; error: string | null; observation: Observation }
 export interface PackageReceipt {
   schemaVersion: 2; requestedShard: unknown; packageName: string | null; sourceSha: string; sourceTree: string | null;
@@ -349,12 +313,7 @@ export function commandExit(result: Pick<CommandResult, 'exitCode' | 'signal' | 
     const recomputed = emptyObservation();
     for (const [index, stream] of observation.streams.entries()) {
       const actual = validateCapturedStream(stream, index, plans?.[index], sourceFiles);
-      if (stream.original) {
-        const identity = object(json(stream.identity!));
-        assert.ok(Array.isArray(identity.ancestors) && identity.ancestors.length > 0);
-        assert.equal(identity.ancestors.at(-1), identity.commandPid);
-        if (result.pid !== undefined) { assert.equal(identity.commandPid, result.pid); }
-      }
+      if (stream.original) { assertCapturedIdentity(stream, result.pid); }
       recomputed.events.push(...actual.events); recomputed.summaries.push(...actual.summaries); recomputed.completedFiles.push(...actual.completedFiles);
       const counts = stream.node.summary, tests = actual.events.filter(event => (event.type ?? event.kind) === 'test');
       assert.ok(counts.success && counts.tests > 0 && counts.passed > 0 && counts.failed === 0 && counts.cancelled === 0 && counts.todo === 0 && counts.passed + counts.skipped === counts.tests);

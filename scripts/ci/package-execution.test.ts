@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { tmpdir } from 'node:os';
 import { commandExit, embeddedObserverEnv, enumerateExecutionFiles, executionSelection, observeLine, packages,
   packageStreamPlans, partitionExecutionFiles, runCommand, selectShard, shardIds, validateInventory, validatePlatform } from './package-execution.ts';
+import { observeEmbeddedProcesses, captureStream } from './er-process-observer.ts';
 import type { Observation } from './package-execution.ts';
 import { assertObservedStreams } from './product-test-observation.ts';
 import type { ExpectedEvidence } from './product-fanout-contract.ts';
@@ -63,7 +64,7 @@ async function embeddedFixture() {
 }
 
 export function registerPackageExecutionTests(): void {
-test('ER inherited two destinations break a nested one-reporter Node test; scoped OS observation preserves original children and two streams', async t => {
+test('ER inherited two destinations break a nested one-reporter Node test; bounded spawn capture and OS corroboration preserve original children and two streams', async t => {
   // Old regression: a real nested --test inherits two destinations and only
   // package-execution's reporter. New code must preserve its original output.
   const f = await embeddedFixture(); t.after(() => rm(f.root, { recursive: true, force: true }));
@@ -93,6 +94,61 @@ test('ER inherited two destinations break a nested one-reporter Node test; scope
     packageStreams: { 'embedded-runtime': f.plans.map(plan => ({ argv: plan.argv, files: plan.files.map(file => file.slice(f.cwd.length + 1)) })) } } as ExpectedEvidence;
   const context = { id: 'embedded-runtime' as const, index: 6, selected: [], root: f.root, packageRoot: f.base };
   assertObservedStreams(expected, { ...green }, context);
+  for (const ancestors of [[0, green.pid], [-5, green.pid], ['not-a-PID', green.pid], [green.pid, green.pid],
+    [green.observation.streams[0]!.node.pid, green.pid], [1.5, green.pid], [Number.MAX_SAFE_INTEGER + 1, green.pid],
+    [null, green.pid], [...Array.from({length: 16}, (_, i) => 1_000_000 + i), green.pid]]) {
+    const corrupted = structuredClone(green), stream = corrupted.observation.streams[0]!;
+    stream.identity = JSON.stringify({ ...JSON.parse(stream.identity!), osObserved: true, ancestors });
+    assert.equal(commandExit(corrupted, 2, undefined, f.plans, f.sourceFiles), 1, 'impossible raw OS ancestry must reject');
+    assert.throws(() => assertObservedStreams(expected, { ...corrupted }, context));
+  }
+  const executions = [green];
+  for (let attempt = 1; attempt < 3; attempt++) {
+    const nextCapture = join(f.root, `capture-${attempt}`); await mkdir(nextCapture);
+    const next = await runCommand(process.execPath, ['scripts/run-package-tests.mjs'], f.cwd,
+      embeddedObserverEnv(env, nextCapture, f.plans), join(f.root, `fresh-${attempt}`));
+    assert.equal(commandExit(next, 2, undefined, f.plans, f.sourceFiles), 0);
+    assertObservedStreams(expected, {...next}, context);
+    assert.equal(new Set(next.observation.streams.map(stream => stream.node.pid)).size, 2);
+    for (const stream of next.observation.streams) {
+      assert.equal(stream.node.pid, stream.original!.actualPid);
+      assert.equal(stream.original!.runnerPid, next.pid, 'direct original runner PID');
+    }
+    executions.push(next);
+  }
+  for (const key of ['actualPid', 'runnerPid', 'actualExecutable', 'actualCwd']) {
+    const corrupted = structuredClone(green); corrupted.observation.streams[1]!.original![key] = null;
+    assert.equal(commandExit(corrupted, 2, undefined, f.plans, f.sourceFiles), 1);
+    assert.throws(() => assertObservedStreams(expected, {...corrupted}, context));
+  }
+  const portable = structuredClone(green);
+  for (const stream of portable.observation.streams) {
+    stream.identity = JSON.stringify({...JSON.parse(stream.identity!), osObserved: false, ancestors: null});
+  }
+  assert.equal(commandExit(portable, 2, undefined, f.plans, f.sourceFiles), 0);
+  assertObservedStreams(expected, {...portable}, context); // Capture decoder only; no Darwin execution claim.
+  const missedCapture = join(f.root, 'post-exit-capture'); await mkdir(missedCapture);
+  const missed = await runCommand(process.execPath, ['scripts/run-package-tests.mjs'], f.cwd,
+    {...env, AE_ADOPTION_CAPTURE_DIR: missedCapture}, join(f.root, 'no-live-observer'));
+  assert.equal(missed.exitCode, 0);
+  assert.match(missed.error!, /ENOENT.*process-0.identity.json/);
+  assert.equal(commandExit(missed, 2, undefined, f.plans, f.sourceFiles), 1, 'old missing-observation decode rejects actual successful commands');
+  // Begin observation after the actual command has exited: no live procfs child
+  // can be claimed. Actual spawn returns still cover the very short second stream.
+  await observeEmbeddedProcesses(f.plans, missedCapture, missed.pid!)();
+  const records = JSON.parse(await readFile(join(missedCapture, 'processes.json'), 'utf8')) as Record<string, unknown>[];
+  const repaired = {...missed, error: null, observation: {summaries: [], events: [], completedFiles: [], streams: []} as Observation};
+  for (const [index, original] of records.entries()) {
+    const observed = captureStream(await readFile(join(missedCapture, `process-${index}.stdout`), 'utf8'),
+      await readFile(join(missedCapture, `process-${index}.stderr`), 'utf8'), index, original,
+      {rawIdentity: await readFile(join(missedCapture, `process-${index}.identity.json`), 'utf8'), observeLine,
+        summary: () => {throw new Error('original ER cannot contain injected Node reporter records');}});
+    repaired.observation.events.push(...observed.events); repaired.observation.summaries.push(...observed.summaries);
+    repaired.observation.completedFiles.push(...observed.completedFiles); repaired.observation.streams.push(...observed.streams);
+    assert.equal(JSON.parse(observed.streams[0]!.identity!).osObserved, false);
+  }
+  assert.equal(commandExit(repaired, 2, undefined, f.plans, f.sourceFiles), 0);
+  assertObservedStreams(expected, {...repaired}, context);
   const duplicate = structuredClone(green); duplicate.observation.streams[1] = structuredClone(duplicate.observation.streams[0]!);
   assert.equal(commandExit(duplicate, 2, undefined, f.plans, f.sourceFiles), 1);
   assert.throws(() => assertObservedStreams(expected, { ...duplicate }, context));
@@ -100,7 +156,7 @@ test('ER inherited two destinations break a nested one-reporter Node test; scope
   assert.equal(commandExit(missing, 2, undefined, f.plans, f.sourceFiles), 1);
   assert.throws(() => assertObservedStreams(expected, { ...missing }, context));
   if (process.env.CI_FOCUSED_EVIDENCE_DIR) { await writeFile(join(process.env.CI_FOCUSED_EVIDENCE_DIR, 'er-red-green.json'), JSON.stringify({
-    scope: 'original ER runner/reporter/argv, disposable typed TEST entries and real nested Node children', old, oldNested, green, plans: f.plans,
+    scope: 'original ER runner/reporter/argv, disposable typed TEST entries and real nested Node children', old, oldNested, green, executions, missed, repaired, portableDecoderOnly: portable, plans: f.plans,
   }, null, 2) + '\n'); }
 });
 
