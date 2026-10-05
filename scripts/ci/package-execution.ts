@@ -313,7 +313,7 @@ export function commandExit(result: Pick<CommandResult, 'exitCode' | 'signal' | 
     const recomputed = emptyObservation();
     for (const [index, stream] of observation.streams.entries()) {
       const actual = validateCapturedStream(stream, index, plans?.[index], sourceFiles);
-      if (stream.original) { assertCapturedIdentity(stream, result.pid); }
+      if (stream.original) { assertCapturedIdentity(stream, result.pid, observation.streams[0]!.original?.runnerPid); }
       recomputed.events.push(...actual.events); recomputed.summaries.push(...actual.summaries); recomputed.completedFiles.push(...actual.completedFiles);
       const counts = stream.node.summary, tests = actual.events.filter(event => (event.type ?? event.kind) === 'test');
       assert.ok(counts.success && counts.tests > 0 && counts.passed > 0 && counts.failed === 0 && counts.cancelled === 0 && counts.todo === 0 && counts.passed + counts.skipped === counts.tests);
@@ -358,7 +358,7 @@ export async function runCommand(executable: string, argv: string[], cwd: string
     } else if (logs.stdout.includes('PACKAGE_NODE_PROCESS ') || logs.stderr.includes('PACKAGE_NODE_PROCESS ')) {
       observation = captured(logs.stdout, logs.stderr, 0, null);
     }
-  } catch (failure) { error = String(failure); }
+  } catch (failure) { error ??= String(failure); }
   return { executable, argv, cwd, pid: child.pid ?? null, start, end: new Date().toISOString(), wallMs: performance.now() - clock, ...result, error, observation };
 }
 function verifySource(root: string, revision: string): void {
