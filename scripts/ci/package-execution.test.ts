@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { tmpdir } from 'node:os';
-import { commandExit, enumerateExecutionFiles, executionSelection, observeLine, packages,
-  partitionExecutionFiles, runCommand, selectShard, shardIds, validateInventory, validatePlatform } from './package-execution.ts';
+import { commandExit, embeddedObserverEnv, enumerateExecutionFiles, executionSelection, observeLine, packages,
+  packageStreamPlans, partitionExecutionFiles, runCommand, selectShard, shardIds, validateInventory, validatePlatform } from './package-execution.ts';
 import type { Observation } from './package-execution.ts';
+import { assertObservedStreams } from './product-test-observation.ts';
+import type { ExpectedEvidence } from './product-fanout-contract.ts';
 
 const reporter = resolve('scripts/ci/package-execution.ts');
 async function fixture() {
@@ -31,7 +34,76 @@ async function fixture() {
 
 const identities = (events: Record<string, unknown>[]) => events.map(e => JSON.stringify([e.file, e.line, e.column, e.name, e.nesting, e.kind, e.status])).toSorted();
 
+async function embeddedFixture() {
+  const root = await mkdtemp(join(tmpdir(), 'er-observer-TEST-'));
+  const base = 'packages/apps/embedded-runtime', cwd = join(root, base);
+  await mkdir(join(cwd, 'scripts'), { recursive: true });
+  for (const name of ['run-package-tests.mjs', 'adoption-test-reporter.mjs']) {
+    await writeFile(join(cwd, 'scripts', name), await readFile(join(base, 'scripts', name)));
+  }
+  const plans = await packageStreamPlans(root, selectShard('embedded-runtime'), null);
+  const sourceFiles = plans.flatMap(plan => plan.files);
+  for (const file of sourceFiles) {
+    await mkdir(join(file, '..'), { recursive: true });
+    await writeFile(file, "import test from 'node:test'; test('disposable original argv entry', () => {});\n");
+  }
+  const helper = join(cwd, 'tests/package/support/observer-registration.ts');
+  await mkdir(join(helper, '..'), { recursive: true }); sourceFiles.push(helper);
+  await writeFile(helper, "import { test, describe } from 'node:test'; describe('helper ancestry', () => { for (const name of ['repeat', 'repeat']) { test(name, () => {}); } test('skip', {skip:'TEST skip'}, () => {}); });\n");
+  const nested = join(cwd, 'tests/package/support/observer-child.test.ts'); sourceFiles.push(nested);
+  await writeFile(nested, "import test from 'node:test'; test('nested child', () => {});\n");
+  await writeFile(join(cwd, 'tests/package/live/run-linux-codex-live-canary.test.mjs'),
+    "import assert from 'node:assert/strict'; import {spawnSync} from 'node:child_process'; import test from 'node:test';\n"
+    + "import '../support/observer-registration.ts';\n"
+    + "test('nested bare Node test retains original default reporter semantics', () => { const env = {...process.env}; delete env.NODE_TEST_CONTEXT; const result = spawnSync(process.execPath, ['--test', 'tests/package/support/observer-child.test.ts'], {env, encoding:'utf8'}); assert.ifError(result.error); assert.equal(result.status, 0, result.stderr); assert.equal(result.stderr, ''); assert.match(result.stdout, /nested child/); assert.doesNotMatch(result.stdout, /PACKAGE_|\\\"kind\\\"/); });\n");
+  await writeFile(join(cwd, 'tests/package/node-docker-route-provenance-integration.test.ts'),
+    "import assert from 'node:assert/strict'; import {spawnSync} from 'node:child_process'; import test from 'node:test';\n"
+    + "test('different nested reporter and ordinary Node preserve exact output', () => { const env = {...process.env}; delete env.NODE_TEST_CONTEXT; const dot = spawnSync(process.execPath, ['--test', '--test-reporter=dot', 'tests/package/support/observer-child.test.ts'], {env, encoding:'utf8'}); assert.ifError(dot.error); assert.equal(dot.status, 0, dot.stderr); assert.equal(dot.stdout, '.\\n'); assert.equal(dot.stderr, ''); const ordinary = spawnSync(process.execPath, ['-e', 'process.stdout.write(\\\"ordinary TEST child\\\")'], {env, encoding:'utf8'}); assert.equal(ordinary.status, 0); assert.equal(ordinary.stdout, 'ordinary TEST child'); assert.equal(ordinary.stderr, ''); });\n");
+  return { root, base, cwd, plans, sourceFiles };
+}
+
 export function registerPackageExecutionTests(): void {
+test('ER inherited two destinations break a nested one-reporter Node test; scoped OS observation preserves original children and two streams', async t => {
+  // Old regression: a real nested --test inherits two destinations and only
+  // package-execution's reporter. New code must preserve its original output.
+  const f = await embeddedFixture(); t.after(() => rm(f.root, { recursive: true, force: true }));
+  const env = { ...process.env }; delete env.NODE_OPTIONS; delete env.NODE_TEST_CONTEXT;
+  const oldCapture = join(f.root, 'old-capture'); await mkdir(oldCapture);
+  const oldEnv = { ...env, AE_ADOPTION_CAPTURE_DIR: oldCapture, CI_ER_PROCESS_OBSERVER: '1',
+    NODE_OPTIONS: `--test-reporter=${process.env.CI_ER_BASELINE_REPORTER ?? reporter} --test-reporter-destination=stderr --test-reporter-destination=stdout` };
+  const oldNested = spawnSync(process.execPath, ['--test', 'tests/package/support/observer-child.test.ts'], { cwd: f.cwd, env: oldEnv, encoding: 'utf8' });
+  assert.ifError(oldNested.error); assert.notEqual(oldNested.status, 0); assert.equal(oldNested.stdout, '');
+  assert.match(oldNested.stderr, /ERR_INVALID_ARG_VALUE.*|must match the number of specified '--test-reporter-destination'/u);
+  const old = await runCommand(process.execPath, ['scripts/run-package-tests.mjs'], f.cwd, oldEnv, join(f.root, 'old'));
+  assert.notEqual(old.exitCode, 0); assert.match(await readFile(join(oldCapture, 'process-0.stdout'), 'utf8'), /"kind":"failure"/u);
+  const capture = join(f.root, 'new-capture'); await mkdir(capture);
+  const observedEnv = embeddedObserverEnv(env, capture, f.plans);
+  assert.equal(observedEnv.NODE_OPTIONS, undefined);
+  const green = await runCommand(process.execPath, ['scripts/run-package-tests.mjs'], f.cwd, observedEnv, join(f.root, 'new'));
+  assert.equal(green.error, null); assert.equal(commandExit(green, 2, undefined, f.plans, f.sourceFiles), 0);
+  assert.equal(new Set(green.observation.streams.map(stream => stream.node.pid)).size, 2);
+  assert.deepEqual(green.observation.events.filter(e => e.title === 'repeat').map(e => e.ordinal), [1, 2]);
+  assert.ok(green.observation.events.some(e => e.status === 'skipped' && e.skipReason === 'TEST skip'));
+  assert.ok(green.observation.events.some(e => e.title === 'repeat' && Array.isArray(e.ancestry) && e.ancestry.length === 1));
+  for (const stream of green.observation.streams) {
+    assert.equal(stream.stderr, '', 'no worker/child observation markers');
+    assert.ok(stream.identity); assert.doesNotMatch(stream.stdout, /PACKAGE_NODE_/u);
+  }
+  const expected = { nodeExecutable: process.execPath, inputs: Object.fromEntries(f.sourceFiles.map(file => [file.slice(f.root.length + 1), 'TEST'])),
+    packageStreams: { 'embedded-runtime': f.plans.map(plan => ({ argv: plan.argv, files: plan.files.map(file => file.slice(f.cwd.length + 1)) })) } } as ExpectedEvidence;
+  const context = { id: 'embedded-runtime' as const, index: 6, selected: [], root: f.root, packageRoot: f.base };
+  assertObservedStreams(expected, { ...green }, context);
+  const duplicate = structuredClone(green); duplicate.observation.streams[1] = structuredClone(duplicate.observation.streams[0]!);
+  assert.equal(commandExit(duplicate, 2, undefined, f.plans, f.sourceFiles), 1);
+  assert.throws(() => assertObservedStreams(expected, { ...duplicate }, context));
+  const missing = structuredClone(green); missing.observation.streams[0]!.identity = null;
+  assert.equal(commandExit(missing, 2, undefined, f.plans, f.sourceFiles), 1);
+  assert.throws(() => assertObservedStreams(expected, { ...missing }, context));
+  if (process.env.CI_FOCUSED_EVIDENCE_DIR) { await writeFile(join(process.env.CI_FOCUSED_EVIDENCE_DIR, 'er-red-green.json'), JSON.stringify({
+    scope: 'original ER runner/reporter/argv, disposable typed TEST entries and real nested Node children', old, oldNested, green, plans: f.plans,
+  }, null, 2) + '\n'); }
+});
+
 test('original four patterns include the literal mjs, exclude nested/helpers/dotfiles, and repartition additions', async t => {
   const f = await fixture(); t.after(() => rm(f.root, { recursive: true, force: true }));
   await writeFile(join(f.packageRoot, 'tests/package/.hidden.test.ts'), '');

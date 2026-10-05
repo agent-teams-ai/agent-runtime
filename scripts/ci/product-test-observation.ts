@@ -9,12 +9,14 @@ const object = (value: unknown): Record<string, unknown> => {
 };
 const array = (value: unknown): unknown[] => { assert.ok(Array.isArray(value)); return value; };
 const normalizedSummary = (record: Record<string, unknown>) => Object.fromEntries(['tests', 'passed', 'failed', 'cancelled', 'skipped', 'todo', 'success'].map(key => [key, record[key]]));
-function parseStream(stdout: string, stderr: string, embedded: boolean, pid: unknown) {
+function parseStream(stdout: string, stderr: string, context: { embedded: boolean; pid: unknown }) {
+  const { embedded, pid } = context;
   const observedNodes: Record<string, unknown>[] = [], observedEvents: Record<string, unknown>[] = [];
   const observedSummaries: Record<string, unknown>[] = [], observedFiles: string[] = [];
   let begin = 0, end = 0;
   for (const line of [...stdout.split('\n'), ...stderr.split('\n')]) {
     if (line.startsWith('PACKAGE_NODE_PROCESS ')) {
+      assert.ok(!embedded, 'ER reporter injection');
       const value = object(JSON.parse(line.slice(21)));
       observedNodes.push({ ...value, summary: normalizedSummary(object(value.summary)) });
     } else if (line.startsWith('PACKAGE_EVENT ')) { observedEvents.push(object(JSON.parse(line.slice(14)))); }
@@ -50,8 +52,18 @@ export function assertObservedStreams(expected: ExpectedEvidence, proof: Record<
     assert.deepEqual(node.argv, plan.argv, 'source-expanded original process argv drift');
     if (index < 3) { assert.equal(node.pid, proof.pid, 'direct AE process PID drift'); }
     assert.equal(typeof stream.stdout, 'string'); assert.equal(typeof stream.stderr, 'string');
-    const {observedNodes, observedEvents, observedSummaries, observedFiles, begin, end} = parseStream(String(stream.stdout), String(stream.stderr), embedded, node.pid);
-    assert.deepEqual(observedNodes, [node], 'raw actual process envelope binding');
+    const {observedNodes, observedEvents, observedSummaries, observedFiles, begin, end} = parseStream(String(stream.stdout), String(stream.stderr), { embedded, pid: node.pid });
+    if (embedded) {
+      assert.equal(typeof stream.identity, 'string', 'actual ER OS process sidecar required');
+      const rawIdentity = object(JSON.parse(String(stream.identity)));
+      assert.equal(rawIdentity.index, streamIndex); assert.equal(rawIdentity.summary, undefined);
+      assert.equal(rawIdentity.commandPid, proof.pid, 'ER OS ancestry must bind the actual runner command');
+      assert.ok(Array.isArray(rawIdentity.ancestors)); assert.ok(rawIdentity.ancestors.length > 0);
+      assert.equal(rawIdentity.ancestors.at(-1), proof.pid);
+      const { index: _index, commandPid: _commandPid, ancestors: _ancestors, ...osIdentity } = rawIdentity; observedNodes.push(osIdentity);
+    } else { assert.equal(stream.identity, null); }
+    const { summary: _summary, ...processIdentity } = node;
+    assert.deepEqual(observedNodes, [embedded ? processIdentity : node], 'raw actual process envelope binding');
     assert.deepEqual(observedSummaries, [node.summary], 'summary must belong to its actual stream');
     if (embedded) {
       assert.equal(begin, 1); assert.equal(end, 1);

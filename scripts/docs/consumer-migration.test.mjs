@@ -135,7 +135,14 @@ test("stable31 managed bytes stay exact and the current Foundation source policy
   assert.notEqual(currentSourcePolicy, historicalSourcePolicy);
   // CMS successor adds two roots/one public entry; nightly adds two private roots; product fanout adds five private roots.
   // Reconstruct the prior CI policy, retaining its fixed whole-document oracle.
-  const policyBytes = await read("architecture/foundation/source-dependencies.yaml");
+  const currentPolicyBytes = await read("architecture/foundation/source-dependencies.yaml");
+  const observerRoot = "  - scripts/ci/er-process-observer.ts\n";
+  assert.equal(currentPolicyBytes.split(observerRoot).length - 1, 1);
+  const policyBytes = currentPolicyBytes.replace(observerRoot, "");
+  assert.equal(sha256(policyBytes), "152d9b7acbface34a9903ddee4ae48c644780f14cd68f50355f8f95212afea92",
+    "ER observer must retain exact af669 policy predecessor");
+  assert.equal(sha256(policyBytes.replace("  - scripts/ci/product-test-observation.ts\n", "")),
+    "5a3e444a4bf6c3ea704b4125e2089e3c198930bbe9c9ba817898c88533dab755", "Retain the pre-P2 independent observation policy");
   const additions = ["  - scripts/ci/cms-pin-review.ts\n", "  - scripts/ci/cms-pin-review.test.ts\n",
     "  - scripts/ci/nightly-contract.ts\n", "  - scripts/ci/nightly-contract.test.ts\n",
     "  - scripts/ci/package-execution.ts\n", "  - scripts/ci/package-execution.test.ts\n",
@@ -170,7 +177,7 @@ test("stable31 managed bytes stay exact and the current Foundation source policy
   assert.equal(sha256(original), baseline.sourcePolicySha256, "CI source-policy delta must preserve current-main scope");
   const policy = await yaml("architecture/foundation/source-dependencies.yaml");
   const boundary = policy.boundaries.find(value => value.id === "tooling.ci-full-gate");
-  assert.deepEqual(boundary.roots, ["scripts/ci/script-routing.ts", "scripts/ci/policy.ts", "scripts/ci/gate.ts", "scripts/ci/inventory.ts", "scripts/ci/measure.ts", "scripts/ci/conformance.ts", "scripts/ci/compare.ts", "scripts/ci/contracts.test.ts", "scripts/ci/cms-pin-review.ts", "scripts/ci/cms-pin-review.test.ts", "scripts/ci/nightly-contract.ts", "scripts/ci/nightly-contract.test.ts", "scripts/ci/foundation-fixture-sharding.ts", "scripts/ci/foundation-fixture-sharding.test.ts", "scripts/ci/foundation-fanout-contract.ts", "scripts/ci/package-execution.ts", "scripts/ci/package-execution.test.ts", "scripts/ci/product-fanout-contract.ts", "scripts/ci/product-fanout-contract.test.ts", "scripts/ci/product-test-observation.ts"]);
+  assert.deepEqual(boundary.roots, ["scripts/ci/script-routing.ts", "scripts/ci/policy.ts", "scripts/ci/gate.ts", "scripts/ci/inventory.ts", "scripts/ci/measure.ts", "scripts/ci/conformance.ts", "scripts/ci/compare.ts", "scripts/ci/contracts.test.ts", "scripts/ci/cms-pin-review.ts", "scripts/ci/cms-pin-review.test.ts", "scripts/ci/nightly-contract.ts", "scripts/ci/nightly-contract.test.ts", "scripts/ci/foundation-fixture-sharding.ts", "scripts/ci/foundation-fixture-sharding.test.ts", "scripts/ci/foundation-fanout-contract.ts", "scripts/ci/package-execution.ts", "scripts/ci/package-execution.test.ts", "scripts/ci/product-fanout-contract.ts", "scripts/ci/product-fanout-contract.test.ts", "scripts/ci/product-test-observation.ts", "scripts/ci/er-process-observer.ts"]);
   assert.equal(boundary.dependencyMode, "development");
   assert.deepEqual(boundary.entrypoints, ["scripts/ci/script-routing.ts", "scripts/ci/cms-pin-review.ts", "scripts/ci/foundation-fixture-sharding.ts"]);
   assert.deepEqual(boundary.allow.boundaries, []);

@@ -8,7 +8,7 @@ import { parse } from 'yaml';
 import { aePatterns, assertFanoutEvidence, assertJobResults, assertProductWorkflow, packageRoots,
   phaseEntries, prerequisiteCommands, readProductSource, shardIds, assertShardWorkflow, assertRootCustody, reports } from './product-fanout-contract.ts';
 import type { ExpectedEvidence, PackageId, ShardId } from './product-fanout-contract.ts';
-import { commandExit, executionSelection, packages as originalPackages, packageStreamPlans, runCommand, selectShard } from './package-execution.ts';
+import { commandExit, embeddedObserverEnv, executionSelection, packages as originalPackages, packageStreamPlans, runCommand, selectShard } from './package-execution.ts';
 import type { PackageReceipt } from './package-execution.ts';
 
 const scripts = {
@@ -31,6 +31,7 @@ async function fixture() {
   await put('.node-version', '24.21.0');
   await put('.github/workflows/ci-product.yml', '# disposable fixture');
   await put('scripts/ci/package-execution.ts', await readFile(new URL('./package-execution.ts', import.meta.url), 'utf8'));
+  await put('scripts/ci/er-process-observer.ts', await readFile(new URL('./er-process-observer.ts', import.meta.url), 'utf8'));
   await put('pnpm-workspace.yaml', "packages:\n  - 'packages/**'\n");
   tracked.pop(); // overwrite, retaining one source identity
   await put('scripts/ci/full-contract.json', JSON.stringify({ scripts }));
@@ -86,14 +87,13 @@ async function packageReports(root: string, expected: ExpectedEvidence, requeste
     const reporter = join(root, 'scripts/ci/package-execution.ts');
     const capture = join(logs, `${shard}-capture`);
     if (id === 'embedded-runtime') { await mkdir(capture); }
-    const embeddedEnv = { ...env, CI_ER_PROCESS_OBSERVER: '1', AE_ADOPTION_CAPTURE_DIR: capture,
-      NODE_OPTIONS: `--test-reporter=${reporter} --test-reporter-destination=stderr --test-reporter-destination=stdout` };
+    const plans = await packageStreamPlans(root, selectShard(shard), selection);
+    const embeddedEnv = id === 'embedded-runtime' ? embeddedObserverEnv(env, capture, plans) : env;
     commands.push(selection
       ? await runCommand(process.execPath, ['--test', '--test-concurrency=1', `--test-reporter=${reporter}`, ...selection.files],
         join(root, packageRoots[id]), env, join(logs, `${shard}-2`))
       : await runCommand('pnpm', ['--filter', `@agent-teams/${id}`, 'run', 'test'], root,
         id === 'embedded-runtime' ? embeddedEnv : { ...env, NODE_OPTIONS: `--test-reporter=${reporter}` }, join(logs, `${shard}-2`)));
-    const plans = await packageStreamPlans(root, selectShard(shard), selection);
     assert.equal(commandExit(commands[2]!, id === 'embedded-runtime' ? 2 : 1, undefined, plans, Object.keys(expected.inputs).map(file => join(root, file))), 0, `producer ${shard}`);
     receipts.push({ schemaVersion: 2, requestedShard: shard, packageName: `@agent-teams/${id}`,
       sourceSha: expected.sha, sourceTree: expected.inputTree, checkoutRoot: root, selection,
