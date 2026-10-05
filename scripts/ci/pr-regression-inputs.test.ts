@@ -247,6 +247,23 @@ async function foundationExecutionFixture(t: test.TestContext): Promise<string> 
   return root;
 }
 
+test('CLI forwarding of repeated fixture names preserves success and still rejects a failed child', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'ar-cli-forwarding-TEST-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const file = join(root, 'repeated.test.ts'), wrapper = join(root, 'forward.mts');
+  await writeFile(file, "import test from 'node:test'; test('repeat', () => {}); test('repeat', () => {});\n");
+  await writeFile(wrapper, "import {spawnSync} from 'node:child_process';\n"
+    + "const result = spawnSync(process.execPath, ['--test', process.argv[2]!], {stdio:'inherit'}); process.exitCode = result.status ?? 1;\n");
+  const command = `node ${wrapper} ${file}`, env = { ...process.env }; delete env.NODE_TEST_CONTEXT;
+  const execution = await observeRegressionProcess(command, root, env);
+  assert.equal(execution.code, 0); assert.deepEqual(execution.tests.map(item => item.name), ['repeat', 'repeat']);
+  const expected = [{ id: 'cli', command }], proof = { ...expected[0]!, disposition: 'executed' as const, execution };
+  assertPrObligations(expected, [proof], []);
+  await writeFile(file, "import test from 'node:test'; test('repeat', () => {}); test('repeat', () => { throw Error('TEST child failure'); });\n");
+  const failed = await observeRegressionProcess(command, root, env);
+  assert.notEqual(failed.code, 0);
+  assert.throws(() => assertPrObligations(expected, [{ ...proof, execution: failed }], []));
+});
+
 function registerFoundationPrExecutionTests(): void {
   // Old failure: zero-exit FULL accepted 9/25 leaves because the other sixteen
   // were never registered. Observe the original command once, then independently
