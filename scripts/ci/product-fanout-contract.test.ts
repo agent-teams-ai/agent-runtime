@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
@@ -8,7 +8,7 @@ import { parse } from 'yaml';
 import { aePatterns, assertFanoutEvidence, assertJobResults, assertProductWorkflow, packageRoots,
   phaseEntries, prerequisiteCommands, readProductSource, shardIds, assertShardWorkflow, assertRootCustody, reports } from './product-fanout-contract.ts';
 import type { ExpectedEvidence, PackageId, ShardId } from './product-fanout-contract.ts';
-import { executionSelection, runCommand, selectShard } from './package-execution.ts';
+import { commandExit, embeddedObserverEnv, executionSelection, packages as originalPackages, packageStreamPlans, runCommand, selectShard } from './package-execution.ts';
 import type { PackageReceipt } from './package-execution.ts';
 
 const scripts = {
@@ -31,22 +31,32 @@ async function fixture() {
   await put('.node-version', '24.21.0');
   await put('.github/workflows/ci-product.yml', '# disposable fixture');
   await put('scripts/ci/package-execution.ts', await readFile(new URL('./package-execution.ts', import.meta.url), 'utf8'));
+  await put('scripts/ci/er-process-observer.ts', await readFile(new URL('./er-process-observer.ts', import.meta.url), 'utf8'));
   await put('pnpm-workspace.yaml', "packages:\n  - 'packages/**'\n");
   tracked.pop(); // overwrite, retaining one source identity
   await put('scripts/ci/full-contract.json', JSON.stringify({ scripts }));
   for (const [id, base] of Object.entries(packageRoots)) {
     await put(`${base}/package.json`, JSON.stringify({ name: `@agent-teams/${id}`, type: 'module', scripts: {
       clean: 'node scripts/clean.ts', build: 'node scripts/build.ts',
-      test: id === 'agent-execution' ? `node --test --test-concurrency=1 ${aePatterns.join(' ')}` : id === 'embedded-runtime' ? 'node scripts/er-probe.ts' : 'node --test tests/example.test.ts',
+      test: originalPackages.find(p => p.root === base)!.test,
     } }));
     await put(`${base}/src/input.ts`, 'export const disposable = true;');
     await put(`${base}/scripts/build.ts`, "import { mkdir } from 'node:fs/promises'; await mkdir(new URL('../dist/', import.meta.url), {recursive:true});");
     await put(`${base}/scripts/clean.ts`, "import { rm } from 'node:fs/promises'; await rm(new URL('../dist/', import.meta.url), {recursive:true,force:true});");
     await put(`${base}/tests/example.test.ts`, "import test from 'node:test'; test('actual fixture observation', () => {}); test('preserved skip', {skip:true}, () => {});");
+    if (id !== 'agent-execution' && id !== 'embedded-runtime') {
+      for (const pattern of originalPackages.find(p => p.root === base)!.test.split(' ').slice(3)) {
+        const file = pattern.replaceAll('*', 'example');
+        await put(`${base}/${file}`, "import test from 'node:test'; test('first identity', () => {}); test('second identity', () => {}); for (const name of ['repeat', 'repeat']) { test(name, () => {}); } test('skip', {skip:true}, () => {});\n");
+      }
+    }
     if (id === 'embedded-runtime') {
       await put(`${base}/tests/second.test.ts`, "import test from 'node:test'; test('second actual process', () => {});");
       await put(`${base}/scripts/adoption-test-reporter.mjs`, await readFile(new URL('../../packages/apps/embedded-runtime/scripts/adoption-test-reporter.mjs', import.meta.url), 'utf8'));
-      await put(`${base}/scripts/er-probe.ts`, "import {spawnSync} from 'node:child_process'; for (const file of ['tests/example.test.ts', 'tests/second.test.ts']) { const r = spawnSync(process.execPath, ['--test', '--test-reporter=./scripts/adoption-test-reporter.mjs', file], {encoding:'utf8'}); process.stdout.write(r.stdout); process.stderr.write(r.stderr); if (r.status !== 0) { process.exit(r.status ?? 1); } }");
+      const runner = await readFile(new URL('../../packages/apps/embedded-runtime/scripts/run-package-tests.mjs', import.meta.url), 'utf8');
+      await put(`${base}/scripts/run-package-tests.mjs`, runner.replace(/export const testProcesses = (\[[\s\S]*?\n\]);/u,
+        'export const testProcesses = [\n  ["--test", "--test-concurrency=1", "tests/example.test.ts"],\n  ["--experimental-test-module-mocks", "--test", "tests/second.test.ts"]\n];'));
+
     }
   }
   // Uneven universe, literal mjs, and intentionally unsorted creation order.
@@ -54,7 +64,7 @@ async function fixture() {
     'tests/features/runtime-installation-discovery/a.test.ts', 'tests/package/a.test.ts',
     'tests/features/contained-agent-turn/contained-turn-live-canary-lifecycle.test.mjs',
     'tests/features/contained-agent-turn/a.test.ts', 'tests/package/m.test.ts'];
-  for (const file of files) { await put(`${packageRoots['agent-execution']}/${file}`, "import test from 'node:test'; test('actual fixture file', () => {}); test('deliberate TEST skip', {skip:true}, () => {});"); }
+  for (const file of files) { await put(`${packageRoots['agent-execution']}/${file}`, "import test from 'node:test'; test('actual fixture file', () => {}); test('other passing identity', () => {}); for (const name of ['repeat', 'repeat']) { test(name, () => {}); } test('deliberate TEST skip', {skip:true}, () => {});"); }
   const source = await readProductSource(root, tracked);
   const expected: ExpectedEvidence = { ...source, sha: 'a'.repeat(40), inputTree: 'b'.repeat(40), nodeExecutable: process.execPath, measureDigests: { 'package.json': 'c'.repeat(64) } };
   return { root, tracked, expected };
@@ -75,11 +85,16 @@ async function packageReports(root: string, expected: ExpectedEvidence, requeste
       commands.push(await runCommand(command.executable, [...command.argv], root, env, join(logs, `${shard}-${i}`)));
     }
     const reporter = join(root, 'scripts/ci/package-execution.ts');
+    const capture = join(logs, `${shard}-capture`);
+    if (id === 'embedded-runtime') { await mkdir(capture); }
+    const plans = await packageStreamPlans(root, selectShard(shard), selection);
+    const embeddedEnv = id === 'embedded-runtime' ? embeddedObserverEnv(env, capture, plans) : env;
     commands.push(selection
       ? await runCommand(process.execPath, ['--test', '--test-concurrency=1', `--test-reporter=${reporter}`, ...selection.files],
         join(root, packageRoots[id]), env, join(logs, `${shard}-2`))
       : await runCommand('pnpm', ['--filter', `@agent-teams/${id}`, 'run', 'test'], root,
-        id === 'embedded-runtime' ? env : { ...env, NODE_OPTIONS: `--test-reporter=${reporter}` }, join(logs, `${shard}-2`)));
+        id === 'embedded-runtime' ? embeddedEnv : { ...env, NODE_OPTIONS: `--test-reporter=${reporter}` }, join(logs, `${shard}-2`)));
+    assert.equal(commandExit(commands[2]!, id === 'embedded-runtime' ? 2 : 1, undefined, plans, Object.keys(expected.inputs).map(file => join(root, file))), 0, `producer ${shard}`);
     receipts.push({ schemaVersion: 2, requestedShard: shard, packageName: `@agent-teams/${id}`,
       sourceSha: expected.sha, sourceTree: expected.inputTree, checkoutRoot: root, selection,
       platform: 'linux', arch: 'x64', uid: process.getuid?.() ?? null, node: 'v24.21.0', execPath: process.execPath, pnpm: '11.18.0',
@@ -97,11 +112,13 @@ function phaseReports(expected: ExpectedEvidence) {
       commands: expected.inventories[i]?.filter(command => command.script === script), tests: [phaseEvent()] })) }));
 }
 export function registerProductFanoutTests(): void {
+registerProductSourceCustodyTests(); registerProductWorkflowTests();
 test('source-derived full coverage preserves all eight runners and old root/type/native commands', async t => {
   const { root, expected } = await fixture(); t.after(() => rm(root, { recursive: true, force: true }));
   assert.equal(expected.universe.length, 7); assert.deepEqual(expected.universe, expected.universe.toSorted());
   const packages = await packageReports(root, expected), phases = phaseReports(expected);
   assertFanoutEvidence(expected, packages.toReversed(), phases.toReversed());
+  if (process.env.CI_FOCUSED_EVIDENCE_DIR) { await writeFile(join(process.env.CI_FOCUSED_EVIDENCE_DIR, 'synthetic-fanout-processes.json'), JSON.stringify({ scope: 'actual disposable TEST commands; no product qualification', expected, packages, phases }, null, 2)); }
   const embedded = packages.find(report => report.packageName === '@agent-teams/embedded-runtime')!;
   assert.equal(embedded.commands[2]!.observation.summaries.length, 2);
   assert.ok(embedded.commands[2]!.observation.events.some(event => event.title === 'second actual process' && event.name === undefined));
@@ -109,6 +126,29 @@ test('source-derived full coverage preserves all eight runners and old root/type
   const reject = async (name: string, change: (p: PackageReceipt[], r: ReturnType<typeof phaseReports>) => void) => {
     await t.test(name, () => { const p = structuredClone(packages), r = structuredClone(phases); change(p, r); assert.throws(() => assertFanoutEvidence(expected, p, r)); });
   };
+  await reject('same-file balanced duplicate identity', p => {
+    const observation = p[0]!.commands[2]!.observation;
+    const first = observation.events.find(e => e.name === 'actual fixture file')!;
+    const second = observation.events.find(e => e.file === first.file && e.name === 'other passing identity')!;
+    observation.events[observation.events.indexOf(first)] = { ...second };
+    assert.equal(commandExit(p[0]!.commands[2]!, 1), 1);
+  });
+  await reject('PA RC swapped observations', p => {
+    const left = p[3]!.commands[2]!, right = p[4]!.commands[2]!;
+    [left.observation, right.observation] = [right.observation, left.observation];
+    const plan = expected.packageStreams['provider-access'][0]!;
+    assert.equal(commandExit(left, 1, undefined, [{executable:process.execPath, argv:plan.argv, cwd:join(root, packageRoots['provider-access']), files:plan.files.map(file => join(root, packageRoots['provider-access'], file))}]), 1);
+  });
+  await reject('ER first stream replaces second', p => {
+    const observation = p[6]!.commands[2]!.observation;
+    const first = observation.events.filter(e => String(e.suite).endsWith('/tests/example.test.ts')); assert.ok(first.length);
+    observation.events = [...first, ...structuredClone(first)]; observation.summaries[1] = structuredClone(observation.summaries[0]!);
+    assert.equal(commandExit(p[6]!.commands[2]!, 2), 1);
+  });
+  await reject('ER duplicate process envelope', p => {
+    const observation = p[6]!.commands[2]!.observation; observation.streams[1] = structuredClone(observation.streams[0]!);
+    assert.equal(commandExit(p[6]!.commands[2]!, 2), 1);
+  });
   await reject('missing matrix report', p => p.pop());
   await reject('duplicate package report', p => { p[7] = p[6]!; });
   await reject('wrong revision', p => { p[0]!.sourceSha = 'd'.repeat(40); });
@@ -195,6 +235,49 @@ test('source oracle rejects ignored inputs, runner drift, and missing literal AE
     });
   }
 });
+}
+export function registerProductSourceCustodyTests(): void {
+test('physical root custody rejects Git-ignored test/type/native/config helpers and symlink ancestry', async t => {
+  for (const path of ['experiments/runtime-profile-behavior/test/extra.test.ts',
+    'experiments/runtime-profile-behavior/src/extra.ts', 'experiments/rust-system-boundaries/client/extra.ts',
+    'scripts/native-helper/extra.mjs', 'scripts/foundation/extra.mjs', 'architecture/foundation/extra.yaml',
+    'tsconfig.extra.json', '.oxlintrc.extra.json']) {
+    await t.test(path, async sub => {
+      const {root, tracked} = await fixture(); sub.after(() => rm(root, {recursive:true, force:true}));
+      execFileSync('git', ['init', '--quiet', root]);
+      await writeFile(join(root, '.git/info/exclude'), `${path}\n`);
+      await mkdir(join(root, path, '..'), {recursive:true});
+      await writeFile(join(root, path), "import test from 'node:test'; test('ignored actual source', () => {});\n");
+      assert.equal(execFileSync('git', ['check-ignore', path], {cwd:root, encoding:'utf8'}).trim(), path);
+      if (path.endsWith('.test.ts')) {
+        const env = {...process.env}; delete env.NODE_TEST_CONTEXT; delete env.NODE_OPTIONS;
+        const result = spawnSync(process.execPath, ['--test', '--test-reporter=tap', path], {cwd:root, encoding:'utf8', env});
+        assert.equal(result.status, 0); assert.match(result.stdout, /ignored actual source/u);
+      }
+      await assert.rejects(readProductSource(root, tracked), /untracked\/ignored/u);
+      const external = await mkdtemp(join(tmpdir(), 'external-source-TEST-')); sub.after(() => rm(external, {recursive:true,force:true}));
+      const target = join(external, 'target.ts'); await writeFile(target, '// TEST');
+      await rm(join(root, path)); await symlink(target, join(root, path));
+      await assert.rejects(readProductSource(root, tracked), /symlink|unsupported/u);
+    });
+  }
+  await t.test('deliberate generated dependency/build exclusions preserve custody', async sub => {
+    const {root, tracked, expected} = await fixture(); sub.after(() => rm(root, {recursive:true,force:true}));
+    for (const path of [`${packageRoots['agent-execution']}/dist/generated.ts`, `${packageRoots['provider-access']}/.cache/output.json`,
+      `${packageRoots['embedded-runtime']}/node_modules/installed.ts`, 'experiments/rust-system-boundaries/target/generated.rs']) {
+      await mkdir(join(root, path, '..'), {recursive:true}); await writeFile(join(root, path), '// generated TEST');
+    }
+    assert.deepEqual((await readProductSource(root, tracked)).inputs, expected.inputs);
+  });
+  await t.test('tracked directory replaced by an external ancestry symlink', async sub => {
+    const {root, tracked} = await fixture(); sub.after(() => rm(root, {recursive:true, force:true}));
+    const base = join(root, 'scripts/ci'), moved = join(root, 'external-ci');
+    await import('node:fs/promises').then(fs => fs.rename(base, moved)); await symlink(moved, base);
+    await assert.rejects(readProductSource(root, tracked), /symlink/u);
+  });
+});
+}
+export function registerProductWorkflowTests(): void {
 test('matrix and root failures, cancellation, skip or missing needs fail closed', () => {
   assertJobResults({ packages: { result: 'success' }, root: { result: 'success' } });
   for (const job of ['packages', 'root']) {
