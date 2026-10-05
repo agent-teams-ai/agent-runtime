@@ -56,7 +56,7 @@ jobs:
     name: check
     if: ${{ always() }}
     needs: [quick, foundation, architecture, docs, product]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork && 'ubuntu-24.04' || vars.CI_LINUX_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 5
     steps:
       - name: Checkout event revision
