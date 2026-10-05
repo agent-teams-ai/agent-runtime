@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { describe } from "node:test";
 import { parseDocument } from "yaml";
 import { commandInventory, routedScripts } from "../ci/script-routing.ts";
 
@@ -81,6 +81,21 @@ const copyWorkspacePackageManifests = async root => {
   }
 };
 
+// execFile reports exit 1 as an error even for an expected violation. Retain
+// infrastructure failures and wait for close (including spawn errors) before
+// allowing either fixture owner to remove its directory.
+const installedCLI = (root, expectedFailureStatus = 1) => new Promise(resolve => {
+  let output;
+  const child = execFile(process.execPath, [foundationCli, "check",
+    "architecture.source-dependencies", "--consumer", root, "--json"],
+  { encoding: "utf8", timeout: 60_000, maxBuffer: 8 * 1024 * 1024 },
+  (error, stdout, stderr) => {
+    const expectedFailure = error?.code === expectedFailureStatus && error.killed === false && error.signal === null;
+    output = { error: error && !expectedFailure ? error : undefined, stdout, stderr };
+  });
+  child.once("close", (status, signal) => resolve({ ...output, status, signal }));
+});
+
 const analyzeFixture = async files => {
   const root = await mkdtemp(join(tmpdir(), "ar-foundation-boundaries-"));
   try {
@@ -128,9 +143,7 @@ const analyzeFixture = async files => {
       project: { id: "foundation-boundary-fixture" },
       capabilities: { "architecture.source-dependencies": { configPath } },
     }));
-    const result = spawnSync(process.execPath, [foundationCli, "check",
-      "architecture.source-dependencies", "--consumer", root, "--json"],
-    { encoding: "utf8", timeout: 60_000, maxBuffer: 8 * 1024 * 1024 });
+    const result = await installedCLI(root);
     assert.equal(result.error, undefined);
     assert.equal(result.signal, null);
     const envelope = JSON.parse(result.stdout);
@@ -147,607 +160,619 @@ const analyzeFixture = async files => {
 
 const rules = diagnostics => diagnostics.map(diagnostic => diagnostic.ruleId);
 
-test("the named negative suite runs exactly once through every Foundation gate", () => {
-  const negativeCommand = "node --test scripts/architecture/source-dependency-adapter-boundaries.test.mjs scripts/docs/runtime-builtin-permissions.test.mjs scripts/ci/run-ordinary-postgres.test.mjs";
-  const verify = scripts => {
-    assert.equal(scripts["foundation:boundaries:negative"], negativeCommand);
-    for (const script of ["foundation:check", "check", "check:fast"]) {
-      assert.deepEqual(commandInventory(scripts, script).filter(command => command.script === "foundation:boundaries:negative"), [
-        { script: "foundation:boundaries:negative", command: negativeCommand }
-      ], `${script} must run the real negative suite exactly once`);
-    }
-    for (const script of ["check", "check:fast"]) {
-      const chain = routedScripts(scripts, script);
-      assert.equal(chain[0], "pnpm lint", script);
-      for (const command of ["pnpm lint", "pnpm foundation:check"]) {
-        assert.equal(chain.filter(step => step === command).length, 1, `${script} must reach ${command} exactly once`);
+function registerPolicyChecks() {
+  test("the named negative suite runs exactly once through every Foundation gate", () => {
+    const negativeCommand = "node --test scripts/architecture/source-dependency-adapter-boundaries.test.mjs scripts/docs/runtime-builtin-permissions.test.mjs scripts/ci/run-ordinary-postgres.test.mjs";
+    const verify = scripts => {
+      assert.equal(scripts["foundation:boundaries:negative"], negativeCommand);
+      for (const script of ["foundation:check", "check", "check:fast"]) {
+        assert.deepEqual(commandInventory(scripts, script).filter(command => command.script === "foundation:boundaries:negative"), [
+          { script: "foundation:boundaries:negative", command: negativeCommand }
+        ], `${script} must run the real negative suite exactly once`);
       }
-    }
-    assert.ok(!scripts["foundation:check"].includes("|| true"));
-    assert.ok(!scripts["foundation:check"].includes("allow-diagnostics"));
-  };
-  verify(manifest.scripts);
-  for (const scripts of [
-    { ...manifest.scripts, check: manifest.scripts.check.replace(" && pnpm check:ci:foundation", "") },
-    { ...manifest.scripts, "check:ci:foundation": `${manifest.scripts["check:ci:foundation"]} && pnpm foundation:check` },
-    { ...manifest.scripts, "foundation:check": manifest.scripts["foundation:check"].replace(" && pnpm foundation:boundaries:negative", "") },
-    { ...manifest.scripts, "foundation:boundaries:negative": "true" }
-  ]) {
-    assert.throws(() => verify(scripts));
-  }
-});
-
-test("contained-turn domain and application remain dependency-free core", async () => {
-  const core = boundariesById.get("core.agent-execution.contained-turn");
-  assert.deepEqual(core.allowedBoundaries, []);
-  assert.deepEqual(core.allowedBuiltins, []);
-  assert.deepEqual(core.allowedPackages, []);
-  assert.deepEqual(core.allowedRuntimeReferences, []);
-
-  assert.deepEqual(rules(await analyzeFixture({
-    [paths.core]: "import 'node:fs';\n",
-  })), ["architecture.source-dependencies.forbidden-builtin-dependency"]);
-  assert.ok(rules(await analyzeFixture({
-    [paths.core]: "import type {} from '@anthropic-ai/claude-agent-sdk';\n",
-  })).includes("architecture.source-dependencies.forbidden-package-dependency"));
-});
-
-test("Filesystem Custody source collector keeps policy inside its scoped tooling boundary", async () => {
-  const policyBoundary = boundariesById.get("tooling.sdk-growth-source.policy");
-  const adapterBoundary = boundariesById.get("tooling.sdk-growth-source.adapters");
-  assert.deepEqual(policyBoundary.allowedBuiltins, []);
-  assert.deepEqual(policyBoundary.allowedPackages, []);
-  assert.deepEqual(policyBoundary.allowedBoundaries, []);
-  assert.deepEqual(adapterBoundary.allowedBoundaries, ["tooling.sdk-growth-source.policy"]);
-  const candidate = "scripts/sdk-growth-source/candidate.mjs";
-  const adapter = "scripts/sdk-growth-source/collect.mjs";
-  const testFile = "scripts/sdk-growth-source/collector.test.mjs";
-  assert.deepEqual(rules(await analyzeFixture({ [candidate]: "import 'node:fs';\n" })),
-    ["architecture.source-dependencies.forbidden-builtin-dependency"]);
-  assert.deepEqual(rules(await analyzeFixture({ [candidate]: "import './collect.mjs';\n" })),
-    ["architecture.source-dependencies.forbidden-boundary-dependency"]);
-  assert.deepEqual(rules(await analyzeFixture({ [adapter]: "import '@anthropic-ai/claude-agent-sdk';\n" })),
-    ["architecture.source-dependencies.forbidden-package-dependency"]);
-  assert.deepEqual(rules(await analyzeFixture({ [testFile]: "import './candidate.mjs';\n" })), []);
-});
-
-test("Node compatibility CI owns its APIs without granting PostgreSQL or future CI files those imports", async () => {
-  const audit = "scripts/ci/audit-node-engine-compatibility.mjs";
-  const engine = "scripts/ci/node-engine-compatibility.test.mjs";
-  const runtime = "scripts/ci/node-runtime-compatibility.test.mjs";
-  const postgres = "scripts/ci/run-ordinary-postgres.mjs";
-  assert.deepEqual(await analyzeFixture({
-    [audit]: "import 'node:fs';\n",
-    [engine]: "import 'node:child_process';\nimport './audit-node-engine-compatibility.mjs';\n",
-    [runtime]: "import 'node:crypto';\nimport 'node:module';\nimport 'node:os';\nimport 'node:util';\n",
-  }), []);
-  assert.deepEqual(rules(await analyzeFixture({[postgres]: "import 'node:crypto';\n"})),
-    ["architecture.source-dependencies.forbidden-builtin-dependency"]);
-  assert.deepEqual(rules(await analyzeFixture({[postgres]: "import 'node:child_process';\n"})),
-    ["architecture.source-dependencies.forbidden-builtin-dependency"]);
-  assert.deepEqual(rules(await analyzeFixture({[runtime]: "import 'node:net';\n"})),
-    ["architecture.source-dependencies.forbidden-builtin-dependency"]);
-  assert.deepEqual(rules(await analyzeFixture({"scripts/ci/unreviewed-capability.mjs": "import 'node:crypto';\n"})),
-    ["architecture.source-dependencies.unclassified-source-file"]);
-});
-
-test("the real parser observes every retained Node import in composition and TLS support", async () => {
-  const composition = "packages/apps/embedded-runtime/src/composition";
-  const host = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody";
-  for (const [path, builtins] of [
-    [`${composition}/agent-runtime-host.ts`, ["node:crypto", "node:util"]],
-    ["packages/apps/embedded-runtime/src/features/contained-turn-access-authority/adapters/contained-turn-access-authority.ts", ["node:util"]],
-    ["packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/adapters/contained-turn-authority-capability.ts", ["node:util"]],
-    ["packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/adapters/contained-turn-route-qualification.ts", ["node:fs"]],
-    ["packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope/adapters/trusted-runtime-access-scope.ts", ["node:util"]],
-    [`${host}/egress/node-tls-http-egress-transport-support.ts`,
-      ["node:buffer", "node:crypto", "node:net", "node:tls"]],
-    [`${host}/docker/node-linux-exclusive-route.ts`,
-      ["node:child_process", "node:crypto", "node:fs", "node:timers"]],
-    ["packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-config-wire.ts",
-      ["node:crypto", "node:util"]],
-  ]) {
-    const source = await readFile(join(repositoryRoot, path), "utf8");
-    const parsed = parseSync(path, source);
-    assert.deepEqual(parsed.errors, [], path);
-    assert.deepEqual(parsed.module.dynamicImports, [], path);
-    const observed = parsed.module.staticImports
-      .map(reference => reference.moduleRequest.value)
-      .filter(specifier => specifier.startsWith("node:"));
-    assert.deepEqual(observed.toSorted(), builtins, path);
-    assert.deepEqual(await analyzeFixture({
-      [path]: observed.map(specifier => `import '${specifier}';`).join("\n"),
-    }), [], path);
-  }
-});
-
-test("Node permissions do not follow imports moved into core or undeclared adapter locations", async () => {
-  const classified = [
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/moved-node-dependency.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/application/moved-node-dependency.ts",
-  ];
-  const unclassified = [
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/undeclared/moved-node-dependency.ts",
-    "packages/apps/embedded-runtime/src/domain/moved-node-dependency.ts",
-    "packages/apps/embedded-runtime/src/application/moved-node-dependency.ts",
-    "packages/apps/embedded-runtime/src/adapters/undeclared/moved-node-dependency.ts",
-  ];
-  for (const builtin of ["node:buffer", "node:timers", "node:util"]) {
-    const diagnostics = await analyzeFixture(Object.fromEntries(
-      [...classified, ...unclassified].map(path => [path, `import '${builtin}';\n`]),
-    ));
-    assert.equal(diagnostics.length, 6, builtin);
-    for (const path of classified) {
-      const sourceDiagnostics = diagnostics.filter(diagnostic => diagnostic.location.path === path);
-      assert.equal(sourceDiagnostics.length, 1, `${builtin}: ${path}`);
-      assert.deepEqual(rules(sourceDiagnostics), ["architecture.source-dependencies.forbidden-builtin-dependency"], path);
-      assert.deepEqual(sourceDiagnostics[0].evidence, [{ kind: "specifier", value: builtin }]);
-    }
-    for (const path of unclassified) {
-      const sourceDiagnostics = diagnostics.filter(diagnostic => diagnostic.location.path === path);
-      assert.equal(sourceDiagnostics.length, 1, `${builtin}: ${path}`);
-      assert.deepEqual(rules(sourceDiagnostics), ["architecture.source-dependencies.unclassified-source-file"], path);
-    }
-  }
-});
-
-test("Embedded Runtime Node utility permission belongs to exact Host composition and ordinary adapter paths", () => {
-  const composition = boundariesById.get("composition.embedded-runtime");
-  assert.deepEqual(composition.roots, [
-    "packages/apps/embedded-runtime/src/composition.ts",
-    "packages/apps/embedded-runtime/src/composition/agent-runtime-host-creation-error.ts",
-    "packages/apps/embedded-runtime/src/composition/default-agent-runtime-host.ts",
-    "packages/apps/embedded-runtime/src/composition/host-custodied-agent-runtime-host.ts",
-    "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
-    "packages/apps/embedded-runtime/src/composition/ordinary-agent-runtime-host.ts",
-    "packages/apps/embedded-runtime/src/composition/ordinary-runtime-assembly.ts",
-    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/adapters/ordinary-observation-journal.ts",
-    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/adapters/ordinary-owner-acl.ts",
-    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
-    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
-    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/contracts/ordinary-session-observation.ts",
-    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/index.ts",
-    "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/internal.ts",
-  ]);
-  // composition.ts re-exports the linux-codex/http-egress/darwin routing
-  // cluster, the contained-turn and contained-turn-support roles, and
-  // access-contracts; PR69 grew this directory well beyond a single
-  // entrypoint file. The ordinary feature extends this same construction
-  // authority through the exact owned paths above; it does not grant a broad
-  // src/composition or src/features directory permission.
-  assert.deepEqual(composition.allowedBoundaries, [
-    "production.embedded-runtime",
-    "composition.embedded-runtime.contained-turn",
-    "composition.embedded-runtime.contained-turn-support",
-    "composition.embedded-runtime.contained-turn-routing",
-    "composition.embedded-runtime.agent-runtime-host",
-    "core.embedded-runtime.access-contracts",
-  ]);
-  // Ordinary Host validation and its observation journal add path/util/fs to
-  // the existing crypto permission. Scoped FMS still rejects inward builtin
-  // imports even when a feature contract shares this composition boundary.
-  assert.deepEqual(composition.allowedBuiltins, ["node:crypto", "node:fs", "node:path", "node:util"]);
-  assert.deepEqual(composition.allowedRuntimeReferences, []);
-  const production = boundariesById.get("production.embedded-runtime");
-  // Host public surface is the contracts barrel. Setup-view builders now live
-  // in composition.embedded-runtime.agent-runtime-host with the planners.
-  assert.deepEqual(production.allowedBoundaries, [
-    "core.embedded-runtime.access-contracts",
-  ]);
-  // Digest computation stays behind OpaqueReferenceDigest in the
-  // agent-runtime-host role; the package barrel does not import Node builtins.
-  assert.deepEqual(production.allowedBuiltins, []);
-});
-
-test("transitional boundaries and adapter permissions remain exact", () => {
-  const legacy = boundariesById.get("adapter.agent-execution.legacy-contained-turn-ports");
-  const claude = boundariesById.get("adapter.agent-execution.claude-agent-sdk");
-  const delegation = boundariesById.get("adapter.agent-execution.provider-delegation-ports");
-  const production = boundariesById.get("production.agent-execution");
-  const composition = boundariesById.get("composition.agent-execution.contained-turn");
-
-  assert.deepEqual(legacy.roots, [dirname(paths.legacy)]);
-  assert.deepEqual(legacy.entrypoints, [paths.legacy]);
-  assert.deepEqual(legacy.allowedBoundaries, [
-    "adapter.agent-execution.host-custody",
-    "core.agent-execution.contained-turn",
-  ]);
-  assert.deepEqual(legacy.allowedPackages, []);
-  assert.deepEqual(legacy.allowedBuiltins, []);
-  assert.deepEqual(legacy.allowedRuntimeReferences, []);
-  assert.deepEqual(claude.allowedBoundaries, [
-    "adapter.agent-execution.provider-delegation-ports",
-    "core.agent-execution.contained-turn",
-  ]);
-  assert.deepEqual(delegation.entrypoints, [paths.providerDelegation, paths.privateDirectoryCustody]);
-  assert.deepEqual(delegation.allowedBoundaries, [
-    "adapter.agent-execution.host-custody",
-    "adapter.agent-execution.legacy-contained-turn-ports",
-  ]);
-  assert.deepEqual(delegation.allowedPackages, []);
-  assert.deepEqual(delegation.allowedBuiltins, []);
-  assert.deepEqual(delegation.allowedRuntimeReferences, []);
-  assert.ok(!claude.allowedBoundaries.includes("adapter.agent-execution.host-custody"));
-  assert.ok(!claude.allowedBoundaries.includes("adapter.agent-execution.legacy-contained-turn-ports"));
-  assert.ok(!claude.allowedBoundaries.includes("production.agent-execution"));
-  // accepted-authority-anti-corruption.ts and authority-owner-boundary.ts import
-  // provider-access-anti-corruption.ts, which imports both of them back (a real
-  // reciprocal cycle once PR69's provider-access wiring is counted), so they
-  // moved into composition.agent-execution.boundary-data alongside it. Only
-  // host-post-claim-preparation.ts (no such cycle) remains in this role.
-  assert.deepEqual(composition.roots, [
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts",
-  ]);
-  assert.deepEqual(composition.entrypoints, composition.roots);
-  assert.deepEqual(composition.allowedBoundaries, [
-    "adapter.agent-execution.host-custody",
-    "core.agent-execution.contained-turn",
-  ]);
-  assert.deepEqual(composition.allowedPackages, []);
-  assert.deepEqual(composition.allowedBuiltins, ["node:util"]);
-  assert.deepEqual(composition.allowedRuntimeReferences, []);
-  assert.deepEqual(production.allowedBoundaries, [
-    "adapter.agent-execution.claude-agent-sdk",
-    "adapter.agent-execution.codex-app-server",
-    "adapter.agent-execution.docker-custody",
-    "adapter.agent-execution.host-custody",
-    "adapter.agent-execution.legacy-contained-turn-ports",
-    "adapter.agent-execution.provider-delegation-ports",
-    "composition.agent-execution.contained-turn",
-    "core.agent-execution.contained-turn",
-    "adapter.agent-execution.codex-data",
-    "adapter.agent-execution.codex-primitives",
-    "adapter.agent-execution.codex-primitives-leaves",
-    "adapter.agent-execution.codex-native-broker",
-    "composition.agent-execution.boundary-data",
-    "composition.agent-execution.dispatch-grant",
-    "adapter.agent-execution.ordinary-provider",
-    "adapter.agent-execution.ordinary-filesystem",
-    "adapter.agent-execution.ordinary-process",
-    "adapter.agent-execution.ordinary-postgres",
-    "composition.agent-execution.ordinary",
-  ]);
-  assert.ok(!production.allowedBuiltins.includes("node:util"));
-  assert.ok(!production.entrypoints.includes(paths.legacy));
-});
-
-test("Docker custody uses only the engine port and explicit residue construction entrypoint", () => {
-  const engine = boundariesById.get("adapter.agent-execution.docker-engine");
-  const custody = boundariesById.get("adapter.agent-execution.docker-custody");
-  const json = boundariesById.get("adapter.agent-execution.docker-json");
-
-  assert.deepEqual(engine.entrypoints, [paths.dockerPort, paths.dockerConstruction]);
-  assert.deepEqual(engine.allowedBoundaries, ["adapter.agent-execution.docker-json"]);
-  assert.deepEqual(engine.allowedPackages, []);
-  assert.deepEqual(engine.allowedRuntimeReferences, []);
-  assert.deepEqual(custody.allowedBoundaries, ["adapter.agent-execution.docker-engine", "adapter.agent-execution.docker-json"]);
-  assert.deepEqual(json.entrypoints, [paths.dockerJson]);
-  assert.deepEqual(json.allowedBoundaries, []);
-  assert.deepEqual(json.allowedPackages, []);
-  assert.deepEqual(json.allowedBuiltins, []);
-  assert.deepEqual(json.allowedRuntimeReferences, []);
-  assert.deepEqual(custody.allowedPackages, ["@agent-teams/filesystem-custody"]);
-  assert.ok(!engine.entrypoints.includes(paths.dockerBarrel));
-  assert.ok(!engine.entrypoints.includes(paths.dockerFake));
-  assert.ok(!engine.entrypoints.includes(paths.dockerNode));
-});
-
-test("installed Foundation parser detects a nonliteral runtime reference", async () => {
-  const diagnostics = await analyzeFixture({
-    [paths.claude]: "const hidden = '../legacy/legacy-contained-turn-ports.js';\nvoid import(hidden);\n",
-  });
-  assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.unresolved-runtime-reference"]);
-});
-
-test("a forbidden boundary cannot import a legal target entrypoint", async () => {
-  const diagnostics = await analyzeFixture({
-    [paths.core]: "import type {} from '../adapters/outbound/legacy/legacy-contained-turn-ports.js';\n",
-    [paths.legacy]: "export {};\n",
-  });
-  assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.forbidden-boundary-dependency"]);
-});
-
-test("existing Host and SDK capabilities retain their exact ownership", async () => {
-  const host = boundariesById.get("adapter.agent-execution.host-custody");
-  assert.deepEqual(host.entrypoints, [
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-workspace-entrypoint.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-cooperative-process-custody.ts",
-    // internal.ts consumes the exact Darwin route readback directly.
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-route-durable-storage.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/native-host-custody-workspace-entrypoint.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-open-attempts.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-bridge.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-selection.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-singleton-custody-owner.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-admission-guard.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/prepared-http-request-v1.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-finalizable-plan.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-launch.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/native-host-custody-workspace-authority.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-core.ts",
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/private-host-custody-reservation.ts",
-  ]);
-
-  assert.deepEqual(host.allowedBuiltins, [
-    "node:buffer", "node:child_process", "node:crypto", "node:dns/promises",
-    "node:events", "node:fs", "node:fs/promises", "node:net", "node:os",
-    "node:path", "node:stream", "node:timers/promises", "node:tls", "node:util",
-  ]);
-
-  for (const builtin of ["node:dns/promises", "node:net", "node:os", "node:stream", "node:tls"]) {
-    assert.deepEqual(await analyzeFixture({
-      [paths.hostNode]: `import '${builtin}';\n`,
-    }), []);
-  }
-  assert.deepEqual(await analyzeFixture({
-    [paths.claude]: "import 'node:perf_hooks';\nimport type {} from '@anthropic-ai/claude-agent-sdk';\n",
-  }), []);
-});
-
-test("Darwin retained-owner consumers use the narrow workspace entrypoint", async () => {
-  const internal = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-io.ts";
-  assert.deepEqual(await analyzeFixture({
-    [paths.composition]: `import type {DarwinAttemptRetainedOwners} from './features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-workspace-entrypoint.js';\n`,
-  }), []);
-  assert.deepEqual(rules(await analyzeFixture({
-    [paths.composition]: `import type {DarwinAttemptRetainedOwners} from './features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-io.js';\n`,
-    [internal]: "export interface DarwinAttemptRetainedOwners {}\n",
-  })), ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"]);
-});
-
-test("Codex evidence utilities do not grant spawn or network ownership", async () => {
-  const path = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-notification-evidence.ts";
-  const hostInternal = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-contracts.ts";
-  // The former direct getBuiltinModule("node:util") consumers under this root
-  // (effect-custody/permission-boundary/platform-tuple/config-wire/native
-  // -broker-recipe) moved into the narrower codex-primitives/codex-primitives
-  // -leaves/codex-native-broker roles; remaining codex-app-server internals
-  // do not inherit node:util from that split.
-  assert.deepEqual(rules(await analyzeFixture({ [path]: "import 'node:util';\n" })),
-    ["architecture.source-dependencies.forbidden-builtin-dependency"]);
-  for (const builtin of ["node:child_process", "node:dns/promises", "node:http", "node:net", "node:tls", "node:timers"]) {
-    assert.deepEqual(rules(await analyzeFixture({ [path]: `import '${builtin}';\n` })),
-      ["architecture.source-dependencies.forbidden-builtin-dependency"]);
-  }
-  assert.deepEqual(rules(await analyzeFixture({
-    [path]: "import '../host-custody/contained-turn-kernel-custody-contracts.js';\n",
-    [hostInternal]: "export {};\n",
-  })), ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"]);
-});
-
-test("Claude may import only narrow provider-delegation and private-directory ports", async () => {
-  assert.deepEqual(await analyzeFixture({
-    [paths.claude]: [
-      "import type {} from '../provider-delegation-ports/contained-turn-provider-delegation-port.js';",
-      "import type {} from '../provider-delegation-ports/private-directory-custody-port.js';",
-    ].join("\n"),
-  }), []);
-
-  for (const [targetPath, specifier] of [
-    [paths.legacy, "../legacy/legacy-contained-turn-ports.js"],
-    [paths.host, "../host-custody/custodied-provider-process.js"],
-    [paths.hostNode, "../host-custody/node-provider-process-custody.js"],
-  ]) {
-    const diagnostics = await analyzeFixture({
-      [paths.claude]: `import type {} from '${specifier}';\n`,
-      [targetPath]: "export {};\n",
-    });
-    assert.deepEqual(
-      rules(diagnostics),
-      ["architecture.source-dependencies.forbidden-boundary-dependency"],
-      specifier,
-    );
-  }
-
-  const diagnostics = await analyzeFixture({
-    [paths.claude]: "import '../../../../../composition.js';\n",
-    [paths.composition]: "export {};\n",
-  });
-  assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.forbidden-boundary-dependency"]);
-
-  assert.deepEqual(await analyzeFixture({
-    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-active-turn.ts":
-      "import type {} from '../legacy/legacy-contained-turn-ports.js';\n",
-    [paths.legacy]: "export {};\n",
-  }), []);
-});
-
-test("Docker custody may import the port and construction boundary, but not engine internals", async () => {
-  assert.deepEqual(await analyzeFixture({
-    [paths.docker]: "import type {} from './engine/docker-engine-port.js';\n",
-    [paths.dockerPort]: "export {};\n",
-  }), []);
-  assert.deepEqual(await analyzeFixture({
-    [paths.docker]: "import {NodeUnixSocketDockerEngine} from './engine/docker-engine-composition.js';\nvoid NodeUnixSocketDockerEngine;\n",
-    [paths.dockerConstruction]: "export {NodeUnixSocketDockerEngine} from './node-unix-socket-docker-engine.js';\n",
-    [paths.dockerNode]: "export class NodeUnixSocketDockerEngine {}\n",
-  }), []);
-
-  for (const [targetPath, specifier] of [
-    [paths.dockerFake, "./engine/fake-docker-engine.js"],
-    [paths.dockerNode, "./engine/node-unix-socket-docker-engine.js"],
-    [paths.dockerBarrel, "./engine/index.js"],
-  ]) {
-    const diagnostics = await analyzeFixture({
-      [paths.docker]: `import type {} from '${specifier}';\n`,
-      [targetPath]: "export {};\n",
-    });
-    assert.deepEqual(
-      rules(diagnostics),
-      ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"],
-      specifier,
-    );
-  }
-});
-
-test("Docker JSON remains neutral and cannot import its engine consumer", async () => {
-  const diagnostics = await analyzeFixture({
-    [paths.dockerJson]: "import type {} from '../engine/docker-engine-port.js';\n",
-    [paths.dockerPort]: "export {};\n",
-  });
-  assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.forbidden-boundary-dependency"]);
-});
-
-test("V4 listener composition uses one Docker entrypoint; Host still cannot import it", async () => {
-  const entry = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-listener-entrypoint.ts";
-  assert.deepEqual(boundariesById.get("adapter.agent-execution.docker-custody").entrypoints, [entry,
-    entry.replace("docker-http-listener-entrypoint.ts", "docker-provider-process-entrypoint.ts"),
-    entry.replace("docker-http-listener-entrypoint.ts", "node-linux-route-privilege.ts")]);
-  assert.deepEqual(await analyzeFixture({[paths.composition]: "import './features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-listener-entrypoint.js';\n"}), []);
-  assert.deepEqual(rules(await analyzeFixture({[paths.host]: "import './docker/docker-http-listener-entrypoint.js';\n"})), ["architecture.source-dependencies.forbidden-boundary-dependency"]);
-  const internal = entry.replace("docker-http-listener-entrypoint.ts", "docker-http-listener-lifecycle.ts");
-  assert.deepEqual(rules(await analyzeFixture({[paths.composition]: "import './features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-listener-lifecycle.js';\n", [internal]: "export {};\n"})), ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"]);
-});
-
-test("Docker process composition uses its narrow entrypoint and a type-only Host projection", async () => {
-  const base = "packages/contexts/agent-execution/src/features/contained-agent-turn";
-  const composition = `${base}/composition/docker-custodied-provider-process.ts`;
-  const entry = `${base}/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.ts`;
-  const internal = entry.replace("docker-provider-process-entrypoint.ts", "docker-provider-process-bridge.ts");
-  const source = await readFile(join(repositoryRoot, composition), "utf8");
-  const parsed = parseSync(composition, source);
-  assert.deepEqual(parsed.errors, []);
-  assert.deepEqual(await analyzeFixture({[composition]: source}), []);
-  assert.match(source, /import type \{CustodiedProviderProcess, CustodiedProviderProcessRegistry\}/u);
-  assert.deepEqual(rules(await analyzeFixture({[paths.host]: "import './docker/docker-provider-process-entrypoint.js';\n"})),
-    ["architecture.source-dependencies.forbidden-boundary-dependency"]);
-  assert.deepEqual(rules(await analyzeFixture({[paths.docker]: "import '../custodied-provider-process.js';\n"})),
-    ["architecture.source-dependencies.forbidden-boundary-dependency"]);
-  assert.deepEqual(rules(await analyzeFixture({[composition]: "import '../adapters/outbound/host-custody/docker/docker-provider-process-bridge.js';\n", [internal]: "export {};\n"})),
-    ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"]);
-});
-
-
-test("native abort subscriptions stay in physical adapters, never core or outer composition", async () => {
-  for (const path of [paths.docker, paths.dockerNode, paths.hostNode]) {
-    assert.deepEqual(await analyzeFixture({[path]: 'import {addAbortListener} from "node:events";\n'}), [], path);
-  }
-  for (const path of [paths.core, paths.composition]) {
-    assert.deepEqual(rules(await analyzeFixture({[path]: 'import {addAbortListener} from "node:events";\n'})),
-      ["architecture.source-dependencies.forbidden-builtin-dependency"], path);
-  }
-});
-
-
-test("Get Modular belongs only to Embedded Runtime composition, including type imports", async () => {
-  const packages = ["@get-modular/core", "@get-modular/assembly"];
-  const owners = new Set(["composition.embedded-runtime", "test.embedded-runtime"]);
-  for (const boundary of policy.boundaries) {
-    assert.deepEqual(boundary.allowedPackages.filter(name => packages.includes(name)).toSorted(),
-      owners.has(boundary.id) ? packages.toSorted() : [], boundary.id);
-  }
-  for (const pkg of packages) {
-    for (const statement of [`import '${pkg}';`, `import type {} from '${pkg}';`]) {
-      assert.deepEqual(await analyzeFixture({
-        "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts": statement,
-      }), []);
-      // AE and Runtime Configuration retain directory roots; Runtime Security
-      // uses exact source roots, so mutate its owned files inside the disposable
-      // fixture instead of testing an unclassified src/application location.
-      const negativePaths = [
-        ...[
-          "packages/contexts/agent-execution/src/features/contained-agent-turn",
-          "packages/contexts/runtime-configuration/src",
-        ].flatMap(root => ["application", "contracts", "domain"].map(layer => `${root}/${layer}/negative-get-modular.ts`)),
-        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts",
-        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.ts",
-        "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts",
-      ];
-      // Batch independent rejecting sources while retaining a separate positive CLI exit.
-      const diagnostics = await analyzeFixture(Object.fromEntries(
-        negativePaths.map(path => [path, statement]),
-      ));
-      for (const path of negativePaths) {
-        const sourceDiagnostics = diagnostics.filter(d => d.location.path === path);
-        assert.ok(
-          rules(sourceDiagnostics).includes("architecture.source-dependencies.forbidden-package-dependency"),
-          `${path}: ${JSON.stringify(rules(sourceDiagnostics))}`,
-        );
-        assert.ok(!rules(sourceDiagnostics).includes("architecture.source-dependencies.unclassified-source-file"), path);
-        assert.equal(
-          sourceDiagnostics.find(d => d.ruleId === "architecture.source-dependencies.forbidden-package-dependency").location.path,
-          path,
-        );
+      for (const script of ["check", "check:fast"]) {
+        const chain = routedScripts(scripts, script);
+        assert.equal(chain[0], "pnpm lint", script);
+        for (const command of ["pnpm lint", "pnpm foundation:check"]) {
+          assert.equal(chain.filter(step => step === command).length, 1, `${script} must reach ${command} exactly once`);
+        }
       }
-      assert.ok(diagnostics.every(d => negativePaths.includes(d.location.path)),
-        JSON.stringify(diagnostics));
+      assert.ok(!scripts["foundation:check"].includes("|| true"));
+      assert.ok(!scripts["foundation:check"].includes("allow-diagnostics"));
+    };
+    verify(manifest.scripts);
+    for (const scripts of [
+      { ...manifest.scripts, check: manifest.scripts.check.replace(" && pnpm check:ci:foundation", "") },
+      { ...manifest.scripts, "check:ci:foundation": `${manifest.scripts["check:ci:foundation"]} && pnpm foundation:check` },
+      { ...manifest.scripts, "foundation:check": manifest.scripts["foundation:check"].replace(" && pnpm foundation:boundaries:negative", "") },
+      { ...manifest.scripts, "foundation:boundaries:negative": "true" }
+    ]) {
+      assert.throws(() => verify(scripts));
     }
-  }
-});
+  });
 
-test("Host custody cannot import the filesystem workspace owner backwards", async () => {
-  const owner = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace-owner.ts";
-  for (const prefix of ["import", "import type {} from"]) {
-    const diagnostics = await analyzeFixture({
-      [paths.host]: `${prefix} '../filesystem/node-contained-turn-workspace-owner.js';\n`,
-      [owner]: "export {};\n",
-    });
-    assert.deepEqual(rules(diagnostics).toSorted(), [
-      "architecture.source-dependencies.cross-boundary-local-import-not-entrypoint",
-      "architecture.source-dependencies.forbidden-boundary-dependency",
-    ]);
-  }
-});
+  test("contained-turn domain and application remain dependency-free core", async () => {
+    const core = boundariesById.get("core.agent-execution.contained-turn");
+    assert.deepEqual(core.allowedBoundaries, []);
+    assert.deepEqual(core.allowedBuiltins, []);
+    assert.deepEqual(core.allowedPackages, []);
+    assert.deepEqual(core.allowedRuntimeReferences, []);
 
-
-test("Darwin native launch consumers use declared custody and Codex entrypoints", async () => {
-  const base = "packages/contexts/agent-execution/src/features/contained-agent-turn";
-  const cases = [
-    {consumer: `${base}/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts`,
-      prefix: "../host-custody/", owner: `${base}/adapters/outbound/host-custody/`,
-      entry: "contained-turn-kernel-custody-entrypoint", internal: "contained-turn-kernel-custody-contracts"},
-    {consumer: `${base}/composition/darwin-codex-host-post-claim-preparation.ts`,
-      prefix: "../adapters/outbound/codex-app-server/", owner: `${base}/adapters/outbound/codex-app-server/`,
-      entry: "codex-app-server-launch-plan", internal: "codex-app-server-notification-evidence"},
-  ];
-  for (const {consumer, prefix, owner, entry, internal} of cases) {
-    assert.deepEqual(await analyzeFixture({[consumer]: `import '${prefix}${entry}.js';\n`}), []);
     assert.deepEqual(rules(await analyzeFixture({
-      [consumer]: `import '${prefix}${internal}.js';\n`,
-      [`${owner}${internal}.ts`]: "export {};\n",
-    })), ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"]);
-  }
-});
-
-test("source v3 rejects includeRootPackage as an unknown public field", async () => {
-  const root = await mkdtemp(join(tmpdir(), "ar-foundation-include-root-"));
-  try {
-    await writeFixtureFile(root, "package.json", JSON.stringify({
-      name: "@vioxen/agent-runtime",
-      private: true,
-      type: "module",
-    }));
-    await writeFixtureFile(root, "pnpm-workspace.yaml", "packages: []\n");
-    await writeFixtureFile(root, configPath, `${configSource}\nincludeRootPackage: true\n`);
-    await writeFixtureFile(root, "foundation.config.yaml", JSON.stringify({
-      schemaVersion: 1,
-      project: { id: "foundation-include-root-fixture" },
-      capabilities: { "architecture.source-dependencies": { configPath } },
-    }));
-    const result = spawnSync(process.execPath, [foundationCli, "check",
-      "architecture.source-dependencies", "--consumer", root, "--json"],
-    { encoding: "utf8", timeout: 60_000, maxBuffer: 8 * 1024 * 1024 });
-    assert.equal(result.error, undefined);
-    const envelope = JSON.parse(result.stdout);
-    assert.notEqual(envelope.outcome, "passed", JSON.stringify(envelope));
-    assert.match(JSON.stringify(envelope), /includeRootPackage|unknown property|invalid-input/iu);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
-
-
-test("production Docker implementation cannot import its development-only fake", async () => {
-  const fake = "packages/contexts/agent-execution/tests/features/contained-agent-turn/support/docker-engine/fake-docker-engine.ts";
-  const relative = "../../../../../../../../tests/features/contained-agent-turn/support/docker-engine/fake-docker-engine.ts";
-  const diagnostics = await analyzeFixture({
-    [paths.dockerNode]: `import {FakeDockerEngine} from '${relative}';\nvoid FakeDockerEngine;\n`,
-    [fake]: "export class FakeDockerEngine {}\n",
+      [paths.core]: "import 'node:fs';\n",
+    })), ["architecture.source-dependencies.forbidden-builtin-dependency"]);
+    assert.ok(rules(await analyzeFixture({
+      [paths.core]: "import type {} from '@anthropic-ai/claude-agent-sdk';\n",
+    })).includes("architecture.source-dependencies.forbidden-package-dependency"));
   });
-  assert.ok(rules(diagnostics).includes("architecture.source-dependencies.forbidden-boundary-dependency"),
-    JSON.stringify(diagnostics));
+
+  test("Filesystem Custody source collector keeps policy inside its scoped tooling boundary", async () => {
+    const policyBoundary = boundariesById.get("tooling.sdk-growth-source.policy");
+    const adapterBoundary = boundariesById.get("tooling.sdk-growth-source.adapters");
+    assert.deepEqual(policyBoundary.allowedBuiltins, []);
+    assert.deepEqual(policyBoundary.allowedPackages, []);
+    assert.deepEqual(policyBoundary.allowedBoundaries, []);
+    assert.deepEqual(adapterBoundary.allowedBoundaries, ["tooling.sdk-growth-source.policy"]);
+    const candidate = "scripts/sdk-growth-source/candidate.mjs";
+    const adapter = "scripts/sdk-growth-source/collect.mjs";
+    const testFile = "scripts/sdk-growth-source/collector.test.mjs";
+    assert.deepEqual(rules(await analyzeFixture({ [candidate]: "import 'node:fs';\n" })),
+      ["architecture.source-dependencies.forbidden-builtin-dependency"]);
+    assert.deepEqual(rules(await analyzeFixture({ [candidate]: "import './collect.mjs';\n" })),
+      ["architecture.source-dependencies.forbidden-boundary-dependency"]);
+    assert.deepEqual(rules(await analyzeFixture({ [adapter]: "import '@anthropic-ai/claude-agent-sdk';\n" })),
+      ["architecture.source-dependencies.forbidden-package-dependency"]);
+    assert.deepEqual(rules(await analyzeFixture({ [testFile]: "import './candidate.mjs';\n" })), []);
+  });
+
+  test("Node compatibility CI owns its APIs without granting PostgreSQL or future CI files those imports", async () => {
+    const audit = "scripts/ci/audit-node-engine-compatibility.mjs";
+    const engine = "scripts/ci/node-engine-compatibility.test.mjs";
+    const runtime = "scripts/ci/node-runtime-compatibility.test.mjs";
+    const postgres = "scripts/ci/run-ordinary-postgres.mjs";
+    assert.deepEqual(await analyzeFixture({
+      [audit]: "import 'node:fs';\n",
+      [engine]: "import 'node:child_process';\nimport './audit-node-engine-compatibility.mjs';\n",
+      [runtime]: "import 'node:crypto';\nimport 'node:module';\nimport 'node:os';\nimport 'node:util';\n",
+    }), []);
+    assert.deepEqual(rules(await analyzeFixture({[postgres]: "import 'node:crypto';\n"})),
+      ["architecture.source-dependencies.forbidden-builtin-dependency"]);
+    assert.deepEqual(rules(await analyzeFixture({[postgres]: "import 'node:child_process';\n"})),
+      ["architecture.source-dependencies.forbidden-builtin-dependency"]);
+    assert.deepEqual(rules(await analyzeFixture({[runtime]: "import 'node:net';\n"})),
+      ["architecture.source-dependencies.forbidden-builtin-dependency"]);
+    assert.deepEqual(rules(await analyzeFixture({"scripts/ci/unreviewed-capability.mjs": "import 'node:crypto';\n"})),
+      ["architecture.source-dependencies.unclassified-source-file"]);
+  });
+
+  test("the real parser observes every retained Node import in composition and TLS support", async () => {
+    const composition = "packages/apps/embedded-runtime/src/composition";
+    const host = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody";
+    for (const [path, builtins] of [
+      [`${composition}/agent-runtime-host.ts`, ["node:crypto", "node:util"]],
+      ["packages/apps/embedded-runtime/src/features/contained-turn-access-authority/adapters/contained-turn-access-authority.ts", ["node:util"]],
+      ["packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/adapters/contained-turn-authority-capability.ts", ["node:util"]],
+      ["packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/adapters/contained-turn-route-qualification.ts", ["node:fs"]],
+      ["packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope/adapters/trusted-runtime-access-scope.ts", ["node:util"]],
+      [`${host}/egress/node-tls-http-egress-transport-support.ts`,
+        ["node:buffer", "node:crypto", "node:net", "node:tls"]],
+      [`${host}/docker/node-linux-exclusive-route.ts`,
+        ["node:child_process", "node:crypto", "node:fs", "node:timers"]],
+      ["packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-config-wire.ts",
+        ["node:crypto", "node:util"]],
+    ]) {
+      const source = await readFile(join(repositoryRoot, path), "utf8");
+      const parsed = parseSync(path, source);
+      assert.deepEqual(parsed.errors, [], path);
+      assert.deepEqual(parsed.module.dynamicImports, [], path);
+      const observed = parsed.module.staticImports
+        .map(reference => reference.moduleRequest.value)
+        .filter(specifier => specifier.startsWith("node:"));
+      assert.deepEqual(observed.toSorted(), builtins, path);
+      assert.deepEqual(await analyzeFixture({
+        [path]: observed.map(specifier => `import '${specifier}';`).join("\n"),
+      }), [], path);
+    }
+  });
+
+  test("Node permissions do not follow imports moved into core or undeclared adapter locations", async () => {
+    const classified = [
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/moved-node-dependency.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/application/moved-node-dependency.ts",
+    ];
+    const unclassified = [
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/undeclared/moved-node-dependency.ts",
+      "packages/apps/embedded-runtime/src/domain/moved-node-dependency.ts",
+      "packages/apps/embedded-runtime/src/application/moved-node-dependency.ts",
+      "packages/apps/embedded-runtime/src/adapters/undeclared/moved-node-dependency.ts",
+    ];
+    for (const builtin of ["node:buffer", "node:timers", "node:util"]) {
+      const diagnostics = await analyzeFixture(Object.fromEntries(
+        [...classified, ...unclassified].map(path => [path, `import '${builtin}';\n`]),
+      ));
+      assert.equal(diagnostics.length, 6, builtin);
+      for (const path of classified) {
+        const sourceDiagnostics = diagnostics.filter(diagnostic => diagnostic.location.path === path);
+        assert.equal(sourceDiagnostics.length, 1, `${builtin}: ${path}`);
+        assert.deepEqual(rules(sourceDiagnostics), ["architecture.source-dependencies.forbidden-builtin-dependency"], path);
+        assert.deepEqual(sourceDiagnostics[0].evidence, [{ kind: "specifier", value: builtin }]);
+      }
+      for (const path of unclassified) {
+        const sourceDiagnostics = diagnostics.filter(diagnostic => diagnostic.location.path === path);
+        assert.equal(sourceDiagnostics.length, 1, `${builtin}: ${path}`);
+        assert.deepEqual(rules(sourceDiagnostics), ["architecture.source-dependencies.unclassified-source-file"], path);
+      }
+    }
+  });
+
+  test("Embedded Runtime Node utility permission belongs to exact Host composition and ordinary adapter paths", () => {
+    const composition = boundariesById.get("composition.embedded-runtime");
+    assert.deepEqual(composition.roots, [
+      "packages/apps/embedded-runtime/src/composition.ts",
+      "packages/apps/embedded-runtime/src/composition/agent-runtime-host-creation-error.ts",
+      "packages/apps/embedded-runtime/src/composition/default-agent-runtime-host.ts",
+      "packages/apps/embedded-runtime/src/composition/host-custodied-agent-runtime-host.ts",
+      "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
+      "packages/apps/embedded-runtime/src/composition/ordinary-agent-runtime-host.ts",
+      "packages/apps/embedded-runtime/src/composition/ordinary-runtime-assembly.ts",
+      "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/adapters/ordinary-observation-journal.ts",
+      "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/adapters/ordinary-owner-acl.ts",
+      "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-agent-runtime-host.ts",
+      "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
+      "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/contracts/ordinary-session-observation.ts",
+      "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/index.ts",
+      "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/internal.ts",
+    ]);
+    // composition.ts re-exports the linux-codex/http-egress/darwin routing
+    // cluster, the contained-turn and contained-turn-support roles, and
+    // access-contracts; PR69 grew this directory well beyond a single
+    // entrypoint file. The ordinary feature extends this same construction
+    // authority through the exact owned paths above; it does not grant a broad
+    // src/composition or src/features directory permission.
+    assert.deepEqual(composition.allowedBoundaries, [
+      "production.embedded-runtime",
+      "composition.embedded-runtime.contained-turn",
+      "composition.embedded-runtime.contained-turn-support",
+      "composition.embedded-runtime.contained-turn-routing",
+      "composition.embedded-runtime.agent-runtime-host",
+      "core.embedded-runtime.access-contracts",
+    ]);
+    // Ordinary Host validation and its observation journal add path/util/fs to
+    // the existing crypto permission. Scoped FMS still rejects inward builtin
+    // imports even when a feature contract shares this composition boundary.
+    assert.deepEqual(composition.allowedBuiltins, ["node:crypto", "node:fs", "node:path", "node:util"]);
+    assert.deepEqual(composition.allowedRuntimeReferences, []);
+    const production = boundariesById.get("production.embedded-runtime");
+    // Host public surface is the contracts barrel. Setup-view builders now live
+    // in composition.embedded-runtime.agent-runtime-host with the planners.
+    assert.deepEqual(production.allowedBoundaries, [
+      "core.embedded-runtime.access-contracts",
+    ]);
+    // Digest computation stays behind OpaqueReferenceDigest in the
+    // agent-runtime-host role; the package barrel does not import Node builtins.
+    assert.deepEqual(production.allowedBuiltins, []);
+  });
+}
+
+function registerAdapterChecks() {
+  test("transitional boundaries and adapter permissions remain exact", () => {
+    const legacy = boundariesById.get("adapter.agent-execution.legacy-contained-turn-ports");
+    const claude = boundariesById.get("adapter.agent-execution.claude-agent-sdk");
+    const delegation = boundariesById.get("adapter.agent-execution.provider-delegation-ports");
+    const production = boundariesById.get("production.agent-execution");
+    const composition = boundariesById.get("composition.agent-execution.contained-turn");
+
+    assert.deepEqual(legacy.roots, [dirname(paths.legacy)]);
+    assert.deepEqual(legacy.entrypoints, [paths.legacy]);
+    assert.deepEqual(legacy.allowedBoundaries, [
+      "adapter.agent-execution.host-custody",
+      "core.agent-execution.contained-turn",
+    ]);
+    assert.deepEqual(legacy.allowedPackages, []);
+    assert.deepEqual(legacy.allowedBuiltins, []);
+    assert.deepEqual(legacy.allowedRuntimeReferences, []);
+    assert.deepEqual(claude.allowedBoundaries, [
+      "adapter.agent-execution.provider-delegation-ports",
+      "core.agent-execution.contained-turn",
+    ]);
+    assert.deepEqual(delegation.entrypoints, [paths.providerDelegation, paths.privateDirectoryCustody]);
+    assert.deepEqual(delegation.allowedBoundaries, [
+      "adapter.agent-execution.host-custody",
+      "adapter.agent-execution.legacy-contained-turn-ports",
+    ]);
+    assert.deepEqual(delegation.allowedPackages, []);
+    assert.deepEqual(delegation.allowedBuiltins, []);
+    assert.deepEqual(delegation.allowedRuntimeReferences, []);
+    assert.ok(!claude.allowedBoundaries.includes("adapter.agent-execution.host-custody"));
+    assert.ok(!claude.allowedBoundaries.includes("adapter.agent-execution.legacy-contained-turn-ports"));
+    assert.ok(!claude.allowedBoundaries.includes("production.agent-execution"));
+    // accepted-authority-anti-corruption.ts and authority-owner-boundary.ts import
+    // provider-access-anti-corruption.ts, which imports both of them back (a real
+    // reciprocal cycle once PR69's provider-access wiring is counted), so they
+    // moved into composition.agent-execution.boundary-data alongside it. Only
+    // host-post-claim-preparation.ts (no such cycle) remains in this role.
+    assert.deepEqual(composition.roots, [
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/host-post-claim-preparation.ts",
+    ]);
+    assert.deepEqual(composition.entrypoints, composition.roots);
+    assert.deepEqual(composition.allowedBoundaries, [
+      "adapter.agent-execution.host-custody",
+      "core.agent-execution.contained-turn",
+    ]);
+    assert.deepEqual(composition.allowedPackages, []);
+    assert.deepEqual(composition.allowedBuiltins, ["node:util"]);
+    assert.deepEqual(composition.allowedRuntimeReferences, []);
+    assert.deepEqual(production.allowedBoundaries, [
+      "adapter.agent-execution.claude-agent-sdk",
+      "adapter.agent-execution.codex-app-server",
+      "adapter.agent-execution.docker-custody",
+      "adapter.agent-execution.host-custody",
+      "adapter.agent-execution.legacy-contained-turn-ports",
+      "adapter.agent-execution.provider-delegation-ports",
+      "composition.agent-execution.contained-turn",
+      "core.agent-execution.contained-turn",
+      "adapter.agent-execution.codex-data",
+      "adapter.agent-execution.codex-primitives",
+      "adapter.agent-execution.codex-primitives-leaves",
+      "adapter.agent-execution.codex-native-broker",
+      "composition.agent-execution.boundary-data",
+      "composition.agent-execution.dispatch-grant",
+      "adapter.agent-execution.ordinary-provider",
+      "adapter.agent-execution.ordinary-filesystem",
+      "adapter.agent-execution.ordinary-process",
+      "adapter.agent-execution.ordinary-postgres",
+      "composition.agent-execution.ordinary",
+    ]);
+    assert.ok(!production.allowedBuiltins.includes("node:util"));
+    assert.ok(!production.entrypoints.includes(paths.legacy));
+  });
+
+  test("Docker custody uses only the engine port and explicit residue construction entrypoint", () => {
+    const engine = boundariesById.get("adapter.agent-execution.docker-engine");
+    const custody = boundariesById.get("adapter.agent-execution.docker-custody");
+    const json = boundariesById.get("adapter.agent-execution.docker-json");
+
+    assert.deepEqual(engine.entrypoints, [paths.dockerPort, paths.dockerConstruction]);
+    assert.deepEqual(engine.allowedBoundaries, ["adapter.agent-execution.docker-json"]);
+    assert.deepEqual(engine.allowedPackages, []);
+    assert.deepEqual(engine.allowedRuntimeReferences, []);
+    assert.deepEqual(custody.allowedBoundaries, ["adapter.agent-execution.docker-engine", "adapter.agent-execution.docker-json"]);
+    assert.deepEqual(json.entrypoints, [paths.dockerJson]);
+    assert.deepEqual(json.allowedBoundaries, []);
+    assert.deepEqual(json.allowedPackages, []);
+    assert.deepEqual(json.allowedBuiltins, []);
+    assert.deepEqual(json.allowedRuntimeReferences, []);
+    assert.deepEqual(custody.allowedPackages, ["@agent-teams/filesystem-custody"]);
+    assert.ok(!engine.entrypoints.includes(paths.dockerBarrel));
+    assert.ok(!engine.entrypoints.includes(paths.dockerFake));
+    assert.ok(!engine.entrypoints.includes(paths.dockerNode));
+  });
+
+  test("installed Foundation parser detects a nonliteral runtime reference", async () => {
+    const diagnostics = await analyzeFixture({
+      [paths.claude]: "const hidden = '../legacy/legacy-contained-turn-ports.js';\nvoid import(hidden);\n",
+    });
+    assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.unresolved-runtime-reference"]);
+  });
+
+  test("a forbidden boundary cannot import a legal target entrypoint", async () => {
+    const diagnostics = await analyzeFixture({
+      [paths.core]: "import type {} from '../adapters/outbound/legacy/legacy-contained-turn-ports.js';\n",
+      [paths.legacy]: "export {};\n",
+    });
+    assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.forbidden-boundary-dependency"]);
+  });
+
+  test("existing Host and SDK capabilities retain their exact ownership", async () => {
+    const host = boundariesById.get("adapter.agent-execution.host-custody");
+    assert.deepEqual(host.entrypoints, [
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-entrypoint.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/custodied-provider-process.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-workspace-entrypoint.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-cooperative-process-custody.ts",
+      // internal.ts consumes the exact Darwin route readback directly.
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-route-durable-storage.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/native-host-custody-workspace-entrypoint.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-adapter.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-open-attempts.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-bridge.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-selection.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-singleton-custody-owner.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-admission-guard.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/prepared-http-request-v1.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-finalizable-plan.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-launch.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/native-host-custody-workspace-authority.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/node-provider-process-custody-core.ts",
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/private-host-custody-reservation.ts",
+    ]);
+
+    assert.deepEqual(host.allowedBuiltins, [
+      "node:buffer", "node:child_process", "node:crypto", "node:dns/promises",
+      "node:events", "node:fs", "node:fs/promises", "node:net", "node:os",
+      "node:path", "node:stream", "node:timers/promises", "node:tls", "node:util",
+    ]);
+
+    for (const builtin of ["node:dns/promises", "node:net", "node:os", "node:stream", "node:tls"]) {
+      assert.deepEqual(await analyzeFixture({
+        [paths.hostNode]: `import '${builtin}';\n`,
+      }), []);
+    }
+    assert.deepEqual(await analyzeFixture({
+      [paths.claude]: "import 'node:perf_hooks';\nimport type {} from '@anthropic-ai/claude-agent-sdk';\n",
+    }), []);
+  });
+
+  test("Darwin retained-owner consumers use the narrow workspace entrypoint", async () => {
+    const internal = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-io.ts";
+    assert.deepEqual(await analyzeFixture({
+      [paths.composition]: `import type {DarwinAttemptRetainedOwners} from './features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-workspace-entrypoint.js';\n`,
+    }), []);
+    assert.deepEqual(rules(await analyzeFixture({
+      [paths.composition]: `import type {DarwinAttemptRetainedOwners} from './features/contained-agent-turn/adapters/outbound/host-custody/darwin-attempt-owner-io.js';\n`,
+      [internal]: "export interface DarwinAttemptRetainedOwners {}\n",
+    })), ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"]);
+  });
+
+  test("Codex evidence utilities do not grant spawn or network ownership", async () => {
+    const path = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-notification-evidence.ts";
+    const hostInternal = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/contained-turn-kernel-custody-contracts.ts";
+    // The former direct getBuiltinModule("node:util") consumers under this root
+    // (effect-custody/permission-boundary/platform-tuple/config-wire/native
+    // -broker-recipe) moved into the narrower codex-primitives/codex-primitives
+    // -leaves/codex-native-broker roles; remaining codex-app-server internals
+    // do not inherit node:util from that split.
+    assert.deepEqual(rules(await analyzeFixture({ [path]: "import 'node:util';\n" })),
+      ["architecture.source-dependencies.forbidden-builtin-dependency"]);
+    for (const builtin of ["node:child_process", "node:dns/promises", "node:http", "node:net", "node:tls", "node:timers"]) {
+      assert.deepEqual(rules(await analyzeFixture({ [path]: `import '${builtin}';\n` })),
+        ["architecture.source-dependencies.forbidden-builtin-dependency"]);
+    }
+    assert.deepEqual(rules(await analyzeFixture({
+      [path]: "import '../host-custody/contained-turn-kernel-custody-contracts.js';\n",
+      [hostInternal]: "export {};\n",
+    })), ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"]);
+  });
+
+  test("Claude may import only narrow provider-delegation and private-directory ports", async () => {
+    assert.deepEqual(await analyzeFixture({
+      [paths.claude]: [
+        "import type {} from '../provider-delegation-ports/contained-turn-provider-delegation-port.js';",
+        "import type {} from '../provider-delegation-ports/private-directory-custody-port.js';",
+      ].join("\n"),
+    }), []);
+
+    for (const [targetPath, specifier] of [
+      [paths.legacy, "../legacy/legacy-contained-turn-ports.js"],
+      [paths.host, "../host-custody/custodied-provider-process.js"],
+      [paths.hostNode, "../host-custody/node-provider-process-custody.js"],
+    ]) {
+      const diagnostics = await analyzeFixture({
+        [paths.claude]: `import type {} from '${specifier}';\n`,
+        [targetPath]: "export {};\n",
+      });
+      assert.deepEqual(
+        rules(diagnostics),
+        ["architecture.source-dependencies.forbidden-boundary-dependency"],
+        specifier,
+      );
+    }
+
+    const diagnostics = await analyzeFixture({
+      [paths.claude]: "import '../../../../../composition.js';\n",
+      [paths.composition]: "export {};\n",
+    });
+    assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.forbidden-boundary-dependency"]);
+
+    assert.deepEqual(await analyzeFixture({
+      "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-active-turn.ts":
+        "import type {} from '../legacy/legacy-contained-turn-ports.js';\n",
+      [paths.legacy]: "export {};\n",
+    }), []);
+  });
+}
+
+function registerCompositionChecks() {
+  test("Docker custody may import the port and construction boundary, but not engine internals", async () => {
+    assert.deepEqual(await analyzeFixture({
+      [paths.docker]: "import type {} from './engine/docker-engine-port.js';\n",
+      [paths.dockerPort]: "export {};\n",
+    }), []);
+    assert.deepEqual(await analyzeFixture({
+      [paths.docker]: "import {NodeUnixSocketDockerEngine} from './engine/docker-engine-composition.js';\nvoid NodeUnixSocketDockerEngine;\n",
+      [paths.dockerConstruction]: "export {NodeUnixSocketDockerEngine} from './node-unix-socket-docker-engine.js';\n",
+      [paths.dockerNode]: "export class NodeUnixSocketDockerEngine {}\n",
+    }), []);
+
+    for (const [targetPath, specifier] of [
+      [paths.dockerFake, "./engine/fake-docker-engine.js"],
+      [paths.dockerNode, "./engine/node-unix-socket-docker-engine.js"],
+      [paths.dockerBarrel, "./engine/index.js"],
+    ]) {
+      const diagnostics = await analyzeFixture({
+        [paths.docker]: `import type {} from '${specifier}';\n`,
+        [targetPath]: "export {};\n",
+      });
+      assert.deepEqual(
+        rules(diagnostics),
+        ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"],
+        specifier,
+      );
+    }
+  });
+
+  test("Docker JSON remains neutral and cannot import its engine consumer", async () => {
+    const diagnostics = await analyzeFixture({
+      [paths.dockerJson]: "import type {} from '../engine/docker-engine-port.js';\n",
+      [paths.dockerPort]: "export {};\n",
+    });
+    assert.deepEqual(rules(diagnostics), ["architecture.source-dependencies.forbidden-boundary-dependency"]);
+  });
+
+  test("V4 listener composition uses one Docker entrypoint; Host still cannot import it", async () => {
+    const entry = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-listener-entrypoint.ts";
+    assert.deepEqual(boundariesById.get("adapter.agent-execution.docker-custody").entrypoints, [entry,
+      entry.replace("docker-http-listener-entrypoint.ts", "docker-provider-process-entrypoint.ts"),
+      entry.replace("docker-http-listener-entrypoint.ts", "node-linux-route-privilege.ts")]);
+    assert.deepEqual(await analyzeFixture({[paths.composition]: "import './features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-listener-entrypoint.js';\n"}), []);
+    assert.deepEqual(rules(await analyzeFixture({[paths.host]: "import './docker/docker-http-listener-entrypoint.js';\n"})), ["architecture.source-dependencies.forbidden-boundary-dependency"]);
+    const internal = entry.replace("docker-http-listener-entrypoint.ts", "docker-http-listener-lifecycle.ts");
+    assert.deepEqual(rules(await analyzeFixture({[paths.composition]: "import './features/contained-agent-turn/adapters/outbound/host-custody/docker/docker-http-listener-lifecycle.js';\n", [internal]: "export {};\n"})), ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"]);
+  });
+
+  test("Docker process composition uses its narrow entrypoint and a type-only Host projection", async () => {
+    const base = "packages/contexts/agent-execution/src/features/contained-agent-turn";
+    const composition = `${base}/composition/docker-custodied-provider-process.ts`;
+    const entry = `${base}/adapters/outbound/host-custody/docker/docker-provider-process-entrypoint.ts`;
+    const internal = entry.replace("docker-provider-process-entrypoint.ts", "docker-provider-process-bridge.ts");
+    const source = await readFile(join(repositoryRoot, composition), "utf8");
+    const parsed = parseSync(composition, source);
+    assert.deepEqual(parsed.errors, []);
+    assert.deepEqual(await analyzeFixture({[composition]: source}), []);
+    assert.match(source, /import type \{CustodiedProviderProcess, CustodiedProviderProcessRegistry\}/u);
+    assert.deepEqual(rules(await analyzeFixture({[paths.host]: "import './docker/docker-provider-process-entrypoint.js';\n"})),
+      ["architecture.source-dependencies.forbidden-boundary-dependency"]);
+    assert.deepEqual(rules(await analyzeFixture({[paths.docker]: "import '../custodied-provider-process.js';\n"})),
+      ["architecture.source-dependencies.forbidden-boundary-dependency"]);
+    assert.deepEqual(rules(await analyzeFixture({[composition]: "import '../adapters/outbound/host-custody/docker/docker-provider-process-bridge.js';\n", [internal]: "export {};\n"})),
+      ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"]);
+  });
+
+
+  test("native abort subscriptions stay in physical adapters, never core or outer composition", async () => {
+    for (const path of [paths.docker, paths.dockerNode, paths.hostNode]) {
+      assert.deepEqual(await analyzeFixture({[path]: 'import {addAbortListener} from "node:events";\n'}), [], path);
+    }
+    for (const path of [paths.core, paths.composition]) {
+      assert.deepEqual(rules(await analyzeFixture({[path]: 'import {addAbortListener} from "node:events";\n'})),
+        ["architecture.source-dependencies.forbidden-builtin-dependency"], path);
+    }
+  });
+
+
+  test("Get Modular belongs only to Embedded Runtime composition, including type imports", async () => {
+    const packages = ["@get-modular/core", "@get-modular/assembly"];
+    const owners = new Set(["composition.embedded-runtime", "test.embedded-runtime"]);
+    for (const boundary of policy.boundaries) {
+      assert.deepEqual(boundary.allowedPackages.filter(name => packages.includes(name)).toSorted(),
+        owners.has(boundary.id) ? packages.toSorted() : [], boundary.id);
+    }
+    for (const pkg of packages) {
+      for (const statement of [`import '${pkg}';`, `import type {} from '${pkg}';`]) {
+        assert.deepEqual(await analyzeFixture({
+          "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts": statement,
+        }), []);
+        // AE and Runtime Configuration retain directory roots; Runtime Security
+        // uses exact source roots, so mutate its owned files inside the disposable
+        // fixture instead of testing an unclassified src/application location.
+        const negativePaths = [
+          ...[
+            "packages/contexts/agent-execution/src/features/contained-agent-turn",
+            "packages/contexts/runtime-configuration/src",
+          ].flatMap(root => ["application", "contracts", "domain"].map(layer => `${root}/${layer}/negative-get-modular.ts`)),
+          "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/application/ordinary-security-owner.ts",
+          "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/contracts/contained-turn-dispatch-authority-v1.ts",
+          "packages/contexts/runtime-security/src/features/contained-turn-dispatch-authority/domain/ordinary-security-policy.ts",
+        ];
+        // Batch independent rejecting sources while retaining a separate positive CLI exit.
+        const diagnostics = await analyzeFixture(Object.fromEntries(
+          negativePaths.map(path => [path, statement]),
+        ));
+        for (const path of negativePaths) {
+          const sourceDiagnostics = diagnostics.filter(d => d.location.path === path);
+          assert.ok(
+            rules(sourceDiagnostics).includes("architecture.source-dependencies.forbidden-package-dependency"),
+            `${path}: ${JSON.stringify(rules(sourceDiagnostics))}`,
+          );
+          assert.ok(!rules(sourceDiagnostics).includes("architecture.source-dependencies.unclassified-source-file"), path);
+          assert.equal(
+            sourceDiagnostics.find(d => d.ruleId === "architecture.source-dependencies.forbidden-package-dependency").location.path,
+            path,
+          );
+        }
+        assert.ok(diagnostics.every(d => negativePaths.includes(d.location.path)),
+          JSON.stringify(diagnostics));
+      }
+    }
+  });
+
+  test("Host custody cannot import the filesystem workspace owner backwards", async () => {
+    const owner = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace-owner.ts";
+    for (const prefix of ["import", "import type {} from"]) {
+      const diagnostics = await analyzeFixture({
+        [paths.host]: `${prefix} '../filesystem/node-contained-turn-workspace-owner.js';\n`,
+        [owner]: "export {};\n",
+      });
+      assert.deepEqual(rules(diagnostics).toSorted(), [
+        "architecture.source-dependencies.cross-boundary-local-import-not-entrypoint",
+        "architecture.source-dependencies.forbidden-boundary-dependency",
+      ]);
+    }
+  });
+
+
+  test("Darwin native launch consumers use declared custody and Codex entrypoints", async () => {
+    const base = "packages/contexts/agent-execution/src/features/contained-agent-turn";
+    const cases = [
+      {consumer: `${base}/adapters/outbound/codex-app-server/codex-app-server-launch-plan.ts`,
+        prefix: "../host-custody/", owner: `${base}/adapters/outbound/host-custody/`,
+        entry: "contained-turn-kernel-custody-entrypoint", internal: "contained-turn-kernel-custody-contracts"},
+      {consumer: `${base}/composition/darwin-codex-host-post-claim-preparation.ts`,
+        prefix: "../adapters/outbound/codex-app-server/", owner: `${base}/adapters/outbound/codex-app-server/`,
+        entry: "codex-app-server-launch-plan", internal: "codex-app-server-notification-evidence"},
+    ];
+    for (const {consumer, prefix, owner, entry, internal} of cases) {
+      assert.deepEqual(await analyzeFixture({[consumer]: `import '${prefix}${entry}.js';\n`}), []);
+      assert.deepEqual(rules(await analyzeFixture({
+        [consumer]: `import '${prefix}${internal}.js';\n`,
+        [`${owner}${internal}.ts`]: "export {};\n",
+      })), ["architecture.source-dependencies.cross-boundary-local-import-not-entrypoint"]);
+    }
+  });
+
+  test("source v3 rejects includeRootPackage as an unknown public field", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ar-foundation-include-root-"));
+    try {
+      await writeFixtureFile(root, "package.json", JSON.stringify({
+        name: "@vioxen/agent-runtime",
+        private: true,
+        type: "module",
+      }));
+      await writeFixtureFile(root, "pnpm-workspace.yaml", "packages: []\n");
+      await writeFixtureFile(root, configPath, `${configSource}\nincludeRootPackage: true\n`);
+      await writeFixtureFile(root, "foundation.config.yaml", JSON.stringify({
+        schemaVersion: 1,
+        project: { id: "foundation-include-root-fixture" },
+        capabilities: { "architecture.source-dependencies": { configPath } },
+      }));
+      const result = await installedCLI(root, 2);
+      assert.equal(result.error, undefined);
+      assert.equal(result.signal, null);
+      assert.equal(result.status, 2, result.stderr);
+      const envelope = JSON.parse(result.stdout);
+      assert.notEqual(envelope.outcome, "passed", JSON.stringify(envelope));
+      assert.match(JSON.stringify(envelope), /includeRootPackage|unknown property|invalid-input/iu);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+
+  test("production Docker implementation cannot import its development-only fake", async () => {
+    const fake = "packages/contexts/agent-execution/tests/features/contained-agent-turn/support/docker-engine/fake-docker-engine.ts";
+    const relative = "../../../../../../../../tests/features/contained-agent-turn/support/docker-engine/fake-docker-engine.ts";
+    const diagnostics = await analyzeFixture({
+      [paths.dockerNode]: `import {FakeDockerEngine} from '${relative}';\nvoid FakeDockerEngine;\n`,
+      [fake]: "export class FakeDockerEngine {}\n",
+    });
+    assert.ok(rules(diagnostics).includes("architecture.source-dependencies.forbidden-boundary-dependency"),
+      JSON.stringify(diagnostics));
+  });
+}
+
+describe("installed Foundation adapter boundary checks", { concurrency: 2 }, () => {
+  registerPolicyChecks();
+  registerAdapterChecks();
+  registerCompositionChecks();
 });
