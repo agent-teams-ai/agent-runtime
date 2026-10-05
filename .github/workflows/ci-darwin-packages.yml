@@ -1,15 +1,9 @@
-name: Full Linux product shard
+name: Full Darwin packages
 
 on:
   workflow_call:
     inputs:
-      shard:
-        required: true
-        type: string
       revision:
-        required: true
-        type: string
-      artifact:
         required: true
         type: string
 
@@ -17,17 +11,22 @@ permissions:
   contents: read
 
 jobs:
-  shard:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 35
+  packages:
+    runs-on: macos-15
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        shard: [agent-execution-1, agent-execution-2, agent-execution-3, provider-access, runtime-configuration, runtime-security, embedded-runtime, filesystem-custody]
     env:
       GIT_AUTHOR_NAME: iliya
       GIT_AUTHOR_EMAIL: iliyazelenkog@gmail.com
       GIT_COMMITTER_NAME: iliya
       GIT_COMMITTER_EMAIL: iliyazelenkog@gmail.com
       EXPECTED_REVISION: ${{ inputs.revision }}
-      EXECUTION_TARGET: linux-x64
-      PACKAGE_SHARD: ${{ inputs.shard }}
+      EXECUTION_TARGET: darwin-arm64
+      PACKAGE_SHARD: ${{ matrix.shard }}
     steps:
       - name: Checkout exact revision
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -67,24 +66,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          printf 'CI_EVIDENCE_DIR=%s/ci-product-shard\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+          printf 'CI_EVIDENCE_DIR=%s/ci-darwin-shard\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Execute the actual full product shard
         run: node scripts/ci/package-execution.ts
-      - name: Retain actual package execution evidence
+      - name: Retain every attempt including failed observations
         if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: full-ci-${{ inputs.artifact }}-package-${{ inputs.shard }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/ci-product-shard/receipt.json
+          name: full-ci-darwin-package-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-darwin-shard/
           if-no-files-found: error
           retention-days: 14
-      # Attempt archives keep failures; only successful units replace current slots.
-      - name: Publish successful shard for same-run retries
+      - name: Publish the successful same-run current unit
         if: ${{ success() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: full-ci-${{ inputs.artifact }}-package-${{ inputs.shard }}-current
-          path: ${{ runner.temp }}/ci-product-shard/receipt.json
+          name: full-ci-darwin-package-${{ matrix.shard }}-current
+          path: ${{ runner.temp }}/ci-darwin-shard/
           if-no-files-found: error
           retention-days: 14
           overwrite: true

@@ -122,6 +122,7 @@ jobs:
     timeout-minutes: 10
     env:
       EXPECTED_REVISION: ${{ inputs.revision }}
+      EXECUTION_TARGET: linux-x64
       NEEDS: ${{ toJSON(needs) }}
     steps:
       - name: Checkout exact revision

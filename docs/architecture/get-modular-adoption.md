@@ -318,8 +318,34 @@ Status since 2026-10-02 (owner decision, AR-0): disabled as a gate.
 dispatch, and CI no longer fetches the retained evidence commits. Paired
 receipts had to be recaptured on most commits to main and blocked the Get
 Modular 0.3.0 migration. Two CI jobs take over what the receipts ran. The
-`runtime-macos` job checks every package on macos-15 for every pull request; it
-is a required check on main since 2026-10-02. The required `postgres-durability` job runs the
+ordinary top-level `runtime-macos` job remains the required check on main since
+2026-10-02. It always joins `macos-product`, which runs eight physical macos-15
+arm64 runners: three complete-file Agent Execution partitions and five whole
+package suites. Every runner cleans and builds all six packages locally before
+its assigned original test command; Embedded Runtime retains both Node test
+processes and deliberate platform skips. The Ubuntu aggregate verifies actual
+Darwin evidence, including a non-root UID, the pinned Mac Node toolcache and
+locally emitted Mach-O arm64 filesystem helper. It accepts only successful
+current unit artifacts from the same workflow run and exact source revision;
+failed, skipped or cancelled latest helper results reject earlier passes.
+Per-attempt archives retain failures. Both targets use execution receipt schema
+three; Linux retains its full package, root, typed and native obligations.
+The source census rejects ignored root/experiment inputs and symlink ancestry.
+Each observed test stream binds its raw PID, cwd, argv, completed file universe,
+registration location, ancestry and ordinal to the original package source;
+Mac streams bind the observed Mac executable rather than the Ubuntu join's Node.
+These checks share schema three while retaining independent source expansion.
+Disposable evidence paths bind through `GITHUB_ENV` after the frozen install.
+The moving macos-15 label requires one
+coherent observed image/compiler/SDK/header tuple within each run; the retained
+20260907.0337.1 observation is historical evidence, not an image pin. Root must
+review the newly observed tuple on real GHA and compare the same candidate's
+inputless manual `Darwin unsplit reference` (`pnpm product:check`) with the
+matrix, including raw identities/statuses, native obligations and queue times,
+after GitHub Actions registers that workflow. It is a future same-head control.
+Source hashes and receipt metadata do not authenticate artifact origin, and
+Linux simulations do not qualify Mac execution. Darwin adds no Linux root,
+typed-lint or native-quality phase. The required `postgres-durability` job runs the
 Linux `postgres-authority-join.test.ts` (Agent Execution, Provider Access and
 Runtime Security on a disposable PostgreSQL database) and fails if that test is
 skipped. The checker, its tests and all retained L0/v1/v2 reports stay unchanged

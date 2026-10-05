@@ -1,10 +1,14 @@
 {
   "postgres-durability": "75cb192e996ff0cc6b298c1ac79f6fa358d3905e5ca0454d8870b2c39918e787",
-  "runtime-macos": "e418a0a0d11498738295dc4d32eec9bbe1126041906a5475389b7c95fe659139",
+  "runtime-macos": "1f295a3930d3a21f91c0e018177b5242db5b87d941aca75a22cc90608dedceca",
   ".github/workflows/docs-protocol.yml": "27d2ec2d28219b5d0a3aeaf2bf45480694ea317003799e9e43c04f8d3b73d8b7",
   ".github/workflows/commit-author-identity.yml": "e1711e72b0065b1873be0fc1f69acc605bb0885a25c263524dc30de0915010e3",
   ".github/workflows/node-26-compatibility.yml": "8732daf010bc6e578c646f498942b7d871f52de5926500ee54759134e433ee85",
   "scripts/ci/audit-node-engine-compatibility.mjs": "8132762ae7591ba03298e60237a5f966bb5d9b2a6262c2f2dd59b6f65b895deb",
   "scripts/ci/node-engine-compatibility.test.mjs": "f1a6baf3ed366699c7c6e27c6853d1571d1459ddc6a1e19611be8d2ec5cca88c",
-  "scripts/ci/node-runtime-compatibility.test.mjs": "e7f8d92e2845f8789a882c538d6e240323b663911512842e2856dc0dd64a90df"
+  "scripts/ci/node-runtime-compatibility.test.mjs": "e7f8d92e2845f8789a882c538d6e240323b663911512842e2856dc0dd64a90df",
+  "macos-product": "9560a3636efbb93c3d5313b0958cfd2eb1c364a837e2339f697a60c9c3b08e17",
+  "scripts/ci/platform-contract.predecessor.json": "6e3189a658313373e0bbfd7fe332826fc5c55ea57a9c83f8d4701fc1e5c0973c",
+  ".github/workflows/ci-darwin-packages.yml": "cef56b1787c81cd50e821f00d4cbd77710d29ed14b1432ed9d23a80d085945e4",
+  ".github/workflows/ci-darwin-reference.yml": "ed5c4de0705bb9abba6d488c804e0f27055ab87aaf96544f429b97216f482322"
 }

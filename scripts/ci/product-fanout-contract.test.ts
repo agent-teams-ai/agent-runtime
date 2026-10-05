@@ -1,16 +1,18 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
 import { parse } from 'yaml';
 import { aePatterns, assertFanoutEvidence, assertJobResults, assertProductWorkflow, packageRoots,
-  phaseEntries, prerequisiteCommands, readProductSource, shardIds, assertShardWorkflow, assertRootCustody, reports } from './product-fanout-contract.ts';
+  phaseEntries, prerequisiteCommands, readProductSource, shardIds, assertShardWorkflow, assertRootCustody, reports, assertPackageEvidence, assertDarwinWorkflow, assertDarwinCaller, assertDarwinReference } from './product-fanout-contract.ts';
 import type { ExpectedEvidence, PackageId, ShardId } from './product-fanout-contract.ts';
-import { executionSelection, runCommand, selectShard } from './package-execution.ts';
-import type { PackageReceipt } from './package-execution.ts';
+import { commandExit, executionSelection, packages as originalPackages, packageStreamPlans, runCommand, selectShard } from './package-execution.ts';
+import type { NativeBuild, PackageReceipt } from './package-execution.ts';
 
+const digest = (value: Uint8Array) => createHash('sha256').update(value).digest('hex');
 const scripts = {
   'product:check': "pnpm --filter './packages/**' -r run clean && pnpm product:build && pnpm --filter './packages/**' -r run test",
   'product:build': "pnpm --filter './packages/**' -r run build",
@@ -31,22 +33,37 @@ async function fixture() {
   await put('.node-version', '24.21.0');
   await put('.github/workflows/ci-product.yml', '# disposable fixture');
   await put('scripts/ci/package-execution.ts', await readFile(new URL('./package-execution.ts', import.meta.url), 'utf8'));
+  await put('scripts/ci/product-workflow-contract.ts', await readFile(new URL('./product-workflow-contract.ts', import.meta.url), 'utf8'));
+  await put('scripts/ci/package-native-observation.ts', await readFile(new URL('./package-native-observation.ts', import.meta.url), 'utf8'));
   await put('pnpm-workspace.yaml', "packages:\n  - 'packages/**'\n");
   tracked.pop(); // overwrite, retaining one source identity
   await put('scripts/ci/full-contract.json', JSON.stringify({ scripts }));
   for (const [id, base] of Object.entries(packageRoots)) {
     await put(`${base}/package.json`, JSON.stringify({ name: `@agent-teams/${id}`, type: 'module', scripts: {
       clean: 'node scripts/clean.ts', build: 'node scripts/build.ts',
-      test: id === 'agent-execution' ? `node --test --test-concurrency=1 ${aePatterns.join(' ')}` : id === 'embedded-runtime' ? 'node scripts/er-probe.ts' : 'node --test tests/example.test.ts',
+      test: originalPackages.find(p => p.root === base)!.test,
     } }));
     await put(`${base}/src/input.ts`, 'export const disposable = true;');
     await put(`${base}/scripts/build.ts`, "import { mkdir } from 'node:fs/promises'; await mkdir(new URL('../dist/', import.meta.url), {recursive:true});");
     await put(`${base}/scripts/clean.ts`, "import { rm } from 'node:fs/promises'; await rm(new URL('../dist/', import.meta.url), {recursive:true,force:true});");
     await put(`${base}/tests/example.test.ts`, "import test from 'node:test'; test('actual fixture observation', () => {}); test('preserved skip', {skip:true}, () => {});");
+    if (id === 'filesystem-custody') {
+      await put(`${base}/scripts/build-native-helper.mjs`, '// copied synthetic TEST builder identity');
+      await put(`${base}/native/rename-no-replace.c`, '// synthetic TEST native source identity');
+    }
+    if (id !== 'agent-execution' && id !== 'embedded-runtime') {
+      for (const pattern of originalPackages.find(p => p.root === base)!.test.split(' ').slice(3)) {
+        const file = pattern.replaceAll('*', 'example');
+        await put(`${base}/${file}`, "import test from 'node:test'; test('first identity', () => {}); test('second identity', () => {}); for (const name of ['repeat', 'repeat']) { test(name, () => {}); } test('skip', {skip:true}, () => {});\n");
+      }
+    }
     if (id === 'embedded-runtime') {
       await put(`${base}/tests/second.test.ts`, "import test from 'node:test'; test('second actual process', () => {});");
       await put(`${base}/scripts/adoption-test-reporter.mjs`, await readFile(new URL('../../packages/apps/embedded-runtime/scripts/adoption-test-reporter.mjs', import.meta.url), 'utf8'));
-      await put(`${base}/scripts/er-probe.ts`, "import {spawnSync} from 'node:child_process'; for (const file of ['tests/example.test.ts', 'tests/second.test.ts']) { const r = spawnSync(process.execPath, ['--test', '--test-reporter=./scripts/adoption-test-reporter.mjs', file], {encoding:'utf8'}); process.stdout.write(r.stdout); process.stderr.write(r.stderr); if (r.status !== 0) { process.exit(r.status ?? 1); } }");
+      const runner = await readFile(new URL('../../packages/apps/embedded-runtime/scripts/run-package-tests.mjs', import.meta.url), 'utf8');
+      await put(`${base}/scripts/run-package-tests.mjs`, runner.replace(/export const testProcesses = (\[[\s\S]*?\n\]);/u,
+        'export const testProcesses = [\n  ["--test", "--test-concurrency=1", "tests/example.test.ts"],\n  ["--experimental-test-module-mocks", "--test", "tests/second.test.ts"]\n];'));
+
     }
   }
   // Uneven universe, literal mjs, and intentionally unsorted creation order.
@@ -54,14 +71,14 @@ async function fixture() {
     'tests/features/runtime-installation-discovery/a.test.ts', 'tests/package/a.test.ts',
     'tests/features/contained-agent-turn/contained-turn-live-canary-lifecycle.test.mjs',
     'tests/features/contained-agent-turn/a.test.ts', 'tests/package/m.test.ts'];
-  for (const file of files) { await put(`${packageRoots['agent-execution']}/${file}`, "import test from 'node:test'; test('actual fixture file', () => {}); test('deliberate TEST skip', {skip:true}, () => {});"); }
+  for (const file of files) { await put(`${packageRoots['agent-execution']}/${file}`, "import test from 'node:test'; test('actual fixture file', () => {}); test('other passing identity', () => {}); for (const name of ['repeat', 'repeat']) { test(name, () => {}); } test('deliberate TEST skip', {skip:true}, () => {});"); }
   const source = await readProductSource(root, tracked);
-  const expected: ExpectedEvidence = { ...source, sha: 'a'.repeat(40), inputTree: 'b'.repeat(40), nodeExecutable: process.execPath, measureDigests: { 'package.json': 'c'.repeat(64) } };
+  const expected: ExpectedEvidence = { ...source, target: 'linux-x64', workflow: { runId: '42', attempt: 2, workflowSha: 'a'.repeat(40) }, sha: 'a'.repeat(40), inputTree: 'b'.repeat(40), nodeExecutable: process.execPath, measureDigests: { 'package.json': 'c'.repeat(64) } };
   return { root, tracked, expected };
 }
 const phaseEvent = (suite = 'fixture') => ({ suite, name: 'observed TEST boundary', ancestry: [], depth: 0, status: 'passed', kind: 'test' as const });
 // Unit receipt metadata names the disposable fixture. Command proofs and observations
-// are the unmodified actual v2 producer output, never current-suite qualification.
+// are the unmodified actual v3 producer output, never current-suite qualification.
 async function packageReports(root: string, expected: ExpectedEvidence, requested: readonly ShardId[] = shardIds): Promise<PackageReceipt[]> {
   const receipts: PackageReceipt[] = [];
   const logs = await mkdtemp(join(root, 'command-attempt-'));
@@ -75,15 +92,21 @@ async function packageReports(root: string, expected: ExpectedEvidence, requeste
       commands.push(await runCommand(command.executable, [...command.argv], root, env, join(logs, `${shard}-${i}`)));
     }
     const reporter = join(root, 'scripts/ci/package-execution.ts');
+    const capture = join(logs, `${shard}-capture`);
+    if (id === 'embedded-runtime') { await mkdir(capture); }
+    const embeddedEnv = { ...env, CI_ER_PROCESS_OBSERVER: '1', AE_ADOPTION_CAPTURE_DIR: capture,
+      NODE_OPTIONS: `--test-reporter=${reporter} --test-reporter-destination=stderr --test-reporter-destination=stdout` };
     commands.push(selection
       ? await runCommand(process.execPath, ['--test', '--test-concurrency=1', `--test-reporter=${reporter}`, ...selection.files],
         join(root, packageRoots[id]), env, join(logs, `${shard}-2`))
       : await runCommand('pnpm', ['--filter', `@agent-teams/${id}`, 'run', 'test'], root,
-        id === 'embedded-runtime' ? env : { ...env, NODE_OPTIONS: `--test-reporter=${reporter}` }, join(logs, `${shard}-2`)));
-    receipts.push({ schemaVersion: 2, requestedShard: shard, packageName: `@agent-teams/${id}`,
+        id === 'embedded-runtime' ? embeddedEnv : { ...env, NODE_OPTIONS: `--test-reporter=${reporter}` }, join(logs, `${shard}-2`)));
+    const plans = await packageStreamPlans(root, selectShard(shard), selection);
+    assert.equal(commandExit(commands[2]!, id === 'embedded-runtime' ? 2 : 1, undefined, plans, Object.keys(expected.inputs).map(file => join(root, file))), 0, `producer ${shard}`);
+    receipts.push({ schemaVersion: 3, target: 'linux-x64', workflow: expected.workflow, nativeBuild: null, embeddedProcesses: id === 'embedded-runtime' ? JSON.parse(await readFile(join(capture, 'processes.json'), 'utf8')) : null, requestedShard: shard, packageName: `@agent-teams/${id}`,
       sourceSha: expected.sha, sourceTree: expected.inputTree, checkoutRoot: root, selection,
       platform: 'linux', arch: 'x64', uid: process.getuid?.() ?? null, node: 'v24.21.0', execPath: process.execPath, pnpm: '11.18.0',
-      runnerImage: { os: null, version: null, runnerOS: null, runnerArch: null }, runnerHash: expected.inputs['scripts/ci/package-execution.ts']!,
+      runnerImage: { os: null, version: null, runnerOS: 'Linux', runnerArch: 'X64' }, runnerHash: expected.inputs['scripts/ci/package-execution.ts']!,
       before: { ...expected.manifests }, after: { ...expected.manifests }, sourceBefore: { ...expected.inputs }, sourceAfter: { ...expected.inputs },
       commands, exitCode: 0, failure: null, coverage: 'actual disposable TEST processes; fixture source identity, not current product suite' });
   }
@@ -96,12 +119,54 @@ function phaseReports(expected: ExpectedEvidence) {
     inventory: expected.inventories[i], phases: names[i]?.map(script => ({ script, code: 0, signal: null,
       commands: expected.inventories[i]?.filter(command => command.script === script), tests: [phaseEvent()] })) }));
 }
+// Decoder fixture only: Linux-observed disposable tests plus explicitly synthetic
+// Mac metadata exercise rejecting contracts. They never qualify Mac execution.
+function macDecoderFixture(receipts: PackageReceipt[], expected: ExpectedEvidence): { receipts: PackageReceipt[]; expected: ExpectedEvidence } {
+  const result = structuredClone(receipts);
+  const execPath = '/Users/runner/hostedtoolcache/node/24.21.0/arm64/bin/node';
+  for (const report of result) {
+    report.target = 'darwin-arm64'; report.platform = 'darwin'; report.arch = 'arm64'; report.uid = 501; report.execPath = execPath;
+    report.coverage = 'synthetic Mac decoder metadata; actual tests ran on disposable Linux TEST; no Mac qualification';
+    report.runnerImage = { os: 'macos15', version: '20261004.1200.1', runnerOS: 'macOS', runnerArch: 'ARM64' };
+    if (report.selection) { report.commands[2]!.executable = execPath; }
+    for (const stream of report.commands[2]!.observation.streams) {
+      stream.node.executable = execPath;
+      const rewrite = (raw: string) => raw.split('\n').map(line => line.startsWith('PACKAGE_NODE_PROCESS ')
+        ? `PACKAGE_NODE_PROCESS ${JSON.stringify({ ...JSON.parse(line.slice(21)), executable: execPath })}` : line).join('\n');
+      stream.stdout = rewrite(stream.stdout); stream.stderr = rewrite(stream.stderr);
+    }
+    const output = join(report.checkoutRoot, 'packages/platform/filesystem-custody/dist/rename-no-replace.node');
+    const sdk = '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk';
+    const headers = '/Users/runner/hostedtoolcache/node/24.21.0/arm64/include/node';
+    const specs: Record<string, [string, string[], string]> = {
+      compilerDriver: ['/usr/bin/xcrun', ['--find', 'cc'], '/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang'],
+      driverTrace: ['cc', ['-###', '-O2', '-Wall', '-Wextra', '-Werror', '-fPIC', '-bundle', '-undefined', 'dynamic_lookup', '-lsandbox', `-I${headers}`, 'native/rename-no-replace.c', '-o', 'dist/rename-no-replace.node'], ''],
+      compilerPath: ['/bin/sh', ['-c', 'command -v cc'], '/usr/bin/cc'], compilerVersion: ['cc', ['--version'], 'Apple clang version 17.0.0'],
+      sdkPath: ['/usr/bin/xcrun', ['--show-sdk-path'], sdk], sdkVersion: ['/usr/bin/xcrun', ['--show-sdk-version'], '15.5'],
+      osVersion: ['/usr/bin/sw_vers', ['-productVersion'], '15.7.9'], osBuild: ['/usr/bin/sw_vers', ['-buildVersion'], '24G830'],
+      format: ['/usr/bin/file', [output], `${output}: Mach-O 64-bit bundle arm64`], arch: ['/usr/bin/lipo', ['-archs', output], 'arm64'],
+      digest: ['/usr/bin/shasum', ['-a', '256', output], `${'d'.repeat(64)}  ${output}`],
+    };
+    const probes: NativeBuild['probes'] = {};
+    for (const [name, [executable, argv, stdout]] of Object.entries(specs)) {
+      probes[name] = { command: { ...structuredClone(report.commands[0]!), executable, argv, cwd: name === 'driverTrace' ? join(report.checkoutRoot, 'packages/platform/filesystem-custody') : report.checkoutRoot }, stdout, stderr: name === 'driverTrace' ? `${headers} ${sdk} native/rename-no-replace.c` : '' };
+    }
+    report.nativeBuild = { cleanOutputAbsent: true, path: 'packages/platform/filesystem-custody/dist/rename-no-replace.node', sha256: 'd'.repeat(64), format: 'Mach-O 64-bit bundle', arch: 'arm64',
+      builderHash: expected.inputs['packages/platform/filesystem-custody/scripts/build-native-helper.mjs']!, sourceHash: expected.inputs['packages/platform/filesystem-custody/native/rename-no-replace.c']!,
+      recipe: ['-O2', '-Wall', '-Wextra', '-Werror', '-fPIC', '-bundle', '-undefined', 'dynamic_lookup', '-lsandbox', `-I${headers}`, 'native/rename-no-replace.c', '-o', 'dist/rename-no-replace.node'],
+      compiler: { path: '/usr/bin/clang', sha256: 'c'.repeat(64) }, compilerDriver: { path: '/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang', sha256: 'b'.repeat(64) }, headers: { path: headers, files: { 'node_api.h': 'e'.repeat(64), 'js_native_api.h': 'f'.repeat(64) } },
+      sdk: { path: sdk, realPath: sdk, settingsHash: 'a'.repeat(64) }, probes };
+  }
+  return { receipts: result, expected: { ...expected, target: 'darwin-arm64' } };
+}
 export function registerProductFanoutTests(): void {
+registerProductSourceCustodyTests(); registerProductWorkflowTests(); registerDarwinFanoutTests();
 test('source-derived full coverage preserves all eight runners and old root/type/native commands', async t => {
   const { root, expected } = await fixture(); t.after(() => rm(root, { recursive: true, force: true }));
   assert.equal(expected.universe.length, 7); assert.deepEqual(expected.universe, expected.universe.toSorted());
   const packages = await packageReports(root, expected), phases = phaseReports(expected);
   assertFanoutEvidence(expected, packages.toReversed(), phases.toReversed());
+  if (process.env.CI_FOCUSED_EVIDENCE_DIR) { await writeFile(join(process.env.CI_FOCUSED_EVIDENCE_DIR, 'synthetic-fanout-processes.json'), JSON.stringify({ scope: 'actual disposable TEST commands; no product qualification', expected, packages, phases }, null, 2)); }
   const embedded = packages.find(report => report.packageName === '@agent-teams/embedded-runtime')!;
   assert.equal(embedded.commands[2]!.observation.summaries.length, 2);
   assert.ok(embedded.commands[2]!.observation.events.some(event => event.title === 'second actual process' && event.name === undefined));
@@ -109,6 +174,29 @@ test('source-derived full coverage preserves all eight runners and old root/type
   const reject = async (name: string, change: (p: PackageReceipt[], r: ReturnType<typeof phaseReports>) => void) => {
     await t.test(name, () => { const p = structuredClone(packages), r = structuredClone(phases); change(p, r); assert.throws(() => assertFanoutEvidence(expected, p, r)); });
   };
+  await reject('same-file balanced duplicate identity', p => {
+    const observation = p[0]!.commands[2]!.observation;
+    const first = observation.events.find(e => e.name === 'actual fixture file')!;
+    const second = observation.events.find(e => e.file === first.file && e.name === 'other passing identity')!;
+    observation.events[observation.events.indexOf(first)] = { ...second };
+    assert.equal(commandExit(p[0]!.commands[2]!, 1), 1);
+  });
+  await reject('PA RC swapped observations', p => {
+    const left = p[3]!.commands[2]!, right = p[4]!.commands[2]!;
+    [left.observation, right.observation] = [right.observation, left.observation];
+    const plan = expected.packageStreams['provider-access'][0]!;
+    assert.equal(commandExit(left, 1, undefined, [{executable:process.execPath, argv:plan.argv, cwd:join(root, packageRoots['provider-access']), files:plan.files.map(file => join(root, packageRoots['provider-access'], file))}]), 1);
+  });
+  await reject('ER first stream replaces second', p => {
+    const observation = p[6]!.commands[2]!.observation;
+    const first = observation.events.filter(e => String(e.suite).endsWith('/tests/example.test.ts')); assert.ok(first.length);
+    observation.events = [...first, ...structuredClone(first)]; observation.summaries[1] = structuredClone(observation.summaries[0]!);
+    assert.equal(commandExit(p[6]!.commands[2]!, 2), 1);
+  });
+  await reject('ER duplicate process envelope', p => {
+    const observation = p[6]!.commands[2]!.observation; observation.streams[1] = structuredClone(observation.streams[0]!);
+    assert.equal(commandExit(p[6]!.commands[2]!, 2), 1);
+  });
   await reject('missing matrix report', p => p.pop());
   await reject('duplicate package report', p => { p[7] = p[6]!; });
   await reject('wrong revision', p => { p[0]!.sourceSha = 'd'.repeat(40); });
@@ -161,7 +249,7 @@ test('source-derived full coverage preserves all eight runners and old root/type
     assert.deepEqual(await readFile(siblingPath), siblingBefore);
     const loaded = await reports(current);
     assert.equal(loaded.length, 8);
-    assertJobResults({ packages: { result: 'success' }, root: { result: 'success' } });
+    assertJobResults({ packages: { result: 'success' }, root: { result: 'success' } }, 'linux-x64');
     assertFanoutEvidence(expected, loaded, phases);
 
     const failed = await runCommand(process.execPath, ['--eval', 'process.exit(1)'], root, process.env, join(root, 'failed-retry'));
@@ -171,7 +259,7 @@ test('source-derived full coverage preserves all eight runners and old root/type
       // actual aggregate CLI boundary; it rejects before reading evidence.
       const needs = { packages: { result: 'success' }, root: { result: 'success' }, [job]: { result: 'failure' } };
       const result = spawnSync(process.execPath, [new URL('./product-fanout-contract.ts', import.meta.url).pathname, 'evidence'], {
-        encoding: 'utf8', env: { ...process.env, NEEDS: JSON.stringify(needs), CI_PACKAGE_REPORT_DIR: current, CI_ROOT_REPORT_DIR: current },
+        encoding: 'utf8', env: { ...process.env, EXECUTION_TARGET: 'linux-x64', NEEDS: JSON.stringify(needs), CI_PACKAGE_REPORT_DIR: current, CI_ROOT_REPORT_DIR: current },
       });
       assert.equal(result.status, 1); assert.match(result.stderr, new RegExp(`${job} incomplete`, 'u'));
       assert.equal((await reports(current)).length, 8);
@@ -195,14 +283,57 @@ test('source oracle rejects ignored inputs, runner drift, and missing literal AE
     });
   }
 });
+}
+export function registerProductSourceCustodyTests(): void {
+test('physical root custody rejects Git-ignored test/type/native/config helpers and symlink ancestry', async t => {
+  for (const path of ['experiments/runtime-profile-behavior/test/extra.test.ts',
+    'experiments/runtime-profile-behavior/src/extra.ts', 'experiments/rust-system-boundaries/client/extra.ts',
+    'scripts/native-helper/extra.mjs', 'scripts/foundation/extra.mjs', 'architecture/foundation/extra.yaml',
+    'tsconfig.extra.json', '.oxlintrc.extra.json']) {
+    await t.test(path, async sub => {
+      const {root, tracked} = await fixture(); sub.after(() => rm(root, {recursive:true, force:true}));
+      execFileSync('git', ['init', '--quiet', root]);
+      await writeFile(join(root, '.git/info/exclude'), `${path}\n`);
+      await mkdir(join(root, path, '..'), {recursive:true});
+      await writeFile(join(root, path), "import test from 'node:test'; test('ignored actual source', () => {});\n");
+      assert.equal(execFileSync('git', ['check-ignore', path], {cwd:root, encoding:'utf8'}).trim(), path);
+      if (path.endsWith('.test.ts')) {
+        const env = {...process.env}; delete env.NODE_TEST_CONTEXT; delete env.NODE_OPTIONS;
+        const result = spawnSync(process.execPath, ['--test', '--test-reporter=tap', path], {cwd:root, encoding:'utf8', env});
+        assert.equal(result.status, 0); assert.match(result.stdout, /ignored actual source/u);
+      }
+      await assert.rejects(readProductSource(root, tracked), /untracked\/ignored/u);
+      const external = await mkdtemp(join(tmpdir(), 'external-source-TEST-')); sub.after(() => rm(external, {recursive:true,force:true}));
+      const target = join(external, 'target.ts'); await writeFile(target, '// TEST');
+      await rm(join(root, path)); await symlink(target, join(root, path));
+      await assert.rejects(readProductSource(root, tracked), /symlink|unsupported/u);
+    });
+  }
+  await t.test('deliberate generated dependency/build exclusions preserve custody', async sub => {
+    const {root, tracked, expected} = await fixture(); sub.after(() => rm(root, {recursive:true,force:true}));
+    for (const path of [`${packageRoots['agent-execution']}/dist/generated.ts`, `${packageRoots['provider-access']}/.cache/output.json`,
+      `${packageRoots['embedded-runtime']}/node_modules/installed.ts`, 'experiments/rust-system-boundaries/target/generated.rs']) {
+      await mkdir(join(root, path, '..'), {recursive:true}); await writeFile(join(root, path), '// generated TEST');
+    }
+    assert.deepEqual((await readProductSource(root, tracked)).inputs, expected.inputs);
+  });
+  await t.test('tracked directory replaced by an external ancestry symlink', async sub => {
+    const {root, tracked} = await fixture(); sub.after(() => rm(root, {recursive:true, force:true}));
+    const base = join(root, 'scripts/ci'), moved = join(root, 'external-ci');
+    await import('node:fs/promises').then(fs => fs.rename(base, moved)); await symlink(moved, base);
+    await assert.rejects(readProductSource(root, tracked), /symlink/u);
+  });
+});
+}
+export function registerProductWorkflowTests(): void {
 test('matrix and root failures, cancellation, skip or missing needs fail closed', () => {
-  assertJobResults({ packages: { result: 'success' }, root: { result: 'success' } });
+  assertJobResults({ packages: { result: 'success' }, root: { result: 'success' } }, 'linux-x64');
   for (const job of ['packages', 'root']) {
     for (const result of ['failure', 'cancelled', 'skipped', '', undefined]) {
-      assert.throws(() => assertJobResults({ packages: { result: 'success' }, root: { result: 'success' }, [job]: { result } }));
+      assert.throws(() => assertJobResults({ packages: { result: 'success' }, root: { result: 'success' }, [job]: { result } }, 'linux-x64'));
     }
   }
-  assert.throws(() => assertJobResults({ root: { result: 'success' } }));
+  assert.throws(() => assertJobResults({ root: { result: 'success' } }, 'linux-x64'));
 });
 test('parsed full-product workflow rejects matrix/phase/permissions/action drift', async t => {
   const workflow = parse(await readFile(new URL('../../.github/workflows/ci-product.yml', import.meta.url), 'utf8'));
@@ -286,6 +417,8 @@ test('separate receipt.json artifacts preserve duplicates and ignore raw diagnos
   for (const dir of ['shard-one', 'shard-two']) {
     await mkdir(join(root, dir)); await writeFile(join(root, dir, 'receipt.json'), JSON.stringify({requestedShard:'agent-execution-1'}));
     await writeFile(join(root, dir, 'command-2.stdout'), 'not JSON and never execution evidence');
+    await mkdir(join(root, dir, 'embedded-processes'));
+    await writeFile(join(root, dir, 'embedded-processes/processes.json'), 'raw diagnostic JSON is not a package receipt');
   }
   const loaded = await reports(root); assert.equal(loaded.length, 2); assert.deepEqual(loaded[0], loaded[1]);
   const expected = {sha:'a'.repeat(40), inputTree:'b'.repeat(40), inputs:{'actual-source.ts':'c'.repeat(64)}};
@@ -293,6 +426,154 @@ test('separate receipt.json artifacts preserve duplicates and ignore raw diagnos
   assertRootCustody(proof, expected);
   assert.throws(() => assertRootCustody({...proof, after:null}, expected));
   assert.throws(() => assertRootCustody({...proof, after:{}}, expected));
+});
+
+}
+function registerDarwinFanoutTests(): void {
+test('explicit Mac decoder retains eight original suites and rejects Linux substitution, root, native and run drift', async t => {
+  const f = await fixture(); t.after(() => rm(f.root, { recursive: true, force: true }));
+  const base = await packageReports(f.root, f.expected), mac = macDecoderFixture(base, f.expected);
+  assertPackageEvidence(mac.expected, mac.receipts);
+  assert.notEqual(mac.receipts[0]!.execPath, mac.expected.nodeExecutable, 'aggregate Node path must not stand in for Mac Node');
+  assert.throws(() => assertPackageEvidence(mac.expected, base), /target/);
+  const cases: Record<string, (r: PackageReceipt[]) => void> = {
+    'balanced same-file replacement': r => {
+      const observation = r[0]!.commands[2]!.observation;
+      const first = observation.events.find(e => e.name === 'actual fixture file')!;
+      const second = observation.events.find(e => e.file === first.file && e.name === 'other passing identity')!;
+      observation.events[observation.events.indexOf(first)] = { ...second };
+    },
+    'balanced replacement including raw capture': r => {
+      const observation = r[0]!.commands[2]!.observation;
+      const first = observation.events.find(e => e.name === 'actual fixture file')!;
+      const second = observation.events.find(e => e.file === first.file && e.name === 'other passing identity')!;
+      observation.events[observation.events.indexOf(first)] = { ...second };
+      const stream = observation.streams[0]!;
+      stream.stdout = stream.stdout.split('\n').map(line => line.startsWith('PACKAGE_EVENT ')
+        && JSON.parse(line.slice(14)).file === first.file && JSON.parse(line.slice(14)).name === first.name
+        ? `PACKAGE_EVENT ${JSON.stringify(second)}` : line).join('\n');
+    },
+    'PA RC stream substitution': r => {
+      const left = r[3]!.commands[2]!, right = r[4]!.commands[2]!;
+      [left.observation, right.observation] = [right.observation, left.observation];
+    },
+    'ER first events replace second': r => {
+      const observation = r[6]!.commands[2]!.observation;
+      const first = observation.events.filter(e => String(e.suite).endsWith('/tests/example.test.ts'));
+      observation.events = [...first, ...structuredClone(first)];
+    },
+    'ER first envelope replaces second': r => {
+      const observation = r[6]!.commands[2]!.observation;
+      observation.streams[1] = structuredClone(observation.streams[0]!);
+    },
+    'legacy schema two': r => Object.assign(r[0]!, { schemaVersion: 2 }),
+    'Mac root UID': r => { r[0]!.uid = 0; }, 'wrong CPU': r => { r[0]!.arch = 'x64'; },
+    'Linux toolcache executable': r => { r[0]!.execPath = process.execPath; },
+    'missing native output': r => { r[0]!.nativeBuild = null; },
+    'wrong native hash': r => { r[0]!.nativeBuild!.sha256 = 'e'.repeat(64); },
+    'wrong Mach-O arch': r => { r[0]!.nativeBuild!.arch = 'x86_64'; },
+    'failed native observer': r => { r[0]!.nativeBuild!.probes.arch!.command.exitCode = 1; },
+    'missing observed compiler/SDK trace': r => { r[0]!.nativeBuild!.probes.driverTrace!.stderr = ''; },
+    'qualified replacement recipe': r => { r[0]!.nativeBuild!.recipe.push('--qualified'); },
+    'mixed image': r => { r[1]!.runnerImage.version = '20261005.1200.1'; },
+    'mixed SDK': r => { r[1]!.nativeBuild!.sdk.settingsHash = 'e'.repeat(64); },
+    'wrong image family': r => { r[0]!.runnerImage.os = 'ubuntu24'; },
+    'cross workflow run': r => { r[0]!.workflow!.runId = '43'; },
+    'cross workflow source': r => { r[0]!.workflow!.workflowSha = 'b'.repeat(40); },
+    'future attempt': r => { r[0]!.workflow!.attempt = 3; },
+    'missing ER PID': r => { r[6]!.commands[2]!.observation.streams.pop(); },
+    'duplicate ER PID': r => { r[6]!.commands[2]!.observation.streams[1]!.node.pid = r[6]!.commands[2]!.observation.streams[0]!.node.pid; },
+    'missing ER actual exit': r => { r[6]!.embeddedProcesses!.pop(); },
+    'ER child cancelled': r => { r[6]!.embeddedProcesses![1]!.signal = 'SIGTERM'; },
+    'ER second original argv changed': r => { r[6]!.embeddedProcesses![1]!.argv = ['--test']; },
+  };
+  for (const [name, mutate] of Object.entries(cases)) {
+    await t.test(name, () => { const changed = structuredClone(mac.receipts); mutate(changed); assert.throws(() => assertPackageEvidence(mac.expected, changed)); });
+  }
+  const retained = structuredClone(mac.receipts); retained[0]!.workflow!.attempt = 1;
+  assertPackageEvidence(mac.expected, retained); // rerun-failed keeps successful earlier units in this run.
+  for (const result of ['failure', 'skipped', 'cancelled']) { assert.throws(() => assertJobResults({ 'macos-product': { result } }, 'darwin-arm64')); }
+  assertJobResults({ 'macos-product': { result: 'success' } }, 'darwin-arm64');
+  assert.throws(() => assertJobResults({ packages: { result: 'success' }, root: { result: 'success' } }, 'darwin-arm64'));
+});
+test('real Mac workflows close required context, matrix, current-slot retry, permissions and revision custody', async t => {
+  const workflow = parse(await readFile(new URL('../../.github/workflows/ci-darwin-packages.yml', import.meta.url), 'utf8'));
+  const runtime = parse(await readFile(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8'));
+  const reference = parse(await readFile(new URL('../../.github/workflows/ci-darwin-reference.yml', import.meta.url), 'utf8'));
+  const revision = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}";
+  assertDarwinWorkflow(workflow); assertDarwinCaller(runtime.jobs, revision); assertDarwinReference(reference);
+  const matrices: Array<(w: typeof workflow) => void> = [
+    w => w.jobs.packages.strategy.matrix.shard.pop(), w => { w.jobs.packages['runs-on'] = 'ubuntu-24.04'; },
+    w => { w.jobs.packages.strategy['fail-fast'] = true; }, w => { w.jobs.packages.strategy['max-parallel'] = 9; },
+    w => { w.permissions.contents = 'write'; }, w => { w.on.workflow_call.inputs.runner = {type:'string'}; },
+    w => { w.jobs.packages.env.EXECUTION_TARGET = 'linux-x64'; }, w => { w.jobs.packages.steps[0].with['fetch-depth'] = 1; },
+    w => { w.jobs.packages.steps.splice(2, 1); }, w => { w.jobs.packages.steps.at(-1).with.overwrite = false; },
+    w => { w.jobs.packages.steps.at(-1).if = '${{ always() }}'; }, w => { w.jobs.packages.steps.at(-2).if = '${{ success() }}'; },
+    w => { w.jobs.packages.env.CI_EVIDENCE_DIR = '${{ runner.temp }}/ci-darwin-shard'; },
+    w => { w.jobs.packages.steps.splice(7, 1); },
+  ];
+  for (const [i, mutate] of matrices.entries()) { await t.test(`matrix/retry ${i}`, () => { const changed = structuredClone(workflow); mutate(changed); assert.throws(() => assertDarwinWorkflow(changed)); }); }
+  const callers: Array<(w: typeof runtime) => void> = [
+    w => { delete w.jobs['macos-product']; }, w => { delete w.jobs['runtime-macos']; },
+    w => { w.jobs['runtime-macos'].name = 'Mac'; }, w => { w.jobs['runtime-macos'].uses = './.github/workflows/ci-darwin-packages.yml'; },
+    w => { w.jobs['runtime-macos'].needs = ['product']; }, w => { delete w.jobs['runtime-macos'].if; },
+    w => { w.jobs['macos-product'].with.revision = '${{ github.sha }}'; },
+    w => { w.jobs['runtime-macos'].steps.find((s: {uses?:string}) => s.uses?.startsWith('actions/download-artifact')).with.pattern = 'full-ci-darwin-package-*-${{ github.run_attempt }}'; },
+    w => { w.jobs['runtime-macos'].steps.find((s: {uses?:string}) => s.uses?.startsWith('actions/download-artifact')).with['run-id'] = 'other'; },
+    w => { w.jobs['runtime-macos'].env.EXECUTION_TARGET = 'linux-x64'; },
+    w => { w.jobs['runtime-macos'].env.CI_PACKAGE_REPORT_DIR = '${{ runner.temp }}/ci-darwin-reports/packages'; },
+    w => { w.jobs['runtime-macos'].steps.splice(7, 1); },
+  ];
+  for (const [i, mutate] of callers.entries()) { await t.test(`required caller ${i}`, () => { const changed = structuredClone(runtime); mutate(changed); assert.throws(() => assertDarwinCaller(changed.jobs, revision)); }); }
+  for (const mutation of ['input', 'PR', 'runner', 'command']) {
+    const bad = structuredClone(reference);
+    if (mutation === 'input') { bad.on.workflow_dispatch.inputs = { revision: { type: 'string' } }; }
+    if (mutation === 'PR') { bad.on.pull_request = {}; }
+    if (mutation === 'runner') { bad.jobs.reference['runs-on'] = 'ubuntu-24.04'; }
+    if (mutation === 'command') { bad.jobs.reference.steps.find((s: {run?:string}) => s.run === 'node scripts/ci/package-execution.ts reference').run = 'pnpm check'; }
+    assert.throws(() => assertDarwinReference(bad));
+  }
+});
+
+test('Linux and Mac evidence bindings publish actual disposable paths through the Actions environment file', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'evidence-bindings-TEST-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const runnerTemp = join(root, 'runner temp with spaces'); await mkdir(runnerTemp);
+  const cases: Array<[string, string, Record<string, string>]> = [
+    ['ci-product.yml', 'root', { CI_EVIDENCE_DIR: 'ci-product-root' }],
+    ['ci-product.yml', 'aggregate', { CI_PACKAGE_REPORT_DIR: 'ci-product-reports/packages', CI_ROOT_REPORT_DIR: 'ci-product-reports/root' }],
+    ['ci-product-shard.yml', 'shard', { CI_EVIDENCE_DIR: 'ci-product-shard' }],
+    ['ci-darwin-packages.yml', 'packages', { CI_EVIDENCE_DIR: 'ci-darwin-shard' }],
+    ['ci.yml', 'runtime-macos', { CI_PACKAGE_REPORT_DIR: 'ci-darwin-reports/packages' }],
+    ['ci-darwin-reference.yml', 'reference', { CI_EVIDENCE_DIR: 'ci-darwin-reference' }],
+  ];
+  for (const [file, job, expected] of cases) {
+    await t.test(`${file}/${job}`, async () => {
+      const workflow = parse(await readFile(new URL(`../../.github/workflows/${file}`, import.meta.url), 'utf8'));
+      const steps = workflow.jobs[job].steps as Array<{ name?: string; run?: string }>;
+      const binding = steps.find(step => step.name === 'Bind disposable evidence paths'); assert.ok(binding?.run);
+      const environmentFile = join(root, `${file}-${job}.env`);
+      const executed = spawnSync('bash', ['-c', binding.run], { encoding: 'utf8',
+        env: { ...process.env, RUNNER_TEMP: runnerTemp, GITHUB_ENV: environmentFile } });
+      assert.equal(executed.error, undefined); assert.equal(executed.status, 0, executed.stderr); assert.equal(executed.signal, null);
+      const published = Object.fromEntries((await readFile(environmentFile, 'utf8')).trimEnd().split('\n').map(line => {
+        const index = line.indexOf('='); assert.ok(index > 0); return [line.slice(0, index), line.slice(index + 1)];
+      }));
+      assert.deepEqual(published, Object.fromEntries(Object.entries(expected).map(([key, suffix]) => [key, join(runnerTemp, suffix)])));
+    });
+  }
+});
+
+test('downloaded native bytes independently reject a self-reported hash, missing output or wrong Mach-O CPU', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'native-download-TEST-')); t.after(() => rm(root, {recursive:true,force:true}));
+  const bytes = Buffer.alloc(32); bytes.writeUInt32LE(0xfeedfacf, 0); bytes.writeUInt32LE(0x0100000c, 4); bytes.writeUInt32LE(8, 12);
+  const put = (sha256: string) => writeFile(join(root, 'receipt.json'), JSON.stringify({target:'darwin-arm64', nativeBuild:{sha256}}));
+  await put(digest(bytes)); await writeFile(join(root, 'rename-no-replace.node'), bytes);
+  assert.equal((await reports(root)).length, 1); // Synthetic header carrier only.
+  await put('c'.repeat(64)); await assert.rejects(reports(root), /hash mismatch/);
+  await put(digest(bytes)); await rm(join(root, 'rename-no-replace.node')); await assert.rejects(reports(root), /ENOENT/);
+  bytes.writeUInt32LE(0x01000007, 4); await put(digest(bytes)); await writeFile(join(root, 'rename-no-replace.node'), bytes);
+  await assert.rejects(reports(root), /arm64/);
 });
 
 }

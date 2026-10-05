@@ -213,7 +213,10 @@ export const inputPaths = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yam
   '.github/workflows/ci-foundation-route.yml', '.github/workflows/ci-pr-regressions.yml',
   '.github/workflows/ci-foundation.yml', '.github/workflows/ci-foundation-shard.yml',
   'scripts/ci/package-execution.ts', 'scripts/ci/package-execution.test.ts',
+  'scripts/ci/product-workflow-contract.ts', 'scripts/ci/package-native-observation.ts',
+  'scripts/ci/product-test-observation.ts',
   'scripts/ci/product-fanout-contract.ts', 'scripts/ci/product-fanout-contract.test.ts',
+  '.github/workflows/ci-darwin-packages.yml', '.github/workflows/ci-darwin-reference.yml', 'scripts/ci/platform-contract.predecessor.json',
   '.github/workflows/ci-product.yml', '.github/workflows/ci-product-shard.yml',
   '.github/workflows/ci.yml', '.github/workflows/ci-nightly.yml'] as const;
 

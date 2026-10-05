@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { tmpdir } from 'node:os';
 import { commandExit, enumerateExecutionFiles, executionSelection, observeLine, packages,
-  partitionExecutionFiles, runCommand, selectShard, shardIds, validateInventory, validatePlatform } from './package-execution.ts';
+  assertMachOArm64, executePackage, partitionExecutionFiles, runCommand, workflowIdentity, selectShard, shardIds, validateInventory, validatePlatform } from './package-execution.ts';
 import type { Observation } from './package-execution.ts';
 
 const reporter = resolve('scripts/ci/package-execution.ts');
@@ -23,7 +23,7 @@ async function fixture() {
     await mkdir(join(packageRoot, path.slice(0, path.lastIndexOf('/'))), { recursive: true });
     // Each file proves isolation: a process-global mutation cannot leak to another file.
     await writeFile(join(packageRoot, path), `import assert from 'node:assert/strict';\nimport {test, describe} from 'node:test';\ntest('identity-${index}', () => { assert.equal(process.env.FIXTURE_OWNER, undefined); process.env.FIXTURE_OWNER = '${index}'; });\n`
-      + (index === 0 ? "test('skipped-identity', {skip: 'TEST skip preserved'}, () => {});\n" : '')
+      + (index === 0 ? "test('skipped-identity', {skip: 'TEST skip preserved'}, () => {});\nfor (const name of ['repeat', 'repeat']) { test(name, () => {}); }\n" : '')
       + (index === 1 ? "describe('suite-identity', () => { test('nested-identity', () => {}); });\n" : ''));
   }
   return { root, packageRoot, paths: paths.toSorted() };
@@ -65,7 +65,7 @@ test('empty pattern, runner option drift, symlink input and unsupported matched 
   await assert.rejects(enumerateExecutionFiles(f.root), /unsupported test path/);
 });
 
-test('eight literal shards and Linux platform contract reject unknown, array, whole-AE and unsupported runners', () => {
+test('eight literal shards and explicit platform contract reject unknown, array, whole-AE and unsupported runners', () => {
   assert.equal(shardIds.length, 8);
   assert.deepEqual(shardIds.slice(0, 3).map(id => selectShard(id).partitionIndex), [0, 1, 2]);
   for (const bad of [undefined, [], 'agent-execution', 'agent-execution-4', '@agent-teams/agent-execution', 'provider-access runtime-security'])
@@ -74,9 +74,14 @@ test('eight literal shards and Linux platform contract reject unknown, array, wh
   assert.throws(() => partitionExecutionFiles(['a', 'a', 'b'], 0), /duplicate/);
   assert.throws(() => partitionExecutionFiles(['a', 'b'], 0), /empty/);
   assert.throws(() => partitionExecutionFiles(['a', 'b', 'c'], 3), /index/);
-  validatePlatform('linux', 'x64', 'Linux', 'X64');
-  assert.throws(() => validatePlatform('darwin', 'arm64', 'macOS', 'ARM64'));
-  assert.throws(() => validatePlatform('linux', 'x64', 'macOS', 'X64'));
+  const linux = { platform: 'linux', arch: 'x64', uid: 1001, runnerOS: 'Linux', runnerArch: 'X64', execPath: process.execPath };
+  validatePlatform('linux-x64', linux);
+  const mac = { platform: 'darwin', arch: 'arm64', uid: 501, runnerOS: 'macOS', runnerArch: 'ARM64', execPath: '/Users/runner/hostedtoolcache/node/24.21.0/arm64/bin/node' };
+  validatePlatform('darwin-arm64', mac);
+  for (const bad of [linux, { ...mac, uid: 0 }, { ...mac, arch: 'x64' }, { ...mac, runnerOS: 'Linux' }, { ...mac, runnerArch: 'X64' }, { ...mac, execPath: process.execPath }, { ...mac, execPath: mac.execPath.replace('24.21.0', '24.18.0') }]) {
+    assert.throws(() => validatePlatform('darwin-arm64', bad));
+  }
+  assert.throws(() => validatePlatform('linux-x64', mac));
 });
 
 test('source inventory rejects missing sixth build, added package, test change and lifecycle hook', () => {
@@ -115,6 +120,15 @@ test('actual Node full run and three partitions preserve file completion, identi
   assert.equal(commandExit(missing, 1, universe.map(p => join(f.packageRoot, p))), 1);
   const missingEvent = structuredClone(full); missingEvent.observation.events.shift();
   assert.equal(commandExit(missingEvent, 1), 1, 'summary alone cannot cover a missing emitted identity');
+  const balanced = structuredClone(full);
+  const first = balanced.observation.events.find(e => e.name === 'identity-0')!;
+  const second = balanced.observation.events.find(e => e.name === 'repeat')!;
+  balanced.observation.events[balanced.observation.events.indexOf(first)] = { ...second };
+  assert.equal(commandExit(balanced, 1), 1, 'balanced same-file duplicate replacement must reject');
+  const repeated = full.observation.events.filter(e => e.name === 'repeat');
+  assert.deepEqual(repeated.map(e => e.ordinal), [1, 2]);
+  const duplicatedStream = structuredClone(full); duplicatedStream.observation.streams.push(structuredClone(duplicatedStream.observation.streams[0]!));
+  assert.equal(commandExit(duplicatedStream, 2), 1, 'duplicate actual process must reject');
   const missingSummary = structuredClone(full); missingSummary.observation.summaries.length = 0;
   assert.equal(commandExit(missingSummary, 1), 1);
   const duplicate = structuredClone(full); duplicate.observation.completedFiles.push(duplicate.observation.completedFiles[0]!);
@@ -125,11 +139,57 @@ test('actual Node full run and three partitions preserve file completion, identi
   await writeFile(join(f.packageRoot, failing), "import test from 'node:test'; test('real failure', () => { throw Error('TEST assertion failed'); });\n");
   const failed = await run([failing], 'failed');
   assert.notEqual(failed.exitCode, 0); assert.equal(commandExit(failed, 1), 1);
-  const observation: Observation = { events: [], summaries: [], completedFiles: [] };
+  for (const [label, body] of [
+    ['todo', "test('unfulfilled TODO', {todo:true}, () => {});"],
+    ['cancelled', "test('actual timed-out test', {timeout:20}, async () => { await new Promise(resolve => setTimeout(resolve, 100)); });"],
+  ] as const) {
+    const path = `tests/package/${label}.test.ts`;
+    await writeFile(join(f.packageRoot, path), `import test from 'node:test'; test('real passing prerequisite', () => {}); ${body}\n`);
+    const result = await run([path], label);
+    assert.equal(commandExit(result, 1), 1, 'TODO/cancellation must never discharge coverage');
+    // Failed file observations refuse atomically; their actual terminal counts
+    // still belong to the retained raw process output.
+    const line = (await readFile(join(f.root, `${label}.stdout`), 'utf8')).split('\n').find(value => value.startsWith('PACKAGE_SUMMARY '));
+    assert.ok(line, 'actual terminal summary must remain archived');
+    const counts = JSON.parse(line.slice('PACKAGE_SUMMARY '.length)) as Record<string, unknown>;
+    assert.ok(Number(counts[label === 'todo' ? 'todo' : 'cancelled']) > 0);
+  }
+  const observation: Observation = { events: [], summaries: [], completedFiles: [], streams: [] };
   assert.throws(() => observeLine('PACKAGE_SUMMARY {"tests":1}', observation), /invalid Node summary/);
   if (process.env.CI_FOCUSED_EVIDENCE_DIR) { await writeFile(join(process.env.CI_FOCUSED_EVIDENCE_DIR, 'synthetic-package-processes.json'), JSON.stringify({
     scope: 'synthetic TEST only; not current product-suite qualification', full, shards, silent, failed,
   }, null, 2) + '\n'); }
+});
+
+test('native header and workflow identity boundaries reject wrong format, CPU, kind and run', () => {
+  const bytes = Buffer.alloc(32); bytes.writeUInt32LE(0xfeedfacf, 0); bytes.writeUInt32LE(0x0100000c, 4); bytes.writeUInt32LE(8, 12);
+  assertMachOArm64(bytes); // Synthetic header only, never a compiled Mac qualification.
+  for (const [offset, value] of [[0, 0x464c457f], [4, 0x01000007], [12, 2]] as const) {
+    const bad = Buffer.from(bytes); bad.writeUInt32LE(value, offset); assert.throws(() => assertMachOArm64(bad));
+  }
+  assert.throws(() => assertMachOArm64(bytes.subarray(0, 8)));
+  const env = { GITHUB_RUN_ID: '42', GITHUB_RUN_ATTEMPT: '2', GITHUB_WORKFLOW_SHA: 'a'.repeat(40) };
+  assert.deepEqual(workflowIdentity(env), { runId: '42', attempt: 2, workflowSha: 'a'.repeat(40) });
+  for (const key of Object.keys(env)) { assert.throws(() => workflowIdentity({ ...env, [key]: undefined })); }
+});
+
+test('actual Linux producer retains an honest schema-three failed Mac receipt without executing a command', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'wrong-target-TEST-')); t.after(() => rm(root, {recursive:true,force:true}));
+  const output = join(root, 'rejected-Mac-attempt');
+  assert.equal(await executePackage(root, 'agent-execution-1', 'a'.repeat(40), output, 'darwin-arm64'), 1);
+  const receipt = JSON.parse(await readFile(join(output, 'receipt.json'), 'utf8'));
+  assert.equal(receipt.schemaVersion, 3); assert.equal(receipt.target, 'darwin-arm64');
+  assert.equal(receipt.platform, process.platform); assert.equal(receipt.execPath, process.execPath);
+  assert.equal(receipt.exitCode, 1); assert.ok(receipt.failure); assert.deepEqual(receipt.commands, []);
+  assert.equal(receipt.nativeBuild, null); assert.equal(receipt.sourceTree, null);
+});
+
+test('retained raw process stdout preserves split UTF8 bytes exactly', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'raw-output-TEST-')); t.after(() => rm(root, {recursive:true,force:true}));
+  const script = join(root, 'raw-output.ts');
+  await writeFile(script, "import {setTimeout} from 'node:timers/promises'; const bytes = Buffer.from('π✅'); process.stdout.write(bytes.subarray(0,1)); await setTimeout(20); process.stdout.write(bytes.subarray(1));\n");
+  const result = await runCommand(process.execPath, [script], root, { ...process.env, NODE_OPTIONS: '' }, join(root, 'raw'));
+  assert.equal(result.exitCode, 0); assert.deepEqual(await readFile(join(root, 'raw.stdout')), Buffer.from('π✅'));
 });
 
 }

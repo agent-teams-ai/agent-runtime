@@ -11,7 +11,7 @@ import { readScripts } from './inventory.ts';
 import type { Scripts } from './script-routing.ts';
 import { validateNightlyWorkflow } from './nightly-contract.ts';
 import { validateFoundationWorkflows } from './foundation-fanout-contract.ts';
-import { assertProductWorkflow, assertShardWorkflow } from './product-fanout-contract.ts';
+import { assertProductWorkflow, assertShardWorkflow, assertDarwinWorkflow, assertDarwinCaller, assertDarwinReference } from './product-fanout-contract.ts';
 import { prObligations } from './pr-regression-command.ts';
 
 export const eventRevision = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}";
@@ -79,7 +79,7 @@ export function validateWorkflow(main: unknown, reusable: unknown, platform: Rec
   assert.deepEqual(object(workflow.on).push, { branches: ['main'] });
   validateScheduling(workflow.concurrency);
   const jobs = object(workflow.jobs);
-  assert.deepEqual(Object.keys(jobs).toSorted(), [...requiredJobs, 'check', 'postgres-durability', 'runtime-macos'].toSorted());
+  assert.deepEqual(Object.keys(jobs).toSorted(), [...requiredJobs, 'check', 'postgres-durability', 'macos-product', 'runtime-macos'].toSorted());
   for (const name of requiredJobs) {
     const job = object(jobs[name]);
     assert.equal(job.uses, name === 'foundation' ? './.github/workflows/ci-foundation-route.yml'
@@ -108,6 +108,8 @@ export function validateWorkflow(main: unknown, reusable: unknown, platform: Rec
   assert.ok(aggregateSteps.every(step => step['continue-on-error'] === undefined));
   assert.equal(aggregateSteps.at(-1)?.run, 'node scripts/ci/gate.ts aggregate');
   assert.equal(object(aggregateSteps.at(-1)?.env).NEEDS, '${{ toJSON(needs) }}');
+  assertDarwinCaller(jobs, eventRevision);
+  assert.equal(digest(jobs['macos-product']), platform['macos-product'], 'Mac helper platform contract changed');
   for (const name of ['postgres-durability', 'runtime-macos']) {
     assert.equal(digest(jobs[name]), platform[name], `${name} platform contract changed`);
   }
@@ -231,6 +233,23 @@ export function validateBenchmark(value: unknown): void {
   assert.deepEqual(gateSteps.at(-1)?.env, { NEEDS: '${{ toJSON(needs) }}', BENCHMARK_ARM: '${{ inputs.arm }}' });
 }
 
+export async function authenticatePlatformPredecessor(root: string): Promise<void> {
+  const retained: { schemaVersion: number; baseCommit: string; ciSha256: string; ciBytes: string; runtimeMacosBytes: string; parsedJobSha256: string } =
+    JSON.parse(await readFile(resolve(root, 'scripts/ci/platform-contract.predecessor.json'), 'utf8'));
+  assert.equal(retained.schemaVersion, 1);
+  assert.equal(retained.baseCommit, '73c771f254858db430d01d13c3cb433ef18b757d');
+  assert.equal(retained.ciSha256, '0c7a76182e5a0cb35d1e7cbb52ea0046741c1ff20f5658fd2a69da53b777fc78');
+  assert.equal(retained.parsedJobSha256, 'e418a0a0d11498738295dc4d32eec9bbe1126041906a5475389b7c95fe659139');
+  const bytes = execFileSync('git', ['show', `${retained.baseCommit}:.github/workflows/ci.yml`], { cwd: root, encoding: 'utf8' });
+  assert.equal(createHash('sha256').update(bytes).digest('hex'), retained.ciSha256, 'full predecessor CI bytes');
+  assert.equal(retained.ciBytes, bytes, 'retained complete predecessor workflow');
+  assert.equal(retained.runtimeMacosBytes, bytes.slice(bytes.indexOf('  runtime-macos:\n')), 'retained complete old Mac block');
+  const job = object(object(parse(bytes)).jobs)['runtime-macos'];
+  assert.equal(digest(job), retained.parsedJobSha256, 'authenticated parsed predecessor job');
+  const oldPlatform = JSON.parse(execFileSync('git', ['show', `${retained.baseCommit}:scripts/ci/platform-contract.json`], { cwd: root, encoding: 'utf8' }));
+  assert.equal(oldPlatform['runtime-macos'], retained.parsedJobSha256, 'predecessor platform linkage');
+}
+
 export async function conformance(root: string): Promise<void> {
   const read = (path: string) => readFile(resolve(root, path), 'utf8');
   const scripts = await readScripts(resolve(root, 'package.json'));
@@ -275,7 +294,13 @@ export async function conformance(root: string): Promise<void> {
   assert.deepEqual(originalPolicy, predecessorPolicy, 'Docs baseline migration preserves source-policy scope');
   assertFullInventory(scripts, baseline.scripts);
   assertPrInventory(scripts);
+  await authenticatePlatformPredecessor(root);
+  assertDarwinWorkflow(parse(await read('.github/workflows/ci-darwin-packages.yml')));
+  assertDarwinReference(parse(await read('.github/workflows/ci-darwin-reference.yml')));
   const platform: Record<string, string> = JSON.parse(await read('scripts/ci/platform-contract.json'));
+  assert.equal(createHash('sha256').update(await read('scripts/ci/platform-contract.predecessor.json')).digest('hex'), platform['scripts/ci/platform-contract.predecessor.json'], 'retained platform evidence bytes');
+  const oldPlatform: Record<string, string> = JSON.parse(execFileSync('git', ['show', '73c771f254858db430d01d13c3cb433ef18b757d:scripts/ci/platform-contract.json'], { cwd: root, encoding: 'utf8' }));
+  for (const [key, value] of Object.entries(oldPlatform)) { if (key !== 'runtime-macos') { assert.equal(platform[key], value, 'unrelated platform contract preserved'); } }
   const runtime: unknown = parse(await read('.github/workflows/ci.yml'));
   validateWorkflow(runtime, parse(await read('.github/workflows/ci-lane.yml')), platform);
   validateFoundationWorkflows(parse(await read('.github/workflows/ci-foundation.yml')),
@@ -284,7 +309,7 @@ export async function conformance(root: string): Promise<void> {
   assertShardWorkflow(parse(await read('.github/workflows/ci-product-shard.yml')));
   validatePrFoundationRoute(parse(await read('.github/workflows/ci-foundation-route.yml')), parse(await read('.github/workflows/ci-pr-regressions.yml')));
   validateNightlyWorkflow(parse(await read('.github/workflows/ci-nightly.yml')), runtime, platform);
-  for (const file of ['.github/workflows/docs-protocol.yml', '.github/workflows/commit-author-identity.yml', '.github/workflows/node-26-compatibility.yml', 'scripts/ci/audit-node-engine-compatibility.mjs', 'scripts/ci/node-engine-compatibility.test.mjs', 'scripts/ci/node-runtime-compatibility.test.mjs']) {
+  for (const file of ['.github/workflows/ci-darwin-packages.yml', '.github/workflows/ci-darwin-reference.yml', '.github/workflows/docs-protocol.yml', '.github/workflows/commit-author-identity.yml', '.github/workflows/node-26-compatibility.yml', 'scripts/ci/audit-node-engine-compatibility.mjs', 'scripts/ci/node-engine-compatibility.test.mjs', 'scripts/ci/node-runtime-compatibility.test.mjs']) {
     assert.equal(createHash('sha256').update(await read(file)).digest('hex'), platform[file], `${file} trust contract changed`);
   }
 }
