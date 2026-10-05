@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import { classifyPrRegressions, supportedPrEnvironment, installationFingerprint } from './pr-regression-inputs.ts';
 import { assertPrObligations, foundationNegativeTests, observeRegressionProcess, prObligations } from './pr-regression-command.ts';
-import type { Execution } from './pr-regression-command.ts';
+import type { Execution, Obligation, ObservedObligation } from './pr-regression-command.ts';
 import { validatePrFoundationRoute } from './conformance.ts';
 
 const repository = fileURLToPath(new URL('../../', import.meta.url));
@@ -82,14 +82,22 @@ export function registerPrRegressionTests(): void {
     let head = f.freeze();
     let result = await f.plan(head);
     assert.equal(result.mode, 'affected-pr');
-    assert.deepEqual(result.deferred, ['foundation-negative', 'fms', 'cms-regression', 'docs-portable']);
-    assert.equal(result.run.includes('ci-selftests'), true, 'scope-reading classifier tests stay current');
+    assert.deepEqual(result.deferred, ['foundation-negative', 'fms', 'cms-regression', 'ci-selftests', 'docs-portable']);
+    assert.deepEqual(result.run, []);
+    assert.equal(result.scopes?.common, result.scopes?.baseCommon);
+    assert.equal(result.scopes?.['ci-selftests'], result.scopes?.['base:ci-selftests']);
     f.git('reset', '--quiet', '--hard', f.base);
     await f.body(er);
     head = f.freeze(); result = await f.plan(head);
     assert.equal(result.mode, 'affected-pr');
-    assert.deepEqual(result.deferred, ['foundation-negative', 'fms', 'docs-portable']);
+    assert.deepEqual(result.deferred, ['foundation-negative', 'fms', 'ci-selftests', 'docs-portable']);
     assert.ok(result.run.includes('cms-regression'));
+    f.git('reset', '--quiet', '--hard', f.base);
+    await f.body('packages/contexts/runtime-configuration/tests/package/curated-assembly-surface.test.ts');
+    result = await f.plan(f.freeze());
+    assert.equal(result.mode, 'affected-pr');
+    assert.deepEqual(result.run, []);
+    assert.ok(result.deferred.includes('ci-selftests'));
   });
   test('every one of the sixteen actual Foundation body anchors runs the entire negative obligation', async t => {
     const f = await fixture(t);
@@ -112,6 +120,13 @@ export function registerPrRegressionTests(): void {
     const f = await fixture(t);
     const mutations: Array<[string, () => Promise<unknown>]> = [
       ['common', () => f.body('scripts/ci/policy.ts')],
+      ['CI helper', () => f.body('scripts/ci/pr-regression-command.ts')],
+      ['CI tests', () => f.body('scripts/ci/contracts.test.ts')],
+      ['live conformance', () => f.body('scripts/ci/conformance.ts')],
+      ['actual ER runner anchor', () => f.body('packages/apps/embedded-runtime/scripts/run-package-tests.mjs')],
+      ['workflow', () => f.body('.github/workflows/ci-lane.yml')],
+      ['regression policy', () => f.body('architecture/foundation/ci-pr-regressions.json')],
+      ['frozen install input', () => f.body('pnpm-lock.yaml')],
       ['profile', () => f.body('architecture/feature-module-standard/candidate-profile.json')],
       ['manifest', () => f.body('packages/contexts/runtime-configuration/package.json')],
       ['toolchain', () => f.body('packages/contexts/runtime-configuration/tsconfig.json')],
@@ -126,7 +141,10 @@ export function registerPrRegressionTests(): void {
     ];
     for (const [name, mutate] of mutations) {
       f.git('reset', '--quiet', '--hard', f.base); f.git('clean', '-fdq'); await mutate();
-      assert.equal((await f.plan(f.freeze())).mode, 'full', name);
+      const result = await f.plan(f.freeze());
+      assert.equal(result.mode, 'full', name);
+      assert.deepEqual(result.deferred, [], name);
+      assert.ok(result.run.includes('ci-selftests'), name);
     }
   });
   test('missing or malformed SHAs, events, worktree bytes and ambient facts never authorize deferral', async t => {
@@ -135,8 +153,15 @@ export function registerPrRegressionTests(): void {
       { base: 'main' }, { head: '0'.repeat(40) }, { head: f.base }, { event: {} },
       { event: { ...f.event(head), action: 'closed' } }, { installation: undefined },
       { environment: { ...trusted, GITHUB_EVENT_NAME: 'merge_group' } },
+      ...['push', 'schedule', 'workflow_dispatch', 'workflow_call'].map(GITHUB_EVENT_NAME => ({ environment: { ...trusted, GITHUB_EVENT_NAME } })),
+      { environment: { ...trusted, PR_REGRESSION_FROZEN_INSTALL: '' } },
       { environment: { ...trusted, NODE_OPTIONS: '--import=evil.mts' } },
       { environment: { ...trusted, NAPI_RS_NATIVE_LIBRARY_PATH: '/tmp/override.node' } },
+      // CI selftests read these inherited fixture/observation inputs. Before
+      // deferral they must refuse overrides, including formerly admitted empty
+      // baseline/fixture values that differ from absence under ?? / undefined.
+      ...['CI_ER_BASELINE_REPORTER', 'CI_ER_PROCESS_PLANS', 'AE_ADOPTION_CAPTURE_DIR', 'CI_FOCUSED_EVIDENCE_DIR', 'FIXTURE_OWNER']
+        .flatMap(key => ['TEST override', ''].map(value => ({ environment: { ...trusted, [key]: value } }))),
       { environment: { ...trusted, RUNNER_ENVIRONMENT: 'self-hosted' } },
       { runtime: { ...facts, glibc: '' } }, { runtime: { ...facts, execArgv: ['--import=evil.mts'] } },
     ];
@@ -156,6 +181,50 @@ export function registerPrRegressionTests(): void {
     await f.body(rc); assert.equal((await f.plan(head)).mode, 'full', 'dirty actual checkout');
     assert.equal(supportedPrEnvironment(trusted, facts), true);
     assert.equal(supportedPrEnvironment({ ...trusted, npm_config_node_options: '--require=evil' }, facts), false);
+  });
+  // Old: the quick route exposes only pnpm test:ci, so it cannot defer the
+  // unchanged regression while retaining live conformance. New: both original
+  // commands are independent obligations, with conformance always executed.
+  test('complete quick obligations retain live conformance and reject deferred execution or passes', () => {
+    const expected: Obligation[] = [
+      { id: 'lint', command: 'pnpm lint' },
+      { id: 'check:node-compat', command: 'pnpm check:node-compat' },
+      { id: 'typecheck:ci', command: 'pnpm typecheck:ci' },
+      { id: 'ci-selftests', command: 'node --test scripts/ci/contracts.test.ts', regression: 'ci-selftests' },
+      { id: 'ci-conformance', command: 'node scripts/ci/conformance.ts' },
+    ];
+    assert.deepEqual(prObligations('quick'), expected);
+    // Explicit unit receipt; this is validation of dispositions, not execution
+    // qualification of lint/typecheck or a claim that these commands passed.
+    const observed: ObservedObligation[] = expected.map(item => item.regression
+      ? { ...item, disposition: 'deferred-unchanged-regression-inputs', tests: [] }
+      : { ...item, disposition: 'executed', execution: { code: 0, signal: null, tests: [], mandatory: [] } });
+    assertPrObligations(expected, observed, ['ci-selftests']);
+    assert.throws(() => assertPrObligations(expected, observed.slice(0, -1), ['ci-selftests']));
+    const lost = structuredClone(observed);
+    Object.assign(lost.at(-1)!, { disposition: 'deferred-unchanged-regression-inputs', regression: 'ci-selftests', tests: [] });
+    assert.throws(() => assertPrObligations(expected, lost, ['ci-selftests']));
+    for (const invented of [{ tests: [{ name: 'invented pass', status: 'passed' }] }, { passed: 1 }, { execution: { code: 0 } }]) {
+      const proof = structuredClone(observed); Object.assign(proof[3]!, invented);
+      assert.throws(() => assertPrObligations(expected, proof, ['ci-selftests']));
+    }
+    assert.throws(() => assertPrObligations(expected, observed, []), /unadmitted deferral/u);
+  });
+  // Old: there is no live conformance obligation outside the combined test:ci
+  // process. New: observe the actual standalone process and reject its failure.
+  test('actual current conformance remains blocking when the CI selftests defer', async t => {
+    const f = await fixture(t);
+    await symlink(join(repository, 'node_modules'), join(f.root, 'node_modules'));
+    const obligation = prObligations('quick').find(item => item.id === 'ci-conformance');
+    assert.deepEqual(obligation, { id: 'ci-conformance', command: 'node scripts/ci/conformance.ts' });
+    assert.ok(obligation);
+    const execution = await observeRegressionProcess(obligation.command, f.root, process.env);
+    assert.equal(execution.code, 0);
+    assertPrObligations([obligation], [{ ...obligation, disposition: 'executed', execution }], ['ci-selftests']);
+    await writeFile(join(f.root, '.node-version'), '26.10.0\n');
+    const failed = await observeRegressionProcess(obligation.command, f.root, process.env);
+    assert.notEqual(failed.code, 0);
+    assert.throws(() => assertPrObligations([obligation], [{ ...obligation, disposition: 'executed', execution: failed }], ['ci-selftests']));
   });
   test('the actual Foundation routing aggregate rejects failed, skipped, cancelled, missing and duplicate routes', async t => {
     const root = await mkdtemp(join(tmpdir(), 'ar-pr-route-TEST-')); t.after(() => rm(root, { recursive: true, force: true }));

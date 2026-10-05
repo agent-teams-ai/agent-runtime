@@ -46,7 +46,9 @@ export function supportedPrEnvironment(env: NodeJS.ProcessEnv, facts: RuntimeFac
     RUNNER_ENVIRONMENT: 'github-hosted', RUNNER_OS: 'Linux', RUNNER_ARCH: 'X64', ImageOS: 'ubuntu24', PR_REGRESSION_FROZEN_INSTALL: 'verified' };
   const override = Object.entries(env).some(([key, value]) => Boolean(value) &&
     /^(?:NODE_OPTIONS|NODE_PATH|NODE_TEST_|NAPI_RS_|OXC_|LD_|DYLD_|TS_NODE_|TSX_|AGENT_TEAMS_|FOUNDATION_FIXTURE_|GIT_(?:OBJECT|ALTERNATE|REPLACE|SHALLOW|INDEX|WORK_TREE|DIR|CONFIG_COUNT|CONFIG_PARAMETERS)|PNPM_(?:HOME|PACKAGE|SUPPORTED)|npm_config_(?:node_options|node_linker|virtual_store|ignore_scripts|force|verify_store|platform|arch|libc|userconfig|globalconfig)|pnpm_config_(?:node_options|node_linker|virtual_store|platform|arch|libc))/iu.test(key));
-  return !override && facts.execArgv.length === 0 && facts.node === 'v24.21.0' && facts.pnpm === '11.18.0'
+  // These selftest inputs distinguish empty strings from absence (?? / undefined).
+  const fixtureOverride = Object.keys(env).some(key => /^(?:CI_ER_|AE_ADOPTION_|CI_FOCUSED_EVIDENCE_DIR|FIXTURE_OWNER)/u.test(key));
+  return !override && !fixtureOverride && facts.execArgv.length === 0 && facts.node === 'v24.21.0' && facts.pnpm === '11.18.0'
     && facts.platform === 'linux' && facts.arch === 'x64' && facts.glibc === '2.39'
     && Object.entries(expected).every(([key, value]) => env[key] === value)
     && /^\d{8}\.\d+(?:\.\d+)?$/u.test(env.ImageVersion ?? '');
@@ -158,13 +160,15 @@ export async function classifyPrRegressions(root: string, input: PrInput): Promi
       'foundation-negative': leaf => policy.foundationAnchors.includes(leaf.path),
       fms: () => false,
       'cms-regression': leaf => policy.cmsBodyRoots.some(bodyRoot => within(leaf.path, bodyRoot)),
-      'ci-selftests': () => true,
+      // CI fixtures execute synthetic bodies; actual runner/test/policy inputs
+      // are common. Membership/kinds/modes and the installed envelope close above.
+      'ci-selftests': leaf => !ordinaryBody(leaf.path),
       'docs-portable': leaf => policy.docsBodyAnchors.includes(leaf.path),
     };
     const scopes = { common: scopeDigest(head.leaves, leaf => !ordinaryBody(leaf.path)),
       baseCommon: scopeDigest(base.leaves, leaf => !ordinaryBody(leaf.path)),
       structure: sha256(JSON.stringify(head.leaves.map(({ path, mode, type }) => ({ path, mode, type })))) };
-    const deferred = regressionIds.filter(id => id !== 'ci-selftests' && !head.leaves.some(leaf => changed.has(leaf.path) && selects[id](leaf)));
+    const deferred = regressionIds.filter(id => !head.leaves.some(leaf => changed.has(leaf.path) && selects[id](leaf)));
     for (const id of regressionIds) {Object.assign(scopes, { [id]: scopeDigest(head.leaves, selects[id]), [`base:${id}`]: scopeDigest(base.leaves, selects[id]) });}
     return { ...full, mode: 'affected-pr', run: regressionIds.filter(id => !deferred.includes(id)), deferred, scopes,
       reason: 'Complete B/H membership, modes, common bytes and whole regression inputs unchanged; all product obligations remain FULL.' };
