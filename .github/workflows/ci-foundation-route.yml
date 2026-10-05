@@ -1,0 +1,52 @@
+name: Foundation scheduling route
+
+on:
+  workflow_call:
+    inputs:
+      revision:
+        required: true
+        type: string
+      artifact:
+        required: true
+        type: string
+      base-revision:
+        default: ''
+        type: string
+      regressions:
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  full:
+    if: ${{ !inputs.regressions }}
+    uses: ./.github/workflows/ci-foundation.yml
+    with:
+      revision: ${{ inputs.revision }}
+      artifact: ${{ inputs.artifact }}
+  pr:
+    if: ${{ inputs.regressions }}
+    uses: ./.github/workflows/ci-pr-regressions.yml
+    with:
+      revision: ${{ inputs.revision }}
+      base-revision: ${{ inputs.base-revision }}
+      artifact: ${{ inputs.artifact }}
+  aggregate:
+    if: ${{ always() }}
+    needs: [full, pr]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require the selected Foundation route to complete
+        shell: bash
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          PR_ROUTE: ${{ inputs.regressions }}
+        run: |
+          set -euo pipefail
+          jq -en --argjson needs "$NEEDS" --argjson pr "$PR_ROUTE" '
+            ($needs | keys == ["full","pr"]) and
+            (if $pr then $needs.pr.result == "success" and $needs.full.result == "skipped"
+             else $needs.full.result == "success" and $needs.pr.result == "skipped" end)'

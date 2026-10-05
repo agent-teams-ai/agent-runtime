@@ -3091,6 +3091,9 @@ boundaries:
   - scripts/ci/package-execution.test.ts
   - scripts/ci/product-fanout-contract.ts
   - scripts/ci/product-fanout-contract.test.ts
+  - scripts/ci/pr-regression-inputs.ts
+  - scripts/ci/pr-regression-inputs.test.ts
+  - scripts/ci/pr-regression-command.ts
   entrypoints:
   - scripts/ci/script-routing.ts
   - scripts/ci/cms-pin-review.ts

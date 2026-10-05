@@ -24,12 +24,16 @@ jobs:
       script: check:ci:quick
       artifact: quick
       revision: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      base-revision: ${{ github.event.pull_request.base.sha || '' }}
+      regressions: ${{ github.event_name == 'pull_request' && github.workflow == 'CI' }}
 
   foundation:
-    uses: ./.github/workflows/ci-foundation.yml
+    uses: ./.github/workflows/ci-foundation-route.yml
     with:
       artifact: foundation
       revision: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      base-revision: ${{ github.event.pull_request.base.sha || '' }}
+      regressions: ${{ github.event_name == 'pull_request' && github.workflow == 'CI' }}
 
   architecture:
     uses: ./.github/workflows/ci-lane.yml
@@ -37,6 +41,8 @@ jobs:
       script: check:ci:architecture
       artifact: architecture
       revision: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      base-revision: ${{ github.event.pull_request.base.sha || '' }}
+      regressions: ${{ github.event_name == 'pull_request' && github.workflow == 'CI' }}
 
   docs:
     uses: ./.github/workflows/ci-lane.yml
@@ -44,6 +50,8 @@ jobs:
       script: check:ci:docs
       artifact: docs
       revision: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      base-revision: ${{ github.event.pull_request.base.sha || '' }}
+      regressions: ${{ github.event_name == 'pull_request' && github.workflow == 'CI' }}
 
   product:
     uses: ./.github/workflows/ci-product.yml
