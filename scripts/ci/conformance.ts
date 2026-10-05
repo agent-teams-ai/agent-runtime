@@ -9,6 +9,7 @@ import { parse } from 'yaml';
 import { assertFullInventory, productPhases, requiredJobs } from './policy.ts';
 import { readScripts } from './inventory.ts';
 import type { Scripts } from './script-routing.ts';
+import { validateNightlyWorkflow } from './nightly-contract.ts';
 
 export const eventRevision = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}";
 const checkoutAction = 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803';
@@ -58,7 +59,8 @@ export function schedulingForEvent(value: unknown, event: SchedulingEvent): { gr
 export function validateWorkflow(main: unknown, reusable: unknown, platform: Record<string, string>): void {
   const workflow = object(main);
   assert.deepEqual(workflow.permissions, { contents: 'read' });
-  assert.deepEqual(Object.keys(object(workflow.on)).toSorted(), ['merge_group', 'pull_request', 'push']);
+  assert.deepEqual(Object.keys(object(workflow.on)).toSorted(), ['merge_group', 'pull_request', 'push', 'workflow_call']);
+  assert.deepEqual(object(workflow.on).workflow_call, {}, 'full CI exposes only an inputless reusable call');
   assert.deepEqual(object(workflow.on).push, { branches: ['main'] });
   validateScheduling(workflow.concurrency);
   const jobs = object(workflow.jobs);
@@ -209,7 +211,9 @@ export async function conformance(root: string): Promise<void> {
   assert.deepEqual(originalPolicy, predecessorPolicy, 'Docs baseline migration preserves source-policy scope');
   assertFullInventory(scripts, baseline.scripts);
   const platform: Record<string, string> = JSON.parse(await read('scripts/ci/platform-contract.json'));
-  validateWorkflow(parse(await read('.github/workflows/ci.yml')), parse(await read('.github/workflows/ci-lane.yml')), platform);
+  const runtime: unknown = parse(await read('.github/workflows/ci.yml'));
+  validateWorkflow(runtime, parse(await read('.github/workflows/ci-lane.yml')), platform);
+  validateNightlyWorkflow(parse(await read('.github/workflows/ci-nightly.yml')), runtime, platform);
   for (const file of ['.github/workflows/docs-protocol.yml', '.github/workflows/commit-author-identity.yml', '.github/workflows/node-26-compatibility.yml', 'scripts/ci/audit-node-engine-compatibility.mjs', 'scripts/ci/node-engine-compatibility.test.mjs', 'scripts/ci/node-runtime-compatibility.test.mjs']) {
     assert.equal(createHash('sha256').update(await read(file)).digest('hex'), platform[file], `${file} trust contract changed`);
   }

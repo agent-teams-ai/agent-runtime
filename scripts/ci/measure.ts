@@ -204,7 +204,9 @@ export const inputPaths = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yam
   'experiments/rust-system-boundaries/Cargo.lock', 'scripts/ci/measure.ts', 'scripts/ci/compare.ts',
   'scripts/ci/policy.ts', 'scripts/ci/script-routing.ts', 'scripts/ci/conformance.ts', 'scripts/ci/gate.ts',
   'scripts/ci/inventory.ts', 'scripts/ci/contracts.test.ts', 'scripts/ci/tsconfig.json',
-  'scripts/ci/cms-pin-review.ts', 'scripts/ci/cms-pin-review.test.ts'] as const;
+  'scripts/ci/cms-pin-review.ts', 'scripts/ci/cms-pin-review.test.ts',
+  'scripts/ci/nightly-contract.ts', 'scripts/ci/nightly-contract.test.ts',
+  '.github/workflows/ci.yml', '.github/workflows/ci-nightly.yml'] as const;
 
 export function toolchainKeys(entry: string): string[] {
   return entry === 'check' || /^check:ci:product(?::(?:packages|root|native))?$/u.test(entry)

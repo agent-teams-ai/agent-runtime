@@ -1,0 +1,18 @@
+name: CI Nightly
+
+on:
+  schedule:
+    - cron: '17 1 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    uses: ./.github/workflows/ci.yml
+  docs-protocol:
+    permissions:
+      contents: read
+      id-token: write
+    uses: agent-teams-ai/.github/.github/workflows/docs-protocol-check.yml@b30455e32cf5d54ade6d8301637701347e4ce57c
