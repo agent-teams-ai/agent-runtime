@@ -23,7 +23,7 @@ async function fixture() {
     await mkdir(join(packageRoot, path.slice(0, path.lastIndexOf('/'))), { recursive: true });
     // Each file proves isolation: a process-global mutation cannot leak to another file.
     await writeFile(join(packageRoot, path), `import assert from 'node:assert/strict';\nimport {test, describe} from 'node:test';\ntest('identity-${index}', () => { assert.equal(process.env.FIXTURE_OWNER, undefined); process.env.FIXTURE_OWNER = '${index}'; });\n`
-      + (index === 0 ? "test('skipped-identity', {skip: 'TEST skip preserved'}, () => {});\n" : '')
+      + (index === 0 ? "test('skipped-identity', {skip: 'TEST skip preserved'}, () => {});\nfor (const name of ['repeat', 'repeat']) { test(name, () => {}); }\n" : '')
       + (index === 1 ? "describe('suite-identity', () => { test('nested-identity', () => {}); });\n" : ''));
   }
   return { root, packageRoot, paths: paths.toSorted() };
@@ -115,6 +115,15 @@ test('actual Node full run and three partitions preserve file completion, identi
   assert.equal(commandExit(missing, 1, universe.map(p => join(f.packageRoot, p))), 1);
   const missingEvent = structuredClone(full); missingEvent.observation.events.shift();
   assert.equal(commandExit(missingEvent, 1), 1, 'summary alone cannot cover a missing emitted identity');
+  const balanced = structuredClone(full);
+  const first = balanced.observation.events.find(e => e.name === 'identity-0')!;
+  const second = balanced.observation.events.find(e => e.name === 'repeat')!;
+  balanced.observation.events[balanced.observation.events.indexOf(first)] = { ...second };
+  assert.equal(commandExit(balanced, 1), 1, 'balanced same-file duplicate replacement must reject');
+  const repeated = full.observation.events.filter(e => e.name === 'repeat');
+  assert.deepEqual(repeated.map(e => e.ordinal), [1, 2]);
+  const duplicatedStream = structuredClone(full); duplicatedStream.observation.streams.push(structuredClone(duplicatedStream.observation.streams[0]!));
+  assert.equal(commandExit(duplicatedStream, 2), 1, 'duplicate actual process must reject');
   const missingSummary = structuredClone(full); missingSummary.observation.summaries.length = 0;
   assert.equal(commandExit(missingSummary, 1), 1);
   const duplicate = structuredClone(full); duplicate.observation.completedFiles.push(duplicate.observation.completedFiles[0]!);
@@ -125,7 +134,7 @@ test('actual Node full run and three partitions preserve file completion, identi
   await writeFile(join(f.packageRoot, failing), "import test from 'node:test'; test('real failure', () => { throw Error('TEST assertion failed'); });\n");
   const failed = await run([failing], 'failed');
   assert.notEqual(failed.exitCode, 0); assert.equal(commandExit(failed, 1), 1);
-  const observation: Observation = { events: [], summaries: [], completedFiles: [] };
+  const observation: Observation = { events: [], summaries: [], completedFiles: [], streams: [] };
   assert.throws(() => observeLine('PACKAGE_SUMMARY {"tests":1}', observation), /invalid Node summary/);
   if (process.env.CI_FOCUSED_EVIDENCE_DIR) { await writeFile(join(process.env.CI_FOCUSED_EVIDENCE_DIR, 'synthetic-package-processes.json'), JSON.stringify({
     scope: 'synthetic TEST only; not current product-suite qualification', full, shards, silent, failed,

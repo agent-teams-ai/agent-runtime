@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { glob, lstat, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertObservedStreams } from './product-test-observation.ts';
 import { commandInventory } from './script-routing.ts';
 import type { Command, Scripts } from './script-routing.ts';
 
@@ -39,32 +40,58 @@ const array = (value: unknown): unknown[] => { assert.ok(Array.isArray(value), '
 export interface ProductSource {
   inputs: Record<string, string>; manifests: Record<string, string>; runners: Record<PackageId, string>;
   universe: string[]; fullArgv: string[]; inventories: readonly Command[][];
+  packageStreams: Record<PackageId, { argv: string[]; files: string[] }[]>;
 }
 export interface ExpectedEvidence extends ProductSource {
   sha: string; inputTree: string; nodeExecutable: string; measureDigests: Record<string, string>;
+}
+
+async function assertPhysicalCustody(root: string, tracked: readonly string[], roots: readonly string[]): Promise<void> {
+  const generated = (path: string) => roots.some(base =>
+    ['dist', '.cache', 'node_modules'].some(dir => path === `${base}/${dir}` || path.startsWith(`${base}/${dir}/`)));
+  // Root tests/type projects, typed source policy and native helpers read these
+  // finite source/config/fixture roots. Preserve all tracked hashes separately.
+  const custodyRoots = ['packages', 'experiments', 'scripts', 'architecture', 'docs', 'research', '.github'];
+  const excluded = (path: string) => generated(path) || path.split('/').includes('node_modules')
+    || path === 'experiments/rust-system-boundaries/target' || path.startsWith('experiments/rust-system-boundaries/target/');
+  const common = tracked.filter(path => !path.includes('/'));
+  const selected = tracked.filter(path => !excluded(path) &&
+    (custodyRoots.some(base => path.startsWith(`${base}/`)) || common.includes(path))).toSorted();
+  const observed: string[] = [];
+  const walk = async (base: string): Promise<void> => {
+    assert.equal(await realpath(join(root, base)), join(root, base), 'source ancestry symlink');
+    for (const entry of await readdir(join(root, base), { withFileTypes: true })) {
+      const path = `${base}/${entry.name}`;
+      if (excluded(path)) { continue; }
+      assert.ok(!entry.isSymbolicLink(), `source symlink: ${path}`);
+      if (entry.isDirectory()) { await walk(path); }
+      else { assert.ok(entry.isFile(), `unsupported source input: ${path}`); observed.push(path); }
+    }
+  };
+  for (const base of custodyRoots) {
+    // Tiny disposable fixtures need only their actual source roots.
+    try { await lstat(join(root, base)); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT' && !tracked.some(path => path.startsWith(`${base}/`))) { continue; }
+      throw error;
+    }
+    await walk(base);
+  }
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    if (common.includes(entry.name) || /\.(?:[cm]?ts|[cm]?js|json|ya?ml|toml|lock|c|h|sh)$/u.test(entry.name)) {
+      assert.ok(entry.isFile(), `unsupported root source input: ${entry.name}`); observed.push(entry.name);
+    }
+  }
+  assert.deepEqual(observed.toSorted(), selected, 'untracked/ignored or missing source inputs');
 }
 
 // Independent source oracle: every tracked byte and the original four expansions.
 // It reads source files, never imports a product module or takes a receipt's universe.
 export async function readProductSource(root: string, tracked: readonly string[]): Promise<ProductSource> {
   const roots = Object.values(packageRoots);
-  const generated = (path: string) => roots.some(base =>
-    ['dist', '.cache', 'node_modules'].some(dir => path === `${base}/${dir}` || path.startsWith(`${base}/${dir}/`)));
-  const common = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.node-version', 'tsconfig.json'];
-  const selected = tracked.filter(path => !generated(path) &&
-    (roots.some(base => path.startsWith(`${base}/`)) || path.startsWith('scripts/ci/') || path.startsWith('.github/workflows/') || common.includes(path))).toSorted();
-  const observed: string[] = [];
-  for (const base of [...roots, 'scripts/ci', '.github/workflows']) {
-    assert.equal(await realpath(join(root, base)), join(root, base), 'source root symlink');
-    for (const entry of await readdir(join(root, base), { recursive: true, withFileTypes: true })) {
-      const path = relative(root, join(entry.parentPath, entry.name)).replaceAll('\\', '/');
-      if (generated(path) || entry.isDirectory()) { continue; }
-      assert.ok(entry.isFile(), `unsupported source input: ${path}`); observed.push(path);
-    }
-  }
-  assert.deepEqual([...observed, ...common].toSorted(), selected, 'untracked/ignored or missing source inputs');
+  await assertPhysicalCustody(root, tracked, roots);
   const inputs: Record<string, string> = {};
   for (const path of [...tracked].toSorted()) {
+    assert.equal(await realpath(join(root, path, '..')), join(root, path, '..'), `tracked source ancestry symlink: ${path}`);
     assert.ok((await lstat(join(root, path))).isFile(), `non-file tracked input: ${path}`);
     inputs[path] = hash(await readFile(join(root, path)));
   }
@@ -102,8 +129,57 @@ export async function readProductSource(root: string, tracked: readonly string[]
   }
   assert.equal(new Set(fullFiles).size, fullFiles.length, 'overlapping original patterns');
   const universe = fullFiles.toSorted(); assert.ok(universe.length >= 3, 'empty AE partition');
+  const packageStreams = {} as ProductSource['packageStreams'];
+  // Independent directory expansion of the unchanged finite Node runner grammar.
+  // Do not use the producer's glob, selection or receipt as this oracle.
+  const expand = async (base: string, pattern: string): Promise<string[]> => {
+    let prefixes = [''];
+    for (const part of pattern.split('/')) {
+      assert.ok(part === '*' || part === '*.test.ts' || /^[a-z0-9.-]+$/u.test(part), 'unsupported original runner input');
+      const next: string[] = [];
+      for (const prefix of prefixes) {
+        const names = await readdir(join(base, prefix));
+        next.push(...names.filter(name => !name.startsWith('.') && (part === '*' || (part === '*.test.ts' ? name.endsWith('.test.ts') : name === part)))
+          .map(name => prefix ? `${prefix}/${name}` : name));
+      }
+      prefixes = next.toSorted();
+    }
+    assert.ok(prefixes.length > 0, `unmatched original runner input: ${pattern}`);
+    for (const file of prefixes) {
+      assert.ok((await lstat(join(base, file))).isFile(), 'regular runner input required');
+      assert.equal(await realpath(join(base, file)), join(base, file), 'runner source symlink');
+      assert.ok(inputs[relative(root, join(base, file))], 'runner input outside tracked source');
+    }
+    return prefixes;
+  };
+  for (const [id, path] of Object.entries(packageRoots)) {
+    const base = join(root, path);
+    let processes: string[][];
+    if (id === 'embedded-runtime') {
+      assert.equal(runners[id], 'node scripts/run-package-tests.mjs', 'original ER runner required');
+      const source = await readFile(join(base, 'scripts/run-package-tests.mjs'), 'utf8');
+      const literal = /export const testProcesses = (\[[\s\S]*?\n\]);/u.exec(source)?.[1];
+      assert.ok(literal, 'explicit ER process source required');
+      const parsed: unknown = JSON.parse(literal);
+      assert.ok(Array.isArray(parsed) && parsed.length === 2 && parsed.every(args => Array.isArray(args) && args.every(arg => typeof arg === 'string')));
+      processes = (parsed as string[][]).map(args => ['--test-reporter=./scripts/adoption-test-reporter.mjs', ...args]);
+    } else {
+      const args = runners[id as PackageId].split(' ');
+      assert.deepEqual(args.slice(0, 3), ['node', '--test', '--test-concurrency=1'], 'original serial Node runner required');
+      processes = [args.slice(1)];
+    }
+    packageStreams[id as PackageId] = [];
+    for (const args of processes) {
+      const options = args.filter(arg => arg.startsWith('--'));
+      const files: string[] = [];
+      for (const pattern of args.filter(arg => !arg.startsWith('--'))) { files.push(...await expand(base, pattern)); }
+      assert.equal(new Set(files).size, files.length, 'overlapping whole-package runner files');
+      packageStreams[id as PackageId].push({ argv: [...options, ...files], files });
+    }
+  }
+  assert.deepEqual(packageStreams['agent-execution'][0]!.files, fullFiles, 'independent AE expansion drift');
   return { inputs, manifests, runners, universe, fullArgv: ['--test', '--test-concurrency=1', ...fullFiles],
-    inventories: phaseEntries.map(entry => commandInventory(scripts, entry)) };
+    packageStreams, inventories: phaseEntries.map(entry => commandInventory(scripts, entry)) };
 }
 
 export function assertJobResults(needs: unknown): void {
@@ -169,6 +245,7 @@ export function assertPackageEvidence(expected: ExpectedEvidence, receipts: read
       assert.deepEqual(report.selection, { ...binding, universe: expected.universe, bindingHash: hash(JSON.stringify(binding)) }, 'AE exact modulo selection drift');
       assert.ok(selected.length > 0); union.push(...selected);
     } else { assert.equal(report.selection, null, 'other five run whole commands'); }
+    assertObservedStreams(expected, proof, { id, index, selected, root, packageRoot: packageRoots[id] });
     const observation = object(proof.observation);
     const summaries = array(observation.summaries).map(object);
     assert.equal(summaries.length, id === 'embedded-runtime' ? 2 : 1, 'actual process summaries missing');

@@ -3091,6 +3091,7 @@ boundaries:
   - scripts/ci/package-execution.test.ts
   - scripts/ci/product-fanout-contract.ts
   - scripts/ci/product-fanout-contract.test.ts
+  - scripts/ci/product-test-observation.ts
   entrypoints:
   - scripts/ci/script-routing.ts
   - scripts/ci/cms-pin-review.ts

@@ -3,7 +3,6 @@ import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { glob, lstat, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { basename, join, relative, resolve } from 'node:path';
-import { createInterface } from 'node:readline';
 import type { TestEvent } from 'node:test/reporters';
 import { fileURLToPath } from 'node:url';
 
@@ -150,47 +149,74 @@ export async function snapshotScripts(root: string): Promise<Record<string, stri
 export async function snapshotSource(root: string): Promise<Record<string, string>> {
   const paths = execFileSync('git', ['ls-tree', '-r', '--name-only', '-z', 'HEAD'], { cwd: root, encoding: 'utf8' })
     .split('\0').filter(Boolean).toSorted();
-  const result: Record<string, string> = {};
-  for (const path of paths) {
-    assert.ok((await lstat(join(root, path))).isFile(), `non-file source input: ${path}`);
-    result[path] = hash(await readFile(join(root, path)));
-  }
-  return result;
+  const { readProductSource } = await import('./product-fanout-contract.ts');
+  return (await readProductSource(root, paths)).inputs;
 }
 export interface Summary { tests: number; passed: number; failed: number; cancelled: number; skipped: number; todo: number; success: boolean }
-export interface Observation { summaries: Summary[]; events: Record<string, unknown>[]; completedFiles: string[] }
-// These are actual Node events. Preserve source locations/nesting; do not invent ancestry or TAP identities.
+export interface StreamPlan { executable: string; argv: string[]; cwd: string; files: string[] }
+export interface NodeProcessObservation { pid: number; executable: string; argv: string[]; cwd: string; summary: Summary }
+export interface CapturedStream { index: number; node: NodeProcessObservation; stdout: string; stderr: string; original: Record<string, unknown> | null }
+export interface Observation { summaries: Summary[]; events: Record<string, unknown>[]; completedFiles: string[]; streams: CapturedStream[] }
+const emptyObservation = (): Observation => ({ summaries: [], events: [], completedFiles: [], streams: [] });
+
+function registrationStatus(event: Extract<TestEvent, {type: 'test:pass' | 'test:fail'}>): string {
+  const d = event.data;
+  return d.todo ? 'todo' : d.skip ? 'skipped' : event.type === 'test:pass' ? 'passed' : 'failed';
+}
+// Registration occurrences come from Node's ordered start/outcome events. A
+// repeated registration site is valid; its occurrence is part of its identity.
 export default async function* reporter(source: AsyncIterable<TestEvent>): AsyncGenerator<string> {
+  const observerOnly = process.env.CI_ER_PROCESS_OBSERVER === '1';
+  const stack: Record<string, unknown>[] = [], pending: Record<string, unknown>[] = [];
+  let occurrences = new Map<string, number>();
   for await (const event of source) {
-    if (event.type === 'test:pass' || event.type === 'test:fail') {
+    if (!observerOnly && event.type === 'test:start') {
       const d = event.data;
-      yield `PACKAGE_EVENT ${JSON.stringify({ observerPid: process.pid, file: d.file, line: d.line, column: d.column,
-        name: d.name, nesting: d.nesting, kind: d.details.type, status: d.todo ? 'todo' : d.skip ? 'skipped' : event.type === 'test:pass' ? 'passed' : 'failed' })}\n`;
+      assert.equal(stack.length, d.nesting);
+      const ancestry = stack.map(item => item.segment);
+      const site = [d.file, d.line, d.column, d.name];
+      const key = JSON.stringify([ancestry, site]);
+      const ordinal = (occurrences.get(key) ?? 0) + 1; occurrences.set(key, ordinal);
+      stack.push({ file: d.file, line: d.line, column: d.column, name: d.name, ancestry, ordinal,
+        segment: [...site, ordinal], nesting: d.nesting });
+    } else if (!observerOnly && (event.type === 'test:pass' || event.type === 'test:fail')) {
+      const d = event.data, registration = stack.pop();
+      assert.equal(registration?.name, d.name); assert.equal(stack.length, d.nesting);
+      const { segment: _segment, ...identity } = registration!;
+      pending.push({ observerPid: process.pid, ...identity, kind: d.details.type,
+        status: registrationStatus(event) });
     } else if (event.type === 'test:summary') {
-      if (event.data.file === undefined)
-        {yield `PACKAGE_SUMMARY ${JSON.stringify({ observerPid: process.pid, ...event.data.counts, success: event.data.success })}\n`;}
-      else {yield `PACKAGE_FILE ${JSON.stringify({ file: event.data.file, success: event.data.success })}\n`;}
-    } else if (event.type === 'test:stdout' || event.type === 'test:stderr') {yield event.data.message;}
-    else if (event.type === 'test:diagnostic') {yield `# ${event.data.message}\n`;}
+      const d = event.data;
+      if (d.file === undefined) {
+        assert.equal(pending.length, 0);
+        const counts = { ...d.counts, success: d.success };
+        yield `PACKAGE_NODE_PROCESS ${JSON.stringify({ pid: process.pid, executable: process.execPath,
+          argv: [...process.execArgv, ...process.argv.slice(1)], cwd: process.cwd(), summary: counts })}\n`;
+        if (!observerOnly) { yield `PACKAGE_SUMMARY ${JSON.stringify(counts)}\n`; }
+      } else if (!observerOnly) {
+        assert.equal(stack.length, 0);
+        for (const identity of pending) { yield `PACKAGE_EVENT ${JSON.stringify({ ...identity, suite: d.file })}\n`; }
+        yield `PACKAGE_FILE ${JSON.stringify({ file: d.file, success: d.success })}\n`;
+        pending.length = 0; occurrences = new Map();
+      }
+    } else if (!observerOnly && (event.type === 'test:stdout' || event.type === 'test:stderr')) { yield event.data.message; }
+    else if (!observerOnly && event.type === 'test:diagnostic') { yield `# ${event.data.message}\n`; }
   }
 }
 export function observeLine(line: string, observation: Observation): void {
-  const eventPrefix = 'PACKAGE_EVENT ', summaryPrefix = 'PACKAGE_SUMMARY ', filePrefix = 'PACKAGE_FILE ';
-  if (line.startsWith(eventPrefix)) {observation.events.push(object(json(line.slice(eventPrefix.length))));}
-  else if (line.startsWith(summaryPrefix)) {observation.summaries.push(summary(object(json(line.slice(summaryPrefix.length)))));}
-  else if (line.startsWith(filePrefix)) {
-    const value = object(json(line.slice(filePrefix.length)));
-    assert.equal(typeof value.file, 'string', 'missing completed file');
-    assert.equal(value.success, true, 'failed test file');
+  if (line.startsWith('PACKAGE_EVENT ')) { observation.events.push(object(json(line.slice(14)))); }
+  else if (line.startsWith('PACKAGE_SUMMARY ')) { observation.summaries.push(summary(object(json(line.slice(16))))); }
+  else if (line.startsWith('PACKAGE_FILE ')) {
+    const value = object(json(line.slice(13)));
+    assert.equal(typeof value.file, 'string', 'missing completed file'); assert.equal(value.success, true, 'failed test file');
     observation.completedFiles.push(String(value.file));
-  }
-  else if (line.startsWith('{')) {
-    let value: unknown;
-    try { value = json(line); } catch { return; }
+  } else if (line.startsWith('{')) {
+    let value: unknown; try { value = json(line); } catch { return; }
     const record = object(value);
-    // Existing Embedded Runtime reporter emits its own typed event envelope.
-    if (record.kind === 'summary') {observation.summaries.push(summary({ ...object(record.counts), success: record.success }));}
-    else if (record.kind === 'test') {observation.events.push(record);}
+    if (record.kind === 'summary') { observation.summaries.push(summary({ ...object(record.counts), success: record.success })); }
+    else if (record.kind === 'test') { observation.events.push(record); }
+    else if (record.kind === 'file') { assert.equal(record.success, true); observation.completedFiles.push(String(record.suite)); }
+    else if (record.kind === 'failure') { throw new Error('Embedded Runtime test failure'); }
   }
 }
 function summary(record: Record<string, unknown>): Summary {
@@ -199,6 +225,31 @@ function summary(record: Record<string, unknown>): Summary {
   assert.equal(typeof record.success, 'boolean', 'missing Node summary outcome');
   return { tests: Number(record.tests), passed: Number(record.passed), failed: Number(record.failed),
     cancelled: Number(record.cancelled), skipped: Number(record.skipped), todo: Number(record.todo), success: record.success === true };
+}
+function captured(stdout: string, stderr: string, index: number, original: Record<string, unknown> | null): Observation {
+  const observation = emptyObservation(), nodes: NodeProcessObservation[] = [];
+  let begin = 0, end = 0;
+  for (const line of [...stdout.split('\n'), ...stderr.split('\n')]) {
+    if (line.startsWith('PACKAGE_NODE_PROCESS ')) {
+      const record = object(json(line.slice(21)));
+      assert.ok(Number.isSafeInteger(record.pid) && Number(record.pid) > 0);
+      assert.equal(typeof record.executable, 'string'); assert.equal(typeof record.cwd, 'string');
+      assert.ok(Array.isArray(record.argv) && record.argv.every(v => typeof v === 'string'));
+      nodes.push({ pid: Number(record.pid), executable: String(record.executable), cwd: String(record.cwd),
+        argv: record.argv as string[], summary: summary(object(record.summary)) });
+    } else { observeLine(line, observation); }
+    if (line.startsWith('{')) {
+      let record: Record<string, unknown>; try { record = object(json(line)); } catch { continue; }
+      if (record.kind === 'begin') { begin++; } if (record.kind === 'end') { end++; }
+    }
+  }
+  assert.equal(nodes.length, 1, 'one actual Node process envelope per stream');
+  if (original) {
+    assert.equal(begin, 1, 'missing/duplicate ER begin'); assert.equal(end, 1, 'missing/duplicate ER end');
+    for (const event of observation.events) { event.observerPid = nodes[0]!.pid; }
+  }
+  observation.streams.push({ index, node: nodes[0]!, stdout, stderr, original });
+  return observation;
 }
 export interface CommandResult { executable: string; argv: string[]; cwd: string; pid: number | null; start: string; end: string; wallMs: number; exitCode: number | null; signal: NodeJS.Signals | null; error: string | null; observation: Observation }
 export interface PackageReceipt {
@@ -210,38 +261,117 @@ export interface PackageReceipt {
   sourceBefore: Record<string, string>; sourceAfter: Record<string, string>;
   commands: CommandResult[]; exitCode: number; failure: string | null; coverage: string;
 }
+export async function packageStreamPlans(root: string, shard: Shard, selection: Selection | null): Promise<StreamPlan[]> {
+  const cwd = join(root, shard.package.root);
+  let argvs: string[][];
+  if (selection) { argvs = [['--test', '--test-concurrency=1', `--test-reporter=${join(root, 'scripts/ci/package-execution.ts')}`, ...selection.files]]; }
+  else if (shard.package.name === '@agent-teams/embedded-runtime') {
+    const source = await readFile(join(cwd, 'scripts/run-package-tests.mjs'), 'utf8');
+    const literal = /export const testProcesses = (\[[\s\S]*?\n\]);/u.exec(source)?.[1];
+    assert.ok(literal, 'explicit original ER testProcesses required');
+    const processes: unknown = json(literal);
+    assert.ok(Array.isArray(processes) && processes.length === 2 && processes.every(args => Array.isArray(args) && args.every(arg => typeof arg === 'string')));
+    argvs = (processes as string[][]).map(args => ['--test-reporter=./scripts/adoption-test-reporter.mjs', ...args]);
+  } else {
+    const manifest = object(json(await readFile(join(cwd, 'package.json'), 'utf8')));
+    const script = object(manifest.scripts).test; assert.equal(script, shard.package.test);
+    const args = String(script).split(' '); assert.deepEqual(args.slice(0, 3), executionPrefix);
+    const files: string[] = [];
+    for (const pattern of args.slice(3)) {
+      const matches: string[] = [];
+      for await (const file of glob(pattern, { cwd })) { if (!file.split('/').some(part => part.startsWith('.'))) { matches.push(file); } }
+      assert.ok(matches.length > 0, 'unmatched original package pattern'); files.push(...matches.toSorted());
+    }
+    argvs = [[...args.slice(1, 3), ...files]];
+  }
+  return argvs.map(argv => ({ executable: process.execPath, argv, cwd, files: argv.filter(arg => !arg.startsWith('--')).map(file => join(cwd, file)) }));
+}
+function validateCapturedStream(stream: CapturedStream, index: number, plan?: StreamPlan, sourceFiles?: readonly string[]): Observation {
+  assert.equal(stream.index, index);
+  const actual = captured(stream.stdout, stream.stderr, index, stream.original);
+  assert.deepEqual(actual.streams[0], stream, 'raw process envelope drift');
+  if (plan) {
+    assert.equal(stream.node.executable, plan.executable); assert.equal(stream.node.cwd, plan.cwd);
+    assert.deepEqual(stream.node.argv, plan.argv, 'original process argv drift');
+    const completed = actual.completedFiles.map(file => resolve(stream.node.cwd, stream.original ? '../../..' : '.', file));
+    assert.deepEqual(completed.toSorted(), plan.files.toSorted(), 'whole-package file universe drift');
+  }
+  if (stream.original) {
+    assert.equal(stream.original.index, index); assert.equal(stream.original.executable, 'node');
+    assert.deepEqual(stream.original.argv, stream.node.argv); assert.equal(stream.original.exitCode, 0); assert.equal(stream.original.signal, null);
+    assert.equal(stream.original.cwd, relative(resolve(stream.node.cwd, '../../..'), stream.node.cwd));
+    assert.ok(Number.isFinite(Date.parse(String(stream.original.start))) && Date.parse(String(stream.original.end)) >= Date.parse(String(stream.original.start)));
+    assert.equal(stream.original.stdout, `process-${index}.stdout`); assert.equal(stream.original.stderr, `process-${index}.stderr`);
+  }
+  assert.deepEqual(actual.summaries, [stream.node.summary], 'summary/stream mismatch');
+  const occurrences = new Map<string, number[]>();
+  const identities = actual.events.map(event => JSON.stringify([event.suite, event.file, event.line, event.column, event.name ?? event.title, event.ancestry, event.ordinal, event.type ?? event.kind]));
+  assert.equal(new Set(identities).size, identities.length, 'duplicate registration identity');
+  for (const event of actual.events) {
+    assert.ok(Number.isSafeInteger(event.ordinal) && Number(event.ordinal) > 0, 'registration occurrence missing');
+    assert.ok(Array.isArray(event.ancestry)); assert.equal(event.observerPid, stream.node.pid);
+    assert.ok(Number.isSafeInteger(event.line) && Number(event.line) > 0 && Number.isSafeInteger(event.column) && Number(event.column) > 0);
+    if (sourceFiles) { assert.ok(sourceFiles.includes(resolve(stream.node.cwd, stream.original ? '../../..' : '.', String(event.file))), 'registration outside source custody'); }
+    const site = JSON.stringify([event.suite, event.file, event.line, event.column, event.name ?? event.title, event.ancestry, event.type ?? event.kind]);
+    const ordinals = occurrences.get(site) ?? []; ordinals.push(Number(event.ordinal)); occurrences.set(site, ordinals);
+    assert.ok(actual.completedFiles.includes(String(event.suite)), 'foreign registration suite');
+  }
+  for (const ordinals of occurrences.values()) { assert.deepEqual(ordinals.toSorted((a, b) => a - b), ordinals.map((_, i) => i + 1)); }
+  return actual;
+}
 export function commandExit(result: Pick<CommandResult, 'exitCode' | 'signal' | 'error' | 'observation'>, expectedProcesses?: number,
-  expectedFiles?: readonly string[]): number {
+  expectedFiles?: readonly string[], plans?: readonly StreamPlan[], sourceFiles?: readonly string[]): number {
   if (result.error || result.signal) {return 1;}
   if (result.exitCode !== 0) {return result.exitCode ?? 1;}
   if (expectedProcesses === undefined) {return 0;}
-  if (result.observation.events.length === 0) {return 1;}
-  if (expectedFiles && (new Set(result.observation.completedFiles).size !== result.observation.completedFiles.length
-    || JSON.stringify(result.observation.completedFiles.toSorted()) !== JSON.stringify(expectedFiles.toSorted()))) {return 1;}
-  const counts = result.observation.summaries;
-  if (counts.length !== expectedProcesses || !counts.every(item => item.success && item.tests > 0 && item.passed > 0
-    && item.failed === 0 && item.cancelled === 0 && item.todo === 0 && item.passed + item.skipped === item.tests)) {return 1;}
-  const tests = result.observation.events.filter(event => (event.type ?? event.kind) === 'test');
-  const total = (key: 'tests' | 'passed' | 'skipped') => counts.reduce((sum, item) => sum + item[key], 0);
-  return tests.length === total('tests') && tests.filter(event => event.status === 'passed').length === total('passed')
-    && tests.filter(event => event.status === 'skipped').length === total('skipped') ? 0 : 1;
+  try {
+    const observation = result.observation;
+    assert.equal(observation.streams.length, expectedProcesses);
+    assert.equal(new Set(observation.streams.map(stream => stream.node.pid)).size, expectedProcesses, 'duplicate process envelope');
+    const recomputed = emptyObservation();
+    for (const [index, stream] of observation.streams.entries()) {
+      const actual = validateCapturedStream(stream, index, plans?.[index], sourceFiles);
+      recomputed.events.push(...actual.events); recomputed.summaries.push(...actual.summaries); recomputed.completedFiles.push(...actual.completedFiles);
+      const counts = stream.node.summary, tests = actual.events.filter(event => (event.type ?? event.kind) === 'test');
+      assert.ok(counts.success && counts.tests > 0 && counts.passed > 0 && counts.failed === 0 && counts.cancelled === 0 && counts.todo === 0 && counts.passed + counts.skipped === counts.tests);
+      assert.equal(tests.length, counts.tests); assert.equal(tests.filter(event => event.status === 'passed').length, counts.passed);
+      assert.equal(tests.filter(event => event.status === 'skipped').length, counts.skipped);
+    }
+    assert.deepEqual(observation.events, recomputed.events, 'raw event binding drift');
+    assert.deepEqual(observation.summaries, recomputed.summaries); assert.deepEqual(observation.completedFiles, recomputed.completedFiles);
+    assert.equal(new Set(observation.completedFiles).size, observation.completedFiles.length, 'duplicate completed file');
+    if (expectedFiles) { assert.deepEqual(observation.completedFiles.toSorted(), expectedFiles.toSorted()); }
+    return 0;
+  } catch { return 1; }
 }
 export async function runCommand(executable: string, argv: string[], cwd: string, env: NodeJS.ProcessEnv, logPrefix: string): Promise<CommandResult> {
   const start = new Date().toISOString(), clock = performance.now();
-  const observation: Observation = { summaries: [], events: [], completedFiles: [] };
+  let observation = emptyObservation();
   const logs = { stdout: '', stderr: '' };
   const child = spawn(executable, argv, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let error: string | null = null;
   child.once('error', failure => { error = failure.message; });
   for (const stream of ['stdout', 'stderr'] as const) {
     child[stream].on('data', (bytes: Buffer) => { logs[stream] += bytes.toString(); process[stream].write(bytes); });
-    const lines = createInterface({ input: child[stream] });
-    lines.on('line', line => { try { observeLine(line, observation); } catch (failure) { error = String(failure); } });
   }
   const result = await new Promise<{ exitCode: number | null; signal: NodeJS.Signals | null }>(_resolve => {
     child.once('close', (exitCode, signal) => _resolve({ exitCode, signal }));
   });
   for (const stream of ['stdout', 'stderr'] as const) {await writeFile(`${logPrefix}.${stream}`, logs[stream], { flag: 'wx' });}
+  try {
+    if (env.AE_ADOPTION_CAPTURE_DIR) {
+      const records: unknown = json(await readFile(join(env.AE_ADOPTION_CAPTURE_DIR, 'processes.json'), 'utf8')); assert.ok(Array.isArray(records));
+      for (const [index, value] of records.entries()) {
+        const record = object(value); assert.equal(record.stdout, `process-${index}.stdout`); assert.equal(record.stderr, `process-${index}.stderr`);
+        const stream = captured(await readFile(join(env.AE_ADOPTION_CAPTURE_DIR, String(record.stdout)), 'utf8'),
+          await readFile(join(env.AE_ADOPTION_CAPTURE_DIR, String(record.stderr)), 'utf8'), index, record);
+        observation.events.push(...stream.events); observation.summaries.push(...stream.summaries);
+        observation.completedFiles.push(...stream.completedFiles); observation.streams.push(...stream.streams);
+      }
+    } else if (logs.stdout.includes('PACKAGE_NODE_PROCESS ') || logs.stderr.includes('PACKAGE_NODE_PROCESS ')) {
+      observation = captured(logs.stdout, logs.stderr, 0, null);
+    }
+  } catch (failure) { error = String(failure); }
   return { executable, argv, cwd, pid: child.pid ?? null, start, end: new Date().toISOString(), wallMs: performance.now() - clock, ...result, error, observation };
 }
 function verifySource(root: string, revision: string): void {
@@ -278,6 +408,10 @@ export async function executePackage(root: string, id: unknown, revision: string
     assert.equal((await readFile(join(root, '.node-version'), 'utf8')).trim(), '24.21.0', 'Node file drift');
     const env = { ...process.env }; delete env.NODE_TEST_CONTEXT;
     const testEnv = { ...env, NODE_OPTIONS: `--test-reporter=${self}` };
+    const embeddedEnv = { ...env, CI_ER_PROCESS_OBSERVER: '1', AE_ADOPTION_CAPTURE_DIR: join(output, 'embedded-processes'),
+      NODE_OPTIONS: `--test-reporter=${self} --test-reporter-destination=stderr --test-reporter-destination=stdout` };
+    if (selected.name === '@agent-teams/embedded-runtime') { await mkdir(embeddedEnv.AE_ADOPTION_CAPTURE_DIR); }
+    const plans = await packageStreamPlans(root, shard, report.selection);
     for (const item of packages) {assert.equal(await realpath(join(root, item.root)), join(root, item.root), 'shared/symlinked package root');}
     const commands = [
       { executable: 'pnpm', argv: cleanArgs, cwd: root, env, processes: undefined, files: undefined },
@@ -287,7 +421,7 @@ export async function executePackage(root: string, id: unknown, revision: string
         cwd: join(root, selected.root), env, processes: 1,
         files: report.selection.files.map(path => join(root, selected.root, path)) }
         : { executable: 'pnpm', argv: ['--filter', selected.name, 'run', 'test'], cwd: root,
-          env: selected.name === '@agent-teams/embedded-runtime' ? env : testEnv,
+          env: selected.name === '@agent-teams/embedded-runtime' ? embeddedEnv : testEnv,
           processes: selected.processes, files: undefined },
     ];
     for (const [index, command] of commands.entries()) {
@@ -309,7 +443,7 @@ export async function executePackage(root: string, id: unknown, revision: string
       assert.deepEqual(await executionSelection(root, shard), report.selection, 'test universe drift during execution');
       assert.equal(hash(await readFile(self)), report.runnerHash, 'runner drift during execution');
       verifySource(root, revision);
-      report.exitCode = commandExit(result, command.processes, command.files);
+      report.exitCode = commandExit(result, command.processes, command.files, index === 2 ? plans : undefined, Object.keys(report.sourceBefore).map(file => join(root, file)));
       await save();
       if (report.exitCode !== 0) {return report.exitCode;}
     }
