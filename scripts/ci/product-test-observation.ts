@@ -34,13 +34,14 @@ function parseStream(stdout: string, stderr: string, context: { embedded: boolea
   }
   return {observedNodes, observedEvents, observedSummaries, observedFiles, begin, end};
 }
-function assertCaptureIdentity(stream: Record<string, unknown>, node: Record<string, unknown>, index: number, commandPid: unknown): Record<string, unknown> {
+function assertCaptureIdentity(stream: Record<string, unknown>, node: Record<string, unknown>, index: number, commandPid: unknown, runnerPid: unknown): Record<string, unknown> {
       const rawIdentity = object(JSON.parse(String(stream.identity)));
       assert.equal(rawIdentity.index, index); assert.equal(rawIdentity.summary, undefined);
       assert.equal(rawIdentity.commandPid, commandPid, 'ER OS ancestry must bind the actual runner command');
       const originalCapture = object(stream.original);
       assert.equal(rawIdentity.mechanism, 'spawnSync-return-v1');
       assert.equal(rawIdentity.runnerPid, originalCapture.runnerPid);
+      assert.equal(rawIdentity.runnerPid, runnerPid, 'both original streams require one actual runner');
       assert.equal(rawIdentity.pid, originalCapture.actualPid);
       assert.equal(rawIdentity.executable, originalCapture.actualExecutable);
       assert.equal(rawIdentity.cwd, originalCapture.actualCwd);
@@ -58,6 +59,7 @@ function assertCaptureIdentity(stream: Record<string, unknown>, node: Record<str
       assert.ok(rawIdentity.ancestors.includes(rawIdentity.runnerPid));
       }
       assert.ok(Number.isSafeInteger(rawIdentity.commandPid) && Number(rawIdentity.commandPid) > 0);
+      assert.notEqual(rawIdentity.commandPid, node.pid, 'original child cannot be its command process');
       const { index: _index, commandPid: _commandPid, ancestors: _ancestors, runnerPid: _runnerPid, mechanism: _mechanism, osObserved: _osObserved, ...osIdentity } = rawIdentity; return osIdentity;
 }
 interface StreamContext { id: PackageId; index: number; selected: string[]; root: string; packageRoot: string }
@@ -81,7 +83,7 @@ export function assertObservedStreams(expected: ExpectedEvidence, proof: Record<
     const {observedNodes, observedEvents, observedSummaries, observedFiles, begin, end} = parseStream(String(stream.stdout), String(stream.stderr), { embedded, pid: node.pid });
     if (embedded) {
       assert.equal(typeof stream.identity, 'string', 'actual ER OS process sidecar required');
-      observedNodes.push(assertCaptureIdentity(stream, node, streamIndex, proof.pid));
+      observedNodes.push(assertCaptureIdentity(stream, node, streamIndex, proof.pid, object(streams[0]!.original).runnerPid));
     } else { assert.equal(stream.identity, null); }
     const { summary: _summary, ...processIdentity } = node;
     assert.deepEqual(observedNodes, [embedded ? processIdentity : node], 'raw actual process envelope binding');

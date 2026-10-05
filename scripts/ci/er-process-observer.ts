@@ -57,6 +57,8 @@ export function observeEmbeddedProcesses(plans: readonly Plan[], capture: string
       assert.ok(Number.isSafeInteger(record.actualPid) && Number(record.actualPid) > 0);
       assert.ok(Number.isSafeInteger(record.runnerPid) && Number(record.runnerPid) > 0);
       assert.notEqual(record.actualPid, record.runnerPid);
+      assert.notEqual(record.actualPid, commandPid, 'original child cannot be its command process');
+      assert.equal(record.runnerPid, (records[0] as Record<string, unknown>).runnerPid, 'both original streams require one actual runner');
       assert.ok(!pids.has(Number(record.actualPid)), 'duplicate spawn PID'); pids.add(Number(record.actualPid));
       assert.equal(record.actualExecutable, plan.executable); assert.equal(record.actualCwd, plan.cwd);
       assert.deepEqual(record.argv, plan.argv);
@@ -114,11 +116,12 @@ export function captureStream(stdout: string, stderr: string, index: number, ori
   return observation;
 }
 
-export function assertCapturedIdentity(stream: CapturedStream, commandPid?: number | null): void {
+export function assertCapturedIdentity(stream: CapturedStream, commandPid: number | null | undefined, runnerPid: unknown): void {
   assert.ok(stream.original);
         const identity = object(JSON.parse(stream.identity!));
         assert.equal(identity.mechanism, 'spawnSync-return-v1');
         assert.equal(identity.runnerPid, stream.original.runnerPid);
+        assert.equal(identity.runnerPid, runnerPid, 'both original streams require one actual runner');
         assert.equal(identity.pid, stream.original.actualPid);
         assert.equal(identity.executable, stream.original.actualExecutable);
         assert.equal(identity.cwd, stream.original.actualCwd);
@@ -136,5 +139,6 @@ export function assertCapturedIdentity(stream: CapturedStream, commandPid?: numb
         assert.ok(identity.ancestors.includes(identity.runnerPid));
         }
         assert.ok(Number.isSafeInteger(identity.commandPid) && Number(identity.commandPid) > 0);
+        assert.notEqual(identity.commandPid, stream.node.pid, 'original child cannot be its command process');
         if (commandPid !== undefined) { assert.equal(identity.commandPid, commandPid); }
 }

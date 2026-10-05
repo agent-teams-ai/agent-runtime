@@ -63,7 +63,7 @@ async function embeddedFixture() {
   return { root, base, cwd, plans, sourceFiles };
 }
 
-export function registerPackageExecutionTests(): void {
+function registerEmbeddedCaptureTests(): void {
 test('ER inherited two destinations break a nested one-reporter Node test; bounded spawn capture and OS corroboration preserve original children and two streams', async t => {
   // Old regression: a real nested --test inherits two destinations and only
   // package-execution's reporter. New code must preserve its original output.
@@ -149,6 +149,23 @@ test('ER inherited two destinations break a nested one-reporter Node test; bound
   }
   assert.equal(commandExit(repaired, 2, undefined, f.plans, f.sourceFiles), 0);
   assertObservedStreams(expected, {...repaired}, context);
+  for (const mutate of [
+    (proof: typeof repaired) => {
+      proof.pid = proof.observation.streams[0]!.node.pid;
+      for (const stream of proof.observation.streams) {
+        stream.identity = JSON.stringify({...JSON.parse(stream.identity!), commandPid: proof.pid});
+      }
+    },
+    (proof: typeof repaired) => {
+      const stream = proof.observation.streams[1]!;
+      stream.original!.runnerPid = 1_234_567;
+      stream.identity = JSON.stringify({...JSON.parse(stream.identity!), runnerPid: 1_234_567});
+    },
+  ]) {
+    const corrupted = structuredClone(repaired); mutate(corrupted);
+    assert.equal(commandExit(corrupted, 2, undefined, f.plans, f.sourceFiles), 1, 'impossible capture PID relationship rejects');
+    assert.throws(() => assertObservedStreams(expected, {...corrupted}, context));
+  }
   const duplicate = structuredClone(green); duplicate.observation.streams[1] = structuredClone(duplicate.observation.streams[0]!);
   assert.equal(commandExit(duplicate, 2, undefined, f.plans, f.sourceFiles), 1);
   assert.throws(() => assertObservedStreams(expected, { ...duplicate }, context));
@@ -159,6 +176,10 @@ test('ER inherited two destinations break a nested one-reporter Node test; bound
     scope: 'original ER runner/reporter/argv, disposable typed TEST entries and real nested Node children', old, oldNested, green, executions, missed, repaired, portableDecoderOnly: portable, plans: f.plans,
   }, null, 2) + '\n'); }
 });
+
+}
+export function registerPackageExecutionTests(): void {
+  registerEmbeddedCaptureTests();
 
 test('original four patterns include the literal mjs, exclude nested/helpers/dotfiles, and repartition additions', async t => {
   const f = await fixture(); t.after(() => rm(f.root, { recursive: true, force: true }));
