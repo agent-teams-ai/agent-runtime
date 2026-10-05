@@ -135,7 +135,11 @@ test("stable31 managed bytes stay exact and the current Foundation source policy
   assert.notEqual(currentSourcePolicy, historicalSourcePolicy);
   // CMS successor adds two roots/one public entry; nightly adds two private roots; product fanout adds five private roots; Darwin adds two private feature-local helpers.
   // Reconstruct the prior CI policy, retaining its fixed whole-document oracle.
-  const policyBytes = await read("architecture/foundation/source-dependencies.yaml");
+  const currentPolicyBytes = await read("architecture/foundation/source-dependencies.yaml");
+  const erObserverAddition = "  - scripts/ci/er-process-observer.ts\n";
+  assert.equal(currentPolicyBytes.split(erObserverAddition).length - 1, 1);
+  const policyBytes = currentPolicyBytes.replace(erObserverAddition, "");
+  assert.equal(sha256(policyBytes), "24e9ac285c89436f43f9fcfb0879640ffab008923adf66bae1363a24d5dcf635", "Retain exact c37 source-policy predecessor");
   // Darwin adds only two private helpers; authenticate the exact Root6179 predecessor.
   const darwinAdditions = ["  - scripts/ci/product-workflow-contract.ts\n", "  - scripts/ci/package-native-observation.ts\n"];
   for (const line of darwinAdditions) { assert.equal(policyBytes.split(line).length - 1, 1); }
@@ -150,7 +154,11 @@ test("stable31 managed bytes stay exact and the current Foundation source policy
   const prAdditions = ["  - scripts/ci/pr-regression-inputs.ts\n", "  - scripts/ci/pr-regression-inputs.test.ts\n",
     "  - scripts/ci/pr-regression-command.ts\n"];
   for (const line of prAdditions) { assert.equal(policyBytes.split(line).length - 1, 1); }
-  const beforePr = prAdditions.reduce((bytes, line) => bytes.replaceAll(line, ""), beforeDarwin);
+  const product9164 = prAdditions.reduce((bytes, line) => bytes.replaceAll(line, ""),
+    darwinAdditions.reduce((bytes, line) => bytes.replaceAll(line, ""), currentPolicyBytes));
+  assert.equal(sha256(product9164), "05aa6103baea872064bec0757a30931bbbd63f9a4752ed67fe0ae857d3ef5b82",
+    "Darwin2 and PR3 reversal reconstructs the verified Product9164 policy");
+  const beforePr = product9164.replace(erObserverAddition, "");
   assert.equal(sha256(beforePr), "152d9b7acbface34a9903ddee4ae48c644780f14cd68f50355f8f95212afea92",
     "Darwin and PR reversals retain the exact new Product P2 policy predecessor");
   const beforeObservation = beforePr.replaceAll(observationAddition, "");
@@ -190,7 +198,7 @@ test("stable31 managed bytes stay exact and the current Foundation source policy
   assert.equal(sha256(original), baseline.sourcePolicySha256, "CI source-policy delta must preserve current-main scope");
   const policy = await yaml("architecture/foundation/source-dependencies.yaml");
   const boundary = policy.boundaries.find(value => value.id === "tooling.ci-full-gate");
-  assert.deepEqual(boundary.roots, ["scripts/ci/script-routing.ts", "scripts/ci/policy.ts", "scripts/ci/gate.ts", "scripts/ci/inventory.ts", "scripts/ci/measure.ts", "scripts/ci/conformance.ts", "scripts/ci/compare.ts", "scripts/ci/contracts.test.ts", "scripts/ci/cms-pin-review.ts", "scripts/ci/cms-pin-review.test.ts", "scripts/ci/nightly-contract.ts", "scripts/ci/nightly-contract.test.ts", "scripts/ci/foundation-fixture-sharding.ts", "scripts/ci/foundation-fixture-sharding.test.ts", "scripts/ci/foundation-fanout-contract.ts", "scripts/ci/package-execution.ts", "scripts/ci/package-execution.test.ts", "scripts/ci/product-fanout-contract.ts", "scripts/ci/product-fanout-contract.test.ts", "scripts/ci/product-test-observation.ts", "scripts/ci/pr-regression-inputs.ts", "scripts/ci/pr-regression-inputs.test.ts", "scripts/ci/pr-regression-command.ts", "scripts/ci/product-workflow-contract.ts", "scripts/ci/package-native-observation.ts"]);
+  assert.deepEqual(boundary.roots, ["scripts/ci/script-routing.ts", "scripts/ci/policy.ts", "scripts/ci/gate.ts", "scripts/ci/inventory.ts", "scripts/ci/measure.ts", "scripts/ci/conformance.ts", "scripts/ci/compare.ts", "scripts/ci/contracts.test.ts", "scripts/ci/cms-pin-review.ts", "scripts/ci/cms-pin-review.test.ts", "scripts/ci/nightly-contract.ts", "scripts/ci/nightly-contract.test.ts", "scripts/ci/foundation-fixture-sharding.ts", "scripts/ci/foundation-fixture-sharding.test.ts", "scripts/ci/foundation-fanout-contract.ts", "scripts/ci/package-execution.ts", "scripts/ci/package-execution.test.ts", "scripts/ci/product-fanout-contract.ts", "scripts/ci/product-fanout-contract.test.ts", "scripts/ci/product-test-observation.ts", "scripts/ci/er-process-observer.ts", "scripts/ci/pr-regression-inputs.ts", "scripts/ci/pr-regression-inputs.test.ts", "scripts/ci/pr-regression-command.ts", "scripts/ci/product-workflow-contract.ts", "scripts/ci/package-native-observation.ts"]);
   assert.equal(boundary.dependencyMode, "development");
   assert.deepEqual(boundary.entrypoints, ["scripts/ci/script-routing.ts", "scripts/ci/cms-pin-review.ts", "scripts/ci/foundation-fixture-sharding.ts"]);
   assert.deepEqual(boundary.allow.boundaries, []);

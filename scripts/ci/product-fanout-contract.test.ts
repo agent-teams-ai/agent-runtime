@@ -9,7 +9,7 @@ import { parse } from 'yaml';
 import { aePatterns, assertFanoutEvidence, assertJobResults, assertProductWorkflow, packageRoots,
   phaseEntries, prerequisiteCommands, readProductSource, shardIds, assertShardWorkflow, assertRootCustody, reports, assertPackageEvidence, assertDarwinWorkflow, assertDarwinCaller, assertDarwinReference } from './product-fanout-contract.ts';
 import type { ExpectedEvidence, PackageId, ShardId } from './product-fanout-contract.ts';
-import { commandExit, executionSelection, packages as originalPackages, packageStreamPlans, runCommand, selectShard } from './package-execution.ts';
+import { commandExit, embeddedObserverEnv, executionSelection, packages as originalPackages, packageStreamPlans, runCommand, selectShard } from './package-execution.ts';
 import type { NativeBuild, PackageReceipt } from './package-execution.ts';
 
 const digest = (value: Uint8Array) => createHash('sha256').update(value).digest('hex');
@@ -35,6 +35,7 @@ async function fixture() {
   await put('scripts/ci/package-execution.ts', await readFile(new URL('./package-execution.ts', import.meta.url), 'utf8'));
   await put('scripts/ci/product-workflow-contract.ts', await readFile(new URL('./product-workflow-contract.ts', import.meta.url), 'utf8'));
   await put('scripts/ci/package-native-observation.ts', await readFile(new URL('./package-native-observation.ts', import.meta.url), 'utf8'));
+  await put('scripts/ci/er-process-observer.ts', await readFile(new URL('./er-process-observer.ts', import.meta.url), 'utf8'));
   await put('pnpm-workspace.yaml', "packages:\n  - 'packages/**'\n");
   tracked.pop(); // overwrite, retaining one source identity
   await put('scripts/ci/full-contract.json', JSON.stringify({ scripts }));
@@ -94,14 +95,13 @@ async function packageReports(root: string, expected: ExpectedEvidence, requeste
     const reporter = join(root, 'scripts/ci/package-execution.ts');
     const capture = join(logs, `${shard}-capture`);
     if (id === 'embedded-runtime') { await mkdir(capture); }
-    const embeddedEnv = { ...env, CI_ER_PROCESS_OBSERVER: '1', AE_ADOPTION_CAPTURE_DIR: capture,
-      NODE_OPTIONS: `--test-reporter=${reporter} --test-reporter-destination=stderr --test-reporter-destination=stdout` };
+    const plans = await packageStreamPlans(root, selectShard(shard), selection);
+    const embeddedEnv = id === 'embedded-runtime' ? embeddedObserverEnv(env, capture, plans) : env;
     commands.push(selection
       ? await runCommand(process.execPath, ['--test', '--test-concurrency=1', `--test-reporter=${reporter}`, ...selection.files],
         join(root, packageRoots[id]), env, join(logs, `${shard}-2`))
       : await runCommand('pnpm', ['--filter', `@agent-teams/${id}`, 'run', 'test'], root,
         id === 'embedded-runtime' ? embeddedEnv : { ...env, NODE_OPTIONS: `--test-reporter=${reporter}` }, join(logs, `${shard}-2`)));
-    const plans = await packageStreamPlans(root, selectShard(shard), selection);
     assert.equal(commandExit(commands[2]!, id === 'embedded-runtime' ? 2 : 1, undefined, plans, Object.keys(expected.inputs).map(file => join(root, file))), 0, `producer ${shard}`);
     receipts.push({ schemaVersion: 3, target: 'linux-x64', workflow: expected.workflow, nativeBuild: null, embeddedProcesses: id === 'embedded-runtime' ? JSON.parse(await readFile(join(capture, 'processes.json'), 'utf8')) : null, requestedShard: shard, packageName: `@agent-teams/${id}`,
       sourceSha: expected.sha, sourceTree: expected.inputTree, checkoutRoot: root, selection,
@@ -131,10 +131,15 @@ function macDecoderFixture(receipts: PackageReceipt[], expected: ExpectedEvidenc
     if (report.selection) { report.commands[2]!.executable = execPath; }
     for (const stream of report.commands[2]!.observation.streams) {
       stream.node.executable = execPath;
+      if (stream.original) {
+        stream.original.actualExecutable = execPath;
+        stream.identity = JSON.stringify({...JSON.parse(stream.identity!), executable: execPath, osObserved: false, ancestors: null});
+      }
       const rewrite = (raw: string) => raw.split('\n').map(line => line.startsWith('PACKAGE_NODE_PROCESS ')
         ? `PACKAGE_NODE_PROCESS ${JSON.stringify({ ...JSON.parse(line.slice(21)), executable: execPath })}` : line).join('\n');
       stream.stdout = rewrite(stream.stdout); stream.stderr = rewrite(stream.stderr);
     }
+    if (report.embeddedProcesses) { report.embeddedProcesses = report.commands[2]!.observation.streams.map(stream => stream.original!); }
     const output = join(report.checkoutRoot, 'packages/platform/filesystem-custody/dist/rename-no-replace.node');
     const sdk = '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk';
     const headers = '/Users/runner/hostedtoolcache/node/24.21.0/arm64/include/node';

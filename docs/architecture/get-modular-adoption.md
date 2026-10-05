@@ -333,8 +333,20 @@ three; Linux retains its full package, root, typed and native obligations.
 The source census rejects ignored root/experiment inputs and symlink ancestry.
 Each observed test stream binds its raw PID, cwd, argv, completed file universe,
 registration location, ancestry and ordinal to the original package source;
-Mac streams bind the observed Mac executable rather than the Ubuntu join's Node.
-These checks share schema three while retaining independent source expansion.
+Mac streams bind their captured Mac executable to the original source plan.
+Embedded Runtime's existing optional capture additionally retains each original
+`spawnSync` return PID, executable, cwd and actual runner PID. Indexed raw
+identity sidecars bind those fields, both original argv arrays and each stream's
+summary/file universe. Both streams require the same actual runner PID, and
+each child PID must differ from its actual command PID. Linux procfs corroboration retains exact observed
+ancestry to the actual command PID when available; every ancestor must be a
+positive safe integer, unique, exclude the child PID and fit within 16 hops.
+An unobserved short child, and the portable Mac path, use explicitly declared
+`spawnSync-return-v1` capture identity with `osObserved=false` and null ancestry.
+This scope does not attest OS executable identity or authenticate artifact
+origin. Original reporter arguments and ordinary nested Node output remain
+unchanged; no Embedded Runtime reporter destinations are inherited through
+`NODE_OPTIONS`. These checks share schema three and independent source expansion.
 Disposable evidence paths bind through `GITHUB_ENV` after the frozen install.
 The moving macos-15 label requires one
 coherent observed image/compiler/SDK/header tuple within each run; the retained

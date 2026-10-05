@@ -9,12 +9,14 @@ const object = (value: unknown): Record<string, unknown> => {
 };
 const array = (value: unknown): unknown[] => { assert.ok(Array.isArray(value)); return value; };
 const normalizedSummary = (record: Record<string, unknown>) => Object.fromEntries(['tests', 'passed', 'failed', 'cancelled', 'skipped', 'todo', 'success'].map(key => [key, record[key]]));
-function parseStream(stdout: string, stderr: string, embedded: boolean, pid: unknown) {
+function parseStream(stdout: string, stderr: string, context: { embedded: boolean; pid: unknown }) {
+  const { embedded, pid } = context;
   const observedNodes: Record<string, unknown>[] = [], observedEvents: Record<string, unknown>[] = [];
   const observedSummaries: Record<string, unknown>[] = [], observedFiles: string[] = [];
   let begin = 0, end = 0;
   for (const line of [...stdout.split('\n'), ...stderr.split('\n')]) {
     if (line.startsWith('PACKAGE_NODE_PROCESS ')) {
+      assert.ok(!embedded, 'ER reporter injection');
       const value = object(JSON.parse(line.slice(21)));
       observedNodes.push({ ...value, summary: normalizedSummary(object(value.summary)) });
     } else if (line.startsWith('PACKAGE_EVENT ')) { observedEvents.push(object(JSON.parse(line.slice(14)))); }
@@ -31,6 +33,34 @@ function parseStream(stdout: string, stderr: string, embedded: boolean, pid: unk
     }
   }
   return {observedNodes, observedEvents, observedSummaries, observedFiles, begin, end};
+}
+function assertCaptureIdentity(stream: Record<string, unknown>, node: Record<string, unknown>, index: number, commandPid: unknown, runnerPid: unknown): Record<string, unknown> {
+      const rawIdentity = object(JSON.parse(String(stream.identity)));
+      assert.equal(rawIdentity.index, index); assert.equal(rawIdentity.summary, undefined);
+      assert.equal(rawIdentity.commandPid, commandPid, 'ER OS ancestry must bind the actual runner command');
+      const originalCapture = object(stream.original);
+      assert.equal(rawIdentity.mechanism, 'spawnSync-return-v1');
+      assert.equal(rawIdentity.runnerPid, originalCapture.runnerPid);
+      assert.equal(rawIdentity.runnerPid, runnerPid, 'both original streams require one actual runner');
+      assert.equal(rawIdentity.pid, originalCapture.actualPid);
+      assert.equal(rawIdentity.executable, originalCapture.actualExecutable);
+      assert.equal(rawIdentity.cwd, originalCapture.actualCwd);
+      assert.ok(Number.isSafeInteger(rawIdentity.runnerPid) && Number(rawIdentity.runnerPid) > 0);
+      assert.notEqual(rawIdentity.runnerPid, node.pid);
+      assert.equal(typeof rawIdentity.osObserved, 'boolean');
+      if (!rawIdentity.osObserved) { assert.equal(rawIdentity.ancestors, null); }
+      else {
+      assert.ok(Number.isSafeInteger(rawIdentity.commandPid) && Number(rawIdentity.commandPid) > 0);
+      assert.ok(Array.isArray(rawIdentity.ancestors) && rawIdentity.ancestors.length > 0 && rawIdentity.ancestors.length <= 16);
+      assert.ok(rawIdentity.ancestors.every(pid => Number.isSafeInteger(pid) && pid > 0), 'invalid ER ancestor PID');
+      assert.equal(new Set(rawIdentity.ancestors).size, rawIdentity.ancestors.length, 'cyclic ER ancestry');
+      assert.ok(!rawIdentity.ancestors.includes(node.pid), 'ER process cannot be its own ancestor');
+      assert.equal(rawIdentity.ancestors.at(-1), commandPid);
+      assert.ok(rawIdentity.ancestors.includes(rawIdentity.runnerPid));
+      }
+      assert.ok(Number.isSafeInteger(rawIdentity.commandPid) && Number(rawIdentity.commandPid) > 0);
+      assert.notEqual(rawIdentity.commandPid, node.pid, 'original child cannot be its command process');
+      const { index: _index, commandPid: _commandPid, ancestors: _ancestors, runnerPid: _runnerPid, mechanism: _mechanism, osObserved: _osObserved, ...osIdentity } = rawIdentity; return osIdentity;
 }
 interface StreamContext { id: PackageId; index: number; selected: string[]; root: string; packageRoot: string; nodeExecutable: string }
 export function assertObservedStreams(expected: ExpectedEvidence, proof: Record<string, unknown>, context: StreamContext): void {
@@ -50,8 +80,13 @@ export function assertObservedStreams(expected: ExpectedEvidence, proof: Record<
     assert.deepEqual(node.argv, plan.argv, 'source-expanded original process argv drift');
     if (index < 3) { assert.equal(node.pid, proof.pid, 'direct AE process PID drift'); }
     assert.equal(typeof stream.stdout, 'string'); assert.equal(typeof stream.stderr, 'string');
-    const {observedNodes, observedEvents, observedSummaries, observedFiles, begin, end} = parseStream(String(stream.stdout), String(stream.stderr), embedded, node.pid);
-    assert.deepEqual(observedNodes, [node], 'raw actual process envelope binding');
+    const {observedNodes, observedEvents, observedSummaries, observedFiles, begin, end} = parseStream(String(stream.stdout), String(stream.stderr), { embedded, pid: node.pid });
+    if (embedded) {
+      assert.equal(typeof stream.identity, 'string', 'actual ER OS process sidecar required');
+      observedNodes.push(assertCaptureIdentity(stream, node, streamIndex, proof.pid, object(streams[0]!.original).runnerPid));
+    } else { assert.equal(stream.identity, null); }
+    const { summary: _summary, ...processIdentity } = node;
+    assert.deepEqual(observedNodes, [embedded ? processIdentity : node], 'raw actual process envelope binding');
     assert.deepEqual(observedSummaries, [node.summary], 'summary must belong to its actual stream');
     if (embedded) {
       assert.equal(begin, 1); assert.equal(end, 1);
