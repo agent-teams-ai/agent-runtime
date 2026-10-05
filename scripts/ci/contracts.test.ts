@@ -10,7 +10,8 @@ import { commandInventory, routedScripts } from './script-routing.ts';
 import type { Scripts } from './script-routing.ts';
 import { readScripts } from './inventory.ts';
 import { assertCmsComposite, captureCmsComposite, cmsBinding, cmsContract, cmsFile, inputPaths, assertPhaseTestExecution, createTestResultCollector, mandatoryRunnerSummary, tapResult, toolchainKeys } from './measure.ts';
-import { validateBenchmark, validateWorkflow } from './conformance.ts';
+import { object as workflowObject, schedulingForEvent, validateBenchmark, validateWorkflow } from './conformance.ts';
+import type { SchedulingEvent } from './conformance.ts';
 import { compare } from './compare.ts';
 import type { Receipt } from './compare.ts';
 import { registerCmsPinReviewTests } from './cms-pin-review.test.ts';
@@ -174,6 +175,75 @@ test('real workflow policy rejects omitted jobs, wrong PR checkout, shallow hist
   assert.ok(guard);
   guard.run = 'test "$(git rev-parse HEAD)" = "$EXPECTED_REVISION"';
   assert.throws(() => validateWorkflow(main, unbound, platform), /immutable revision/u);
+});
+
+test('current scheduling rejects pending main loss, non-PR cancellation, stale PR heads and cross-talk', async t => {
+  const main: unknown = parse(await readFile(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8'));
+  const lane: unknown = parse(await readFile(new URL('../../.github/workflows/ci-lane.yml', import.meta.url), 'utf8'));
+  const platform: Record<string, string> = JSON.parse(await readFile(new URL('./platform-contract.json', import.meta.url), 'utf8'));
+  validateWorkflow(main, lane, platform);
+  const faults: Array<[string, Record<string, unknown>]> = [
+    ['former policy cancels distinct main SHAs', { group: 'check-${{ github.workflow }}-${{ github.ref }}', 'cancel-in-progress': true }],
+    ['shared main ref replaces pending SHAs despite PR-only cancellation', {
+      ...workflowObject(workflowObject(main).concurrency), group: 'check-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}',
+    }],
+    ['disabling cancellation alone still replaces pending main SHAs', {
+      group: 'check-${{ github.workflow }}-${{ github.ref }}', 'cancel-in-progress': false,
+    }],
+    ['non-PR running work is cancellable', { ...workflowObject(workflowObject(main).concurrency), 'cancel-in-progress': true }],
+    ['obsolete PR heads survive', { ...workflowObject(workflowObject(main).concurrency), 'cancel-in-progress': false }],
+    ['PR group follows the merge SHA instead of stable identity', {
+      ...workflowObject(workflowObject(main).concurrency), group: 'check-${{ github.workflow }}-${{ github.event_name }}-${{ github.sha }}',
+    }],
+    ['PR group follows the head SHA instead of stable identity', {
+      ...workflowObject(workflowObject(main).concurrency), group: 'check-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.head.sha || github.sha }}',
+    }],
+    ['different PRs with equal branch names interfere', {
+      ...workflowObject(workflowObject(main).concurrency), group: 'check-${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.sha }}',
+    }],
+    ['equal SHA or PR number in different events interferes', {
+      ...workflowObject(workflowObject(main).concurrency), group: 'check-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}',
+    }],
+    ['different workflows interfere', {
+      ...workflowObject(workflowObject(main).concurrency), group: 'check-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}',
+    }],
+  ];
+  for (const [name, concurrency] of faults) {
+    await t.test(name, () => {
+      const changed = workflowObject(structuredClone(main));
+      changed.concurrency = concurrency;
+      assert.throws(() => validateWorkflow(changed, lane, platform), /CI scheduling/u);
+    });
+  }
+});
+
+test('admitted scheduling separates three main SHAs and merge-group work while grouping only the same PR', async () => {
+  const concurrency = workflowObject(parse(await readFile(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8'))).concurrency;
+  // Literal expected groups are independent of the projection and its constants.
+  // Three main arrivals cover the pending-slot replacement risk; PR github.sha
+  // represents a changing merge revision and never determines the PR group.
+  const rows: Array<[SchedulingEvent, string, boolean]> = [
+    [{ workflow: 'CI', eventName: 'push', sha: 'a'.repeat(40) }, `check-CI-push-${'a'.repeat(40)}`, false],
+    [{ workflow: 'CI', eventName: 'push', sha: 'b'.repeat(40) }, `check-CI-push-${'b'.repeat(40)}`, false],
+    [{ workflow: 'CI', eventName: 'push', sha: 'c'.repeat(40) }, `check-CI-push-${'c'.repeat(40)}`, false],
+    [{ workflow: 'CI', eventName: 'merge_group', sha: 'a'.repeat(40) }, `check-CI-merge_group-${'a'.repeat(40)}`, false],
+    [{ workflow: 'CI', eventName: 'merge_group', sha: 'b'.repeat(40) }, `check-CI-merge_group-${'b'.repeat(40)}`, false],
+    [{ workflow: 'CI', eventName: 'pull_request', sha: 'a'.repeat(40), pullRequestNumber: 201 }, 'check-CI-pull_request-201', true],
+    [{ workflow: 'CI', eventName: 'pull_request', sha: 'b'.repeat(40), pullRequestNumber: 201 }, 'check-CI-pull_request-201', true],
+    [{ workflow: 'CI', eventName: 'pull_request', sha: 'a'.repeat(40), pullRequestNumber: 202 }, 'check-CI-pull_request-202', true],
+    [{ workflow: 'Other CI', eventName: 'push', sha: 'a'.repeat(40) }, `check-Other CI-push-${'a'.repeat(40)}`, false],
+    [{ workflow: 'Other CI', eventName: 'merge_group', sha: 'a'.repeat(40) }, `check-Other CI-merge_group-${'a'.repeat(40)}`, false],
+    [{ workflow: 'Other CI', eventName: 'pull_request', sha: 'a'.repeat(40), pullRequestNumber: 201 }, 'check-Other CI-pull_request-201', true],
+  ];
+  const groups: string[] = [];
+  for (const [event, group, cancelInProgress] of rows) {
+    const actual = schedulingForEvent(concurrency, event);
+    assert.deepEqual(actual, { group, cancelInProgress });
+    groups.push(actual.group.toLowerCase()); // GitHub concurrency is case insensitive.
+  }
+  const expectedRepeated = 'check-ci-pull_request-201';
+  assert.equal(groups.filter(group => group === expectedRepeated).length, 2);
+  assert.equal(new Set(groups).size, rows.length - 1, 'all other event/workflow/SHA/PR identities must be isolated');
 });
 
 test('measurement observes real Node test identities including failure and skip', async t => {
