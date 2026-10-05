@@ -1,0 +1,100 @@
+name: Foundation fixture partition
+
+on:
+  workflow_call:
+    inputs:
+      revision:
+        required: true
+        type: string
+      artifact:
+        required: true
+        type: string
+      index:
+        required: true
+        type: number
+
+permissions:
+  contents: read
+
+jobs:
+  shard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GIT_AUTHOR_NAME: iliya
+      GIT_AUTHOR_EMAIL: iliyazelenkog@gmail.com
+      GIT_COMMITTER_NAME: iliya
+      GIT_COMMITTER_EMAIL: iliyazelenkog@gmail.com
+      EXPECTED_REVISION: ${{ inputs.revision }}
+      ARTIFACT_PREFIX: ${{ inputs.artifact }}
+      FOUNDATION_FIXTURE_PROTOCOL: foundation-fixtures/1
+      FOUNDATION_FIXTURE_INDEX: ${{ inputs.index }}
+      FOUNDATION_FIXTURE_COUNT: '3'
+    steps:
+      - name: Checkout exact revision with full history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.revision }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Guard inputs and retained C0 before repository code
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_REVISION" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$ARTIFACT_PREFIX" =~ ^[a-z][a-z0-9-]{0,60}$ ]]
+          [[ "$FOUNDATION_FIXTURE_INDEX" =~ ^[012]$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_REVISION"
+          object=8e5e859d10981e1623d0617e933afc68a9e8770c
+          if ! git cat-file -e "$object^{commit}"; then
+            git fetch --no-tags origin "$object"
+          fi
+          test "$(git rev-parse "$object^{commit}")" = "$object"
+          git fsck --connectivity-only --no-reflogs "$object"
+      - name: Setup pinned Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+      - name: Enable pinned pnpm
+        run: |
+          corepack enable
+          corepack install --global pnpm@11.18.0
+      - name: Frozen install
+        run: pnpm install --frozen-lockfile
+      - name: Run original boundary file and retain observed results
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/foundation-evidence"
+          raw="$RUNNER_TEMP/foundation-evidence/raw.json"
+          report="$RUNNER_TEMP/foundation-evidence/shard-$FOUNDATION_FIXTURE_INDEX.json"
+          start=$(date +%s%3N)
+          set +e
+          node --test --test-reporter=tap --test-reporter=./scripts/ci/foundation-fixture-sharding.ts \
+            --test-reporter-destination=stdout --test-reporter-destination="$raw" \
+            scripts/architecture/source-dependency-adapter-boundaries.test.mjs
+          status=$?
+          set -e
+          end=$(date +%s%3N)
+          jq --arg revision "$EXPECTED_REVISION" --argjson index "$FOUNDATION_FIXTURE_INDEX" \
+            --argjson exitCode "$status" --argjson start "$start" --argjson end "$end" \
+            '. + {revision:$revision,index:$index,exitCode:$exitCode,start:$start,end:$end}' "$raw" > "$report"
+          exit "$status"
+      - name: Retain fixture report even on failure
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: foundation-${{ env.ARTIFACT_PREFIX }}-shard-${{ env.FOUNDATION_FIXTURE_INDEX }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/foundation-evidence/shard-*.json
+          if-no-files-found: error
+          retention-days: 14
+      # The attempt archive above retains failures and superseded successes.
+      - name: Publish successful partition for same-run retries
+        if: ${{ success() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: foundation-${{ env.ARTIFACT_PREFIX }}-shard-${{ env.FOUNDATION_FIXTURE_INDEX }}-current
+          path: ${{ runner.temp }}/foundation-evidence/shard-*.json
+          if-no-files-found: error
+          retention-days: 14
+          overwrite: true

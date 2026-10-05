@@ -10,6 +10,7 @@ import { assertFullInventory, productPhases, requiredJobs } from './policy.ts';
 import { readScripts } from './inventory.ts';
 import type { Scripts } from './script-routing.ts';
 import { validateNightlyWorkflow } from './nightly-contract.ts';
+import { validateFoundationWorkflows } from './foundation-fanout-contract.ts';
 
 export const eventRevision = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}";
 const checkoutAction = 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803';
@@ -67,12 +68,17 @@ export function validateWorkflow(main: unknown, reusable: unknown, platform: Rec
   assert.deepEqual(Object.keys(jobs).toSorted(), [...requiredJobs, 'check', 'postgres-durability', 'runtime-macos'].toSorted());
   for (const name of requiredJobs) {
     const job = object(jobs[name]);
-    assert.equal(job.uses, './.github/workflows/ci-lane.yml');
+    assert.equal(job.uses, name === 'foundation' ? './.github/workflows/ci-foundation.yml' : './.github/workflows/ci-lane.yml');
     assert.equal(job.if, undefined, 'full lane must run unconditionally');
     assert.equal(job.needs, undefined, 'independent lane');
     assert.equal(job.permissions, undefined);
     assert.equal(job['continue-on-error'], undefined);
-    assert.equal(object(job.with).script, `check:ci:${name}`);
+    if (name === 'foundation') {
+      assert.deepEqual(job.with, { artifact: 'foundation', revision: eventRevision });
+      assert.deepEqual(Object.keys(job).toSorted(), ['uses', 'with']);
+    } else {
+      assert.equal(object(job.with).script, `check:ci:${name}`);
+    }
     assert.equal(object(job.with).revision, eventRevision);
   }
   const aggregate = object(jobs.check);
@@ -213,6 +219,8 @@ export async function conformance(root: string): Promise<void> {
   const platform: Record<string, string> = JSON.parse(await read('scripts/ci/platform-contract.json'));
   const runtime: unknown = parse(await read('.github/workflows/ci.yml'));
   validateWorkflow(runtime, parse(await read('.github/workflows/ci-lane.yml')), platform);
+  validateFoundationWorkflows(parse(await read('.github/workflows/ci-foundation.yml')),
+    parse(await read('.github/workflows/ci-foundation-shard.yml')));
   validateNightlyWorkflow(parse(await read('.github/workflows/ci-nightly.yml')), runtime, platform);
   for (const file of ['.github/workflows/docs-protocol.yml', '.github/workflows/commit-author-identity.yml', '.github/workflows/node-26-compatibility.yml', 'scripts/ci/audit-node-engine-compatibility.mjs', 'scripts/ci/node-engine-compatibility.test.mjs', 'scripts/ci/node-runtime-compatibility.test.mjs']) {
     assert.equal(createHash('sha256').update(await read(file)).digest('hex'), platform[file], `${file} trust contract changed`);

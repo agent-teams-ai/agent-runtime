@@ -4,11 +4,15 @@ import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import test, { describe } from "node:test";
+import { describe } from "node:test";
+import { fixtureRegistration } from "../ci/foundation-fixture-sharding.ts";
 import { parseDocument } from "yaml";
 import { commandInventory, routedScripts } from "../ci/script-routing.ts";
 
 import { parseSync } from "oxc-parser";
+
+const fixtures = fixtureRegistration(process.env);
+const test = fixtures.test;
 
 const foundationManifestPath = fileURLToPath(import.meta.resolve("@agent-teams/engineering-foundation/package.json"));
 const foundationManifest = JSON.parse(await readFile(foundationManifestPath, "utf8"));
@@ -775,4 +779,8 @@ describe("installed Foundation adapter boundary checks", { concurrency: 2 }, () 
   registerPolicyChecks();
   registerAdapterChecks();
   registerCompositionChecks();
+  const registration = fixtures.finish();
+  if (registration) {
+    console.log(registration);
+  }
 });

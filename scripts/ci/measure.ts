@@ -206,6 +206,9 @@ export const inputPaths = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yam
   'scripts/ci/inventory.ts', 'scripts/ci/contracts.test.ts', 'scripts/ci/tsconfig.json',
   'scripts/ci/cms-pin-review.ts', 'scripts/ci/cms-pin-review.test.ts',
   'scripts/ci/nightly-contract.ts', 'scripts/ci/nightly-contract.test.ts',
+  'scripts/ci/foundation-fixture-sharding.ts', 'scripts/ci/foundation-fixture-sharding.test.ts',
+  'scripts/ci/foundation-fanout-contract.ts',
+  '.github/workflows/ci-foundation.yml', '.github/workflows/ci-foundation-shard.yml',
   '.github/workflows/ci.yml', '.github/workflows/ci-nightly.yml'] as const;
 
 export function toolchainKeys(entry: string): string[] {

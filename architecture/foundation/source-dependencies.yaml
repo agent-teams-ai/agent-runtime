@@ -3084,9 +3084,13 @@ boundaries:
   - scripts/ci/cms-pin-review.test.ts
   - scripts/ci/nightly-contract.ts
   - scripts/ci/nightly-contract.test.ts
+  - scripts/ci/foundation-fixture-sharding.ts
+  - scripts/ci/foundation-fixture-sharding.test.ts
+  - scripts/ci/foundation-fanout-contract.ts
   entrypoints:
   - scripts/ci/script-routing.ts
   - scripts/ci/cms-pin-review.ts
+  - scripts/ci/foundation-fixture-sharding.ts
   allow:
     boundaries: []
     packages:

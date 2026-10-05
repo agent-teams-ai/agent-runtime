@@ -16,9 +16,11 @@ import { compare } from './compare.ts';
 import type { Receipt } from './compare.ts';
 import { registerCmsPinReviewTests } from './cms-pin-review.test.ts';
 import { registerNightlyContractTests } from './nightly-contract.test.ts';
+import { registerFoundationFixtureShardingTests } from './foundation-fixture-sharding.test.ts';
 
 registerCmsPinReviewTests();
 registerNightlyContractTests();
+registerFoundationFixtureShardingTests();
 
 const scripts = await readScripts(new URL('../../package.json', import.meta.url));
 const baseline: { scripts: Scripts } = JSON.parse(await readFile(new URL('./full-contract.json', import.meta.url), 'utf8'));
