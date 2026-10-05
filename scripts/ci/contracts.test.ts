@@ -18,6 +18,11 @@ import { registerCmsPinReviewTests } from './cms-pin-review.test.ts';
 import { registerNightlyContractTests } from './nightly-contract.test.ts';
 import { registerFoundationFixtureShardingTests } from './foundation-fixture-sharding.test.ts';
 
+import { registerPackageExecutionTests } from './package-execution.test.ts';
+import { registerProductFanoutTests } from './product-fanout-contract.test.ts';
+
+registerPackageExecutionTests();
+registerProductFanoutTests();
 registerCmsPinReviewTests();
 registerNightlyContractTests();
 registerFoundationFixtureShardingTests();
