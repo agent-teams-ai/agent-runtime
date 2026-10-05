@@ -46,9 +46,8 @@ jobs:
       revision: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
   product:
-    uses: ./.github/workflows/ci-lane.yml
+    uses: ./.github/workflows/ci-product.yml
     with:
-      script: check:ci:product
       artifact: product
       revision: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
