@@ -139,9 +139,18 @@ export function registerPrRegressionTests(): void {
       { runtime: { ...facts, glibc: '' } }, { runtime: { ...facts, execArgv: ['--import=evil.mts'] } },
     ];
     for (const value of overrides) {assert.equal((await f.plan(head, value)).mode, 'full', JSON.stringify(value));}
-    const predecessor = f.git('rev-parse', `${f.base}^`);
-    const firstPolicyEvent = f.event(head); firstPolicyEvent.pull_request.base.sha = predecessor;
-    assert.equal((await f.plan(head, { base: predecessor, event: firstPolicyEvent })).mode, 'full', 'first policy PR runs FULL');
+    // Create an actual pre-adoption TEST snapshot; the repository's current
+    // parent may already contain this policy after it has been committed.
+    f.git('reset', '--quiet', '--hard', f.base);
+    const policyFile = 'architecture/foundation/ci-pr-regressions.json';
+    await rm(join(f.root, policyFile));
+    const predecessor = f.freeze();
+    await cp(join(repository, policyFile), join(f.root, policyFile));
+    await f.body(rc);
+    const firstPolicyHead = f.freeze();
+    const firstPolicyEvent = f.event(firstPolicyHead); firstPolicyEvent.pull_request.base.sha = predecessor;
+    assert.equal((await f.plan(firstPolicyHead, { base: predecessor, event: firstPolicyEvent })).mode, 'full', 'first policy PR runs FULL');
+    f.git('reset', '--quiet', '--hard', head);
     await f.body(rc); assert.equal((await f.plan(head)).mode, 'full', 'dirty actual checkout');
     assert.equal(supportedPrEnvironment(trusted, facts), true);
     assert.equal(supportedPrEnvironment({ ...trusted, npm_config_node_options: '--require=evil' }, facts), false);
