@@ -27,7 +27,6 @@ jobs:
       GIT_COMMITTER_EMAIL: iliyazelenkog@gmail.com
       EXPECTED_REVISION: ${{ inputs.revision }}
       PACKAGE_SHARD: ${{ inputs.shard }}
-      CI_EVIDENCE_DIR: ${{ runner.temp }}/ci-product-shard
     steps:
       - name: Checkout exact revision
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -63,6 +62,11 @@ jobs:
           corepack install --global pnpm@11.18.0
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Bind disposable evidence paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'CI_EVIDENCE_DIR=%s/ci-product-shard\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Execute the actual full product shard
         run: node scripts/ci/package-execution.ts
       - name: Retain actual package execution evidence

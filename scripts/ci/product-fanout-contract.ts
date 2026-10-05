@@ -232,6 +232,9 @@ const download = 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a546
 const revisionGuard = 'set -euo pipefail\n[[ "$EXPECTED_REVISION" =~ ^[a-f0-9]{40}$ ]]\ntest "$(git rev-parse HEAD)" = "$EXPECTED_REVISION"\n';
 const retainedHistory = 'set -euo pipefail\nobject=8e5e859d10981e1623d0617e933afc68a9e8770c\nif ! git cat-file -e "$object^{commit}"; then\n  git fetch --no-tags origin "$object"\nfi\ntest "$(git rev-parse "$object^{commit}")" = "$object"\ngit fsck --connectivity-only --no-reflogs "$object"\n';
 const enablePnpm = 'corepack enable\ncorepack install --global pnpm@11.18.0\n';
+const rootEvidenceBinding = "set -euo pipefail\nprintf 'CI_EVIDENCE_DIR=%s/ci-product-root\\n' \"$RUNNER_TEMP\" >> \"$GITHUB_ENV\"\n";
+const packageEvidenceBinding = "set -euo pipefail\nprintf 'CI_EVIDENCE_DIR=%s/ci-product-shard\\n' \"$RUNNER_TEMP\" >> \"$GITHUB_ENV\"\n";
+const aggregateEvidenceBinding = "set -euo pipefail\nprintf 'CI_PACKAGE_REPORT_DIR=%s/ci-product-reports/packages\\n' \"$RUNNER_TEMP\" >> \"$GITHUB_ENV\"\nprintf 'CI_ROOT_REPORT_DIR=%s/ci-product-reports/root\\n' \"$RUNNER_TEMP\" >> \"$GITHUB_ENV\"\n";
 function assertProductSteps(steps: Record<string, unknown>[]): void {
   for (const step of steps) {
     assert.ok(Object.keys(step).every(key => ['name', 'run', 'shell', 'uses', 'with', 'if'].includes(key)), 'unreviewed step field');
@@ -240,7 +243,7 @@ function assertProductSteps(steps: Record<string, unknown>[]): void {
       assert.equal(step.if, undefined, 'unconditional full phases');
       assert.ok(!String(step.run).includes('${{'), 'no shell input interpolation');
       assert.equal(step.uses, undefined); assert.equal(step.with, undefined);
-      assert.equal(step.shell, step.run === revisionGuard || step.run === retainedHistory ? 'bash' : undefined);
+      assert.equal(step.shell, [revisionGuard, retainedHistory, rootEvidenceBinding, packageEvidenceBinding, aggregateEvidenceBinding].includes(String(step.run)) ? 'bash' : undefined);
     } else {
       assert.ok([checkout, setup, upload, download].includes(String(step.uses)), 'unadmitted action');
       if (step.uses === upload) {
@@ -290,20 +293,19 @@ export function assertProductWorkflow(value: unknown): void {
     assertProductSteps(steps);
     const sequence = steps.map(step => step.uses ?? step.run);
     const rootSequence = [checkout, revisionGuard, retainedHistory, setup, 'node scripts/ci/gate.ts revision', enablePnpm,
-      'pnpm install --frozen-lockfile', 'node scripts/ci/product-fanout-contract.ts custody-start',
+      'pnpm install --frozen-lockfile', rootEvidenceBinding, 'node scripts/ci/product-fanout-contract.ts custody-start',
       "pnpm --filter './packages/**' -r run clean", 'pnpm product:build', ...phaseEntries.map(entry => `node scripts/ci/measure.ts ${entry}`),
       'node scripts/ci/product-fanout-contract.ts custody-end', upload, upload];
     const aggregateSequence = [checkout, revisionGuard, retainedHistory, setup, 'node scripts/ci/product-fanout-contract.ts results', enablePnpm,
-      'pnpm install --frozen-lockfile', download, download, 'node scripts/ci/product-fanout-contract.ts evidence'];
+      'pnpm install --frozen-lockfile', aggregateEvidenceBinding, download, download, 'node scripts/ci/product-fanout-contract.ts evidence'];
     assert.deepEqual(sequence, name === 'root' ? rootSequence : aggregateSequence);
 
     if (name === 'root') {
       assert.deepEqual(runs, [revisionGuard, retainedHistory, 'node scripts/ci/gate.ts revision', enablePnpm,
-        'pnpm install --frozen-lockfile', 'node scripts/ci/product-fanout-contract.ts custody-start',
+        'pnpm install --frozen-lockfile', rootEvidenceBinding, 'node scripts/ci/product-fanout-contract.ts custody-start',
         'pnpm --filter \'./packages/**\' -r run clean', 'pnpm product:build', ...phaseEntries.map(entry => `node scripts/ci/measure.ts ${entry}`),
         'node scripts/ci/product-fanout-contract.ts custody-end']);
       for (const key of ['AUTHOR', 'COMMITTER']) { assert.equal(env[`GIT_${key}_NAME`], 'iliya'); assert.equal(env[`GIT_${key}_EMAIL`], 'iliyazelenkog@gmail.com'); }
-      assert.equal(env.CI_EVIDENCE_DIR, '${{ runner.temp }}/ci-product-root');
       const archive = object(steps.at(-2));
       assert.equal(archive.uses, upload); assert.equal(archive.if, '${{ always() }}');
       assert.deepEqual(archive.with, { name: 'full-ci-${{ inputs.artifact }}-root-${{ github.run_attempt }}',
@@ -311,14 +313,12 @@ export function assertProductWorkflow(value: unknown): void {
       assert.equal(lastStep.uses, upload); assert.equal(lastStep.if, '${{ success() }}');
       assert.deepEqual(lastStep.with, { name: 'full-ci-${{ inputs.artifact }}-root-current',
         path: '${{ runner.temp }}/ci-product-root/*.json', 'if-no-files-found': 'error', 'retention-days': 14, overwrite: true });
-      assert.deepEqual(Object.keys(env).toSorted(), ['CI_EVIDENCE_DIR', 'EXPECTED_REVISION', 'GIT_AUTHOR_EMAIL', 'GIT_AUTHOR_NAME', 'GIT_COMMITTER_EMAIL', 'GIT_COMMITTER_NAME']);
+      assert.deepEqual(Object.keys(env).toSorted(), ['EXPECTED_REVISION', 'GIT_AUTHOR_EMAIL', 'GIT_AUTHOR_NAME', 'GIT_COMMITTER_EMAIL', 'GIT_COMMITTER_NAME']);
     } else {
       assert.equal(env.NEEDS, '${{ toJSON(needs) }}');
       assert.deepEqual(runs, [revisionGuard, retainedHistory, 'node scripts/ci/product-fanout-contract.ts results', enablePnpm,
-        'pnpm install --frozen-lockfile', 'node scripts/ci/product-fanout-contract.ts evidence']);
-      assert.equal(env.CI_PACKAGE_REPORT_DIR, '${{ runner.temp }}/ci-product-reports/packages');
-      assert.equal(env.CI_ROOT_REPORT_DIR, '${{ runner.temp }}/ci-product-reports/root');
-      assert.deepEqual(Object.keys(env).toSorted(), ['CI_PACKAGE_REPORT_DIR', 'CI_ROOT_REPORT_DIR', 'EXPECTED_REVISION', 'NEEDS']);
+        'pnpm install --frozen-lockfile', aggregateEvidenceBinding, 'node scripts/ci/product-fanout-contract.ts evidence']);
+      assert.deepEqual(Object.keys(env).toSorted(), ['EXPECTED_REVISION', 'NEEDS']);
       // Exact inputs preserve the action's default same-workflow-run scope:
       // no run-id, repository, token or artifact-id may select another run.
       assert.deepEqual(steps.filter(step => step.uses === download).map(step => step.with), [
@@ -341,8 +341,7 @@ export function assertShardWorkflow(value: unknown): void {
   assert.equal(job['runs-on'], 'ubuntu-24.04'); assert.equal(job['timeout-minutes'], 35);
   assert.deepEqual(job.env, { GIT_AUTHOR_NAME: 'iliya', GIT_AUTHOR_EMAIL: 'iliyazelenkog@gmail.com',
     GIT_COMMITTER_NAME: 'iliya', GIT_COMMITTER_EMAIL: 'iliyazelenkog@gmail.com',
-    EXPECTED_REVISION: '${{ inputs.revision }}', PACKAGE_SHARD: '${{ inputs.shard }}',
-    CI_EVIDENCE_DIR: '${{ runner.temp }}/ci-product-shard' });
+    EXPECTED_REVISION: '${{ inputs.revision }}', PACKAGE_SHARD: '${{ inputs.shard }}' });
   const steps = array(job.steps).map(item => {
     const { name: _name, ...step } = object(item); return step;
   });
@@ -351,6 +350,7 @@ export function assertShardWorkflow(value: unknown): void {
     { shell: 'bash', run: revisionGuard }, { shell: 'bash', run: retainedHistory },
     { uses: setup, with: { 'node-version-file': '.node-version' } },
     { run: 'node scripts/ci/gate.ts revision' }, { run: enablePnpm }, { run: 'pnpm install --frozen-lockfile' },
+    { shell: 'bash', run: packageEvidenceBinding },
     { run: 'node scripts/ci/package-execution.ts' },
     { if: '${{ always() }}', uses: upload, with: {
       name: 'full-ci-${{ inputs.artifact }}-package-${{ inputs.shard }}-${{ github.run_attempt }}',

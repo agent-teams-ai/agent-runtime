@@ -42,7 +42,6 @@ jobs:
       GIT_COMMITTER_NAME: iliya
       GIT_COMMITTER_EMAIL: iliyazelenkog@gmail.com
       EXPECTED_REVISION: ${{ inputs.revision }}
-      CI_EVIDENCE_DIR: ${{ runner.temp }}/ci-product-root
     steps:
       - name: Checkout exact revision
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -78,6 +77,11 @@ jobs:
           corepack install --global pnpm@11.18.0
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Bind disposable evidence paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'CI_EVIDENCE_DIR=%s/ci-product-root\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Capture independent full source custody
         run: node scripts/ci/product-fanout-contract.ts custody-start
       - name: Clean all six packages
@@ -119,8 +123,6 @@ jobs:
     env:
       EXPECTED_REVISION: ${{ inputs.revision }}
       NEEDS: ${{ toJSON(needs) }}
-      CI_PACKAGE_REPORT_DIR: ${{ runner.temp }}/ci-product-reports/packages
-      CI_ROOT_REPORT_DIR: ${{ runner.temp }}/ci-product-reports/root
     steps:
       - name: Checkout exact revision
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -156,6 +158,12 @@ jobs:
           corepack install --global pnpm@11.18.0
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Bind disposable evidence paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'CI_PACKAGE_REPORT_DIR=%s/ci-product-reports/packages\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+          printf 'CI_ROOT_REPORT_DIR=%s/ci-product-reports/root\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       # Reuse the download pin already present in the release evidence drill.
       - name: Download all eight shard execution reports
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
