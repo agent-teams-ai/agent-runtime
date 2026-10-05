@@ -43,7 +43,7 @@ const foundationContract = {
       }
     },
     "remainder": {
-      "runs-on": "${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork && 'ubuntu-24.04' || vars.CI_LINUX_RUNNER || 'ubuntu-24.04' }}",
+      "runs-on": "${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-24.04' || vars.CI_LINUX_RUNNER || 'ubuntu-24.04' }}",
       "timeout-minutes": 20,
       "env": {
         "GIT_AUTHOR_NAME": "iliya",
@@ -119,7 +119,7 @@ const foundationContract = {
         "fixtures",
         "remainder"
       ],
-      "runs-on": "${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork && 'ubuntu-24.04' || vars.CI_LINUX_RUNNER || 'ubuntu-24.04' }}",
+      "runs-on": "${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-24.04' || vars.CI_LINUX_RUNNER || 'ubuntu-24.04' }}",
       "timeout-minutes": 5,
       "env": {
         "GIT_AUTHOR_NAME": "iliya",
@@ -204,7 +204,7 @@ const shardContract = {
   },
   "jobs": {
     "shard": {
-      "runs-on": "${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork && 'ubuntu-24.04' || vars.CI_LINUX_RUNNER || 'ubuntu-24.04' }}",
+      "runs-on": "${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-24.04' || vars.CI_LINUX_RUNNER || 'ubuntu-24.04' }}",
       "timeout-minutes": 15,
       "env": {
         "GIT_AUTHOR_NAME": "iliya",
