@@ -112,7 +112,7 @@ export function assertPrObligations(expected: readonly Obligation[], observed: r
       if (declaration.regression === 'foundation-negative') {assertFoundationNegativeExecution(item.execution, foundationRequired);}
       // Pretty CLI output lacks source sites and can forward repeated fixture
       // names. Enforce identity uniqueness for actual public Node events only.
-      if (item.execution.nodeSummaries?.length) {
+      if (declaration.regression === 'foundation-negative' || /^node --test(?: |$)/u.test(item.command)) {
         const identities = item.execution.tests.map(result => JSON.stringify([result.suite, result.ancestry, result.name, result.kind]));
         assert.equal(new Set(identities).size, identities.length, 'duplicate observed test identity');
       }
