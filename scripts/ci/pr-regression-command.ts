@@ -131,6 +131,7 @@ export function prObligations(group: Group): Obligation[] {
   if (group === 'docs') {return [phase('docs:protocol:check'), phase('docs:qualification:typecheck'), phase('docs:qualification:serial'), regression('docs-portable')];}
   assert.ok(group === 'quick' || group === 'architecture', 'product scheduling stays with Runtime full product route');
   return groups[group].flatMap(id => {
+    if (id === 'test:ci') {return [regression('ci-selftests'), phase('ci-conformance', 'node scripts/ci/conformance.ts')];}
     if (id === 'test:feature-modules') {return [regression('fms')];}
     if (id === 'test:consumer-modules') {return [regression('cms-regression'), phase('cms-direct', cmsDirectCommand), phase('cms-mandatory', cmsMandatoryCommand)];}
     return [phase(id)];

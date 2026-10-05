@@ -79,8 +79,9 @@ Verification workflow:
   sampling policy in [ci-pr-regressions.json](architecture/foundation/ci-pr-regressions.json).
   Complete immutable base/head inputs and the current frozen runner envelope
   must close before deferral. Deferrals claim zero test execution or passes.
-  Current-source validators, both CMS pin commands, CI rejecting tests, all six
-  product packages, typed/native checks, Darwin and PostgreSQL remain required.
+  CI selftests may defer only with unchanged closed tooling inputs; current CI
+  conformance always executes. Current-source validators, both CMS pin commands,
+  all six product packages, typed/native checks, Darwin and PostgreSQL remain required.
   Common changes and uncertainty run FULL; main, nightly, merge queue and
   reusable full calls retain complete coverage. Local full and fast commands
   retain their existing meaning.
