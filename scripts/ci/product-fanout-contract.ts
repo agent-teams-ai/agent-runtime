@@ -6,7 +6,7 @@ import { basename, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertProductWorkflow, assertShardWorkflow, assertDarwinWorkflow } from './product-workflow-contract.ts';
 export { assertProductWorkflow, assertShardWorkflow, assertDarwinWorkflow, assertDarwinCaller, assertDarwinReference } from './product-workflow-contract.ts';
-import { workflowIdentity } from './package-execution.ts';
+import { workflowIdentity } from './product-workflow-contract.ts';
 import type { ExecutionTarget, WorkflowIdentity } from './package-execution.ts';
 import { assertObservedStreams } from './product-test-observation.ts';
 import { commandInventory } from './script-routing.ts';

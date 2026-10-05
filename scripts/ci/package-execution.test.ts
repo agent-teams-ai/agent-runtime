@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { tmpdir } from 'node:os';
@@ -342,3 +342,25 @@ test('retained raw process stdout preserves split UTF8 bytes exactly', async t =
 });
 
 }
+
+// Before the aggregate used its shared workflow contract directly, starting the
+// producer as a fresh CLI ended with exit 13 before any package command ran.
+test('fresh package CLI reaches its prerequisite and preserves its failure without a module deadlock', { skip: process.platform !== 'linux' }, async t => {
+  const root = resolve('.'), revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim();
+  const temporary = await mkdtemp(join(tmpdir(), 'ar-package-cli-TEST-')); t.after(() => rm(temporary, { recursive: true, force: true }));
+  const bin = join(temporary, 'bin'); await mkdir(bin);
+  const pnpm = join(bin, 'pnpm');
+  await writeFile(pnpm, '#!/bin/sh\nif [ "$#" -eq 1 ] && [ "$1" = --version ]; then printf "11.18.0\\n"; else printf "TEST prerequisite refusal\\n"; exit 97; fi\n');
+  await chmod(pnpm, 0o755);
+  const output = join(temporary, 'evidence');
+  const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, EXECUTION_TARGET: 'linux-x64', PACKAGE_SHARD: 'runtime-configuration',
+    EXPECTED_REVISION: revision, CI_EVIDENCE_DIR: output, RUNNER_OS: 'Linux', RUNNER_ARCH: 'X64', GITHUB_RUN_ID: '1', GITHUB_RUN_ATTEMPT: '1', GITHUB_WORKFLOW_SHA: revision };
+  delete env.NODE_OPTIONS; delete env.NODE_TEST_CONTEXT;
+  const result = spawnSync(process.execPath, [reporter], { cwd: root, env, encoding: 'utf8', timeout: 30000 });
+  assert.equal(result.status, 97, result.stderr);
+  const receipt = JSON.parse(await readFile(join(output, 'receipt.json'), 'utf8'));
+  assert.equal(receipt.exitCode, 97); assert.equal(receipt.commands.length, 1);
+  assert.deepEqual(receipt.commands[0].argv, ['--filter', './packages/**', '-r', 'run', 'clean']);
+  assert.ok(receipt.commands[0].pid > 0); assert.equal(receipt.commands[0].exitCode, 97);
+  assert.ok(receipt.sourceBefore['scripts/ci/package-execution.ts']);
+});
