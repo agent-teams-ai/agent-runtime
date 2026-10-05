@@ -26,9 +26,8 @@ jobs:
       revision: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
   foundation:
-    uses: ./.github/workflows/ci-lane.yml
+    uses: ./.github/workflows/ci-foundation.yml
     with:
-      script: check:ci:foundation
       artifact: foundation
       revision: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
