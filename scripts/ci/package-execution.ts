@@ -362,7 +362,7 @@ export async function runCommand(executable: string, argv: string[], cwd: string
     } else if (logs.stdout.includes('PACKAGE_NODE_PROCESS ') || logs.stderr.includes('PACKAGE_NODE_PROCESS ')) {
       observation = captured(logs.stdout, logs.stderr, 0, null);
     }
-  } catch (failure) { error = String(failure); }
+  } catch (failure) { error ??= String(failure); }
   return { executable, argv, cwd, pid: child.pid ?? null, start, end: new Date().toISOString(), wallMs: performance.now() - clock, ...result, error, observation };
 }
 export async function executePackage(root: string, id: unknown, revision: string, output: string, target: ExecutionTarget): Promise<number> {
