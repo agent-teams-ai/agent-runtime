@@ -73,6 +73,8 @@ Verification workflow:
 - Run `pnpm check:fast` before handoff.
 - Run the authoritative `pnpm check` before opening or merging a pull request.
 - A passing changed-file or fast check never replaces the complete gate.
+- `CI Nightly` runs the same full CI, Darwin, PostgreSQL and centrally pinned
+  Docs checks daily at 01:17 UTC and through inputless manual dispatch.
 
 ## Consumer Module Standard maintenance
 

@@ -15,8 +15,10 @@ import type { SchedulingEvent } from './conformance.ts';
 import { compare } from './compare.ts';
 import type { Receipt } from './compare.ts';
 import { registerCmsPinReviewTests } from './cms-pin-review.test.ts';
+import { registerNightlyContractTests } from './nightly-contract.test.ts';
 
 registerCmsPinReviewTests();
+registerNightlyContractTests();
 
 const scripts = await readScripts(new URL('../../package.json', import.meta.url));
 const baseline: { scripts: Scripts } = JSON.parse(await readFile(new URL('./full-contract.json', import.meta.url), 'utf8'));
