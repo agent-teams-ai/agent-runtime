@@ -9,33 +9,82 @@ import { groups } from './policy.ts';
 import type { Group } from './policy.ts';
 import { assertCmsComposite, captureCmsComposite, cmsBinding, cmsContract, cmsDirectCommand, cmsMandatoryCommand,
   createTestResultCollector, mandatoryRunnerSummary } from './measure.ts';
-import type { TestResult } from './measure.ts';
+import type { NodeSummary, TestResult } from './measure.ts';
 import { classifyPrRegressions, currentPrInput, installationFingerprint, regressionCommands } from './pr-regression-inputs.ts';
 import type { PrPlan, RegressionId } from './pr-regression-inputs.ts';
 
-export interface Execution { code: number | null; signal: string | null; tests: TestResult[]; mandatory: string[] }
+export interface Execution { code: number | null; signal: string | null; tests: TestResult[]; mandatory: string[]; nodeSummaries?: NodeSummary[] }
 export interface Obligation { id: string; command: string; regression?: RegressionId }
 export type ObservedObligation = Obligation & (
   { disposition: 'executed'; execution: Execution }
   | { disposition: 'deferred-unchanged-regression-inputs'; tests: [] }
 );
 
+type RequiredTest = Pick<TestResult, 'suite' | 'ancestry' | 'name' | 'kind' | 'depth'>;
+const foundationFiles = ['scripts/architecture/source-dependency-adapter-boundaries.test.mjs',
+  'scripts/docs/runtime-builtin-permissions.test.mjs', 'scripts/ci/run-ordinary-postgres.test.mjs'] as const;
+const foundationCommand = `node --test ${foundationFiles.join(' ')}`;
+const foundationSuite = 'installed Foundation adapter boundary checks';
+const foundationRegistrationFile = 'scripts/ci/foundation-fixture-sharding.ts';
+
+// The existing Foundation aggregate's original-source oracle, independent of
+// the sharding helper's name table. The other two original files remain required.
+export async function foundationNegativeTests(root: string): Promise<RequiredTest[]> {
+  const required: RequiredTest[] = [];
+  for (const [index, suite] of foundationFiles.entries()) {
+    const source = await readFile(join(root, suite), 'utf8');
+    const pattern = index === 0 ? /^  test\("([^"]+)",/gmu : /^test\("([^"]+)",/gmu;
+    const names = [...source.matchAll(pattern)].map(match => match[1]!);
+    assert.equal(names.length, [25, 5, 3][index], `incomplete original Foundation registrations: ${suite}`);
+    assert.equal(new Set(names).size, names.length, `duplicate original Foundation registration: ${suite}`);
+    // Node reports the boundary leaves at their registration wrapper's file;
+    // the containing suite reports the original file. Retain both real sites.
+    required.push(...names.map(name => ({ suite: index === 0 ? foundationRegistrationFile : suite, name,
+      ancestry: [], depth: index === 0 ? 1 : 0, kind: 'test' as const })));
+    if (index === 0) {required.push({ suite, name: foundationSuite, ancestry: [], depth: 0, kind: 'suite' });}
+  }
+  return required;
+}
+
+const testIdentity = (result: RequiredTest) => JSON.stringify([result.suite, result.ancestry, result.name, result.kind, result.depth]);
+function assertFoundationNegativeExecution(execution: Execution, required: readonly RequiredTest[] | undefined): void {
+  assert.ok(required?.length === 34, 'missing independent original Foundation registrations');
+  assert.deepEqual(execution.tests.map(testIdentity).toSorted(), required.map(testIdentity).toSorted(),
+    'missing, mutated or duplicate original Foundation test execution');
+  assert.equal(execution.nodeSummaries?.length, 1, 'missing or duplicate Foundation Node summary');
+  const summary = execution.nodeSummaries[0]!;
+  assert.equal(summary.success, true, 'incomplete Foundation Node execution');
+  assert.deepEqual(summary.counts, { tests: 33, suites: 1, passed: 33, failed: 0, cancelled: 0, skipped: 0, todo: 0, topLevel: 9 },
+    'incomplete Foundation Node counts');
+}
+
 // Fixed commands come from the reviewed script inventory, never an event payload.
 // This observes real stdout and exit/signal; deferrals never enter this function.
 export async function observeRegressionProcess(command: string, root: string, env: NodeJS.ProcessEnv): Promise<Execution> {
-  const tokens = command.split(' '), executable = tokens.shift(); assert.ok(executable);
+  const foundation = command === regressionCommands['foundation-negative'];
+  if (foundation) {
+    assert.equal((await readScripts(join(root, 'package.json')))['foundation:boundaries:negative'], foundationCommand,
+      'original three-file Foundation command drift');
+  }
+  const serialCommand = foundation ? foundationCommand : command;
+  const tokens = serialCommand.split(' '), executable = tokens.shift(); assert.ok(executable);
   const directNodeTest = executable === 'node' && tokens[0] === '--test';
   const file = executable === 'node' ? process.execPath : executable === 'pnpm' ? 'pnpm' : resolvePath(root, 'node_modules/.bin', executable);
   const args = directNodeTest ? [...tokens.slice(0, 1), `--test-reporter=${fileURLToPath(new URL('./measure.ts', import.meta.url))}`, ...tokens.slice(1)] : tokens;
   const childEnv = { ...env }; delete childEnv.NODE_TEST_CONTEXT;
+  if (foundation) {
+    // Serial PR FULL and sampled execution never inherit the non-PR shard route.
+    for (const key of ['FOUNDATION_FIXTURE_PROTOCOL', 'FOUNDATION_FIXTURE_INDEX', 'FOUNDATION_FIXTURE_COUNT']) {delete childEnv[key];}
+  }
   const child = spawn(file, args, { cwd: root, env: childEnv, stdio: ['ignore', 'pipe', 'inherit'] });
-  const execution: Execution = { code: null, signal: null, tests: [], mandatory: [] };
+  const execution: Execution = { code: null, signal: null, tests: [], mandatory: [], nodeSummaries: [] };
   const observe = createTestResultCollector();
   const lines = createInterface({ input: child.stdout });
   lines.on('line', line => {
     console.log(line);
     const result = directNodeTest && line.startsWith('CI_NODE_EVENT ') ? JSON.parse(line.slice(14)) as TestResult : observe(line);
     if (result) {execution.tests.push(result);}
+    if (directNodeTest && line.startsWith('CI_NODE_SUMMARY ')) {execution.nodeSummaries!.push(JSON.parse(line.slice(16)) as NodeSummary);}
     const summary = mandatoryRunnerSummary(line); if (summary) {execution.mandatory.push(summary);}
   });
   await new Promise<void>((resolve, reject) => {
@@ -45,7 +94,7 @@ export async function observeRegressionProcess(command: string, root: string, en
   return execution;
 }
 
-export function assertPrObligations(expected: readonly Obligation[], observed: readonly ObservedObligation[], deferred: readonly RegressionId[]): void {
+export function assertPrObligations(expected: readonly Obligation[], observed: readonly ObservedObligation[], deferred: readonly RegressionId[], foundationRequired?: readonly RequiredTest[]): void {
   assert.deepEqual(observed.map(({ id, command }) => ({ id, command })), expected.map(({ id, command }) => ({ id, command })), 'missing, duplicate or reordered PR obligation');
   assert.equal(new Set(observed.map(item => item.id)).size, observed.length, 'duplicate obligation');
   for (const [i, item] of observed.entries()) {
@@ -60,6 +109,7 @@ export function assertPrObligations(expected: readonly Obligation[], observed: r
       assert.ok(!declaration.regression || !deferred.includes(declaration.regression), 'wrong disposition');
       assert.equal(item.execution.code, 0, 'failed or missing command'); assert.equal(item.execution.signal, null, 'cancelled command');
       assert.ok(item.execution.tests.every(result => result.status === 'passed'), 'failed, skipped, todo or cancelled test');
+      if (declaration.regression === 'foundation-negative') {assertFoundationNegativeExecution(item.execution, foundationRequired);}
       const identities = item.execution.tests.map(result => JSON.stringify([result.suite, result.ancestry, result.name, result.kind]));
       assert.equal(new Set(identities).size, identities.length, 'duplicate observed test identity');
       if (/node --test|agent-teams-node-test/u.test(item.command) || /^pnpm (?:test:|foundation:boundaries:negative|docs:qualification:(?:serial|portable))/u.test(item.command)) {
@@ -89,6 +139,8 @@ export async function runPrRegressions(group: Group, output: string): Promise<vo
   const input = await currentPrInput(root, process.env);
   const plan: PrPlan = await classifyPrRegressions(root, input);
   const expected = prObligations(group);
+  const foundationRequired = expected.some(item => item.regression === 'foundation-negative' && !plan.deferred.includes(item.regression))
+    ? await foundationNegativeTests(root) : undefined;
   const report = { protocol: 'pr-regression-execution/1', group, plan,
     runner: { runtime: input.runtime, imageOS: process.env.ImageOS, imageVersion: process.env.ImageVersion,
       environment: process.env.RUNNER_ENVIRONMENT, repository: process.env.GITHUB_REPOSITORY,
@@ -109,11 +161,12 @@ export async function runPrRegressions(group: Group, output: string): Promise<vo
       report.obligations.push({ ...item, disposition: 'executed', execution: { ...cms.direct, mandatory: [] } },
         { ...expected.find(value => value.id === 'cms-mandatory')!, disposition: 'executed', execution: { ...cms.mandatory, tests: [], mandatory: cms.mandatory.summaries } });
     } else if (item.id !== 'cms-mandatory') {
-      if (plan.mode === 'affected-pr') {assert.equal(await installationFingerprint(root), plan.installation, 'installed executable/native/link drift before execution');}
+      // currentPrInput already observes the frozen installation before this lane.
+      // The final observation rejects drift across the entire execution.
       const execution = await observeRegressionProcess(item.command, root, process.env);
       report.obligations.push({ ...item, disposition: 'executed', execution });
       await save();
-      assertPrObligations(expected.slice(0, report.obligations.length), report.obligations, plan.deferred);
+      assertPrObligations(expected.slice(0, report.obligations.length), report.obligations, plan.deferred, foundationRequired);
     }
     await save();
   }
@@ -121,7 +174,7 @@ export async function runPrRegressions(group: Group, output: string): Promise<vo
     assert.equal(await installationFingerprint(root), plan.installation, 'installed drift during PR');
     assert.deepEqual(await classifyPrRegressions(root, input), plan, 'current source/scope drift during PR');
   }
-  assertPrObligations(expected, report.obligations, plan.deferred);
+  assertPrObligations(expected, report.obligations, plan.deferred, foundationRequired);
   console.log(`PR regression sampling ${plan.mode}: ${plan.deferred.join(', ') || 'all regressions executed'}; no historical pass reused.`);
 }
 

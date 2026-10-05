@@ -7,7 +7,8 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import { classifyPrRegressions, supportedPrEnvironment, installationFingerprint } from './pr-regression-inputs.ts';
-import { assertPrObligations, observeRegressionProcess, prObligations } from './pr-regression-command.ts';
+import { assertPrObligations, foundationNegativeTests, observeRegressionProcess, prObligations } from './pr-regression-command.ts';
+import type { Execution } from './pr-regression-command.ts';
 import { validatePrFoundationRoute } from './conformance.ts';
 
 const repository = fileURLToPath(new URL('../../', import.meta.url));
@@ -74,6 +75,7 @@ async function fixture(t: test.TestContext) {
 }
 
 export function registerPrRegressionTests(): void {
+  registerFoundationPrExecutionTests();
   test('real immutable RC and ER body snapshots defer whole regressions with their independent closures', async t => {
     const f = await fixture(t);
     await f.body(rc);
@@ -213,5 +215,120 @@ export function registerPrRegressionTests(): void {
     assert.throws(() => assertPrObligations([{ id: 'real', command }], [{ id: 'real', command, disposition: 'deferred-unchanged-regression-inputs', tests: [] }], []));
     const unsupported = spawnSync(process.execPath, [join(repository, 'scripts/ci/pr-regression-command.ts'), 'unknown'], { env, encoding: 'utf8' });
     assert.notEqual(unsupported.status, 0);
+  });
+}
+
+async function foundationExecutionFixture(t: test.TestContext): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), 'ar-pr-foundation-execution-TEST-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const files = ['scripts/architecture/source-dependency-adapter-boundaries.test.mjs',
+    'scripts/docs/runtime-builtin-permissions.test.mjs', 'scripts/ci/run-ordinary-postgres.test.mjs'];
+  await mkdir(join(root, 'scripts/ci'), { recursive: true });
+  await cp(join(repository, 'scripts/ci/foundation-fixture-sharding.ts'), join(root, 'scripts/ci/foundation-fixture-sharding.ts'));
+  await writeFile(join(root, 'package.json'), JSON.stringify({ type: 'module', scripts: {
+    'foundation:boundaries:negative': `node --test ${files.join(' ')}`,
+  } }));
+  for (const [index, file] of files.entries()) {
+    const original = await readFile(join(repository, file), 'utf8');
+    const names = original.split('\n').filter(line => line.startsWith(index === 0 ? '  test("' : 'test("'))
+      .map(line => JSON.parse(line.slice(line.indexOf('"'), line.indexOf('",') + 1)) as string);
+    assert.equal(names.length, [25, 5, 3][index]);
+    await mkdir(join(root, dirname(file)), { recursive: true });
+    // Generated data at the immutable original .mjs paths exercises the real
+    // selector/Node stream boundary without repeating installed CLI qualification.
+    const leaves = names.map(name => `${index === 0 ? '  ' : ''}test(${JSON.stringify(name)}, () => {});`).join('\n');
+    const source = index === 0
+      ? `import { describe } from 'node:test';\nimport { fixtureRegistration } from '../ci/foundation-fixture-sharding.ts';\n`
+        + `const fixtures = fixtureRegistration(process.env); const test = fixtures.test;\n`
+        + `describe('installed Foundation adapter boundary checks', () => {\n${leaves}\nfixtures.finish();\n});\n`
+      : `import test from 'node:test';\n${leaves}\n`;
+    await writeFile(join(root, file), source);
+  }
+  return root;
+}
+
+function registerFoundationPrExecutionTests(): void {
+  // Old failure: zero-exit FULL accepted 9/25 leaves because the other sixteen
+  // were never registered. Observe the original command once, then independently
+  // corrupt that real proof; no shard-helper name table supplies expectations.
+  test('serial PR Foundation execution clears unsupported selectors and closes every original leaf and summary', async t => {
+    const override = { FOUNDATION_FIXTURE_PROTOCOL: 'foundation-fixtures/1', FOUNDATION_FIXTURE_INDEX: '0', FOUNDATION_FIXTURE_COUNT: '3' };
+    const f = await fixture(t); await f.body(rc); const head = f.freeze();
+    assert.equal((await f.plan(head, { environment: { ...trusted, ...override } })).mode, 'full');
+    const expected = prObligations('foundation').filter(item => item.regression === 'foundation-negative');
+    const executionRoot = await foundationExecutionFixture(t);
+    const required = await foundationNegativeTests(executionRoot);
+    const execution = await observeRegressionProcess(expected[0]!.command, executionRoot, { ...process.env, ...override });
+    const validate = (proof: Execution, oracle = required) => assertPrObligations(expected,
+      [{ ...expected[0]!, disposition: 'executed', execution: proof }], [], oracle);
+    validate(execution);
+    assert.equal(execution.tests.filter(item => item.kind === 'test' && item.depth === 1).length, 25);
+    assert.equal(execution.tests.filter(item => item.kind === 'test' && item.depth === 0).length, 8);
+    assert.equal(execution.code, 0); assert.equal(execution.signal, null);
+    assert.deepEqual(override, { FOUNDATION_FIXTURE_PROTOCOL: 'foundation-fixtures/1', FOUNDATION_FIXTURE_INDEX: '0', FOUNDATION_FIXTURE_COUNT: '3' }, 'caller environment remains owned by caller');
+    const partial = structuredClone(execution);
+    let position = 0;
+    partial.tests = partial.tests.filter(item => item.kind !== 'test' || item.depth === 0 || position++ % 3 === 0);
+    partial.nodeSummaries![0]!.counts.tests = 17; partial.nodeSummaries![0]!.counts.passed = 17;
+    assert.throws(() => validate(partial), /original Foundation test execution/u, 'green 9/25 plus eight other tests rejects independently');
+    const leaf = (proof: Execution) => proof.tests.find(item => item.kind === 'test' && item.suite === required[0]!.suite)!;
+    const mutations: Array<(proof: Execution) => void> = [
+      proof => { proof.tests.splice(proof.tests.indexOf(leaf(proof)), 1); },
+      proof => { leaf(proof).name += ' mutated'; },
+      proof => { leaf(proof).suite = 'wrong-original.test.mjs'; },
+      proof => { leaf(proof).ancestry = ['wrong parent']; },
+      proof => { leaf(proof).kind = 'suite'; },
+      proof => { leaf(proof).depth = 0; },
+      proof => { proof.tests.push(structuredClone(leaf(proof))); },
+      proof => { proof.tests = proof.tests.filter(item => item.kind !== 'suite'); },
+      proof => { delete proof.nodeSummaries; },
+      proof => { proof.nodeSummaries = []; },
+      proof => { proof.nodeSummaries!.push(structuredClone(proof.nodeSummaries![0]!)); },
+      proof => { proof.nodeSummaries![0]!.success = false; },
+      proof => { Object.assign(proof.nodeSummaries![0]!.counts, { failed: 1 }); },
+      proof => { proof.code = 1; },
+      proof => { proof.signal = 'SIGTERM'; },
+    ];
+    for (const key of ['tests', 'passed', 'suites', 'cancelled', 'skipped', 'todo', 'topLevel'] as const) {
+      mutations.push(proof => { proof.nodeSummaries![0]!.counts[key]++; });
+    }
+    for (const status of ['failed', 'skip', 'todo', 'cancelled']) {mutations.push(proof => { leaf(proof).status = status; });}
+    for (const mutate of mutations) {
+      const proof = structuredClone(execution); mutate(proof); assert.throws(() => validate(proof));
+    }
+    for (const suite of new Set(required.filter(item => item.kind === 'test').map(item => item.suite))) {
+      const proof = structuredClone(execution);
+      const index = proof.tests.findIndex(item => item.suite === suite && item.kind === 'test');
+      proof.tests.splice(index, 1); assert.throws(() => validate(proof), /original Foundation test execution/u);
+    }
+    assert.throws(() => assertPrObligations(expected, [{ ...expected[0]!, disposition: 'executed', execution }], []),
+      /independent original Foundation registrations/u, 'exit zero alone cannot qualify Foundation');
+    const deferred = [{ ...expected[0]!, disposition: 'deferred-unchanged-regression-inputs' as const, tests: [] as [] }];
+    assertPrObligations(expected, deferred, ['foundation-negative']);
+
+    // Missing/duplicate source registrations must fail the independent census.
+    // A source-name mutant with the right count must reject the unchanged proof.
+    const root = await mkdtemp(join(tmpdir(), 'ar-pr-originals-TEST-')); t.after(() => rm(root, { recursive: true, force: true }));
+    const originalFiles = new Set(required.filter(item => item.depth === 0).map(item => item.suite));
+    for (const suite of originalFiles) {
+      await mkdir(join(root, dirname(suite)), { recursive: true }); await cp(join(executionRoot, suite), join(root, suite));
+    }
+    for (const suite of originalFiles) {
+      const original = await readFile(join(root, suite), 'utf8');
+      const registrations = [...original.matchAll(/^ *test\("([^"]+)",/gmu)];
+      await writeFile(join(root, suite), original.replace(registrations[0]![0], '  omittedRegistration('));
+      await assert.rejects(foundationNegativeTests(root), /incomplete original Foundation registrations/u);
+      await writeFile(join(root, suite), original.replace(registrations[1]![0], registrations[0]![0]));
+      await assert.rejects(foundationNegativeTests(root), /duplicate original Foundation registration/u);
+      await writeFile(join(root, suite), original.replace(registrations[0]![0],
+        registrations[0]![0].replace(registrations[0]![1]!, 'independent original name mutant')));
+      const mutated = await foundationNegativeTests(root);
+      assert.throws(() => validate(execution, mutated), /original Foundation test execution/u);
+      await writeFile(join(root, suite), original);
+    }
+    const manifest = JSON.parse(await readFile(join(f.root, 'package.json'), 'utf8')) as { scripts: Record<string, string> };
+    manifest.scripts['foundation:boundaries:negative'] += ' --test-name-pattern=one';
+    await writeFile(join(f.root, 'package.json'), JSON.stringify(manifest));
+    await assert.rejects(observeRegressionProcess(expected[0]!.command, f.root, process.env), /original three-file Foundation command drift/u);
   });
 }
