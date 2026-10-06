@@ -13,6 +13,7 @@ import { validateNightlyWorkflow } from './nightly-contract.ts';
 import { validateFoundationWorkflows } from './foundation-fanout-contract.ts';
 import { assertProductWorkflow, assertShardWorkflow, assertDarwinWorkflow, assertDarwinCaller, assertDarwinReference } from './product-fanout-contract.ts';
 import { prObligations } from './pr-regression-command.ts';
+import { assertNamespaceQualificationWorkflow } from './namespace-qualification-contract.ts';
 
 export const eventRevision = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}";
 export const prSamplingRoute = "${{ github.event_name == 'pull_request' && github.workflow == 'CI' }}";
@@ -297,6 +298,7 @@ export async function conformance(root: string): Promise<void> {
   await authenticatePlatformPredecessor(root);
   assertDarwinWorkflow(parse(await read('.github/workflows/ci-darwin-packages.yml')));
   assertDarwinReference(parse(await read('.github/workflows/ci-darwin-reference.yml')));
+  assertNamespaceQualificationWorkflow(parse(await read('.github/workflows/ci-namespace-qualification.yml')));
   const platform: Record<string, string> = JSON.parse(await read('scripts/ci/platform-contract.json'));
   assert.equal(createHash('sha256').update(await read('scripts/ci/platform-contract.predecessor.json')).digest('hex'), platform['scripts/ci/platform-contract.predecessor.json'], 'retained platform evidence bytes');
   const oldPlatform: Record<string, string> = JSON.parse(execFileSync('git', ['show', '73c771f254858db430d01d13c3cb433ef18b757d:scripts/ci/platform-contract.json'], { cwd: root, encoding: 'utf8' }));
