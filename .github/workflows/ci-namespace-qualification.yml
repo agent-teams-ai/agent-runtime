@@ -16,7 +16,6 @@ jobs:
       GIT_COMMITTER_NAME: iliya
       GIT_COMMITTER_EMAIL: iliyazelenkog@gmail.com
       EXPECTED_REVISION: ${{ github.workflow_sha }}
-      CI_EVIDENCE_DIR: ${{ runner.temp }}/ci-namespace-qualification
     steps:
       - name: Checkout exact workflow revision
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -42,6 +41,11 @@ jobs:
           corepack install --global pnpm@11.18.0
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Bind disposable evidence path
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'CI_EVIDENCE_DIR=%s/ci-namespace-qualification\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Run original full product checks
         id: product
         run: pnpm product:check

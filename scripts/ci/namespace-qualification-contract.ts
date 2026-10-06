@@ -17,7 +17,7 @@ export function assertNamespaceQualificationWorkflow(value: unknown): void {
     jobs: { qualification: { 'runs-on': 'namespace-profile-macos-15', 'timeout-minutes': 30,
       env: { GIT_AUTHOR_NAME: 'iliya', GIT_AUTHOR_EMAIL: 'iliyazelenkog@gmail.com',
         GIT_COMMITTER_NAME: 'iliya', GIT_COMMITTER_EMAIL: 'iliyazelenkog@gmail.com',
-        EXPECTED_REVISION: '${{ github.workflow_sha }}', CI_EVIDENCE_DIR: '${{ runner.temp }}/ci-namespace-qualification' },
+        EXPECTED_REVISION: '${{ github.workflow_sha }}' },
       steps: [
         { name: 'Checkout exact workflow revision', uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803',
           with: { ref: '${{ github.workflow_sha }}', 'persist-credentials': false, 'fetch-depth': 0 } },
@@ -27,6 +27,8 @@ export function assertNamespaceQualificationWorkflow(value: unknown): void {
         { name: 'Verify typed revision binding', run: 'node scripts/ci/gate.ts revision' },
         { name: 'Enable pinned pnpm', run: 'corepack enable\ncorepack install --global pnpm@11.18.0\n' },
         { name: 'Install dependencies', run: 'pnpm install --frozen-lockfile' },
+        { name: 'Bind disposable evidence path', shell: 'bash',
+          run: "set -euo pipefail\nprintf 'CI_EVIDENCE_DIR=%s/ci-namespace-qualification\\n' \"$RUNNER_TEMP\" >> \"$GITHUB_ENV\"\n" },
         { name: 'Run original full product checks', id: 'product', run: 'pnpm product:check' },
         { name: 'Capture actual Namespace platform and native evidence', if: '${{ always() }}',
           env: { PRODUCT_OUTCOME: '${{ steps.product.outcome }}' }, run: 'node scripts/ci/namespace-qualification.ts' },
