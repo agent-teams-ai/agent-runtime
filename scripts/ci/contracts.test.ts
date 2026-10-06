@@ -18,6 +18,7 @@ import { registerCmsPinReviewTests } from './cms-pin-review.test.ts';
 import { registerNightlyContractTests } from './nightly-contract.test.ts';
 import { registerFoundationFixtureShardingTests } from './foundation-fixture-sharding.test.ts';
 import { registerPrRegressionTests } from './pr-regression-inputs.test.ts';
+import { assertNamespaceNativeQualification, assertNamespaceQualificationWorkflow } from './namespace-qualification-contract.ts';
 
 import { registerPackageExecutionTests } from './package-execution.test.ts';
 import { registerProductFanoutTests } from './product-fanout-contract.test.ts';
@@ -28,6 +29,42 @@ registerCmsPinReviewTests();
 registerNightlyContractTests();
 registerFoundationFixtureShardingTests();
 registerPrRegressionTests();
+
+const namespaceQualificationJob = (value: Record<string, unknown>) => workflowObject(workflowObject(value.jobs).qualification);
+const namespaceQualificationStep = (value: Record<string, unknown>, name: string) => {
+  const steps = namespaceQualificationJob(value).steps; assert.ok(Array.isArray(steps));
+  const found = steps.map(workflowObject).find(item => item.name === name); assert.ok(found); return found;
+};
+
+// A PR-triggered, mutable, filtered or success-only canary must fail before it
+// reaches Namespace. These mutants exercise the admission validator boundary.
+test('Namespace canary rejects untrusted triggers, mutable source and incomplete product evidence', async () => {
+  const workflow = workflowObject(parse(await readFile(new URL('../../.github/workflows/ci-namespace-qualification.yml', import.meta.url), 'utf8')));
+  assertNamespaceQualificationWorkflow(workflow);
+  const faults: Array<(value: Record<string, unknown>) => void> = [
+    value => { workflowObject(value.on).pull_request = {}; },
+    value => { workflowObject(value.on).workflow_dispatch = { inputs: { revision: { type: 'string' } } }; },
+    value => { workflowObject(value.permissions).contents = 'write'; },
+    value => { workflowObject(namespaceQualificationStep(value, 'Checkout exact workflow revision').with).ref = 'main'; },
+    value => { namespaceQualificationStep(value, 'Run original full product checks').run = 'pnpm --filter @agent-teams/agent-execution test'; },
+    value => { namespaceQualificationStep(value, 'Run original full product checks').if = '${{ false }}'; },
+    value => { namespaceQualificationStep(value, 'Run original full product checks')['continue-on-error'] = true; },
+    value => { namespaceQualificationStep(value, 'Capture actual Namespace platform and native evidence').if = '${{ success() }}'; },
+    value => { workflowObject(namespaceQualificationJob(value).env).ImageOS = 'macos15'; },
+    value => { namespaceQualificationStep(value, 'Retain every qualification attempt').if = '${{ success() }}'; },
+  ];
+  for (const mutate of faults) { const changed = structuredClone(workflow); mutate(changed); assert.throws(() => assertNamespaceQualificationWorkflow(changed)); }
+});
+test('Namespace successful full product qualification requires observed Mach-O ARM64 bytes', () => {
+  const native = { format: { exitCode: 0, signal: null, stdout: 'rename-no-replace.node: Mach-O 64-bit bundle arm64' },
+    arch: { exitCode: 0, signal: null, stdout: 'arm64\n' } };
+  assertNamespaceNativeQualification('success', native);
+  assertNamespaceNativeQualification('failure', null); assertNamespaceNativeQualification('skipped', null);
+  assert.throws(() => assertNamespaceNativeQualification('success', null), /actual native artifact/u);
+  assert.throws(() => assertNamespaceNativeQualification('success', { ...native, format: { ...native.format, stdout: 'ELF 64-bit shared object' } }));
+  assert.throws(() => assertNamespaceNativeQualification('success', { ...native, arch: { ...native.arch, stdout: 'x86_64' } }));
+  assert.throws(() => assertNamespaceNativeQualification('success', { ...native, arch: { ...native.arch, exitCode: 1 } }));
+});
 
 const scripts = await readScripts(new URL('../../package.json', import.meta.url));
 const baseline: { scripts: Scripts } = JSON.parse(await readFile(new URL('./full-contract.json', import.meta.url), 'utf8'));
