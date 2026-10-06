@@ -3098,6 +3098,8 @@ boundaries:
   - scripts/ci/pr-regression-command.ts
   - scripts/ci/product-workflow-contract.ts
   - scripts/ci/package-native-observation.ts
+  - scripts/ci/namespace-qualification-contract.ts
+  - scripts/ci/namespace-qualification.ts
   entrypoints:
   - scripts/ci/script-routing.ts
   - scripts/ci/cms-pin-review.ts

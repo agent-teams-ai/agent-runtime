@@ -30,27 +30,28 @@ registerNightlyContractTests();
 registerFoundationFixtureShardingTests();
 registerPrRegressionTests();
 
+const namespaceQualificationJob = (value: Record<string, unknown>) => workflowObject(workflowObject(value.jobs).qualification);
+const namespaceQualificationStep = (value: Record<string, unknown>, name: string) => {
+  const steps = namespaceQualificationJob(value).steps; assert.ok(Array.isArray(steps));
+  const found = steps.map(workflowObject).find(item => item.name === name); assert.ok(found); return found;
+};
+
 // A PR-triggered, mutable, filtered or success-only canary must fail before it
 // reaches Namespace. These mutants exercise the admission validator boundary.
 test('Namespace canary rejects untrusted triggers, mutable source and incomplete product evidence', async () => {
   const workflow = workflowObject(parse(await readFile(new URL('../../.github/workflows/ci-namespace-qualification.yml', import.meta.url), 'utf8')));
   assertNamespaceQualificationWorkflow(workflow);
-  const job = (value: Record<string, unknown>) => workflowObject(workflowObject(value.jobs).qualification);
-  const step = (value: Record<string, unknown>, name: string) => {
-    const steps = job(value).steps; assert.ok(Array.isArray(steps));
-    const found = steps.map(workflowObject).find(item => item.name === name); assert.ok(found); return found;
-  };
   const faults: Array<(value: Record<string, unknown>) => void> = [
     value => { workflowObject(value.on).pull_request = {}; },
     value => { workflowObject(value.on).workflow_dispatch = { inputs: { revision: { type: 'string' } } }; },
     value => { workflowObject(value.permissions).contents = 'write'; },
-    value => { workflowObject(step(value, 'Checkout exact workflow revision').with).ref = 'main'; },
-    value => { step(value, 'Run original full product checks').run = 'pnpm --filter @agent-teams/agent-execution test'; },
-    value => { step(value, 'Run original full product checks').if = '${{ false }}'; },
-    value => { step(value, 'Run original full product checks')['continue-on-error'] = true; },
-    value => { step(value, 'Capture actual Namespace platform and native evidence').if = '${{ success() }}'; },
-    value => { workflowObject(job(value).env).ImageOS = 'macos15'; },
-    value => { step(value, 'Retain every qualification attempt').if = '${{ success() }}'; },
+    value => { workflowObject(namespaceQualificationStep(value, 'Checkout exact workflow revision').with).ref = 'main'; },
+    value => { namespaceQualificationStep(value, 'Run original full product checks').run = 'pnpm --filter @agent-teams/agent-execution test'; },
+    value => { namespaceQualificationStep(value, 'Run original full product checks').if = '${{ false }}'; },
+    value => { namespaceQualificationStep(value, 'Run original full product checks')['continue-on-error'] = true; },
+    value => { namespaceQualificationStep(value, 'Capture actual Namespace platform and native evidence').if = '${{ success() }}'; },
+    value => { workflowObject(namespaceQualificationJob(value).env).ImageOS = 'macos15'; },
+    value => { namespaceQualificationStep(value, 'Retain every qualification attempt').if = '${{ success() }}'; },
   ];
   for (const mutate of faults) { const changed = structuredClone(workflow); mutate(changed); assert.throws(() => assertNamespaceQualificationWorkflow(changed)); }
 });
