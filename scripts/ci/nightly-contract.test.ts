@@ -38,8 +38,8 @@ export function registerNightlyContractTests(): void {
     assert.equal((object(original['runtime-macos']).steps as Array<{run?:string}>).at(-1)?.run, 'pnpm product:check');
     const current = jobs((await fixture()).runtime);
     const rootCheckpoint = object(object(parse(execFileSync('git', ['show',
-      '61791a71bdbb8c834291eb368f64bdc7a0dcecd0:.github/workflows/ci.yml'], { encoding: 'utf8' }))).jobs);
-    assert.deepEqual(unowned(current), unowned(rootCheckpoint), 'all accepted Root6179 Linux/PR/Foundation jobs remain exact');
+      'f97c9b79b73d37edcc85216fed975ce4f52e5268:.github/workflows/ci.yml'], { encoding: 'utf8' }))).jobs);
+    assert.deepEqual(unowned(current), unowned(rootCheckpoint), 'all accepted managed-runner Linux/PR/Foundation jobs remain exact');
     const root = await mkdtemp(join(tmpdir(), 'mac-predecessor-TEST-')); t.after(() => rm(root, {recursive:true,force:true}));
     await mkdir(join(root, 'scripts/ci'), {recursive:true});
     await writeFile(join(root, '.git'), `gitdir: ${join(process.cwd(), '.git')}\n`);
