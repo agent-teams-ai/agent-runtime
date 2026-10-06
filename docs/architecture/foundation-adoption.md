@@ -117,6 +117,22 @@ two actual executions; the unchanged installed public CLI still protects its
 three selected identities without OS exceptions. These observations do not
 qualify a new Foundation release or authorize product deployment.
 
+Direct trusted ordinary package-body PRs may defer whole tooling regressions
+under [the fixed policy](../../architecture/foundation/ci-pr-regressions.json).
+CI selftests use synthetic product bodies; their actual helpers/tests, ER
+runner/reporter anchors, workflows, policy, install and toolchain inputs belong
+to the unchanged common closure. Complete immutable base/head membership,
+kinds, modes and actual checkout/installation observations must close first.
+PR quick routing always executes `node scripts/ci/conformance.ts`; a deferred
+`node --test scripts/ci/contracts.test.ts` records zero execution and no passes.
+Foundation body anchors, CMS body roots and the Docs canary retain their own
+regression selections. All current-source/modularity/CMS validators, both CMS
+pin processes, six product packages, root/typed/native, Darwin and PostgreSQL
+stay required. Common, unknown, structural, environment or installation drift
+(including inherited fixture/observation overrides) selects FULL. Main, nightly,
+merge group, manual and reusable full calls retain
+the original complete commands; local full/fast commands retain their meaning.
+
 ## Maintainability budgets
 
 Production TypeScript is limited to 500 effective lines per file, 150 per

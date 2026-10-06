@@ -1,0 +1,27 @@
+name: PR Foundation whole regression scheduling
+
+on:
+  workflow_call:
+    inputs:
+      revision:
+        required: true
+        type: string
+      base-revision:
+        required: true
+        type: string
+      artifact:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  regressions:
+    uses: ./.github/workflows/ci-lane.yml
+    with:
+      script: check:ci:foundation
+      revision: ${{ inputs.revision }}
+      base-revision: ${{ inputs.base-revision }}
+      artifact: ${{ inputs.artifact }}
+      regressions: true

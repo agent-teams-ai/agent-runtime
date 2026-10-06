@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "owner": "agent-runtime/tooling.ci-full-gate",
+  "policy": "affected-pr/full-main-night-common",
+  "packageRoots": [
+    "packages/apps/embedded-runtime",
+    "packages/contexts/agent-execution",
+    "packages/contexts/provider-access",
+    "packages/contexts/runtime-configuration",
+    "packages/contexts/runtime-security",
+    "packages/platform/filesystem-custody"
+  ],
+  "commonScope": "Every tracked leaf outside the six package roots, and all package membership, path kinds, modes, manifests, instructions, profiles, toolchain and runner helpers. Only existing regular src/tests code body changes qualify. All six product packages, root, typed, native, Darwin and PostgreSQL remain required.",
+  "foundationAnchors": [
+    "packages/apps/embedded-runtime/src/composition/agent-runtime-host.ts",
+    "packages/apps/embedded-runtime/src/features/contained-turn-access-authority/adapters/contained-turn-access-authority.ts",
+    "packages/apps/embedded-runtime/src/features/contained-turn-authority-capability/adapters/contained-turn-authority-capability.ts",
+    "packages/apps/embedded-runtime/src/features/contained-turn-route-qualification/adapters/contained-turn-route-qualification.ts",
+    "packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope/adapters/trusted-runtime-access-scope.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-tls-http-egress-transport-support.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/node-linux-exclusive-route.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-config-wire.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/docker-custodied-provider-process.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-provider-options.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-receipt-identity.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/codex-credential-output-inventory.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/preparation-scope-anti-corruption.ts",
+    "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/provider-access-anti-corruption.ts",
+    "packages/apps/embedded-runtime/src/composition/contained-turn-feature-composition.ts",
+    "packages/contexts/provider-access/src/features/contained-turn-access/adapters/provider-access-data.ts"
+  ],
+  "cmsBodyRoots": ["packages/apps/embedded-runtime/src", "packages/contexts/agent-execution/src"],
+  "docsBodyAnchors": ["packages/contexts/agent-execution/tests/live/claude-contained-turn-live-canary.mjs"],
+  "regressions": {
+    "foundation-negative": "pnpm foundation:boundaries:negative",
+    "fms": "pnpm test:feature-modules",
+    "cms-regression": "node --test scripts/architecture/check-consumer-module-standard.test.mjs",
+    "ci-selftests": "node --test scripts/ci/contracts.test.ts",
+    "docs-portable": "pnpm docs:qualification:portable"
+  },
+  "ciSelftestInputs": "Contracts and their registered regressions execute synthetic product bodies. Actual CI helpers/tests, ER runner/reporter anchors, workflows, policy, installation and toolchain are common inputs; the complete B/H membership/kind/mode census must be unchanged. Body copies/hashes in classifier fixtures do not interpret product code. Only the whole unchanged CI regression may defer; node scripts/ci/conformance.ts always executes on current source in PR quick routing.",
+  "environment": "Same-repository ordinary pull_request in the CI caller only; github-hosted ubuntu-24.04/X64/glibc 2.39, Node 24.21.0, pnpm 11.18.0. Fresh frozen install with store integrity verification before any repository helper; current installed files, link targets, executable modes and native bytes bound before/after. No loader/native/test-selection or CI test-baseline/observation overrides. Uncertainty selects FULL.",
+  "sampling": "A deferral executes zero test identities and claims no pass at H. It needs no historical receipt. Residual runner regressions are sampled by complete main/night/merge/reusable CI. First policy/common change executes FULL."
+}
