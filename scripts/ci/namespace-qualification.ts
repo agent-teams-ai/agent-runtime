@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { assertNamespaceNativeQualification } from './namespace-qualification-contract.ts';
 
@@ -20,9 +20,16 @@ const probes = {
   revision: observe('git', ['rev-parse', 'HEAD']), tree: observe('git', ['rev-parse', 'HEAD^{tree}']),
   sourceDrift: observe('git', ['diff', '--exit-code', 'HEAD', '--']),
   pnpm: observe('pnpm', ['--version']), os: observe('/usr/bin/sw_vers', []), machine: observe('/usr/bin/uname', ['-a']),
-  compiler: observe('/usr/bin/clang', ['--version']), compilerPath: observe('/usr/bin/xcrun', ['--find', 'clang']),
+  compiler: observe('cc', ['--version']), compilerPath: observe('/bin/sh', ['-c', 'command -v cc']),
+  compilerDriver: observe('/usr/bin/xcrun', ['--find', 'cc']),
   sdkPath: observe('/usr/bin/xcrun', ['--show-sdk-path']), sdkVersion: observe('/usr/bin/xcrun', ['--show-sdk-version']),
 };
+const compilerIdentity = async (probe: ReturnType<typeof observe>) => {
+  if (probe.exitCode !== 0) { return null; }
+  const path = await realpath(probe.stdout.trim());
+  return { path, sha256: sha256(await readFile(path)) };
+};
+const compilerTools = { ambient: await compilerIdentity(probes.compilerPath), driver: await compilerIdentity(probes.compilerDriver) };
 const nativePath = join(root, 'packages/platform/filesystem-custody/dist/rename-no-replace.node');
 const nativeExists = await stat(nativePath).then(value => value.isFile(), (error: unknown) => {
   if ((error as NodeJS.ErrnoException).code === 'ENOENT') { return false; } throw error;
@@ -41,7 +48,7 @@ const report = { schemaVersion: 1, scope: 'on-demand original full product check
   platform: process.platform, arch: process.arch, uid: process.getuid?.() ?? null, node: process.version,
   nodeExecutable: process.execPath, nodeSha256: sha256(await readFile(process.execPath)),
   runner: { name: process.env.RUNNER_NAME ?? null, os: process.env.RUNNER_OS ?? null, arch: process.env.RUNNER_ARCH ?? null,
-    imageOS: process.env.ImageOS ?? null, imageVersion: process.env.ImageVersion ?? null }, probes, native };
+    imageOS: process.env.ImageOS ?? null, imageVersion: process.env.ImageVersion ?? null }, probes, compilerTools, native };
 await writeFile(join(directory, 'qualification.json'), `${JSON.stringify(report, null, 2)}\n`);
 assert.match(report.expectedRevision ?? '', /^[a-f0-9]{40}$/u);
 assert.equal(probes.revision.stdout.trim(), report.expectedRevision); assert.equal(report.workflowSha, report.expectedRevision);
