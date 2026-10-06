@@ -122,7 +122,7 @@ function validateReusableLane(reusable: unknown): void {
   assert.deepEqual(Object.keys(object(lane.on)), ['workflow_call']);
   assert.deepEqual(Object.keys(object(lane.jobs)), ['lane']);
   const runner = object(object(lane.jobs).lane);
-  assert.equal(runner['runs-on'], 'ubuntu-24.04');
+  assert.equal(runner['runs-on'], "${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-24.04' || vars.CI_LINUX_RUNNER || 'ubuntu-24.04' }}");
   assert.equal(runner['timeout-minutes'], 35);
   const commands = steps(runner.steps);
   const checkout = commands.find(step => step.uses === checkoutAction);
