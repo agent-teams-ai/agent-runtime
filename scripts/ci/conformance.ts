@@ -11,8 +11,12 @@ import { readScripts } from './inventory.ts';
 import type { Scripts } from './script-routing.ts';
 import { validateNightlyWorkflow } from './nightly-contract.ts';
 import { validateFoundationWorkflows } from './foundation-fanout-contract.ts';
+import { assertProductWorkflow, assertShardWorkflow } from './product-fanout-contract.ts';
+import { prObligations } from './pr-regression-command.ts';
 
 export const eventRevision = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}";
+export const prSamplingRoute = "${{ github.event_name == 'pull_request' && github.workflow == 'CI' }}";
+export const prBaseRevision = "${{ github.event.pull_request.base.sha || '' }}";
 const checkoutAction = 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803';
 const nodeAction = 'actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38';
 export function object(value: unknown): Record<string, unknown> {
@@ -57,6 +61,16 @@ export function schedulingForEvent(value: unknown, event: SchedulingEvent): { gr
   };
 }
 
+function validateCallerRoute(name: string, inputs: unknown): void {
+  const value = object(inputs);
+  if (name === 'product') {
+    assert.equal(value.regressions, undefined, 'all six product packages stay FULL');
+  } else {
+    assert.equal(value.regressions, prSamplingRoute, 'only direct PR scheduling route');
+    assert.equal(value['base-revision'], prBaseRevision, 'immutable event base');
+  }
+}
+
 export function validateWorkflow(main: unknown, reusable: unknown, platform: Record<string, string>): void {
   const workflow = object(main);
   assert.deepEqual(workflow.permissions, { contents: 'read' });
@@ -68,18 +82,19 @@ export function validateWorkflow(main: unknown, reusable: unknown, platform: Rec
   assert.deepEqual(Object.keys(jobs).toSorted(), [...requiredJobs, 'check', 'postgres-durability', 'runtime-macos'].toSorted());
   for (const name of requiredJobs) {
     const job = object(jobs[name]);
-    assert.equal(job.uses, name === 'foundation' ? './.github/workflows/ci-foundation.yml' : './.github/workflows/ci-lane.yml');
+    assert.equal(job.uses, name === 'foundation' ? './.github/workflows/ci-foundation-route.yml'
+      : name === 'product' ? './.github/workflows/ci-product.yml' : './.github/workflows/ci-lane.yml');
     assert.equal(job.if, undefined, 'full lane must run unconditionally');
     assert.equal(job.needs, undefined, 'independent lane');
     assert.equal(job.permissions, undefined);
     assert.equal(job['continue-on-error'], undefined);
-    if (name === 'foundation') {
-      assert.deepEqual(job.with, { artifact: 'foundation', revision: eventRevision });
-      assert.deepEqual(Object.keys(job).toSorted(), ['uses', 'with']);
-    } else {
-      assert.equal(object(job.with).script, `check:ci:${name}`);
-    }
-    assert.equal(object(job.with).revision, eventRevision);
+    const expectedInputs = name === 'product' ? { artifact: name, revision: eventRevision }
+      : name === 'foundation' ? { artifact: name, revision: eventRevision, 'base-revision': prBaseRevision, regressions: prSamplingRoute }
+        : { script: `check:ci:${name}`, artifact: name, revision: eventRevision, 'base-revision': prBaseRevision, regressions: prSamplingRoute };
+    assert.deepEqual(job.with, expectedInputs);
+    assert.deepEqual(Object.keys(job).toSorted(), ['uses', 'with']);
+    assert.equal(job.secrets, undefined);
+    validateCallerRoute(name, job.with);
   }
   const aggregate = object(jobs.check);
   assert.equal(aggregate.name, 'check');
@@ -96,6 +111,10 @@ export function validateWorkflow(main: unknown, reusable: unknown, platform: Rec
   for (const name of ['postgres-durability', 'runtime-macos']) {
     assert.equal(digest(jobs[name]), platform[name], `${name} platform contract changed`);
   }
+  validateReusableLane(reusable);
+}
+
+function validateReusableLane(reusable: unknown): void {
   const lane = object(reusable);
   assert.deepEqual(lane.permissions, { contents: 'read' });
   assert.deepEqual(Object.keys(object(lane.on)), ['workflow_call']);
@@ -128,7 +147,7 @@ export function validateWorkflow(main: unknown, reusable: unknown, platform: Rec
     const entry = entries[index];
     assert.ok(entry);
     const laneName = entry.startsWith('check:ci:product:') ? 'check:ci:product' : entry;
-    assert.equal(step.if, "${{ inputs.script == 'check' || inputs.script == '" + laneName + "' }}");
+    assert.equal(step.if, "${{ !inputs.regressions && (inputs.script == 'check' || inputs.script == '" + laneName + "') }}");
     assert.equal(step['continue-on-error'], undefined);
     assert.equal(object(step.env).EXPECTED_REVISION, '${{ inputs.revision }}');
   }
@@ -139,6 +158,45 @@ export function validateWorkflow(main: unknown, reusable: unknown, platform: Rec
   const install = commands.findIndex(step => step.run === 'pnpm install --frozen-lockfile');
   assert.ok(install > verify && execution.every(step => commands.indexOf(step) > install), 'frozen install before full commands');
   assert.ok(commands.some(step => step.run === 'corepack enable\ncorepack install --global pnpm@11.18.0\n'));
+  const inputs = object(object(object(lane.on).workflow_call).inputs);
+  assert.deepEqual(inputs.regressions, { type: 'boolean', default: false }, 'reusable default remains FULL');
+  assert.deepEqual(inputs['base-revision'], { type: 'string', default: '' });
+  const integrity = commands.findIndex(step => step.name === 'Observe current frozen store integrity for PR sampling');
+  const pr = commands.findIndex(step => step.name === 'Execute current-source PR obligations and whole regression decisions');
+  assert.ok(integrity > install && pr > integrity && execution.every(step => commands.indexOf(step) > pr));
+  assert.deepEqual(commands[integrity], { name: 'Observe current frozen store integrity for PR sampling', if: '${{ inputs.regressions }}', shell: 'bash',
+    run: 'set -euo pipefail\n# Failed/unavailable integrity keeps sampling FULL; no past pass is used.\nif pnpm store status; then\n  echo \'PR_REGRESSION_FROZEN_INSTALL=verified\' >> "$GITHUB_ENV"\nfi\n' });
+  assert.deepEqual(commands[pr], { name: 'Execute current-source PR obligations and whole regression decisions', if: '${{ inputs.regressions }}',
+    env: { EXPECTED_REVISION: '${{ inputs.revision }}', EXPECTED_BASE_REVISION: '${{ inputs.base-revision }}', CI_EVIDENCE_DIR: '${{ runner.temp }}/ci-evidence', PR_REGRESSION_GROUP: '${{ inputs.script }}' },
+    run: 'node scripts/ci/pr-regression-command.ts "$PR_REGRESSION_GROUP"' });
+}
+
+export function validatePrFoundationRoute(route: unknown, pr: unknown): void {
+  const input = { revision: { required: true, type: 'string' }, artifact: { required: true, type: 'string' },
+    'base-revision': { default: '', type: 'string' }, regressions: { default: false, type: 'boolean' } };
+  assert.deepEqual(route, { name: 'Foundation scheduling route', on: { workflow_call: { inputs: input } }, permissions: { contents: 'read' }, jobs: {
+    full: { if: '${{ !inputs.regressions }}', uses: './.github/workflows/ci-foundation.yml', with: { revision: '${{ inputs.revision }}', artifact: '${{ inputs.artifact }}' } },
+    pr: { if: '${{ inputs.regressions }}', uses: './.github/workflows/ci-pr-regressions.yml', with: { revision: '${{ inputs.revision }}', 'base-revision': '${{ inputs.base-revision }}', artifact: '${{ inputs.artifact }}' } },
+    aggregate: { if: '${{ always() }}', needs: ['full', 'pr'], 'runs-on': 'ubuntu-24.04', 'timeout-minutes': 5, steps: [{ name: 'Require the selected Foundation route to complete', shell: 'bash',
+      env: { NEEDS: '${{ toJSON(needs) }}', PR_ROUTE: '${{ inputs.regressions }}' },
+      run: 'set -euo pipefail\njq -en --argjson needs "$NEEDS" --argjson pr "$PR_ROUTE" \'\n  ($needs | keys == ["full","pr"]) and\n  (if $pr then $needs.pr.result == "success" and $needs.full.result == "skipped"\n   else $needs.full.result == "success" and $needs.pr.result == "skipped" end)\'\n' }] },
+  } }, 'Foundation retains the separately accepted full route and rejects incomplete PR execution');
+  assert.deepEqual(pr, { name: 'PR Foundation whole regression scheduling', on: { workflow_call: { inputs: {
+    revision: { required: true, type: 'string' }, 'base-revision': { required: true, type: 'string' }, artifact: { required: true, type: 'string' },
+  } } }, permissions: { contents: 'read' }, jobs: { regressions: { uses: './.github/workflows/ci-lane.yml', with: {
+    script: 'check:ci:foundation', revision: '${{ inputs.revision }}', 'base-revision': '${{ inputs.base-revision }}', artifact: '${{ inputs.artifact }}', regressions: true,
+  } } } }, 'PR Foundation route must execute the whole reviewed obligation runner');
+}
+
+function assertPrInventory(scripts: Scripts): void {
+  for (const group of ['quick', 'foundation', 'architecture', 'docs'] as const) {
+    const original = commandInventory(scripts, `check:ci:${group}`).map(item => item.command);
+    const projected = prObligations(group).flatMap(item => {
+      const script = /^pnpm ([\w:-]+)$/u.exec(item.command)?.[1];
+      return script ? commandInventory(scripts, script).map(value => value.command) : [item.command];
+    });
+    assert.deepEqual(projected, original, `PR ${group} preserves every full command when no deferrals qualify`);
+  }
 }
 
 export function validateBenchmark(value: unknown): void {
@@ -216,11 +274,15 @@ export async function conformance(root: string): Promise<void> {
   assert.equal(createHash('sha256').update(predecessorPolicy).digest('hex'), baseline.predecessor.sourcePolicySha256, 'predecessor source policy bytes');
   assert.deepEqual(originalPolicy, predecessorPolicy, 'Docs baseline migration preserves source-policy scope');
   assertFullInventory(scripts, baseline.scripts);
+  assertPrInventory(scripts);
   const platform: Record<string, string> = JSON.parse(await read('scripts/ci/platform-contract.json'));
   const runtime: unknown = parse(await read('.github/workflows/ci.yml'));
   validateWorkflow(runtime, parse(await read('.github/workflows/ci-lane.yml')), platform);
   validateFoundationWorkflows(parse(await read('.github/workflows/ci-foundation.yml')),
     parse(await read('.github/workflows/ci-foundation-shard.yml')));
+  assertProductWorkflow(parse(await read('.github/workflows/ci-product.yml')));
+  assertShardWorkflow(parse(await read('.github/workflows/ci-product-shard.yml')));
+  validatePrFoundationRoute(parse(await read('.github/workflows/ci-foundation-route.yml')), parse(await read('.github/workflows/ci-pr-regressions.yml')));
   validateNightlyWorkflow(parse(await read('.github/workflows/ci-nightly.yml')), runtime, platform);
   for (const file of ['.github/workflows/docs-protocol.yml', '.github/workflows/commit-author-identity.yml', '.github/workflows/node-26-compatibility.yml', 'scripts/ci/audit-node-engine-compatibility.mjs', 'scripts/ci/node-engine-compatibility.test.mjs', 'scripts/ci/node-runtime-compatibility.test.mjs']) {
     assert.equal(createHash('sha256').update(await read(file)).digest('hex'), platform[file], `${file} trust contract changed`);

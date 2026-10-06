@@ -103,6 +103,7 @@ function run(check) {
     process.stdout.write(result.stdout ?? ""); process.stderr.write(result.stderr ?? "");
     records.push({index, cwd: packagePath, executable: check ? "pnpm" : "node", argv,
       start, end: new Date().toISOString(), exitCode: result.status, signal: result.signal,
+      ...(capture ? {actualPid: result.pid, actualExecutable: executable, actualCwd: packageRoot, runnerPid: process.pid} : {}),
       stdout: `${prefix}.stdout`, stderr: `${prefix}.stderr`});
     if (result.error || result.status !== 0 || result.signal) { failed = true; break; }
   }

@@ -131,6 +131,8 @@ test("current-kernel adapter streams incrementally and returns SDK logical succe
   const adapter = kernelProvider(
     spawnedQuery([delta("O"), delta("K"), success("kernel")], () => { sdkSpawnRequests += 1; }),
     {
+      // The success/streaming contract uses virtual time, independent of runner load.
+      clock: new ManualClock(),
       processes: {
         get: () => inertRegistryProcess(),
         start: () => {

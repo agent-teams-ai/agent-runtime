@@ -3,6 +3,12 @@ name: Full CI lane
 on:
   workflow_call:
     inputs:
+      regressions:
+        type: boolean
+        default: false
+      base-revision:
+        type: string
+        default: ''
       script:
         required: true
         type: string
@@ -70,57 +76,76 @@ jobs:
           corepack install --global pnpm@11.18.0
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Observe current frozen store integrity for PR sampling
+        if: ${{ inputs.regressions }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Failed/unavailable integrity keeps sampling FULL; no past pass is used.
+          if pnpm store status; then
+            echo 'PR_REGRESSION_FROZEN_INSTALL=verified' >> "$GITHUB_ENV"
+          fi
+
+      - name: Execute current-source PR obligations and whole regression decisions
+        if: ${{ inputs.regressions }}
+        env:
+          EXPECTED_REVISION: ${{ inputs.revision }}
+          EXPECTED_BASE_REVISION: ${{ inputs.base-revision }}
+          CI_EVIDENCE_DIR: ${{ runner.temp }}/ci-evidence
+          PR_REGRESSION_GROUP: ${{ inputs.script }}
+        run: node scripts/ci/pr-regression-command.ts "$PR_REGRESSION_GROUP"
       - name: Source quality
-        if: ${{ inputs.script == 'check' || inputs.script == 'check:ci:quick' }}
+        if: ${{ !inputs.regressions && (inputs.script == 'check' || inputs.script == 'check:ci:quick') }}
         env:
           EXPECTED_REVISION: ${{ inputs.revision }}
           BENCHMARK_ARM: ${{ inputs.arm }}
           CI_EVIDENCE_DIR: ${{ runner.temp }}/ci-evidence
         run: node scripts/ci/measure.ts check:ci:quick
       - name: Foundation
-        if: ${{ inputs.script == 'check' || inputs.script == 'check:ci:foundation' }}
+        if: ${{ !inputs.regressions && (inputs.script == 'check' || inputs.script == 'check:ci:foundation') }}
         env:
           EXPECTED_REVISION: ${{ inputs.revision }}
           BENCHMARK_ARM: ${{ inputs.arm }}
           CI_EVIDENCE_DIR: ${{ runner.temp }}/ci-evidence
         run: node scripts/ci/measure.ts check:ci:foundation
       - name: Architecture
-        if: ${{ inputs.script == 'check' || inputs.script == 'check:ci:architecture' }}
+        if: ${{ !inputs.regressions && (inputs.script == 'check' || inputs.script == 'check:ci:architecture') }}
         env:
           EXPECTED_REVISION: ${{ inputs.revision }}
           BENCHMARK_ARM: ${{ inputs.arm }}
           CI_EVIDENCE_DIR: ${{ runner.temp }}/ci-evidence
         run: node scripts/ci/measure.ts check:ci:architecture
       - name: Docs at checked out head
-        if: ${{ inputs.script == 'check' || inputs.script == 'check:ci:docs' }}
+        if: ${{ !inputs.regressions && (inputs.script == 'check' || inputs.script == 'check:ci:docs') }}
         env:
           EXPECTED_REVISION: ${{ inputs.revision }}
           BENCHMARK_ARM: ${{ inputs.arm }}
           CI_EVIDENCE_DIR: ${{ runner.temp }}/ci-evidence
         run: node scripts/ci/measure.ts check:ci:docs
       - name: check:ci:product:packages
-        if: ${{ inputs.script == 'check' || inputs.script == 'check:ci:product' }}
+        if: ${{ !inputs.regressions && (inputs.script == 'check' || inputs.script == 'check:ci:product') }}
         env:
           EXPECTED_REVISION: ${{ inputs.revision }}
           BENCHMARK_ARM: ${{ inputs.arm }}
           CI_EVIDENCE_DIR: ${{ runner.temp }}/ci-evidence
         run: node scripts/ci/measure.ts check:ci:product:packages
       - name: check:ci:product:root
-        if: ${{ inputs.script == 'check' || inputs.script == 'check:ci:product' }}
+        if: ${{ !inputs.regressions && (inputs.script == 'check' || inputs.script == 'check:ci:product') }}
         env:
           EXPECTED_REVISION: ${{ inputs.revision }}
           BENCHMARK_ARM: ${{ inputs.arm }}
           CI_EVIDENCE_DIR: ${{ runner.temp }}/ci-evidence
         run: node scripts/ci/measure.ts check:ci:product:root
       - name: check:ci:product:typed
-        if: ${{ inputs.script == 'check' || inputs.script == 'check:ci:product' }}
+        if: ${{ !inputs.regressions && (inputs.script == 'check' || inputs.script == 'check:ci:product') }}
         env:
           EXPECTED_REVISION: ${{ inputs.revision }}
           BENCHMARK_ARM: ${{ inputs.arm }}
           CI_EVIDENCE_DIR: ${{ runner.temp }}/ci-evidence
         run: node scripts/ci/measure.ts check:ci:product:typed
       - name: check:ci:product:native
-        if: ${{ inputs.script == 'check' || inputs.script == 'check:ci:product' }}
+        if: ${{ !inputs.regressions && (inputs.script == 'check' || inputs.script == 'check:ci:product') }}
         env:
           EXPECTED_REVISION: ${{ inputs.revision }}
           BENCHMARK_ARM: ${{ inputs.arm }}

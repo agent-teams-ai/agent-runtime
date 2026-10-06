@@ -1,0 +1,180 @@
+name: Full Linux product CI
+
+on:
+  workflow_call:
+    inputs:
+      revision:
+        required: true
+        type: string
+      artifact:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  packages:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - agent-execution-1
+          - agent-execution-2
+          - agent-execution-3
+          - provider-access
+          - runtime-configuration
+          - runtime-security
+          - embedded-runtime
+          - filesystem-custody
+    uses: ./.github/workflows/ci-product-shard.yml
+    with:
+      shard: ${{ matrix.shard }}
+      revision: ${{ inputs.revision }}
+      artifact: ${{ inputs.artifact }}
+
+  root:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      GIT_AUTHOR_NAME: iliya
+      GIT_AUTHOR_EMAIL: iliyazelenkog@gmail.com
+      GIT_COMMITTER_NAME: iliya
+      GIT_COMMITTER_EMAIL: iliyazelenkog@gmail.com
+      EXPECTED_REVISION: ${{ inputs.revision }}
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.revision }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify checkout before running repository code
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_REVISION" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_REVISION"
+      - name: Retain exact C0 review history before repository code
+        shell: bash
+        run: |
+          set -euo pipefail
+          object=8e5e859d10981e1623d0617e933afc68a9e8770c
+          if ! git cat-file -e "$object^{commit}"; then
+            git fetch --no-tags origin "$object"
+          fi
+          test "$(git rev-parse "$object^{commit}")" = "$object"
+          git fsck --connectivity-only --no-reflogs "$object"
+      - name: Setup pinned Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+      - name: Verify typed revision binding
+        run: node scripts/ci/gate.ts revision
+      - name: Enable pinned pnpm
+        run: |
+          corepack enable
+          corepack install --global pnpm@11.18.0
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Bind disposable evidence paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'CI_EVIDENCE_DIR=%s/ci-product-root\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Capture independent full source custody
+        run: node scripts/ci/product-fanout-contract.ts custody-start
+      - name: Clean all six packages
+        run: pnpm --filter './packages/**' -r run clean
+      - name: Build all six packages
+        run: pnpm product:build
+      - name: Product root
+        run: node scripts/ci/measure.ts check:ci:product:root
+      - name: Product typed
+        run: node scripts/ci/measure.ts check:ci:product:typed
+      - name: Product native
+        run: node scripts/ci/measure.ts check:ci:product:native
+      - name: Verify full source custody after all phases
+        run: node scripts/ci/product-fanout-contract.ts custody-end
+      - name: Retain actual root phase execution evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: full-ci-${{ inputs.artifact }}-root-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-product-root/*.json
+          if-no-files-found: error
+          retention-days: 14
+      # Current slots retain successful siblings when only failed jobs rerun.
+      - name: Publish successful root phases for same-run retries
+        if: ${{ success() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: full-ci-${{ inputs.artifact }}-root-current
+          path: ${{ runner.temp }}/ci-product-root/*.json
+          if-no-files-found: error
+          retention-days: 14
+          overwrite: true
+
+  aggregate:
+    if: ${{ always() }}
+    needs: [packages, root]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      EXPECTED_REVISION: ${{ inputs.revision }}
+      NEEDS: ${{ toJSON(needs) }}
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.revision }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify checkout before running repository code
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_REVISION" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_REVISION"
+      - name: Retain exact C0 review history before repository code
+        shell: bash
+        run: |
+          set -euo pipefail
+          object=8e5e859d10981e1623d0617e933afc68a9e8770c
+          if ! git cat-file -e "$object^{commit}"; then
+            git fetch --no-tags origin "$object"
+          fi
+          test "$(git rev-parse "$object^{commit}")" = "$object"
+          git fsck --connectivity-only --no-reflogs "$object"
+      - name: Setup pinned Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+      - name: Require both independent jobs to succeed
+        run: node scripts/ci/product-fanout-contract.ts results
+      - name: Enable pinned pnpm
+        run: |
+          corepack enable
+          corepack install --global pnpm@11.18.0
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Bind disposable evidence paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'CI_PACKAGE_REPORT_DIR=%s/ci-product-reports/packages\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+          printf 'CI_ROOT_REPORT_DIR=%s/ci-product-reports/root\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      # Reuse the download pin already present in the release evidence drill.
+      - name: Download all eight shard execution reports
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: full-ci-${{ inputs.artifact }}-package-*-current
+          path: ${{ runner.temp }}/ci-product-reports/packages
+          merge-multiple: false
+      - name: Download root typed native execution reports
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: full-ci-${{ inputs.artifact }}-root-current
+          path: ${{ runner.temp }}/ci-product-reports/root
+      - name: Validate complete full product evidence against exact source
+        run: node scripts/ci/product-fanout-contract.ts evidence

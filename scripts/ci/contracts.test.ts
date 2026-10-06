@@ -17,10 +17,17 @@ import type { Receipt } from './compare.ts';
 import { registerCmsPinReviewTests } from './cms-pin-review.test.ts';
 import { registerNightlyContractTests } from './nightly-contract.test.ts';
 import { registerFoundationFixtureShardingTests } from './foundation-fixture-sharding.test.ts';
+import { registerPrRegressionTests } from './pr-regression-inputs.test.ts';
 
+import { registerPackageExecutionTests } from './package-execution.test.ts';
+import { registerProductFanoutTests } from './product-fanout-contract.test.ts';
+
+registerPackageExecutionTests();
+registerProductFanoutTests();
 registerCmsPinReviewTests();
 registerNightlyContractTests();
 registerFoundationFixtureShardingTests();
+registerPrRegressionTests();
 
 const scripts = await readScripts(new URL('../../package.json', import.meta.url));
 const baseline: { scripts: Scripts } = JSON.parse(await readFile(new URL('./full-contract.json', import.meta.url), 'utf8'));
