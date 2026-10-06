@@ -29,6 +29,11 @@ jobs:
           set -euo pipefail
           [[ "$EXPECTED_REVISION" =~ ^[a-f0-9]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$EXPECTED_REVISION"
+      - name: Bind disposable evidence path
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'CI_EVIDENCE_DIR=%s/ci-namespace-qualification\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Setup pinned Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
@@ -41,11 +46,6 @@ jobs:
           corepack install --global pnpm@11.18.0
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Bind disposable evidence path
-        shell: bash
-        run: |
-          set -euo pipefail
-          printf 'CI_EVIDENCE_DIR=%s/ci-namespace-qualification\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Run original full product checks
         id: product
         run: pnpm product:check
