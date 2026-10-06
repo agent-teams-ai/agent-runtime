@@ -237,42 +237,68 @@ jobs:
           export POSTGRES_TEST_IMAGE="$(docker inspect --format '{{.Config.Image}}' "$POSTGRES_SERVICE")"
           bash scripts/ci/ordinary-postgres-disposable.sh
 
-  # Darwin coverage for every PR, merge queue run and main push. Since AR-0
-  # (owner decision 2026-10-02) it replaces the darwin-arm64 half of the paired
-  # L0 receipt, which ran `pnpm --filter @agent-teams/embedded-runtime check`;
-  # the linux-x64 PostgreSQL half runs in postgres-durability above.
-  # `pnpm product:check` cleans, builds (the same tsc project as typecheck) and
-  # tests every package, embedded-runtime included. Required on main since
-  # 2026-10-02.
+  # AR-0 retains all-six Darwin clean/build/test obligations behind the exact
+  # ordinary required context; eight physical Mac runners produce its evidence.
+  macos-product:
+    uses: ./.github/workflows/ci-darwin-packages.yml
+    with:
+      revision: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
   runtime-macos:
     name: runtime-macos
-    runs-on: macos-15
-    timeout-minutes: 15
+    if: ${{ always() }}
+    needs: [macos-product]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      EXPECTED_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      EXECUTION_TARGET: darwin-arm64
+      NEEDS: ${{ toJSON(needs) }}
     steps:
-      - name: Checkout repository
+      - name: Checkout exact revision
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-
-      - name: Verify checkout revision
+          fetch-depth: 0
+      - name: Verify checkout before running repository code
         shell: bash
-        env:
-          EXPECTED_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-        run: test "$(git rev-parse HEAD)" = "$EXPECTED_REVISION"
-
-      - name: Setup Node.js
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_REVISION" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_REVISION"
+      - name: Retain exact C0 review history before repository code
+        shell: bash
+        run: |
+          set -euo pipefail
+          object=8e5e859d10981e1623d0617e933afc68a9e8770c
+          if ! git cat-file -e "$object^{commit}"; then
+            git fetch --no-tags origin "$object"
+          fi
+          test "$(git rev-parse "$object^{commit}")" = "$object"
+          git fsck --connectivity-only --no-reflogs "$object"
+      - name: Setup pinned Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
-
+      - name: Require latest Mac helper success
+        run: node scripts/ci/product-fanout-contract.ts darwin-results
       - name: Enable pinned pnpm
         run: |
           corepack enable
           corepack install --global pnpm@11.18.0
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Run macOS runtime package tests
-        run: pnpm product:check
+      - name: Bind disposable evidence paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'CI_PACKAGE_REPORT_DIR=%s/ci-darwin-reports/packages\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Download current units from this workflow run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: full-ci-darwin-package-*-current
+          path: ${{ runner.temp }}/ci-darwin-reports/packages
+          merge-multiple: false
+      - name: Require complete actual Darwin execution evidence
+        run: node scripts/ci/product-fanout-contract.ts darwin-evidence

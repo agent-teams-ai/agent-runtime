@@ -4,6 +4,9 @@ import { createHash } from 'node:crypto';
 import { glob, lstat, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertProductWorkflow, assertShardWorkflow, assertDarwinWorkflow, workflowIdentity } from './product-workflow-contract.ts';
+export { assertProductWorkflow, assertShardWorkflow, assertDarwinWorkflow, assertDarwinCaller, assertDarwinReference } from './product-workflow-contract.ts';
+import type { ExecutionTarget, WorkflowIdentity } from './package-execution.ts';
 import { assertObservedStreams } from './product-test-observation.ts';
 import { commandInventory } from './script-routing.ts';
 import type { Command, Scripts } from './script-routing.ts';
@@ -39,11 +42,11 @@ const object = (value: unknown): Record<string, unknown> => {
 const array = (value: unknown): unknown[] => { assert.ok(Array.isArray(value), 'expected report array'); return value; };
 export interface ProductSource {
   inputs: Record<string, string>; manifests: Record<string, string>; runners: Record<PackageId, string>;
-  universe: string[]; fullArgv: string[]; inventories: readonly Command[][];
+  universe: string[]; fullArgv: string[]; embeddedArgv: string[][]; inventories: readonly Command[][];
   packageStreams: Record<PackageId, { argv: string[]; files: string[] }[]>;
 }
 export interface ExpectedEvidence extends ProductSource {
-  sha: string; inputTree: string; nodeExecutable: string; measureDigests: Record<string, string>;
+  target: ExecutionTarget; workflow: WorkflowIdentity; sha: string; inputTree: string; nodeExecutable: string; measureDigests: Record<string, string>;
 }
 
 async function assertPhysicalCustody(root: string, tracked: readonly string[], roots: readonly string[]): Promise<void> {
@@ -114,6 +117,13 @@ export async function readProductSource(root: string, tracked: readonly string[]
     runners[id as PackageId] = runner as string;
   }
   assert.equal(runners['agent-execution'], aeRunner, 'frozen AE runner drift');
+  const embeddedHelper = runners['embedded-runtime'].split(' ');
+  assert.equal(embeddedHelper[0], 'node'); assert.equal(embeddedHelper.length, 2);
+  const embeddedSource = await readFile(join(root, packageRoots['embedded-runtime'], embeddedHelper[1]!), 'utf8');
+  const embeddedLiteral = /export const testProcesses = (\[[\s\S]*?\n\]);/u.exec(embeddedSource);
+  assert.ok(embeddedLiteral, 'explicit original Embedded Runtime process inventory required');
+  const embeddedArgv = array(JSON.parse(embeddedLiteral[1]!)).map(argv => { assert.ok(array(argv).every(v => typeof v === 'string')); return argv as string[]; });
+  assert.equal(embeddedArgv.length, 2);
   const fullFiles: string[] = [];
   for (const pattern of aePatterns) {
     const matches: string[] = [];
@@ -179,13 +189,15 @@ export async function readProductSource(root: string, tracked: readonly string[]
   }
   assert.deepEqual(packageStreams['agent-execution'][0]!.files, fullFiles, 'independent AE expansion drift');
   return { inputs, manifests, runners, universe, fullArgv: ['--test', '--test-concurrency=1', ...fullFiles],
-    packageStreams, inventories: phaseEntries.map(entry => commandInventory(scripts, entry)) };
+    embeddedArgv, packageStreams, inventories: phaseEntries.map(entry => commandInventory(scripts, entry)) };
 }
 
-export function assertJobResults(needs: unknown): void {
+export function assertJobResults(needs: unknown, target: ExecutionTarget): void {
   const jobs = object(needs);
-  assert.deepEqual(Object.keys(jobs).toSorted(), ['packages', 'root']);
-  for (const id of ['packages', 'root']) { assert.equal(object(jobs[id]).result, 'success', `${id} incomplete`); }
+  assert.ok(['linux-x64', 'darwin-arm64'].includes(target));
+  const expected = target === 'darwin-arm64' ? ['macos-product'] : ['packages', 'root'];
+  assert.deepEqual(Object.keys(jobs).toSorted(), expected);
+  for (const id of expected) { assert.equal(object(jobs[id]).result, 'success', `${id} incomplete`); }
 }
 function successful(proof: Record<string, unknown>): void {
   assert.equal(proof.code, 0, 'missing/failed process');
@@ -213,17 +225,120 @@ function packageCommand(value: unknown, executable: string, argv: readonly strin
   assert.ok(Number.isFinite(Date.parse(String(proof.start))) && Date.parse(String(proof.end)) >= Date.parse(String(proof.start)), 'missing process times');
   return proof;
 }
+function assertNativeEvidence(report: Record<string, unknown>, expected: ExpectedEvidence): void {
+  const native = object(report.nativeBuild), root = String(report.checkoutRoot);
+  assert.equal(native.cleanOutputAbsent, true, 'native output must follow successful clean');
+  assert.equal(native.path, 'packages/platform/filesystem-custody/dist/rename-no-replace.node');
+  assert.match(String(native.sha256), /^[a-f0-9]{64}$/u, 'native output hash required');
+  assert.equal(native.format, 'Mach-O 64-bit bundle'); assert.equal(native.arch, 'arm64');
+  const base = 'packages/platform/filesystem-custody';
+  assert.equal(native.builderHash, expected.inputs[`${base}/scripts/build-native-helper.mjs`]);
+  assert.equal(native.sourceHash, expected.inputs[`${base}/native/rename-no-replace.c`]);
+  const compiler = object(native.compiler), driver = object(native.compilerDriver), headers = object(native.headers), sdk = object(native.sdk);
+  for (const item of [compiler, driver, headers, sdk]) { assert.ok(typeof item.path === 'string' && isAbsolute(item.path)); }
+  assert.match(String(driver.sha256), /^[a-f0-9]{64}$/u);
+  assert.match(String(compiler.sha256), /^[a-f0-9]{64}$/u); assert.match(String(sdk.settingsHash), /^[a-f0-9]{64}$/u);
+  const files = object(headers.files); assert.ok(files['node_api.h'] && files['js_native_api.h']);
+  for (const digest of Object.values(files)) { assert.match(String(digest), /^[a-f0-9]{64}$/u); }
+  assert.deepEqual(native.recipe, ['-O2', '-Wall', '-Wextra', '-Werror', '-fPIC', '-bundle', '-undefined', 'dynamic_lookup', '-lsandbox',
+    `-I${headers.path}`, 'native/rename-no-replace.c', '-o', 'dist/rename-no-replace.node']);
+  const output = join(root, String(native.path));
+  const probes = object(native.probes);
+  const commands: Record<string, [string, string[]]> = {
+    compilerDriver: ['/usr/bin/xcrun', ['--find', 'cc']], driverTrace: ['cc', ['-###', ...array(native.recipe) as string[]]],
+    compilerPath: ['/bin/sh', ['-c', 'command -v cc']], compilerVersion: ['cc', ['--version']],
+    sdkPath: ['/usr/bin/xcrun', ['--show-sdk-path']], sdkVersion: ['/usr/bin/xcrun', ['--show-sdk-version']],
+    osVersion: ['/usr/bin/sw_vers', ['-productVersion']], osBuild: ['/usr/bin/sw_vers', ['-buildVersion']],
+    format: ['/usr/bin/file', [output]], arch: ['/usr/bin/lipo', ['-archs', output]], digest: ['/usr/bin/shasum', ['-a', '256', output]],
+  };
+  assert.deepEqual(Object.keys(probes).toSorted(), Object.keys(commands).toSorted());
+  for (const [name, [executable, argv]] of Object.entries(commands)) {
+    const probe = object(probes[name]); packageCommand(probe.command, executable, argv, name === 'driverTrace' ? join(root, base) : root);
+    assert.equal(typeof probe.stdout, 'string'); assert.equal(typeof probe.stderr, 'string');
+    assert.ok(String(probe.stdout).trim() || String(probe.stderr).trim());
+  }
+  assert.equal(String(object(probes.sdkPath).stdout).trim(), sdk.path);
+  assert.ok(typeof sdk.realPath === 'string' && isAbsolute(sdk.realPath));
+  const trace = String(object(probes.driverTrace).stderr);
+  assert.ok(trace.includes(String(sdk.path)) || trace.includes(sdk.realPath), 'native driver trace must bind current SDK');
+  for (const input of [headers.path, 'native/rename-no-replace.c']) { assert.ok(trace.includes(String(input)), 'native driver trace must bind current headers/SDK/source'); }
+  assert.match(String(object(probes.compilerVersion).stdout), /(?:Apple )?clang version/u);
+  assert.match(String(object(probes.osVersion).stdout).trim(), /^15\.[0-9]+(?:\.[0-9]+)?$/u, 'Mac OS family drift');
+  assert.match(String(object(probes.format).stdout), /Mach-O 64-bit bundle arm64/u);
+  assert.equal(String(object(probes.arch).stdout).trim(), 'arm64');
+  assert.equal(String(object(probes.digest).stdout).split(/\s+/u)[0], native.sha256, 'native output hash mismatch');
+}
+function assertReceiptPlatform(report: Record<string, unknown>, expected: ExpectedEvidence): void {
+  const mac = expected.target === 'darwin-arm64';
+  assert.equal(report.platform, mac ? 'darwin' : 'linux'); assert.equal(report.arch, mac ? 'arm64' : 'x64');
+  const image = object(report.runnerImage);
+  assert.equal(image.runnerOS, mac ? 'macOS' : 'Linux'); assert.equal(image.runnerArch, mac ? 'ARM64' : 'X64');
+  if (mac) {
+    assert.ok(Number.isSafeInteger(report.uid) && Number(report.uid) > 0, 'non-root Mac execution required');
+    assert.match(String(image.os), /^macos15(?:-arm64)?$/u, 'macos-15 image family required');
+    assert.match(String(image.version), /^[0-9]{8}\.[0-9]{4}(?:\.[0-9]+)?$/u, 'explicit current image version required');
+    assert.match(String(report.execPath), /^\/Users\/runner\/hostedtoolcache\/node\/24\.21\.0\/arm64\/bin\/node$/u, 'pinned Mac Node toolcache required');
+    assertNativeEvidence(report, expected);
+  } else { assert.equal(report.nativeBuild, null); }
+  assert.equal(report.node, 'v24.21.0'); assert.equal(report.pnpm, '11.18.0');
+  if (!mac) { assert.equal(report.execPath, expected.nodeExecutable); }
+}
+function assertEmbeddedProcesses(report: Record<string, unknown>, observation: Record<string, unknown>, id: PackageId): void {
+  if (id === 'embedded-runtime') {
+    const children = array(report.embeddedProcesses).map(object), streams = array(observation.streams).map(object);
+    assert.equal(children.length, 2, 'both actual Embedded Runtime exits required');
+    assert.deepEqual(children, streams.map(stream => stream.original), 'original ER stream custody drift');
+  } else { assert.equal(report.embeddedProcesses, null); }
+}
+function assertTestObservation(observation: Record<string, unknown>, context: { id: PackageId; index: number; selected: string[]; root: string }): void {
+  const { id, index, selected, root } = context;
+  const summaries = array(observation.summaries).map(object);
+  assert.equal(summaries.length, id === 'embedded-runtime' ? 2 : 1, 'actual process summaries missing');
+  for (const summary of summaries) {
+    for (const key of ['tests', 'passed', 'failed', 'cancelled', 'skipped', 'todo']) {
+    assert.ok(Number.isSafeInteger(summary[key]) && Number(summary[key]) >= 0, 'invalid summary count');
+    }
+    assert.equal(summary.success, true); assert.ok(Number(summary.tests) > 0 && Number(summary.passed) > 0);
+    for (const key of ['failed', 'cancelled', 'todo']) { assert.equal(summary[key], 0); }
+    assert.equal(Number(summary.passed) + Number(summary.skipped), summary.tests);
+  }
+  const events = array(observation.events).map(object); assert.ok(events.length > 0, 'missing actual events');
+  for (const event of events) {
+    assert.ok(['passed', 'skipped'].includes(String(event.status)), 'failed/cancelled/todo event');
+    const name = event.name ?? event.title; assert.ok(typeof name === 'string' && name.length > 0);
+    assert.ok(['test', 'suite'].includes(String(event.type ?? event.kind)), 'unsupported event kind');
+  }
+  const tests = events.filter(event => (event.type ?? event.kind) === 'test');
+  const total = (key: string) => summaries.reduce((sum, summary) => sum + Number(summary[key]), 0);
+  assert.equal(tests.length, total('tests'), 'dropped test events');
+  assert.equal(tests.filter(event => event.status === 'passed').length, total('passed'));
+  assert.equal(tests.filter(event => event.status === 'skipped').length, total('skipped'), 'deliberate skips changed');
+  const completed = array(observation.completedFiles);
+  if (index < 3) {
+    const files = selected.map(file => join(root, packageRoots[id], file));
+    assert.deepEqual([...completed].toSorted(), files.toSorted(), 'missing/duplicate/extra completed file');
+    assert.deepEqual([...new Set(events.map(event => event.file))].toSorted(), files.toSorted(), 'dropped/foreign file events');
+    for (const event of events) { assert.ok(Number.isSafeInteger(event.observerPid) && Number(event.observerPid) > 0, 'actual Node reporter PID required'); }
+  }
+}
 export function assertPackageEvidence(expected: ExpectedEvidence, receipts: readonly unknown[]): void {
+  assert.ok(['linux-x64', 'darwin-arm64'].includes(expected.target), 'trusted target required');
+  assert.match(expected.sha, /^[a-f0-9]{40}$/u); assert.match(expected.inputTree, /^[a-f0-9]{40}$/u);
+  assert.match(expected.workflow.runId, /^[1-9][0-9]*$/u); assert.match(expected.workflow.workflowSha, /^[a-f0-9]{40}$/u);
+  assert.ok(Number.isSafeInteger(expected.workflow.attempt) && expected.workflow.attempt > 0);
   assert.equal(receipts.length, 8, 'eight shard reports required');
   const packageReports = receipts.map(object);
   assert.deepEqual(packageReports.map(report => report.requestedShard).toSorted(), [...shardIds].toSorted(), 'missing/duplicate/extra shard');
   const union: string[] = [];
   for (const report of packageReports) {
-    assert.equal(report.schemaVersion, 2, 'one actual producer contract');
+    assert.equal(report.schemaVersion, 3, 'one actual producer contract');
+    assert.equal(report.target, expected.target, 'trusted execution target mismatch');
+    const workflow = object(report.workflow);
+    assert.equal(workflow.runId, expected.workflow.runId, 'same workflow run required');
+    assert.equal(workflow.workflowSha, expected.workflow.workflowSha, 'workflow source drift');
+    assert.ok(Number.isSafeInteger(workflow.attempt) && Number(workflow.attempt) > 0 && Number(workflow.attempt) <= expected.workflow.attempt, 'invalid/future attempt');
     assert.equal(report.sourceSha, expected.sha, 'wrong source SHA'); assert.equal(report.sourceTree, expected.inputTree, 'wrong source tree');
-    assert.equal(report.platform, 'linux'); assert.equal(report.arch, 'x64');
-    assert.equal(report.node, 'v24.21.0'); assert.equal(report.pnpm, '11.18.0');
-    assert.equal(report.execPath, expected.nodeExecutable);
+    assertReceiptPlatform(report, expected);
     assert.equal(report.exitCode, 0); assert.equal(report.failure, null);
     assert.equal(report.runnerHash, expected.inputs['scripts/ci/package-execution.ts'], 'runner bytes drift');
     for (const key of ['sourceBefore', 'sourceAfter']) { assert.deepEqual(report[key], expected.inputs, 'complete source inventory drift'); }
@@ -234,10 +349,11 @@ export function assertPackageEvidence(expected: ExpectedEvidence, receipts: read
     assert.equal(report.packageName, `@agent-teams/${id}`);
     const commands = array(report.commands); assert.equal(commands.length, 3, 'all-six clean/build and selected test required');
     prerequisiteCommands.forEach((command, i) => packageCommand(commands[i], command.executable, command.argv, root));
+    for (let i = 1; i < commands.length; i++) { assert.ok(Date.parse(String(object(commands[i]).start)) >= Date.parse(String(object(commands[i - 1]).end)), 'clean/build/test must execute in order'); }
     const selected = expected.universe.filter((_, i) => i % 3 === index);
     const reporter = join(root, 'scripts/ci/package-execution.ts');
     const proof = index < 3
-      ? packageCommand(commands[2], expected.nodeExecutable, ['--test', '--test-concurrency=1', `--test-reporter=${reporter}`, ...selected], join(root, packageRoots[id]))
+      ? packageCommand(commands[2], String(report.execPath), ['--test', '--test-concurrency=1', `--test-reporter=${reporter}`, ...selected], join(root, packageRoots[id]))
       : packageCommand(commands[2], 'pnpm', ['--filter', `@agent-teams/${id}`, 'run', 'test'], root);
     if (index < 3) {
       const binding = { fullScript: expected.runners[id], fullArgv: expected.fullArgv, patterns: [...aePatterns],
@@ -245,41 +361,22 @@ export function assertPackageEvidence(expected: ExpectedEvidence, receipts: read
       assert.deepEqual(report.selection, { ...binding, universe: expected.universe, bindingHash: hash(JSON.stringify(binding)) }, 'AE exact modulo selection drift');
       assert.ok(selected.length > 0); union.push(...selected);
     } else { assert.equal(report.selection, null, 'other five run whole commands'); }
-    assertObservedStreams(expected, proof, { id, index, selected, root, packageRoot: packageRoots[id] });
+    assertObservedStreams(expected, proof, { id, index, selected, root, packageRoot: packageRoots[id], nodeExecutable: String(report.execPath) });
     const observation = object(proof.observation);
-    const summaries = array(observation.summaries).map(object);
-    assert.equal(summaries.length, id === 'embedded-runtime' ? 2 : 1, 'actual process summaries missing');
-    for (const summary of summaries) {
-      for (const key of ['tests', 'passed', 'failed', 'cancelled', 'skipped', 'todo']) {
-        assert.ok(Number.isSafeInteger(summary[key]) && Number(summary[key]) >= 0, 'invalid summary count');
-      }
-      assert.equal(summary.success, true); assert.ok(Number(summary.tests) > 0 && Number(summary.passed) > 0);
-      for (const key of ['failed', 'cancelled', 'todo']) { assert.equal(summary[key], 0); }
-      assert.equal(Number(summary.passed) + Number(summary.skipped), summary.tests);
-    }
-    const events = array(observation.events).map(object); assert.ok(events.length > 0, 'missing actual events');
-    for (const event of events) {
-      assert.ok(['passed', 'skipped'].includes(String(event.status)), 'failed/cancelled/todo event');
-      const name = event.name ?? event.title; assert.ok(typeof name === 'string' && name.length > 0);
-      assert.ok(['test', 'suite'].includes(String(event.type ?? event.kind)), 'unsupported event kind');
-    }
-    const tests = events.filter(event => (event.type ?? event.kind) === 'test');
-    const total = (key: string) => summaries.reduce((sum, summary) => sum + Number(summary[key]), 0);
-    assert.equal(tests.length, total('tests'), 'dropped test events');
-    assert.equal(tests.filter(event => event.status === 'passed').length, total('passed'));
-    assert.equal(tests.filter(event => event.status === 'skipped').length, total('skipped'), 'deliberate skips changed');
-    const completed = array(observation.completedFiles);
-    if (index < 3) {
-      const files = selected.map(file => join(root, packageRoots[id], file));
-      assert.deepEqual([...completed].toSorted(), files.toSorted(), 'missing/duplicate/extra completed file');
-      assert.deepEqual([...new Set(events.map(event => event.file))].toSorted(), files.toSorted(), 'dropped/foreign file events');
-    }
+    assertEmbeddedProcesses(report, observation, id);
+    assertTestObservation(observation, { id, index, selected, root });
+  }
+  if (expected.target === 'darwin-arm64') {
+    const tuple = (report: Record<string, unknown>) => { const native = object(report.nativeBuild); return { image: report.runnerImage, compiler: native.compiler, compilerDriver: native.compilerDriver, headers: native.headers, sdk: native.sdk,
+      versions: Object.fromEntries(['compilerVersion', 'sdkVersion', 'osVersion', 'osBuild'].map(key => [key, object(object(native.probes)[key]).stdout])) }; };
+    for (const report of packageReports) { assert.deepEqual(tuple(report), tuple(packageReports[0]!), 'mixed Mac image/compiler/SDK/header tuple'); }
   }
   assert.equal(new Set(union).size, union.length, 'overlapping AE shards');
   assert.deepEqual(union.toSorted(), expected.universe, 'AE union omits original test file');
 }
 export function assertFanoutEvidence(expected: ExpectedEvidence, packages: readonly unknown[], phases: readonly unknown[]): void {
   assert.match(expected.sha, /^[a-f0-9]{40}$/u); assert.match(expected.inputTree, /^[a-f0-9]{40}$/u);
+  assert.equal(expected.target, 'linux-x64', 'root/typed/native phases are Linux obligations');
   assertPackageEvidence(expected, packages);
   assert.equal(phases.length, 3, 'root/typed/native reports required');
   const phaseReports = phases.map(object);
@@ -302,150 +399,22 @@ export function assertFanoutEvidence(expected: ExpectedEvidence, packages: reado
   }
 }
 
-const checkout = 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803';
-const setup = 'actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38';
-const upload = 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a';
-const download = 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c';
-const revisionGuard = 'set -euo pipefail\n[[ "$EXPECTED_REVISION" =~ ^[a-f0-9]{40}$ ]]\ntest "$(git rev-parse HEAD)" = "$EXPECTED_REVISION"\n';
-const retainedHistory = 'set -euo pipefail\nobject=8e5e859d10981e1623d0617e933afc68a9e8770c\nif ! git cat-file -e "$object^{commit}"; then\n  git fetch --no-tags origin "$object"\nfi\ntest "$(git rev-parse "$object^{commit}")" = "$object"\ngit fsck --connectivity-only --no-reflogs "$object"\n';
-const enablePnpm = 'corepack enable\ncorepack install --global pnpm@11.18.0\n';
-const rootEvidenceBinding = "set -euo pipefail\nprintf 'CI_EVIDENCE_DIR=%s/ci-product-root\\n' \"$RUNNER_TEMP\" >> \"$GITHUB_ENV\"\n";
-const packageEvidenceBinding = "set -euo pipefail\nprintf 'CI_EVIDENCE_DIR=%s/ci-product-shard\\n' \"$RUNNER_TEMP\" >> \"$GITHUB_ENV\"\n";
-const aggregateEvidenceBinding = "set -euo pipefail\nprintf 'CI_PACKAGE_REPORT_DIR=%s/ci-product-reports/packages\\n' \"$RUNNER_TEMP\" >> \"$GITHUB_ENV\"\nprintf 'CI_ROOT_REPORT_DIR=%s/ci-product-reports/root\\n' \"$RUNNER_TEMP\" >> \"$GITHUB_ENV\"\n";
-function assertProductSteps(steps: Record<string, unknown>[]): void {
-  for (const step of steps) {
-    assert.ok(Object.keys(step).every(key => ['name', 'run', 'shell', 'uses', 'with', 'if'].includes(key)), 'unreviewed step field');
-    assert.equal(step.env, undefined, 'no step environment overrides');
-    if (step.run !== undefined) {
-      assert.equal(step.if, undefined, 'unconditional full phases');
-      assert.ok(!String(step.run).includes('${{'), 'no shell input interpolation');
-      assert.equal(step.uses, undefined); assert.equal(step.with, undefined);
-      assert.equal(step.shell, [revisionGuard, retainedHistory, rootEvidenceBinding, packageEvidenceBinding, aggregateEvidenceBinding].includes(String(step.run)) ? 'bash' : undefined);
-    } else {
-      assert.ok([checkout, setup, upload, download].includes(String(step.uses)), 'unadmitted action');
-      if (step.uses === upload) {
-        assert.ok(['${{ always() }}', '${{ success() }}'].includes(String(step.if)), 'archive/current upload condition');
-      } else { assert.equal(step.if, undefined); }
-      assert.equal(step.shell, undefined);
-    }
-  }
-}
-export function assertProductWorkflow(value: unknown): void {
-  const workflow = object(value);
-  assert.deepEqual(Object.keys(workflow).toSorted(), ['jobs', 'name', 'on', 'permissions']);
-  assert.deepEqual(workflow.permissions, { contents: 'read' });
-  assert.deepEqual(workflow.on, { workflow_call: { inputs: { revision: { required: true, type: 'string' }, artifact: { required: true, type: 'string' } } } });
-  const jobs = object(workflow.jobs);
-  assert.deepEqual(Object.keys(jobs).toSorted(), ['aggregate', 'packages', 'root']);
-  const packages = object(jobs.packages);
-  assert.deepEqual(packages, { strategy: { 'fail-fast': false, matrix: { shard: [...shardIds] } },
-    uses: './.github/workflows/ci-product-shard.yml', with: { shard: '${{ matrix.shard }}', revision: '${{ inputs.revision }}', artifact: '${{ inputs.artifact }}' } });
-  for (const name of ['root', 'aggregate']) {
-    const job = object(jobs[name]);
-    assert.deepEqual(Object.keys(job).toSorted(), name === 'root'
-      ? ['env', 'runs-on', 'steps', 'timeout-minutes'] : ['env', 'if', 'needs', 'runs-on', 'steps', 'timeout-minutes']);
-    assert.equal(job['runs-on'], 'ubuntu-24.04');
-    assert.equal(job['timeout-minutes'], name === 'root' ? 35 : 10);
-    assert.equal(job['continue-on-error'], undefined); assert.equal(job.permissions, undefined);
-    assert.equal(job.secrets, undefined); assert.equal(job.environment, undefined);
-    assert.equal(job.if, name === 'aggregate' ? '${{ always() }}' : undefined);
-    assert.deepEqual(job.needs, name === 'aggregate' ? ['packages', 'root'] : undefined);
-    const env = object(job.env); assert.equal(env.EXPECTED_REVISION, '${{ inputs.revision }}');
-    const steps = array(job.steps).map(object);
-    const firstStep = object(steps[0]), guardStep = object(steps[1]), historyStep = object(steps[2]), lastStep = object(steps.at(-1));
-    assert.deepEqual(firstStep.with, { ref: '${{ inputs.revision }}', 'persist-credentials': false, 'fetch-depth': 0 });
-    assert.equal(firstStep.uses, checkout);
-    const guard = String(guardStep.run);
-    assert.equal(guardStep.shell, 'bash');
-    assert.equal(guard, revisionGuard);
-    assert.deepEqual(steps.find(step => step.uses === setup)?.with, { 'node-version-file': '.node-version' });
-    assert.equal(historyStep.shell, 'bash'); assert.equal(historyStep.run, retainedHistory);
-    assert.equal(steps.filter(step => step.uses === checkout).length, 1);
-    assert.equal(steps.filter(step => step.uses === setup).length, 1);
-    assert.equal(steps.filter(step => step.uses === upload).length, name === 'root' ? 2 : 0);
-    assert.equal(steps.filter(step => step.uses === download).length, name === 'aggregate' ? 2 : 0);
-    const runs = steps.filter(step => step.run !== undefined).map(step => step.run);
-    const install = runs.indexOf('pnpm install --frozen-lockfile'); assert.ok(install > 0);
-    assert.ok(runs.includes(enablePnpm));
-    assertProductSteps(steps);
-    const sequence = steps.map(step => step.uses ?? step.run);
-    const rootSequence = [checkout, revisionGuard, retainedHistory, setup, 'node scripts/ci/gate.ts revision', enablePnpm,
-      'pnpm install --frozen-lockfile', rootEvidenceBinding, 'node scripts/ci/product-fanout-contract.ts custody-start',
-      "pnpm --filter './packages/**' -r run clean", 'pnpm product:build', ...phaseEntries.map(entry => `node scripts/ci/measure.ts ${entry}`),
-      'node scripts/ci/product-fanout-contract.ts custody-end', upload, upload];
-    const aggregateSequence = [checkout, revisionGuard, retainedHistory, setup, 'node scripts/ci/product-fanout-contract.ts results', enablePnpm,
-      'pnpm install --frozen-lockfile', aggregateEvidenceBinding, download, download, 'node scripts/ci/product-fanout-contract.ts evidence'];
-    assert.deepEqual(sequence, name === 'root' ? rootSequence : aggregateSequence);
-
-    if (name === 'root') {
-      assert.deepEqual(runs, [revisionGuard, retainedHistory, 'node scripts/ci/gate.ts revision', enablePnpm,
-        'pnpm install --frozen-lockfile', rootEvidenceBinding, 'node scripts/ci/product-fanout-contract.ts custody-start',
-        'pnpm --filter \'./packages/**\' -r run clean', 'pnpm product:build', ...phaseEntries.map(entry => `node scripts/ci/measure.ts ${entry}`),
-        'node scripts/ci/product-fanout-contract.ts custody-end']);
-      for (const key of ['AUTHOR', 'COMMITTER']) { assert.equal(env[`GIT_${key}_NAME`], 'iliya'); assert.equal(env[`GIT_${key}_EMAIL`], 'iliyazelenkog@gmail.com'); }
-      const archive = object(steps.at(-2));
-      assert.equal(archive.uses, upload); assert.equal(archive.if, '${{ always() }}');
-      assert.deepEqual(archive.with, { name: 'full-ci-${{ inputs.artifact }}-root-${{ github.run_attempt }}',
-        path: '${{ runner.temp }}/ci-product-root/*.json', 'if-no-files-found': 'error', 'retention-days': 14 });
-      assert.equal(lastStep.uses, upload); assert.equal(lastStep.if, '${{ success() }}');
-      assert.deepEqual(lastStep.with, { name: 'full-ci-${{ inputs.artifact }}-root-current',
-        path: '${{ runner.temp }}/ci-product-root/*.json', 'if-no-files-found': 'error', 'retention-days': 14, overwrite: true });
-      assert.deepEqual(Object.keys(env).toSorted(), ['EXPECTED_REVISION', 'GIT_AUTHOR_EMAIL', 'GIT_AUTHOR_NAME', 'GIT_COMMITTER_EMAIL', 'GIT_COMMITTER_NAME']);
-    } else {
-      assert.equal(env.NEEDS, '${{ toJSON(needs) }}');
-      assert.deepEqual(runs, [revisionGuard, retainedHistory, 'node scripts/ci/product-fanout-contract.ts results', enablePnpm,
-        'pnpm install --frozen-lockfile', aggregateEvidenceBinding, 'node scripts/ci/product-fanout-contract.ts evidence']);
-      assert.deepEqual(Object.keys(env).toSorted(), ['EXPECTED_REVISION', 'NEEDS']);
-      // Exact inputs preserve the action's default same-workflow-run scope:
-      // no run-id, repository, token or artifact-id may select another run.
-      assert.deepEqual(steps.filter(step => step.uses === download).map(step => step.with), [
-        { pattern: 'full-ci-${{ inputs.artifact }}-package-*-current', path: '${{ runner.temp }}/ci-product-reports/packages', 'merge-multiple': false },
-        { name: 'full-ci-${{ inputs.artifact }}-root-current', path: '${{ runner.temp }}/ci-product-reports/root' },
-      ]);
-    }
-  }
-}
-
-export function assertShardWorkflow(value: unknown): void {
-  const workflow = object(value);
-  assert.deepEqual(Object.keys(workflow).toSorted(), ['jobs', 'name', 'on', 'permissions']);
-  assert.deepEqual(workflow.permissions, { contents: 'read' });
-  assert.deepEqual(workflow.on, { workflow_call: { inputs: Object.fromEntries(['shard', 'revision', 'artifact'].map(key =>
-    [key, { required: true, type: 'string' }])) } });
-  const jobs = object(workflow.jobs); assert.deepEqual(Object.keys(jobs), ['shard']);
-  const job = object(jobs.shard);
-  assert.deepEqual(Object.keys(job).toSorted(), ['env', 'runs-on', 'steps', 'timeout-minutes']);
-  assert.equal(job['runs-on'], 'ubuntu-24.04'); assert.equal(job['timeout-minutes'], 35);
-  assert.deepEqual(job.env, { GIT_AUTHOR_NAME: 'iliya', GIT_AUTHOR_EMAIL: 'iliyazelenkog@gmail.com',
-    GIT_COMMITTER_NAME: 'iliya', GIT_COMMITTER_EMAIL: 'iliyazelenkog@gmail.com',
-    EXPECTED_REVISION: '${{ inputs.revision }}', PACKAGE_SHARD: '${{ inputs.shard }}' });
-  const steps = array(job.steps).map(item => {
-    const { name: _name, ...step } = object(item); return step;
-  });
-  assert.deepEqual(steps, [
-    { uses: checkout, with: { ref: '${{ inputs.revision }}', 'persist-credentials': false, 'fetch-depth': 0 } },
-    { shell: 'bash', run: revisionGuard }, { shell: 'bash', run: retainedHistory },
-    { uses: setup, with: { 'node-version-file': '.node-version' } },
-    { run: 'node scripts/ci/gate.ts revision' }, { run: enablePnpm }, { run: 'pnpm install --frozen-lockfile' },
-    { shell: 'bash', run: packageEvidenceBinding },
-    { run: 'node scripts/ci/package-execution.ts' },
-    { if: '${{ always() }}', uses: upload, with: {
-      name: 'full-ci-${{ inputs.artifact }}-package-${{ inputs.shard }}-${{ github.run_attempt }}',
-      path: '${{ runner.temp }}/ci-product-shard/receipt.json', 'if-no-files-found': 'error', 'retention-days': 14 } },
-    { if: '${{ success() }}', uses: upload, with: {
-      name: 'full-ci-${{ inputs.artifact }}-package-${{ inputs.shard }}-current',
-      path: '${{ runner.temp }}/ci-product-shard/receipt.json', 'if-no-files-found': 'error', 'retention-days': 14, overwrite: true } },
-  ]);
-}
-
 // receipt.json remains in each artifact's own directory. Diagnostic logs are not reports.
-export async function reports(directory: string): Promise<unknown[]> {
+export async function reports(directory: string, kind: 'packages' | 'root' = 'packages'): Promise<unknown[]> {
   const found: unknown[] = [];
   for (const entry of await readdir(directory, { recursive: true, withFileTypes: true })) {
     assert.ok(!entry.isSymbolicLink(), 'evidence symlink');
-    if (entry.isDirectory() || !entry.name.endsWith('.json')) { continue; }
+    const accepted = kind === 'packages' ? entry.name === 'receipt.json' : ['root-custody.json', ...phaseEntries.map(phaseName => `${phaseName.replaceAll(':', '-')}.json`)].includes(entry.name);
+    if (entry.isDirectory() || !accepted) { continue; }
     assert.ok(entry.isFile(), 'unexpected evidence input');
-    found.push(JSON.parse(await readFile(join(entry.parentPath, entry.name), 'utf8')));
+    const receipt: unknown = JSON.parse(await readFile(join(entry.parentPath, entry.name), 'utf8'));
+    if (object(receipt).target === 'darwin-arm64') {
+      const native = object(object(receipt).nativeBuild);
+      const bytes = await readFile(join(entry.parentPath, 'rename-no-replace.node'));
+      assert.equal(hash(bytes), native.sha256, 'downloaded native output hash mismatch');
+      const { assertMachOArm64 } = await import('./package-execution.ts'); assertMachOArm64(bytes);
+    }
+    found.push(receipt);
   }
   return found;
 }
@@ -458,9 +427,13 @@ const git = (...args: string[]) => execFileSync('git', args, { encoding: 'utf8' 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   assert.equal(process.argv.length, 3, 'one fixed mode required');
   const mode = process.argv[2];
-  assert.ok(['results', 'evidence', 'custody-start', 'custody-end'].includes(mode ?? ''), 'unknown gate mode');
-  if (mode === 'results' || mode === 'evidence') { assertJobResults(JSON.parse(process.env.NEEDS ?? '{}')); }
-  if (mode !== 'results') {
+  assert.ok(['results', 'evidence', 'darwin-results', 'darwin-evidence', 'custody-start', 'custody-end'].includes(mode ?? ''), 'unknown gate mode');
+  const target: ExecutionTarget = mode?.startsWith('darwin-') ? 'darwin-arm64' : 'linux-x64';
+  if (mode?.endsWith('results') || mode?.endsWith('evidence')) {
+    assert.equal(process.env.EXECUTION_TARGET, target, 'workflow must supply trusted target');
+    assertJobResults(JSON.parse(process.env.NEEDS ?? '{}'), target);
+  }
+  if (!mode?.endsWith('results')) {
     const root = process.cwd();
     const sha = git('rev-parse', 'HEAD').trim(); assert.equal(sha, process.env.EXPECTED_REVISION);
     assert.match(sha, /^[a-f0-9]{40}$/u);
@@ -468,20 +441,27 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const tracked = git('ls-tree', '-r', '--name-only', '-z', 'HEAD').split('\0').filter(Boolean);
     const source = await readProductSource(root, tracked);
     execFileSync('git', ['diff', '--quiet', 'HEAD']);
-    if (mode === 'evidence') {
+    if (mode?.endsWith('evidence')) {
       const { inputPaths } = await import('./measure.ts');
       const measureDigests: Record<string, string> = {};
       for (const path of inputPaths) { measureDigests[path] = hash(await readFile(path)); }
       const { parse } = await import('yaml');
+      const expected = { ...source, sha, inputTree, target, workflow: workflowIdentity(process.env), nodeExecutable: process.execPath, measureDigests };
+      if (target === 'darwin-arm64') {
+        assertDarwinWorkflow(parse(await readFile('.github/workflows/ci-darwin-packages.yml', 'utf8')));
+        assert.ok(process.env.CI_PACKAGE_REPORT_DIR);
+        assertPackageEvidence(expected, await reports(process.env.CI_PACKAGE_REPORT_DIR));
+      } else {
       assertProductWorkflow(parse(await readFile('.github/workflows/ci-product.yml', 'utf8')));
       assertShardWorkflow(parse(await readFile('.github/workflows/ci-product-shard.yml', 'utf8')));
       assert.ok(process.env.CI_PACKAGE_REPORT_DIR && process.env.CI_ROOT_REPORT_DIR, 'external evidence directories required');
-      const rootReports = await reports(process.env.CI_ROOT_REPORT_DIR);
+      const rootReports = await reports(process.env.CI_ROOT_REPORT_DIR, 'root');
       const custody = rootReports.filter(report => object(report).kind === 'root-custody');
       assert.equal(custody.length, 1, 'one completed root custody receipt required');
       assertRootCustody(custody[0], { ...source, sha, inputTree });
-      assertFanoutEvidence({ ...source, sha, inputTree, nodeExecutable: process.execPath, measureDigests },
+      assertFanoutEvidence(expected,
         await reports(process.env.CI_PACKAGE_REPORT_DIR), rootReports.filter(report => object(report).kind !== 'root-custody'));
+      }
     } else {
       const output = process.env.CI_EVIDENCE_DIR; assert.ok(output, 'external custody directory required');
       assert.ok(relative(root, resolve(output)).startsWith('..'), 'custody must be outside checkout');
@@ -497,5 +477,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       }
     }
   }
-  console.log('Full Linux product checkpoint validated; hosted qualification and speed remain separate.');
+  console.log('Full target-specific product checkpoint validated; hosted qualification and speed remain separate.');
 }

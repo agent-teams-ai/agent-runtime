@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { join, relative, resolve } from 'node:path';
 import type { ExpectedEvidence, PackageId } from './product-fanout-contract.ts';
 
-// Private independent aggregate oracle for the fixed Linux v2 Node streams.
+// Private independent aggregate oracle for the fixed target-specific schema-three Node streams.
 const object = (value: unknown): Record<string, unknown> => {
   assert.ok(value && typeof value === 'object' && !Array.isArray(value), 'expected observation object');
   return value as Record<string, unknown>;
@@ -62,9 +62,9 @@ function assertCaptureIdentity(stream: Record<string, unknown>, node: Record<str
       assert.notEqual(rawIdentity.commandPid, node.pid, 'original child cannot be its command process');
       const { index: _index, commandPid: _commandPid, ancestors: _ancestors, runnerPid: _runnerPid, mechanism: _mechanism, osObserved: _osObserved, ...osIdentity } = rawIdentity; return osIdentity;
 }
-interface StreamContext { id: PackageId; index: number; selected: string[]; root: string; packageRoot: string }
+interface StreamContext { id: PackageId; index: number; selected: string[]; root: string; packageRoot: string; nodeExecutable: string }
 export function assertObservedStreams(expected: ExpectedEvidence, proof: Record<string, unknown>, context: StreamContext): void {
-  const {id, index, selected, root, packageRoot} = context;
+  const {id, index, selected, root, packageRoot, nodeExecutable} = context;
   const observation = object(proof.observation), streams = array(observation.streams).map(object);
   const plans = index < 3 ? [{ argv: ['--test', '--test-concurrency=1', `--test-reporter=${join(root, 'scripts/ci/package-execution.ts')}`, ...selected], files: selected }]
     : expected.packageStreams[id];
@@ -76,7 +76,7 @@ export function assertObservedStreams(expected: ExpectedEvidence, proof: Record<
     const node = object(stream.node), embedded = id === 'embedded-runtime';
     assert.ok(Number.isSafeInteger(node.pid) && Number(node.pid) > 0, 'actual Node PID required');
     assert.ok(!pids.has(node.pid), 'duplicate process envelope'); pids.add(node.pid);
-    assert.equal(node.executable, expected.nodeExecutable); assert.equal(node.cwd, join(root, packageRoot));
+    assert.equal(node.executable, nodeExecutable); assert.equal(node.cwd, join(root, packageRoot));
     assert.deepEqual(node.argv, plan.argv, 'source-expanded original process argv drift');
     if (index < 3) { assert.equal(node.pid, proof.pid, 'direct AE process PID drift'); }
     assert.equal(typeof stream.stdout, 'string'); assert.equal(typeof stream.stderr, 'string');

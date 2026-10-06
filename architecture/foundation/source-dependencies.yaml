@@ -3096,6 +3096,8 @@ boundaries:
   - scripts/ci/pr-regression-inputs.ts
   - scripts/ci/pr-regression-inputs.test.ts
   - scripts/ci/pr-regression-command.ts
+  - scripts/ci/product-workflow-contract.ts
+  - scripts/ci/package-native-observation.ts
   entrypoints:
   - scripts/ci/script-routing.ts
   - scripts/ci/cms-pin-review.ts
