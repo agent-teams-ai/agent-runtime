@@ -46,6 +46,14 @@ test('Namespace canary rejects untrusted triggers, mutable source and incomplete
     value => { workflowObject(value.on).workflow_dispatch = { inputs: { revision: { type: 'string' } } }; },
     value => { workflowObject(value.permissions).contents = 'write'; },
     value => { workflowObject(namespaceQualificationStep(value, 'Checkout exact workflow revision').with).ref = 'main'; },
+    value => { workflowObject(namespaceQualificationStep(value, 'Setup pinned Node').with)['package-manager-cache'] = true; },
+    value => { namespaceQualificationStep(value, 'Configure Namespace pnpm cache').uses = 'namespacelabs/nscloud-cache-action@v1'; },
+    value => {
+      const steps = namespaceQualificationJob(value).steps; assert.ok(Array.isArray(steps));
+      const cache = steps.findIndex(item => workflowObject(item).name === 'Configure Namespace pnpm cache');
+      const pnpm = steps.findIndex(item => workflowObject(item).name === 'Enable pinned pnpm');
+      [steps[cache], steps[pnpm]] = [steps[pnpm], steps[cache]];
+    },
     value => { namespaceQualificationStep(value, 'Run original full product checks').run = 'pnpm --filter @agent-teams/agent-execution test'; },
     value => { namespaceQualificationStep(value, 'Run original full product checks').if = '${{ false }}'; },
     value => { namespaceQualificationStep(value, 'Run original full product checks')['continue-on-error'] = true; },
