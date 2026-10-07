@@ -135,7 +135,11 @@ test("stable31 managed bytes stay exact and the current Foundation source policy
   assert.notEqual(currentSourcePolicy, historicalSourcePolicy);
   // CMS successor adds two roots/one public entry; nightly adds two private roots; product fanout adds five private roots; Darwin adds two private feature-local helpers.
   // Reconstruct the prior CI policy, retaining its fixed whole-document oracle.
-  const namespacePolicyBytes = await read("architecture/foundation/source-dependencies.yaml");
+  const comparatorPolicyBytes = await read("architecture/foundation/source-dependencies.yaml");
+  // Reverse only the exact fixed tooling dependency; retain every historical digest.
+  const comparatorAdmission = '    - "@agent-teams/ci-input-proof"\n';
+  assert.equal(comparatorPolicyBytes.split(comparatorAdmission).length - 1, 1);
+  const namespacePolicyBytes = comparatorPolicyBytes.replace(comparatorAdmission, "");
   // Namespace qualification adds exactly two private roots to the existing CI owner.
   // Reverse only this finite delta and authenticate the accepted main predecessor.
   const namespaceAdditions = ["  - scripts/ci/namespace-qualification-contract.ts\n",
