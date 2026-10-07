@@ -51,8 +51,8 @@ async function fixture(t: test.TestContext) {
   git('clone', '--quiet', '--shared', repository, '.');
   // Seed the new common policy at both immutable TEST revisions. First adoption
   // is tested separately; these fixtures model the next package-only PR.
-  for (const path of ['architecture/foundation/ci-pr-regressions.json', 'architecture/foundation/source-dependencies.yaml',
-    'scripts/ci/pr-regression-inputs.ts', 'scripts/ci/pr-regression-inputs.test.ts', 'scripts/ci/pr-regression-command.ts',
+  for (const path of ['package.json', 'pnpm-lock.yaml', 'architecture/foundation/ci-pr-regressions.json', 'architecture/foundation/source-dependencies.yaml',
+    'scripts/ci/pr-regression-inputs.ts', 'scripts/ci/pr-regression-inputs.test.ts', 'scripts/ci/pr-regression-command.ts', 'scripts/ci/conformance.ts',
     '.github/workflows/ci-foundation-route.yml', '.github/workflows/ci-pr-regressions.yml']) {
     await cp(join(repository, path), join(root, path));
   }

@@ -285,7 +285,8 @@ export async function conformance(root: string): Promise<void> {
     assert.equal(typeof originalScripts[name], 'string', `${name} is retained by Docs migration`);
   }
   const currentManifest = JSON.parse(await read('package.json'));
-  for (const key of ['engines', 'packageManager', 'dependencies', 'devDependencies']) { assert.deepEqual(currentManifest[key], originalManifest[key], `current-main ${key}`); }
+  for (const key of ['engines', 'packageManager', 'dependencies']) { assert.deepEqual(currentManifest[key], originalManifest[key], `current-main ${key}`); }
+  assert.deepEqual(currentManifest.devDependencies, { ...originalManifest.devDependencies, '@agent-teams/ci-input-proof': '0.1.0-rc.0' }, 'current-main devDependencies retain the baseline plus the exact shared comparator');
   assert.deepEqual(baseline.scripts, originalManifest.scripts, 'original current-main scripts');
   assert.deepEqual(baseline.inventory, commandInventory(baseline.scripts, 'check'), 'original current-main leaf inventory');
   const originalPolicy = execFileSync('git', ['show', `${baseline.baseCommit}:architecture/foundation/source-dependencies.yaml`], { cwd: root });
