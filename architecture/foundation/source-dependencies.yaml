@@ -3107,6 +3107,7 @@ boundaries:
   allow:
     boundaries: []
     packages:
+    - "@agent-teams/ci-input-proof"
     - yaml
     builtins:
     - node:assert/strict

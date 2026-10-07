@@ -133,6 +133,26 @@ stay required. Common, unknown, structural, environment or installation drift
 merge group, manual and reusable full calls retain
 the original complete commands; local full/fast commands retain their meaning.
 
+The leaf relation now uses the public `@agent-teams/ci-input-proof@0.1.0-rc.0`
+root API as a fixed development dependency inside the existing CI tooling
+feature. `tooling.ci-full-gate` admits only that exact package name; no new
+composition node or lifecycle owner is introduced. The consumer still owns
+complete Git B/H collection, ordinary-body permissions, checkout and installed
+graph observations, scope selection and independent executed-test obligations.
+The kernel compares Git-object SHA-1 leaves and returns changed paths; it does
+not authenticate snapshots or authorize deferral or merge. Manifest, lockfile,
+helper and policy changes remain closed inputs and select FULL.
+
+Kernel ceilings and stricter path validation may conservatively select FULL.
+A classifier rejection uses the existing FULL route; an unavailable static
+package import can fail CI before classification and must never become a green
+omission. This adoption removes the local comparison loop without introducing
+new omission rules, historical evidence reuse or an independent current-H
+producer. Pin the exact RC and its lockfile integrity rather than `latest`.
+Historical manifest and policy evidence stays immutable; current conformance
+permits only the exact comparator dependency in addition to that baseline.
+The RC adoption itself makes no claim about Windows critical-path latency.
+
 ## Maintainability budgets
 
 Production TypeScript is limited to 500 effective lines per file, 150 per

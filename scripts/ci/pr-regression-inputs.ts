@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { lstat, readFile, readdir, readlink, realpath } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
+import { compareLeafInventories } from '@agent-teams/ci-input-proof';
 import { parse } from 'yaml';
 
 export const regressionIds = ['foundation-negative', 'fms', 'cms-regression', 'ci-selftests', 'docs-portable'] as const;
@@ -134,6 +135,11 @@ function assertUniverse(leaves: Leaf[]): void {
   for (const anchor of [...policy.foundationAnchors, ...policy.docsBodyAnchors, ...schedulingClosure]) {assert.ok(leaves.some(leaf => leaf.path === anchor && leaf.type === 'blob' && leaf.mode === '100644'), 'missing regression input');}
 }
 const scopeDigest = (leaves: Leaf[], select: (leaf: Leaf) => boolean) => sha256(JSON.stringify(leaves.filter(select)));
+const leafInventory = (leaves: readonly Leaf[]) => ({ version: 1, digestScheme: 'git-object-sha1',
+  inputs: leaves.map(leaf => ({ path: leaf.path,
+    type: leaf.type === 'blob' ? (leaf.mode === '120000' ? 'symlink' : 'file') : 'gitlink',
+    mode: leaf.mode, membership: ordinaryBody(leaf.path) ? 'structural' : 'closed', content: leaf.oid })),
+});
 
 export async function classifyPrRegressions(root: string, input: PrInput): Promise<PrPlan> {
   const full: PrPlan = { protocol: 'pr-regression-sampling/1', mode: 'full', base: input.base, head: input.head,
@@ -143,16 +149,12 @@ export async function classifyPrRegressions(root: string, input: PrInput): Promi
     const base = snapshot(root, input.base), head = snapshot(root, input.head);
     full.baseTree = base.tree; full.headTree = head.tree;
     assertUniverse(base.leaves); assertUniverse(head.leaves);
-    assert.equal(base.leaves.length, head.leaves.length, 'membership changed');
-    for (const [i, before] of base.leaves.entries()) {
-      const after = head.leaves[i]!;
-      assert.equal(before.path, after.path, 'membership changed');
-      assert.equal(before.mode, after.mode, 'mode changed'); assert.equal(before.type, after.type, 'kind changed');
-      if (before.oid !== after.oid) {
-        full.changed.push(after.path);
-        assert.ok(ordinaryBody(after.path), 'common, manifest, instructions, profile, toolchain or helper change');
-      }
-    }
+    const relation = compareLeafInventories(leafInventory(base.leaves), leafInventory(head.leaves),
+      base.leaves.filter(leaf => ordinaryBody(leaf.path)).map(leaf => leaf.path));
+    if (relation.status === 'rejected') {throw new Error(`input comparison rejected: ${relation.reason}`);}
+    const contentChanges = new Set(relation.changedContentPaths);
+    // Preserve the consumer's Git inventory order; the kernel owns comparison only.
+    full.changed = head.leaves.filter(leaf => contentChanges.has(leaf.path)).map(leaf => leaf.path);
     assert.ok(full.changed.length > 0, 'no ordinary body delta');
     await verifyCheckout(root, input.head, head.leaves);
     const changed = new Set(full.changed);
