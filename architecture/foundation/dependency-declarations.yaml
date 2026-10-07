@@ -19,6 +19,7 @@ policies:
     - typescript
     - xstate
   exactRegistryDevelopmentOnlyPackages:
+    - "@agent-teams/ci-input-proof"
     - "@agent-teams/docs-protocol"
     - "@agent-teams/docs-protocol-agent-teams"
     - "@agent-teams/engineering-foundation"
