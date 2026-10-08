@@ -109,13 +109,13 @@ Decided during planning on 2026-10-04 (the owner delegated technical choices), c
 
 | # | Brief | Branch | Starts after | Size (changed lines) |
 |---|---|---|---|---|
-| 01 | `01-derived-composition-types.md`: read the value types of `OrdinaryRuntimeFactories` from the descriptors (shape unchanged; `HostInputs` is done by AR-1b); one structural test (adds `oxc-parser` as an embedded-runtime development dependency) | `refactor/derived-composition-types` | AR-2 | 20-60 |
-| 02 | `02-retire-failure-sweep.md`: the 7-case sweep becomes two projection cases; smoke (AR-1c) covers the rest | `test/retire-failure-sweep` | AR-2 | 20-60 |
-| 03 | `03-typed-dependency-records-and-cast-check.md`: type-check the 20 GM-module test files, type the 1 untyped record, mark the 3 deliberate invalid inputs, AST check in the adoption gate | `test/dependency-record-casts` | AR-2; merge after 01-02 | 300-700 (stop above 150 type errors) |
-| 04 | `04-handle-guards.md`: guards plus `--test-force-exit` per decision Q2 | `test/handle-guards` | AR-2; merge after 03 | 150-300 |
-| 05 | `05-promise-with-resolvers.md`: the 2 hand-written `deferred()` helpers outside contained-turn | `test/promise-with-resolvers` | AR-2; merge last | 5-20 |
-| 06 | `06-fixture-copies.md`: outcome of decision Q1, nothing to implement; recorded by the docs PR | - | - | 0 |
-| 07 | `07-ordinary-store-contract-suite.md`: port-level cases, owner in-memory fake, `contractSuite` for `agent-runtime/ordinary/store`, fake run in package tests, PostgreSQL run required in `postgres-durability` | `test/ordinary-store-contract-suite` | AR-2 and 03; an open STORE-1a port change goes first or waits (asked at start) | 350-600 |
+| 01 | `test-debt-189-01-derived-composition-types.md`: read the value types of `OrdinaryRuntimeFactories` from the descriptors (shape unchanged; `HostInputs` is done by AR-1b); one structural test (adds `oxc-parser` as an embedded-runtime development dependency) | `refactor/derived-composition-types` | AR-2 | 20-60 |
+| 02 | `test-debt-189-02-retire-failure-sweep.md`: the 7-case sweep becomes two projection cases; smoke (AR-1c) covers the rest | `test/retire-failure-sweep` | AR-2 | 20-60 |
+| 03 | `test-debt-189-03-dependency-record-casts.md`: type-check the 20 GM-module test files, type the 1 untyped record, mark the 3 deliberate invalid inputs, AST check in the adoption gate | `test/dependency-record-casts` | AR-2; merge after 01-02 | 300-700 (stop above 150 type errors) |
+| 04 | `test-debt-189-04-handle-guards.md`: guards plus `--test-force-exit` per decision Q2 | `test/handle-guards` | AR-2; merge after 03 | 150-300 |
+| 05 | `test-debt-189-05-promise-with-resolvers.md`: the 2 hand-written `deferred()` helpers outside contained-turn | `test/promise-with-resolvers` | AR-2; merge last | 5-20 |
+| 06 | `test-debt-189-06-fixture-copies.md`: outcome of decision Q1, nothing to implement; recorded by the docs PR | - | - | 0 |
+| 07 | `test-debt-189-07-ordinary-store-contract-suite.md`: port-level cases, owner in-memory fake, `contractSuite` for `agent-runtime/ordinary/store`, fake run in package tests, PostgreSQL run required in `postgres-durability` | `test/ordinary-store-contract-suite` | AR-2 and 03; an open STORE-1a port change goes first or waits (asked at start) | 350-600 |
 
 Merge order: 01 -> 02 -> 03 -> 04 -> 07 -> 05. Briefs 01, 02 and 05 can be developed in parallel; 03, 04 and 07 touch
 the embedded-runtime test files, the launcher or the root `tsconfig.json` `include`, so they rebase after the earlier
