@@ -12,7 +12,7 @@ AR-2: per-grant Provider Access scopes. PR title `feat(provider-access): release
 `feat/provider-access-grant-scopes` from fresh `origin/main` after AR-1c merged and ADR-0024 is accepted. Three
 commits P1 to P3. Estimated +180 / -30.
 
-## 1. Facts you need (verified at agent-runtime `0ace1cce`, get-modular `81063ad`)
+## 1. Facts you need (verified at agent-runtime `0ace1cce`, rechecked unchanged at `44846323`; get-modular `81063ad`)
 
 - Owner decision (2026-10-02): the second real Agent Runtime scope is per grant in Provider Access, with dynamic
   children, `order: "concurrent"`, and the domain retirement kept inside one cleanup entry. Provider Access owns the
@@ -105,10 +105,17 @@ See section 1. No open questions remain for this brief.
 ### P1 `build(provider-access): depend on @get-modular/resources`
 
 `packages/contexts/provider-access/package.json`: `"dependencies": { "@get-modular/resources": "catalog:" }`;
-`architecture/foundation/source-dependencies.yaml`, boundary `composition.provider-access.ordinary`:
-`packages: ['@get-modular/resources']`; `pnpm install`, then `pnpm install --frozen-lockfile`. If Foundation rejects a
-declared but unused dependency, fold P1 into P2. Gates (exit 0): `pnpm install --frozen-lockfile`,
-`pnpm foundation:check`; `ls node_modules/.pnpm | grep -c '^@get-modular+resources@'` prints 1.
+`architecture/foundation/source-dependencies.yaml`, boundary `composition.provider-access.ordinary`: replace the line
+`    packages: []` of its `allow` block with exactly `    packages: ['@get-modular/resources']`.
+`scripts/docs/consumer-migration.test.mjs`, the test "stable31 managed bytes stay exact and the current Foundation
+source policy retains reviewed scope" (it authenticates the whole source policy by reversing reviewed additions down
+to fixed digests): before the AR-1c reversal, reverse this commit's line:
+`const accessAdmission = ["    packages: ['@get-modular/resources']\n", "    packages: []\n"];` assert
+`bytes.split(accessAdmission[0]).length - 1 === 1`, replace it with `accessAdmission[1]`, and feed the result into the
+AR-1c reversal. No existing digest changes; if one fails, the edit changed more than this line: stop.
+`pnpm install`, then `pnpm install --frozen-lockfile`. If Foundation rejects a declared but unused dependency, fold
+P1 into P2. Gates (exit 0): `pnpm install --frozen-lockfile`, `pnpm foundation:check`, `pnpm docs:qualification`;
+`ls node_modules/.pnpm | grep -c '^@get-modular+resources@'` prints 1.
 
 ### P2 `feat(provider-access): release ordinary grants through concurrent child scopes`
 
@@ -178,10 +185,10 @@ Gates (exit 0): `pnpm --filter @agent-teams/provider-access check`,
 
 `packages/contexts/provider-access/src/features/contained-turn-access/README.md`: one paragraph on ordinary grant
 release (scope per owner, child per grant, concurrent release, retry of failed grants only, debt path shape).
-`docs/architecture/get-modular-adoption.md`, and in `architecture/get-modular/evidence/train-030-cms-pin-review.json`
-switch every row still `pending: AR-2` to its final state ("order concurrent only for independent peers: met (Provider
-Access grants)", resource scopes rule 7 met, errors by code met); afterwards no row says `pending`. Gates:
-`pnpm docs:protocol:check`, `pnpm test:consumer-modules`.
+`docs/architecture/get-modular-adoption.md`: in the section "Train 0.3.0 conformance status" switch every row still
+`pending: AR-2` to its final state ("order concurrent only for independent peers: met (Provider Access grants)",
+resource scopes rule 7 met, errors by code met); afterwards no row says `pending`. Never edit
+`smart-ci-cms-pin-review.json`. Gate: `pnpm docs:protocol:check`.
 
 Final gates: the local full gates of section 2 after the last commit. In CI, `postgres-durability`
 runs the Provider Access PostgreSQL gates and the ordinary PostgreSQL gate.
@@ -212,5 +219,6 @@ Afterwards the AR program plan lanes rebase, and issue #189 can start.
 4. Mutations in a scratch clone at the PR head, each committed on a detached HEAD and started again from the PR head:
    remove `order: 'concurrent'` (the 64-grant test times out); drop the `for (const debt ...)` loop after
    `grantScopes.control.close()` (the isolation test fails because the first dispose resolves).
-5. `node -p "require('./architecture/get-modular/evidence/train-030-cms-pin-review.json').normDisposition.filter(r => String(r.state).startsWith('pending')).length"` prints 0.
+5. `awk '/^## Train 0.3.0 conformance status/{f=1;next} /^## /{f=0} f' docs/architecture/get-modular-adoption.md | grep -c '| pending'`
+   prints 0.
 6. `git diff origin/main -- '*.ts' | grep -c '^+.*as never'` is 0.

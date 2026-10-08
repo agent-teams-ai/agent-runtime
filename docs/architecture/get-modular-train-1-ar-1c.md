@@ -25,7 +25,7 @@ Estimated +480 / -200 (without the retained archive).
 
 Consumer Module Standard Host rule: "Use one deadline at the root: escalate first, then abandon, with referenced
 timers". Decision for this train: no new deadline in AR-1c. The decorated `dispose()` closes owners without a
-deadline, as the manual list does today; the Host drain keeps its 1 s caller wait. The `normDisposition` row says:
+deadline, as the manual list does today; the Host drain keeps its 1 s caller wait. The row of the section "Train 0.3.0 conformance status" of `docs/architecture/get-modular-adoption.md` says:
 "outstanding by decision of 2026-10-04: release of the resource owners keeps today's behavior without a deadline; added when an owner's
 release can block without its own bound, or on owner request; prepared values grace 5000 ms, abandon 5000 ms".
 Today the owners bound their own I/O: Runtime Security transactions set `statement_timeout` 5000 ms, Provider Access
@@ -44,7 +44,7 @@ async function closeWithin(control: ScopeControl, graceMs: number, abandonMs: nu
 
 Do not add it in this PR.
 
-## 2. Facts you need (verified at agent-runtime `0ace1cce`, get-modular `81063ad`)
+## 2. Facts you need (verified at agent-runtime `0ace1cce`, rechecked unchanged at `44846323`; get-modular `81063ad`)
 
 `@get-modular/resources` 0.1.0:
 
@@ -209,7 +209,7 @@ then `--apply`. Body (English, `Status: proposed` until the owner approves the t
   abandon) is added when an owner's release can block without its own bound, or on owner request; prepared values
   grace 5000 ms, abandon 5000 ms.
 - Consequences: debt paths name implementation IDs; a failing Provider Access release no longer blocks Runtime
-  Security and Codex release; `normDisposition` rows closed by AR-1c and AR-2.
+  Security and Codex release; the conformance status rows closed by AR-1c and AR-2.
 
 In C1 also add `ADR-0024` to the `related` list of `docs/decisions/README.md` and one bullet under `## Proposed`
 (like ADR-0016): the type `adr` has reachability `manual-fixed-index` through that file, so `pnpm docs:check` needs it.
@@ -226,14 +226,14 @@ acceptance this PR and AR-2 do not merge.
 | File | Change |
 |---|---|
 | `pnpm-workspace.yaml` | catalog `'@get-modular/resources': 0.1.0`, `'@get-modular/conformance': 0.1.0`; `minimumReleaseAgeExclude` add `@get-modular/resources@0.1.0` and `@get-modular/conformance@0.1.0` after the Assembly entry |
-| `scripts/docs/consumer-migration.test.mjs` | the same two entries in the exact list |
+| `scripts/docs/consumer-migration.test.mjs` | (1) the same two entries in the exact `minimumReleaseAgeExclude` list (`:52-60`); (2) the test "stable31 managed bytes stay exact and the current Foundation source policy retains reviewed scope" authenticates the whole `architecture/foundation/source-dependencies.yaml` by reversing reviewed finite additions down to fixed digests (`:138-210` at `44846323`). Reverse this commit's additions first: right after `const comparatorPolicyBytes = await read("architecture/foundation/source-dependencies.yaml");` add a comment line `// Get Modular train 1 (AR-1c) admits resources and conformance; reverse only these lines.` and `const getModularAdditions = ["    - '@get-modular/resources'\n", "    - '@get-modular/conformance'\n"];`, assert their exact counts (2 and 1) with `split(...).length - 1`, remove them with `split(...).join("")`, and let the existing chain read the result instead of `comparatorPolicyBytes`. Never change an existing digest; if one fails, the edit added more than these lines: stop. |
 | `packages/apps/embedded-runtime/package.json` | `dependencies`: `"@get-modular/resources": "catalog:"`; `devDependencies`: `"@get-modular/conformance": "catalog:"` |
 | `pnpm-lock.yaml` | `pnpm install`, then `pnpm install --frozen-lockfile`; resources and conformance integrities equal the bundle's `INTEGRITY` lines |
 | `architecture/get-modular/evidence/get-modular-resources-0.1.0.tgz` | downloaded with `npm pack @get-modular/resources@0.1.0` (a registry download, not a pack from source) and checked with the bundle's `SHA256SUMS`; conformance is not retained (development only), its lock integrity is the check |
 | `architecture/get-modular/consumer-profile.json` `packages` | third entry for resources |
 | `architecture/get-modular/consumer-profile.schema.json:137` | enum adds `"@get-modular/resources"` |
-| `scripts/architecture/check-get-modular-adoption.mjs:38` | `['@get-modular/core', '@get-modular/assembly', '@get-modular/resources']`, message `exact package set` |
-| `scripts/architecture/check-get-modular-adoption.test.mjs:38` | synthetic triple; new rejecting case: a profile with only Core and Assembly fails with `/exact package set/` |
+| `scripts/architecture/check-get-modular-adoption.mjs:39` | `['@get-modular/core', '@get-modular/assembly', '@get-modular/resources']`, message `exact package set` |
+| `scripts/architecture/check-get-modular-adoption.test.mjs:39` | synthetic triple; new rejecting case: a profile with only Core and Assembly fails with `/exact package set/` |
 | `architecture/foundation/source-dependencies.yaml` | `composition.embedded-runtime` `allow.packages` add `'@get-modular/resources'`; `test.embedded-runtime` add `'@get-modular/conformance'` and `'@get-modular/resources'` (alphabetical) |
 | `architecture/foundation/dependency-declarations.yaml` | `developmentOnlyPackages` add `"@get-modular/conformance"` |
 
@@ -395,9 +395,9 @@ Gates: build and `pnpm --filter @agent-teams/embedded-runtime test` (exit 0).
 Feature README (`:29-40`): the scope tree, owners continue past a failure, journal after owners, and keep the sentence
 "Inner Host/feature recovery must succeed before outer prerequisite owners and the journal are released".
 `docs/architecture/get-modular-adoption.md` section "Ordinary closure retention and binding evidence": scopes instead
-of the manual list, debt paths, smoke and isolate evidence; in the pin review JSON switch the rows whose `closedBy`
-names AR-1c to their final state, rows shared with AR-2 to `pending: AR-2` (in the doc and
-the pin review JSON, state only). Gates: `pnpm docs:protocol:check`, `pnpm test:consumer-modules`.
+of the manual list, debt paths, smoke and isolate evidence; in the section "Train 0.3.0 conformance status" of `docs/architecture/get-modular-adoption.md` switch the rows whose
+`closedBy` names AR-1c to their final state, rows shared with AR-2 to `pending: AR-2`. Never edit
+`smart-ci-cms-pin-review.json`. Gate: `pnpm docs:protocol:check`.
 
 Final gates: the local full gates of section 3 after the last commit. A live ordinary end-to-end run
 needs a separate owner permission and a disposable environment; it is not part of this PR.
@@ -408,7 +408,7 @@ needs a separate owner permission and a disposable environment; it is not part o
 - Two copies of `@get-modular/resources` (the scope check throws `resources.scoped.invalid-run-scope`): stop.
 - A type error that needs a cast around `scoped()` or `ModuleFactory`: stop, Get Modular finding.
 - An owner cleanup that depends on another owner: stop (section 6).
-- Flaky tests on `runtime-macos` or a run above 12 minutes: report.
+- Flaky tests on a `runtime-macos` package shard, or a shard above 12 minutes (limit 15): report.
 
 ## 9. Must not
 

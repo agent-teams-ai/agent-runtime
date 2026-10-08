@@ -10,8 +10,8 @@ summary: Index of the Get Modular train 1 migration briefs for Agent Runtime.
 
 Index of the Agent Runtime migration onto Get Modular train 1 (Core and Assembly 0.3.0, resources and conformance
 0.1.0). Status: planning document. It authorizes no pull request merge, publication or gate change by itself; every
-merge is done by the owner. Base of all facts: agent-runtime `origin/main` = `0ace1cce` (2026-10-04), get-modular
-`origin/main` = `81063ad` (2026-10-04). Main moves within hours: every brief starts with its own "Re-verify before
+merge is done by the owner. Base of all facts: agent-runtime `origin/main` = `0ace1cce` (2026-10-04), rechecked at
+`44846323` (2026-10-07); get-modular `origin/main` = `81063ad` (2026-10-04). Main moves within hours: every brief starts with its own "Re-verify before
 start" section.
 
 ## Deliverables and order
@@ -21,7 +21,7 @@ start" section.
 | 0 | Docs PR that adds these briefs to agent-runtime | this index, section "Where the briefs live" | nothing | yes |
 | 1 | Draft branch `draft/gm-train-030` on the R-1a bundle `get-modular-0.3.0-train-r1a` (all four archives), with a draft PR "do not merge" | `get-modular-train-1-draft-branch.md` | release PR reviewed and green, R-1a bundle packed from its final head (release question Q2 decided by the owner on 2026-10-08: option A) | never; closed after npm publication |
 | 2 | npm publication of Core 0.3.0, Assembly 0.3.0, resources 0.1.0, conformance 0.1.0 (R-1b) | get-modular release brief | owner review of TEST-1 and of the draft branch result | owner only |
-| 3 | AR-1a: CMS pin to `81063ad` (get-modular #142), Core and Assembly 0.3.0 | `get-modular-train-1-ar-1a.md` | 2 | yes |
+| 3 | AR-1a: Core and Assembly 0.3.0; verifies the existing CMS pin `81063ad` (get-modular #142, migrated by agent-runtime #201) | `get-modular-train-1-ar-1a.md` | 2 | yes |
 | 4 | AR-1b: module identities, builder, root as a function of Assembly, graph gate | `get-modular-train-1-ar-1b.md` | 3 merged | yes |
 | 5 | AR-1c: ADR-0024, resources 0.1.0 and conformance 0.1.0, scoped ordinary owners, drain race fix, smoke | `get-modular-train-1-ar-1c.md` | 4 merged; the owner approves the ADR-0024 text in the AR-1c PR before merge | yes |
 | 6 | AR-2: per-grant Provider Access scopes | `get-modular-train-1-ar-2.md` | 5 merged (ADR-0024 accepted) | yes |
@@ -55,10 +55,13 @@ Why this order (decided, not open):
   are out of scope; nothing is prepared for plugins.
 - Agent Runtime has no deployed data: module IDs are renamed without data migration.
 - Consumer Module Standard maintenance (workspace rule): before AR-1b, AR-1c and AR-2, compare the pinned standard
-  with the current get-modular `main`; if it changed, stop, the owner decides on a pin step first. AR-1a performs the
-  pin migration of this train to `81063ad` (#142), the same pin as the TEST consumer (planning decision 2026-10-04: the pin
-  names the commit that defines the standard revision, so it does not depend on when the release PR merges; the
-  release PR changes no standard byte, and AR-1a checks that).
+  with the current get-modular `main`; if it changed, stop, the owner decides on a pin step first. The pin migration
+  of this train is already done: agent-runtime #201 (commit `8e0a98d8`, 2026-10-04) pinned `81063ad` (#142), the same
+  pin as the TEST consumer (planning decision 2026-10-04: the pin names the commit that defines the standard revision, so
+  it does not depend on when the release PR merges). AR-1a verifies it and that the release PR changes no standard
+  byte. The pin step's evidence (`architecture/get-modular/evidence/smart-ci-cms-pin-review.json`, validated by
+  `scripts/ci/cms-pin-review.ts`) is never edited; the train records conformance progress in the section "Train
+  0.3.0 conformance status" of `docs/architecture/get-modular-adoption.md`, created by AR-1a.
 - Gates are never deleted. A gate in the way is disabled with a comment (reason and restore condition) only where a
   brief says so. The gates disabled by AR-0 (#187) and AR-S (#190) stay disabled; this migration restores none of
   them, because none of their restore conditions depends on it.
@@ -101,12 +104,9 @@ Docs PR procedure (branch `docs/get-modular-train-1-briefs` from fresh `origin/m
    generated frontmatter; replace the generated body with the brief text. The H1 is exactly the title (the briefs
    already start with it).
 3. Add one bullet per document to `docs/architecture/README.md` in the existing "Documents:" list.
-4. In `docs/architecture/get-modular-adoption.md`, section "Status and authority", add one paragraph: the Consumer
-   Module Standard revised for 0.3.0 at get-modular `81063ad` (SHA-256 `49d08b6d1762e94308157fb59b3aa82ac1630c91f529f6efcd4915dfffee7ba7`)
-   is not yet reviewed here; AR-1a migrates the pin to `81063ad` (#142), the commit that defines this standard
-   revision; until then any change to
-   module boundaries, capability contracts, composition or lifecycle ownership in this repository must do that pin
-   step itself.
+4. No change to `docs/architecture/get-modular-adoption.md`: the pin `81063ad` is already reviewed there (section
+   "Reviewed Smart CI prerequisite successor checkpoint", agent-runtime #201), including the statement that
+   successor-wide production conformance is not established.
 5. Gates, each must exit 0: `pnpm docs:check`, `pnpm docs:protocol:check`, `pnpm docs:qualification`, commit,
    `pnpm check` on Linux. On macOS `test:sdk-growth:source` fails on unmodified `origin/main` (it reads
    `/proc/self/fd`), so run every step of the `check` chains except that one (the loop is in the AR-1a brief,
@@ -146,7 +146,7 @@ docs-protocol, so they stop reading as active plans.
   `scoped()`, `smoke` or `isolate` verdicts); (c) a packaging defect (dependencies, peers, engines, exports, files;
   an install failure under `--strict-peer-dependencies` or `--engine-strict`; a Node 26.10 install, build or test
   failure caused by the archives); (d) any integrity mismatch between bundle, lockfile and retained copy. Not blocking
-  npm: a defect in the standard's text (it blocks the AR-1a pin until a standard revision), an Agent Runtime defect
+  npm: a defect in the standard's text (recorded for a later standard revision), an Agent Runtime defect
   (fixed on the draft branch and in its brief), a CI failure that passes on one re-run and is recorded.
 - Release timing (get-modular release question Q2, decided by the owner on 2026-10-08, option A): the release PR
   stays open; the R-1a bundle is packed from its final head after review and CI; the owner merges the release PR

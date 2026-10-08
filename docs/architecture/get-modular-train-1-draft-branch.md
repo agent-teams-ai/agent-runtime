@@ -55,12 +55,12 @@ Assembly, resources or conformance reproduced with a minimal case (outcome, clea
 `scoped()`, `smoke` or `isolate` verdicts); (c) a packaging defect (dependencies, peers, engines, exports, files; an
 install failure under `--strict-peer-dependencies` or `--engine-strict`; a Node 26.10 install, build or test failure
 caused by the archives); (d) any integrity mismatch between bundle, lockfile and retained copy. Not blocking npm: a
-defect in the standard's text (it blocks the AR-1a pin until a standard revision), an Agent Runtime defect (fixed
+defect in the standard's text (recorded for a later standard revision), an Agent Runtime defect (fixed
 here and in its brief), a CI failure that passes on one re-run and is recorded.
 
 ## 2. Re-verify before start (stop on any mismatch that touches a file this branch edits)
 
-Facts at agent-runtime `0ace1cce` (2026-10-04):
+Facts at agent-runtime `44846323` (2026-10-07):
 
 ```sh
 git fetch origin && git log --oneline -3 origin/main
@@ -72,9 +72,9 @@ grep -n "catalogMode\|strictPeerDependencies\|minimumReleaseAge:\|@get-modular" 
 #   '@get-modular/core': 0.2.0, '@get-modular/assembly': 0.2.0, excludes @get-modular/{core,assembly}@0.2.0
 gh api repos/agent-teams-ai/agent-runtime/rules/branches/main \
   --jq '.[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context'
-gh pr list --repo agent-teams-ai/agent-runtime --state open   # at base: #180 (draft, provider-access), #72
-grep -n "9c722ce\|33b41d5" architecture/get-modular/consumer-profile.json architecture/consumer-module-standard/contained-turn-profile.json
-grep -n "cmsPinReviewPath =" scripts/architecture/check-cms-pin.mjs   # creation-cleanup-cms-pin-review.json
+gh pr list --repo agent-teams-ai/agent-runtime --state open   # at 44846323: #72, #180 (draft, provider-access), #210 (smol-toml), #214, #215 (docs)
+grep -n "81063add\|49d08b6d" architecture/get-modular/consumer-profile.json architecture/consumer-module-standard/contained-turn-profile.json
+grep -n "cmsPinReviewPath =" scripts/architecture/check-cms-pin.mjs   # smart-ci-cms-pin-review.json (pin migrated by #201)
 ```
 
 The bundle (in its own directory, never inside a repository checkout):
@@ -215,7 +215,7 @@ Runtime.
    `resolution: {integrity: sha512-<base64>, tarball: file:architecture/get-modular/evidence/<archive>}` and
    `version: <x.y.z>`; the integrity is the SHA-512 of the archive bytes; `lock.overrides[<name>]` equals the
    workspace value.
-   - `scripts/architecture/check-get-modular-adoption.mjs`, `readPackageArtifact` (lines 134-152 at the base): at the
+   - `scripts/architecture/check-get-modular-adoption.mjs`, `readPackageArtifact` (lines 135-153 at `44846323`): at the
      top, when `lock.overrides?.[pkg.name] === 'file:' + pkg.archivePath`, require `specifier === 'catalog:'`,
      `workspace.catalog[pkg.name] === pkg.version`, importer `version === 'file:' + pkg.archivePath`,
      `lock.packages['<name>@file:<archivePath>'].version === pkg.version`, and the SHA-512 of the retained bytes equal to
@@ -236,26 +236,27 @@ After D0, apply the commits of each brief in order. Differences from the real PR
 
 - Archives are already in place from D0. The real AR-1a and AR-1c download the published tarballs with
   `npm pack <name>@<version>` (a download, not a pack from source) and compare them with the bundle by `SHA256SUMS`.
-- AR-1a commit A1 pins the Consumer Module Standard to `81063ad` (get-modular #142), exactly as the real AR-1a will
-  (planning decision 2026-10-04: the pin names the commit that defines the standard revision, independent of when the
-  release PR merges); the check in section 2 proves the bytes at `SOURCE_SHA` are the same. In the review JSON set
-  `releaseBundleSourceCommit` to `SOURCE_SHA` and leave out `releaseCommit` (the release PR is still open); the real
-  AR-1a adds it.
+- The Consumer Module Standard pin is already `81063ad` (get-modular #142) on `main` since agent-runtime #201; AR-1a
+  only verifies it, here and in the real PR. The check in section 2 proves the bytes at `SOURCE_SHA` are the same.
 - ADR-0024 (AR-1c commit C1) stays `proposed` on this branch: do not set it accepted and do not run the baseline
   promotion; acceptance happens only in the real AR-1c after the owner approves the text.
 - The registry steps of the four briefs' "Re-verify before start" (`npm view ... dist.integrity`, `npm pack`) are
   skipped here: before publication they return E404, and section 2 of this brief replaces them. The AR-2 check
   `... some(d => d.id === 'ADR-0024')  # true` prints `false` here, as expected (ADR-0024 stays proposed). The CMS
-  upstream comparison of AR-1b, AR-1c and AR-2 compares get-modular `main` with the standard pinned by A1 (`81063ad`).
-- AR-1a commit A3 links this open draft PR; the real AR-1a links it after the owner closed it.
+  upstream comparison of AR-1b, AR-1c and AR-2 compares get-modular `main` with the pinned standard (`81063ad`).
+- AR-1a commit A2 links this open draft PR; the real AR-1a links it after the owner closed it.
 - AR-1a section 0 (handoff inputs) and the `REL_SHA` lines of AR-1a section 2 (the byte loop entry for `REL_SHA`, the
   `merge-base` check, the tree check) do not apply here; section 1 of this brief supplies `SOURCE_SHA`, and section 2
   of this brief checks it.
+- M3 and M4 carry the same `scripts/docs/consumer-migration.test.mjs` edits as AR-1c C2 and AR-2 P1: the test
+  authenticates the whole `architecture/foundation/source-dependencies.yaml` by reversing reviewed additions down to
+  fixed digests, so each commit reverses exactly its own added lines before the existing chain. Never change an
+  existing digest; `pnpm docs:qualification` must stay green at M3 and M4.
 - The lockfile is regenerated with the overrides block. Real PRs follow "Porting a draft commit" below.
 
 | Milestone | Commits | Local gates, each must exit 0 | Push |
 |---|---|---|---|
-| M1 | AR-1a A1, A2, A3 | `pnpm install --frozen-lockfile`, the local full gates of section 3 | push, wait for draft PR CI |
+| M1 | AR-1a A1, A2 | `pnpm install --frozen-lockfile`, the local full gates of section 3 | push, wait for draft PR CI |
 | M2 | AR-1b B1 to B5 | same | same |
 | M3 | AR-1c C1 to C6 | same, plus `pnpm --filter @agent-teams/embedded-runtime test` twice in a row (flake probe) | same |
 | M4 | AR-2 P1 to P3 | same, plus `pnpm --filter @agent-teams/provider-access check` | same |
@@ -273,12 +274,9 @@ Expected draft-only findings, and how to treat them:
 ### Porting a draft commit to a real PR branch
 
 Start the real PR branch from fresh `origin/main`. Some commits differ by design and are re-done from their brief
-instead of picked: A2 and C2 (archives come from the registry download, the lockfile from the registry), A3 (link to
-the closed draft PR), C1 (ADR-0024 accepted after the owner approved the text). A1 is picked, then the review JSON gets
-`releaseCommit: <REL_SHA>` and refresh `reviewedOn`, `sourceMainCommit` and `sourceMainDocumentCommit` to the values at
-the real review (the byte checks of AR-1a section 2 must pass again); amend the picked commit before the first push
-(the branch is unshared). For every other
-draft commit of that PR (never D0):
+instead of picked: AR-1a A1 and AR-1c C2 (archives come from the registry download, the lockfile from the
+registry), AR-1a A2 (link to the closed draft PR), AR-1c C1 (ADR-0024 accepted after the owner approved the text).
+For every other draft commit of that PR (never D0):
 
 1. `git cherry-pick -x <draft commit>`.
 2. On a conflict in `pnpm-workspace.yaml`, keep the `origin/main` side around the conflict and take only the brief's
@@ -316,7 +314,7 @@ packaging, standard text) or "Agent Runtime".
   (`package/CHANGELOG.md` in the archive): stop; Get Modular finding.
 - `strictPeerDependencies` refuses the conformance peers: stop; Get Modular packaging finding.
 - Any ambiguity in a brief: stop and ask; do not guess.
-- `runtime-macos` above 12 minutes: report to the owner (limit 15).
+- A macOS package shard of `runtime-macos` above 12 minutes (limit 15): report to the owner.
 
 ## 8. Must not
 

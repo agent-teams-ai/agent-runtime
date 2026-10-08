@@ -12,7 +12,7 @@ AR-1b: module identities, contract descriptors, root as a function of Assembly. 
 `refactor/agent-runtime-module-identity` from fresh `origin/main` after AR-1a merged. Five commits B1 to B5.
 Estimated +450 / -330.
 
-## 1. Facts you need (verified at agent-runtime `0ace1cce`, get-modular `81063ad`)
+## 1. Facts you need (verified at agent-runtime `0ace1cce`, rechecked unchanged at `44846323`; get-modular `81063ad`)
 
 Get Modular 0.3.0 authoring API (`@get-modular/assembly`, Core re-exports `required`, `optional`, `many`):
 
@@ -85,7 +85,7 @@ git -C <gm-clone> show origin/main:docs/architecture/common-assembly.md | shasum
 node -p "require('./architecture/get-modular/consumer-profile.json').standard.sha256"   # must be equal
 ```
 
-If they differ, stop: the standard changed upstream, and the owner decides on a pin step (like AR-1a A1) before this PR.
+If they differ, stop: the standard changed upstream, and the owner decides on a pin step (like agent-runtime #201) before this PR.
 
 If another PR changed the files of this brief, re-read them and stop where a step no longer applies. Environment as in
 AR-1a (Node from `.node-version`, pnpm 11.18.0 through corepack, identity-only `GIT_CONFIG_GLOBAL` for local checks,
@@ -314,7 +314,7 @@ Atomic: declarations, gate, census and tests change together, or the graph gate 
    - `architecture/get-modular/consumer-profile.json`: in `composition.embedded-runtime` relationships remove the same
      `type-only` edge (lines 2570-2574 at base); fix any other drift that `pnpm architecture:get-modular-adoption` reports
      as `live relationships drift`, only for edges this diff explains. `compositions[1].factorySymbol` ->
-     `createOrdinaryModuleFactories`, and the matching assertion in `scripts/architecture/check-get-modular-adoption.test.mjs:362`.
+     `createOrdinaryModuleFactories`, and the matching assertion in `scripts/architecture/check-get-modular-adoption.test.mjs:368`.
 8. Tests that name IDs or tokens: `tests/package/runtime-setup-assembly.test.ts` (lines 328, 397, 399, 466, 528:
    the Host implementation ID becomes `agent-runtime/runtime-host/passive`; lines 119, 140, 327, 402-404, 413, 486
    compare module IDs and stay; line 622: `entry.implementationId !== "agent-runtime/setup-security"` becomes
@@ -350,9 +350,10 @@ Gates: `pnpm --filter "@agent-teams/embedded-runtime..." run build`, `pnpm --fil
 
 `docs/architecture/get-modular-adoption.md`: the ordinary section (lines 11-48: per-contract tokens instead of
 `agent-runtime/ordinary-v1`, new IDs), the identity table of section 5, the statement that no ID is stored outside
-code, tests, gates and docs. In `architecture/get-modular/evidence/train-030-cms-pin-review.json` switch the rows
-whose `closedBy` names AR-1b from `pending: AR-1b` to their final state (state only, no new pin; a row closed by
-AR-1b and AR-1c becomes `pending: AR-1c`). Gate: `pnpm docs:protocol:check`, `pnpm test:consumer-modules`.
+code, tests, gates and docs. In the section "Train 0.3.0 conformance status" of `docs/architecture/get-modular-adoption.md` (added by AR-1a) switch the rows whose
+`closedBy` names AR-1b from `pending: AR-1b` to their final state (a row closed by AR-1b and AR-1c becomes
+`pending: AR-1c`). Never edit `architecture/get-modular/evidence/smart-ci-cms-pin-review.json`: it is the evidence of
+the pin step, and `scripts/ci/cms-pin-review.ts` fixes its claims. Gate: `pnpm docs:protocol:check`.
 
 Final gates: the local full gates of section 2 after the last commit.
 
@@ -392,4 +393,6 @@ Required checks green; independent review clean after re-run; owner merges.
 7. `git diff origin/main -- '*.ts' | grep -c '^+.*as never'` is 0.
 8. `grep -n 'implementationId !== "agent-runtime/' packages/apps/embedded-runtime/tests/package/*.ts` shows only new
    implementation IDs (a stale ID makes an assertion vacuous).
-9. In the pin review JSON, every row with `state: "met"` names only AR-1a or AR-1b in `closedBy`.
+9. In the section "Train 0.3.0 conformance status" of `docs/architecture/get-modular-adoption.md`, every row whose state cell is exactly `met` names only #201, AR-1a or AR-1b in `closedBy`; the row "Scoped
+   acceptance and evidence" says `met for Core and Assembly 0.3.0` until AR-1c;
+   `git diff origin/main --stat -- architecture/get-modular/evidence` is empty.
