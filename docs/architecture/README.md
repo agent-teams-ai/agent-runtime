@@ -65,6 +65,9 @@ Documents:
 - [Agent Runtime Architecture Program Plan](agent-runtime-architecture-program-plan.md):
   owner decisions, target architecture, lanes, task cards and parallel waves for
   the Codex boundaries, libraries and storage program.
+- [Agent Runtime Architecture Program: Execution Brief](agent-runtime-architecture-program-execution-brief.md):
+  preconditions, card instructions, review checklists and stop conditions for
+  implementing the remaining cards of the architecture program.
 - [Legacy feature inventory](legacy-feature-inventory.json): commit-pinned,
   structured legacy/current/authority/implementation/qualification/backlog
   traceability. Its validator permits additions and uses explicit
