@@ -69,6 +69,14 @@ Documents:
   structured legacy/current/authority/implementation/qualification/backlog
   traceability. Its validator permits additions and uses explicit
   supersession; an authored row count is not completeness proof.
+- [Test Debt 189 Plan](test-debt-189-plan.md): index of the issue 189 test debt briefs, measurements and decisions.
+- [Test Debt 189 01 Derived Composition Types](test-debt-189-01-derived-composition-types.md): derive the ordinary Host factory value types from the descriptors.
+- [Test Debt 189 02 Retire Failure Sweep](test-debt-189-02-retire-failure-sweep.md): retire the per-module failure sweep that smoke replaces.
+- [Test Debt 189 03 Dependency Record Casts](test-debt-189-03-dependency-record-casts.md): typed module dependency records and the cast check.
+- [Test Debt 189 04 Handle Guards](test-debt-189-04-handle-guards.md): handle guards that end a leak instead of hiding it.
+- [Test Debt 189 05 Promise With Resolvers](test-debt-189-05-promise-with-resolvers.md): replace hand-written deferred helpers.
+- [Test Debt 189 06 Fixture Copies](test-debt-189-06-fixture-copies.md): outcome record for the copied contained-turn fixtures.
+- [Test Debt 189 07 Ordinary Store Contract Suite](test-debt-189-07-ordinary-store-contract-suite.md): contract suite for the ordinary operation store.
 - [Get Modular Train 1 Migration](get-modular-train-1-migration.md): index of the
   migration briefs for Core and Assembly 0.3.0, resources and conformance.
 - [Get Modular Train 1 Draft Branch](get-modular-train-1-draft-branch.md): the
