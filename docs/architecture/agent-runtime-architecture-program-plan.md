@@ -250,7 +250,7 @@ Status meanings: `ready` = decided and clear how to implement; `needs-decision` 
 | Owner-loss of `running` operations | OWNER-LOSS | needs-decision (design) | Q-RESTART |
 | Orphan process group after Host SIGKILL | ORPHAN-GROUP | known limitation | `process` exposes start identity so a future reaper stays possible; no work now |
 | Contained removal | CONTAINED-REMOVAL | needs-decision | separate reachability and obligations review (Q-CONTAINED) |
-| Issue #189 test debt | ISSUE-189 | external | sync points in section 6.4 |
+| Issue #189 test debt | ISSUE-189 | external | sync points in section 6.4; briefs in [test-debt-189-plan](test-debt-189-plan.md) |
 | Resources AR-0 | - | external (done) | PR #187 merged `a196056f`; AR-S PR #190 merged `706d475f` |
 | Resources AR-1 | - | external | waits for get-modular step R-1b (publication of Core and Assembly 0.3.0 and resources 0.1.0) |
 | Resources AR-1b | - | external | after AR-1; carries the Assembly `LaunchRecipe` type switch (D2) |
@@ -424,7 +424,7 @@ Options are listed best first. Scores: confidence / reliability, out of 10. None
   The Agent Execution process binding keeps the claim gate (`node-ordinary-process.ts:143-149`), darwin and non-root policy (`:58`), receipt translation, journal and environment cleaning.
 - **Non-goals:** no supervision policy, no claim, no receipts, no PID recovery or reaper, no Windows, no PTY, no framing, no Provider Access switch. Claude spawn hook (`claude-agent-sdk-query-contracts.ts:15-28`) only as a written compatibility note in the pull request.
 - **Invariants:** claim before start (binding); start at most once; synchronous pre-spawn hook; shared byte budget across both streams; fatal UTF-8 on stderr with zeroing; no signal after the leader exit has been observed; close idempotent; facts are separate, never one `done: true`.
-- **Acceptance:** existing `ordinary-node-process.test.ts` cases split across library and binding; rejecting tests: async hook refused before spawn; no group signal after observed leader exit; budget shared across streams; invalid stderr UTF-8 fails and zeroes; repeated close returns the same facts; isolated install; `runtime-macos` green.
+- **Acceptance:** handle guard plus `--test-force-exit` from the first test (decision Q2 of [test-debt-189-plan](test-debt-189-plan.md)); existing `ordinary-node-process.test.ts` cases split across library and binding; rejecting tests: async hook refused before spawn; no group signal after observed leader exit; budget shared across streams; invalid stderr UTF-8 fails and zeroes; repeated close returns the same facts; isolated install; `runtime-macos` green.
 - **Extraction basis:** REUSE (Agent Execution and Provider Access); the invariant lives in three copies inside agent-runtime.
 - **Depends on:** GOV-1, SEAM-1, GOV-4.
 - **Budget:** 800-1400 changed, 150-300 moves.
@@ -435,7 +435,7 @@ Options are listed best first. Scores: confidence / reliability, out of 10. None
 - **Goal:** root entry with a session over a borrowed byte channel: request and response correlation with id `string | number`; notification buffering in arrival order; explicit send disposition (`not_written`, `possibly_written`, `answered`); server-to-client requests refused by default; `detach()` never closes the channel or signals the process; no retry; envelope without `jsonrpc`; `initialize` and `initialized` helpers. The Agent Execution Codex binding switches to it (`ordinary-codex-protocol.ts:8-47`).
 - **Non-goals:** no protocol revisions (LIB-CODEX-2); no effect admission, config or sandbox checks (stay in Agent Execution); no process ownership; no approvals, resume or WebSocket; no Provider Access switch.
 - **Invariants:** no second `turn/start` after a possibly written request; closing the connection ends correlation, not the possibly written native operation; the client never owns the process; abort writes zero commands.
-- **Acceptance:** `ordinary-codex.test.ts:84, 94` parity; rejecting tests: no retry possible after `possibly_written`; server request refused; `detach()` leaves the channel open; isolated install.
+- **Acceptance:** handle guard plus `--test-force-exit` from the first test (decision Q2 of [test-debt-189-plan](test-debt-189-plan.md)); `ordinary-codex.test.ts:84, 94` parity; rejecting tests: no retry possible after `possibly_written`; server request refused; `detach()` leaves the channel open; isolated install.
 - **Extraction basis:** Feature Module Standard v1 DEPENDENCY_LIFECYCLE (12 stable Codex releases in 26 days after 0.153.4) and REUSE (Agent Execution and Provider Access).
 - **Depends on:** LIB-JSONL, SEAM-1.
 - **Budget:** 600-1100 changed, 250-400 moves.
@@ -523,7 +523,8 @@ Options are listed best first. Scores: confidence / reliability, out of 10. None
 - **Goal:** transaction runner on one `PoolClient` (`BEGIN`, `SET LOCAL` statement, lock and idle timeouts, `COMMIT` as strings through our client wrapper; commit phase classified; unknown outcome releases with discard); client wrapper passes `(config, values)`; `DrizzleQueryError` sanitized to a typed error carrying only SQLSTATE; migration runner per owner (section 3.5 item 5); journal head check folded into the existing `set_config` query; `openPostgresStorage`, `migratePostgresStorage`, `verifyPostgresStorage`; three compatibility suites (storage report section 6.6) owned by the port owners through CODEOWNERS; package tests for parallel migrations and catalog checks.
 - **Non-goals:** no owner adapters; no Host; no `db.transaction()`; no Drizzle relations, relational queries or cache.
 - **Invariants:** the adapter never retries and never reads back by itself; unknown commit never grants a retry; a borrowed pool is never ended; error messages never contain query parameters (prompts, output, snapshots); concurrent migrations are safe; an edited released migration is detected; a database newer than the code is refused.
-- **Acceptance:** rejecting tests: lost `COMMIT` acknowledgement gives outcome unknown and a discarded client; four parallel migrations give one journal row per migration and all verify; edited migration gives `hash_mismatch`; extra journal row gives `newer_schema`; sanitized errors contain no parameters; `close()` semantics. `postgres-durability` uses one database per test.
+- **Acceptance:** handle guard plus `--test-force-exit` from the first test (decision Q2 of [test-debt-189-plan](test-debt-189-plan.md)); rejecting tests: lost `COMMIT` acknowledgement gives outcome unknown and a discarded client; four parallel migrations give one journal row per migration and all verify; edited migration gives `hash_mismatch`; extra journal row gives `newer_schema`; sanitized errors contain no parameters; `close()` semantics. `postgres-durability` uses one database per test.
+- **Moves from #189:** `packages/apps/embedded-runtime/tests/features/ordinary-session-runtime/support/ordinary-store-cases.ts` (brief 07 of [test-debt-189-plan](test-debt-189-plan.md)) moves unchanged into the private storage compatibility package (STORE-0 mechanism), runs against its adapters, and Embedded Runtime imports it from there; the file is never copied.
 - **Budget:** 600-900 changed, 0 moves.
 
 #### STORE-2-execution and STORE-2-security. Owner adapters with legacy guards
@@ -669,7 +670,7 @@ Owner actions possible in this wave: PUBLISH-2 for the three libraries after ACC
 
 - Starts after AR-1 and AR-1b (decision 23); may also wait for `@get-modular/conformance` 0.1.0 (contradiction 7).
 - Test entry points are private workspace packages, the mechanism created by STORE-0 and STORE-2-core (decision 16). No `./testing` subpath: the rejecting test `packages/contexts/agent-execution/tests/package/testing-subpath-packed-consumer.test.ts` stays, and `SDK_PUBLIC_IMPORT_QUALIFICATION_DRIFT` or its surface report replacement would flag the subpath anyway.
-- The 35 copied fixtures under `packages/apps/embedded-runtime/tests/package/support/external/**` are replaced by imports from the owners' private test packages.
+- The 35 copied fixtures under `packages/apps/embedded-runtime/tests/package/support/external/**` serve contained-turn tests only. #189 does not replace them (decision Q1 of [test-debt-189-plan](test-debt-189-plan.md)): they are deleted with contained-turn, or migrated through the owners' private test packages if contained-turn stays. The contained-turn `as never` casts follow the same path (CONTAINED-REMOVAL).
 - Required checks named in #189 match the current ruleset.
 
 ---
