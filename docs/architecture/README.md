@@ -77,6 +77,18 @@ Documents:
 - [Test Debt 189 05 Promise With Resolvers](test-debt-189-05-promise-with-resolvers.md): replace hand-written deferred helpers.
 - [Test Debt 189 06 Fixture Copies](test-debt-189-06-fixture-copies.md): outcome record for the copied contained-turn fixtures.
 - [Test Debt 189 07 Ordinary Store Contract Suite](test-debt-189-07-ordinary-store-contract-suite.md): contract suite for the ordinary operation store.
+- [Get Modular Train 1 Migration](get-modular-train-1-migration.md): index of the
+  migration briefs for Core and Assembly 0.3.0, resources and conformance.
+- [Get Modular Train 1 Draft Branch](get-modular-train-1-draft-branch.md): the
+  never-merged draft branch that proves the whole migration first.
+- [Get Modular Train 1 AR-1a](get-modular-train-1-ar-1a.md): Consumer Module
+  Standard pin and Core and Assembly 0.3.0.
+- [Get Modular Train 1 AR-1b](get-modular-train-1-ar-1b.md): module identities,
+  contract descriptors and the root as a function of Assembly.
+- [Get Modular Train 1 AR-1c](get-modular-train-1-ar-1c.md): resource scopes for
+  ordinary owners and smoke for the composition root.
+- [Get Modular Train 1 AR-2](get-modular-train-1-ar-2.md): per-grant Provider
+  Access scopes.
 
 Decision status:
 
