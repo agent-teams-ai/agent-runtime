@@ -27,10 +27,30 @@ production code, conformance as the development-only test kit of AR-1c.
 
 | Input | Value |
 |---|---|
-| Owner answer, release question Q3 (where the bundle lives) and how to fetch it | `<fill: get-modular path and commit, or another location>` |
-| `SOURCE_SHA`: the bundle's source commit from `release-intent.md` (the final head of the open release PR) | `<fill>` |
-| `SHA256SUMS` and `INTEGRITY` contents (copied from the bundle) | `<fill>` |
-| Release PR number in get-modular | `<fill>` |
+| Owner answer, release question Q3 (where the bundle lives) and how to fetch it | get-modular PR #151, commit `869d6e065fd191ec5c0ecd8c5deff30106598f9c`, directory `research/releases/0.3.0-train/` (the four archives, `SHA256SUMS`, `INTEGRITY`, `release-intent.md`). Fetch: `git -C <get-modular clone> fetch origin 869d6e065fd191ec5c0ecd8c5deff30106598f9c`, then copy exactly the seven files, each with `git -C <get-modular clone> show 869d6e065fd191ec5c0ecd8c5deff30106598f9c:research/releases/0.3.0-train/<file> > <bundle dir>/<file>`, with `<bundle dir>` outside any repository checkout. The directory also holds `release-plan.md`, which is not part of the bundle |
+| `SOURCE_SHA`: the bundle's source commit from `release-intent.md` (the final head of the open release PR) | `9e529d69150c1738c29d56a05de7cada60547808` (bundle source commit, recorded in `release-intent.md`; the head of get-modular release PR #150 when the bundle was packed) |
+| `SHA256SUMS` and `INTEGRITY` contents (copied from the bundle) | see below |
+| Release PR number in get-modular | [#150](https://github.com/agent-teams-ai/get-modular/pull/150) |
+| Commit A2 on the draft branch | Owner decision 2026-10-08. On the draft, A2 names the bundle source commit `9e529d69150c1738c29d56a05de7cada60547808` (release PR #150, not merged yet) instead of `REL_SHA`, and calls the archives retained, not yet published. For the draft only, D0 and A1 are pushed and the draft PR is opened before the M1 local gates. This replaces "Open the draft PR after M1" in "Report and findings" and the push-after-gates order for those two commits. A2 then links that open draft PR, the M1 local gates run on the A2 head, and A2 is pushed only after they pass. The real AR-1a writes A2 again with `REL_SHA` and the published archives after the release merges |
+| Local full gates on macOS for the draft branch | Owner decision 2026-10-08. For the draft branch, the local full gates of each milestone run on Linux (`pnpm check`). The macOS part is covered by the required `runtime-macos` check on the draft PR instead of a local macOS run. This replaces the macOS half of the publication gate's "green locally" wording for the draft only |
+
+`SHA256SUMS`:
+
+```text
+3a4312465485269971db08efb10759fb3a3d4d23266c7f5d9fe8069b4bb411c8  get-modular-assembly-0.3.0.tgz
+7923297944b83ee7a800742aac8474aae42e8708d8ca166fa7ce3f80fe6e0039  get-modular-conformance-0.1.0.tgz
+bd84c087c7d6842907d08a1a2f6dc0afd250e297f9456e0f77b87630e0f5093e  get-modular-core-0.3.0.tgz
+1172c89d9f863d0e1763293eb6153d0835c609fc01ea730004fcee293872cc7a  get-modular-resources-0.1.0.tgz
+```
+
+`INTEGRITY`:
+
+```text
+get-modular-assembly-0.3.0.tgz sha512-41GrHEavrA6BHeVassm5H/Nx3Av8nNIui5ShfiiTYxios100/Fj2bXI9ZiSyz8FiLT5VMv3SEVmoiO6UcRudeA==
+get-modular-conformance-0.1.0.tgz sha512-yIxQqJd/RRIxtO3uoo3MQXNdfeMk96qjzzW3ggfxTyfg9/UDUl7qfB3nOTWVkDN+Zg/gLFY+24grd1zGUQSWmw==
+get-modular-core-0.3.0.tgz sha512-we9Sr1pU+mK7MPDF1tZc9b9SC+wBp0bzIeahmaESXFplILfgE16avp+j2e3Zl7mYd9LyCeQk1c21UyGkd0p8RQ==
+get-modular-resources-0.1.0.tgz sha512-sIC+ZYI196qK11Dmz9s9U/Va4UAOU5G8m9beCp3zIIbEK0fKLAWGssd4l72aS0ycRBi5AhsbKFysKS9EVVax8g==
+```
 
 Cross-check values from release rehearsal #3 (packed on get-modular `81063ad`; if get-modular `main` did not change
 `packages/`, `architecture/`, `pnpm-lock.yaml` or `package.json` before the release, the bundle has the same values):

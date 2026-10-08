@@ -17,9 +17,9 @@ Estimated +480 / -200 (without the retained archive).
 
 | Input | Value |
 |---|---|
-| R-1a bundle `get-modular-0.3.0-train-r1a`: location and fetch command | `<fill>` |
-| `SHA256SUMS` line for `get-modular-resources-0.1.0.tgz` | `<fill>` |
-| `INTEGRITY` lines for `get-modular-resources-0.1.0.tgz` and `get-modular-conformance-0.1.0.tgz` | `<fill>` |
+| R-1a bundle `get-modular-0.3.0-train-r1a`: location and fetch command | get-modular PR #151, commit `869d6e065fd191ec5c0ecd8c5deff30106598f9c`, directory `research/releases/0.3.0-train/` (the four archives, `SHA256SUMS`, `INTEGRITY`, `release-intent.md`). Fetch: `git -C <get-modular clone> fetch origin 869d6e065fd191ec5c0ecd8c5deff30106598f9c`, then copy exactly the seven files, each with `git -C <get-modular clone> show 869d6e065fd191ec5c0ecd8c5deff30106598f9c:research/releases/0.3.0-train/<file> > <bundle dir>/<file>`, with `<bundle dir>` outside any repository checkout. The directory also holds `release-plan.md`, which is not part of the bundle |
+| `SHA256SUMS` line for `get-modular-resources-0.1.0.tgz` | `1172c89d9f863d0e1763293eb6153d0835c609fc01ea730004fcee293872cc7a  get-modular-resources-0.1.0.tgz` |
+| `INTEGRITY` lines for `get-modular-resources-0.1.0.tgz` and `get-modular-conformance-0.1.0.tgz` | `get-modular-conformance-0.1.0.tgz sha512-yIxQqJd/RRIxtO3uoo3MQXNdfeMk96qjzzW3ggfxTyfg9/UDUl7qfB3nOTWVkDN+Zg/gLFY+24grd1zGUQSWmw==`; `get-modular-resources-0.1.0.tgz sha512-sIC+ZYI196qK11Dmz9s9U/Va4UAOU5G8m9beCp3zIIbEK0fKLAWGssd4l72aS0ycRBi5AhsbKFysKS9EVVax8g==` |
 
 ## 1. Decision on the root deadline (recorded, not open)
 
