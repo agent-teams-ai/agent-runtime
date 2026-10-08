@@ -27,11 +27,11 @@ production code, conformance as the development-only test kit of AR-1c.
 
 | Input | Value |
 |---|---|
-| Owner answer, release question Q3 (where the bundle lives) and how to fetch it | get-modular PR #151, commit `869d6e065fd191ec5c0ecd8c5deff30106598f9c`, directory `research/releases/0.3.0-train/` (the four archives, `SHA256SUMS`, `INTEGRITY`, `release-intent.md`). Fetch: `git -C <get-modular clone> fetch origin 869d6e065fd191ec5c0ecd8c5deff30106598f9c`, then copy the seven files from that commit with `git show` or `git archive` |
-| `SOURCE_SHA`: the bundle's source commit from `release-intent.md` (the final head of the open release PR) | `9e529d69150c1738c29d56a05de7cada60547808` (head of get-modular release PR #150) |
+| Owner answer, release question Q3 (where the bundle lives) and how to fetch it | get-modular PR #151, commit `869d6e065fd191ec5c0ecd8c5deff30106598f9c`, directory `research/releases/0.3.0-train/` (the four archives, `SHA256SUMS`, `INTEGRITY`, `release-intent.md`). Fetch: `git fetch origin 869d6e065fd191ec5c0ecd8c5deff30106598f9c`, then copy exactly the seven files, each with `git show 869d6e065fd191ec5c0ecd8c5deff30106598f9c:research/releases/0.3.0-train/<file> > <file>`. The directory also holds `release-plan.md`, which is not part of the bundle |
+| `SOURCE_SHA`: the bundle's source commit from `release-intent.md` (the final head of the open release PR) | `9e529d69150c1738c29d56a05de7cada60547808` (bundle source commit, recorded in `release-intent.md`; the head of get-modular release PR #150 when the bundle was packed) |
 | `SHA256SUMS` and `INTEGRITY` contents (copied from the bundle) | see below |
 | Release PR number in get-modular | [#150](https://github.com/agent-teams-ai/get-modular/pull/150) |
-| Commit A2 on the draft branch | On the draft, A2 names the bundle source commit `9e529d69150c1738c29d56a05de7cada60547808` as the head of release PR #150, not merged yet, instead of `REL_SHA`, and links the open draft PR, which is opened right after D0 and A1 are pushed. The real AR-1a writes A2 again with `REL_SHA` after the release merges |
+| Commit A2 on the draft branch | Owner decision 2026-10-08. On the draft, A2 names the bundle source commit `9e529d69150c1738c29d56a05de7cada60547808` (release PR #150, not merged yet) instead of `REL_SHA`, and calls the archives retained, not yet published. For the draft only, D0 and A1 are pushed and the draft PR is opened before the M1 local gates. This replaces "Open the draft PR after M1" in "Report and findings" and the push-after-gates order for those two commits. A2 then links that open draft PR, the M1 local gates run on the A2 head, and A2 is pushed only after they pass. The real AR-1a writes A2 again with `REL_SHA` and the published archives after the release merges |
 
 `SHA256SUMS`:
 
