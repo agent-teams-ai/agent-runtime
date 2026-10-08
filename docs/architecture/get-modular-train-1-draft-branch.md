@@ -32,6 +32,7 @@ production code, conformance as the development-only test kit of AR-1c.
 | `SHA256SUMS` and `INTEGRITY` contents (copied from the bundle) | see below |
 | Release PR number in get-modular | [#150](https://github.com/agent-teams-ai/get-modular/pull/150) |
 | Commit A2 on the draft branch | Owner decision 2026-10-08. On the draft, A2 names the bundle source commit `9e529d69150c1738c29d56a05de7cada60547808` (release PR #150, not merged yet) instead of `REL_SHA`, and calls the archives retained, not yet published. For the draft only, D0 and A1 are pushed and the draft PR is opened before the M1 local gates. This replaces "Open the draft PR after M1" in "Report and findings" and the push-after-gates order for those two commits. A2 then links that open draft PR, the M1 local gates run on the A2 head, and A2 is pushed only after they pass. The real AR-1a writes A2 again with `REL_SHA` and the published archives after the release merges |
+| Local full gates on macOS for the draft branch | Owner decision 2026-10-08. For the draft branch, the local full gates of each milestone run on Linux (`pnpm check`). The macOS part is covered by the required `runtime-macos` check on the draft PR instead of a local macOS run. This replaces the macOS half of the publication gate's "green locally" wording for the draft only |
 
 `SHA256SUMS`:
 
