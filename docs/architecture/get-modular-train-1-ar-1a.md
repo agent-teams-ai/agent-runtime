@@ -17,13 +17,13 @@ title `build(deps): adopt Get Modular 0.3.0 Core and Assembly`, branch `build/ge
 
 | Input | Value |
 |---|---|
-| `REL_SHA`: the merged get-modular release commit (40 hex); used for the release link and package facts, not as the pin | `<fill>` |
-| get-modular release PR number | `<fill>` |
-| R-1a bundle `get-modular-0.3.0-train-r1a`: location and fetch command (release question Q3) | `<fill>` |
-| Bundle source commit from `release-intent.md` (the final head of the release PR before its merge) | `<fill>` |
-| `SHA256SUMS` lines for `get-modular-core-0.3.0.tgz` and `get-modular-assembly-0.3.0.tgz` | `<fill>` |
-| `INTEGRITY` lines for the same two archives | `<fill>` |
-| Closed draft PR URL (pre-publication evidence) | `<fill>` |
+| `REL_SHA`: the merged get-modular release commit (40 hex); used for the release link and package facts, not as the pin | `bb364ac8ca461b5e8277eeb3f7867b26187f99e8` |
+| get-modular release PR number | [agent-teams-ai/get-modular#150](https://github.com/agent-teams-ai/get-modular/pull/150) |
+| R-1a bundle `get-modular-0.3.0-train-r1a`: location and fetch command (release question Q3) | Directory `research/releases/0.3.0-train/` of agent-teams-ai/get-modular at merge commit `c6ec622f3c206af11e3448386ffcce42b1184f17` (#151), files `get-modular-core-0.3.0.tgz`, `get-modular-assembly-0.3.0.tgz`, `get-modular-resources-0.1.0.tgz`, `get-modular-conformance-0.1.0.tgz`, `SHA256SUMS`, `INTEGRITY`, `release-intent.md`. Fetch each file into a fresh directory outside the clone with: `gh api "repos/agent-teams-ai/get-modular/contents/research/releases/0.3.0-train/<file>?ref=c6ec622f3c206af11e3448386ffcce42b1184f17" -H "Accept: application/vnd.github.raw" > "<dir>/<file>"`, then `cd "<dir>" && shasum -a 256 -c SHA256SUMS` |
+| Bundle source commit from `release-intent.md` (the final head of the release PR before its merge) | `9e529d69150c1738c29d56a05de7cada60547808` |
+| `SHA256SUMS` lines for `get-modular-core-0.3.0.tgz` and `get-modular-assembly-0.3.0.tgz` | `bd84c087c7d6842907d08a1a2f6dc0afd250e297f9456e0f77b87630e0f5093e  get-modular-core-0.3.0.tgz` and `3a4312465485269971db08efb10759fb3a3d4d23266c7f5d9fe8069b4bb411c8  get-modular-assembly-0.3.0.tgz` |
+| `INTEGRITY` lines for the same two archives | `get-modular-core-0.3.0.tgz sha512-we9Sr1pU+mK7MPDF1tZc9b9SC+wBp0bzIeahmaESXFplILfgE16avp+j2e3Zl7mYd9LyCeQk1c21UyGkd0p8RQ==` and `get-modular-assembly-0.3.0.tgz sha512-41GrHEavrA6BHeVassm5H/Nx3Av8nNIui5ShfiiTYxios100/Fj2bXI9ZiSyz8FiLT5VMv3SEVmoiO6UcRudeA==` |
+| Closed draft PR URL (pre-publication evidence) | None. Owner decision 2026-10-09: the agent-runtime draft branch was dropped as a publication gate; the train was published after the TEST consumer and the Node 26.10+ check. Pre-publication evidence for A2: the TEST consumer [agent-teams-ai/modularity-host-test#16](https://github.com/agent-teams-ai/modularity-host-test/pull/16) (merged as `4501de4c0439cbb8e242c69354e29188360178ce`) and the consumer checks recorded in get-modular `research/releases/0.3.0-train/release-intent.md`. A2 links modularity-host-test#16 where it says "a link to the closed draft PR" |
 
 ## 1. Facts you need (verified at agent-runtime `44846323`, get-modular `81063ad`)
 
