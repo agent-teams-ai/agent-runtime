@@ -1,7 +1,7 @@
 ---
 id: runtime.architecture.get-modular-train-1-draft-branch
 type: architecture
-status: active
+status: superseded
 owner: architecture
 summary: Draft branch that proves the whole Get Modular train 1 migration before the pull requests.
 ---

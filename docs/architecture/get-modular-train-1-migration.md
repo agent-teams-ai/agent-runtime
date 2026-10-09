@@ -153,4 +153,11 @@ docs-protocol, so they stop reading as active plans.
   after signing off the consumer checks. The release branch is updated without force pushes. For these briefs:
   `SOURCE_SHA` is the release PR head; `REL_SHA` (the merged release commit) exists only after the draft branch work.
 
+## Owner decision (2026-10-09)
+
+- The draft branch is no longer a publication gate and the draft branch brief is retired (status `superseded`). The
+  publication condition and the draft branch gate above, from 2026-10-08, no longer apply. The train was published
+  after the TEST consumer (modularity-host-test#16) and the Node 26.10+ check. The AR briefs run on the published
+  versions.
+
 No owner question remains open for these briefs.
