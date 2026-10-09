@@ -8,6 +8,8 @@ summary: Draft branch that proves the whole Get Modular train 1 migration before
 
 # Get Modular Train 1 Draft Branch
 
+Superseded on 2026-10-09 and not executed: see "Owner decision (2026-10-09)" in [Get Modular Train 1 Migration](get-modular-train-1-migration.md).
+
 Draft branch on the retained R-1a archives, never merged. Purpose: prove the whole Agent Runtime migration (AR-1a, AR-1b, AR-1c, AR-2) against the exact archives that will be
 published, before npm publication. npm versions are immutable. A Get Modular defect found here is fixed in
 get-modular, not worked around in Agent Runtime.

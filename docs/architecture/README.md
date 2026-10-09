@@ -80,7 +80,7 @@ Documents:
 - [Get Modular Train 1 Migration](get-modular-train-1-migration.md): index of the
   migration briefs for Core and Assembly 0.3.0, resources and conformance.
 - [Get Modular Train 1 Draft Branch](get-modular-train-1-draft-branch.md): the
-  never-merged draft branch that proves the whole migration first.
+  retired draft branch brief (superseded on 2026-10-09, not executed).
 - [Get Modular Train 1 AR-1a](get-modular-train-1-ar-1a.md): Consumer Module
   Standard pin and Core and Assembly 0.3.0.
 - [Get Modular Train 1 AR-1b](get-modular-train-1-ar-1b.md): module identities,
