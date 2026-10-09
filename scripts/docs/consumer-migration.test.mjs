@@ -55,8 +55,8 @@ test("projected direct tooling pins and disabled release-age waiting preserve th
     "@agent-teams/docs-protocol@0.6.2",
     "@agent-teams/docs-protocol-agent-teams@0.3.2",
     "@agent-teams/engineering-foundation@1.7.2",
-    "@get-modular/core@0.2.0",
-    "@get-modular/assembly@0.2.0",
+    "@get-modular/core@0.3.0",
+    "@get-modular/assembly@0.3.0",
   ]);
   assert.match(await read("scripts/architecture/feature-module-config.mjs"), /const FOUNDATION_VERSION = "1\.7\.2";/u);
 });

@@ -35,6 +35,9 @@ const run = (command: string, args: string[], cwd: string): string => {
 
 type ArchivePin = { name: string; version: string; archiveSha256: string; archivePath: string };
 
+// One source of Get Modular package names and versions: the adoption profile.
+const gmPins: ArchivePin[] = JSON.parse(await readFile(join(repositoryRoot, "architecture/get-modular/consumer-profile.json"), "utf8")).packages;
+
 // The profile pins retained bytes; the committed lock supplies their registry SRI.
 // Never resolve a version or accept registry metadata as archive verification.
 const withVerifiedArchives = async (
@@ -45,7 +48,7 @@ const withVerifiedArchives = async (
   const profile = JSON.parse(await readFile(join(repositoryRoot, "architecture/get-modular/consumer-profile.json"), "utf8"));
   const lock = await readFile(join(repositoryRoot, "pnpm-lock.yaml"), "utf8");
   const verified: { pin: ArchivePin; bytes: Buffer }[] = [];
-  for (const name of ["@get-modular/core", "@get-modular/assembly"]) {
+  for (const name of gmPins.map(pin => pin.name)) {
     const pins: ArchivePin[] = profile.packages.filter((pin: ArchivePin) => pin.name === name);
     assert.equal(pins.length, 1, `one retained archive identity required: ${name}`);
     const pin = pins[0]!;
@@ -90,7 +93,7 @@ const consumePackedArchives = async (root: string, dependencies: Record<string, 
     packageManager: "pnpm@11.18.0", dependencies,
     devDependencies: { typescript: "7.0.2", "@types/node": "24.13.3" },
   }));
-  await writeFile(join(consumer, "pnpm-workspace.yaml"), JSON.stringify({ overrides: dependencies, minimumReleaseAgeExclude: ["@get-modular/core@0.2.0", "@get-modular/assembly@0.2.0"] }));
+  await writeFile(join(consumer, "pnpm-workspace.yaml"), JSON.stringify({ overrides: dependencies, minimumReleaseAgeExclude: gmPins.map(pin => `${pin.name}@${pin.version}`) }));
   // Core/Assembly and all local roots use the exact disposable archives.
   // Only remaining declared dependencies require registry retrieval.
   run("pnpm", ["install", "--ignore-scripts", "--config.node-linker=hoisted"], consumer);
@@ -126,7 +129,7 @@ const consumePackedArchives = async (root: string, dependencies: Record<string, 
     const installed = await realpath(join(consumer, "node_modules", name));
     assert.ok(installed.startsWith(`${installedConsumer}${sep}`), `${name} escaped disposable install`);
     const manifest = JSON.parse(await readFile(join(installed, "package.json"), "utf8"));
-    if (name.startsWith("@get-modular/")) { assert.equal(manifest.version, "0.2.0"); }
+    if (name.startsWith("@get-modular/")) { assert.equal(manifest.version, gmPins.find(pin => pin.name === name)?.version); }
     for (const value of Object.values(manifest.dependencies ?? {})) {
       assert.doesNotMatch(String(value), /^(?:workspace:|link:|catalog:)/u);
     }
@@ -275,7 +278,7 @@ test("verified retained archives are staged as exact consumer file dependencies"
   }, async (consumerRoot, dependencies) => {
     consumed = true;
     assert.equal(consumerRoot, root);
-    assert.deepEqual(Object.keys(dependencies).toSorted(), ["@get-modular/assembly", "@get-modular/core"]);
+    assert.deepEqual(Object.keys(dependencies).toSorted(), gmPins.map(pin => pin.name).toSorted());
     for (const [name, dependency] of Object.entries(dependencies)) {
       assert.ok(dependency.startsWith(`file:${join(root, "archives")}${sep}`));
       assert.deepEqual(await readFile(dependency.slice(5)), retained.get(name));
@@ -284,7 +287,7 @@ test("verified retained archives are staged as exact consumer file dependencies"
   assert.equal(consumed, true);
 });
 
-for (const name of ["@get-modular/core", "@get-modular/assembly"]) {
+for (const name of gmPins.map(pin => pin.name)) {
   test(`same-version wrong ${name} archive is rejected before consumer installation or behavior`, async t => {
     const root = await mkdtemp(join(tmpdir(), "ar-packed-wrong-archive-"));
     t.after(() => rm(root, { recursive: true, force: true }));

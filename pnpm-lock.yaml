@@ -13,11 +13,11 @@ catalogs:
       specifier: 0.3.251
       version: 0.3.251
     '@get-modular/assembly':
-      specifier: 0.2.0
-      version: 0.2.0
+      specifier: 0.3.0
+      version: 0.3.0
     '@get-modular/core':
-      specifier: 0.2.0
-      version: 0.2.0
+      specifier: 0.3.0
+      version: 0.3.0
     '@microsoft/api-extractor':
       specifier: 7.58.12
       version: 7.58.12
@@ -173,10 +173,10 @@ importers:
         version: link:../../contexts/runtime-security
       '@get-modular/assembly':
         specifier: 'catalog:'
-        version: 0.2.0
+        version: 0.3.0
       '@get-modular/core':
         specifier: 'catalog:'
-        version: 0.2.0
+        version: 0.3.0
     devDependencies:
       pg:
         specifier: 'catalog:'
@@ -365,12 +365,12 @@ packages:
   '@emnapi/wasi-threads@1.2.2':
     resolution: {integrity: sha512-c95qOXkHdydNKhscBTebqEC1CVAZpyqOfVfBzQ1qgzyl3gfeldUjIggDbIZgDKsHLgnsM+igH7TJ/eAasaVuMA==}
 
-  '@get-modular/assembly@0.2.0':
-    resolution: {integrity: sha512-xZTgfMUzHnA8DR7wk/3mAdLppTlwAsm6pfW5bgoW6lvGh8hYGBJwcwzbdynJduRVBVW7aFmchsrLTP5w4rcmlw==}
+  '@get-modular/assembly@0.3.0':
+    resolution: {integrity: sha512-41GrHEavrA6BHeVassm5H/Nx3Av8nNIui5ShfiiTYxios100/Fj2bXI9ZiSyz8FiLT5VMv3SEVmoiO6UcRudeA==}
     engines: {node: '>=24.18.0 <25 || >=26.10.0 <27'}
 
-  '@get-modular/core@0.2.0':
-    resolution: {integrity: sha512-npn2dAR5TuVobDzuI7MRZS0p6/0qzTWbRbPo5y9EaDz4qFtBNF6+YBhU92QPwOkYzVjo9xAJtIgMkly7wlkdWw==}
+  '@get-modular/core@0.3.0':
+    resolution: {integrity: sha512-we9Sr1pU+mK7MPDF1tZc9b9SC+wBp0bzIeahmaESXFplILfgE16avp+j2e3Zl7mYd9LyCeQk1c21UyGkd0p8RQ==}
     engines: {node: '>=24.18.0 <25 || >=26.10.0 <27'}
 
   '@hono/node-server@2.1.1':
@@ -1989,11 +1989,11 @@ snapshots:
       tslib: 2.8.1
     optional: true
 
-  '@get-modular/assembly@0.2.0':
+  '@get-modular/assembly@0.3.0':
     dependencies:
-      '@get-modular/core': 0.2.0
+      '@get-modular/core': 0.3.0
 
-  '@get-modular/core@0.2.0': {}
+  '@get-modular/core@0.3.0': {}
 
   '@hono/node-server@2.1.1(hono@4.13.5)':
     dependencies:
