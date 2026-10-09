@@ -289,7 +289,7 @@ Options are listed best first. Scores: confidence / reliability, out of 10. None
 - **Review:** one independent reviewer per pull request; a new review after fixes; merge only by the owner. Every card below uses this rule; cards that need an extra reviewer (Provider Access owner) say so.
 - **Commits:** author and committer from the repository's local git config (the owner's identity); conventional commits with issue references; no `codex/` branches.
 - **Gates:** never delete gate code. Disable with a comment stating why, when to return, owner and review date (decision 6). Each governance pull request lists in its body what stays enforcing.
-- **Consumer Module Standard:** before any change to a capability contract or boundary, compare the pin with upstream. Today the pin `9c722ce` still matches: `docs/architecture/common-assembly.md` in get-modular last changed in `461bff0c` (2026-09-28). Capability ids do not change in any card before AR-1b.
+- **Consumer Module Standard:** before any change to a capability contract or boundary, compare the pin with upstream. Since agent-runtime #201 the pin is `81063ad` (get-modular #142). Capability ids do not change in any card before AR-1b.
 - **Breaking changes:** allowed; 0.x packages ship a break as minor with changelog and migration guide. Persisted formats still need a safe migration (D1).
 - **No live provider runs.** `pnpm check` stays synthetic. Any Codex canary needs explicit owner permission.
 - **Size:** at most about 2000 changed lines per pull request; moves are counted separately.
