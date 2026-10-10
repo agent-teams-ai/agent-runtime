@@ -33,6 +33,9 @@
       "import": "./dist/composition.js"
     }
   },
+  "dependencies": {
+    "@get-modular/resources": "catalog:"
+  },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
     "@types/pg": "catalog:",

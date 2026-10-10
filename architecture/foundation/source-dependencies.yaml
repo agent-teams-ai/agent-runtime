@@ -2928,7 +2928,7 @@ boundaries:
     - adapter.provider-access.ordinary
     - adapter.provider-access.boundary-data
     - core.provider-access.binding
-    packages: []
+    packages: ['@get-modular/resources']
     builtins:
     - node:crypto
     - node:util

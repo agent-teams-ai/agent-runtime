@@ -220,6 +220,10 @@ importers:
         version: 7.0.2
 
   packages/contexts/provider-access:
+    dependencies:
+      '@get-modular/resources':
+        specifier: 'catalog:'
+        version: 0.1.0
     devDependencies:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
