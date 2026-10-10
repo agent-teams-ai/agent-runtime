@@ -91,8 +91,8 @@ importers:
         specifier: workspace:*
         version: link:packages/contexts/agent-execution
       '@agent-teams/ci-input-proof':
-        specifier: 0.1.0-rc.0
-        version: 0.1.0-rc.0
+        specifier: 0.1.0
+        version: 0.1.0
       '@agent-teams/docs-protocol':
         specifier: 0.6.2
         version: 0.6.2
@@ -251,8 +251,8 @@ importers:
 
 packages:
 
-  '@agent-teams/ci-input-proof@0.1.0-rc.0':
-    resolution: {integrity: sha512-aiOC4nvGRfG6CkLKRG2utkqFAOJNtPojZZYLqmmG5OzhZYKqQCh6T2OOMNqA5vlbccWWEXxismMXE6QDl0vo7w==}
+  '@agent-teams/ci-input-proof@0.1.0':
+    resolution: {integrity: sha512-PA2/mlS1Ko2dyg79fmveKwNKszCBDhMexAZx82WfY2NjccwCxCOqXT5XWMFuYUzFXDzQSgPq4xF2YbDsXJeBwQ==}
     engines: {node: ^24.18.0 || ^26.0.0, pnpm: '>=11.17.0 <12'}
 
   '@agent-teams/docs-protocol-agent-teams@0.3.2':
@@ -1870,7 +1870,7 @@ packages:
 
 snapshots:
 
-  '@agent-teams/ci-input-proof@0.1.0-rc.0': {}
+  '@agent-teams/ci-input-proof@0.1.0': {}
 
   '@agent-teams/docs-protocol-agent-teams@0.3.2':
     dependencies:

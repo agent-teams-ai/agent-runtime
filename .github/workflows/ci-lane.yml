@@ -94,7 +94,39 @@ jobs:
           EXPECTED_BASE_REVISION: ${{ inputs.base-revision }}
           CI_EVIDENCE_DIR: ${{ runner.temp }}/ci-evidence
           PR_REGRESSION_GROUP: ${{ inputs.script }}
-        run: node scripts/ci/pr-regression-command.ts "$PR_REGRESSION_GROUP"
+        # This trusted step authenticates the bootstrap bytes and mode against
+        # both immutable trees and the checkout; it does not establish external
+        # workflow authenticity.
+        run: |
+          set -euo pipefail
+          bootstrap=scripts/ci/pr-regression-bootstrap.ts
+          bootstrap_entry() {
+            local revision=$1 entry mode kind blob path
+            entry=$(git ls-tree "$revision" -- "$bootstrap") || return 1
+            [ "$(printf '%s\n' "$entry" | wc -l)" -eq 1 ] || return 1
+            read -r mode kind blob path <<<"$entry"
+            [ "$kind" = blob ] && [ "$path" = "$bootstrap" ] || return 1
+            printf '%s %s\n' "$mode" "$blob"
+          }
+          base_entry=$(bootstrap_entry "$EXPECTED_BASE_REVISION") || true
+          head_entry=$(bootstrap_entry "$EXPECTED_REVISION") || true
+          checkout_blob=$(git hash-object -- "$bootstrap" 2>/dev/null) || checkout_blob=
+          checkout_mode=
+          if [ -f "$bootstrap" ] && [ ! -L "$bootstrap" ]; then
+            case "$(stat -c '%a' -- "$bootstrap" 2>/dev/null || true)" in
+              644) checkout_mode=100644 ;;
+              755) checkout_mode=100755 ;;
+            esac
+          fi
+          head_mode=${head_entry%% *}
+          head_blob=${head_entry#* }
+          if [ -z "$base_entry" ] || [ -z "$head_entry" ] || [ "$base_entry" != "$head_entry" ] \
+            || [ "$checkout_blob" != "$head_blob" ] || [ "$checkout_mode" != "$head_mode" ]; then
+            unset FOUNDATION_FIXTURE_PROTOCOL FOUNDATION_FIXTURE_INDEX FOUNDATION_FIXTURE_COUNT
+            node scripts/ci/measure.ts "$PR_REGRESSION_GROUP"
+            exit $?
+          fi
+          node scripts/ci/pr-regression-bootstrap.ts "$PR_REGRESSION_GROUP"
       - name: Source quality
         if: ${{ !inputs.regressions && (inputs.script == 'check' || inputs.script == 'check:ci:quick') }}
         env:

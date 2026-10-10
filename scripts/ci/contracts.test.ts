@@ -17,6 +17,7 @@ import type { Receipt } from './compare.ts';
 import { registerCmsPinReviewTests } from './cms-pin-review.test.ts';
 import { registerNightlyContractTests } from './nightly-contract.test.ts';
 import { registerFoundationFixtureShardingTests } from './foundation-fixture-sharding.test.ts';
+import { registerPrRegressionBootstrapTests } from './pr-regression-bootstrap.test.ts';
 import { registerPrRegressionTests } from './pr-regression-inputs.test.ts';
 import { assertNamespaceNativeQualification, assertNamespaceQualificationWorkflow } from './namespace-qualification-contract.ts';
 
@@ -28,6 +29,7 @@ registerProductFanoutTests();
 registerCmsPinReviewTests();
 registerNightlyContractTests();
 registerFoundationFixtureShardingTests();
+registerPrRegressionBootstrapTests();
 registerPrRegressionTests();
 
 const namespaceQualificationJob = (value: Record<string, unknown>) => workflowObject(workflowObject(value.jobs).qualification);

@@ -11,7 +11,7 @@ import { assertCmsComposite, captureCmsComposite, cmsBinding, cmsContract, cmsDi
   createTestResultCollector, mandatoryRunnerSummary } from './measure.ts';
 import type { NodeSummary, TestResult } from './measure.ts';
 import { classifyPrRegressions, currentPrInput, installationFingerprint, regressionCommands } from './pr-regression-inputs.ts';
-import type { PrPlan, RegressionId } from './pr-regression-inputs.ts';
+import type { LeafInventoryComparator, PrInput, PrPlan, RegressionId } from './pr-regression-inputs.ts';
 
 export interface Execution { code: number | null; signal: string | null; tests: TestResult[]; mandatory: string[]; nodeSummaries?: NodeSummary[] }
 export interface Obligation { id: string; command: string; regression?: RegressionId }
@@ -138,11 +138,12 @@ export function prObligations(group: Group): Obligation[] {
   });
 }
 
-export async function runPrRegressions(group: Group, output: string): Promise<void> {
+export async function runPrRegressions(group: Group, output: string, compareLeafInventories: LeafInventoryComparator,
+  suppliedInput?: PrInput): Promise<void> {
   const root = process.cwd(), scripts = await readScripts(join(root, 'package.json'));
   assert.ok(scripts[`check:ci:${group}`], 'known CI group');
-  const input = await currentPrInput(root, process.env);
-  const plan: PrPlan = await classifyPrRegressions(root, input);
+  const input = suppliedInput ?? await currentPrInput(root, process.env);
+  const plan: PrPlan = await classifyPrRegressions(root, input, compareLeafInventories);
   const expected = prObligations(group);
   const foundationRequired = expected.some(item => item.regression === 'foundation-negative' && !plan.deferred.includes(item.regression))
     ? await foundationNegativeTests(root) : undefined;
@@ -177,14 +178,12 @@ export async function runPrRegressions(group: Group, output: string): Promise<vo
   }
   if (plan.mode === 'affected-pr') {
     assert.equal(await installationFingerprint(root), plan.installation, 'installed drift during PR');
-    assert.deepEqual(await classifyPrRegressions(root, input), plan, 'current source/scope drift during PR');
+    assert.deepEqual(await classifyPrRegressions(root, input, compareLeafInventories), plan, 'current source/scope drift during PR');
   }
   assertPrObligations(expected, report.obligations, plan.deferred, foundationRequired);
   console.log(`PR regression sampling ${plan.mode}: ${plan.deferred.join(', ') || 'all regressions executed'}; no historical pass reused.`);
 }
 
 if (process.argv[1] && resolvePath(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const group = process.argv[2]?.replace('check:ci:', '');
-  assert.ok(group === 'quick' || group === 'foundation' || group === 'architecture' || group === 'docs', 'known PR group');
-  await runPrRegressions(group, process.env.CI_EVIDENCE_DIR ?? 'tmp/root-export-evidence/pr-regressions');
+  throw new Error('PR regression command requires pre-import source admission through pr-regression-bootstrap.ts');
 }

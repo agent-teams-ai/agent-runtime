@@ -109,7 +109,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@agent-teams/ci-input-proof": "0.1.0-rc.0",
+    "@agent-teams/ci-input-proof": "0.1.0",
     "@agent-teams/agent-execution": "workspace:*",
     "@agent-teams/embedded-runtime": "workspace:*",
     "@agent-teams/docs-protocol": "0.6.2",

@@ -208,6 +208,7 @@ export const inputPaths = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yam
   'scripts/ci/nightly-contract.ts', 'scripts/ci/nightly-contract.test.ts',
   'scripts/ci/foundation-fixture-sharding.ts', 'scripts/ci/foundation-fixture-sharding.test.ts',
   'scripts/ci/foundation-fanout-contract.ts',
+  'scripts/ci/pr-regression-bootstrap.ts', 'scripts/ci/pr-regression-bootstrap.test.ts',
   'scripts/ci/pr-regression-inputs.ts', 'scripts/ci/pr-regression-inputs.test.ts',
   'scripts/ci/pr-regression-command.ts', 'architecture/foundation/ci-pr-regressions.json',
   '.github/workflows/ci-foundation-route.yml', '.github/workflows/ci-pr-regressions.yml',
