@@ -82,8 +82,8 @@ export interface InspectCodexConfigurationResult {
 }
 
 export interface InspectCodexConfiguration {
-  execute(
+  readonly execute: (
     input: InspectCodexConfigurationInput,
     options?: { readonly signal?: AbortSignal },
-  ): Promise<InspectCodexConfigurationResult>;
+  ) => Promise<InspectCodexConfigurationResult>;
 }

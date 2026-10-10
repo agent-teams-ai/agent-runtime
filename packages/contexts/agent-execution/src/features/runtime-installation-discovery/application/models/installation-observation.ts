@@ -63,10 +63,10 @@ export interface DiscoverCodexInstallationsResult {
 }
 
 export interface DiscoverCodexInstallations {
-  execute(
+  readonly execute: (
     input: DiscoverCodexInstallationsInput,
     options?: { readonly signal?: AbortSignal },
-  ): Promise<DiscoverCodexInstallationsResult>;
+  ) => Promise<DiscoverCodexInstallationsResult>;
 }
 
 export interface DiscoverClaudeCodeInstallationsInput {
@@ -80,8 +80,8 @@ export interface DiscoverClaudeCodeInstallationsResult {
 }
 
 export interface DiscoverClaudeCodeInstallations {
-  execute(
+  readonly execute: (
     input: DiscoverClaudeCodeInstallationsInput,
     options?: { readonly signal?: AbortSignal },
-  ): Promise<DiscoverClaudeCodeInstallationsResult>;
+  ) => Promise<DiscoverClaudeCodeInstallationsResult>;
 }

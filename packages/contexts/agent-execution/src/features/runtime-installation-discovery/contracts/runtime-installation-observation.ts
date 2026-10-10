@@ -48,8 +48,8 @@ export interface DiscoverCodexInstallationsResult {
 }
 
 export interface DiscoverCodexInstallations {
-  execute(
+  readonly execute: (
     input: DiscoverCodexInstallationsInput,
     options?: { readonly signal?: AbortSignal },
-  ): Promise<DiscoverCodexInstallationsResult>;
+  ) => Promise<DiscoverCodexInstallationsResult>;
 }
