@@ -20,7 +20,7 @@ start" section.
 |---|---|---|---|---|
 | 0 | Docs PR that adds these briefs to agent-runtime | this index, section "Where the briefs live" | nothing | yes |
 | 1 | Draft branch `draft/gm-train-030` on the R-1a bundle `get-modular-0.3.0-train-r1a` (all four archives), with a draft PR "do not merge" | `get-modular-train-1-draft-branch.md` | release PR reviewed and green, R-1a bundle packed from its final head (release question Q2 decided by the owner on 2026-10-08: option A) | never; closed after npm publication |
-| 2 | npm publication of Core 0.3.0, Assembly 0.3.0, resources 0.1.0, conformance 0.1.0 (R-1b) | get-modular release brief | owner review of TEST-1 and of the draft branch result | owner only |
+| 2 | npm publication of Core 0.3.0, Assembly 0.3.0, resources 0.1.0, conformance 0.1.0 (R-1b) | get-modular release brief | owner review of TEST-1 and the Node 26.10+ check (owner decision 2026-10-09) | owner only |
 | 3 | AR-1a: Core and Assembly 0.3.0; verifies the existing CMS pin `81063ad` (get-modular #142, migrated by agent-runtime #201) | `get-modular-train-1-ar-1a.md` | 2 | yes |
 | 4 | AR-1b: module identities, builder, root as a function of Assembly, graph gate | `get-modular-train-1-ar-1b.md` | 3 merged | yes |
 | 5 | AR-1c: ADR-0024, resources 0.1.0 and conformance 0.1.0, scoped ordinary owners, drain race fix, smoke | `get-modular-train-1-ar-1c.md` | 4 merged; the owner approves the ADR-0024 text in the AR-1c PR before merge | yes |
@@ -45,9 +45,7 @@ Why this order (decided, not open):
   dependencies on Core, Assembly and resources, and the workspace has `strictPeerDependencies: true`.
 - AR-2 is last because it touches `packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts`,
   which the AR program plan also edits (STORE and ACCESS lanes); those lanes rebase after AR-2.
-- The draft branch carries the commits of all four PRs. A real PR either cherry-picks them with the porting procedure
-  in `get-modular-train-1-draft-branch.md` (section "Porting a draft commit") or re-implements from the brief; both end
-  with a registry lockfile and no `file:` entries.
+- The draft branch was retired on 2026-10-09 (section "Owner decision (2026-10-09)"): each PR is implemented from its brief and ends with a registry lockfile and no `file:` entries.
 
 ## Rules every brief repeats (owner decisions, stated as facts)
 
@@ -152,5 +150,12 @@ docs-protocol, so they stop reading as active plans.
   stays open; the R-1a bundle is packed from its final head after review and CI; the owner merges the release PR
   after signing off the consumer checks. The release branch is updated without force pushes. For these briefs:
   `SOURCE_SHA` is the release PR head; `REL_SHA` (the merged release commit) exists only after the draft branch work.
+
+## Owner decision (2026-10-09)
+
+- The draft branch is no longer a publication gate and the draft branch brief is retired (status `superseded`). The
+  publication condition and the draft branch gate above, from 2026-10-08, no longer apply. The train was published
+  after the TEST consumer (modularity-host-test#16) and the Node 26.10+ check. The AR briefs run on the published
+  versions.
 
 No owner question remains open for these briefs.

@@ -65,6 +65,9 @@ Documents:
 - [Agent Runtime Architecture Program Plan](agent-runtime-architecture-program-plan.md):
   owner decisions, target architecture, lanes, task cards and parallel waves for
   the Codex boundaries, libraries and storage program.
+- [Agent Runtime Architecture Program: Execution Brief](agent-runtime-architecture-program-execution-brief.md):
+  preconditions, card instructions, review checklists and stop conditions for
+  implementing the remaining cards of the architecture program.
 - [Legacy feature inventory](legacy-feature-inventory.json): commit-pinned,
   structured legacy/current/authority/implementation/qualification/backlog
   traceability. Its validator permits additions and uses explicit
@@ -80,7 +83,7 @@ Documents:
 - [Get Modular Train 1 Migration](get-modular-train-1-migration.md): index of the
   migration briefs for Core and Assembly 0.3.0, resources and conformance.
 - [Get Modular Train 1 Draft Branch](get-modular-train-1-draft-branch.md): the
-  never-merged draft branch that proves the whole migration first.
+  retired draft branch brief (superseded on 2026-10-09, not executed).
 - [Get Modular Train 1 AR-1a](get-modular-train-1-ar-1a.md): Consumer Module
   Standard pin and Core and Assembly 0.3.0.
 - [Get Modular Train 1 AR-1b](get-modular-train-1-ar-1b.md): module identities,

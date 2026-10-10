@@ -1,6 +1,6 @@
 # Architecture critique archive, October 2026
 
-This directory archives the analysis behind the Agent Runtime architecture program plan: two critique rounds and one storage verification, produced on 2026-10-01 and 2026-10-02. The material is analysis only. It changes no code and it is written in Russian (identifiers, paths and quotations are kept in their original form).
+This directory archives the analysis behind the Agent Runtime architecture program plan: two critique rounds and one storage verification, produced on 2026-10-01 and 2026-10-02, and the independent review of the version 2 draft (2026-10-04). The material is analysis only. It changes no code and it is written in Russian (identifiers, paths and quotations are kept in their original form).
 
 The plan in [`docs/architecture/agent-runtime-architecture-program-plan.md`](../../docs/architecture/agent-runtime-architecture-program-plan.md) is the current authority. The archive is evidence for it, not a set of decisions. The owner decisions log is [`round2/decisions-log-2026-10-02.md`](round2/decisions-log-2026-10-02.md).
 
@@ -10,6 +10,7 @@ The plan in [`docs/architecture/agent-runtime-architecture-program-plan.md`](../
 - `round1/`: first critique round (four critic reports, the synthesis, the shared prompt, the launch receipt and input checksums).
 - `round2/`: second critique round (four critic reports, the synthesis, the 2026-10-02 update, the decisions log, the shared prompt and the launch receipt).
 - `storage-verification/`: storage verification report.
+- `plan-reviews/`: independent review of the unpublished version 2 draft of the plan (2026-10-04); its findings are folded into version 2 (2026-10-08).
 
 ## Source revisions
 
@@ -46,7 +47,7 @@ Replacements per file (rule 4 has no replacements; the last column counts other 
 | `round1/sdk-foundation-report.md` | 0 | 0 | 2 | 0 | 1 |
 | `round1/skeptic-openclaw-report.md` | 0 | 0 | 2 | 0 | 1 |
 | `round2/codex-version-report.md` | 0 | 0 | 3 | 0 | 1 |
-| `round2/decisions-log-2026-10-02.md` | 0 | 0 | 0 | 0 | 1 |
+| `round2/decisions-log-2026-10-02.md` | 0 | 0 | 3 | 0 | 2 |
 | `round2/governance-sdk-report.md` | 0 | 0 | 2 | 0 | 1 |
 | `round2/launch-receipt.md` | 0 | 0 | 4 | 0 | 1 |
 | `round2/library-decomposition-report.md` | 0 | 0 | 2 | 0 | 1 |
@@ -55,7 +56,8 @@ Replacements per file (rule 4 has no replacements; the last column counts other 
 | `round2/round2-update-2026-10-02.md` | 1 | 0 | 0 | 0 | 0 |
 | `round2/skeptic-integration-report.md` | 2 | 0 | 3 | 0 | 4 |
 | `storage-verification/storage-report.md` | 1 | 0 | 0 | 0 | 0 |
-| **Total** | 31 | 1 | 49 | 4 | 44 |
+| `plan-reviews/plan-v2-review-2026-10-04.md` | 2 | 0 | 0 | 0 | 2 |
+| **Total** | 33 | 1 | 52 | 4 | 47 |
 
 Files not listed had no replacements. The counts come from a word-level diff of each file against the unredacted original, so they are approximate: rule 3 counts removed model and role mentions, and a few lines were reworded by those rules to stay grammatical.
 
