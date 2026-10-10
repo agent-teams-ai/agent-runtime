@@ -6,10 +6,12 @@ import {join} from "node:path";
 import {Pool} from "pg";
 import {compileComposition} from "@get-modular/core";
 import {assemblyFor} from "@get-modular/assembly";
+import {isolate, smoke} from "@get-modular/conformance";
 import {createScope, type Resources} from "@get-modular/resources";
 import {createAgentRuntimeHost} from "../../dist/composition.js";
-import {runtimeOrdinarySetupDeclarations, runtimeOrdinarySetupProfile, runtimeSetupDeclarations, runtimeSetupProfile, bindRuntimeSetup, createRuntimeSetupFactories, type RuntimeSetupCapabilities} from "../../dist/composition/runtime-setup-assembly.js";
-import {ordinaryRuntimeDeclarations, type OrdinaryRuntimeFactories} from "../../dist/composition/ordinary-runtime-assembly.js";
+import {runtimeOrdinarySetupDeclarations, runtimeOrdinarySetupProfile, runtimeSetupDeclarations, runtimeSetupProfile, bindRuntimeSetup, composeRuntimeSetup, createRuntimeSetupFactories, type RuntimeSetupCapabilities} from "../../dist/composition/runtime-setup-assembly.js";
+import type {AgentRuntimeHost} from "../../dist/composition/agent-runtime-host.js";
+import {createOrdinaryModuleFactories, ordinaryProviderDeclaration, ordinaryRuntimeDeclarations, type OrdinaryRuntimeCapabilities, type OrdinaryRuntimeFactories} from "../../dist/composition/ordinary-runtime-assembly.js";
 import {copyObservation} from "../../dist/composition/contained-turn-runtime-validation.js";
 
 test("ordinary active graph has independent exact seven-port parity and passive profile remains separate", async () => {
@@ -155,7 +157,10 @@ function createFakeOrdinaryFactories() {
   };
   const counts = {calls: 0, created: 0, released: 0};
   // The three owning modules register a fake owner with their module scope, like the real factories do.
-  const own = (resources: Resources, name: string) => resources.setup({name, setup: () => {counts.created += 1; return {name};}, cleanup: () => {counts.released += 1;}});
+  const released = new Set<object>();
+  const own = (resources: Resources, name: string) => resources.setup({name, setup: () => {counts.created += 1; return {name};}, cleanup: owner => {
+    assert.equal(released.has(owner), false, `${name} released twice`); released.add(owner); counts.released += 1;
+  }});
   const factories: OrdinaryRuntimeFactories = {
     operationStore: async () => {counts.calls += 1; return ports.store;},
     security: async resources => {counts.calls += 1; await own(resources, "security-owner"); return {port: ports.security, registerSecrets};},
@@ -202,4 +207,29 @@ test("materialized ordinary root injects the provider owner's launch capability 
     assert.equal((await owners.control.close()).complete, true);
   }
   assert.equal(counts.released, 3);
+});
+
+test("smoke: the ordinary composition root releases every created owner under injected failure and abort", async () => {
+  const fakes = createFakeOrdinaryFactories();
+  const composition = await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: runtimeOrdinarySetupProfile});
+  assert.ok(composition.ok);
+  const hosts: AgentRuntimeHost[] = [];
+  const steps = await smoke({api: assemblyFor<RuntimeSetupCapabilities>(),
+    compose: api => composeRuntimeSetup(api, composition, createRuntimeSetupFactories(process.platform), host => {hosts.push(host);}, undefined,
+      {factories: fakes.factories, decorateHost: host => host})});
+  assert.equal(steps.length, 31, "one run plus fail and abort at each of 15 modules");
+  assert.deepEqual(steps.filter(step => step.problem !== undefined), []);
+  assert.ok(fakes.counts.created > 0);
+  assert.equal(fakes.counts.released, fakes.counts.created);
+  for (const host of hosts) {await host.dispose();}
+});
+
+test("isolate: the provider module releases its Codex owner exactly once", async () => {
+  const fakes = createFakeOrdinaryFactories();
+  await using isolated = await isolate(assemblyFor<OrdinaryRuntimeCapabilities>(), {
+    declaration: ordinaryProviderDeclaration, factory: createOrdinaryModuleFactories(fakes.factories).provider, dependencies: {}});
+  assert.equal(isolated.instance.provider, fakes.ports.provider);
+  assert.equal(fakes.counts.created, 1); assert.equal(fakes.counts.released, 0);
+  const report = await isolated.close();
+  assert.equal(report.complete, true); assert.equal(fakes.counts.released, 1);
 });
