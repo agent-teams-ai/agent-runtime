@@ -57,6 +57,8 @@ test("projected direct tooling pins and disabled release-age waiting preserve th
     "@agent-teams/engineering-foundation@1.7.2",
     "@get-modular/core@0.3.0",
     "@get-modular/assembly@0.3.0",
+    "@get-modular/resources@0.1.0",
+    "@get-modular/conformance@0.1.0",
   ]);
   assert.match(await read("scripts/architecture/feature-module-config.mjs"), /const FOUNDATION_VERSION = "1\.7\.2";/u);
 });
@@ -135,7 +137,12 @@ test("stable31 managed bytes stay exact and the current Foundation source policy
   assert.notEqual(currentSourcePolicy, historicalSourcePolicy);
   // CMS successor adds two roots/one public entry; nightly adds two private roots; product fanout adds five private roots; Darwin adds two private feature-local helpers.
   // Reconstruct the prior CI policy, retaining its fixed whole-document oracle.
-  const comparatorPolicyBytes = await read("architecture/foundation/source-dependencies.yaml");
+  // Get Modular train 1 (AR-1c) admits resources and conformance; reverse only these lines.
+  const getModularAdditions = ["    - '@get-modular/resources'\n", "    - '@get-modular/conformance'\n"];
+  const currentSourcePolicyBytes = await read("architecture/foundation/source-dependencies.yaml");
+  assert.equal(currentSourcePolicyBytes.split(getModularAdditions[0]).length - 1, 2);
+  assert.equal(currentSourcePolicyBytes.split(getModularAdditions[1]).length - 1, 1);
+  const comparatorPolicyBytes = getModularAdditions.reduce((bytes, line) => bytes.split(line).join(""), currentSourcePolicyBytes);
   // Reverse only the exact fixed tooling dependency; retain every historical digest.
   const comparatorAdmission = '    - "@agent-teams/ci-input-proof"\n';
   assert.equal(comparatorPolicyBytes.split(comparatorAdmission).length - 1, 1);

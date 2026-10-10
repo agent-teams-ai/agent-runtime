@@ -15,9 +15,15 @@ catalogs:
     '@get-modular/assembly':
       specifier: 0.3.0
       version: 0.3.0
+    '@get-modular/conformance':
+      specifier: 0.1.0
+      version: 0.1.0
     '@get-modular/core':
       specifier: 0.3.0
       version: 0.3.0
+    '@get-modular/resources':
+      specifier: 0.1.0
+      version: 0.1.0
     '@microsoft/api-extractor':
       specifier: 7.58.12
       version: 7.58.12
@@ -177,7 +183,13 @@ importers:
       '@get-modular/core':
         specifier: 'catalog:'
         version: 0.3.0
+      '@get-modular/resources':
+        specifier: 'catalog:'
+        version: 0.1.0
     devDependencies:
+      '@get-modular/conformance':
+        specifier: 'catalog:'
+        version: 0.1.0(@get-modular/assembly@0.3.0)(@get-modular/core@0.3.0)(@get-modular/resources@0.1.0)
       pg:
         specifier: 'catalog:'
         version: 8.23.0
@@ -369,8 +381,20 @@ packages:
     resolution: {integrity: sha512-41GrHEavrA6BHeVassm5H/Nx3Av8nNIui5ShfiiTYxios100/Fj2bXI9ZiSyz8FiLT5VMv3SEVmoiO6UcRudeA==}
     engines: {node: '>=24.18.0 <25 || >=26.10.0 <27'}
 
+  '@get-modular/conformance@0.1.0':
+    resolution: {integrity: sha512-yIxQqJd/RRIxtO3uoo3MQXNdfeMk96qjzzW3ggfxTyfg9/UDUl7qfB3nOTWVkDN+Zg/gLFY+24grd1zGUQSWmw==}
+    engines: {node: '>=24.18.0 <25 || >=26.10.0 <27'}
+    peerDependencies:
+      '@get-modular/assembly': ^0.3.0
+      '@get-modular/core': ^0.3.0
+      '@get-modular/resources': ^0.1.0
+
   '@get-modular/core@0.3.0':
     resolution: {integrity: sha512-we9Sr1pU+mK7MPDF1tZc9b9SC+wBp0bzIeahmaESXFplILfgE16avp+j2e3Zl7mYd9LyCeQk1c21UyGkd0p8RQ==}
+    engines: {node: '>=24.18.0 <25 || >=26.10.0 <27'}
+
+  '@get-modular/resources@0.1.0':
+    resolution: {integrity: sha512-sIC+ZYI196qK11Dmz9s9U/Va4UAOU5G8m9beCp3zIIbEK0fKLAWGssd4l72aS0ycRBi5AhsbKFysKS9EVVax8g==}
     engines: {node: '>=24.18.0 <25 || >=26.10.0 <27'}
 
   '@hono/node-server@2.1.1':
@@ -1993,7 +2017,15 @@ snapshots:
     dependencies:
       '@get-modular/core': 0.3.0
 
+  '@get-modular/conformance@0.1.0(@get-modular/assembly@0.3.0)(@get-modular/core@0.3.0)(@get-modular/resources@0.1.0)':
+    dependencies:
+      '@get-modular/assembly': 0.3.0
+      '@get-modular/core': 0.3.0
+      '@get-modular/resources': 0.1.0
+
   '@get-modular/core@0.3.0': {}
+
+  '@get-modular/resources@0.1.0': {}
 
   '@hono/node-server@2.1.1(hono@4.13.5)':
     dependencies:

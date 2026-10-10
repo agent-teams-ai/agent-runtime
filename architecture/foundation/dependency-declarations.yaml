@@ -10,6 +10,7 @@ policies:
     - "@agent-teams/"
   developmentOnlyPackages:
     - "@agent-teams/engineering-foundation"
+    - "@get-modular/conformance"
     - "@xstate/graph"
     - "@types/node"
     - ajv
