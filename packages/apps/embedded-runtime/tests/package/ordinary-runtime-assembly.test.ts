@@ -246,10 +246,8 @@ test("smoke: the passive composition root releases every attempt under injected 
   for (const host of hosts) { await host.dispose(); }
 });
 
-test("ordinary Host factory types are read from the contract descriptors", async () => {
-  // Hand-written value types drift from the contracts; only descriptor-derived types are allowed here.
-  const path = new URL("../../src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts", import.meta.url);
-  const {program, errors} = parseSync(path.pathname, await readFile(path, "utf8"));
+function factoryTypeReferences(source: string): string[] {
+  const {program, errors} = parseSync("ordinary-runtime-assembly.ts", source);
   assert.equal(errors.length, 0);
   const declaration = program.body.map(node => node.type === "ExportNamedDeclaration" ? node.declaration : node)
     .find(node => node?.type === "TSInterfaceDeclaration" && node.id.name === "OrdinaryRuntimeFactories");
@@ -260,8 +258,22 @@ test("ordinary Host factory types are read from the contract descriptors", async
     if (Array.isArray(node)) { node.forEach(visit); return; }
     const record = node as Record<string, unknown>;
     if (record["type"] === "TSTypeReference") { references.push(String((record["typeName"] as {name?: unknown}).name)); }
+    if (record["type"] === "TSImportType") { references.push("import()"); }
     for (const [key, value] of Object.entries(record)) { if (key !== "parent") { visit(value); } }
   };
   visit(declaration.body);
-  assert.deepEqual([...new Set(references)].toSorted(), ["Promise", "Resources", "ValueOf"]);
+  return [...new Set(references)].toSorted();
+}
+
+test("ordinary Host factory types are read from the contract descriptors", async () => {
+  // Hand-written value types drift from the contracts; only descriptor-derived types are allowed here.
+  const path = new URL("../../src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts", import.meta.url);
+  const source = await readFile(path, "utf8");
+  assert.deepEqual(factoryTypeReferences(source), ["Promise", "Resources", "ValueOf"]);
+  const derived = "workspace(): Promise<ValueOf<typeof OrdinaryWorkspace>>;";
+  assert.ok(source.includes(derived));
+  const inlineImport = source.replace(derived, 'workspace(): Promise<import("@agent-teams/agent-execution/composition").OrdinaryTurnDependencies["workspace"]>;');
+  assert.ok(factoryTypeReferences(inlineImport).includes("import()"), "an inline type import must be rejected");
+  const handWritten = source.replace(derived, 'workspace(): Promise<OrdinaryTurnDependencies["workspace"]>;');
+  assert.ok(factoryTypeReferences(handWritten).includes("OrdinaryTurnDependencies"), "a hand-written type must be rejected");
 });

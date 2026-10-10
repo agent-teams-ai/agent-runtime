@@ -106,7 +106,9 @@ export interface OrdinaryRuntimeFactories {
 }
 ```
 
-The value is read from the descriptor with `infer` because indexing `CapabilitiesOf<T>[T["id"]]["value"]` with a generic `T` stops compiling once `CapabilitiesOf` remaps its keys (TS2536). The `Contract` type is exported by `@get-modular/assembly` in 0.3.x.
+The value is read from the descriptor with `infer` instead of indexing `CapabilitiesOf<T>[T["id"]]["value"]`.
+Get Modular Assembly 0.4.0 (GM ADR-0035) remaps `CapabilitiesOf` keys, so generic indexing fails with TS2536.
+The `Contract` type is exported by `@get-modular/assembly` in 0.3.x.
 
 Keep the method set, parameter order and `resources` arguments exactly as AR-1c left them; only the type expressions
 change. Delete type aliases that become unused (for example a local `RegisterSecrets`, if nothing else uses it).
@@ -204,6 +206,6 @@ and prefix the commands with `GIT_CONFIG_GLOBAL="$TMPDIR/gitconfig-user-only"`. 
 3a. Mutation: put back one hand-written type (`workspace(): Promise<OrdinaryTurnDependencies["workspace"]>`); the
    structural test must fail naming `OrdinaryTurnDependencies`. Revert.
 4. `git diff origin/main` touches only the feature `ordinary-runtime-assembly.ts`,
-   `tests/package/ordinary-runtime-assembly.test.ts`, the embedded-runtime `package.json` (`oxc-parser` only) and the lock; the method names, parameters and return records of
+   `tests/package/ordinary-runtime-assembly.test.ts`, the embedded-runtime `package.json` (`oxc-parser` only), the lock and this brief; the method names, parameters and return records of
    `OrdinaryRuntimeFactories` are unchanged.
 5. Commits carry the repository's local identity; no AI tool or assistant is mentioned anywhere.
