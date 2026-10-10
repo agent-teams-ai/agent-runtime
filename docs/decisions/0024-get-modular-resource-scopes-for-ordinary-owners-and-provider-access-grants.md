@@ -1,7 +1,7 @@
 ---
 id: ADR-0024
 type: adr
-status: proposed
+status: accepted
 owner: architecture
 summary: Admits @get-modular/resources 0.1.0 for ordinary Host owners and Provider Access grants, and @get-modular/conformance 0.1.0 as a development-only test dependency.
 related:
@@ -12,7 +12,7 @@ related:
 
 # ADR-0024: Get Modular resource scopes for ordinary owners and Provider Access grants
 
-Status: proposed
+Status: accepted
 
 Date: 2026-10-10
 

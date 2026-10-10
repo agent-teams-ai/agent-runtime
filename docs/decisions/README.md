@@ -41,10 +41,6 @@ immutable evidence; a later change uses an explicit superseding decision.
 
 ## Proposed
 
-- [ADR-0024: Get Modular resource scopes for ordinary owners and Provider Access grants](0024-get-modular-resource-scopes-for-ordinary-owners-and-provider-access-grants.md)
-  proposes admitting `@get-modular/resources` for ordinary Host owners and
-  Provider Access grants and `@get-modular/conformance` as a development-only
-  test dependency, extending ADR-0015's import rule.
 - [ADR-0016: Contained-turn Consumer Module Standard pending adoption](0016-contained-turn-consumer-module-standard-adoption.md)
   classifies the existing seven-port Pure DI boundary as explicitly not adopted
   until a separate contained-turn Assembly migration is accepted.
@@ -112,6 +108,11 @@ immutable evidence; a later change uses an explicit superseding decision.
 - [ADR-0023: Embedded Runtime host-app feature activation](0023-embedded-runtime-host-app-feature-activation.md)
   activates Embedded Runtime as a host-app under Feature Module Standard v1
   with extra composition assembly files and without moving host custody.
+- [ADR-0024: Get Modular resource scopes for ordinary owners and Provider Access grants](0024-get-modular-resource-scopes-for-ordinary-owners-and-provider-access-grants.md)
+  admits `@get-modular/resources` for ordinary Host owners and
+  Provider Access grants and `@get-modular/conformance` as a development-only
+  test dependency, extending ADR-0015's import rule and narrowly
+  superseding its no-resource-manager statement for ordinary owners.
 - [ADR-0090: Ordinary user-session Codex execution profile](0090-ordinary-user-session-codex-execution-profile.md)
 
 ## Superseded
