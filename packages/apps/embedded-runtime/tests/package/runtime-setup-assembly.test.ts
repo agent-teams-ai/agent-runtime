@@ -113,7 +113,7 @@ test("raw rejection prototype traps are never inspected", async () => {
 });
 
 // Construction order, failure attribution and release at every module of both profiles are covered by the smoke
-// tests. These cases cover the Agent Runtime error projection: codexConfiguration for a leaf present in both
+// tests (passive and ordinary) in ordinary-runtime-assembly.test.ts. These cases cover the Agent Runtime error projection: codexConfiguration for a leaf present in both
 // declaration lists, and host for the root, whose passive implementation id exists only in the passive list (it
 // guards the moduleId lookup in default-agent-runtime-host.ts).
 for (const key of ["codexConfiguration", "host"] as const) {
