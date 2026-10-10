@@ -24,8 +24,8 @@ still releases its resource owners (Runtime Security, Provider Access, Codex)
 and its journal through a manual cleanup list whose reverse walk stops at the
 first failure, so one failing release blocks every release behind it.
 
-ADR-0015 admits only Core and Assembly imports in `composition.embedded-runtime`.
-No accepted decision admits `@get-modular/resources` or
+ADR-0015 keeps Core/Assembly imports in `composition.embedded-runtime`, and the
+source policy admits only Core and Assembly there. No accepted decision admits `@get-modular/resources` or
 `@get-modular/conformance`.
 
 ## Decision
@@ -33,9 +33,10 @@ No accepted decision admits `@get-modular/resources` or
 Embedded Runtime consumes `@get-modular/resources` 0.1.0 together with Core and
 Assembly 0.3.0: exact catalog version, retained archive, one installed copy.
 
-Ordinary cleanup uses the scope tree of the AR-1c brief. An `ordinary-host`
-scope holds the journal and a child `owners` scope that is the run scope of the
-owning modules. Owners release in reverse construction order and continue past a
+Ordinary cleanup uses one scope tree per ordinary Host: an `ordinary-host` scope
+holds the observation journal and a child `owners` scope; `owners` is the run
+scope of the three owning modules, Runtime Security, Provider Access and Codex,
+which are bound with `scoped()`. Owners release in reverse construction order and continue past a
 failed owner. The journal closes only after the owners report a complete close.
 The Host drain, including the ADR-0090 ordinary turn owner handoff, must
 succeed before any owner is released. The turn and the raw Host stay outside the
@@ -49,11 +50,20 @@ import it.
 the test code of the Agent Runtime packages that guard handles or smoke-test
 composition roots (Embedded Runtime and filesystem-custody). Production code
 never imports it, and the Foundation development-only assertion keeps it out of
-runtime dependencies. AR-1c adds it to Embedded Runtime only; a later change adds
+runtime dependencies. It is pinned by exact catalog version and lock integrity,
+with no retained archive. AR-1c adds it to Embedded Runtime only; a later change adds
 it to filesystem-custody under this same decision.
 
-This extends the ADR-0015 import rule by exactly these permissions. ADR-0015 and
-ADR-0090 bytes stay unchanged. Contained-turn and Darwin deployment keep their
+This extends the ADR-0015 import rule by exactly these permissions.
+
+ADR-0015's statement that no universal resource manager, reflective cleanup or new
+lifecycle abstraction is admitted keeps applying to the passive slice. For the
+ordinary Host owners and Provider Access grants named here, this decision narrowly
+supersedes it: each owner's composition code registers its own cleanup by name in a
+Host-owned scope tree, without reflection, discovery or lifecycle hooks, and close
+policy stays in the Host.
+
+ADR-0015 and ADR-0090 bytes stay unchanged. Contained-turn and Darwin deployment keep their
 own cleanup until ADR-0016 is resolved.
 
 Root deadline: none in this train. Releasing the resource owners keeps today's
