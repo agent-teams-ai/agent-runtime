@@ -11,7 +11,7 @@ import {createPrivateOfficialAuthOwner, BINARY_SHA256} from './owner.ts';
 import {acquireAndPublish} from './bootstrap.ts';
 import {assembleWithDarwinJoin} from './assembly.ts';
 import {syntheticPool} from './synthetic-pool.mjs';
-const deferred = () => {let resolveFn;const promise=new Promise(resolve=>{resolveFn=resolve;});return {promise,resolve:resolveFn};};
+const deferred = () => Promise.withResolvers();
 // Entirely in-memory official-protocol double. No OS process, auth or database.
 function memoryChild({stuck=false,closeOnly=false,holdClosure=false,token='invented-secret'}={}) {
   const child = new EventEmitter(); child.stdout=new PassThrough();child.stderr=new PassThrough();
