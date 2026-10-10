@@ -14,6 +14,7 @@ export const packageRoots = ['packages/apps/embedded-runtime', 'packages/context
 export const policyPath = 'architecture/foundation/ci-pr-regressions.json';
 const schedulingClosure = [policyPath, 'scripts/ci/pr-regression-inputs.ts', 'scripts/ci/pr-regression-inputs.test.ts',
   'scripts/ci/pr-regression-command.ts', 'scripts/ci/pr-regression-bootstrap.ts', 'scripts/ci/pr-regression-bootstrap.test.ts',
+  'scripts/ci/pr-regression-bootstrap-fixtures.ts',
   '.github/workflows/ci-foundation-route.yml', '.github/workflows/ci-pr-regressions.yml'];
 interface Policy {
   schemaVersion: number; packageRoots: string[]; foundationAnchors: string[]; cmsBodyRoots: string[]; docsBodyAnchors: string[];
