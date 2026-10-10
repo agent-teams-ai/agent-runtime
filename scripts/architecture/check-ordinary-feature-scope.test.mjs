@@ -60,6 +60,7 @@ test('ordinary eight owner declarations and exact seven required turn slots reje
     assert.ok(graph.includes(before), `stale mutant ${before}`);
     assert.throws(() => verifyOrdinaryGraph(graph.replace(before, after)));
   }
+  assert.throws(() => verifyOrdinaryGraph(`${graph}\nexport const hiddenNested = [declareModule({moduleId: "agent-runtime/ordinary/hidden", implementationId: "agent-runtime/ordinary/hidden/default", owner: {authority: "agent-runtime", path: ["agent-execution"]}, provides: [], slots: []})];`), /outside the exported census/);
   assert.throws(() => verifyOrdinaryGraph(`${graph}\nexport const hiddenDeclaration = declareModule({moduleId: "agent-runtime/ordinary/hidden", implementationId: "agent-runtime/ordinary/hidden/default", owner: {authority: "agent-runtime", path: ["agent-execution"]}, provides: [], slots: []});`));
 });
 

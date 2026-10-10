@@ -53,7 +53,9 @@ const descriptorCall = (node, method) => {
 export function verifyOrdinaryGraph(source) {
   const parsed = parseSync(ordinaryCompositionPath, source);
   assert.equal(parsed.errors.length, 0, 'ordinary graph parse failure');
+  let declareCalls = 0;
   walk(parsed.program, node => {
+    if (callName(node) === 'declareModule') {declareCalls += 1;}
     assert.notEqual(callName(node), 'defineModule', 'ordinary graph must use declareModule');
     assert.ok(!(node.type === 'Property' && (node.key?.name ?? node.key?.value) === 'compatibility'), 'ordinary declarations must not spell compatibility');
   });
@@ -68,6 +70,7 @@ export function verifyOrdinaryGraph(source) {
   const resolve = node => node?.type === 'Identifier' ? variables.find(v => v.id?.name === node.name)?.init : node;
   const modules = variables.filter(v => callName(v.init) === 'declareModule');
   assert.equal(modules.length, 8, 'ordinary graph must declare exactly eight modules');
+  assert.equal(declareCalls, 8, 'ordinary graph must not declare modules outside the exported census');
   const ids = [];
   for (const entry of modules) {
     const object = entry.init.arguments[0], id = string(object, 'moduleId'); ids.push(id);

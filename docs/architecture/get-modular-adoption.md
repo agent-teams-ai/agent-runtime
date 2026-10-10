@@ -87,6 +87,8 @@ descriptors and declarations of the ordinary feature and the Host handoff, and
 the package tests compile both profiles and compare the plan bindings and
 tokens with a hand-written list.
 
+Construction order is the Core tie-break by implementation ID, and the package test pins it as a literal list for both profiles. In the ordinary profile `agent-runtime/setup-security/default` is constructed after the eight ordinary owners. This is safe: it has no slots, the ordinary Security owner is a separate module, and no ordinary owner reads its output or relies on its side effects; if an order requirement ever appears, it must be an explicit slot, not an ID.
+
 ### Ordinary closure retention and binding evidence
 
 An unsuccessful bounded reservation close leaves the ordinary flight owned.
@@ -1174,7 +1176,7 @@ the `outstandingWork` of the review, which stay as the evidence of the pin step.
 | Scoped acceptance and evidence: pins, package and archive identities, blocking commands | met for Core and Assembly 0.3.0 | met (resources added in AR-1c) | AR-1a, AR-1c |
 | New composition boundaries: descriptors own IDs and revisions; no hand-written compatibility; no `any`, `as never` or double casts in wiring | met | met | AR-1b |
 | Identity and namespaces, rules 1-7 | met | met | AR-1b |
-| Module packages and contracts | met for a private host-app package: descriptors and declarations live with the composition; the ordinary module factories are members of a frozen record built per Host attempt from Host constructors and bound by the root; a separate contract package is revisited in the package publication lane | met for a private host-app package | AR-1b |
+| Module packages and contracts | met for a private host-app package: descriptors and declarations live with the composition; the ordinary module factories are members of a frozen record built per Host attempt from Host constructors and bound by the root; a separate contract package is revisited in the package publication lane. Outstanding: port members of the seven ordinary contract value types (Agent Execution `ordinary-ports.ts`) are declared as methods, not function-typed properties | met for a private host-app package; the port member shape stays outstanding with the Agent Execution owner | AR-1b; port shape: Agent Execution owner |
 | Module packages list Get Modular packages only as peers | not applicable | not applicable while Agent Runtime packages are private and export no Get Modular modules; revisit in the package publication lane | none |
 | Dynamic instances (templates, inputs) | not applicable | not applicable: no prepared assembly serves more than one run; compile, bind and prepare run once per Host attempt | none |
 | Module resource scopes, author rules 1-13 | pending: AR-1c, AR-2 | met for the security, Provider Access and Codex owners; rule 7 holds: the Provider Access retirement protocol (broker close, rendering, capture and guard disposal, store retire) stays inside one cleanup | AR-1c, AR-2 |

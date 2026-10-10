@@ -45,8 +45,20 @@ test("compiled binding plans equal the independent identity table and carry revi
   const passive = await compileComposition({declarations: runtimeSetupDeclarations, profile: runtimeSetupProfile});
   assert.ok(passive.ok);
   assert.deepEqual(planRows(passive.plan.bindings), passiveRows(passiveHost).toSorted());
+  // Construction order is the Core tie-break by implementation ID; a rename must not change it silently.
+  assert.deepEqual(passive.plan.dependencyOrder, [
+    "agent-runtime/claude-configuration/default", "agent-runtime/claude-planner/default", "agent-runtime/codex-configuration/default",
+    "agent-runtime/codex-planner/default", "agent-runtime/installation-discovery/default", "agent-runtime/setup-security/default", passiveHost,
+  ]);
   const ordinary = await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: runtimeOrdinarySetupProfile});
   assert.ok(ordinary.ok);
+  assert.deepEqual(ordinary.plan.dependencyOrder, [
+    "agent-runtime/claude-configuration/default", "agent-runtime/claude-planner/default", "agent-runtime/codex-configuration/default",
+    "agent-runtime/codex-planner/default", "agent-runtime/installation-discovery/default", "agent-runtime/ordinary/artifacts/node",
+    "agent-runtime/ordinary/provider/codex", "agent-runtime/ordinary/process/node", "agent-runtime/ordinary/security/postgres",
+    "agent-runtime/ordinary/provider-access/postgres", "agent-runtime/ordinary/store/postgres", "agent-runtime/ordinary/workspace/node",
+    "agent-runtime/ordinary/turn/default", "agent-runtime/setup-security/default", ordinaryHost,
+  ]);
   assert.deepEqual(planRows(ordinary.plan.bindings), [
     ...passiveRows(ordinaryHost),
     planRow("agent-runtime/ordinary/process/node", "prepare-launch", "agent-runtime/ordinary/provider/codex", "agent-runtime/ordinary/prepare-launch"),
