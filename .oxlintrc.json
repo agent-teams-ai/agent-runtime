@@ -31,6 +31,25 @@
       }
     },
     {
+      "files": [
+        "packages/apps/embedded-runtime/src/features/setup-inspection-planning/adapters/claude-code-setup-inspection-planner.ts",
+        "packages/apps/embedded-runtime/src/features/setup-inspection-planning/adapters/codex-setup-inspection-planner.ts",
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/application/ordinary-ports.ts",
+        "packages/contexts/agent-execution/src/features/runtime-installation-discovery/application/models/installation-observation.ts",
+        "packages/contexts/agent-execution/src/features/runtime-installation-discovery/contracts/claude-code-installation-observation.ts",
+        "packages/contexts/agent-execution/src/features/runtime-installation-discovery/contracts/runtime-installation-observation.ts",
+        "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection/contracts/claude-code-configuration-inspection.ts",
+        "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/contracts/codex-configuration-inspection.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/models/claude-code-setup-inspection-models.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/application/models/setup-inspection-models.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/contracts/claude-code-setup-inspection-authorization.ts",
+        "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization/contracts/setup-inspection-authorization.ts"
+      ],
+      "rules": {
+        "typescript/method-signature-style": ["error", "property"]
+      }
+    },
+    {
       "files": ["packages/apps/embedded-runtime/src/features/*/index.ts"],
       "rules": {
         "unicorn/require-module-specifiers": "off"
