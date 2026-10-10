@@ -99,7 +99,7 @@ test("module identities stay in the product namespace", () => {
 test("public ordinary construction and disposal never capture auth or start provider and borrow pool", async t => {
   const root = await mkdtemp(join(await realpath(tmpdir()), "ordinary-public-TEST-"));
   t.after(() => rm(root, {recursive: true, force: true}));
-  const dirs = Object.fromEntries(["auth", "private", "evidence", "source", "workspace", "artifact"].map(name => [name, join(root, name)]));
+  const dirs = {auth: join(root, "auth"), private: join(root, "private"), evidence: join(root, "evidence"), source: join(root, "source"), workspace: join(root, "workspace"), artifact: join(root, "artifact")};
   for (const path of Object.values(dirs)) {await mkdir(path, {mode: 0o700});}
   const pool = new Pool(); let migrations = 0; let ended = 0;
   t.mock.method(pool, "query", async () => {migrations += 1; return {rows: [], rowCount: 0};});
@@ -189,6 +189,7 @@ test("materialized ordinary root injects the provider owner's launch capability 
     const invalid = await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: mismatched});
     assert.equal(invalid.ok, false); assert.equal(counts.calls, 0);
     const composition = await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: runtimeOrdinarySetupProfile});
+    if (!composition.ok) {assert.fail(JSON.stringify(composition));}
     const preparation = await api.prepare({composition, factories: bound.factories, roots: bound.roots});
     assert.equal(preparation.status, "prepared");
     if (preparation.status !== "prepared") {assert.fail(JSON.stringify(preparation));}
@@ -197,7 +198,7 @@ test("materialized ordinary root injects the provider owner's launch capability 
     if (result.status !== "succeeded") {assert.fail(JSON.stringify(result));}
     const expected = {"agent-runtime/ordinary/store": ports.store, "agent-runtime/ordinary/security": ports.security, "agent-runtime/ordinary/provider-access": ports.access, "agent-runtime/ordinary/workspace": ports.workspace, "agent-runtime/ordinary/artifacts": ports.artifacts, "agent-runtime/ordinary/process": ports.process, "agent-runtime/ordinary/provider": ports.provider, "agent-runtime/ordinary/prepare-launch": prepareLaunch};
     for (const [capability, value] of Object.entries(expected)) {
-      const entry = result.created.find(item => Object.hasOwn(item.capabilities, capability));
+      const entry: {readonly capabilities: object} | undefined = result.created.find(item => Object.hasOwn(item.capabilities, capability));
       assert.ok(entry); assert.equal(Reflect.get(entry.capabilities, capability), value, capability);
     }
     assert.equal(counts.calls, 7);

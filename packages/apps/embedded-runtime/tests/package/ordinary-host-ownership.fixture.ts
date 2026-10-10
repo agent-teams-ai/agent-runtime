@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import {createOrdinaryTurnFeature, containedTurnCommandFingerprint, digestContainedTurnCanonicalValue, ORDINARY_PROFILE, type OrdinaryOperation, type OrdinaryAuthoritySnapshot, type OrdinaryReceipt, type OrdinaryTurnDependencies, type OrdinaryOperationStore} from "@agent-teams/agent-execution/composition";
+import {createOrdinaryTurnFeature, containedTurnCommandFingerprint, digestContainedTurnCanonicalValue, ORDINARY_PROFILE, type OrdinaryOperation, type OrdinaryAuthoritySnapshot, type OrdinaryReceipt, type OrdinaryTurnDependencies, type OrdinaryOperationStore, type OrdinaryTransport} from "@agent-teams/agent-execution/composition";
 import {createAgentRuntimeHost} from "../../dist/composition/agent-runtime-host.js";
 import {bindContainedTurnCapabilityAuthority} from "../../dist/composition/contained-turn-authority-capability.js";
 
 type OrdinaryPreparation = NonNullable<OrdinaryOperation["preparation"]>;
+type Canonical = Parameters<typeof digestContainedTurnCanonicalValue>[0];
 function unavailable(): never {throw new Error("TEST setup must not execute", {cause: "synthetic setup"});}
 
 const hash = "a".repeat(64);
@@ -13,7 +14,8 @@ const initial = (): OrdinaryOperation => ({...binding, ...ORDINARY_PROFILE, sche
 const authority = (owner: OrdinaryAuthoritySnapshot["owner"]): OrdinaryAuthoritySnapshot => ({...binding, owner, grantId: owner, ownerReceiptId: `receipt:${owner}`, consumptionDigest: hash, consumptionRevision: 1, authorityDigest: hash, expiresAt: Date.now() + 55000, scope: input.scope, provider: "codex"});
 const preparation = (): OrdinaryPreparation => ({providerAccess: authority("provider_access"), security: authority("runtime_security"), reservationId: "reservation:test", workspaceId: "workspace:test", materializationId: "material:test", credentialGeneration: 1});
 const closure = (prepared: OrdinaryPreparation): readonly OrdinaryReceipt[] => [
-  {...binding, kind: "dispatch_claim", claimId: "claim:test", committedRevision: 2, reservationId: prepared.reservationId, preparationDigest: digestContainedTurnCanonicalValue(prepared)},
+  // The domain codec does not type a preparation as a canonical value.
+  {...binding, kind: "dispatch_claim", claimId: "claim:test", committedRevision: 2, reservationId: prepared.reservationId, preparationDigest: digestContainedTurnCanonicalValue(prepared as unknown as Canonical)},
   {...binding, kind: "provider_terminal", terminalStatus: "completed", threadId: "thread:test", turnId: "turn:test"},
   {...binding, kind: "output_drain", finalSequence: 0, stdoutClosed: true, stderrClosed: true},
   {...binding, kind: "process_group_closed", reservationId: prepared.reservationId, pid: 200, processGroupId: 200, ownershipToken: "owner:test", exitObserved: true, groupEmptyObserved: true},
@@ -50,7 +52,8 @@ const fixture = () => {
     security: {resolveAndConsume: async () => {const snapshot = authority("runtime_security"); return {grantId: snapshot.grantId, expiresAt: snapshot.expiresAt, authority: snapshot, admitOutput: async () => true, admitArtifact: async () => true, settle: async disposition => ({...receipt("security_grant_settled"), disposition})};}},
     workspace: {prepare: async () => ({workspaceId: "workspace:test", cwd: "/test", homeDirectory: "/test/home"}), snapshot: async () => ({receipt: receipt("workspace_snapshot"), resultBytes: new Uint8Array([1, 2, 3])}), close: async () => {closedWorkspaces += 1;}},
     artifacts: {publish: async () => receipt("artifact_published")},
-    process: {reserve: async (request) => {assert.ok(request.deadline > performance.now() && request.deadline <= performance.now() + 45000); return ({reservationId: "reservation:test", start: async () => {starts += 1; assert.equal(state().status, "running"); return {lines: (async function* () {})(), write: async () => {}, closeInput: async () => {}};}, close: async (finalSequence) => {if (!starts) {return {kind: "not_started", reservationId: "reservation:test"};} return [{...receipt("output_drain"), finalSequence}, receipt("process_group_closed")];}});}},
+    // The transport is an opaque brand that only the process owner and the provider can construct; this fake never reaches a provider.
+    process: {reserve: async (request) => {assert.ok(request.deadline > performance.now() && request.deadline <= performance.now() + 45000); return ({reservationId: "reservation:test", start: async () => {starts += 1; assert.equal(state().status, "running"); return {lines: (async function* () {})(), write: async () => {}, closeInput: async () => {}} as unknown as OrdinaryTransport;}, close: async (finalSequence) => {if (!starts) {return {kind: "not_started", reservationId: "reservation:test"};} return [{...receipt("output_drain"), finalSequence}, receipt("process_group_closed")];}});}},
     provider: {supported: {provider: "codex", mode: "workspace-write", executionProfile: ORDINARY_PROFILE.executionProfile, capabilityManifestRevision: ORDINARY_PROFILE.capabilityManifestRevision}, execute: async () => {providerCalls += 1; return receipt("provider_terminal");}},
   };
   return {dependencies, state, counts: () => ({starts, providerCalls, closedWorkspaces})};
@@ -58,11 +61,11 @@ const fixture = () => {
 
 export async function ordinaryHostOwnershipRetry() {
   const f = fixture(); const reserve = f.dependencies.process.reserve; let closes = 0;
-  f.dependencies.process.reserve = async request => {
+  const processOwner = {reserve: async (request: Parameters<typeof reserve>[0]) => {
     const reservation = await reserve(request);
-    return {...reservation, close: sequence => {closes += 1; if (closes <= 2) {return Promise.reject(new Error("TEST physical closure unavailable"));} return reservation.close(sequence);}};
-  };
-  const feature = createOrdinaryTurnFeature(f.dependencies);
+    return {...reservation, close: (sequence: number) => {closes += 1; if (closes <= 2) {return Promise.reject(new Error("TEST physical closure unavailable"));} return reservation.close(sequence);}};
+  }};
+  const feature = createOrdinaryTurnFeature({...f.dependencies, process: processOwner});
   let submission: ReturnType<typeof feature.submit.execute> | undefined;
   const capability = {...feature, submit: {execute: (...args: Parameters<typeof feature.submit.execute>) => {submission = feature.submit.execute(...args); return submission;}}};
   const host = createAgentRuntimeHost({

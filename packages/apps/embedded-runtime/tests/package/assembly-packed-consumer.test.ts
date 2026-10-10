@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
+import type { Dirent } from "node:fs";
 import { mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
@@ -98,12 +99,12 @@ const consumePackedArchives = async (root: string, dependencies: Record<string, 
   // Only remaining declared dependencies require registry retrieval.
   run("pnpm", ["install", "--ignore-scripts", "--config.node-linker=hoisted"], consumer);
   const installedConsumer = await realpath(consumer);
-  const packedDeclarationMentionsPg = async (packageName) => {
+  const packedDeclarationMentionsPg = async (packageName: string) => {
     const installed = await realpath(join(consumer, "node_modules", packageName));
     const queue = [join(installed, "dist")];
     while (queue.length > 0) {
-      const directory = queue.pop();
-      let entries;
+      const directory = queue.pop()!; // The loop condition guarantees an entry.
+      let entries: Dirent[];
       try {
         entries = await readdir(directory, { withFileTypes: true });
       } catch (error) {
