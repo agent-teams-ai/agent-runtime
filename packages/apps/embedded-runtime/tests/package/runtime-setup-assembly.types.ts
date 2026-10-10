@@ -1,4 +1,5 @@
 import { assemblyFor, declareModule, defineContract } from "@get-modular/assembly";
+import { required } from "@get-modular/core";
 import { createDefaultAgentRuntimeHost, type AgentRuntimeHost,
 // @ts-expect-error Internal attempt injection is not part of the package composition entrypoint.
 createRuntimeSetupAttempt } from "../../dist/composition.js";
@@ -35,6 +36,16 @@ const unknownCapability = declareModule({ moduleId: security.moduleId, implement
   owner: security.owner, provides: [UndeclaredCapability.provide()], slots: [] });
 // @ts-expect-error Only declared consumer capability IDs can be bound.
 assembly.bindFactory(unknownCapability, async () => { throw new Error("type-only fixture"); });
+const IncompatibleSlot = defineContract<unknown>()({ id: "agent-runtime/codex-authorization", revision: 2 });
+const incompatibleSlot = declareModule({ moduleId: "agent-runtime/consumer", implementationId: "agent-runtime/consumer/default",
+  owner: security.owner, provides: [], slots: [IncompatibleSlot.slot("authorize", required())] });
+// @ts-expect-error A slot of another revision cannot bind under the consumer map.
+assembly.bindFactory(incompatibleSlot, async () => { throw new Error("type-only fixture"); });
+declareModule({ moduleId: "agent-runtime/handwritten", implementationId: "agent-runtime/handwritten/default", owner: security.owner,
+  // @ts-expect-error A declaration never spells compatibility by hand.
+  provides: [{ capabilityId: "agent-runtime/codex-authorization", compatibility: { family: "exact", familyVersion: 1, token: "agent-runtime/codex-authorization/r1" } }], slots: [] });
+// @ts-expect-error A declaration spec never carries a wire discriminator.
+declareModule({ kind: "get-modular.module-declaration", moduleId: "agent-runtime/discriminated", implementationId: "agent-runtime/discriminated/default", owner: security.owner, provides: [], slots: [] });
 assembly.bindFactory(runtimeSetupDeclarations[6], async (dependencies) => {
   // @ts-expect-error A root factory cannot request an undeclared slot.
   void dependencies.undeclaredSlot;

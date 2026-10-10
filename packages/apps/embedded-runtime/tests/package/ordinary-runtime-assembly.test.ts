@@ -7,7 +7,7 @@ import {Pool} from "pg";
 import {compileComposition} from "@get-modular/core";
 import {assemblyFor} from "@get-modular/assembly";
 import {createAgentRuntimeHost} from "../../dist/composition.js";
-import {runtimeOrdinarySetupDeclarations, runtimeOrdinarySetupProfile, runtimeSetupProfile, bindRuntimeSetup, createRuntimeSetupFactories, type RuntimeSetupCapabilities} from "../../dist/composition/runtime-setup-assembly.js";
+import {runtimeOrdinarySetupDeclarations, runtimeOrdinarySetupProfile, runtimeSetupDeclarations, runtimeSetupProfile, bindRuntimeSetup, createRuntimeSetupFactories, type RuntimeSetupCapabilities} from "../../dist/composition/runtime-setup-assembly.js";
 import {ordinaryRuntimeDeclarations} from "../../dist/composition/ordinary-runtime-assembly.js";
 import {copyObservation} from "../../dist/composition/contained-turn-runtime-validation.js";
 
@@ -25,6 +25,61 @@ test("ordinary active graph has independent exact seven-port parity and passive 
   const swapped = {...runtimeOrdinarySetupProfile, bindings: runtimeOrdinarySetupProfile.bindings.map(binding => binding.consumerImplementationId === "agent-runtime/ordinary/turn/default" && binding.slotId === "process" ? {...binding, providerImplementationIds: ["agent-runtime/ordinary/workspace/node"]} : binding)};
   assert.equal((await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: swapped})).ok, false);
 });
+const planRow = (consumer: string, slot: string, provider: string, capability: string) => `${consumer}|${slot}|${provider}|${capability}|${capability}/r1`;
+const passiveHost = "agent-runtime/runtime-host/passive";
+const ordinaryHost = "agent-runtime/runtime-host/ordinary";
+const passiveRows = (host: string) => [
+  planRow(host, "authorize-setup-inspection", "agent-runtime/setup-security/default", "agent-runtime/codex-authorization"),
+  planRow(host, "authorize-claude-code-setup-inspection", "agent-runtime/setup-security/default", "agent-runtime/claude-authorization"),
+  planRow(host, "discover-codex-installations", "agent-runtime/installation-discovery/default", "agent-runtime/codex-installations"),
+  planRow(host, "discover-claude-code-installations", "agent-runtime/installation-discovery/default", "agent-runtime/claude-installations"),
+  planRow(host, "inspect-codex-configuration", "agent-runtime/codex-configuration/default", "agent-runtime/codex-configuration"),
+  planRow(host, "inspect-claude-code-configuration", "agent-runtime/claude-configuration/default", "agent-runtime/claude-configuration"),
+  planRow(host, "plan-codex-setup-inspection", "agent-runtime/codex-planner/default", "agent-runtime/codex-planner"),
+  planRow(host, "plan-claude-code-setup-inspection", "agent-runtime/claude-planner/default", "agent-runtime/claude-planner"),
+];
+const planRows = (bindings: readonly {consumerImplementationId: string; slotId: string; providerImplementationIds: readonly string[]; capabilityId: string; compatibility: {token: string}}[]) =>
+  bindings.map(b => `${b.consumerImplementationId}|${b.slotId}|${b.providerImplementationIds.join(",")}|${b.capabilityId}|${b.compatibility.token}`).toSorted();
+
+test("compiled binding plans equal the independent identity table and carry revision 1 tokens", async () => {
+  const passive = await compileComposition({declarations: runtimeSetupDeclarations, profile: runtimeSetupProfile});
+  assert.ok(passive.ok);
+  assert.deepEqual(planRows(passive.plan.bindings), passiveRows(passiveHost).toSorted());
+  const ordinary = await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: runtimeOrdinarySetupProfile});
+  assert.ok(ordinary.ok);
+  assert.deepEqual(planRows(ordinary.plan.bindings), [
+    ...passiveRows(ordinaryHost),
+    planRow("agent-runtime/ordinary/process/node", "prepare-launch", "agent-runtime/ordinary/provider/codex", "agent-runtime/ordinary/prepare-launch"),
+    planRow("agent-runtime/ordinary/provider-access/postgres", "register-secrets", "agent-runtime/ordinary/security/postgres", "agent-runtime/ordinary/register-secrets"),
+    planRow("agent-runtime/ordinary/turn/default", "operation-store", "agent-runtime/ordinary/store/postgres", "agent-runtime/ordinary/store"),
+    planRow("agent-runtime/ordinary/turn/default", "security", "agent-runtime/ordinary/security/postgres", "agent-runtime/ordinary/security"),
+    planRow("agent-runtime/ordinary/turn/default", "provider-access", "agent-runtime/ordinary/provider-access/postgres", "agent-runtime/ordinary/provider-access"),
+    planRow("agent-runtime/ordinary/turn/default", "workspace", "agent-runtime/ordinary/workspace/node", "agent-runtime/ordinary/workspace"),
+    planRow("agent-runtime/ordinary/turn/default", "artifacts", "agent-runtime/ordinary/artifacts/node", "agent-runtime/ordinary/artifacts"),
+    planRow("agent-runtime/ordinary/turn/default", "process", "agent-runtime/ordinary/process/node", "agent-runtime/ordinary/process"),
+    planRow("agent-runtime/ordinary/turn/default", "provider", "agent-runtime/ordinary/provider/codex", "agent-runtime/ordinary/provider"),
+    planRow(ordinaryHost, "ordinary-turn", "agent-runtime/ordinary/turn/default", "agent-runtime/ordinary/turn"),
+  ].toSorted());
+});
+
+test("one declaration per implementation ID across the passive and ordinary compositions", () => {
+  const seen = new Map<string, string>();
+  for (const declaration of [...runtimeSetupDeclarations, ...runtimeOrdinarySetupDeclarations]) {
+    const json = JSON.stringify(declaration);
+    assert.equal(seen.get(declaration.implementationId) ?? json, json, declaration.implementationId);
+    seen.set(declaration.implementationId, json);
+  }
+  assert.equal(seen.size, 6 + 2 + 8);
+});
+
+test("module identities stay in the product namespace", () => {
+  for (const declaration of [...runtimeSetupDeclarations, ...runtimeOrdinarySetupDeclarations]) {
+    assert.ok(declaration.moduleId.startsWith("agent-runtime/"), declaration.moduleId);
+    assert.equal(declaration.owner.authority, "agent-runtime", declaration.moduleId);
+    assert.ok(declaration.implementationId.startsWith(`${declaration.moduleId}/`), declaration.implementationId);
+  }
+});
+
 test("public ordinary construction and disposal never capture auth or start provider and borrow pool", async t => {
   const root = await mkdtemp(join(await realpath(tmpdir()), "ordinary-public-TEST-"));
   t.after(() => rm(root, {recursive: true, force: true}));
