@@ -110,7 +110,7 @@ jobs:
           }
           base_entry=$(bootstrap_entry "$EXPECTED_BASE_REVISION") || true
           head_entry=$(bootstrap_entry "$EXPECTED_REVISION") || true
-          checkout_blob=$(git hash-object -- "$bootstrap" 2>/dev/null) || checkout_blob=
+          checkout_blob=$(git hash-object --no-filters -- "$bootstrap" 2>/dev/null) || checkout_blob=
           checkout_mode=
           if [ -f "$bootstrap" ] && [ ! -L "$bootstrap" ]; then
             case "$(stat -c '%a' -- "$bootstrap" 2>/dev/null || true)" in

@@ -1,19 +1,19 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { access, chmod, constants, copyFile, cp, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, cp, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { delimiter, dirname, join, relative, resolve, sep } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parse } from 'yaml';
-import { installationMetadataMaxBytes, parseInstallationMetadata } from './pr-regression-bootstrap.ts';
+import { admitAndImportOptimizer, installationMetadataMaxBytes, parseInstallationMetadata } from './pr-regression-bootstrap.ts';
 
 const repository = fileURLToPath(new URL('../../', import.meta.url));
 const bodyPath = 'packages/contexts/runtime-configuration/src/features/bootstrap-body.ts';
 const fixturePath = 'scripts/sdk-growth-source/fixtures/pr-regression-bootstrap.txt';
 type Mutation = 'none' | 'body' | 'bootstrap' | 'helper' | 'config' | 'lock' | 'fixture' | 'installed' | 'add' | 'delete' | 'mode' | 'symlink'
   | 'worktree-file' | 'worktree-link' | 'incomplete-census' | 'push-tuple' | 'base-tuple' | 'merge-tuple';
-type Optimizer = 'valid' | 'absent' | 'manifest' | 'marker' | 'extra' | 'foreign-link';
+type Optimizer = 'valid' | 'absent' | 'manifest' | 'marker' | 'mode' | 'extra' | 'foreign-link';
 type ModulesMetadata = 'real' | 'yaml' | 'wrong-manager' | 'wrong-layout' | 'malformed' | 'oversized' | 'duplicate-identity'
   | 'escaped-identity-shadow' | 'duplicate-layout' | 'escaped-layout' | 'duplicate-nested-identity' | 'duplicate-nested-layout'
   | 'virtual-store-only' | 'escaped-virtual-store-only-shadow' | 'symlink';
@@ -40,9 +40,7 @@ async function modulesFixtureBytes(modules: ModulesMetadata): Promise<Buffer> {
   }
 }
 
-async function testScratch(prefix: string): Promise<string> {
-  return mkdtemp(join(tmpdir(), prefix));
-}
+const testScratch = (prefix: string): Promise<string> => mkdtemp(join(tmpdir(), prefix));
 
 async function workflowBootstrapShell(): Promise<string> {
   const workflow = parse(await readFile(join(repository, '.github/workflows/ci-lane.yml'), 'utf8')) as {
@@ -53,36 +51,31 @@ async function workflowBootstrapShell(): Promise<string> {
   return step.run;
 }
 
-interface WorkflowFixture {
-  root: string;
-  evidence: string;
-  shell: string;
-  env: NodeJS.ProcessEnv;
-}
+interface WorkflowFixture { root: string; evidence: string; shell: string; env: NodeJS.ProcessEnv }
 
-async function workflowSourceFixture(t: test.TestContext, mutation: 'missing' | 'syntax' | 'early-success'): Promise<WorkflowFixture> {
+async function workflowSourceFixture(t: test.TestContext,
+  mutation: 'missing' | 'syntax' | 'early-success' | 'clean-filter-early-success'): Promise<WorkflowFixture> {
   const root = await testScratch('ar-pr-workflow-TEST-');
   const evidence = `${root}-evidence`, temporary = `${root}-tmp`;
   await Promise.all([mkdir(join(root, 'scripts/ci'), { recursive: true }), mkdir(evidence), mkdir(temporary)]);
-  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(evidence, { recursive: true, force: true }),
-    rm(temporary, { recursive: true, force: true })]));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(evidence, { recursive: true, force: true }), rm(temporary, { recursive: true, force: true })]));
   const bootstrapPath = join(root, 'scripts/ci/pr-regression-bootstrap.ts');
   const fullMarker = join(evidence, 'full-ran'), bootstrapMarker = join(evidence, 'bootstrap-ran');
   const fakeFullMarker = join(evidence, 'fake-full-ran');
-  const measure = `import { writeFileSync } from 'node:fs';\n`
-    + `writeFileSync(${JSON.stringify(fullMarker)}, 'current-full\\n');\n`
-    + `writeFileSync(${JSON.stringify(join(evidence, 'full-env.json'))}, JSON.stringify({\n`
-    + `  protocol: process.env.FOUNDATION_FIXTURE_PROTOCOL ?? null,\n`
-    + `  index: process.env.FOUNDATION_FIXTURE_INDEX ?? null,\n`
-    + `  count: process.env.FOUNDATION_FIXTURE_COUNT ?? null,\n`
-    + `}));\n`
+  const measure = `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(fullMarker)}, 'current-full\\n');\n`
+    + `writeFileSync(${JSON.stringify(join(evidence, 'full-env.json'))}, JSON.stringify({protocol: process.env.FOUNDATION_FIXTURE_PROTOCOL ?? null, index: process.env.FOUNDATION_FIXTURE_INDEX ?? null, count: process.env.FOUNDATION_FIXTURE_COUNT ?? null}));\n`
     + `process.exitCode = Number(process.env.TEST_FULL_EXIT ?? '0');\n`;
   const admitted = `export {};\n`;
-  const earlySuccess = `import { writeFileSync } from 'node:fs';\n`
-    + `writeFileSync(${JSON.stringify(bootstrapMarker)}, 'executed\\n');\n`
-    + `writeFileSync(${JSON.stringify(fakeFullMarker)}, 'fake-full\\n');\n`;
+  const earlySuccess = `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(bootstrapMarker)}, 'executed\\n');\nwriteFileSync(${JSON.stringify(fakeFullMarker)}, 'fake-full\\n');\n`;
   await writeFile(join(root, 'scripts/ci/measure.ts'), measure);
   await writeFile(bootstrapPath, admitted);
+  if (mutation === 'clean-filter-early-success') {
+    await writeFile(join(root, '.gitattributes'), 'scripts/ci/pr-regression-bootstrap.ts filter=trusted-bootstrap\n');
+    await writeFile(join(root, 'clean-bootstrap'),
+      `#!/bin/sh\ncat ${JSON.stringify(join(root, 'trusted-bootstrap.ts'))}\n`);
+    await chmod(join(root, 'clean-bootstrap'), 0o755);
+    await writeFile(join(root, 'trusted-bootstrap.ts'), admitted);
+  }
   const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
   const commit = (message: string) => {
     git('add', '-A');
@@ -95,8 +88,11 @@ async function workflowSourceFixture(t: test.TestContext, mutation: 'missing' | 
   git('init', '--quiet');
   git('config', 'user.name', 'TEST');
   git('config', 'user.email', 'test@example.invalid');
+  if (mutation === 'clean-filter-early-success') {
+    git('config', 'filter.trusted-bootstrap.clean', `sh ${join(root, 'clean-bootstrap')}`);
+  }
   const base = commit('Disposable TEST workflow base\n');
-  if (mutation === 'early-success') {await writeFile(bootstrapPath, earlySuccess);}
+  if (mutation === 'early-success' || mutation === 'clean-filter-early-success') {await writeFile(bootstrapPath, earlySuccess);}
   const head = commit('Disposable TEST workflow head\n');
   if (mutation === 'missing') {await rm(bootstrapPath);}
   if (mutation === 'syntax') {
@@ -159,23 +155,6 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\"'\"'")}'`;
 }
 
-async function resolveTestPnpm(): Promise<string> {
-  const explicit = process.env.TEST_PNPM_PATH;
-  if (explicit) {
-    const candidate = resolve(explicit);
-    await access(candidate, constants.X_OK);
-    return realpath(candidate);
-  }
-  for (const directory of (process.env.PATH ?? '').split(delimiter)) {
-    const candidate = join(directory || '.', 'pnpm');
-    try {
-      await access(candidate, constants.X_OK);
-      return realpath(candidate);
-    } catch {}
-  }
-  throw new Error('TEST_PNPM_PATH or PATH must provide an executable pnpm');
-}
-
 async function copySourceTree(source: string, destination: string): Promise<void> {
   const excluded = new Set(['.git', '.cache', '.agents', '.aws', '.codex', 'node_modules', 'tmp']);
   const visit = async (path: string, target: string): Promise<void> => {
@@ -197,6 +176,72 @@ async function copySourceTree(source: string, destination: string): Promise<void
   await visit(source, destination);
 }
 
+async function installNodeModulesFixture(root: string, optimizer: 'linked' | 'absent' | 'marker'): Promise<void> {
+  const sourceModules = await realpath(join(repository, 'node_modules')), targetModules = join(root, 'node_modules');
+  await mkdir(targetModules, { recursive: true });
+  for (const name of (await readdir(sourceModules)).toSorted()) {
+    const source = join(sourceModules, name), target = join(targetModules, name);
+    if (name === '@agent-teams') {
+      await mkdir(target, { recursive: true });
+      for (const packageEntry of (await readdir(source)).toSorted()) {
+        const packageSource = await realpath(join(source, packageEntry));
+        const packageTarget = join(target, packageEntry);
+        if (packageEntry !== 'ci-input-proof') {
+          await symlink(packageSource, packageTarget, (await lstat(packageSource)).isDirectory() ? 'dir' : 'file');
+        } else if (optimizer === 'linked') {
+          await symlink(packageSource, packageTarget, 'dir');
+        } else if (optimizer === 'marker') {
+          await cp(join(source, packageEntry), packageTarget, { recursive: true, dereference: true });
+          const entry = join(packageTarget, 'dist/index.js');
+          await writeFile(entry, `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(join(root, 'optimizer-import-marker'))}, 'executed\\n');\n${await readFile(entry, 'utf8')}`);
+        }
+      }
+      continue;
+    }
+    const resolved = await realpath(source);
+    await symlink(resolved, target, (await lstat(resolved)).isDirectory() ? 'dir' : 'file');
+  }
+}
+
+async function actualMeasureFixture(t: test.TestContext, options: { optimizer?: 'linked' | 'absent' | 'marker';
+  missing?: 'bootstrap-test' } = {}) {
+  const root = await testScratch('ar-actual-measure-TEST-');
+  const evidence = `${root}-evidence`, temporary = `${root}-tmp`, fakeBin = join(root, 'fake-bin');
+  await Promise.all([mkdir(evidence), mkdir(temporary), mkdir(fakeBin)]);
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(evidence, { recursive: true, force: true }), rm(temporary, { recursive: true, force: true })]));
+  await copySourceTree(repository, root);
+  await installNodeModulesFixture(root, options.optimizer ?? 'linked');
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
+  git('init', '--quiet'); git('config', 'user.name', 'TEST'); git('config', 'user.email', 'test@example.invalid'); git('add', '-A');
+  const tree = git('write-tree');
+  const sha = execFileSync('git', ['commit-tree', tree], {
+    cwd: root,
+    env: { GIT_AUTHOR_NAME: 'TEST', GIT_AUTHOR_EMAIL: 'test@example.invalid', GIT_COMMITTER_NAME: 'TEST', GIT_COMMITTER_EMAIL: 'test@example.invalid' },
+    input: 'Disposable TEST actual measure graph\n', encoding: 'utf8',
+  }).trim();
+  git('reset', '--quiet', '--hard', sha);
+  if (options.missing === 'bootstrap-test') {await rm(join(root, 'scripts/ci/pr-regression-bootstrap.test.ts'));}
+  const realTsc = shellQuote(join(repository, 'node_modules/.bin/tsc'));
+  const realGit = shellQuote(execFileSync('which', ['git'], { encoding: 'utf8' }).trim());
+  await writeFile(join(fakeBin, 'git'),
+    `#!/bin/sh\nset -eu\nif [ "\${1-}" = "show" ] && [ "\${2-}" != "" ]; then path=\${2#*:}; if [ "$path" != "\${2-}" ]; then exec cat "$path"; fi; fi\nexec ${realGit} "$@"\n`);
+  await chmod(join(fakeBin, 'git'), 0o755);
+  await writeFile(join(fakeBin, 'pnpm'),
+    `#!/bin/sh\nset -eu\nif [ "\${1-}" = "--version" ]; then printf '11.18.0\\n'; exit 0; fi\nif [ "\${1-}" = "exec" ] && [ "\${2-}" = "tsc" ]; then shift 2; exec ${realTsc} "$@"; fi\nif [ "\${1-}" = "run" ]; then command=$(node -e 'const p=require("./package.json"); process.stdout.write(p.scripts[process.argv[1]] ?? "")' "\${2-}"); [ -n "$command" ] || exit 1; PATH="$PWD/node_modules/.bin:$PATH"; export PATH; exec sh -c "$command"; fi\nexit 1\n`);
+  await chmod(join(fakeBin, 'pnpm'), 0o755);
+  return { root, evidence, env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH ?? ''}`, TMPDIR: temporary,
+    EXPECTED_REVISION: sha, CI_EVIDENCE_DIR: evidence } satisfies NodeJS.ProcessEnv };
+}
+
+async function runActualMeasureGraph(fixture: Awaited<ReturnType<typeof actualMeasureFixture>>,
+  skipTests = false) {
+  const env: NodeJS.ProcessEnv = { ...fixture.env };
+  delete env.NODE_TEST_CONTEXT;
+  delete env.NODE_OPTIONS;
+  return spawnSync(process.execPath, ['scripts/ci/measure.ts', 'check:ci:quick'], { cwd: fixture.root,
+    env: skipTests ? { ...env, NODE_OPTIONS: '--test-name-pattern=impossible-name-that-does-not-exist' } : env, encoding: 'utf8' });
+}
+
 async function prepareSourceFixture(t: test.TestContext, optimizer: Optimizer, badCandidate: boolean,
   modules: ModulesMetadata): Promise<{ root: string; evidence: string; temporary: string; packageDirectory: string }> {
   const root = await testScratch('ar-pr-bootstrap-TEST-');
@@ -206,12 +251,11 @@ async function prepareSourceFixture(t: test.TestContext, optimizer: Optimizer, b
   await mkdir(join(root, 'scripts/sdk-growth-source/fixtures'), { recursive: true });
   await mkdir(join(root, dirname(bodyPath)), { recursive: true });
   await Promise.all([mkdir(evidence), mkdir(temporary)]);
-  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(evidence, { recursive: true, force: true }),
-    rm(temporary, { recursive: true, force: true })]));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(evidence, { recursive: true, force: true }), rm(temporary, { recursive: true, force: true })]));
 
   await writeFile(join(root, '.gitignore'), 'node_modules/\n');
   await writeFile(join(root, 'package.json'), '{"type":"module"}\n');
-  const installedLock = await readFile(join(repository, 'pnpm-lock.yaml'));
+  const installedLock = await readFile(join(repository, 'node_modules/.pnpm/lock.yaml'));
   await writeFile(join(root, 'pnpm-lock.yaml'), installedLock);
   await writeFile(join(root, bodyPath), 'export const body = "base";\n');
   await writeFile(join(root, fixturePath), 'TEST fixture base\n');
@@ -252,6 +296,7 @@ async function prepareSourceFixture(t: test.TestContext, optimizer: Optimizer, b
         `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(join(evidence, 'optimizer-import-marker'))}, 'executed\\n');\n`
         + `export { compareLeafInventories } from './features/input-comparison/application/compare-leaf-inventories.js';\n`);
     }
+    if (optimizer === 'mode') {await chmod(join(packageDirectory, 'dist/index.js'), 0o755);}
     if (optimizer === 'extra') {await writeFile(join(packageDirectory, 'unexpected.js'), 'throw Error("TEST extra optimizer source");\n');}
   }
   const publicPackage = join(root, 'node_modules/@agent-teams/ci-input-proof');
@@ -350,7 +395,7 @@ async function sourceFixture(t: test.TestContext, mutation: Mutation = 'body', o
     env.GITHUB_REF = 'refs/pull/211/head';
     env.GITHUB_WORKFLOW_REF = 'agent-teams-ai/agent-runtime/.github/workflows/ci.yml@refs/pull/211/head';
   }
-  return { root, evidence, env };
+  return { root, evidence, env, packageDirectory };
 }
 
 async function invoke(t: test.TestContext, mutation: Mutation = 'body', optimizer: Optimizer = 'valid', badCandidate = false, fullExit = 0,
@@ -362,14 +407,8 @@ async function invoke(t: test.TestContext, mutation: Mutation = 'body', optimize
   return { ...fixture, result };
 }
 
-interface InstalledOptions {
-  mutation?: 'body' | 'bootstrap';
-  optimizer?: 'valid' | 'absent' | 'malformed' | 'foreign-link';
-  badCandidate?: boolean;
-  fullExit?: number;
-  group?: 'quick' | 'foundation';
-  foundationFailure?: boolean;
-}
+interface InstalledOptions { mutation?: 'body' | 'bootstrap'; optimizer?: 'valid' | 'absent' | 'malformed' | 'foreign-link';
+  badCandidate?: boolean; fullExit?: number; group?: 'quick' | 'foundation'; foundationFailure?: boolean }
 
 async function installedSourceFixture(t: test.TestContext, options: InstalledOptions = {}) {
   const root = await testScratch('ar-pr-operational-TEST-');
@@ -377,6 +416,8 @@ async function installedSourceFixture(t: test.TestContext, options: InstalledOpt
   t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(evidence, { recursive: true, force: true }),
     rm(temporary, { recursive: true, force: true })]));
   await copySourceTree(repository, root);
+  const installedLock = await readFile(join(repository, 'node_modules/.pnpm/lock.yaml'));
+  await writeFile(join(root, 'pnpm-lock.yaml'), installedLock);
   await mkdir(join(root, dirname(bodyPath)), { recursive: true });
   await writeFile(join(root, bodyPath), 'export const body = "base";\n');
   if ((options.group ?? 'quick') === 'foundation') {
@@ -423,29 +464,15 @@ async function installedSourceFixture(t: test.TestContext, options: InstalledOpt
     }
   }
   await cp(yamlSource, yamlStore, { recursive: true, dereference: true });
-  await writeFile(join(root, 'node_modules/.pnpm/lock.yaml'), await readFile(join(root, 'pnpm-lock.yaml')));
+  await writeFile(join(root, 'node_modules/.pnpm/lock.yaml'), installedLock);
   await writeFile(join(root, 'node_modules/.modules.yaml'),
     await readFile(process.env.TEST_PNPM_MODULES_FIXTURE ?? join(repository, 'node_modules/.modules.yaml')));
   await writeFile(join(root, 'node_modules/.bin/tsc'), '#!/bin/sh\nprintf "Version 7.0.2\\\\n"\n');
   await chmod(join(root, 'node_modules/.bin/tsc'), 0o755);
   const fakeBin = join(root, 'fake-bin');
-  const actualPnpm = shellQuote(await resolveTestPnpm());
   await mkdir(fakeBin, { recursive: true });
-  await writeFile(join(fakeBin, 'pnpm'), `#!/bin/sh
-set -eu
-if [ "\${1-}" = "--version" ]; then exec ${actualPnpm} --version; fi
-if [ "\${1-}" = "exec" ] && [ "\${2-}" = "tsc" ]; then shift 2; exec ./node_modules/.bin/tsc "$@"; fi
-if [ "\${1-}" = "run" ]; then
-  command=$(node -e 'const p=require("./package.json"); process.stdout.write(p.scripts[process.argv[1]] ?? "")' "\${2-}")
-  [ -n "$command" ] || exit 1
-  exec sh -c "$command"
-fi
-if [ "$#" -eq 1 ]; then
-  command=$(node -e 'const p=require("./package.json"); process.stdout.write(p.scripts[process.argv[1]] ?? "")' "$1")
-  if [ -n "$command" ]; then exec sh -c "$command"; fi
-fi
-exec ${actualPnpm} "$@"
-`);
+  await writeFile(join(fakeBin, 'pnpm'),
+    `#!/bin/sh\nset -eu\nif [ "\${1-}" = "--version" ]; then printf '11.18.0\\n'; exit 0; fi\nif [ "\${1-}" = "exec" ] && [ "\${2-}" = "tsc" ]; then shift 2; exec ./node_modules/.bin/tsc "$@"; fi\nif [ "\${1-}" = "run" ]; then command=$(node -e 'const p=require("./package.json"); process.stdout.write(p.scripts[process.argv[1]] ?? "")' "\${2-}"); [ -n "$command" ] || exit 1; PATH="$PWD/node_modules/.bin:$PATH"; export PATH; exec sh -c "$command"; fi\nif [ "$#" -eq 1 ]; then command=$(node -e 'const p=require("./package.json"); process.stdout.write(p.scripts[process.argv[1]] ?? "")' "$1"); if [ -n "$command" ]; then exec sh -c "$command"; fi; fi\nexit 1\n`);
   await chmod(join(fakeBin, 'pnpm'), 0o755);
   const publicOptimizer = join(root, 'node_modules/@agent-teams/ci-input-proof');
   await mkdir(dirname(publicOptimizer), { recursive: true });
@@ -528,7 +555,7 @@ async function invokeInstalled(t: test.TestContext, options: InstalledOptions = 
   return { ...fixture, result };
 }
 
-export function registerPrRegressionBootstrapTests(): void {
+function registerWorkflowAndMeasureTests(): void {
   test('nominal pnpm metadata keys reject semantic duplicates and escaped identity aliases', () => {
     const accepted = '{"packageManager" : "pnpm@11.18.0","virtualStoreDir":".pnpm"}';
     assert.deepEqual(parseInstallationMetadata(Buffer.from(accepted)),
@@ -561,6 +588,75 @@ export function registerPrRegressionBootstrapTests(): void {
     }
   });
 
+  test('raw-byte bootstrap admission rejects a configured clean-filter early-success mapping', async t => {
+    const fixture = await workflowSourceFixture(t, 'clean-filter-early-success');
+    assert.match(fixture.shell, /git hash-object --no-filters -- "\$bootstrap"/u, 'workflow uses raw-byte admission');
+    const legacyShell = fixture.shell.replace('git hash-object --no-filters -- "$bootstrap"', 'git hash-object -- "$bootstrap"');
+    assert.notEqual(legacyShell, fixture.shell, 'legacy filtered shell fixture');
+    const git = (...args: string[]) => execFileSync('git', args, { cwd: fixture.root, encoding: 'utf8' }).trim();
+    const expected = git('ls-tree', fixture.env.EXPECTED_REVISION!, '--', 'scripts/ci/pr-regression-bootstrap.ts').split(/\s+/u)[2];
+    const filtered = git('hash-object', '--', 'scripts/ci/pr-regression-bootstrap.ts');
+    const raw = git('hash-object', '--no-filters', '--', 'scripts/ci/pr-regression-bootstrap.ts');
+    assert.equal(filtered, expected, 'legacy filter maps altered raw bytes to the trusted blob');
+    assert.notEqual(raw, expected, 'raw bootstrap bytes differ from the trusted blob');
+
+    const legacy = spawnSync('bash', ['-c', legacyShell],
+      { cwd: fixture.root, env: fixture.env, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
+    assert.equal(legacy.status, 0, `${legacy.stdout}\n${legacy.stderr}`);
+    assert.equal(await readFile(join(fixture.evidence, 'bootstrap-ran'), 'utf8'), 'executed\n');
+    assert.equal(await readFile(join(fixture.evidence, 'fake-full-ran'), 'utf8'), 'fake-full\n');
+    await Promise.all([rm(join(fixture.evidence, 'bootstrap-ran')), rm(join(fixture.evidence, 'fake-full-ran'))]);
+
+    const fixed = spawnSync('bash', ['-c', fixture.shell],
+      { cwd: fixture.root, env: fixture.env, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
+    assert.equal(fixed.status, 23, `${fixed.stdout}\n${fixed.stderr}`);
+    assert.equal(await readFile(join(fixture.evidence, 'full-ran'), 'utf8'), 'current-full\n');
+    await assert.rejects(readFile(join(fixture.evidence, 'bootstrap-ran')));
+    await assert.rejects(readFile(join(fixture.evidence, 'fake-full-ran')));
+  });
+
+  test('actual measure FULL import graph never loads a rejected optimizer', async t => {
+    for (const optimizer of ['marker', 'absent'] as const) {
+      const fixture = await actualMeasureFixture(t, { optimizer });
+      const run = await runActualMeasureGraph(fixture, true);
+      await assert.rejects(readFile(join(fixture.root, 'optimizer-import-marker')), optimizer);
+      const report = JSON.parse(await readFile(join(fixture.evidence, 'check-ci-quick.json'), 'utf8')) as {
+        phases: Array<{ script: string; code: number | null; tests: Array<{ name: string; status: string }> }>;
+      };
+      const regression = report.phases.find(phase => phase.script === 'test:ci');
+      assert.ok(regression, `${optimizer}: ${JSON.stringify(report.phases)}\n${run.stdout}\n${run.stderr}`);
+      assert.ok(regression.tests.some(testResult =>
+        testResult.name === 'scripts/ci/contracts.test.ts' && testResult.status === 'passed'),
+      `${optimizer}: actual contracts import graph did not load\n${run.stdout}\n${run.stderr}`);
+    }
+  });
+
+  test('actual measure records missing admission inputs and still attempts real FULL regression', async t => {
+    const fixture = await actualMeasureFixture(t, { missing: 'bootstrap-test' });
+    const run = await runActualMeasureGraph(fixture);
+    assert.notEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
+    const report = JSON.parse(await readFile(join(fixture.evidence, 'check-ci-quick.json'), 'utf8')) as {
+      sourceComplete: boolean; sourceDisposition: string; receiptReuseAllowed: boolean;
+      inputAdmission: Array<{ path: string; status: string; reason?: string }>;
+      phases: Array<{ script: string; code: number | null; signal: string | null; started: string; ended: string }>;
+    };
+    assert.equal(report.sourceComplete, false);
+    assert.equal(report.sourceDisposition, 'blocking-source-incomplete');
+    assert.equal(report.receiptReuseAllowed, false);
+    assert.deepEqual(report.inputAdmission.find(input => input.path === 'scripts/ci/pr-regression-bootstrap.test.ts'),
+      { path: 'scripts/ci/pr-regression-bootstrap.test.ts', status: 'unavailable', reason: 'missing' });
+    assert.deepEqual(report.phases.map(phase => phase.script),
+      ['lint', 'check:node-compat', 'typecheck:ci', 'test:ci']);
+    const regression = report.phases.find(phase => phase.script === 'test:ci');
+    assert.notEqual(regression?.code, 0);
+    assert.equal(regression?.signal, null);
+    assert.ok(Date.parse(regression!.started) <= Date.parse(regression!.ended));
+    assert.match(run.stdout + run.stderr, /pr-regression-bootstrap\.test\.ts/u);
+  });
+}
+
+export function registerPrRegressionBootstrapTests(): void {
+  registerWorkflowAndMeasureTests();
   test('authentic retained history closes ccf->df and passes the original package/workflow validators', async t => {
     const root = await testScratch('ar-pr-history-TEST-');
     t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(`${root}-evidence`, { recursive: true, force: true })]));
@@ -697,6 +793,30 @@ export function registerPrRegressionBootstrapTests(): void {
     assert.equal(await readFile(join(policy.evidence, 'full-ran'), 'utf8'), 'current-full\n');
     assert.equal(await readFile(join(policy.evidence, 'candidate-import-marker'), 'utf8'), 'executed\n');
     await assert.rejects(readFile(join(policy.evidence, 'candidate-ran')));
+  });
+
+  test('published optimizer mode drift rejects before comparator import', async t => {
+    const run = await invoke(t, 'none', 'mode');
+    assert.equal((await lstat(join(run.packageDirectory, 'dist/index.js'))).mode & 0o777, 0o755);
+    assert.equal(run.result.status, 0, run.result.stderr);
+    assert.equal(await readFile(join(run.evidence, 'full-ran'), 'utf8'), 'current-full\n');
+    await assert.rejects(readFile(join(run.evidence, 'candidate-ran')));
+    await assert.rejects(readFile(join(run.evidence, 'candidate-import-marker')));
+    await assert.rejects(readFile(join(run.evidence, 'optimizer-import-marker')));
+  });
+
+  test('additional optimizer integration observation runs only after independent admission', async t => {
+    const fixture = await sourceFixture(t, 'none', 'valid');
+    const bootstrap = await import(pathToFileURL(join(fixture.root, 'scripts/ci/pr-regression-bootstrap.ts')).href) as {
+      admitAndImportOptimizer: typeof admitAndImportOptimizer;
+    };
+    const compare = await bootstrap.admitAndImportOptimizer(fixture.root);
+    const base = { version: 1, digestScheme: 'sha256', inputs: [
+      { path: 'root.ts', type: 'file', mode: '100644', membership: 'closed', content: 'a'.repeat(64) },
+      { path: 'body.ts', type: 'file', mode: '100644', membership: 'structural', content: '1'.repeat(64) },
+    ] };
+    const head = { ...base, inputs: [base.inputs[0]!, { ...base.inputs[1]!, content: '2'.repeat(64) }] };
+    assert.deepEqual(compare(base, head, ['body.ts']), { status: 'compatible-inputs', changedContentPaths: ['body.ts'] });
   });
 
   test('bootstrap/helper/config/lock/fixture/installed drift and structural changes select FULL', async t => {

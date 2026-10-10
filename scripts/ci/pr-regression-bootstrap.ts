@@ -18,19 +18,20 @@ type Group = typeof groups[number];
 const publishedPackage = {
   integrity: 'sha512-PA2/mlS1Ko2dyg79fmveKwNKszCBDhMexAZx82WfY2NjccwCxCOqXT5XWMFuYUzFXDzQSgPq4xF2YbDsXJeBwQ==',
   archiveSha256: '463da396e04acb4fbe19ddff7a4e88e576b1834faa49eeed7334a5ebf4a4f0a3',
+  directoryMode: 0o755,
   files: {
-    'CHANGELOG.md': '7659580d7da0fe6601e7fd9090bbd466056bca3f6c83f34041c67eb738b36b4c',
-    'LICENSE': 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4',
-    'README.md': '69d9924e046b9061847ab48bc830a1582f6b28822a819cc0da8d44bafff25196',
-    'dist/features/input-comparison/application/compare-leaf-inventories.d.ts': 'a36d5140341daa691cf718b7a9ec19ac319cd5f26fdd5abaa6978897daf5a3ec',
-    'dist/features/input-comparison/application/compare-leaf-inventories.d.ts.map': '793914a89fff6db521db675f53e0755bec6cb1e1b4ac0a7d4c49c4ffe18db8f8',
-    'dist/features/input-comparison/application/compare-leaf-inventories.js': 'd7ef5d81d988531a9cf8fddfd2f1e9582eb153fffac405bdfaa5774b18dd17ee',
-    'dist/features/input-comparison/application/compare-leaf-inventories.js.map': '512ca3deb0c754bf08913e6e4eb4c3eb4b4c28437061a9a6e77eb0a2f4c892c3',
-    'dist/index.d.ts': '4812320d2fd19162084c78db8402b23ede3ffa838ee2c051709348f9a1142412',
-    'dist/index.d.ts.map': '09602ae7e769956a924f2163beafb2452c55ee67e93bb060e654ce8c6d911948',
-    'dist/index.js': 'ffbd3ebad0cc8596888a9c7b94d2048f88c946e72f055f59d485291cc3d68ab0',
-    'dist/index.js.map': '2416200c4f896cb6da1c524d7514beb3291a4e77470ca692a2737dda6db71cb2',
-    'package.json': 'eaefcb0451b322108fc6dc6d4aa90fd94a92606c9d25b6146b0d4fa1adae5ffd',
+    'CHANGELOG.md': { digest: '7659580d7da0fe6601e7fd9090bbd466056bca3f6c83f34041c67eb738b36b4c', mode: 0o644 },
+    'LICENSE': { digest: 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4', mode: 0o644 },
+    'README.md': { digest: '69d9924e046b9061847ab48bc830a1582f6b28822a819cc0da8d44bafff25196', mode: 0o644 },
+    'dist/features/input-comparison/application/compare-leaf-inventories.d.ts': { digest: 'a36d5140341daa691cf718b7a9ec19ac319cd5f26fdd5abaa6978897daf5a3ec', mode: 0o644 },
+    'dist/features/input-comparison/application/compare-leaf-inventories.d.ts.map': { digest: '793914a89fff6db521db675f53e0755bec6cb1e1b4ac0a7d4c49c4ffe18db8f8', mode: 0o644 },
+    'dist/features/input-comparison/application/compare-leaf-inventories.js': { digest: 'd7ef5d81d988531a9cf8fddfd2f1e9582eb153fffac405bdfaa5774b18dd17ee', mode: 0o644 },
+    'dist/features/input-comparison/application/compare-leaf-inventories.js.map': { digest: '512ca3deb0c754bf08913e6e4eb4c3eb4b4c28437061a9a6e77eb0a2f4c892c3', mode: 0o644 },
+    'dist/index.d.ts': { digest: '4812320d2fd19162084c78db8402b23ede3ffa838ee2c051709348f9a1142412', mode: 0o644 },
+    'dist/index.d.ts.map': { digest: '09602ae7e769956a924f2163beafb2452c55ee67e93bb060e654ce8c6d911948', mode: 0o644 },
+    'dist/index.js': { digest: 'ffbd3ebad0cc8596888a9c7b94d2048f88c946e72f055f59d485291cc3d68ab0', mode: 0o644 },
+    'dist/index.js.map': { digest: '2416200c4f896cb6da1c524d7514beb3291a4e77470ca692a2737dda6db71cb2', mode: 0o644 },
+    'package.json': { digest: 'eaefcb0451b322108fc6dc6d4aa90fd94a92606c9d25b6146b0d4fa1adae5ffd', mode: 0o644 },
   },
 } as const;
 
@@ -359,10 +360,27 @@ async function packageSource(root: string): Promise<{ directory: string; entries
   const actualFiles = Object.fromEntries(entries.filter(entry => entry.kind === 'file')
     .map(entry => [entry.path, entry.digest]).toSorted(([left], [right]) => left!.localeCompare(right!)));
   assert.deepEqual(actualFiles, Object.fromEntries(Object.entries(publishedPackage.files)
-    .toSorted(([left], [right]) => left!.localeCompare(right!))), 'published optimizer source census drift');
+    .map(([path, file]) => [path, file.digest]).toSorted(([left], [right]) => left!.localeCompare(right!))),
+  'published optimizer source census drift');
+  const expectedEntries: InstalledEntry[] = [{ path: '', kind: 'directory', mode: publishedPackage.directoryMode }];
+  for (const path of Object.keys(publishedPackage.files)) {
+    const parts = path.split('/');
+    for (let index = 1; index < parts.length; index += 1) {
+      const parentDirectory = parts.slice(0, index).join('/');
+      if (!expectedEntries.some(entry => entry.path === parentDirectory)) {
+        expectedEntries.push({ path: parentDirectory, kind: 'directory', mode: publishedPackage.directoryMode });
+      }
+    }
+  }
+  for (const [path, file] of Object.entries(publishedPackage.files)) {
+    expectedEntries.push({ path, kind: 'file', mode: file.mode, digest: file.digest });
+  }
+  assert.deepEqual(entries.toSorted((left, right) => left.path.localeCompare(right.path)),
+    expectedEntries.toSorted((left, right) => left.path.localeCompare(right.path)),
+  'published optimizer file/link/path closure or archive mode drift');
   const manifestPathInStore = join(directory, 'package.json');
   const manifestBytes = await readFile(manifestPathInStore);
-  assert.equal(sha256(manifestBytes), publishedPackage.files['package.json'], 'optimizer manifest anchor drift');
+  assert.equal(sha256(manifestBytes), publishedPackage.files['package.json'].digest, 'optimizer manifest anchor drift');
   const manifest = object(JSON.parse(manifestBytes.toString('utf8')));
   assert.equal(manifest.name, packageName); assert.equal(manifest.version, packageVersion);
   const lock = (await readFile(resolvePath(root, 'pnpm-lock.yaml'))).toString('utf8');
@@ -380,7 +398,7 @@ async function packageSource(root: string): Promise<{ directory: string; entries
     const path = pending.pop()!; if (closed.has(path)) {continue;} closed.add(path);
     assert.ok(entries.some(entry => entry.path === path && entry.kind === 'file'), `optimizer entry source missing: ${path}`);
     const bytes = await readFile(join(directory, path));
-    assert.equal(sha256(bytes), publishedPackage.files[path as keyof typeof publishedPackage.files],
+    assert.equal(sha256(bytes), publishedPackage.files[path as keyof typeof publishedPackage.files].digest,
       `optimizer control source anchor drift: ${path}`);
     const source = bytes.toString('utf8');
     for (const match of source.matchAll(staticImport)) {
@@ -406,6 +424,18 @@ async function bindInstallation(root: string): Promise<{ digest: string; optimiz
   return { digest: sha256(JSON.stringify(await installedEntries(root))), optimizer };
 }
 
+export async function admitAndImportOptimizer(root = process.cwd(),
+  previouslyAdmitted?: Awaited<ReturnType<typeof bindInstallation>>): Promise<InventoryComparator> {
+  const admitted = previouslyAdmitted ?? await bindInstallation(root);
+  const optimizer = await packageSource(root);
+  assert.equal(sha256(JSON.stringify(optimizer.entries)), sha256(JSON.stringify(admitted.optimizer.entries)),
+    'authenticated optimizer drift immediately before import');
+  const comparator = await import('@agent-teams/ci-input-proof') as { compareLeafInventories: InventoryComparator };
+  assert.equal(typeof comparator.compareLeafInventories, 'function', 'optimizer kernel missing');
+  assert.equal((await bindInstallation(root)).digest, admitted.digest, 'installed optimizer/control source drift after import');
+  return comparator.compareLeafInventories;
+}
+
 async function runFull(group: Group, root: string, env: NodeJS.ProcessEnv): Promise<number> {
   const fullEnv = { ...env };
   for (const key of ['FOUNDATION_FIXTURE_PROTOCOL', 'FOUNDATION_FIXTURE_INDEX', 'FOUNDATION_FIXTURE_COUNT']) {delete fullEnv[key];}
@@ -429,15 +459,12 @@ export async function runBootstrap(group: Group, root = process.cwd(), env: Node
     return runFull(group, root, env);
   }
   try {
-    const comparator = await import('@agent-teams/ci-input-proof') as
-      { compareLeafInventories: InventoryComparator };
-    assert.equal(typeof comparator.compareLeafInventories, 'function', 'optimizer kernel missing');
+    const compare = await admitAndImportOptimizer(root, admitted);
     const inputModule = await import('./pr-regression-inputs.ts') as
       { currentPrInput: (root: string, env: NodeJS.ProcessEnv) => Promise<unknown>; classifyPrRegressions: (root: string, input: unknown, compare: InventoryComparator) => Promise<{ mode: 'full' | 'affected-pr' }> };
     const commandModule = await import('./pr-regression-command.ts') as
       { runPrRegressions: (group: Group, output: string, compare: InventoryComparator, input: unknown) => Promise<void> };
     const input = await inputModule.currentPrInput(root, env);
-    const compare = comparator.compareLeafInventories;
     const plan = await inputModule.classifyPrRegressions(root, input, compare);
     const afterImport = await bindInstallation(root);
     assert.equal(afterImport.digest, admitted.digest, 'installed optimizer/control source drift before execution');

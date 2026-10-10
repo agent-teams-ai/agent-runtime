@@ -6,7 +6,6 @@ import { dirname, join, relative, sep } from 'node:path';
 import test, { after } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
-import { compareLeafInventories } from '@agent-teams/ci-input-proof';
 import { classifyPrRegressions, supportedPrEnvironment, installationFingerprint } from './pr-regression-inputs.ts';
 import type { LeafInventoryComparator } from './pr-regression-inputs.ts';
 import { assertPrObligations, foundationNegativeTests, observeRegressionProcess, prObligations } from './pr-regression-command.ts';
@@ -43,7 +42,31 @@ const trusted = {
   PR_REGRESSION_FROZEN_INSTALL: 'verified',
 };
 const facts = { node: 'v24.21.0', pnpm: '11.18.0', platform: 'linux', arch: 'x64', glibc: '2.39', execArgv: [] as string[] };
-const inventoryKernel = compareLeafInventories as LeafInventoryComparator;
+const inventoryKernel: LeafInventoryComparator = (base, head, structuralPaths) => {
+  const before = new Map(base.inputs.map(input => [input.path, input]));
+  const current = new Map(head.inputs.map(input => [input.path, input]));
+  const permitted = new Set(structuralPaths);
+  if (base.version !== 1 || head.version !== 1 || base.digestScheme !== head.digestScheme
+    || before.size !== base.inputs.length || current.size !== head.inputs.length) {
+    return { status: 'rejected', reason: 'malformed-inventory' };
+  }
+  if (before.size !== current.size) { return { status: 'rejected', reason: 'input-structure-changed' }; }
+  for (const [path, input] of before) {
+    const next = current.get(path);
+    if (!next || next.type !== input.type || next.mode !== input.mode || next.membership !== input.membership) {
+      return { status: 'rejected', reason: 'input-structure-changed' };
+    }
+  }
+  const changedContentPaths: string[] = [];
+  for (const [path, input] of before) {
+    const next = current.get(path)!;
+    if (next.content !== input.content) {
+      if (input.membership === 'closed' || !permitted.has(path)) { return { status: 'rejected', reason: 'closed-input-changed' }; }
+      changedContentPaths.push(path);
+    }
+  }
+  return { status: 'compatible-inputs', changedContentPaths: changedContentPaths.toSorted() };
+};
 let sourceTemplate: Promise<string> | undefined;
 
 async function testScratch(prefix: string): Promise<string> {
@@ -126,7 +149,7 @@ async function fixture(t: test.TestContext) {
 
 export function registerPrRegressionTests(): void {
   registerFoundationPrExecutionTests();
-  test('the public comparator exposes compatible-inputs without granting sampling authority', () => {
+  test('the injected pure comparator relation does not grant sampling authority', () => {
     const base = { version: 1, digestScheme: 'sha256', inputs: [
       { path: 'root.ts', type: 'file', mode: '100644', membership: 'closed', content: 'a'.repeat(64) },
       { path: 'body.ts', type: 'file', mode: '100644', membership: 'structural', content: '1'.repeat(64) },

@@ -18,6 +18,8 @@ export const cmsContract = 'architecture/foundation/mandatory-node-tests.json';
 export const cmsDirectCommand = `node --test ${cmsFile}`;
 export const cmsMandatoryCommand = `agent-teams-node-test --contract ${cmsContract} -- ${cmsFile}`;
 export type NodeSummary = Pick<Extract<TestEvent, { type: 'test:summary' }>['data'], 'counts' | 'success'>;
+export type InputAdmission = { path: string; status: 'available'; digest: string }
+  | { path: string; status: 'unavailable'; reason: 'missing' | 'unreadable' };
 
 // Public reporting starts retain parent ancestry; execution enqueue order can interleave unrelated tests.
 export function createNodeEventCollector() {
@@ -74,14 +76,30 @@ const cmsInputPaths = [cmsFile, cmsContract, 'scripts/architecture/check-cms-pin
   'architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json',
   'architecture/get-modular/evidence/creation-cleanup-cms-pin-delta.diff'];
 const hash = (bytes: string | Buffer) => createHash('sha256').update(bytes).digest('hex');
-export async function cmsBinding(): Promise<Record<string, string>> {
+export async function admissionInputs(root = process.cwd()): Promise<InputAdmission[]> {
+  const inputs: InputAdmission[] = [];
+  for (const path of inputPaths) {
+    try {
+      inputs.push({ path, status: 'available', digest: hash(await readFile(resolvePath(root, path))) });
+    } catch (error) {
+      const reason = (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'missing' : 'unreadable';
+      inputs.push({ path, status: 'unavailable', reason });
+    }
+  }
+  return inputs;
+}
+export async function cmsBinding(root = process.cwd()): Promise<Record<string, string>> {
   const binding: Record<string, string> = {};
-  for (const path of [...inputPaths, ...cmsInputPaths]) { binding[path] = hash(await readFile(path)); }
+  for (const input of await admissionInputs(root)) {
+    if (input.status === 'available') { binding[input.path] = input.digest; }
+  }
+  for (const path of cmsInputPaths) { binding[path] = hash(await readFile(resolvePath(root, path))); }
   const installed = 'node_modules/@agent-teams/engineering-foundation';
-  const files = (await readdir(installed, { recursive: true, withFileTypes: true })).filter(file => file.isFile());
+  const installedRoot = resolvePath(root, installed);
+  const files = (await readdir(installedRoot, { recursive: true, withFileTypes: true })).filter(file => file.isFile());
   const fingerprints = await Promise.all(files.map(async file => {
     const path = join(file.parentPath, file.name);
-    return [relative(installed, path), hash(await readFile(path))];
+    return [relative(installedRoot, path), hash(await readFile(path))];
   }));
   binding.installedFoundation = hash(JSON.stringify(fingerprints.toSorted((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))));
   return binding;
@@ -301,14 +319,31 @@ async function runPhase(script: string, scripts: Scripts) {
     wallMs: performance.now() - start, ...outcome, tests, unqualifiedRunners };
 }
 
+async function executePhases(scripts: Scripts, entry: string, sourceComplete: boolean,
+  record: (phase: Awaited<ReturnType<typeof runPhase>>) => Promise<void>): Promise<number | undefined> {
+  let observedFailure: number | undefined;
+  for (const script of phases(scripts, entry)) {
+    const phase = await runPhase(script, scripts);
+    await record(phase);
+    const failed = phase.code !== 0 || phase.signal !== null;
+    if (failed && observedFailure === undefined) { observedFailure = phase.code || 1; }
+    if (phase.cms && !failed) {
+      assertCmsComposite(phase.cms, await cmsBinding(), phase.tests, JSON.parse(await readFile(cmsContract, 'utf8')));
+    }
+    assertPhaseTestExecution(phase);
+    if (failed && sourceComplete) { return observedFailure ?? 1; }
+  }
+  return observedFailure;
+}
+
 export async function measure(entry: string, output: string): Promise<number> {
   const scripts = await readScripts('package.json');
   const sha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
   assertRevision(sha, process.env.EXPECTED_REVISION ?? '');
-  const digests: Record<string, string> = {};
-  for (const path of inputPaths) {
-    digests[path] = createHash('sha256').update(await readFile(path)).digest('hex');
-  }
+  const inputAdmission = await admissionInputs();
+  const digests = Object.fromEntries(inputAdmission.flatMap(input =>
+    input.status === 'available' ? [[input.path, input.digest] as const] : []));
+  const sourceComplete = inputAdmission.every(input => input.status === 'available');
   const report = { entry, sha, inputTree: execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { encoding: 'utf8' }).trim(),
     workflow: process.env.GITHUB_WORKFLOW_REF ?? 'local', workflowSha: process.env.GITHUB_WORKFLOW_SHA ?? sha,
     runId: process.env.GITHUB_RUN_ID ?? 'local', attempt: process.env.GITHUB_RUN_ATTEMPT ?? '1',
@@ -318,22 +353,18 @@ export async function measure(entry: string, output: string): Promise<number> {
     runnerImage: { os: process.env.ImageOS ?? 'unobserved', version: process.env.ImageVersion ?? 'unobserved',
       arch: process.env.RUNNER_ARCH ?? process.arch },
     toolchain: observedToolchain(entry),
-    cachePolicy: 'no Actions dependency or build cache', digests, inventory: commandInventory(scripts, entry),
+    cachePolicy: 'no Actions dependency or build cache', digests, inputAdmission,
+    sourceComplete, sourceDisposition: sourceComplete ? 'source-complete' as const : 'blocking-source-incomplete' as const,
+    receiptReuseAllowed: sourceComplete, inventory: commandInventory(scripts, entry),
     phases: [] as Awaited<ReturnType<typeof runPhase>>[] };
   await mkdir(output, { recursive: true });
   const save = () => writeFile(join(output, `${entry.replaceAll(':', '-')}.json`), `${JSON.stringify(report, null, 2)}\n`);
   await save();
-  for (const script of phases(scripts, entry)) {
-    const phase = await runPhase(script, scripts);
+  const observedFailure = await executePhases(scripts, entry, sourceComplete, async phase => {
     report.phases.push(phase);
     await save();
-    if (phase.code !== 0 || phase.signal !== null) { return phase.code || 1; }
-    if (phase.cms) {
-      assertCmsComposite(phase.cms, await cmsBinding(), phase.tests, JSON.parse(await readFile(cmsContract, 'utf8')));
-    }
-    assertPhaseTestExecution(phase);
-  }
-  return 0;
+  });
+  return sourceComplete ? 0 : observedFailure ?? 1;
 }
 
 if (process.argv[1] && resolvePath(process.argv[1]) === fileURLToPath(import.meta.url)) {
