@@ -112,8 +112,12 @@ test("raw rejection prototype traps are never inspected", async () => {
   assert.equal(traps, 0);
 });
 
-for (const key of ["security", "discovery", "codexConfiguration", "claudeConfiguration", "codexPlanner", "claudePlanner", "host"] as const) {
-  test(`factory failure remains primary: ${key}`, async () => {
+// Construction order, failure attribution and release at every module of both profiles are covered by the smoke
+// tests. These cases cover the Agent Runtime error projection: codexConfiguration for a leaf present in both
+// declaration lists, and host for the root, whose passive implementation id exists only in the passive list (it
+// guards the moduleId lookup in default-agent-runtime-host.ts).
+for (const key of ["codexConfiguration", "host"] as const) {
+  test(`factory failure is projected once with the module id and without the raw cause: ${key}`, async () => {
     const calls: string[] = [];
     const composition = await compileComposition({ declarations: runtimeSetupDeclarations, profile: runtimeSetupProfile });
     assert.ok(composition.ok);
