@@ -50,6 +50,10 @@ test("terminal output drain and canonical artifact must match durable state", ()
   assert.throws(() => validateOrdinaryOperation({...operation, receipts: operation.receipts.map(item => item.kind === "artifact_published" ? {...item, snapshotDigest: "b".repeat(64)} : item)}));
 });
 
+/** The port members are readonly, so a test that replaces one rebuilds the port instead of assigning to it. */
+const patchPort = <K extends keyof OrdinaryTurnDependencies>(f: {dependencies: OrdinaryTurnDependencies}, key: K, patch: Partial<OrdinaryTurnDependencies[K]>): void => {
+  f.dependencies = {...f.dependencies, [key]: {...f.dependencies[key], ...patch}};
+};
 const fixture = (options: {unknownClaim?: boolean; missingClosure?: boolean; cancelBeforeClaim?: boolean} = {}) => {
   let operation: OrdinaryOperation | undefined; let starts = 0; let providerCalls = 0; let closedWorkspaces = 0;
   const channel = Object.freeze({}) as OrdinaryTransport;
@@ -165,7 +169,7 @@ test("receipt discrimination rejects accessor data without invoking the getter",
 
 test("foreign tenant not_found cancellation cannot abort the local owned flight", async () => {
   const f = fixture(); const cancel = f.dependencies.operationStore.cancel;
-  f.dependencies.operationStore.cancel = async ref => ref.scope.tenantId === input.scope.tenantId ? cancel(ref) : undefined;
+  patchPort(f, "operationStore", {cancel: async ref => ref.scope.tenantId === input.scope.tenantId ? cancel(ref) : undefined});
   let started!: () => void; let finish!: () => void; let observedSignal: AbortSignal | undefined;
   const ready = new Promise<void>(resolve => {started = resolve;}); const done = new Promise<void>(resolve => {finish = resolve;});
   const provider = {...f.dependencies.provider, execute: async ({signal}: Parameters<OrdinaryTurnDependencies["provider"]["execute"]>[0]) => {
@@ -180,7 +184,7 @@ test("dispose waits for in-flight durable acceptance and cancels it before launc
   const f = fixture(); const accept = f.dependencies.operationStore.accept;
   let entered!: () => void; let release!: () => void;
   const ready = new Promise<void>(resolve => {entered = resolve;}); const wait = new Promise<void>(resolve => {release = resolve;});
-  f.dependencies.operationStore.accept = async value => {entered(); await wait; return accept(value);};
+  patchPort(f, "operationStore", {accept: async value => {entered(); await wait; return accept(value);}});
   const feature = createOrdinaryTurnFeature(f.dependencies); const submitted = feature.submit.execute(input); await ready;
   let disposed = false; const closing = feature.dispose().then(() => {disposed = true; return;});
   await Promise.resolve(); assert.equal(disposed, false); release(); await closing; await submitted;
@@ -188,7 +192,7 @@ test("dispose waits for in-flight durable acceptance and cancels it before launc
 });
 test("lost output commit acknowledgement reads durable cursor before drain and reconciles", async () => {
   const f = fixture(); const append = f.dependencies.operationStore.append;
-  f.dependencies.operationStore.append = async (operation, output) => {await append(operation, output); throw new Error("synthetic commit acknowledgement lost");};
+  patchPort(f, "operationStore", {append: async (operation, output) => {await append(operation, output); throw new Error("synthetic commit acknowledgement lost");}});
   const provider = {...f.dependencies.provider, execute: async ({emit}: Parameters<OrdinaryTurnDependencies["provider"]["execute"]>[0]) => {
     await emit({kind: "assistant", text: "durable output"});
     return {...binding, kind: "provider_terminal", terminalStatus: "completed", threadId: "thread:test", turnId: "turn:test"} as const;
@@ -201,7 +205,7 @@ test("signal cancellation persistence is joined before submit and dispose settle
   const f = fixture(); const cancel = f.dependencies.operationStore.cancel;
   let entered!: () => void; let release!: () => void; let ready!: () => void;
   const pendingCancel = new Promise<void>(resolve => {entered = resolve;}); const waitCancel = new Promise<void>(resolve => {release = resolve;}); const providerReady = new Promise<void>(resolve => {ready = resolve;});
-  f.dependencies.operationStore.cancel = async ref => {entered(); await waitCancel; return cancel(ref);};
+  patchPort(f, "operationStore", {cancel: async ref => {entered(); await waitCancel; return cancel(ref);}});
   const signal = new AbortController();
   const provider = {...f.dependencies.provider, execute: async () => {ready(); await pendingCancel; return {...binding, kind: "provider_terminal", terminalStatus: "completed", threadId: "thread:test", turnId: "turn:test"} as const;}};
   const feature = createOrdinaryTurnFeature({...f.dependencies, provider});
@@ -213,8 +217,8 @@ test("signal cancellation persistence is joined before submit and dispose settle
 
 test("failed before-close readback retains process cleanup but never invents output drain evidence", async () => {
   const f = fixture(); const append = f.dependencies.operationStore.append; const read = f.dependencies.operationStore.read; let failRead = false;
-  f.dependencies.operationStore.append = async (operation, output) => {await append(operation, output); failRead = true; throw new Error("unknown commit");};
-  f.dependencies.operationStore.read = async ref => {if (failRead) {failRead = false; throw new Error("readback unavailable");} return read(ref);};
+  patchPort(f, "operationStore", {append: async (operation, output) => {await append(operation, output); failRead = true; throw new Error("unknown commit");}});
+  patchPort(f, "operationStore", {read: async ref => {if (failRead) {failRead = false; throw new Error("readback unavailable");} return read(ref);}});
   const provider = {...f.dependencies.provider, execute: async ({emit}: Parameters<OrdinaryTurnDependencies["provider"]["execute"]>[0]) => {
     await emit({kind: "assistant", text: "durable output"});
     return {...binding, kind: "provider_terminal", terminalStatus: "completed", threadId: "thread:test", turnId: "turn:test"} as const;
@@ -242,10 +246,10 @@ test("unproven reservation is retained across failed concurrent disposal and rel
   const f = fixture(); const reserve = f.dependencies.process.reserve;
   let closes = 0; let allowClosure = false;
   const failure = new Error("TEST bounded close unconfirmed");
-  f.dependencies.process.reserve = async request => {
+  patchPort(f, "process", {reserve: async request => {
     const reservation = await reserve(request);
     return {...reservation, close: async sequence => {closes += 1; if (!allowClosure) {throw failure;} return reservation.close(sequence);}};
-  };
+  }});
   const feature = createOrdinaryTurnFeature(f.dependencies);
   await feature.submit.execute(input);
   assert.equal(closes, 1); assert.equal(f.state().status, "reconcile_required");
@@ -264,13 +268,14 @@ test("unproven reservation is retained across failed concurrent disposal and rel
 test("late closure is not repeated when its evidence commit needs a retry", async () => {
   const f = fixture(); const reserve = f.dependencies.process.reserve;
   let closes = 0;
-  f.dependencies.process.reserve = async request => {
+  patchPort(f, "process", {reserve: async request => {
     const reservation = await reserve(request);
     return {...reservation, close: async sequence => {closes += 1; if (closes === 1) {throw new Error("TEST timeout");} return reservation.close(sequence);}};
-  };
+  }});
+  const reconcile = f.dependencies.operationStore.reconcile; let fail = false;
+  patchPort(f, "operationStore", {reconcile: async (...args) => {if (fail) {fail = false; throw new Error("TEST evidence unavailable");} return reconcile(...args);}});
   const feature = createOrdinaryTurnFeature(f.dependencies); await feature.submit.execute(input);
-  const reconcile = f.dependencies.operationStore.reconcile; let fail = true;
-  f.dependencies.operationStore.reconcile = async (...args) => {if (fail) {fail = false; throw new Error("TEST evidence unavailable");} return reconcile(...args);};
+  fail = true;
   await assert.rejects(feature.dispose(), AggregateError); assert.equal(closes, 2);
   await feature.dispose(); await feature.dispose(); assert.equal(closes, 2);
   assert.equal(f.state().receipts.filter(receipt => receipt.kind === "process_group_closed").length, 1);
@@ -278,12 +283,14 @@ test("late closure is not repeated when its evidence commit needs a retry", asyn
 
 test("retry still closes the process when output readback is unavailable without inventing drain", async () => {
   const f = fixture(); const reserve = f.dependencies.process.reserve; let closes = 0;
-  f.dependencies.process.reserve = async request => {
+  patchPort(f, "process", {reserve: async request => {
     const reservation = await reserve(request);
     return {...reservation, close: async sequence => {closes += 1; if (closes === 1) {throw new Error("TEST timeout");} return reservation.close(sequence);}};
-  };
+  }});
+  const read = f.dependencies.operationStore.read; let readable = true;
+  patchPort(f, "operationStore", {read: async ref => {if (!readable) {throw new Error("TEST readback unavailable");} return read(ref);}});
   const feature = createOrdinaryTurnFeature(f.dependencies); await feature.submit.execute(input);
-  f.dependencies.operationStore.read = async () => {throw new Error("TEST readback unavailable");};
+  readable = false;
   await feature.dispose(); assert.equal(closes, 2);
   assert.equal(f.state().receipts.some(receipt => receipt.kind === "process_group_closed"), true);
   assert.equal(f.state().receipts.some(receipt => receipt.kind === "output_drain"), false);
@@ -293,11 +300,11 @@ for (const boundary of ["cancellation_read", "start_rejected"] as const) {
   test(`truthful unstarted reservation releases after ${boundary}`, async () => {
     const f = fixture(); let starts = 0; let closes = 0;
     const read = f.dependencies.operationStore.read;
-    f.dependencies.operationStore.read = async (...args) => {
+    patchPort(f, "operationStore", {read: async (...args) => {
       if (boundary === "cancellation_read" && f.state().status === "running") {await f.dependencies.operationStore.cancel({operationId: f.state().operationId, scope: f.state().scope});}
       return read(...args);
-    };
-    f.dependencies.process.reserve = async () => ({reservationId: "reservation:test", start: async () => {starts += 1; throw new Error("TEST journal rejected before spawn");}, close: async () => {closes += 1; return {kind: "not_started", reservationId: "reservation:test"};}});
+    }});
+    patchPort(f, "process", {reserve: async () => ({reservationId: "reservation:test", start: async () => {starts += 1; throw new Error("TEST journal rejected before spawn");}, close: async () => {closes += 1; return {kind: "not_started", reservationId: "reservation:test"};}})});
     const feature = createOrdinaryTurnFeature(f.dependencies);
     await feature.submit.execute(input);
     await feature.dispose(); await feature.dispose();
@@ -317,19 +324,19 @@ for (const failedAction of ["retire", "provider_settle", "security_settle"] as c
       return effect();
     };
     const provider = f.dependencies.providerAccess.resolveAndConsume;
-    f.dependencies.providerAccess.resolveAndConsume = async (...args) => {
+    patchPort(f, "providerAccess", {resolveAndConsume: async (...args) => {
       const grant = await provider(...args);
       return {...grant, retire: () => run("retire", () => grant.retire()), settle: disposition => run("provider_settle", () => grant.settle(disposition))};
-    };
+    }});
     const security = f.dependencies.security.resolveAndConsume;
-    f.dependencies.security.resolveAndConsume = async (...args) => {
+    patchPort(f, "security", {resolveAndConsume: async (...args) => {
       const grant = await security(...args);
       return {...grant, settle: disposition => run("security_settle", () => grant.settle(disposition))};
-    };
-    f.dependencies.process.reserve = async request => {
+    }});
+    patchPort(f, "process", {reserve: async request => {
       const reservation = await reserve(request);
       return {...reservation, close: sequence => {closes += 1; if (closes === 1) {return Promise.reject(new Error("TEST close timeout"));} return reservation.close(sequence);}};
-    };
+    }});
     const feature = createOrdinaryTurnFeature(f.dependencies); await feature.submit.execute(input);
     await assert.rejects(feature.dispose(), AggregateError);
     await feature.dispose(); await feature.dispose();
@@ -350,19 +357,19 @@ for (const failedAction of ["retire", "provider_settle", "security_settle"] as c
       return effect();
     };
     const provider = f.dependencies.providerAccess.resolveAndConsume;
-    f.dependencies.providerAccess.resolveAndConsume = async (...args) => {
+    patchPort(f, "providerAccess", {resolveAndConsume: async (...args) => {
       const grant = await provider(...args);
       return {...grant, retire: () => run("retire", () => grant.retire()), settle: disposition => run("provider_settle", () => grant.settle(disposition))};
-    };
+    }});
     const security = f.dependencies.security.resolveAndConsume;
-    f.dependencies.security.resolveAndConsume = async (...args) => {
+    patchPort(f, "security", {resolveAndConsume: async (...args) => {
       const grant = await security(...args);
       return {...grant, settle: disposition => run("security_settle", () => grant.settle(disposition))};
-    };
-    f.dependencies.process.reserve = async request => {
+    }});
+    patchPort(f, "process", {reserve: async request => {
       const reservation = await reserve(request);
       return {...reservation, close: sequence => {closes += 1; if (closes <= 3) {return Promise.reject(new Error("TEST close timeout", {cause: "synthetic closure"}));} return reservation.close(sequence);}};
-    };
+    }});
     const feature = createOrdinaryTurnFeature(f.dependencies); await feature.submit.execute(input);
     await assert.rejects(feature.dispose(), error => error instanceof AggregateError && error.errors[0] instanceof AggregateError && error.errors[0].errors.length === 2);
     await assert.rejects(feature.dispose(), error => error instanceof AggregateError && error.errors[0] instanceof AggregateError && error.errors[0].errors.length === 1);
