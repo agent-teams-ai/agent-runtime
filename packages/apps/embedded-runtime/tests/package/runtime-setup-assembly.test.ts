@@ -1,12 +1,13 @@
 import {failedCreationRecovery, terminalCreationCleanupUncertainty} from './runtime-setup-creation-cleanup.fixture.ts';
 import { compileComposition, defineModule } from "@get-modular/core";
+import { assemblyFor } from "@get-modular/assembly";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { createDefaultAgentRuntimeHost, AgentRuntimeHostCreationError } from "../../dist/composition.js";
 import { createRuntimeSetupAttempt } from "../../dist/composition/default-agent-runtime-host.js";
-import { bindRuntimeSetup, runtimeSetupDeclarations, runtimeSetupProfile, createRuntimeSetupFactories } from "../../dist/composition/runtime-setup-assembly.js";
+import { bindRuntimeSetup, runtimeSetupDeclarations, runtimeSetupProfile, createRuntimeSetupFactories, type RuntimeSetupCapabilities } from "../../dist/composition/runtime-setup-assembly.js";
 import { createExactParityHost, fixtureScope, registerPassiveSetupScenarios } from "../helpers/assembly-direct-reference.ts";
 
 registerPassiveSetupScenarios("Assembly", () => createDefaultAgentRuntimeHost());
@@ -236,7 +237,8 @@ for (const fault of ["missing-handle", "extra-handle", "duplicate-handle", "miss
     assert.equal(composition.ok, true);
     if (!composition.ok) {return;}
     const factories = createRuntimeSetupFactories(process.platform);
-    const bindings = bindRuntimeSetup({ ...factories,
+    const api = assemblyFor<RuntimeSetupCapabilities>();
+    const bindings = bindRuntimeSetup(api, { ...factories,
       security: async () => { productCalls += 1; return factories.security(); },
       discovery: async () => { productCalls += 1; return factories.discovery(); },
       codexConfiguration: async () => { productCalls += 1; return factories.codexConfiguration(); },
@@ -245,10 +247,10 @@ for (const fault of ["missing-handle", "extra-handle", "duplicate-handle", "miss
       claudePlanner: async () => { productCalls += 1; return factories.claudePlanner(); },
       host: (dependencies) => { productCalls += 1; return factories.host(dependencies); },
     }, () => { throw new Error("preparation created Host"); });
-    const extra = bindings.assembly.bindFactory(defineModule({ ...runtimeSetupDeclarations[6],
+    const extra = api.bindFactory(defineModule({ ...runtimeSetupDeclarations[6],
       moduleId: "agent-runtime/extra", implementationId: "agent-runtime/extra", slots: [],
     }), async () => { productCalls += 1; return { instance: undefined, capabilities: {} }; });
-    const result = await bindings.assembly.prepare({ composition,
+    const result = await api.prepare({ composition,
       factories: fault === "extra-handle" ? [...bindings.factories, extra] : fault === "missing-handle" ? bindings.factories.slice(1)
         : fault === "duplicate-handle" ? [...bindings.factories, bindings.roots.host] : bindings.factories,
       roots: fault === "missing-root" ? {} : fault === "wrong-root" ? { host: bindings.factories[0]! } : bindings.roots,
@@ -677,7 +679,8 @@ for (const fault of ["missing-binding", "wrong-implementation", "capability", "c
     if (!composition.ok) {return;}
     let calls = 0;
     const fail = (): never => { calls += 1; throw new Error("preflight must not materialize"); };
-    const bindings = bindRuntimeSetup({ security: fail, discovery: fail, codexConfiguration: fail,
+    const api = assemblyFor<RuntimeSetupCapabilities>();
+    const bindings = bindRuntimeSetup(api, { security: fail, discovery: fail, codexConfiguration: fail,
       claudeConfiguration: fail, codexPlanner: fail, claudePlanner: fail, host: fail }, fail);
     const first = composition.plan.bindings[0]!;
     const changed = {
@@ -695,7 +698,7 @@ for (const fault of ["missing-binding", "wrong-implementation", "capability", "c
         dependencyOrder: fault === "order" ? composition.plan.dependencyOrder.toReversed() : composition.plan.dependencyOrder,
       },
     };
-    const result = await bindings.assembly.prepare({ composition: changed, factories: bindings.factories, roots: bindings.roots });
+    const result = await api.prepare({ composition: changed, factories: bindings.factories, roots: bindings.roots });
     assert.equal(result.status, "failed");
     assert.equal(calls, 0);
   });

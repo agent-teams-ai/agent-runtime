@@ -5,8 +5,9 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {Pool} from "pg";
 import {compileComposition} from "@get-modular/core";
+import {assemblyFor} from "@get-modular/assembly";
 import {createAgentRuntimeHost} from "../../dist/composition.js";
-import {runtimeOrdinarySetupDeclarations, runtimeOrdinarySetupProfile, runtimeSetupProfile, bindRuntimeSetup, createRuntimeSetupFactories} from "../../dist/composition/runtime-setup-assembly.js";
+import {runtimeOrdinarySetupDeclarations, runtimeOrdinarySetupProfile, runtimeSetupProfile, bindRuntimeSetup, createRuntimeSetupFactories, type RuntimeSetupCapabilities} from "../../dist/composition/runtime-setup-assembly.js";
 import {ordinaryRuntimeDeclarations} from "../../dist/composition/ordinary-runtime-assembly.js";
 import {copyObservation} from "../../dist/composition/contained-turn-runtime-validation.js";
 
@@ -59,13 +60,14 @@ test("ordinary observation exposes exact profile, preserves early cancellation, 
 test("ordinary preparation fails before owner construction when a selected factory is missing", async () => {
   let calls = 0;
   const forbiddenFactory = async (): Promise<never> => {calls += 1; throw new Error("must not construct");};
-  const bound = bindRuntimeSetup(createRuntimeSetupFactories(process.platform), () => {}, undefined, {
+  const api = assemblyFor<RuntimeSetupCapabilities>();
+  const bound = bindRuntimeSetup(api, createRuntimeSetupFactories(process.platform), () => {}, undefined, {
     factories: {operationStore: forbiddenFactory, security: forbiddenFactory, providerAccess: forbiddenFactory, workspace: forbiddenFactory, artifacts: forbiddenFactory, process: forbiddenFactory, provider: forbiddenFactory},
     decorateHost: host => host,
   });
   const composition = await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: runtimeOrdinarySetupProfile});
   assert.equal(composition.ok, true);
-  const prepared = await bound.assembly.prepare({composition, factories: bound.factories.slice(1), roots: bound.roots});
+  const prepared = await api.prepare({composition, factories: bound.factories.slice(1), roots: bound.roots});
   assert.equal(prepared.status, "failed"); assert.equal(calls, 0);
 });
 
@@ -86,7 +88,8 @@ test("materialized ordinary root injects the provider owner's launch capability 
   let calls = 0;
   const factories = createRuntimeSetupFactories(process.platform);
   let hostOwner: Parameters<typeof factories.host>[1];
-  const bound = bindRuntimeSetup({...factories, host: (dependencies, owner) => {
+  const api = assemblyFor<RuntimeSetupCapabilities>();
+  const bound = bindRuntimeSetup(api, {...factories, host: (dependencies, owner) => {
     hostOwner = owner; return factories.host(dependencies, owner);
   }}, () => {}, undefined, {
     factories: {
@@ -103,7 +106,7 @@ test("materialized ordinary root injects the provider owner's launch capability 
   const invalid = await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: mismatched});
   assert.equal(invalid.ok, false); assert.equal(calls, 0);
   const composition = await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: runtimeOrdinarySetupProfile});
-  const preparation = await bound.assembly.prepare({composition, factories: bound.factories, roots: bound.roots});
+  const preparation = await api.prepare({composition, factories: bound.factories, roots: bound.roots});
   assert.equal(preparation.status, "prepared");
   if (preparation.status !== "prepared") {assert.fail(JSON.stringify(preparation));}
   const result = await preparation.prepared.run({});

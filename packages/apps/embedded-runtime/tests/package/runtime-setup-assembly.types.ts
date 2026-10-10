@@ -16,7 +16,7 @@ export async function consumerContract(): Promise<AgentRuntimeHost> {
   const synchronous: AgentRuntimeHost = pending;
   void synchronous;
   const awaited: AgentRuntimeHost = await pending;
-  const bindings = bindRuntimeSetup(createRuntimeSetupFactories(process.platform), (host) => {
+  const bindings = bindRuntimeSetup(assemblyFor<RuntimeSetupCapabilities>(), createRuntimeSetupFactories(process.platform), (host) => {
     const captured: AgentRuntimeHost = host;
     void captured;
   });

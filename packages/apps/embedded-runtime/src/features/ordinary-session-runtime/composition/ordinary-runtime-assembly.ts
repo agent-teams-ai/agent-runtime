@@ -1,5 +1,5 @@
 import {defineModule} from "@get-modular/core";
-import {assemblyFor, type CapabilityContract} from "@get-modular/assembly";
+import type {Assembly, CapabilityContract} from "@get-modular/assembly";
 import {createOrdinaryTurnFeature, type OrdinaryTurnDependencies, type OrdinaryProcessPort, type NodeOrdinaryProcessOptions} from "@agent-teams/agent-execution/composition";
 import type {RuntimeSetupCapabilities} from "../../../composition/runtime-setup-assembly.js";
 
@@ -59,7 +59,7 @@ export interface OrdinaryRuntimeFactories {
   process(prepareLaunch: NodeOrdinaryProcessOptions["prepareLaunch"]): Promise<OrdinaryProcessPort>;
   provider(): Promise<{readonly provider: OrdinaryTurnDependencies["provider"]; readonly prepareLaunch: NodeOrdinaryProcessOptions["prepareLaunch"]}>;
 }
-export function bindOrdinaryRuntime(assembly: ReturnType<typeof assemblyFor<RuntimeSetupCapabilities>>, factories: OrdinaryRuntimeFactories) {
+export function bindOrdinaryRuntime(assembly: Assembly<RuntimeSetupCapabilities>, factories: OrdinaryRuntimeFactories) {
   const storeBinding = assembly.bindFactory(store, async () => {const instance = await factories.operationStore(); return {instance, capabilities: {"ordinary/store": instance}};});
   const securityBinding = assembly.bindFactory(security, async () => {const instance = await factories.security(); return {instance, capabilities: {"ordinary/security": instance.port, "ordinary/register-secrets": instance.registerSecrets}};});
   const accessBinding = assembly.bindFactory(providerAccess, async dependencies => {const instance = await factories.providerAccess(dependencies["register-secrets"]); return {instance, capabilities: {"ordinary/provider-access": instance}};});

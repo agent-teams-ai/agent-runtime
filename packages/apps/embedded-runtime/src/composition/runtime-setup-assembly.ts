@@ -3,7 +3,7 @@ import {bindOrdinaryRuntime, ordinaryRuntimeDeclarations, ordinaryRuntimeBinding
 import type {createOrdinaryTurnFeature} from "@agent-teams/agent-execution/composition";
 type OrdinaryFeature = ReturnType<typeof createOrdinaryTurnFeature>;
 import { defineModule } from "@get-modular/core";
-import { assemblyFor, type CapabilityContract } from "@get-modular/assembly";
+import type { Assembly, CapabilityContract, SuccessfulComposition } from "@get-modular/assembly";
 import { createAgentRuntimeHost, type AgentRuntimeHost, type AgentRuntimeHostDependencies, type CodexSetupCapabilityBundle, type ClaudeCodeSetupCapabilityBundle } from "./agent-runtime-host.js";
 import { randomBytes } from "node:crypto";
 
@@ -154,42 +154,41 @@ export type RuntimeSetupFactories = ReturnType<typeof createRuntimeSetupFactorie
 export type RuntimeSetupRootProduct = { readonly instance: AgentRuntimeHost; readonly capabilities: Record<string, never> };
 export type RuntimeSetupRootCompletion = (product: RuntimeSetupRootProduct) => Promise<RuntimeSetupRootProduct>;
 
-export function bindRuntimeSetup(factories: RuntimeSetupFactories, captureHost: (host: AgentRuntimeHost) => void,
-  completeRoot?: RuntimeSetupRootCompletion, ordinary?: OrdinaryRuntimeAssemblyInput) {
-  const assembly = assemblyFor<RuntimeSetupCapabilities>();
-  const setupSecurity = assembly.bindFactory(setupSecurityDeclaration, async () => {
+export function bindRuntimeSetup(api: Assembly<RuntimeSetupCapabilities>, factories: RuntimeSetupFactories,
+  captureHost: (host: AgentRuntimeHost) => void, completeRoot?: RuntimeSetupRootCompletion, ordinary?: OrdinaryRuntimeAssemblyInput) {
+  const setupSecurity = api.bindFactory(setupSecurityDeclaration, async () => {
     const instance = await factories.security();
     return { instance, capabilities: {
       "agent-runtime/codex-authorization": instance.authorizeSetupInspection,
       "agent-runtime/claude-authorization": instance.authorizeClaudeCodeSetupInspection,
     } };
   });
-  const installationDiscovery = assembly.bindFactory(installationDiscoveryDeclaration, async () => {
+  const installationDiscovery = api.bindFactory(installationDiscoveryDeclaration, async () => {
     const instance = await factories.discovery();
     return { instance, capabilities: {
       "agent-runtime/codex-installations": instance.discoverCodexInstallations,
       "agent-runtime/claude-installations": instance.discoverClaudeCodeInstallations,
     } };
   });
-  const codexConfiguration = assembly.bindFactory(codexConfigurationDeclaration, async () => {
+  const codexConfiguration = api.bindFactory(codexConfigurationDeclaration, async () => {
     const instance = await factories.codexConfiguration();
     return { instance, capabilities: {
       "agent-runtime/codex-configuration": instance.inspectCodexConfiguration,
     } };
   });
-  const claudeConfiguration = assembly.bindFactory(claudeConfigurationDeclaration, async () => {
+  const claudeConfiguration = api.bindFactory(claudeConfigurationDeclaration, async () => {
     const instance = await factories.claudeConfiguration();
     return { instance, capabilities: {
       "agent-runtime/claude-configuration": instance,
     } };
   });
-  const codexPlanner = assembly.bindFactory(codexPlannerDeclaration, async () => {
+  const codexPlanner = api.bindFactory(codexPlannerDeclaration, async () => {
     const instance = await factories.codexPlanner();
     return { instance, capabilities: {
       "agent-runtime/codex-planner": instance,
     } };
   });
-  const claudePlanner = assembly.bindFactory(claudePlannerDeclaration, async () => {
+  const claudePlanner = api.bindFactory(claudePlannerDeclaration, async () => {
     const instance = await factories.claudePlanner();
     return { instance, capabilities: {
       "agent-runtime/claude-planner": instance,
@@ -226,7 +225,18 @@ export function bindRuntimeSetup(factories: RuntimeSetupFactories, captureHost: 
     if (completeRoot !== undefined) {return await completeRoot({ instance: host, capabilities: {} });}
     return { instance: host, capabilities: {} };
   };
-  const runtimeHost = ordinary === undefined ? assembly.bindFactory(runtimeHostDeclaration, buildHost) : assembly.bindFactory(ordinaryHostDeclaration, buildHost);
-  const activeFactories = ordinary === undefined ? [] : bindOrdinaryRuntime(assembly, ordinary.factories);
-  return { assembly, factories: [setupSecurity, installationDiscovery, codexConfiguration, claudeConfiguration, codexPlanner, claudePlanner, ...activeFactories, runtimeHost], roots: { host: runtimeHost } };
+  const runtimeHost = ordinary === undefined ? api.bindFactory(runtimeHostDeclaration, buildHost) : api.bindFactory(ordinaryHostDeclaration, buildHost);
+  const activeFactories = ordinary === undefined ? [] : bindOrdinaryRuntime(api, ordinary.factories);
+  return { factories: [setupSecurity, installationDiscovery, codexConfiguration, claudeConfiguration, codexPlanner, claudePlanner, ...activeFactories, runtimeHost], roots: { host: runtimeHost } };
+}
+
+type RuntimeSetupBindArguments = [factories: RuntimeSetupFactories, captureHost: (host: AgentRuntimeHost) => void,
+  completeRoot?: RuntimeSetupRootCompletion, ordinary?: OrdinaryRuntimeAssemblyInput];
+
+/** The production composition root. A function of Assembly, so `smoke` can pass its own api. Not async: a
+ * synchronous binding failure still surfaces in the "bind" phase. */
+export function composeRuntimeSetup(api: Assembly<RuntimeSetupCapabilities>, composition: SuccessfulComposition,
+  ...bindArguments: RuntimeSetupBindArguments) {
+  const bound = bindRuntimeSetup(api, ...bindArguments);
+  return api.prepare({ composition, factories: bound.factories, roots: bound.roots });
 }

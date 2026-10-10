@@ -1,10 +1,10 @@
 import {createOrdinaryAgentRuntimeHost, type OrdinaryAgentRuntimeHostOptions} from "../features/ordinary-session-runtime/internal.js";
 export type {OrdinaryAgentRuntimeHostOptions} from "../features/ordinary-session-runtime/internal.js";
 import { compileComposition } from "@get-modular/core";
-import type { AssemblyOutcome } from "@get-modular/assembly";
+import { assemblyFor, type AssemblyOutcome } from "@get-modular/assembly";
 import type { AgentRuntimeHost } from "./agent-runtime-host.js";
 import { AgentRuntimeHostCreationError, assemblyErrorCodes, projectDiagnostics, type AgentRuntimeHostCreationPhase } from "./agent-runtime-host-creation-error.js";
-import { bindRuntimeSetup, createRuntimeSetupFactories, runtimeSetupDeclarations, runtimeSetupProfile, runtimeOrdinarySetupDeclarations, runtimeOrdinarySetupProfile, type OrdinaryRuntimeAssemblyInput, type RuntimeSetupFactories, type RuntimeSetupRootCompletion } from "./runtime-setup-assembly.js";
+import { bindRuntimeSetup, composeRuntimeSetup, createRuntimeSetupFactories, runtimeSetupDeclarations, runtimeSetupProfile, runtimeOrdinarySetupDeclarations, runtimeOrdinarySetupProfile, type OrdinaryRuntimeAssemblyInput, type RuntimeSetupCapabilities, type RuntimeSetupFactories, type RuntimeSetupRootCompletion } from "./runtime-setup-assembly.js";
 
 const errorCodes: Partial<typeof assemblyErrorCodes> = assemblyErrorCodes;
 
@@ -51,9 +51,10 @@ export async function createRuntimeSetupAttempt(
       cancellationObserved: signal?.aborted, diagnostics: projectDiagnostics(composition.diagnostics) }); }
     checkCancellation();
     phase = "bind";
-    const bindings = bindRuntimeSetup(factoriesForAttempt(platform), (host) => { ownedHost = host; }, checkpoints.completeRoot, ordinary);
+    const pending = composeRuntimeSetup(assemblyFor<RuntimeSetupCapabilities>(), composition,
+      factoriesForAttempt(platform), (host) => { ownedHost = host; }, checkpoints.completeRoot, ordinary);
     phase = "prepare";
-    const preparation = await bindings.assembly.prepare({ composition, factories: bindings.factories, roots: bindings.roots });
+    const preparation = await pending;
     if (preparation.status === "failed") { throw failureForAttempt(
       errorCodes[preparation.error.code] ?? "invalid_composition", phase, { cancellationObserved: signal?.aborted,
       diagnostics: projectDiagnostics(preparation.diagnostics), cause: preparation.error.cause }); }
