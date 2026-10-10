@@ -12,17 +12,17 @@ import {ordinaryRuntimeDeclarations} from "../../dist/composition/ordinary-runti
 import {copyObservation} from "../../dist/composition/contained-turn-runtime-validation.js";
 
 test("ordinary active graph has independent exact seven-port parity and passive profile remains separate", async () => {
-  const expected = {"operation-store": "ordinary/store", security: "ordinary/security", "provider-access": "ordinary/provider-access", workspace: "ordinary/workspace", artifacts: "ordinary/artifacts", process: "ordinary/process", provider: "ordinary/provider"};
-  assert.deepEqual(Object.fromEntries(runtimeOrdinarySetupProfile.bindings.filter(binding => binding.consumerImplementationId === "ordinary/turn").map(binding => [binding.slotId, binding.providerImplementationIds[0]])), expected);
-  assert.deepEqual(ordinaryRuntimeDeclarations.find(d => d.moduleId === "ordinary/turn")?.slots.map(s => s.slotId).toSorted(), Object.keys(expected).toSorted());
-  assert.equal(runtimeSetupProfile.bindings.some(binding => binding.consumerImplementationId.startsWith("ordinary/")), false);
+  const expected = {"operation-store": "agent-runtime/ordinary/store/postgres", security: "agent-runtime/ordinary/security/postgres", "provider-access": "agent-runtime/ordinary/provider-access/postgres", workspace: "agent-runtime/ordinary/workspace/node", artifacts: "agent-runtime/ordinary/artifacts/node", process: "agent-runtime/ordinary/process/node", provider: "agent-runtime/ordinary/provider/codex"};
+  assert.deepEqual(Object.fromEntries(runtimeOrdinarySetupProfile.bindings.filter(binding => binding.consumerImplementationId === "agent-runtime/ordinary/turn/default").map(binding => [binding.slotId, binding.providerImplementationIds[0]])), expected);
+  assert.deepEqual(ordinaryRuntimeDeclarations.find(d => d.moduleId === "agent-runtime/ordinary/turn")?.slots.map(s => s.slotId).toSorted(), Object.keys(expected).toSorted());
+  assert.equal(runtimeSetupProfile.bindings.some(binding => binding.consumerImplementationId.startsWith("agent-runtime/ordinary/")), false);
   const result = await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: runtimeOrdinarySetupProfile});
   assert.equal(result.ok, true, JSON.stringify(result));
   for (const slotId of Object.keys(expected)) {
-    const profile = {...runtimeOrdinarySetupProfile, bindings: runtimeOrdinarySetupProfile.bindings.filter(binding => !(binding.consumerImplementationId === "ordinary/turn" && binding.slotId === slotId))};
+    const profile = {...runtimeOrdinarySetupProfile, bindings: runtimeOrdinarySetupProfile.bindings.filter(binding => !(binding.consumerImplementationId === "agent-runtime/ordinary/turn/default" && binding.slotId === slotId))};
     assert.equal((await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile})).ok, false, slotId);
   }
-  const swapped = {...runtimeOrdinarySetupProfile, bindings: runtimeOrdinarySetupProfile.bindings.map(binding => binding.consumerImplementationId === "ordinary/turn" && binding.slotId === "process" ? {...binding, providerImplementationIds: ["ordinary/workspace"]} : binding)};
+  const swapped = {...runtimeOrdinarySetupProfile, bindings: runtimeOrdinarySetupProfile.bindings.map(binding => binding.consumerImplementationId === "agent-runtime/ordinary/turn/default" && binding.slotId === "process" ? {...binding, providerImplementationIds: ["agent-runtime/ordinary/workspace/node"]} : binding)};
   assert.equal((await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: swapped})).ok, false);
 });
 test("public ordinary construction and disposal never capture auth or start provider and borrow pool", async t => {
@@ -102,7 +102,7 @@ test("materialized ordinary root injects the provider owner's launch capability 
       process: async launch => {calls += 1; assert.equal(launch, prepareLaunch); return processPort;},
     }, decorateHost: (host, feature) => {assert.equal(hostOwner, feature); return host;},
   });
-  const mismatched = {...runtimeOrdinarySetupProfile, bindings: runtimeOrdinarySetupProfile.bindings.map(binding => binding.consumerImplementationId === "ordinary/process" ? {...binding, providerImplementationIds: ["ordinary/workspace"]} : binding)};
+  const mismatched = {...runtimeOrdinarySetupProfile, bindings: runtimeOrdinarySetupProfile.bindings.map(binding => binding.consumerImplementationId === "agent-runtime/ordinary/process/node" ? {...binding, providerImplementationIds: ["agent-runtime/ordinary/workspace/node"]} : binding)};
   const invalid = await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: mismatched});
   assert.equal(invalid.ok, false); assert.equal(calls, 0);
   const composition = await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: runtimeOrdinarySetupProfile});
@@ -112,7 +112,7 @@ test("materialized ordinary root injects the provider owner's launch capability 
   const result = await preparation.prepared.run({});
   assert.equal(result.status, "succeeded");
   if (result.status !== "succeeded") {assert.fail(JSON.stringify(result));}
-  const expected = {"ordinary/store": store, "ordinary/security": security, "ordinary/provider-access": access, "ordinary/workspace": workspace, "ordinary/artifacts": artifacts, "ordinary/process": processPort, "ordinary/provider": provider, "ordinary/prepare-launch": prepareLaunch};
+  const expected = {"agent-runtime/ordinary/store": store, "agent-runtime/ordinary/security": security, "agent-runtime/ordinary/provider-access": access, "agent-runtime/ordinary/workspace": workspace, "agent-runtime/ordinary/artifacts": artifacts, "agent-runtime/ordinary/process": processPort, "agent-runtime/ordinary/provider": provider, "agent-runtime/ordinary/prepare-launch": prepareLaunch};
   for (const [capability, value] of Object.entries(expected)) {
     const entry = result.created.find(item => Object.hasOwn(item.capabilities, capability));
     assert.ok(entry); assert.equal(Reflect.get(entry.capabilities, capability), value, capability);

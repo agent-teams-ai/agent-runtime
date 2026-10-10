@@ -365,7 +365,7 @@ test('PR71 reviewed owners and helpers retain exact live relationships without e
     /fixed feature-local route helper.*not separate graph nodes/);
   assert.deepEqual(pending.boundaries.filter(b => b.status === 'adopted').map(b => b.id), ['composition.embedded-runtime']);
   assert.deepEqual(pending.compositions.filter(c => c.authority === undefined).map(c => c.factorySymbol), ['createDefaultAgentRuntimeHost']);
-  assert.deepEqual(pending.compositions.filter(c => c.authority === 'ADR-0090').map(c => c.factorySymbol), ['bindOrdinaryRuntime']);
+  assert.deepEqual(pending.compositions.filter(c => c.authority === 'ADR-0090').map(c => c.factorySymbol), ['createOrdinaryModuleFactories']);
   assert.deepEqual(pending.exceptions, []);
 });
 

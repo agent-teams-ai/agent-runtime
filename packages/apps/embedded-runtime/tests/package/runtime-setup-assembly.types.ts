@@ -1,5 +1,4 @@
-import { assemblyFor } from "@get-modular/assembly";
-import { defineModule } from "@get-modular/core";
+import { assemblyFor, declareModule, defineContract } from "@get-modular/assembly";
 import { createDefaultAgentRuntimeHost, type AgentRuntimeHost,
 // @ts-expect-error Internal attempt injection is not part of the package composition entrypoint.
 createRuntimeSetupAttempt } from "../../dist/composition.js";
@@ -26,15 +25,14 @@ export async function consumerContract(): Promise<AgentRuntimeHost> {
 
 const assembly = assemblyFor<RuntimeSetupCapabilities>();
 const security = runtimeSetupDeclarations[0];
-const incompatibleToken = defineModule({ ...security, provides: [{
-  ...security.provides[0],
-  compatibility: { family: "exact", familyVersion: 1, token: "agent-runtime/incompatible-v2" },
-}] });
+const IncompatibleAuthorization = defineContract<unknown>()({ id: "agent-runtime/codex-authorization", revision: 2 });
+const UndeclaredCapability = defineContract<unknown>()({ id: "agent-runtime/undeclared-capability", revision: 1 });
+const incompatibleToken = declareModule({ moduleId: security.moduleId, implementationId: security.implementationId,
+  owner: security.owner, provides: [IncompatibleAuthorization.provide()], slots: [] });
 // @ts-expect-error Exact compatibility tokens are part of the consumer contract.
 assembly.bindFactory(incompatibleToken, async () => { throw new Error("type-only fixture"); });
-const unknownCapability = defineModule({ ...security, provides: [{
-  ...security.provides[0], capabilityId: "agent-runtime/undeclared-capability",
-}] });
+const unknownCapability = declareModule({ moduleId: security.moduleId, implementationId: security.implementationId,
+  owner: security.owner, provides: [UndeclaredCapability.provide()], slots: [] });
 // @ts-expect-error Only declared consumer capability IDs can be bound.
 assembly.bindFactory(unknownCapability, async () => { throw new Error("type-only fixture"); });
 assembly.bindFactory(runtimeSetupDeclarations[6], async (dependencies) => {

@@ -1,9 +1,9 @@
 import {bindContainedTurnCapabilityAuthority} from "./contained-turn-authority-capability.js";
-import {bindOrdinaryRuntime, ordinaryRuntimeDeclarations, ordinaryRuntimeBindings, ordinaryTurnHostSlot, type OrdinaryRuntimeCapabilities, type OrdinaryRuntimeFactories} from "./ordinary-runtime-assembly.js";
+import {createOrdinaryModuleFactories, ordinaryRuntimeDeclarations, ordinaryRuntimeBindings, ordinaryStoreDeclaration, ordinarySecurityDeclaration, ordinaryProviderAccessDeclaration, ordinaryWorkspaceDeclaration, ordinaryArtifactsDeclaration, ordinaryProcessDeclaration, ordinaryProviderDeclaration, ordinaryTurnDeclaration, OrdinaryTurn, type OrdinaryRuntimeCapabilities, type OrdinaryRuntimeFactories} from "./ordinary-runtime-assembly.js";
 import type {createOrdinaryTurnFeature} from "@agent-teams/agent-execution/composition";
 type OrdinaryFeature = ReturnType<typeof createOrdinaryTurnFeature>;
-import { defineModule } from "@get-modular/core";
-import type { Assembly, CapabilityContract, SuccessfulComposition } from "@get-modular/assembly";
+import { required } from "@get-modular/core";
+import { declareModule, defineContract, type Assembly, type CapabilitiesOf, type FactoryDependencies, type SuccessfulComposition } from "@get-modular/assembly";
 import { createAgentRuntimeHost, type AgentRuntimeHost, type AgentRuntimeHostDependencies, type CodexSetupCapabilityBundle, type ClaudeCodeSetupCapabilityBundle } from "./agent-runtime-host.js";
 import { randomBytes } from "node:crypto";
 
@@ -31,109 +31,94 @@ import {
 import { createCodexSetupInspectionPlanner } from "./codex-setup-inspection-planner.js";
 import { createClaudeCodeSetupInspectionPlanner } from "./claude-code-setup-inspection-planner.js";
 
-const compatibility = { family: "exact", familyVersion: 1, token: "agent-runtime/setup-v1" } as const;
-export type RuntimeSetupCapabilities = OrdinaryRuntimeCapabilities & {
-  "agent-runtime/codex-authorization": CapabilityContract<CodexSetupCapabilityBundle["authorizeSetupInspection"], "agent-runtime/setup-v1">;
-  "agent-runtime/claude-authorization": CapabilityContract<ClaudeCodeSetupCapabilityBundle["authorizeClaudeCodeSetupInspection"], "agent-runtime/setup-v1">;
-  "agent-runtime/codex-installations": CapabilityContract<CodexSetupCapabilityBundle["discoverCodexInstallations"], "agent-runtime/setup-v1">;
-  "agent-runtime/claude-installations": CapabilityContract<ClaudeCodeSetupCapabilityBundle["discoverClaudeCodeInstallations"], "agent-runtime/setup-v1">;
-  "agent-runtime/codex-configuration": CapabilityContract<CodexSetupCapabilityBundle["inspectCodexConfiguration"], "agent-runtime/setup-v1">;
-  "agent-runtime/claude-configuration": CapabilityContract<ClaudeCodeSetupCapabilityBundle["inspectClaudeCodeConfiguration"], "agent-runtime/setup-v1">;
-  "agent-runtime/codex-planner": CapabilityContract<CodexSetupCapabilityBundle["planCodexSetupInspection"], "agent-runtime/setup-v1">;
-  "agent-runtime/claude-planner": CapabilityContract<ClaudeCodeSetupCapabilityBundle["planClaudeCodeSetupInspection"], "agent-runtime/setup-v1">;
-};
-const setupSecurityDeclaration = defineModule({
-  kind: "get-modular.module-declaration", schemaVersion: 1,
-  moduleId: "agent-runtime/setup-security", implementationId: "agent-runtime/setup-security",
-  owner: { authority: "agent-teams", path: ["runtime-security"] },
-  provides: [
-    { capabilityId: "agent-runtime/codex-authorization", compatibility },
-    { capabilityId: "agent-runtime/claude-authorization", compatibility },
-  ], slots: [
-  ],
+const CodexAuthorization = defineContract<CodexSetupCapabilityBundle["authorizeSetupInspection"]>()({ id: "agent-runtime/codex-authorization", revision: 1 });
+const ClaudeAuthorization = defineContract<ClaudeCodeSetupCapabilityBundle["authorizeClaudeCodeSetupInspection"]>()({ id: "agent-runtime/claude-authorization", revision: 1 });
+const CodexInstallations = defineContract<CodexSetupCapabilityBundle["discoverCodexInstallations"]>()({ id: "agent-runtime/codex-installations", revision: 1 });
+const ClaudeInstallations = defineContract<ClaudeCodeSetupCapabilityBundle["discoverClaudeCodeInstallations"]>()({ id: "agent-runtime/claude-installations", revision: 1 });
+const CodexConfiguration = defineContract<CodexSetupCapabilityBundle["inspectCodexConfiguration"]>()({ id: "agent-runtime/codex-configuration", revision: 1 });
+const ClaudeConfiguration = defineContract<ClaudeCodeSetupCapabilityBundle["inspectClaudeCodeConfiguration"]>()({ id: "agent-runtime/claude-configuration", revision: 1 });
+const CodexPlanner = defineContract<CodexSetupCapabilityBundle["planCodexSetupInspection"]>()({ id: "agent-runtime/codex-planner", revision: 1 });
+const ClaudePlanner = defineContract<ClaudeCodeSetupCapabilityBundle["planClaudeCodeSetupInspection"]>()({ id: "agent-runtime/claude-planner", revision: 1 });
+interface SetupCapabilities extends CapabilitiesOf<typeof CodexAuthorization | typeof ClaudeAuthorization | typeof CodexInstallations | typeof ClaudeInstallations | typeof CodexConfiguration | typeof ClaudeConfiguration | typeof CodexPlanner | typeof ClaudePlanner> {}
+export interface RuntimeSetupCapabilities extends SetupCapabilities, OrdinaryRuntimeCapabilities {}
+const owner = (path: string) => ({ authority: "agent-runtime", path: [path] }) as const;
+const setupSecurityDeclaration = declareModule({
+  moduleId: "agent-runtime/setup-security", implementationId: "agent-runtime/setup-security/default",
+  owner: owner("runtime-security"),
+  provides: [CodexAuthorization.provide(), ClaudeAuthorization.provide()],
+  slots: [],
 });
-const installationDiscoveryDeclaration = defineModule({
-  kind: "get-modular.module-declaration", schemaVersion: 1,
-  moduleId: "agent-runtime/installation-discovery", implementationId: "agent-runtime/installation-discovery",
-  owner: { authority: "agent-teams", path: ["agent-execution"] },
-  provides: [
-    { capabilityId: "agent-runtime/codex-installations", compatibility },
-    { capabilityId: "agent-runtime/claude-installations", compatibility },
-  ], slots: [
-  ],
+const installationDiscoveryDeclaration = declareModule({
+  moduleId: "agent-runtime/installation-discovery", implementationId: "agent-runtime/installation-discovery/default",
+  owner: owner("agent-execution"),
+  provides: [CodexInstallations.provide(), ClaudeInstallations.provide()],
+  slots: [],
 });
-const codexConfigurationDeclaration = defineModule({
-  kind: "get-modular.module-declaration", schemaVersion: 1,
-  moduleId: "agent-runtime/codex-configuration", implementationId: "agent-runtime/codex-configuration",
-  owner: { authority: "agent-teams", path: ["runtime-configuration"] },
-  provides: [
-    { capabilityId: "agent-runtime/codex-configuration", compatibility },
-  ], slots: [
-  ],
+const codexConfigurationDeclaration = declareModule({
+  moduleId: "agent-runtime/codex-configuration", implementationId: "agent-runtime/codex-configuration/default",
+  owner: owner("runtime-configuration"),
+  provides: [CodexConfiguration.provide()],
+  slots: [],
 });
-const claudeConfigurationDeclaration = defineModule({
-  kind: "get-modular.module-declaration", schemaVersion: 1,
-  moduleId: "agent-runtime/claude-configuration", implementationId: "agent-runtime/claude-configuration",
-  owner: { authority: "agent-teams", path: ["runtime-configuration"] },
-  provides: [
-    { capabilityId: "agent-runtime/claude-configuration", compatibility },
-  ], slots: [
-  ],
+const claudeConfigurationDeclaration = declareModule({
+  moduleId: "agent-runtime/claude-configuration", implementationId: "agent-runtime/claude-configuration/default",
+  owner: owner("runtime-configuration"),
+  provides: [ClaudeConfiguration.provide()],
+  slots: [],
 });
-const codexPlannerDeclaration = defineModule({
-  kind: "get-modular.module-declaration", schemaVersion: 1,
-  moduleId: "agent-runtime/codex-planner", implementationId: "agent-runtime/codex-planner",
-  owner: { authority: "agent-teams", path: ["embedded-runtime"] },
-  provides: [
-    { capabilityId: "agent-runtime/codex-planner", compatibility },
-  ], slots: [
-  ],
+const codexPlannerDeclaration = declareModule({
+  moduleId: "agent-runtime/codex-planner", implementationId: "agent-runtime/codex-planner/default",
+  owner: owner("embedded-runtime"),
+  provides: [CodexPlanner.provide()],
+  slots: [],
 });
-const claudePlannerDeclaration = defineModule({
-  kind: "get-modular.module-declaration", schemaVersion: 1,
-  moduleId: "agent-runtime/claude-planner", implementationId: "agent-runtime/claude-planner",
-  owner: { authority: "agent-teams", path: ["embedded-runtime"] },
-  provides: [
-    { capabilityId: "agent-runtime/claude-planner", compatibility },
-  ], slots: [
-  ],
+const claudePlannerDeclaration = declareModule({
+  moduleId: "agent-runtime/claude-planner", implementationId: "agent-runtime/claude-planner/default",
+  owner: owner("embedded-runtime"),
+  provides: [ClaudePlanner.provide()],
+  slots: [],
 });
-const runtimeHostDeclaration = defineModule({
-  kind: "get-modular.module-declaration", schemaVersion: 1,
-  moduleId: "agent-runtime/runtime-host", implementationId: "agent-runtime/runtime-host",
-  owner: { authority: "agent-teams", path: ["embedded-runtime"] },
-  provides: [
-  ], slots: [
-    { slotId: "authorize-setup-inspection", capabilityId: "agent-runtime/codex-authorization", compatibility, cardinality: { kind: "required" } },
-    { slotId: "authorize-claude-code-setup-inspection", capabilityId: "agent-runtime/claude-authorization", compatibility, cardinality: { kind: "required" } },
-    { slotId: "discover-codex-installations", capabilityId: "agent-runtime/codex-installations", compatibility, cardinality: { kind: "required" } },
-    { slotId: "discover-claude-code-installations", capabilityId: "agent-runtime/claude-installations", compatibility, cardinality: { kind: "required" } },
-    { slotId: "inspect-codex-configuration", capabilityId: "agent-runtime/codex-configuration", compatibility, cardinality: { kind: "required" } },
-    { slotId: "inspect-claude-code-configuration", capabilityId: "agent-runtime/claude-configuration", compatibility, cardinality: { kind: "required" } },
-    { slotId: "plan-codex-setup-inspection", capabilityId: "agent-runtime/codex-planner", compatibility, cardinality: { kind: "required" } },
-    { slotId: "plan-claude-code-setup-inspection", capabilityId: "agent-runtime/claude-planner", compatibility, cardinality: { kind: "required" } },
+// The passive and ordinary Host variants come from one spec: `declareModule` refuses an object that already has `kind`.
+const hostSpec = {
+  moduleId: "agent-runtime/runtime-host", owner: owner("embedded-runtime"), provides: [],
+  slots: [
+    CodexAuthorization.slot("authorize-setup-inspection", required()),
+    ClaudeAuthorization.slot("authorize-claude-code-setup-inspection", required()),
+    CodexInstallations.slot("discover-codex-installations", required()),
+    ClaudeInstallations.slot("discover-claude-code-installations", required()),
+    CodexConfiguration.slot("inspect-codex-configuration", required()),
+    ClaudeConfiguration.slot("inspect-claude-code-configuration", required()),
+    CodexPlanner.slot("plan-codex-setup-inspection", required()),
+    ClaudePlanner.slot("plan-claude-code-setup-inspection", required()),
   ],
-});
+} as const;
+const runtimeHostDeclaration = declareModule({ ...hostSpec, implementationId: "agent-runtime/runtime-host/passive" });
+const ordinaryHostDeclaration = declareModule({ ...hostSpec, implementationId: "agent-runtime/runtime-host/ordinary",
+  slots: [...hostSpec.slots, OrdinaryTurn.slot("ordinary-turn", required())] });
 export const runtimeSetupDeclarations = [setupSecurityDeclaration, installationDiscoveryDeclaration, codexConfigurationDeclaration, claudeConfigurationDeclaration, codexPlannerDeclaration, claudePlannerDeclaration, runtimeHostDeclaration] as const;
+const setupBindings = (hostImplementationId: string) => [
+  { consumerImplementationId: hostImplementationId, slotId: "authorize-setup-inspection", providerImplementationIds: [setupSecurityDeclaration.implementationId] },
+  { consumerImplementationId: hostImplementationId, slotId: "authorize-claude-code-setup-inspection", providerImplementationIds: [setupSecurityDeclaration.implementationId] },
+  { consumerImplementationId: hostImplementationId, slotId: "discover-codex-installations", providerImplementationIds: [installationDiscoveryDeclaration.implementationId] },
+  { consumerImplementationId: hostImplementationId, slotId: "discover-claude-code-installations", providerImplementationIds: [installationDiscoveryDeclaration.implementationId] },
+  { consumerImplementationId: hostImplementationId, slotId: "inspect-codex-configuration", providerImplementationIds: [codexConfigurationDeclaration.implementationId] },
+  { consumerImplementationId: hostImplementationId, slotId: "inspect-claude-code-configuration", providerImplementationIds: [claudeConfigurationDeclaration.implementationId] },
+  { consumerImplementationId: hostImplementationId, slotId: "plan-codex-setup-inspection", providerImplementationIds: [codexPlannerDeclaration.implementationId] },
+  { consumerImplementationId: hostImplementationId, slotId: "plan-claude-code-setup-inspection", providerImplementationIds: [claudePlannerDeclaration.implementationId] },
+] as const;
 export const runtimeSetupProfile = {
   kind: "get-modular.composition-profile", schemaVersion: 1, profileId: "agent-runtime/passive-setup",
   roots: [runtimeHostDeclaration.moduleId],
   selections: runtimeSetupDeclarations.map(({ moduleId, implementationId }) => ({ moduleId, implementationId })),
-  bindings: [
-    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "authorize-setup-inspection", providerImplementationIds: [setupSecurityDeclaration.implementationId] },
-    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "authorize-claude-code-setup-inspection", providerImplementationIds: [setupSecurityDeclaration.implementationId] },
-    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "discover-codex-installations", providerImplementationIds: [installationDiscoveryDeclaration.implementationId] },
-    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "discover-claude-code-installations", providerImplementationIds: [installationDiscoveryDeclaration.implementationId] },
-    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "inspect-codex-configuration", providerImplementationIds: [codexConfigurationDeclaration.implementationId] },
-    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "inspect-claude-code-configuration", providerImplementationIds: [claudeConfigurationDeclaration.implementationId] },
-    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "plan-codex-setup-inspection", providerImplementationIds: [codexPlannerDeclaration.implementationId] },
-    { consumerImplementationId: runtimeHostDeclaration.implementationId, slotId: "plan-claude-code-setup-inspection", providerImplementationIds: [claudePlannerDeclaration.implementationId] },
-  ],
+  bindings: setupBindings(runtimeHostDeclaration.implementationId),
 } as const;
 
-const ordinaryHostDeclaration = defineModule({...runtimeHostDeclaration, slots: [...runtimeHostDeclaration.slots, ordinaryTurnHostSlot]});
 export const runtimeOrdinarySetupDeclarations = [...runtimeSetupDeclarations.filter(item => item !== runtimeHostDeclaration), ordinaryHostDeclaration, ...ordinaryRuntimeDeclarations];
-export const runtimeOrdinarySetupProfile = {...runtimeSetupProfile, profileId: "agent-runtime/ordinary-session", selections: runtimeOrdinarySetupDeclarations.map(({moduleId, implementationId}) => ({moduleId, implementationId})), bindings: [...runtimeSetupProfile.bindings, ...ordinaryRuntimeBindings]};
+export const runtimeOrdinarySetupProfile = {...runtimeSetupProfile, profileId: "agent-runtime/ordinary-session", selections: runtimeOrdinarySetupDeclarations.map(({moduleId, implementationId}) => ({moduleId, implementationId})), bindings: [
+  ...setupBindings(ordinaryHostDeclaration.implementationId),
+  ...ordinaryRuntimeBindings,
+  {consumerImplementationId: ordinaryHostDeclaration.implementationId, slotId: "ordinary-turn", providerImplementationIds: ["agent-runtime/ordinary/turn/default"]},
+]};
 export interface OrdinaryRuntimeAssemblyInput {readonly factories: OrdinaryRuntimeFactories; readonly decorateHost: (host: AgentRuntimeHost, feature: OrdinaryFeature) => AgentRuntimeHost;}
 
 export const createRuntimeSetupFactories = (platform: NodeJS.Platform) => ({
@@ -194,17 +179,8 @@ export function bindRuntimeSetup(api: Assembly<RuntimeSetupCapabilities>, factor
       "agent-runtime/claude-planner": instance,
     } };
   });
-  type HostInputs = {
-    "authorize-setup-inspection": CodexSetupCapabilityBundle["authorizeSetupInspection"];
-    "discover-codex-installations": CodexSetupCapabilityBundle["discoverCodexInstallations"];
-    "inspect-codex-configuration": CodexSetupCapabilityBundle["inspectCodexConfiguration"];
-    "plan-codex-setup-inspection": CodexSetupCapabilityBundle["planCodexSetupInspection"];
-    "authorize-claude-code-setup-inspection": ClaudeCodeSetupCapabilityBundle["authorizeClaudeCodeSetupInspection"];
-    "discover-claude-code-installations": ClaudeCodeSetupCapabilityBundle["discoverClaudeCodeInstallations"];
-    "inspect-claude-code-configuration": ClaudeCodeSetupCapabilityBundle["inspectClaudeCodeConfiguration"];
-    "plan-claude-code-setup-inspection": ClaudeCodeSetupCapabilityBundle["planClaudeCodeSetupInspection"];
-    "ordinary-turn"?: OrdinaryFeature;
-  };
+  type OrdinaryHostInputs = FactoryDependencies<RuntimeSetupCapabilities, typeof ordinaryHostDeclaration>;
+  type HostInputs = Omit<OrdinaryHostInputs, "ordinary-turn"> & { readonly "ordinary-turn"?: OrdinaryHostInputs["ordinary-turn"] };
   const buildHost = async (dependencies: HostInputs) => {
     const rawHost = factories.host({
       codexSetup: {
@@ -226,7 +202,17 @@ export function bindRuntimeSetup(api: Assembly<RuntimeSetupCapabilities>, factor
     return { instance: host, capabilities: {} };
   };
   const runtimeHost = ordinary === undefined ? api.bindFactory(runtimeHostDeclaration, buildHost) : api.bindFactory(ordinaryHostDeclaration, buildHost);
-  const activeFactories = ordinary === undefined ? [] : bindOrdinaryRuntime(api, ordinary.factories);
+  const modules = ordinary === undefined ? undefined : createOrdinaryModuleFactories(ordinary.factories);
+  const activeFactories = modules === undefined ? [] : [
+    api.bindFactory(ordinaryStoreDeclaration, modules.store),
+    api.bindFactory(ordinarySecurityDeclaration, modules.security),
+    api.bindFactory(ordinaryProviderAccessDeclaration, modules.providerAccess),
+    api.bindFactory(ordinaryWorkspaceDeclaration, modules.workspace),
+    api.bindFactory(ordinaryArtifactsDeclaration, modules.artifacts),
+    api.bindFactory(ordinaryProcessDeclaration, modules.process),
+    api.bindFactory(ordinaryProviderDeclaration, modules.provider),
+    api.bindFactory(ordinaryTurnDeclaration, modules.turn),
+  ];
   return { factories: [setupSecurity, installationDiscovery, codexConfiguration, claudeConfiguration, codexPlanner, claudePlanner, ...activeFactories, runtimeHost], roots: { host: runtimeHost } };
 }
 

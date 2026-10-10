@@ -83,7 +83,7 @@ test('ordinary creation failure retains terminal journal uncertainty', async t =
   const root = await mkdtemp(join(await realpath(tmpdir()), 'ordinary-journal-debt-TEST-'));
   t.after(() => rm(root, {recursive: true, force: true}));
   const rawClose = fs.closeSync; let calls = 0;
-  const primary = new AgentRuntimeHostCreationError('factory_failed', 'run', {moduleId: 'ordinary/security', diagnostics: ['TEST'], cancellationObserved: true, cause: new Error('TEST private primary')});
+  const primary = new AgentRuntimeHostCreationError('factory_failed', 'run', {moduleId: 'agent-runtime/ordinary/security', diagnostics: ['TEST'], cancellationObserved: true, cause: new Error('TEST private primary')});
   let failure!: AgentRuntimeHostCreationError;
   await assert.rejects(createOrdinaryAgentRuntimeHost({execution: {provider: 'codex', executablePath: join(root, 'absent-TEST'), authSourceDirectory: root, privateRoot: root, evidenceRoot: root, sourceDirectory: root, workspaceRoot: root, artifactRoot: root, sourceRevision: 'TEST'}, storage: {pool: {connect: forbidden}}, scope: {tenantId: 'test', projectId: 'TEST'}}, async () => {
     t.mock.method(fs, 'closeSync', (fd: number) => {calls += 1; rawClose(fd); throw new Error('TEST uncertain journal close');});

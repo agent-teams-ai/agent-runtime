@@ -62,7 +62,7 @@ export async function createRuntimeSetupAttempt(
     phase = "run";
     const outcome = await preparation.prepared.run(signal === undefined ? {} : { signal });
     checkpoints.observeOutcome?.(outcome);
-    assertSuccessfulOutcome(outcome, signal, failureForAttempt);
+    assertSuccessfulOutcome(outcome, signal, failureForAttempt, selectedComposition(ordinary).declarations);
     phase = "handoff";
     checkCancellation();
     if (outcome.roots.host !== ownedHost) { throw failureForAttempt("internal_failure", phase); }
@@ -95,12 +95,13 @@ function assertSuccessfulOutcome(
   outcome: RuntimeSetupOutcome,
   signal: AbortSignal | undefined,
   failure: (...args: ConstructorParameters<typeof AgentRuntimeHostCreationError>) => AgentRuntimeHostCreationError,
+  declarations: ReturnType<typeof selectedComposition>["declarations"],
 ): asserts outcome is Extract<RuntimeSetupOutcome, { status: "succeeded" }> {
   if (outcome.status === "failed") {
     throw failure(errorCodes[outcome.code] ?? "internal_failure", "run", {
       cancellationObserved: outcome.cancellation !== undefined || signal?.aborted === true,
       cause: outcome.cause,
-      moduleId: runtimeOrdinarySetupDeclarations.find(({ implementationId }) => implementationId === outcome.implementationId)?.moduleId,
+      moduleId: declarations.find(({ implementationId }) => implementationId === outcome.implementationId)?.moduleId,
     });
   }
   if (outcome.status === "cancelled") { throw failure("cancelled", "run", { cancellationObserved: true }); }

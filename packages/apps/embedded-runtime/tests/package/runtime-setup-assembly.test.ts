@@ -117,13 +117,13 @@ for (const key of ["security", "discovery", "codexConfiguration", "claudeConfigu
     const calls: string[] = [];
     const composition = await compileComposition({ declarations: runtimeSetupDeclarations, profile: runtimeSetupProfile });
     assert.ok(composition.ok);
-    const moduleIds = { security: "agent-runtime/setup-security", discovery: "agent-runtime/installation-discovery", codexConfiguration: "agent-runtime/codex-configuration", claudeConfiguration: "agent-runtime/claude-configuration", codexPlanner: "agent-runtime/codex-planner", claudePlanner: "agent-runtime/claude-planner", host: "agent-runtime/runtime-host" } as const;
+    const implementationIds = { security: "agent-runtime/setup-security/default", discovery: "agent-runtime/installation-discovery/default", codexConfiguration: "agent-runtime/codex-configuration/default", claudeConfiguration: "agent-runtime/claude-configuration/default", codexPlanner: "agent-runtime/codex-planner/default", claudePlanner: "agent-runtime/claude-planner/default", host: "agent-runtime/runtime-host/passive" } as const;
     const expected = composition.plan.dependencyOrder;
     const secret = { toJSON() { throw new Error("raw cause executed"); } };
     await assert.rejects(createRuntimeSetupAttempt(undefined, (platform) => {
       const factories = createRuntimeSetupFactories(platform);
-      const record = (called: keyof typeof moduleIds) => {
-        calls.push(moduleIds[called]);
+      const record = (called: keyof typeof implementationIds) => {
+        calls.push(implementationIds[called]);
         if (called === key) { throw secret; }
       };
       return {
@@ -144,8 +144,8 @@ for (const key of ["security", "discovery", "codexConfiguration", "claudeConfigu
       return true;
     });
     // Sibling order belongs to the compiled plan; failure must stop its exact prefix.
-    assert.ok(expected.includes(moduleIds[key]));
-    assert.deepEqual(calls, expected.slice(0, expected.indexOf(moduleIds[key]) + 1));
+    assert.ok(expected.includes(implementationIds[key]));
+    assert.deepEqual(calls, expected.slice(0, expected.indexOf(implementationIds[key]) + 1));
   });
 }
 
@@ -327,7 +327,7 @@ test("valid root fulfillment after abort awaits factory and cleanup without hand
   assert.equal(outcome.created.filter((entry) => entry.instance === owned).length, 1);
   assert.equal(outcome.created[6]!.instance, owned);
   assert.equal(outcome.created[6]!.moduleId, "agent-runtime/runtime-host");
-  assert.equal(outcome.created[6]!.implementationId, "agent-runtime/runtime-host");
+  assert.equal(outcome.created[6]!.implementationId, "agent-runtime/runtime-host/passive");
   assert.equal(handoffs, 0);
   cleanup.resolve();
   await assert.rejects(result, (error: unknown) => {
@@ -396,9 +396,9 @@ test("malformed root after abort preserves primary failure through rejecting cle
   assert.ok(outcome.status === "failed");
   assert.equal(outcome.code, "assembly.run.invalid-product");
   assert.equal(outcome.phase, "completion");
-  assert.equal(outcome.implementationId, "agent-runtime/runtime-host");
+  assert.equal(outcome.implementationId, "agent-runtime/runtime-host/passive");
   assert.equal(outcome.returned?.product, returned);
-  assert.equal(outcome.returned?.implementationId, "agent-runtime/runtime-host");
+  assert.equal(outcome.returned?.implementationId, "agent-runtime/runtime-host/passive");
   assert.equal(outcome.created.length, 6);
   assert.deepEqual(outcome.created.map((entry) => entry.moduleId).toSorted(), [
     "agent-runtime/claude-configuration", "agent-runtime/claude-planner",
@@ -465,7 +465,7 @@ for (const aborted of [false, true]) {
         if (outcome.status !== "failed") {return;}
         assert.equal(outcome.code, "assembly.run.invalid-product");
         assert.equal(outcome.returned?.product, returned);
-        assert.equal(outcome.returned?.implementationId, "agent-runtime/runtime-host");
+        assert.equal(outcome.returned?.implementationId, "agent-runtime/runtime-host/passive");
         assert.equal(outcome.created.length, 6);
         assert.ok(outcome.created.every((entry) => entry.instance !== owned));
         assert.equal(outcome.cancellation !== undefined, aborted);
@@ -527,7 +527,7 @@ test("unexpected envelope inspection failure before journal commit retains the c
   assert.equal(outcome.code, "assembly.run.internal");
   assert.equal(outcome.returned?.product, returned);
   assert.equal(outcome.created.length, 6);
-  assert.ok(outcome.created.every((entry) => entry.implementationId !== "agent-runtime/runtime-host"));
+  assert.ok(outcome.created.every((entry) => entry.implementationId !== "agent-runtime/runtime-host/passive"));
   assert.equal(disposed, 1);
 });
 
@@ -621,7 +621,7 @@ test("factory owns and awaits release of a resource acquired before rejection", 
     assert.equal(outcome.status, "failed");
     if (outcome.status !== "failed") {return;}
     assert.equal(outcome.returned, undefined);
-    assert.ok(outcome.created.every((entry) => entry.implementationId !== "agent-runtime/setup-security"));
+    assert.ok(outcome.created.every((entry) => entry.implementationId !== "agent-runtime/setup-security/default"));
   } });
   void result.then(() => { settled = true; return; }, () => { settled = true; return; });
   await entered.promise;

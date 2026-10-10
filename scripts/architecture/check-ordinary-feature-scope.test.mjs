@@ -48,19 +48,19 @@ test('scoped checks reuse rejecting Node/SDK/layer and exact legacy seam rules',
 test('ordinary eight owner declarations and exact seven required turn slots reject graph drift', () => {
   assert.doesNotThrow(() => verifyOrdinaryGraph(graph));
   for (const [before, after] of [
-    ['slotId: "prepare-launch"', 'slotId: "unpaired-launch"'],
-    ['capabilityId: "ordinary/prepare-launch"', 'capabilityId: "ordinary/provider"'],
-    ['consumerImplementationId: "ordinary/process", slotId: "prepare-launch", providerImplementationIds: ["ordinary/provider"]', 'consumerImplementationId: "ordinary/process", slotId: "prepare-launch", providerImplementationIds: ["ordinary/workspace"]'],
-    ['moduleId: "ordinary/store"', 'moduleId: "ordinary/hidden"'],
-    ['slotId: "operation-store"', 'slotId: "missing-store"'],
-    ['capabilityId: "ordinary/process"', 'capabilityId: "ordinary/provider"'],
-    ['cardinality: {kind: "required"}', 'cardinality: {kind: "optional"}'],
-    ['token: "agent-runtime/ordinary-v1"', 'token: "agent-runtime/contained-turn-v1"'],
-    ['providerImplementationIds: ["ordinary/store"]', 'providerImplementationIds: ["ordinary/provider"]'],
+    ['OrdinaryStore.slot("operation-store", required())', 'OrdinaryWorkspace.slot("operation-store", required())'],
+    ['OrdinaryPrepareLaunch.slot("prepare-launch", required())', 'OrdinaryPrepareLaunch.slot("prepare-launch", optional())'],
+    ['{id: "agent-runtime/ordinary/store", revision: 1}', '{id: "agent-runtime/ordinary/store", revision: 2}'],
+    ['implementationId: "agent-runtime/ordinary/store/postgres"', 'implementationId: "agent-runtime/ordinary/store/hidden"'],
+    ['moduleId: "agent-runtime/ordinary/store",', 'moduleId: "agent-runtime/ordinary/hidden",'],
+    ['slotId: "prepare-launch", providerImplementationIds: ["agent-runtime/ordinary/provider/codex"]', 'slotId: "prepare-launch", providerImplementationIds: ["agent-runtime/ordinary/workspace/node"]'],
+    ['provides: [OrdinaryProcess.provide()]', 'provides: [OrdinaryProvider.provide()]'],
+    ['authority: "agent-runtime"', 'authority: "agent-teams"'],
   ]) {
     assert.ok(graph.includes(before), `stale mutant ${before}`);
     assert.throws(() => verifyOrdinaryGraph(graph.replace(before, after)));
   }
+  assert.throws(() => verifyOrdinaryGraph(`${graph}\nexport const hiddenDeclaration = declareModule({moduleId: "agent-runtime/ordinary/hidden", implementationId: "agent-runtime/ordinary/hidden/default", owner: {authority: "agent-runtime", path: ["agent-execution"]}, provides: [], slots: []});`));
 });
 
 
@@ -79,6 +79,8 @@ test('ordinary Host ownership handoff rejects a dropped or substituted closed ro
     ['}, dependencies["ordinary-turn"]);', '});'],
     ['}, dependencies["ordinary-turn"]);', '}, dependencies["ordinary-process"]);'],
     ['createAgentRuntimeHost(dependencies, ordinaryOwner)', 'createAgentRuntimeHost(dependencies)'],
+    ['OrdinaryTurn.slot("ordinary-turn", required())', 'OrdinaryTurn.slot("ordinary-turn", optional())'],
+    ['providerImplementationIds: ["agent-runtime/ordinary/turn/default"]', 'providerImplementationIds: ["agent-runtime/ordinary/store/postgres"]'],
   ]) {
     assert.ok(source.includes(before), 'stale ordinary ownership mutant');
     assert.throws(() => verifyOrdinaryHostOwnership(source.replace(before, after)));

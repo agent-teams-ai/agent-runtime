@@ -2566,11 +2566,6 @@
           "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
           "to": "@agent-teams/agent-execution/composition",
           "mode": "runtime"
-        },
-        {
-          "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
-          "to": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
-          "mode": "type-only"
         }
       ]
     },
@@ -6274,7 +6269,7 @@
       "declarations": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
       "profile": "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
       "factories": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
-      "factorySymbol": "bindOrdinaryRuntime",
+      "factorySymbol": "createOrdinaryModuleFactories",
       "tests": [
         "packages/apps/embedded-runtime/tests/package/ordinary-runtime-assembly.test.ts",
         "packages/contexts/agent-execution/tests/features/contained-agent-turn/ordinary-core.test.ts",
