@@ -145,8 +145,9 @@ The archives are the Get Modular 0.3.0 release, commit
 taken from the retained bundle `get-modular-0.3.0-train-r1a`, which was packed
 from release PR head `9e529d69150c1738c29d56a05de7cada60547808` (the head at
 packing time; the release commit has the same tree as the regenerated release
-head, and the standard bytes are identical at the pin, the bundle source, the
-release commit and get-modular main). They equal the registry tarballs byte for
+head `87cb92324f1de7a0b5fd5631ac46f1f58002fde2`, and the standard bytes are
+identical at the pin, the bundle source, the release commit and get-modular main
+at `c6ec622f3c206af11e3448386ffcce42b1184f17`, checked on 2026-10-10). They equal the registry tarballs byte for
 byte. Pre-publication evidence is the consumer check
 [modularity-host-test#16](https://github.com/agent-teams-ai/modularity-host-test/pull/16)
 (merge `4501de4c0439cbb8e242c69354e29188360178ce`) and the consumer checks in
@@ -1115,10 +1116,17 @@ package/archive pins, accepted decisions, C0 evidence or frozen check inventory.
 
 One row per norm of the pinned standard, with the state that is true at the head
 of the pull request that last edited the row. AR-1a writes `met` only for rows
-closed by #201 or by itself; every other row is `pending: <closing PR>` and that
-pull request switches its row in place to the final state. This table complements
-the "Reviewed Smart CI prerequisite successor checkpoint" section and the
-`outstandingWork` of the review, which stay as the evidence of the pin step.
+closed by #201 or by itself; every other row is `pending: <closing PR>`,
+`outstanding`, `not applicable` or `not adopted`, and a closing pull request
+switches its row in place to the final state. The closing pull requests are
+described in the briefs [AR-1b](get-modular-train-1-ar-1b.md),
+[AR-1c](get-modular-train-1-ar-1c.md) and [AR-2](get-modular-train-1-ar-2.md),
+all part of the [train migration](get-modular-train-1-migration.md); rows that
+name issue #189 follow its [test debt plan](test-debt-189-plan.md), and brief 07 is
+the [ordinary store contract suite](test-debt-189-07-ordinary-store-contract-suite.md).
+This table
+complements the "Reviewed Smart CI prerequisite successor checkpoint" section and
+the `outstandingWork` of the review, which stay as the evidence of the pin step.
 
 | norm | state now | final state, written by the closing PR | closedBy |
 | --- | --- | --- | --- |
