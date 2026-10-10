@@ -70,6 +70,7 @@ test("rejects missing, partial, malformed, and unknown capability bindings synch
   ];
 
   for (const dependencies of invalidDependencies) {
+    // hostile-input: each record is malformed on purpose; the Host must refuse it
     assert.throws(() => createAgentRuntimeHost(dependencies as never), TypeError);
   }
 });
@@ -105,6 +106,7 @@ test("snapshots the optional contained-turn capability and its methods exactly o
     },
   });
 
+  // hostile-input: accessor-backed record that changes on a second read; the Host must snapshot it once
   const host = createAgentRuntimeHost(dependencies as never);
   t.after(() => host.dispose());
   assert.equal(bundleReads, 1);
@@ -141,6 +143,7 @@ test("snapshots accessor-backed capability bundles and binding methods exactly o
     },
   });
 
+  // hostile-input: accessor-backed record that changes on a second read; the Host must snapshot it once
   const host = createAgentRuntimeHost(dependencies as never);
   t.after(() => host.dispose());
   const access = host.bindAccess({
