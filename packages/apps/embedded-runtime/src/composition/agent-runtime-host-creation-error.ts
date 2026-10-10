@@ -49,9 +49,11 @@ export const assemblyErrorCodes = {
   "assembly.prepare.invalid-input": "invalid_composition",
   "assembly.prepare.limit": "invalid_composition",
   "assembly.prepare.handles": "invalid_composition",
+  "assembly.prepare.input-handles": "invalid_composition", // Agent Runtime binds no run inputs
   "assembly.prepare.roots": "invalid_composition",
   "assembly.prepare.core-rejected": "invalid_composition",
   "assembly.prepare.plan-mismatch": "invalid_composition",
+  "assembly.run.invalid-inputs": "internal_failure", // unreachable without inputs: an internal defect
   "assembly.run.factory-threw": "factory_failed",
   "assembly.run.factory-rejected": "factory_failed",
   "assembly.run.unsupported-carrier": "invalid_factory_product",

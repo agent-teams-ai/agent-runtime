@@ -122,7 +122,7 @@ remain independently enforced history against retained predecessor bytes.
 
 Document identity, package versions/archive integrity, Core compatibility token,
 and local adoption authority are distinct. The profile retains the approved published
-Core and Assembly 0.2.0 archives, verifies their SHA-256 and lock integrity,
+Core and Assembly 0.3.0 archives, verifies their SHA-256 and lock integrity,
 and requires exact catalog versions. It records actual blocking commands,
 without `conformant: true` for the repository. The A3 and dynamic Host migrations
 remain reviewed below. The historical zero-delta review applies to retained
@@ -133,12 +133,26 @@ The consumed release archives are distinct from the standard pin:
 
 | Published root | Version | Retained archive SHA-256 |
 | --- | --- | --- |
-| `@get-modular/core` | `0.2.0` | `dd4cb159c839fbbf38512d1f66aa8ff5019123a6981ca553ba640d423ae67b58` |
-| `@get-modular/assembly` | `0.2.0` | `86b26f860ec4eaeeb143cde553deca74acafe89a856d74ea3e62e4a2531fddfa` |
+| `@get-modular/core` | `0.3.0` | `bd84c087c7d6842907d08a1a2f6dc0afd250e297f9456e0f77b87630e0f5093e` |
+| `@get-modular/assembly` | `0.3.0` | `3a4312465485269971db08efb10759fb3a3d4d23266c7f5d9fe8069b4bb411c8` |
 
 The consumer profile retains both complete published archives and exact
 lockfile integrity. The historical 0.1.0 stage1 entry digest belongs to its
 earlier release evidence and does not identify the current archive.
+The archives are the Get Modular 0.3.0 release, commit
+`bb364ac8ca461b5e8277eeb3f7867b26187f99e8`
+([get-modular#150](https://github.com/agent-teams-ai/get-modular/pull/150)),
+taken from the retained bundle `get-modular-0.3.0-train-r1a`, which was packed
+from release PR head `9e529d69150c1738c29d56a05de7cada60547808` (the head at
+packing time; the release commit has the same tree as the regenerated release
+head `87cb92324f1de7a0b5fd5631ac46f1f58002fde2`, and the standard bytes are
+identical at the pin, the bundle source, the release commit and get-modular main
+at `c6ec622f3c206af11e3448386ffcce42b1184f17`, checked on 2026-10-10). They equal the registry tarballs byte for
+byte. Pre-publication evidence is the consumer check
+[modularity-host-test#16](https://github.com/agent-teams-ai/modularity-host-test/pull/16)
+(merge `4501de4c0439cbb8e242c69354e29188360178ce`) and the consumer checks in
+[release-intent.md](https://github.com/agent-teams-ai/get-modular/blob/c6ec622f3c206af11e3448386ffcce42b1184f17/research/releases/0.3.0-train/release-intent.md)
+at `c6ec622`. The 0.1.0 and 0.2.0 archives stay retained as historical evidence.
 The [packed consumer test](../../packages/apps/embedded-runtime/tests/package/assembly-packed-consumer.test.ts)
 installs declared production roots and checks passive behavior and typings.
 These identities do not assert whole-runtime conformance.
@@ -1097,3 +1111,42 @@ identity review and successor module/root conformance evidence remain with their
 owners. No successor compiler or conformance CLI execution is claimed; the packet
 names library conformance-kit APIs. This checkpoint changes no production wiring,
 package/archive pins, accepted decisions, C0 evidence or frozen check inventory.
+
+## Train 0.3.0 conformance status
+
+One row per norm of the pinned standard, with the state that is true at the head
+of the pull request that last edited the row. AR-1a writes `met` only for rows
+closed by #201 or by itself; every other row is `pending: <closing PR>`,
+`outstanding`, `not applicable` or `not adopted`, and a closing pull request
+switches its row in place to the final state. The closing pull requests are
+described in the briefs [AR-1b](get-modular-train-1-ar-1b.md),
+[AR-1c](get-modular-train-1-ar-1c.md) and [AR-2](get-modular-train-1-ar-2.md),
+all part of the [train migration](get-modular-train-1-migration.md); rows that
+name issue #189 follow its [test debt plan](test-debt-189-plan.md), and brief 07 is
+the [ordinary store contract suite](test-debt-189-07-ordinary-store-contract-suite.md).
+This table
+complements the "Reviewed Smart CI prerequisite successor checkpoint" section and
+the `outstandingWork` of the review, which stay as the evidence of the pin step.
+
+| norm | state now | final state, written by the closing PR | closedBy |
+| --- | --- | --- | --- |
+| Authority and identity: document pin, accepting ADR-0026, profile | met (pin `81063ad` since #201) | met | agent-runtime #201 |
+| Scoped acceptance and evidence: pins, package and archive identities, blocking commands | met for Core and Assembly 0.3.0 | met (resources added in AR-1c) | AR-1a, AR-1c |
+| New composition boundaries: descriptors own IDs and revisions; no hand-written compatibility; no `any`, `as never` or double casts in wiring | pending: AR-1b | met | AR-1b |
+| Identity and namespaces, rules 1-7 | pending: AR-1b | met | AR-1b |
+| Module packages and contracts | pending: AR-1b | met for a private host-app package: descriptors and declarations live with the composition; module factories are members of a frozen record built per Host attempt from Host constructors and bound by the root; a separate contract package is revisited in the package publication lane | AR-1b |
+| Module packages list Get Modular packages only as peers | not applicable | not applicable while Agent Runtime packages are private and export no Get Modular modules; revisit in the package publication lane | none |
+| Dynamic instances (templates, inputs) | not applicable | not applicable: no prepared assembly serves more than one run; compile, bind and prepare run once per Host attempt | none |
+| Module resource scopes, author rules 1-13 | pending: AR-1c, AR-2 | met for the security, Provider Access and Codex owners; rule 7 holds: the Provider Access retirement protocol (broker close, rendering, capture and guard disposal, store retire) stays inside one cleanup | AR-1c, AR-2 |
+| Host rules: `scoped()`, one scope per run, close after `run()` settles, one package copy | pending: AR-1c | met (the passive profile has no owning factories, so its runs need no scope) | AR-1c |
+| Host rule: outer scope for a provider that cleanups need; drain before closing | pending: AR-1c | met: journal in the outer scope; Host drain with the turn owner handoff before owners close | AR-1c |
+| Host rule: one deadline at the root (escalate, then abandon) | outstanding | outstanding by decision of 2026-10-04: release of the resource owners keeps today's behavior without a deadline; added when an owner's release can block without its own bound, or on owner request; prepared values grace 5000 ms, abandon 5000 ms | none yet |
+| Host rule: `order: "concurrent"` only for independent peers | pending: AR-2 | met: Provider Access grants | AR-2 |
+| Errors identified by code | pending: AR-1c, AR-2 | met | AR-1c, AR-2 |
+| Testing 1 and 2: named module factories, typed fakes | pending: AR-1b | factories met for the ordinary feature; fakes this train touches are typed, but package test files are not type-checked yet; remaining work tracked in issue #189 | AR-1b, AR-1c; rest per #189 |
+| Testing 3: contract suites | outstanding | outstanding; covered by issue #189 brief 07 after AR-2 (planning decision 2026-10-04): one suite for `agent-runtime/ordinary/store`, owned by the ordinary feature, run against an in-memory fake and the PostgreSQL store, moved unchanged into STORE-2-core as its compatibility suite (never copied or imported from embedded-runtime); every other contract recorded as "no second implementation" | #189 brief 07 |
+| Testing 4: `isolate` | pending: AR-1c | met for one scoped owner module | AR-1c |
+| Testing 5: roots as functions of Assembly, one `smoke` per root | pending: AR-1b, AR-1c | met for the passive and ordinary profiles | AR-1b, AR-1c |
+| Testing 6: independent binding oracle | pending: AR-1b | met: literal compiled-plan oracle | AR-1b |
+| Testing 7 and 8: `guardHandles`, close every scope, no sleeps | pending: AR-1c | 8 met for new tests; 7 not adopted in this train, tracked in issue #189 | AR-1c; 7 per #189 |
+| Optional dynamic Host lifecycle candidate | not adopted | not adopted | none |
