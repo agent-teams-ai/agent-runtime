@@ -190,6 +190,9 @@ importers:
       '@get-modular/conformance':
         specifier: 'catalog:'
         version: 0.1.0(@get-modular/assembly@0.3.0)(@get-modular/core@0.3.0)(@get-modular/resources@0.1.0)
+      oxc-parser:
+        specifier: 'catalog:'
+        version: 0.147.0
       pg:
         specifier: 'catalog:'
         version: 8.23.0

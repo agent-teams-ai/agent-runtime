@@ -78,8 +78,8 @@ gates; tests other than the structural test; contained-turn code.
 
 - CMS "Testing modules" rule 1 and the module rules: types come from the module's own contract descriptors; a module
   never imports the Host's map.
-- Production code never imports `@get-modular/conformance` (ADR-0033); derive value types with `CapabilitiesOf` from
-  `@get-modular/assembly`, not with `ContractValue` from conformance.
+- Production code never imports `@get-modular/conformance` (ADR-0033); derive value types from the descriptor type (`Contract` from
+  `@get-modular/assembly`), not with `ContractValue` from conformance.
 - The root `package.json`, CI files and the AR2-pinned `test` scripts are frozen (`scripts/ci/conformance.ts:171-179`,
   `scripts/architecture/ar2-test-execution-inventory.mjs:16-25`).
 
@@ -91,9 +91,9 @@ In the feature `ordinary-runtime-assembly.ts`, add one helper and use it for eve
 `OrdinaryRuntimeFactories`:
 
 ```ts
-import type { AnyContract, CapabilitiesOf } from "@get-modular/assembly";
+import type { Contract } from "@get-modular/assembly";
 /** The value a contract carries, read from its descriptor so the Host factories follow a changed contract. */
-type ValueOf<T extends AnyContract> = CapabilitiesOf<T>[T["id"]]["value"];
+type ValueOf<T extends Contract<string, unknown, number>> = T extends Contract<string, infer V, number> ? V : never;
 
 export interface OrdinaryRuntimeFactories {
   operationStore(): Promise<ValueOf<typeof OrdinaryStore>>;
@@ -105,6 +105,8 @@ export interface OrdinaryRuntimeFactories {
   provider(resources: Resources): Promise<{ readonly provider: ValueOf<typeof OrdinaryProvider>; readonly prepareLaunch: ValueOf<typeof OrdinaryPrepareLaunch> }>;
 }
 ```
+
+The value is read from the descriptor with `infer` because indexing `CapabilitiesOf<T>[T["id"]]["value"]` with a generic `T` stops compiling once `CapabilitiesOf` remaps its keys (TS2536). The `Contract` type is exported by `@get-modular/assembly` in 0.3.x.
 
 Keep the method set, parameter order and `resources` arguments exactly as AR-1c left them; only the type expressions
 change. Delete type aliases that become unused (for example a local `RegisterSecrets`, if nothing else uses it).

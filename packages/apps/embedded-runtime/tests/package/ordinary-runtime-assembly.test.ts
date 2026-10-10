@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {mkdtemp, realpath, mkdir, readdir, rm} from "node:fs/promises";
+import {mkdtemp, realpath, mkdir, readdir, readFile, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
+import {parseSync} from "oxc-parser";
 import {Pool} from "pg";
 import {compileComposition} from "@get-modular/core";
 import {assemblyFor} from "@get-modular/assembly";
@@ -243,4 +244,24 @@ test("smoke: the passive composition root releases every attempt under injected 
   assert.equal(steps.length, 15, "one run plus fail and abort at each of 7 modules");
   assert.deepEqual(steps.filter(step => step.problem !== undefined), []);
   for (const host of hosts) { await host.dispose(); }
+});
+
+test("ordinary Host factory types are read from the contract descriptors", async () => {
+  // Hand-written value types drift from the contracts; only descriptor-derived types are allowed here.
+  const path = new URL("../../src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts", import.meta.url);
+  const {program, errors} = parseSync(path.pathname, await readFile(path, "utf8"));
+  assert.equal(errors.length, 0);
+  const declaration = program.body.map(node => node.type === "ExportNamedDeclaration" ? node.declaration : node)
+    .find(node => node?.type === "TSInterfaceDeclaration" && node.id.name === "OrdinaryRuntimeFactories");
+  assert.ok(declaration?.type === "TSInterfaceDeclaration", "OrdinaryRuntimeFactories interface");
+  const references: string[] = [];
+  const visit = (node: unknown): void => {
+    if (node === null || typeof node !== "object") { return; }
+    if (Array.isArray(node)) { node.forEach(visit); return; }
+    const record = node as Record<string, unknown>;
+    if (record["type"] === "TSTypeReference") { references.push(String((record["typeName"] as {name?: unknown}).name)); }
+    for (const [key, value] of Object.entries(record)) { if (key !== "parent") { visit(value); } }
+  };
+  visit(declaration.body);
+  assert.deepEqual([...new Set(references)].toSorted(), ["Promise", "Resources", "ValueOf"]);
 });
