@@ -146,13 +146,17 @@ function assertUniverse(leaves: Leaf[], policy: Policy): void {
 const scopeDigest = (leaves: Leaf[], select: (leaf: Leaf) => boolean) => sha256(JSON.stringify(leaves.filter(select)));
 const leafInventory = (leaves: readonly Leaf[]): LeafInventory => ({ version: 1, digestScheme: 'git-object-sha1',
   inputs: leaves.map(leaf => {
-    const mode = leaf.mode;
-    if (mode !== '100644' && mode !== '100755' && mode !== '120000' && mode !== '160000') {
-      throw new Error('public inventory mode');
+    const membership = ordinaryBody(leaf.path) ? 'structural' : 'closed';
+    if (leaf.type === 'blob' && (leaf.mode === '100644' || leaf.mode === '100755')) {
+      return { path: leaf.path, type: 'file', mode: leaf.mode, membership, content: leaf.oid };
     }
-    return { path: leaf.path,
-      type: leaf.type === 'blob' ? (leaf.mode === '120000' ? 'symlink' : 'file') : 'gitlink',
-      mode, membership: ordinaryBody(leaf.path) ? 'structural' : 'closed', content: leaf.oid };
+    if (leaf.type === 'blob' && leaf.mode === '120000') {
+      return { path: leaf.path, type: 'symlink', mode: leaf.mode, membership, content: leaf.oid };
+    }
+    if (leaf.type === 'commit' && leaf.mode === '160000') {
+      return { path: leaf.path, type: 'gitlink', mode: leaf.mode, membership, content: leaf.oid };
+    }
+    throw new Error('public inventory mode');
   }),
 });
 
