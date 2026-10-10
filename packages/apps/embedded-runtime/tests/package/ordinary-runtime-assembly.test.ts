@@ -6,9 +6,10 @@ import {join} from "node:path";
 import {Pool} from "pg";
 import {compileComposition} from "@get-modular/core";
 import {assemblyFor} from "@get-modular/assembly";
+import {createScope, type Resources} from "@get-modular/resources";
 import {createAgentRuntimeHost} from "../../dist/composition.js";
 import {runtimeOrdinarySetupDeclarations, runtimeOrdinarySetupProfile, runtimeSetupDeclarations, runtimeSetupProfile, bindRuntimeSetup, createRuntimeSetupFactories, type RuntimeSetupCapabilities} from "../../dist/composition/runtime-setup-assembly.js";
-import {ordinaryRuntimeDeclarations} from "../../dist/composition/ordinary-runtime-assembly.js";
+import {ordinaryRuntimeDeclarations, type OrdinaryRuntimeFactories} from "../../dist/composition/ordinary-runtime-assembly.js";
 import {copyObservation} from "../../dist/composition/contained-turn-runtime-validation.js";
 
 test("ordinary active graph has independent exact seven-port parity and passive profile remains separate", async () => {
@@ -142,48 +143,63 @@ async function forbidden(): Promise<never> {throw new Error("TEST port must rema
 async function prepareLaunch(): Promise<never> {throw new Error("TEST paired launch", {cause: "synthetic launch"});}
 function registerSecrets() {return true;}
 
+function createFakeOrdinaryFactories() {
+  const ports = {
+    store: {accept: forbidden, prepare: forbidden, read: forbidden, claim: forbidden, cancel: forbidden, append: forbidden, finish: forbidden, reconcile: forbidden},
+    security: {resolveAndConsume: forbidden},
+    access: {resolveAndConsume: forbidden},
+    workspace: {prepare: forbidden, snapshot: forbidden, close: forbidden},
+    artifacts: {publish: forbidden},
+    process: {reserve: forbidden},
+    provider: {supported: {provider: "codex", mode: "workspace-write", executionProfile: "user-session-v1", capabilityManifestRevision: "ordinary-codex-macos-arm64-0.153.4-v1"} as const, execute: forbidden},
+  };
+  const counts = {calls: 0, created: 0, released: 0};
+  // The three owning modules register a fake owner with their module scope, like the real factories do.
+  const own = (resources: Resources, name: string) => resources.setup({name, setup: () => {counts.created += 1; return {name};}, cleanup: () => {counts.released += 1;}});
+  const factories: OrdinaryRuntimeFactories = {
+    operationStore: async () => {counts.calls += 1; return ports.store;},
+    security: async resources => {counts.calls += 1; await own(resources, "security-owner"); return {port: ports.security, registerSecrets};},
+    providerAccess: async (register, resources) => {counts.calls += 1; assert.equal(register, registerSecrets); await own(resources, "provider-access-owner"); return ports.access;},
+    workspace: async () => {counts.calls += 1; return ports.workspace;},
+    artifacts: async () => {counts.calls += 1; return ports.artifacts;},
+    provider: async resources => {counts.calls += 1; await own(resources, "codex"); return {provider: ports.provider, prepareLaunch};},
+    process: async launch => {counts.calls += 1; assert.equal(launch, prepareLaunch); return ports.process;},
+  };
+  return {ports, counts, factories};
+}
+
 test("materialized ordinary root injects the provider owner's launch capability and all seven bindings", async () => {
-
-  const store = {accept: forbidden, prepare: forbidden, read: forbidden, claim: forbidden, cancel: forbidden, append: forbidden, finish: forbidden, reconcile: forbidden};
-  const security = {resolveAndConsume: forbidden};
-  const access = {resolveAndConsume: forbidden};
-  const workspace = {prepare: forbidden, snapshot: forbidden, close: forbidden};
-  const artifacts = {publish: forbidden};
-  const processPort = {reserve: forbidden};
-  const provider = {supported: {provider: "codex", mode: "workspace-write", executionProfile: "user-session-v1", capabilityManifestRevision: "ordinary-codex-macos-arm64-0.153.4-v1"} as const, execute: forbidden};
-
-  let calls = 0;
+  const fakes = createFakeOrdinaryFactories();
+  const {ports, counts} = fakes;
+  const owners = createScope({name: "test-owners"});
   const factories = createRuntimeSetupFactories(process.platform);
   let hostOwner: Parameters<typeof factories.host>[1];
   const api = assemblyFor<RuntimeSetupCapabilities>();
   const bound = bindRuntimeSetup(api, {...factories, host: (dependencies, owner) => {
     hostOwner = owner; return factories.host(dependencies, owner);
-  }}, () => {}, undefined, {
-    factories: {
-      operationStore: async () => {calls += 1; return store;},
-      security: async () => {calls += 1; return {port: security, registerSecrets};},
-      providerAccess: async register => {calls += 1; assert.equal(register, registerSecrets); return access;},
-      workspace: async () => {calls += 1; return workspace;},
-      artifacts: async () => {calls += 1; return artifacts;},
-      provider: async () => {calls += 1; return {provider, prepareLaunch};},
-      process: async launch => {calls += 1; assert.equal(launch, prepareLaunch); return processPort;},
-    }, decorateHost: (host, feature) => {assert.equal(hostOwner, feature); return host;},
-  });
-  const mismatched = {...runtimeOrdinarySetupProfile, bindings: runtimeOrdinarySetupProfile.bindings.map(binding => binding.consumerImplementationId === "agent-runtime/ordinary/process/node" ? {...binding, providerImplementationIds: ["agent-runtime/ordinary/workspace/node"]} : binding)};
-  const invalid = await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: mismatched});
-  assert.equal(invalid.ok, false); assert.equal(calls, 0);
-  const composition = await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: runtimeOrdinarySetupProfile});
-  const preparation = await api.prepare({composition, factories: bound.factories, roots: bound.roots});
-  assert.equal(preparation.status, "prepared");
-  if (preparation.status !== "prepared") {assert.fail(JSON.stringify(preparation));}
-  const result = await preparation.prepared.run({});
-  assert.equal(result.status, "succeeded");
-  if (result.status !== "succeeded") {assert.fail(JSON.stringify(result));}
-  const expected = {"agent-runtime/ordinary/store": store, "agent-runtime/ordinary/security": security, "agent-runtime/ordinary/provider-access": access, "agent-runtime/ordinary/workspace": workspace, "agent-runtime/ordinary/artifacts": artifacts, "agent-runtime/ordinary/process": processPort, "agent-runtime/ordinary/provider": provider, "agent-runtime/ordinary/prepare-launch": prepareLaunch};
-  for (const [capability, value] of Object.entries(expected)) {
-    const entry = result.created.find(item => Object.hasOwn(item.capabilities, capability));
-    assert.ok(entry); assert.equal(Reflect.get(entry.capabilities, capability), value, capability);
+  }}, () => {}, undefined, {factories: fakes.factories, decorateHost: host => host});
+  try {
+    const mismatched = {...runtimeOrdinarySetupProfile, bindings: runtimeOrdinarySetupProfile.bindings.map(binding => binding.consumerImplementationId === "agent-runtime/ordinary/process/node" ? {...binding, providerImplementationIds: ["agent-runtime/ordinary/workspace/node"]} : binding)};
+    const invalid = await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: mismatched});
+    assert.equal(invalid.ok, false); assert.equal(counts.calls, 0);
+    const composition = await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: runtimeOrdinarySetupProfile});
+    const preparation = await api.prepare({composition, factories: bound.factories, roots: bound.roots});
+    assert.equal(preparation.status, "prepared");
+    if (preparation.status !== "prepared") {assert.fail(JSON.stringify(preparation));}
+    const result = await preparation.prepared.run({scope: owners.resources});
+    assert.equal(result.status, "succeeded");
+    if (result.status !== "succeeded") {assert.fail(JSON.stringify(result));}
+    const expected = {"agent-runtime/ordinary/store": ports.store, "agent-runtime/ordinary/security": ports.security, "agent-runtime/ordinary/provider-access": ports.access, "agent-runtime/ordinary/workspace": ports.workspace, "agent-runtime/ordinary/artifacts": ports.artifacts, "agent-runtime/ordinary/process": ports.process, "agent-runtime/ordinary/provider": ports.provider, "agent-runtime/ordinary/prepare-launch": prepareLaunch};
+    for (const [capability, value] of Object.entries(expected)) {
+      const entry = result.created.find(item => Object.hasOwn(item.capabilities, capability));
+      assert.ok(entry); assert.equal(Reflect.get(entry.capabilities, capability), value, capability);
+    }
+    assert.equal(counts.calls, 7);
+    assert.equal(hostOwner, result.created.find(entry => entry.implementationId === "agent-runtime/ordinary/turn/default")?.instance);
+    await result.roots.host.dispose();
+    assert.equal(counts.created, 3); assert.equal(counts.released, 0);
+  } finally {
+    assert.equal((await owners.control.close()).complete, true);
   }
-  assert.equal(calls, 7);
-  await result.roots.host.dispose();
+  assert.equal(counts.released, 3);
 });

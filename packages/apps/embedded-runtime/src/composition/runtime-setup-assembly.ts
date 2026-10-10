@@ -3,6 +3,7 @@ import {createOrdinaryModuleFactories, ordinaryRuntimeDeclarations, ordinaryRunt
 import type {createOrdinaryTurnFeature} from "@agent-teams/agent-execution/composition";
 type OrdinaryFeature = ReturnType<typeof createOrdinaryTurnFeature>;
 import { required } from "@get-modular/core";
+import { scoped, type Resources } from "@get-modular/resources";
 import { declareModule, defineContract, type Assembly, type CapabilitiesOf, type FactoryDependencies, type SuccessfulComposition } from "@get-modular/assembly";
 import { createAgentRuntimeHost, type AgentRuntimeHost, type AgentRuntimeHostDependencies, type CodexSetupCapabilityBundle, type ClaudeCodeSetupCapabilityBundle } from "./agent-runtime-host.js";
 import { randomBytes } from "node:crypto";
@@ -119,7 +120,14 @@ export const runtimeOrdinarySetupProfile = {...runtimeSetupProfile, profileId: "
   ...ordinaryRuntimeBindings,
   {consumerImplementationId: ordinaryHostDeclaration.implementationId, slotId: "ordinary-turn", providerImplementationIds: ["agent-runtime/ordinary/turn/default"]},
 ]};
-export interface OrdinaryRuntimeAssemblyInput {readonly factories: OrdinaryRuntimeFactories; readonly decorateHost: (host: AgentRuntimeHost, feature: OrdinaryFeature) => AgentRuntimeHost;}
+export interface OrdinaryRuntimeBindingInput {
+  readonly factories: OrdinaryRuntimeFactories;
+  readonly decorateHost: (host: AgentRuntimeHost) => AgentRuntimeHost;
+}
+export interface OrdinaryRuntimeAssemblyInput extends OrdinaryRuntimeBindingInput {
+  /** Run scope of the owning modules: the ordinary Host's owners scope. */
+  readonly owners: Resources;
+}
 
 export const createRuntimeSetupFactories = (platform: NodeJS.Platform) => ({
   security: async () => createSetupInspectionAuthorizationFeature({ pathCanonicalizer: createNodePathCanonicalizer() }),
@@ -140,7 +148,7 @@ export type RuntimeSetupRootProduct = { readonly instance: AgentRuntimeHost; rea
 export type RuntimeSetupRootCompletion = (product: RuntimeSetupRootProduct) => Promise<RuntimeSetupRootProduct>;
 
 export function bindRuntimeSetup(api: Assembly<RuntimeSetupCapabilities>, factories: RuntimeSetupFactories,
-  captureHost: (host: AgentRuntimeHost) => void, completeRoot?: RuntimeSetupRootCompletion, ordinary?: OrdinaryRuntimeAssemblyInput) {
+  captureHost: (host: AgentRuntimeHost) => void, completeRoot?: RuntimeSetupRootCompletion, ordinary?: OrdinaryRuntimeBindingInput) {
   const setupSecurity = api.bindFactory(setupSecurityDeclaration, async () => {
     const instance = await factories.security();
     return { instance, capabilities: {
@@ -196,7 +204,7 @@ export function bindRuntimeSetup(api: Assembly<RuntimeSetupCapabilities>, factor
       },
       ...(dependencies["ordinary-turn"] === undefined ? {} : {containedTurn: bindContainedTurnCapabilityAuthority(dependencies["ordinary-turn"], "runtime-access-authority:ordinary-user-session-v1")}),
     }, dependencies["ordinary-turn"]);
-    const host = ordinary !== undefined && dependencies["ordinary-turn"] !== undefined ? ordinary.decorateHost(rawHost, dependencies["ordinary-turn"]) : rawHost;
+    const host = ordinary !== undefined && dependencies["ordinary-turn"] !== undefined ? ordinary.decorateHost(rawHost) : rawHost;
     captureHost(host);
     if (completeRoot !== undefined) {return await completeRoot({ instance: host, capabilities: {} });}
     return { instance: host, capabilities: {} };
@@ -205,19 +213,19 @@ export function bindRuntimeSetup(api: Assembly<RuntimeSetupCapabilities>, factor
   const modules = ordinary === undefined ? undefined : createOrdinaryModuleFactories(ordinary.factories);
   const activeFactories = modules === undefined ? [] : [
     api.bindFactory(ordinaryStoreDeclaration, modules.store),
-    api.bindFactory(ordinarySecurityDeclaration, modules.security),
-    api.bindFactory(ordinaryProviderAccessDeclaration, modules.providerAccess),
+    api.bindFactory(ordinarySecurityDeclaration, scoped(ordinarySecurityDeclaration.implementationId, modules.security)),
+    api.bindFactory(ordinaryProviderAccessDeclaration, scoped(ordinaryProviderAccessDeclaration.implementationId, modules.providerAccess)),
     api.bindFactory(ordinaryWorkspaceDeclaration, modules.workspace),
     api.bindFactory(ordinaryArtifactsDeclaration, modules.artifacts),
     api.bindFactory(ordinaryProcessDeclaration, modules.process),
-    api.bindFactory(ordinaryProviderDeclaration, modules.provider),
+    api.bindFactory(ordinaryProviderDeclaration, scoped(ordinaryProviderDeclaration.implementationId, modules.provider)),
     api.bindFactory(ordinaryTurnDeclaration, modules.turn),
   ];
   return { factories: [setupSecurity, installationDiscovery, codexConfiguration, claudeConfiguration, codexPlanner, claudePlanner, ...activeFactories, runtimeHost], roots: { host: runtimeHost } };
 }
 
 type RuntimeSetupBindArguments = [factories: RuntimeSetupFactories, captureHost: (host: AgentRuntimeHost) => void,
-  completeRoot?: RuntimeSetupRootCompletion, ordinary?: OrdinaryRuntimeAssemblyInput];
+  completeRoot?: RuntimeSetupRootCompletion, ordinary?: OrdinaryRuntimeBindingInput];
 
 /** The production composition root. A function of Assembly, so `smoke` can pass its own api. Not async: a
  * synchronous binding failure still surfaces in the "bind" phase. */

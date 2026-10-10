@@ -60,7 +60,7 @@ export async function createRuntimeSetupAttempt(
       diagnostics: projectDiagnostics(preparation.diagnostics), cause: preparation.error.cause }); }
     checkCancellation();
     phase = "run";
-    const outcome = await preparation.prepared.run(signal === undefined ? {} : { signal });
+    const outcome = await preparation.prepared.run({ ...(signal === undefined ? {} : { signal }), ...(ordinary === undefined ? {} : { scope: ordinary.owners }) });
     checkpoints.observeOutcome?.(outcome);
     assertSuccessfulOutcome(outcome, signal, failureForAttempt, selectedComposition(ordinary).declarations);
     phase = "handoff";
