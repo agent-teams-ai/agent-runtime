@@ -70,8 +70,8 @@ catalogs:
       specifier: 8.23.0
       version: 8.23.0
     smol-toml:
-      specifier: 1.8.0
-      version: 1.8.0
+      specifier: 1.9.0
+      version: 1.9.0
     typescript:
       specifier: 7.0.2
       version: 7.0.2
@@ -248,7 +248,7 @@ importers:
         version: 3.3.1
       smol-toml:
         specifier: 'catalog:'
-        version: 1.8.0
+        version: 1.9.0
 
   packages/contexts/runtime-security:
     dependencies:
@@ -1783,8 +1783,8 @@ packages:
   signal-exit@3.0.7:
     resolution: {integrity: sha512-wnD2ZE+l+SPC/uoS0vXeE9L1+0wuaMqKlfz9AMUo38JsyLSBWSFcHR1Rri62LZc12vLr1gb3jl7iwQhgwpAbGQ==}
 
-  smol-toml@1.8.0:
-    resolution: {integrity: sha512-kCZr2V3ch9i00x8zXRhjUNVcjG9ijES5dDudkXvUVCT5QlJNQWElSJdZqyPemffHoLNUYwOcou0Fy+ojN0uHSQ==}
+  smol-toml@1.9.0:
+    resolution: {integrity: sha512-hpd+HLON7HdZXqYchMM/+LaTTbdK0AU3NngIJ4KVyWbY9bfQqdL9cD+4yf6dUoU2Ap4VsU0JkQi6FxAI1B2mXQ==}
     engines: {node: '>= 18'}
 
   source-map@0.6.1:
@@ -3210,7 +3210,7 @@ snapshots:
 
   signal-exit@3.0.7: {}
 
-  smol-toml@1.8.0: {}
+  smol-toml@1.9.0: {}
 
   source-map@0.6.1: {}
 
