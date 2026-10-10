@@ -27,8 +27,12 @@ observation type. Existing outer composition entrypoints select the construction
 handoff and return the public Host.
 
 The Host joins the ordinary feature before disposing its owned PA/RS/provider
-resources and journal. On failed construction, cleanup attempts to release resources
-already created;
+resources and journal. Those resources live in a scope tree: an `ordinary-host`
+scope holds the journal and a child `owners` scope that is the run scope of the
+Runtime Security, Provider Access and Codex modules (`scoped()`). Owners release in
+reverse construction order and continue past a failed owner; the journal closes only
+after the owners report a complete close. On failed construction, cleanup attempts
+to release resources already created;
 uncertain workspace recovery inputs remain owned by their filesystem owner.
 A creation error with unfinished cleanup retains `cleanupRecovery.recover()` as
 cleanup-only authority. It exposes no Host or commands. Concurrent calls join;
