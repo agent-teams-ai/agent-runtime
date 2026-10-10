@@ -519,3 +519,5 @@ function registerFoundationPrExecutionTests(): void {
     await assert.rejects(observeRegressionProcess(expected[0]!.command, f.root, process.env), /original three-file Foundation command drift/u);
   });
 }
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {registerPrRegressionTests();}

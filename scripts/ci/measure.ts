@@ -364,7 +364,7 @@ export async function measure(entry: string, output: string): Promise<number> {
     report.phases.push(phase);
     await save();
   });
-  return sourceComplete ? 0 : observedFailure ?? 1;
+  return observedFailure ?? (sourceComplete ? 0 : 1);
 }
 
 if (process.argv[1] && resolvePath(process.argv[1]) === fileURLToPath(import.meta.url)) {

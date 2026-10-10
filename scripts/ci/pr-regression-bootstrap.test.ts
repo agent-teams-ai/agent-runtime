@@ -11,6 +11,7 @@ import { admitAndImportOptimizer, installationMetadataMaxBytes, parseInstallatio
 const repository = fileURLToPath(new URL('../../', import.meta.url));
 const bodyPath = 'packages/contexts/runtime-configuration/src/features/bootstrap-body.ts';
 const fixturePath = 'scripts/sdk-growth-source/fixtures/pr-regression-bootstrap.txt';
+const regressionGraphTestName = 'complete quick obligations retain live conformance and reject deferred execution or passes';
 type Mutation = 'none' | 'body' | 'bootstrap' | 'helper' | 'config' | 'lock' | 'fixture' | 'installed' | 'add' | 'delete' | 'mode' | 'symlink'
   | 'worktree-file' | 'worktree-link' | 'incomplete-census' | 'push-tuple' | 'base-tuple' | 'merge-tuple';
 type Optimizer = 'valid' | 'absent' | 'manifest' | 'marker' | 'mode' | 'extra' | 'foreign-link';
@@ -180,6 +181,7 @@ async function installNodeModulesFixture(root: string, optimizer: 'linked' | 'ab
   const sourceModules = await realpath(join(repository, 'node_modules')), targetModules = join(root, 'node_modules');
   await mkdir(targetModules, { recursive: true });
   for (const name of (await readdir(sourceModules)).toSorted()) {
+    if (name === '.pnpm' || name === '.modules.yaml') {continue;}
     const source = join(sourceModules, name), target = join(targetModules, name);
     if (name === '@agent-teams') {
       await mkdir(target, { recursive: true });
@@ -188,12 +190,6 @@ async function installNodeModulesFixture(root: string, optimizer: 'linked' | 'ab
         const packageTarget = join(target, packageEntry);
         if (packageEntry !== 'ci-input-proof') {
           await symlink(packageSource, packageTarget, (await lstat(packageSource)).isDirectory() ? 'dir' : 'file');
-        } else if (optimizer === 'linked') {
-          await symlink(packageSource, packageTarget, 'dir');
-        } else if (optimizer === 'marker') {
-          await cp(join(source, packageEntry), packageTarget, { recursive: true, dereference: true });
-          const entry = join(packageTarget, 'dist/index.js');
-          await writeFile(entry, `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(join(root, 'optimizer-import-marker'))}, 'executed\\n');\n${await readFile(entry, 'utf8')}`);
         }
       }
       continue;
@@ -201,10 +197,28 @@ async function installNodeModulesFixture(root: string, optimizer: 'linked' | 'ab
     const resolved = await realpath(source);
     await symlink(resolved, target, (await lstat(resolved)).isDirectory() ? 'dir' : 'file');
   }
+  await mkdir(join(targetModules, '.pnpm'), { recursive: true });
+  await copyFile(join(sourceModules, '.pnpm/lock.yaml'), join(targetModules, '.pnpm/lock.yaml'));
+  await copyFile(join(sourceModules, '.modules.yaml'), join(targetModules, '.modules.yaml'));
+  const optimizerSource = join(sourceModules, '.pnpm/@agent-teams+ci-input-proof@0.1.0/node_modules/@agent-teams/ci-input-proof');
+  const optimizerTarget = join(targetModules, '.pnpm/@agent-teams+ci-input-proof@0.1.0/node_modules/@agent-teams/ci-input-proof');
+  await mkdir(dirname(optimizerTarget), { recursive: true });
+  if (optimizer !== 'absent') {
+    await cp(optimizerSource, optimizerTarget, { recursive: true, dereference: true });
+    if (optimizer === 'marker') {
+      const entry = join(optimizerTarget, 'dist/index.js');
+      await writeFile(entry, `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(join(root, 'optimizer-import-marker'))}, 'executed\\n');\n${await readFile(entry, 'utf8')}`);
+    }
+  }
+  const publicOptimizer = join(targetModules, '@agent-teams/ci-input-proof');
+  await mkdir(dirname(publicOptimizer), { recursive: true });
+  if (optimizer !== 'absent') {
+    await symlink(relative(dirname(publicOptimizer), optimizerTarget), publicOptimizer, 'dir');
+  }
 }
 
 async function actualMeasureFixture(t: test.TestContext, options: { optimizer?: 'linked' | 'absent' | 'marker';
-  missing?: 'bootstrap-test' } = {}) {
+  missing?: 'bootstrap' | 'bootstrap-test' } = {}) {
   const root = await testScratch('ar-actual-measure-TEST-');
   const evidence = `${root}-evidence`, temporary = `${root}-tmp`, fakeBin = join(root, 'fake-bin');
   await Promise.all([mkdir(evidence), mkdir(temporary), mkdir(fakeBin)]);
@@ -221,11 +235,8 @@ async function actualMeasureFixture(t: test.TestContext, options: { optimizer?: 
   }).trim();
   git('reset', '--quiet', '--hard', sha);
   if (options.missing === 'bootstrap-test') {await rm(join(root, 'scripts/ci/pr-regression-bootstrap.test.ts'));}
+  if (options.missing === 'bootstrap') {await rm(join(root, 'scripts/ci/pr-regression-bootstrap.ts'));}
   const realTsc = shellQuote(join(repository, 'node_modules/.bin/tsc'));
-  const realGit = shellQuote(execFileSync('which', ['git'], { encoding: 'utf8' }).trim());
-  await writeFile(join(fakeBin, 'git'),
-    `#!/bin/sh\nset -eu\nif [ "\${1-}" = "show" ] && [ "\${2-}" != "" ]; then path=\${2#*:}; if [ "$path" != "\${2-}" ]; then exec cat "$path"; fi; fi\nexec ${realGit} "$@"\n`);
-  await chmod(join(fakeBin, 'git'), 0o755);
   await writeFile(join(fakeBin, 'pnpm'),
     `#!/bin/sh\nset -eu\nif [ "\${1-}" = "--version" ]; then printf '11.18.0\\n'; exit 0; fi\nif [ "\${1-}" = "exec" ] && [ "\${2-}" = "tsc" ]; then shift 2; exec ${realTsc} "$@"; fi\nif [ "\${1-}" = "run" ]; then command=$(node -e 'const p=require("./package.json"); process.stdout.write(p.scripts[process.argv[1]] ?? "")' "\${2-}"); [ -n "$command" ] || exit 1; PATH="$PWD/node_modules/.bin:$PATH"; export PATH; exec sh -c "$command"; fi\nexit 1\n`);
   await chmod(join(fakeBin, 'pnpm'), 0o755);
@@ -233,13 +244,23 @@ async function actualMeasureFixture(t: test.TestContext, options: { optimizer?: 
     EXPECTED_REVISION: sha, CI_EVIDENCE_DIR: evidence } satisfies NodeJS.ProcessEnv };
 }
 
-async function runActualMeasureGraph(fixture: Awaited<ReturnType<typeof actualMeasureFixture>>,
-  skipTests = false) {
+async function runActualMeasureGraph(fixture: Awaited<ReturnType<typeof actualMeasureFixture>>) {
   const env: NodeJS.ProcessEnv = { ...fixture.env };
   delete env.NODE_TEST_CONTEXT;
   delete env.NODE_OPTIONS;
-  return spawnSync(process.execPath, ['scripts/ci/measure.ts', 'check:ci:quick'], { cwd: fixture.root,
-    env: skipTests ? { ...env, NODE_OPTIONS: '--test-name-pattern=impossible-name-that-does-not-exist' } : env, encoding: 'utf8' });
+  return spawnSync(process.execPath, ['scripts/ci/measure.ts', 'check:ci:quick'], { cwd: fixture.root, env, encoding: 'utf8' });
+}
+
+async function runActualRegressionImportGraph(fixture: Awaited<ReturnType<typeof actualMeasureFixture>>) {
+  const env: NodeJS.ProcessEnv = { ...fixture.env };
+  delete env.NODE_TEST_CONTEXT;
+  delete env.NODE_OPTIONS;
+  const contracts = await readFile(join(fixture.root, 'scripts/ci/contracts.test.ts'), 'utf8');
+  assert.match(contracts, /import \{ registerPrRegressionTests \} from '\.\/pr-regression-inputs\.test\.ts';/u);
+  assert.match(contracts, /registerPrRegressionTests\(\);/u);
+  return spawnSync(process.execPath,
+    ['--test', '--test-reporter=tap', `--test-name-pattern=^${regressionGraphTestName}$`, 'scripts/ci/pr-regression-inputs.test.ts'],
+    { cwd: fixture.root, env, encoding: 'utf8' });
 }
 
 async function prepareSourceFixture(t: test.TestContext, optimizer: Optimizer, badCandidate: boolean,
@@ -615,43 +636,53 @@ function registerWorkflowAndMeasureTests(): void {
     await assert.rejects(readFile(join(fixture.evidence, 'fake-full-ran')));
   });
 
-  test('actual measure FULL import graph never loads a rejected optimizer', async t => {
+  test('actual pre-import recovery regression graph never loads a rejected optimizer', async t => {
     for (const optimizer of ['marker', 'absent'] as const) {
-      const fixture = await actualMeasureFixture(t, { optimizer });
-      const run = await runActualMeasureGraph(fixture, true);
-      await assert.rejects(readFile(join(fixture.root, 'optimizer-import-marker')), optimizer);
-      const report = JSON.parse(await readFile(join(fixture.evidence, 'check-ci-quick.json'), 'utf8')) as {
-        phases: Array<{ script: string; code: number | null; tests: Array<{ name: string; status: string }> }>;
+      const rejected = await sourceFixture(t, 'none', optimizer);
+      const bootstrap = await import(pathToFileURL(join(rejected.root, 'scripts/ci/pr-regression-bootstrap.ts')).href) as {
+        admitAndImportOptimizer: typeof admitAndImportOptimizer;
       };
-      const regression = report.phases.find(phase => phase.script === 'test:ci');
-      assert.ok(regression, `${optimizer}: ${JSON.stringify(report.phases)}\n${run.stdout}\n${run.stderr}`);
-      assert.ok(regression.tests.some(testResult =>
-        testResult.name === 'scripts/ci/contracts.test.ts' && testResult.status === 'passed'),
-      `${optimizer}: actual contracts import graph did not load\n${run.stdout}\n${run.stderr}`);
+      await assert.rejects(bootstrap.admitAndImportOptimizer(rejected.root), optimizer);
+      await assert.rejects(readFile(join(rejected.evidence, 'optimizer-import-marker')), optimizer);
+
+      const fixture = await actualMeasureFixture(t, { optimizer });
+      const graph = await runActualRegressionImportGraph(fixture);
+      assert.equal(graph.status, 0, `${optimizer}: ${graph.stdout}\n${graph.stderr}`);
+      assert.match(graph.stdout, new RegExp(`^ok \\d+ - ${regressionGraphTestName}$`, 'm'),
+        `${optimizer}: actual regression import graph did not load\n${graph.stdout}\n${graph.stderr}`);
+      assert.doesNotMatch(graph.stdout, /^not ok /mu, `${optimizer}: original regression failed\n${graph.stdout}\n${graph.stderr}`);
+      await assert.rejects(readFile(join(fixture.root, 'optimizer-import-marker')), optimizer);
     }
   });
 
   test('actual measure records missing admission inputs and still attempts real FULL regression', async t => {
-    const fixture = await actualMeasureFixture(t, { missing: 'bootstrap-test' });
-    const run = await runActualMeasureGraph(fixture);
-    assert.notEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
-    const report = JSON.parse(await readFile(join(fixture.evidence, 'check-ci-quick.json'), 'utf8')) as {
-      sourceComplete: boolean; sourceDisposition: string; receiptReuseAllowed: boolean;
-      inputAdmission: Array<{ path: string; status: string; reason?: string }>;
-      phases: Array<{ script: string; code: number | null; signal: string | null; started: string; ended: string }>;
-    };
-    assert.equal(report.sourceComplete, false);
-    assert.equal(report.sourceDisposition, 'blocking-source-incomplete');
-    assert.equal(report.receiptReuseAllowed, false);
-    assert.deepEqual(report.inputAdmission.find(input => input.path === 'scripts/ci/pr-regression-bootstrap.test.ts'),
-      { path: 'scripts/ci/pr-regression-bootstrap.test.ts', status: 'unavailable', reason: 'missing' });
-    assert.deepEqual(report.phases.map(phase => phase.script),
-      ['lint', 'check:node-compat', 'typecheck:ci', 'test:ci']);
-    const regression = report.phases.find(phase => phase.script === 'test:ci');
-    assert.notEqual(regression?.code, 0);
-    assert.equal(regression?.signal, null);
-    assert.ok(Date.parse(regression!.started) <= Date.parse(regression!.ended));
-    assert.match(run.stdout + run.stderr, /pr-regression-bootstrap\.test\.ts/u);
+    for (const missing of ['bootstrap', 'bootstrap-test'] as const) {
+      const fixture = await actualMeasureFixture(t, { missing });
+      const run = await runActualMeasureGraph(fixture);
+      assert.notEqual(run.status, 0, `${missing}: ${run.stdout}\n${run.stderr}`);
+      const report = JSON.parse(await readFile(join(fixture.evidence, 'check-ci-quick.json'), 'utf8')) as {
+        sourceComplete: boolean; sourceDisposition: string; receiptReuseAllowed: boolean;
+        inputAdmission: Array<{ path: string; status: string; reason?: string }>;
+        phases: Array<{ script: string; code: number | null; signal: string | null; started: string; ended: string;
+          tests: Array<{ name: string; status: string }> }>;
+      };
+      assert.equal(report.sourceComplete, false, missing);
+      assert.equal(report.sourceDisposition, 'blocking-source-incomplete', missing);
+      assert.equal(report.receiptReuseAllowed, false, missing);
+      const missingPath = missing === 'bootstrap'
+        ? 'scripts/ci/pr-regression-bootstrap.ts' : 'scripts/ci/pr-regression-bootstrap.test.ts';
+      assert.deepEqual(report.inputAdmission.find(input => input.path === missingPath),
+        { path: missingPath, status: 'unavailable', reason: 'missing' }, missing);
+      assert.deepEqual(report.phases.map(phase => phase.script),
+        ['lint', 'check:node-compat', 'typecheck:ci', 'test:ci'], missing);
+      const regression = report.phases.find(phase => phase.script === 'test:ci');
+      assert.notEqual(regression?.code, 0, missing);
+      assert.equal(regression?.signal, null, missing);
+      assert.ok(Date.parse(regression!.started) <= Date.parse(regression!.ended), missing);
+      assert.equal(regression!.tests.some(testResult => testResult.status === 'passed'), false,
+        `${missing}: unavailable source must not claim a passed regression child\n${run.stdout}\n${run.stderr}`);
+      assert.match(run.stdout + run.stderr, /pr-regression-bootstrap\.(?:test\.)?ts/u, missing);
+    }
   });
 }
 
@@ -839,10 +870,15 @@ export function registerPrRegressionBootstrapTests(): void {
   });
 
   test('FULL is the independent existing command and its failure remains hard', async t => {
-    const run = await invoke(t, 'bootstrap', 'absent', false, 23);
+    const run = await invokeInstalled(t, { mutation: 'bootstrap', fullExit: 23 });
     assert.equal(run.result.status, 23, run.result.stderr);
-    assert.equal(await readFile(join(run.evidence, 'full-ran'), 'utf8'), 'current-full\n');
-    await assert.rejects(readFile(join(run.evidence, 'candidate-ran')));
+    const report = JSON.parse(await readFile(join(run.evidence, 'check-ci-quick.json'), 'utf8')) as {
+      phases: Array<{ script: string; code: number | null; signal: string | null }>;
+    };
+    assert.equal(report.phases[0]?.script, 'lint');
+    assert.equal(report.phases[0]?.code, 23);
+    assert.equal(report.phases[0]?.signal, null);
+    await assert.rejects(readFile(join(run.evidence, 'pr-quick.json')));
   });
 }
 
