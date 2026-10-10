@@ -233,3 +233,14 @@ test("isolate: the provider module releases its Codex owner exactly once", async
   const report = await isolated.close();
   assert.equal(report.complete, true); assert.equal(fakes.counts.released, 1);
 });
+
+test("smoke: the passive composition root releases every attempt under injected failure and abort", async () => {
+  const composition = await compileComposition({ declarations: runtimeSetupDeclarations, profile: runtimeSetupProfile });
+  assert.ok(composition.ok);
+  const hosts: AgentRuntimeHost[] = [];
+  const steps = await smoke({ api: assemblyFor<RuntimeSetupCapabilities>(),
+    compose: api => composeRuntimeSetup(api, composition, createRuntimeSetupFactories(process.platform), host => { hosts.push(host); }) });
+  assert.equal(steps.length, 15, "one run plus fail and abort at each of 7 modules");
+  assert.deepEqual(steps.filter(step => step.problem !== undefined), []);
+  for (const host of hosts) { await host.dispose(); }
+});

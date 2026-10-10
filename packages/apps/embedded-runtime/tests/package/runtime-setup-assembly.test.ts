@@ -1,15 +1,13 @@
 import {failedCreationRecovery, terminalCreationCleanupUncertainty} from './runtime-setup-creation-cleanup.fixture.ts';
 import { compileComposition, defineModule } from "@get-modular/core";
 import { assemblyFor } from "@get-modular/assembly";
-import { smoke } from "@get-modular/conformance";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { createDefaultAgentRuntimeHost, AgentRuntimeHostCreationError } from "../../dist/composition.js";
 import { createRuntimeSetupAttempt } from "../../dist/composition/default-agent-runtime-host.js";
-import type { AgentRuntimeHost } from "../../dist/composition/agent-runtime-host.js";
-import { bindRuntimeSetup, composeRuntimeSetup, runtimeSetupDeclarations, runtimeSetupProfile, createRuntimeSetupFactories, type RuntimeSetupCapabilities } from "../../dist/composition/runtime-setup-assembly.js";
+import { bindRuntimeSetup, runtimeSetupDeclarations, runtimeSetupProfile, createRuntimeSetupFactories, type RuntimeSetupCapabilities } from "../../dist/composition/runtime-setup-assembly.js";
 import { createExactParityHost, fixtureScope, registerPassiveSetupScenarios } from "../helpers/assembly-direct-reference.ts";
 
 registerPassiveSetupScenarios("Assembly", () => createDefaultAgentRuntimeHost());
@@ -839,14 +837,3 @@ test("independent oracle rejects a materialized wrong-platform planner binding",
 test("failed creation retains single-flight cleanup recovery and primary projection", {timeout: 5_000}, failedCreationRecovery);
 
 test("failed creation preserves terminal cleanup uncertainty across recovery observations", {timeout: 5_000}, terminalCreationCleanupUncertainty);
-
-test("smoke: the passive composition root releases every attempt under injected failure and abort", async () => {
-  const composition = await compileComposition({ declarations: runtimeSetupDeclarations, profile: runtimeSetupProfile });
-  assert.ok(composition.ok);
-  const hosts: AgentRuntimeHost[] = [];
-  const steps = await smoke({ api: assemblyFor<RuntimeSetupCapabilities>(),
-    compose: api => composeRuntimeSetup(api, composition, createRuntimeSetupFactories(process.platform), host => { hosts.push(host); }) });
-  assert.equal(steps.length, 15, "one run plus fail and abort at each of 7 modules");
-  assert.deepEqual(steps.filter(step => step.problem !== undefined), []);
-  for (const host of hosts) { await host.dispose(); }
-});

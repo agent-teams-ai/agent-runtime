@@ -22,6 +22,10 @@ export async function createDefaultAgentRuntimeHost(options?: DefaultAgentRuntim
 
 const selectedComposition = (ordinary: OrdinaryRuntimeAssemblyInput | undefined) => ordinary === undefined ? {declarations: runtimeSetupDeclarations, profile: runtimeSetupProfile} : {declarations: runtimeOrdinarySetupDeclarations, profile: runtimeOrdinarySetupProfile};
 
+// The ordinary Host passes its owners scope as the run scope of the owning modules.
+const runOptions = (signal: AbortSignal | undefined, ordinary: OrdinaryRuntimeAssemblyInput | undefined) =>
+  ({ ...(signal === undefined ? {} : { signal }), ...(ordinary === undefined ? {} : { scope: ordinary.owners }) });
+
 // Owner-local seam; never exported through the package composition surface.
 export async function createRuntimeSetupAttempt(
   options?: DefaultAgentRuntimeHostOptions,
@@ -60,7 +64,7 @@ export async function createRuntimeSetupAttempt(
       diagnostics: projectDiagnostics(preparation.diagnostics), cause: preparation.error.cause }); }
     checkCancellation();
     phase = "run";
-    const outcome = await preparation.prepared.run({ ...(signal === undefined ? {} : { signal }), ...(ordinary === undefined ? {} : { scope: ordinary.owners }) });
+    const outcome = await preparation.prepared.run(runOptions(signal, ordinary));
     checkpoints.observeOutcome?.(outcome);
     assertSuccessfulOutcome(outcome, signal, failureForAttempt, selectedComposition(ordinary).declarations);
     phase = "handoff";
