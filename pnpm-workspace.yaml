@@ -31,6 +31,8 @@ catalog:
   zod: "4.4.3"
   '@get-modular/core': 0.3.0
   '@get-modular/assembly': 0.3.0
+  '@get-modular/resources': 0.1.0
+  '@get-modular/conformance': 0.1.0
 allowBuilds:
   msgpackr-extract: false
   opencode-ai: true
@@ -43,3 +45,5 @@ minimumReleaseAgeExclude:
   - "@agent-teams/engineering-foundation@1.7.2"
   - "@get-modular/core@0.3.0"
   - "@get-modular/assembly@0.3.0"
+  - "@get-modular/resources@0.1.0"
+  - "@get-modular/conformance@0.1.0"

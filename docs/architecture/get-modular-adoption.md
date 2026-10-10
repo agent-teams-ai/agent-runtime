@@ -94,8 +94,17 @@ Construction order is the Core tie-break by implementation ID, and the package t
 An unsuccessful bounded reservation close leaves the ordinary flight owned.
 Concurrent disposal calls join one attempt; rejection permits another bounded
 attempt, and observed closure plus durable reconciliation releases the flight.
-The Host retains its provider owner and writable observation journal until the
-feature's disposal succeeds. Successful owner cleanup is removed exactly once.
+The Host retains its resource owners and writable observation journal until the
+Host drain, including the feature's disposal, succeeds. Owners (security, Provider
+Access, Codex) live in an `owners` scope under an `ordinary-host` scope that also
+holds the journal; the owning modules are bound with `scoped()` and receive the
+`owners` resources as the run scope. Owners release in reverse construction order
+and continue past a failed owner; a failed release is a debt named by implementation
+ID, retried by the next disposal without repeating successful releases. The journal
+closes only after the owners report a complete close. There is no root deadline in
+this train (ADR-0024). The tests pin the release order, the failed-owner retry and
+the retained journal, and run `smoke` for the passive and ordinary roots and
+`isolate` for the provider module.
 A timeout or rejection never proves termination. Reconciliation workspaces remain
 retained; retry does not publish artifacts or reclassify a reconciled turn as success.
 
@@ -1173,22 +1182,22 @@ the `outstandingWork` of the review, which stay as the evidence of the pin step.
 | norm | state now | final state, written by the closing PR | closedBy |
 | --- | --- | --- | --- |
 | Authority and identity: document pin, accepting ADR-0026, profile | met (pin `81063ad` since #201) | met | agent-runtime #201 |
-| Scoped acceptance and evidence: pins, package and archive identities, blocking commands | met for Core and Assembly 0.3.0 | met (resources added in AR-1c) | AR-1a, AR-1c |
+| Scoped acceptance and evidence: pins, package and archive identities, blocking commands | met for Core and Assembly 0.3.0 and resources 0.1.0 (retained archive, exact catalog, one copy) | met (resources added in AR-1c) | AR-1a, AR-1c |
 | New composition boundaries: descriptors own IDs and revisions; no hand-written compatibility; no `any`, `as never` or double casts in wiring | met | met | AR-1b |
 | Identity and namespaces, rules 1-7 | met | met | AR-1b |
 | Module packages and contracts | met for a private host-app package: descriptors and declarations live with the composition; the ordinary module factories are members of a frozen record built per Host attempt from Host constructors and bound by the root; a separate contract package is revisited in the package publication lane. Outstanding: port members of the seven ordinary contract value types (Agent Execution `ordinary-ports.ts`) are declared as methods, not function-typed properties | met for a private host-app package; the port member shape stays outstanding with the Agent Execution owner | AR-1b; port shape: Agent Execution owner |
 | Module packages list Get Modular packages only as peers | not applicable | not applicable while Agent Runtime packages are private and export no Get Modular modules; revisit in the package publication lane | none |
 | Dynamic instances (templates, inputs) | not applicable | not applicable: no prepared assembly serves more than one run; compile, bind and prepare run once per Host attempt | none |
-| Module resource scopes, author rules 1-13 | pending: AR-1c, AR-2 | met for the security, Provider Access and Codex owners; rule 7 holds: the Provider Access retirement protocol (broker close, rendering, capture and guard disposal, store retire) stays inside one cleanup | AR-1c, AR-2 |
-| Host rules: `scoped()`, one scope per run, close after `run()` settles, one package copy | pending: AR-1c | met (the passive profile has no owning factories, so its runs need no scope) | AR-1c |
-| Host rule: outer scope for a provider that cleanups need; drain before closing | pending: AR-1c | met: journal in the outer scope; Host drain with the turn owner handoff before owners close | AR-1c |
+| Module resource scopes, author rules 1-13 | pending: AR-2 (security and Codex owners met in AR-1c) | met for the security, Provider Access and Codex owners; rule 7 holds: the Provider Access retirement protocol (broker close, rendering, capture and guard disposal, store retire) stays inside one cleanup | AR-1c, AR-2 |
+| Host rules: `scoped()`, one scope per run, close after `run()` settles, one package copy | met (the passive profile has no owning factories, so its runs need no scope) | met (the passive profile has no owning factories, so its runs need no scope) | AR-1c |
+| Host rule: outer scope for a provider that cleanups need; drain before closing | met: journal in the outer scope; Host drain with the turn owner handoff before owners close | met: journal in the outer scope; Host drain with the turn owner handoff before owners close | AR-1c |
 | Host rule: one deadline at the root (escalate, then abandon) | outstanding | outstanding by decision of 2026-10-04: release of the resource owners keeps today's behavior without a deadline; added when an owner's release can block without its own bound, or on owner request; prepared values grace 5000 ms, abandon 5000 ms | none yet |
 | Host rule: `order: "concurrent"` only for independent peers | pending: AR-2 | met: Provider Access grants | AR-2 |
-| Errors identified by code | pending: AR-1c, AR-2 | met | AR-1c, AR-2 |
-| Testing 1 and 2: named module factories, typed fakes | pending: AR-1c | factories met for the ordinary feature; fakes this train touches are typed, but package test files are not type-checked yet; remaining work tracked in issue #189 | AR-1b, AR-1c; rest per #189 |
+| Errors identified by code | pending: AR-2 (AR-1c compares no Get Modular error with `instanceof`) | met | AR-1c, AR-2 |
+| Testing 1 and 2: named module factories, typed fakes | factories met for the ordinary feature; fakes this train touches are typed, but package test files are not type-checked yet; remaining work tracked in issue #189 | factories met for the ordinary feature; fakes this train touches are typed, but package test files are not type-checked yet; remaining work tracked in issue #189 | AR-1b, AR-1c; rest per #189 |
 | Testing 3: contract suites | outstanding | outstanding; covered by issue #189 brief 07 after AR-2 (planning decision 2026-10-04): one suite for `agent-runtime/ordinary/store`, owned by the ordinary feature, run against an in-memory fake and the PostgreSQL store, moved unchanged into STORE-2-core as its compatibility suite (never copied or imported from embedded-runtime); every other contract recorded as "no second implementation" | #189 brief 07 |
-| Testing 4: `isolate` | pending: AR-1c | met for one scoped owner module | AR-1c |
-| Testing 5: roots as functions of Assembly, one `smoke` per root | pending: AR-1c | met for the passive and ordinary profiles | AR-1b, AR-1c |
+| Testing 4: `isolate` | met for one scoped owner module (provider) | met for one scoped owner module | AR-1c |
+| Testing 5: roots as functions of Assembly, one `smoke` per root | met for the passive and ordinary profiles | met for the passive and ordinary profiles | AR-1b, AR-1c |
 | Testing 6: independent binding oracle | met: literal compiled-plan oracle | met | AR-1b |
-| Testing 7 and 8: `guardHandles`, close every scope, no sleeps | pending: AR-1c | 8 met for new tests; 7 not adopted in this train, tracked in issue #189 | AR-1c; 7 per #189 |
+| Testing 7 and 8: `guardHandles`, close every scope, no sleeps | 8 met for new tests; 7 not adopted in this train, tracked in issue #189 | 8 met for new tests; 7 not adopted in this train, tracked in issue #189 | AR-1c; 7 per #189 |
 | Optional dynamic Host lifecycle candidate | not adopted | not adopted | none |

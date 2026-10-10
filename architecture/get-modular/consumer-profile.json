@@ -6294,6 +6294,12 @@
       "version": "0.3.0",
       "archiveSha256": "3a4312465485269971db08efb10759fb3a3d4d23266c7f5d9fe8069b4bb411c8",
       "archivePath": "architecture/get-modular/evidence/get-modular-assembly-0.3.0.tgz"
+    },
+    {
+      "name": "@get-modular/resources",
+      "version": "0.1.0",
+      "archiveSha256": "1172c89d9f863d0e1763293eb6153d0835c609fc01ea730004fcee293872cc7a",
+      "archivePath": "architecture/get-modular/evidence/get-modular-resources-0.1.0.tgz"
     }
   ],
   "enforcement": {

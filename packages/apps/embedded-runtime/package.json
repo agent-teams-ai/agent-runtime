@@ -26,7 +26,8 @@
     "@agent-teams/runtime-configuration": "workspace:*",
     "@agent-teams/runtime-security": "workspace:*",
     "@get-modular/assembly": "catalog:",
-    "@get-modular/core": "catalog:"
+    "@get-modular/core": "catalog:",
+    "@get-modular/resources": "catalog:"
   },
   "files": [
     "dist",
@@ -44,6 +45,7 @@
     "./scripts/run-package-tests.mjs": "./scripts/run-package-tests.mjs"
   },
   "devDependencies": {
+    "@get-modular/conformance": "catalog:",
     "pg": "catalog:"
   }
 }

@@ -36,7 +36,7 @@ export function validateProfile(profile) {
   assert.ok(profile.authority.path, 'missing accepted authority');
   assert.ok(profile.productionRoots.length && profile.boundaries.length, 'missing activation census');
   assert.ok(profile.boundaries.some(b => b.status === 'adopted') && profile.compositions.length, 'active adoption requires a materialized composition');
-  equalSet(profile.packages.map(p => p.name), ['@get-modular/core', '@get-modular/assembly'], 'exact package pair');
+  equalSet(profile.packages.map(p => p.name), ['@get-modular/core', '@get-modular/assembly', '@get-modular/resources'], 'exact package set');
   assert.equal(new Set(profile.boundaries.map(b => b.id)).size, profile.boundaries.length, 'duplicate boundary');
   if (profile.boundaries.some(b => b.roots.some(path => path.includes('/ordinary-session-runtime/')))) {
     assert.equal(profile.compositions.filter(c => c.authority === 'ADR-0090').length, 1, 'ordinary source requires one explicitly authorized composition');

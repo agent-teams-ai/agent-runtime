@@ -134,7 +134,7 @@
         "additionalProperties": false,
         "required": ["name", "version", "archiveSha256", "archivePath"],
         "properties": {
-          "name": {"enum": ["@get-modular/core", "@get-modular/assembly"]},
+          "name": {"enum": ["@get-modular/core", "@get-modular/assembly", "@get-modular/resources"]},
           "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
           "archiveSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "archivePath": {"type": "string", "pattern": "^(?!/)(?!.*(?:\\*|\\?|\\[|\\\\|\\.\\.)).+$"}

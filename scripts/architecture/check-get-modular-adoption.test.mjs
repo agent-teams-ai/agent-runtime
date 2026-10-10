@@ -36,7 +36,7 @@ function fixture() {
       { id: 'composition.legacy', owner: 'Test', roots: ['packages/test/src/legacy.ts'], entrypoints: ['packages/test/src/legacy.ts'], status: 'not-adopted', rationale: 'retained direct edge', reviewTrigger: 'new edge', relationships: [{ from: 'packages/test/src/legacy.ts', to: 'test-library', mode: 'runtime' }] },
     ],
     compositions: [{ boundary: 'composition.test', entrypoint: 'packages/test/src/composition.ts', declarations: 'mapping.ts', profile: 'mapping.ts', factories: 'mapping.ts', tests: ['tests/mapping.test.ts'] }],
-    packages: ['@get-modular/core', '@get-modular/assembly'].map(name => ({ name, version: '0.1.0', archiveSha256: digest('synthetic archive'), archivePath: `evidence/${name.split('/')[1]}.tgz` })),
+    packages: ['@get-modular/core', '@get-modular/assembly', '@get-modular/resources'].map(name => ({ name, version: '0.1.0', archiveSha256: digest('synthetic archive'), archivePath: `evidence/${name.split('/')[1]}.tgz` })),
     enforcement: { roots: ['check:fast', 'check'], commands: { 'architecture:adoption': 'node scripts/architecture/check-get-modular-adoption.mjs', 'test:adoption': 'node --test scripts/architecture/check-get-modular-adoption.test.mjs' } },
   });
   profile.standard.evidencePath = 'evidence/common-assembly.md'; profile.standard.commit = standard.commit; profile.standard.sha256 = digest(standard.bytes);
@@ -89,6 +89,7 @@ const mutations = [
   ['removed fast gate', (_p, e) => { e.scripts['check:fast'] = 'pnpm lint'; }, /root gate missing/],
   ['commented root chain bypass', (_p, e) => { e.scripts['check:fast'] = 'true # && pnpm architecture:adoption'; }, /nonblocking root command/],
   ['coordinated rejecting test gate removal', (p, e) => { delete p.enforcement.commands['test:adoption']; delete e.scripts['test:adoption']; e.scripts.check = 'pnpm architecture:adoption'; e.scripts['check:fast'] = 'pnpm architecture:adoption'; }, /canonical adoption rejecting tests missing/],
+  ['core and assembly without resources', p => { p.packages = p.packages.filter(pkg => pkg.name !== '@get-modular/resources'); }, /exact package set/],
   ['archive drift', (_p, e) => { e.artifacts[0].bytes += 'drift'; }, /archive drift/],
   ['stale exception', p => { p.exceptions = [{ boundary: 'missing', rule: 'wiring', paths: ['mapping.ts'], authority: 'decision.md', owner: 'Test', rationale: 'test', reviewTrigger: 'test' }]; }, /stale exception/],
 ];

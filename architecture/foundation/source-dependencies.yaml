@@ -835,6 +835,7 @@ boundaries:
     - '@agent-teams/runtime-security'
     - '@get-modular/core'
     - '@get-modular/assembly'
+    - '@get-modular/resources'
     builtins:
     - node:crypto
     - node:fs
@@ -1394,7 +1395,9 @@ boundaries:
     - '@agentclientprotocol/sdk'
     - '@anthropic-ai/claude-agent-sdk'
     - '@get-modular/assembly'
+    - '@get-modular/conformance'
     - '@get-modular/core'
+    - '@get-modular/resources'
     - '@opencode-ai/plugin'
     - '@types/node'
     - '@types/pg'
