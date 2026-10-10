@@ -311,6 +311,7 @@ class HostDisposalOrchestrator {
   readonly #hostAbort = new AbortController();
   #disposal: Promise<void> | undefined;
   #disposed = false;
+  #finishing: Promise<void> | undefined;
 
   public constructor(calls: HostCallLedger, containedTurns: ContainedTurnOwnershipLedger, disposeOrdinaryOwner?: () => Promise<void>) {
     this.#disposeOrdinaryOwner = disposeOrdinaryOwner;
@@ -348,7 +349,7 @@ class HostDisposalOrchestrator {
       this.#hostAbort.abort(new DOMException("Agent Runtime Host is disposed", "AbortError"));
       this.#containedTurns.requestCancellationForAll();
       void Promise.race([
-        this.#finishDisposal(),
+        this.#finish(),
         this.#rejectAtDeadline(),
       ]).then(resolveDisposal, reject);
     } catch (error) {
@@ -356,6 +357,10 @@ class HostDisposalOrchestrator {
     }
     return attempt;
   };
+
+  // A rejected wait (deadline) ends only this caller's wait; a new drain starts after the running one settles.
+  readonly #finish = (): Promise<void> =>
+    this.#finishing ??= this.#finishDisposal().finally(() => { this.#finishing = undefined; });
 
   readonly #finishDisposal = async (): Promise<void> => {
     await this.#calls.settle();
