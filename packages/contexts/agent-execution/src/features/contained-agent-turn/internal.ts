@@ -104,7 +104,7 @@ export { applyOrdinaryPostgresSchema, PostgresOrdinaryOperationStore, type Ordin
 export {ORDINARY_PROFILE} from "./domain/ordinary-model.js";
 export type {OrdinaryOperation, OrdinaryAuthoritySnapshot, OrdinaryReceipt, OrdinaryReceiptOf} from "./domain/ordinary-model.js";
 export type {OrdinaryFeature} from "./composition/ordinary-feature-factory.js";
-export type {OrdinaryTurnDependencies, OrdinaryOperationStore, OrdinarySecurityPort, OrdinaryProviderAccessPort, OrdinarySecurityGrant, OrdinaryProviderGrant, OrdinaryCredentialMaterial, OrdinaryWorkspaceHandle, OrdinaryWorkspaceSnapshot, OrdinaryWorkspacePort, OrdinaryArtifactsPort, OrdinaryProcessPort, OrdinaryProcessReservation, OrdinaryTransport, OrdinaryProviderPort} from "./application/ordinary-ports.js";
+export type {OrdinaryTurnDependencies, OrdinaryOperationStore, OrdinarySecurityPort, OrdinaryProviderAccessPort, OrdinarySecurityGrant, OrdinaryProviderGrant, OrdinaryCredentialMaterial, OrdinaryWorkspaceHandle, OrdinaryWorkspaceSnapshot, OrdinaryWorkspacePort, OrdinaryArtifactsPort, OrdinaryProcessPort, OrdinaryProcessReservation, OrdinaryTransport, OrdinaryProviderPort, OrdinaryLaunchRecipe} from "./application/ordinary-ports.js";
 export { createNodeOrdinaryWorkspace, type NodeOrdinaryWorkspaceOptions, type OrdinaryWorkspaceObservation } from "./adapters/outbound/ordinary-filesystem/node-ordinary-workspace.js";
 export { createNodeOrdinaryArtifacts, readNodeOrdinaryArtifact, type NodeOrdinaryArtifactsOptions, type OrdinaryArtifactObservation } from "./adapters/outbound/ordinary-filesystem/node-ordinary-artifacts.js";
 

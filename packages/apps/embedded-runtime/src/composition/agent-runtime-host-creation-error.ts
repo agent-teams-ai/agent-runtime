@@ -75,14 +75,14 @@ export type RuntimeSetupModuleId =
   | "agent-runtime/codex-planner"
   | "agent-runtime/claude-planner"
   | "agent-runtime/runtime-host"
-  | "ordinary/store"
-  | "ordinary/security"
-  | "ordinary/provider-access"
-  | "ordinary/workspace"
-  | "ordinary/artifacts"
-  | "ordinary/process"
-  | "ordinary/provider"
-  | "ordinary/turn";
+  | "agent-runtime/ordinary/store"
+  | "agent-runtime/ordinary/security"
+  | "agent-runtime/ordinary/provider-access"
+  | "agent-runtime/ordinary/workspace"
+  | "agent-runtime/ordinary/artifacts"
+  | "agent-runtime/ordinary/process"
+  | "agent-runtime/ordinary/provider"
+  | "agent-runtime/ordinary/turn";
 
 type SameModuleIds =
   [InternalRuntimeSetupModuleId] extends [RuntimeSetupModuleId]

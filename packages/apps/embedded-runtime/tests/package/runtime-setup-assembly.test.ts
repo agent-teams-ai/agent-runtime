@@ -1,12 +1,13 @@
 import {failedCreationRecovery, terminalCreationCleanupUncertainty} from './runtime-setup-creation-cleanup.fixture.ts';
 import { compileComposition, defineModule } from "@get-modular/core";
+import { assemblyFor } from "@get-modular/assembly";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { createDefaultAgentRuntimeHost, AgentRuntimeHostCreationError } from "../../dist/composition.js";
 import { createRuntimeSetupAttempt } from "../../dist/composition/default-agent-runtime-host.js";
-import { bindRuntimeSetup, runtimeSetupDeclarations, runtimeSetupProfile, createRuntimeSetupFactories } from "../../dist/composition/runtime-setup-assembly.js";
+import { bindRuntimeSetup, runtimeSetupDeclarations, runtimeSetupProfile, createRuntimeSetupFactories, type RuntimeSetupCapabilities } from "../../dist/composition/runtime-setup-assembly.js";
 import { createExactParityHost, fixtureScope, registerPassiveSetupScenarios } from "../helpers/assembly-direct-reference.ts";
 
 registerPassiveSetupScenarios("Assembly", () => createDefaultAgentRuntimeHost());
@@ -116,13 +117,13 @@ for (const key of ["security", "discovery", "codexConfiguration", "claudeConfigu
     const calls: string[] = [];
     const composition = await compileComposition({ declarations: runtimeSetupDeclarations, profile: runtimeSetupProfile });
     assert.ok(composition.ok);
-    const moduleIds = { security: "agent-runtime/setup-security", discovery: "agent-runtime/installation-discovery", codexConfiguration: "agent-runtime/codex-configuration", claudeConfiguration: "agent-runtime/claude-configuration", codexPlanner: "agent-runtime/codex-planner", claudePlanner: "agent-runtime/claude-planner", host: "agent-runtime/runtime-host" } as const;
+    const implementationIds = { security: "agent-runtime/setup-security/default", discovery: "agent-runtime/installation-discovery/default", codexConfiguration: "agent-runtime/codex-configuration/default", claudeConfiguration: "agent-runtime/claude-configuration/default", codexPlanner: "agent-runtime/codex-planner/default", claudePlanner: "agent-runtime/claude-planner/default", host: "agent-runtime/runtime-host/passive" } as const;
     const expected = composition.plan.dependencyOrder;
     const secret = { toJSON() { throw new Error("raw cause executed"); } };
     await assert.rejects(createRuntimeSetupAttempt(undefined, (platform) => {
       const factories = createRuntimeSetupFactories(platform);
-      const record = (called: keyof typeof moduleIds) => {
-        calls.push(moduleIds[called]);
+      const record = (called: keyof typeof implementationIds) => {
+        calls.push(implementationIds[called]);
         if (called === key) { throw secret; }
       };
       return {
@@ -143,8 +144,8 @@ for (const key of ["security", "discovery", "codexConfiguration", "claudeConfigu
       return true;
     });
     // Sibling order belongs to the compiled plan; failure must stop its exact prefix.
-    assert.ok(expected.includes(moduleIds[key]));
-    assert.deepEqual(calls, expected.slice(0, expected.indexOf(moduleIds[key]) + 1));
+    assert.ok(expected.includes(implementationIds[key]));
+    assert.deepEqual(calls, expected.slice(0, expected.indexOf(implementationIds[key]) + 1));
   });
 }
 
@@ -236,7 +237,8 @@ for (const fault of ["missing-handle", "extra-handle", "duplicate-handle", "miss
     assert.equal(composition.ok, true);
     if (!composition.ok) {return;}
     const factories = createRuntimeSetupFactories(process.platform);
-    const bindings = bindRuntimeSetup({ ...factories,
+    const api = assemblyFor<RuntimeSetupCapabilities>();
+    const bindings = bindRuntimeSetup(api, { ...factories,
       security: async () => { productCalls += 1; return factories.security(); },
       discovery: async () => { productCalls += 1; return factories.discovery(); },
       codexConfiguration: async () => { productCalls += 1; return factories.codexConfiguration(); },
@@ -245,10 +247,10 @@ for (const fault of ["missing-handle", "extra-handle", "duplicate-handle", "miss
       claudePlanner: async () => { productCalls += 1; return factories.claudePlanner(); },
       host: (dependencies) => { productCalls += 1; return factories.host(dependencies); },
     }, () => { throw new Error("preparation created Host"); });
-    const extra = bindings.assembly.bindFactory(defineModule({ ...runtimeSetupDeclarations[6],
+    const extra = api.bindFactory(defineModule({ ...runtimeSetupDeclarations[6],
       moduleId: "agent-runtime/extra", implementationId: "agent-runtime/extra", slots: [],
     }), async () => { productCalls += 1; return { instance: undefined, capabilities: {} }; });
-    const result = await bindings.assembly.prepare({ composition,
+    const result = await api.prepare({ composition,
       factories: fault === "extra-handle" ? [...bindings.factories, extra] : fault === "missing-handle" ? bindings.factories.slice(1)
         : fault === "duplicate-handle" ? [...bindings.factories, bindings.roots.host] : bindings.factories,
       roots: fault === "missing-root" ? {} : fault === "wrong-root" ? { host: bindings.factories[0]! } : bindings.roots,
@@ -325,7 +327,7 @@ test("valid root fulfillment after abort awaits factory and cleanup without hand
   assert.equal(outcome.created.filter((entry) => entry.instance === owned).length, 1);
   assert.equal(outcome.created[6]!.instance, owned);
   assert.equal(outcome.created[6]!.moduleId, "agent-runtime/runtime-host");
-  assert.equal(outcome.created[6]!.implementationId, "agent-runtime/runtime-host");
+  assert.equal(outcome.created[6]!.implementationId, "agent-runtime/runtime-host/passive");
   assert.equal(handoffs, 0);
   cleanup.resolve();
   await assert.rejects(result, (error: unknown) => {
@@ -394,9 +396,9 @@ test("malformed root after abort preserves primary failure through rejecting cle
   assert.ok(outcome.status === "failed");
   assert.equal(outcome.code, "assembly.run.invalid-product");
   assert.equal(outcome.phase, "completion");
-  assert.equal(outcome.implementationId, "agent-runtime/runtime-host");
+  assert.equal(outcome.implementationId, "agent-runtime/runtime-host/passive");
   assert.equal(outcome.returned?.product, returned);
-  assert.equal(outcome.returned?.implementationId, "agent-runtime/runtime-host");
+  assert.equal(outcome.returned?.implementationId, "agent-runtime/runtime-host/passive");
   assert.equal(outcome.created.length, 6);
   assert.deepEqual(outcome.created.map((entry) => entry.moduleId).toSorted(), [
     "agent-runtime/claude-configuration", "agent-runtime/claude-planner",
@@ -463,7 +465,7 @@ for (const aborted of [false, true]) {
         if (outcome.status !== "failed") {return;}
         assert.equal(outcome.code, "assembly.run.invalid-product");
         assert.equal(outcome.returned?.product, returned);
-        assert.equal(outcome.returned?.implementationId, "agent-runtime/runtime-host");
+        assert.equal(outcome.returned?.implementationId, "agent-runtime/runtime-host/passive");
         assert.equal(outcome.created.length, 6);
         assert.ok(outcome.created.every((entry) => entry.instance !== owned));
         assert.equal(outcome.cancellation !== undefined, aborted);
@@ -525,7 +527,7 @@ test("unexpected envelope inspection failure before journal commit retains the c
   assert.equal(outcome.code, "assembly.run.internal");
   assert.equal(outcome.returned?.product, returned);
   assert.equal(outcome.created.length, 6);
-  assert.ok(outcome.created.every((entry) => entry.implementationId !== "agent-runtime/runtime-host"));
+  assert.ok(outcome.created.every((entry) => entry.implementationId !== "agent-runtime/runtime-host/passive"));
   assert.equal(disposed, 1);
 });
 
@@ -619,7 +621,7 @@ test("factory owns and awaits release of a resource acquired before rejection", 
     assert.equal(outcome.status, "failed");
     if (outcome.status !== "failed") {return;}
     assert.equal(outcome.returned, undefined);
-    assert.ok(outcome.created.every((entry) => entry.implementationId !== "agent-runtime/setup-security"));
+    assert.ok(outcome.created.every((entry) => entry.implementationId !== "agent-runtime/setup-security/default"));
   } });
   void result.then(() => { settled = true; return; }, () => { settled = true; return; });
   await entered.promise;
@@ -677,7 +679,8 @@ for (const fault of ["missing-binding", "wrong-implementation", "capability", "c
     if (!composition.ok) {return;}
     let calls = 0;
     const fail = (): never => { calls += 1; throw new Error("preflight must not materialize"); };
-    const bindings = bindRuntimeSetup({ security: fail, discovery: fail, codexConfiguration: fail,
+    const api = assemblyFor<RuntimeSetupCapabilities>();
+    const bindings = bindRuntimeSetup(api, { security: fail, discovery: fail, codexConfiguration: fail,
       claudeConfiguration: fail, codexPlanner: fail, claudePlanner: fail, host: fail }, fail);
     const first = composition.plan.bindings[0]!;
     const changed = {
@@ -695,7 +698,7 @@ for (const fault of ["missing-binding", "wrong-implementation", "capability", "c
         dependencyOrder: fault === "order" ? composition.plan.dependencyOrder.toReversed() : composition.plan.dependencyOrder,
       },
     };
-    const result = await bindings.assembly.prepare({ composition: changed, factories: bindings.factories, roots: bindings.roots });
+    const result = await api.prepare({ composition: changed, factories: bindings.factories, roots: bindings.roots });
     assert.equal(result.status, "failed");
     assert.equal(calls, 0);
   });

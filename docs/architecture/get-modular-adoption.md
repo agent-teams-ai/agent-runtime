@@ -22,12 +22,13 @@ The ordinary extension declares eight owned nodes: operation store, Runtime
 Security, Provider Access, workspace, artifacts, process, provider and turn.
 The turn requires exactly seven dependencies; Provider Access additionally
 consumes Security's operation-bound secret-registration capability. Process
-requires Provider's `ordinary/prepare-launch` capability. The same provider
+requires Provider's `agent-runtime/ordinary/prepare-launch` capability. The same provider
 factory returns execution and launch preparation from one adapter owner; Assembly
 injects preparation into Process before the closed turn is materialized. The Host
-receives the closed ordinary turn root. The compatibility token is
-`agent-runtime/ordinary-v1`; it is distinct from the execution profile,
-manifest and persistence codec identities.
+receives the closed ordinary turn root. Every capability has a contract
+descriptor with revision 1, so its token is `<capabilityId>/r1`; the tokens
+are distinct from the execution profile, manifest and persistence codec
+identities.
 
 The ordinary feature's full source and exact new files in existing features
 have [scoped active FMS adoption](../../architecture/feature-module-standard/ordinary-scope.json).
@@ -46,6 +47,47 @@ Node/SDK/layer, slot, capability, cardinality, token and binding mutants.
 Both commands remain in fast and full gates; runtime preparation, cleanup and
 public construction tests are mapped in the same profile. These architecture
 gates do not substitute for the ordinary end-to-end execution evidence.
+
+### Module identities
+
+Module and implementation IDs lie in the `agent-runtime/` namespace, and
+`owner.authority` is `agent-runtime` for all sixteen declarations. Descriptors
+own capability IDs and revisions (`defineContract`); declarations reference
+descriptors through `declareModule` and never spell `compatibility`. An
+implementation ID names the variant, so a later store, process or provider
+variant gets a new implementation ID under the same module. The passive and the
+ordinary Host share one module and have two implementation IDs, because their
+slots differ. No ID is stored outside code, tests, gates and docs; renamed IDs
+needed no data migration.
+
+| moduleId | implementationId | provides | slots |
+| --- | --- | --- | --- |
+| `agent-runtime/setup-security` | `agent-runtime/setup-security/default` | `agent-runtime/codex-authorization`, `agent-runtime/claude-authorization` | none |
+| `agent-runtime/installation-discovery` | `agent-runtime/installation-discovery/default` | `agent-runtime/codex-installations`, `agent-runtime/claude-installations` | none |
+| `agent-runtime/codex-configuration` | `agent-runtime/codex-configuration/default` | `agent-runtime/codex-configuration` | none |
+| `agent-runtime/claude-configuration` | `agent-runtime/claude-configuration/default` | `agent-runtime/claude-configuration` | none |
+| `agent-runtime/codex-planner` | `agent-runtime/codex-planner/default` | `agent-runtime/codex-planner` | none |
+| `agent-runtime/claude-planner` | `agent-runtime/claude-planner/default` | `agent-runtime/claude-planner` | none |
+| `agent-runtime/runtime-host` | `agent-runtime/runtime-host/passive` | none | the eight setup slots |
+| `agent-runtime/runtime-host` | `agent-runtime/runtime-host/ordinary` | none | the eight setup slots and `ordinary-turn` |
+| `agent-runtime/ordinary/store` | `agent-runtime/ordinary/store/postgres` | `agent-runtime/ordinary/store` | none |
+| `agent-runtime/ordinary/security` | `agent-runtime/ordinary/security/postgres` | `agent-runtime/ordinary/security`, `agent-runtime/ordinary/register-secrets` | none |
+| `agent-runtime/ordinary/provider-access` | `agent-runtime/ordinary/provider-access/postgres` | `agent-runtime/ordinary/provider-access` | `register-secrets` |
+| `agent-runtime/ordinary/workspace` | `agent-runtime/ordinary/workspace/node` | `agent-runtime/ordinary/workspace` | none |
+| `agent-runtime/ordinary/artifacts` | `agent-runtime/ordinary/artifacts/node` | `agent-runtime/ordinary/artifacts` | none |
+| `agent-runtime/ordinary/process` | `agent-runtime/ordinary/process/node` | `agent-runtime/ordinary/process` | `prepare-launch` |
+| `agent-runtime/ordinary/provider` | `agent-runtime/ordinary/provider/codex` | `agent-runtime/ordinary/provider`, `agent-runtime/ordinary/prepare-launch` | none |
+| `agent-runtime/ordinary/turn` | `agent-runtime/ordinary/turn/default` | `agent-runtime/ordinary/turn` | `operation-store`, `security`, `provider-access`, `workspace`, `artifacts`, `process`, `provider` |
+
+The composition root is a function of `Assembly`: `composeRuntimeSetup` binds
+every factory through the api it receives. The ordinary feature exports its
+declarations and unbound module factories and does not import the Host's
+capability map. `pnpm architecture:get-modular-adoption` checks the literal
+descriptors and declarations of the ordinary feature and the Host handoff, and
+the package tests compile both profiles and compare the plan bindings and
+tokens with a hand-written list.
+
+Construction order is the Core tie-break by implementation ID, and the package test pins it as a literal list for both profiles. In the ordinary profile `agent-runtime/setup-security/default` is constructed after the eight ordinary owners. This is safe: it has no slots, the ordinary Security owner is a separate module, and no ordinary owner reads its output or relies on its side effects; if an order requirement ever appears, it must be an explicit slot, not an ID.
 
 ### Ordinary closure retention and binding evidence
 
@@ -1132,9 +1174,9 @@ the `outstandingWork` of the review, which stay as the evidence of the pin step.
 | --- | --- | --- | --- |
 | Authority and identity: document pin, accepting ADR-0026, profile | met (pin `81063ad` since #201) | met | agent-runtime #201 |
 | Scoped acceptance and evidence: pins, package and archive identities, blocking commands | met for Core and Assembly 0.3.0 | met (resources added in AR-1c) | AR-1a, AR-1c |
-| New composition boundaries: descriptors own IDs and revisions; no hand-written compatibility; no `any`, `as never` or double casts in wiring | pending: AR-1b | met | AR-1b |
-| Identity and namespaces, rules 1-7 | pending: AR-1b | met | AR-1b |
-| Module packages and contracts | pending: AR-1b | met for a private host-app package: descriptors and declarations live with the composition; module factories are members of a frozen record built per Host attempt from Host constructors and bound by the root; a separate contract package is revisited in the package publication lane | AR-1b |
+| New composition boundaries: descriptors own IDs and revisions; no hand-written compatibility; no `any`, `as never` or double casts in wiring | met | met | AR-1b |
+| Identity and namespaces, rules 1-7 | met | met | AR-1b |
+| Module packages and contracts | met for a private host-app package: descriptors and declarations live with the composition; the ordinary module factories are members of a frozen record built per Host attempt from Host constructors and bound by the root; a separate contract package is revisited in the package publication lane. Outstanding: port members of the seven ordinary contract value types (Agent Execution `ordinary-ports.ts`) are declared as methods, not function-typed properties | met for a private host-app package; the port member shape stays outstanding with the Agent Execution owner | AR-1b; port shape: Agent Execution owner |
 | Module packages list Get Modular packages only as peers | not applicable | not applicable while Agent Runtime packages are private and export no Get Modular modules; revisit in the package publication lane | none |
 | Dynamic instances (templates, inputs) | not applicable | not applicable: no prepared assembly serves more than one run; compile, bind and prepare run once per Host attempt | none |
 | Module resource scopes, author rules 1-13 | pending: AR-1c, AR-2 | met for the security, Provider Access and Codex owners; rule 7 holds: the Provider Access retirement protocol (broker close, rendering, capture and guard disposal, store retire) stays inside one cleanup | AR-1c, AR-2 |
@@ -1143,10 +1185,10 @@ the `outstandingWork` of the review, which stay as the evidence of the pin step.
 | Host rule: one deadline at the root (escalate, then abandon) | outstanding | outstanding by decision of 2026-10-04: release of the resource owners keeps today's behavior without a deadline; added when an owner's release can block without its own bound, or on owner request; prepared values grace 5000 ms, abandon 5000 ms | none yet |
 | Host rule: `order: "concurrent"` only for independent peers | pending: AR-2 | met: Provider Access grants | AR-2 |
 | Errors identified by code | pending: AR-1c, AR-2 | met | AR-1c, AR-2 |
-| Testing 1 and 2: named module factories, typed fakes | pending: AR-1b | factories met for the ordinary feature; fakes this train touches are typed, but package test files are not type-checked yet; remaining work tracked in issue #189 | AR-1b, AR-1c; rest per #189 |
+| Testing 1 and 2: named module factories, typed fakes | pending: AR-1c | factories met for the ordinary feature; fakes this train touches are typed, but package test files are not type-checked yet; remaining work tracked in issue #189 | AR-1b, AR-1c; rest per #189 |
 | Testing 3: contract suites | outstanding | outstanding; covered by issue #189 brief 07 after AR-2 (planning decision 2026-10-04): one suite for `agent-runtime/ordinary/store`, owned by the ordinary feature, run against an in-memory fake and the PostgreSQL store, moved unchanged into STORE-2-core as its compatibility suite (never copied or imported from embedded-runtime); every other contract recorded as "no second implementation" | #189 brief 07 |
 | Testing 4: `isolate` | pending: AR-1c | met for one scoped owner module | AR-1c |
-| Testing 5: roots as functions of Assembly, one `smoke` per root | pending: AR-1b, AR-1c | met for the passive and ordinary profiles | AR-1b, AR-1c |
-| Testing 6: independent binding oracle | pending: AR-1b | met: literal compiled-plan oracle | AR-1b |
+| Testing 5: roots as functions of Assembly, one `smoke` per root | pending: AR-1c | met for the passive and ordinary profiles | AR-1b, AR-1c |
+| Testing 6: independent binding oracle | met: literal compiled-plan oracle | met | AR-1b |
 | Testing 7 and 8: `guardHandles`, close every scope, no sleeps | pending: AR-1c | 8 met for new tests; 7 not adopted in this train, tracked in issue #189 | AR-1c; 7 per #189 |
 | Optional dynamic Host lifecycle candidate | not adopted | not adopted | none |

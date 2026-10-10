@@ -1,10 +1,10 @@
 import {createOrdinaryAgentRuntimeHost, type OrdinaryAgentRuntimeHostOptions} from "../features/ordinary-session-runtime/internal.js";
 export type {OrdinaryAgentRuntimeHostOptions} from "../features/ordinary-session-runtime/internal.js";
 import { compileComposition } from "@get-modular/core";
-import type { AssemblyOutcome } from "@get-modular/assembly";
+import { assemblyFor, type AssemblyOutcome } from "@get-modular/assembly";
 import type { AgentRuntimeHost } from "./agent-runtime-host.js";
 import { AgentRuntimeHostCreationError, assemblyErrorCodes, projectDiagnostics, type AgentRuntimeHostCreationPhase } from "./agent-runtime-host-creation-error.js";
-import { bindRuntimeSetup, createRuntimeSetupFactories, runtimeSetupDeclarations, runtimeSetupProfile, runtimeOrdinarySetupDeclarations, runtimeOrdinarySetupProfile, type OrdinaryRuntimeAssemblyInput, type RuntimeSetupFactories, type RuntimeSetupRootCompletion } from "./runtime-setup-assembly.js";
+import { bindRuntimeSetup, composeRuntimeSetup, createRuntimeSetupFactories, runtimeSetupDeclarations, runtimeSetupProfile, runtimeOrdinarySetupDeclarations, runtimeOrdinarySetupProfile, type OrdinaryRuntimeAssemblyInput, type RuntimeSetupCapabilities, type RuntimeSetupFactories, type RuntimeSetupRootCompletion } from "./runtime-setup-assembly.js";
 
 const errorCodes: Partial<typeof assemblyErrorCodes> = assemblyErrorCodes;
 
@@ -51,9 +51,10 @@ export async function createRuntimeSetupAttempt(
       cancellationObserved: signal?.aborted, diagnostics: projectDiagnostics(composition.diagnostics) }); }
     checkCancellation();
     phase = "bind";
-    const bindings = bindRuntimeSetup(factoriesForAttempt(platform), (host) => { ownedHost = host; }, checkpoints.completeRoot, ordinary);
+    const pending = composeRuntimeSetup(assemblyFor<RuntimeSetupCapabilities>(), composition,
+      factoriesForAttempt(platform), (host) => { ownedHost = host; }, checkpoints.completeRoot, ordinary);
     phase = "prepare";
-    const preparation = await bindings.assembly.prepare({ composition, factories: bindings.factories, roots: bindings.roots });
+    const preparation = await pending;
     if (preparation.status === "failed") { throw failureForAttempt(
       errorCodes[preparation.error.code] ?? "invalid_composition", phase, { cancellationObserved: signal?.aborted,
       diagnostics: projectDiagnostics(preparation.diagnostics), cause: preparation.error.cause }); }
@@ -61,7 +62,7 @@ export async function createRuntimeSetupAttempt(
     phase = "run";
     const outcome = await preparation.prepared.run(signal === undefined ? {} : { signal });
     checkpoints.observeOutcome?.(outcome);
-    assertSuccessfulOutcome(outcome, signal, failureForAttempt);
+    assertSuccessfulOutcome(outcome, signal, failureForAttempt, selectedComposition(ordinary).declarations);
     phase = "handoff";
     checkCancellation();
     if (outcome.roots.host !== ownedHost) { throw failureForAttempt("internal_failure", phase); }
@@ -94,12 +95,13 @@ function assertSuccessfulOutcome(
   outcome: RuntimeSetupOutcome,
   signal: AbortSignal | undefined,
   failure: (...args: ConstructorParameters<typeof AgentRuntimeHostCreationError>) => AgentRuntimeHostCreationError,
+  declarations: ReturnType<typeof selectedComposition>["declarations"],
 ): asserts outcome is Extract<RuntimeSetupOutcome, { status: "succeeded" }> {
   if (outcome.status === "failed") {
     throw failure(errorCodes[outcome.code] ?? "internal_failure", "run", {
       cancellationObserved: outcome.cancellation !== undefined || signal?.aborted === true,
       cause: outcome.cause,
-      moduleId: runtimeOrdinarySetupDeclarations.find(({ implementationId }) => implementationId === outcome.implementationId)?.moduleId,
+      moduleId: declarations.find(({ implementationId }) => implementationId === outcome.implementationId)?.moduleId,
     });
   }
   if (outcome.status === "cancelled") { throw failure("cancelled", "run", { cancellationObserved: true }); }
