@@ -103,6 +103,11 @@
       "immutableDigest": "sha256:6932ada5202b24d2f5f05c7da52638dcb2f0e19c44a13b9218d63a2f4c149019"
     },
     {
+      "id": "ADR-0024",
+      "path": "docs/decisions/0024-get-modular-resource-scopes-for-ordinary-owners-and-provider-access-grants.md",
+      "immutableDigest": "sha256:925670691825177147316faf90aeffe2390a038f44b1a7f474673757c335d133"
+    },
+    {
       "id": "ADR-0090",
       "path": "docs/decisions/0090-ordinary-user-session-codex-execution-profile.md",
       "immutableDigest": "sha256:ce26ce717bd00701b2ddf4d073999591cda8b9f0e08b3238290e6646bfe02bf1"

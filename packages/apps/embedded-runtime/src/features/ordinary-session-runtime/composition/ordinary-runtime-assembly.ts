@@ -1,5 +1,6 @@
 import {declareModule, defineContract, type CapabilitiesOf, type ModuleFactory} from "@get-modular/assembly";
 import {required} from "@get-modular/core";
+import type {ModuleContext, Resources} from "@get-modular/resources";
 import {createOrdinaryTurnFeature, type OrdinaryTurnDependencies, type OrdinaryProcessPort, type OrdinaryLaunchRecipe} from "@agent-teams/agent-execution/composition";
 
 type OrdinaryFeature = ReturnType<typeof createOrdinaryTurnFeature>;
@@ -45,12 +46,12 @@ export const ordinaryRuntimeBindings = [
 ] as const;
 export interface OrdinaryRuntimeFactories {
   operationStore(): Promise<OrdinaryTurnDependencies["operationStore"]>;
-  security(): Promise<{readonly port: OrdinaryTurnDependencies["security"]; readonly registerSecrets: RegisterSecrets}>;
-  providerAccess(registerSecrets: RegisterSecrets): Promise<OrdinaryTurnDependencies["providerAccess"]>;
+  security(resources: Resources): Promise<{readonly port: OrdinaryTurnDependencies["security"]; readonly registerSecrets: RegisterSecrets}>;
+  providerAccess(registerSecrets: RegisterSecrets, resources: Resources): Promise<OrdinaryTurnDependencies["providerAccess"]>;
   workspace(): Promise<OrdinaryTurnDependencies["workspace"]>;
   artifacts(): Promise<OrdinaryTurnDependencies["artifacts"]>;
   process(prepareLaunch: OrdinaryLaunchRecipe): Promise<OrdinaryProcessPort>;
-  provider(): Promise<{readonly provider: OrdinaryTurnDependencies["provider"]; readonly prepareLaunch: OrdinaryLaunchRecipe}>;
+  provider(resources: Resources): Promise<{readonly provider: OrdinaryTurnDependencies["provider"]; readonly prepareLaunch: OrdinaryLaunchRecipe}>;
 }
 interface OrdinaryTurnModuleCapabilities extends CapabilitiesOf<typeof OrdinaryStore | typeof OrdinarySecurity | typeof OrdinaryProviderAccess | typeof OrdinaryWorkspace | typeof OrdinaryArtifacts | typeof OrdinaryProcess | typeof OrdinaryProvider | typeof OrdinaryTurn> {}
 const createTurnModule: ModuleFactory<OrdinaryTurnModuleCapabilities, typeof ordinaryTurnDeclaration, OrdinaryFeature> = async dependencies => {
@@ -61,17 +62,17 @@ const createTurnModule: ModuleFactory<OrdinaryTurnModuleCapabilities, typeof ord
 export function createOrdinaryModuleFactories(factories: OrdinaryRuntimeFactories) {
   const store: ModuleFactory<CapabilitiesOf<typeof OrdinaryStore>, typeof ordinaryStoreDeclaration, OrdinaryTurnDependencies["operationStore"]> =
     async () => {const instance = await factories.operationStore(); return {instance, capabilities: {"agent-runtime/ordinary/store": instance}};};
-  const security: ModuleFactory<CapabilitiesOf<typeof OrdinarySecurity | typeof OrdinaryRegisterSecrets>, typeof ordinarySecurityDeclaration, Awaited<ReturnType<OrdinaryRuntimeFactories["security"]>>> =
-    async () => {const instance = await factories.security(); return {instance, capabilities: {"agent-runtime/ordinary/security": instance.port, "agent-runtime/ordinary/register-secrets": instance.registerSecrets}};};
-  const providerAccess: ModuleFactory<CapabilitiesOf<typeof OrdinaryProviderAccess | typeof OrdinaryRegisterSecrets>, typeof ordinaryProviderAccessDeclaration, OrdinaryTurnDependencies["providerAccess"]> =
-    async dependencies => {const instance = await factories.providerAccess(dependencies["register-secrets"]); return {instance, capabilities: {"agent-runtime/ordinary/provider-access": instance}};};
+  const security: ModuleFactory<CapabilitiesOf<typeof OrdinarySecurity | typeof OrdinaryRegisterSecrets>, typeof ordinarySecurityDeclaration, Awaited<ReturnType<OrdinaryRuntimeFactories["security"]>>, ModuleContext> =
+    async (_dependencies, context) => {const instance = await factories.security(context.resources); return {instance, capabilities: {"agent-runtime/ordinary/security": instance.port, "agent-runtime/ordinary/register-secrets": instance.registerSecrets}};};
+  const providerAccess: ModuleFactory<CapabilitiesOf<typeof OrdinaryProviderAccess | typeof OrdinaryRegisterSecrets>, typeof ordinaryProviderAccessDeclaration, OrdinaryTurnDependencies["providerAccess"], ModuleContext> =
+    async (dependencies, context) => {const instance = await factories.providerAccess(dependencies["register-secrets"], context.resources); return {instance, capabilities: {"agent-runtime/ordinary/provider-access": instance}};};
   const workspace: ModuleFactory<CapabilitiesOf<typeof OrdinaryWorkspace>, typeof ordinaryWorkspaceDeclaration, OrdinaryTurnDependencies["workspace"]> =
     async () => {const instance = await factories.workspace(); return {instance, capabilities: {"agent-runtime/ordinary/workspace": instance}};};
   const artifacts: ModuleFactory<CapabilitiesOf<typeof OrdinaryArtifacts>, typeof ordinaryArtifactsDeclaration, OrdinaryTurnDependencies["artifacts"]> =
     async () => {const instance = await factories.artifacts(); return {instance, capabilities: {"agent-runtime/ordinary/artifacts": instance}};};
   const process: ModuleFactory<CapabilitiesOf<typeof OrdinaryProcess | typeof OrdinaryPrepareLaunch>, typeof ordinaryProcessDeclaration, OrdinaryProcessPort> =
     async dependencies => {const instance = await factories.process(dependencies["prepare-launch"]); return {instance, capabilities: {"agent-runtime/ordinary/process": instance}};};
-  const provider: ModuleFactory<CapabilitiesOf<typeof OrdinaryProvider | typeof OrdinaryPrepareLaunch>, typeof ordinaryProviderDeclaration, Awaited<ReturnType<OrdinaryRuntimeFactories["provider"]>>> =
-    async () => {const instance = await factories.provider(); return {instance, capabilities: {"agent-runtime/ordinary/provider": instance.provider, "agent-runtime/ordinary/prepare-launch": instance.prepareLaunch}};};
+  const provider: ModuleFactory<CapabilitiesOf<typeof OrdinaryProvider | typeof OrdinaryPrepareLaunch>, typeof ordinaryProviderDeclaration, Awaited<ReturnType<OrdinaryRuntimeFactories["provider"]>>, ModuleContext> =
+    async (_dependencies, context) => {const instance = await factories.provider(context.resources); return {instance, capabilities: {"agent-runtime/ordinary/provider": instance.provider, "agent-runtime/ordinary/prepare-launch": instance.prepareLaunch}};};
   return Object.freeze({store, security, providerAccess, workspace, artifacts, process, provider, turn: createTurnModule});
 }

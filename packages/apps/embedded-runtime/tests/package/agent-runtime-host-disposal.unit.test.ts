@@ -110,3 +110,17 @@ test("reserved authority in cancellation terminal proof cannot release operation
   assert.equal(lifecycle.dispose(), disposal);
   assert.equal(cancellations, 1);
 });
+
+test("a retry after the wait deadline joins the running ordinary drain", { timeout: 5000 }, async () => {
+  let calls = 0;
+  const gate = Promise.withResolvers<void>();
+  const lifecycle = createAgentRuntimeHostDisposalLifecycle(undefined, async () => { calls += 1; await gate.promise; });
+  const first = lifecycle.dispose();
+  assert.equal(lifecycle.dispose(), first);
+  await assert.rejects(first, (error: unknown) => error instanceof AgentRuntimeHostDisposalIncompleteError);
+  const retry = lifecycle.dispose();
+  assert.equal(calls, 1);
+  gate.resolve();
+  await retry;
+  assert.equal(calls, 1);
+});
