@@ -7,6 +7,7 @@ import type { TestContext } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const repository = fileURLToPath(new URL('../../', import.meta.url));
+const fixtureBootstrapImport = "import { admitAndImportOptimizer } from './scripts/ci/pr-regression-bootstrap.ts';";
 
 export const regressionGraphTestName = 'complete quick obligations retain live conformance and reject deferred execution or passes';
 
@@ -122,6 +123,35 @@ export function runActualMeasureGraph(fixture: ActualMeasureFixture): SpawnSyncR
   delete env.NODE_TEST_CONTEXT;
   delete env.NODE_OPTIONS;
   return spawnSync(process.execPath, ['scripts/ci/measure.ts', 'check:ci:quick'], { cwd: fixture.root, env, encoding: 'utf8' });
+}
+
+function fixtureBootstrapProbe(root: string, environment: NodeJS.ProcessEnv, source: string): SpawnSyncReturns<string> {
+  const env: NodeJS.ProcessEnv = { ...environment };
+  delete env.NODE_TEST_CONTEXT;
+  delete env.NODE_OPTIONS;
+  return spawnSync(process.execPath, ['--input-type=module', '--eval', source], { cwd: root, env, encoding: 'utf8' });
+}
+
+export function runFixtureBootstrapAdmission(root: string, environment: NodeJS.ProcessEnv): SpawnSyncReturns<string> {
+  return fixtureBootstrapProbe(root, environment, `${fixtureBootstrapImport}
+try {
+  await admitAndImportOptimizer(process.cwd());
+  process.stdout.write('admitted');
+} catch (error) {
+  process.stdout.write(JSON.stringify({ rejected: error instanceof Error ? error.message : String(error) }));
+  process.exitCode = 24;
+}`);
+}
+
+export function runFixtureOptimizerComparison(root: string, environment: NodeJS.ProcessEnv): SpawnSyncReturns<string> {
+  return fixtureBootstrapProbe(root, environment, `${fixtureBootstrapImport}
+const compare = await admitAndImportOptimizer(process.cwd());
+const base = { version: 1, digestScheme: 'sha256', inputs: [
+  { path: 'root.ts', type: 'file', mode: '100644', membership: 'closed', content: 'a'.repeat(64) },
+  { path: 'body.ts', type: 'file', mode: '100644', membership: 'structural', content: '1'.repeat(64) },
+] };
+const head = { ...base, inputs: [base.inputs[0], { ...base.inputs[1], content: '2'.repeat(64) }] };
+process.stdout.write(JSON.stringify(compare(base, head, ['body.ts'])));`);
 }
 
 export async function runActualRegressionImportGraph(fixture: ActualMeasureFixture): Promise<SpawnSyncReturns<string>> {

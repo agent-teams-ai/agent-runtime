@@ -3,15 +3,17 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { chmod, cp, lstat, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import test from 'node:test';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
-import { admitAndImportOptimizer, installationMetadataMaxBytes, parseInstallationMetadata } from './pr-regression-bootstrap.ts';
+import { installationMetadataMaxBytes, parseInstallationMetadata } from './pr-regression-bootstrap.ts';
 import {
   actualMeasureFixture,
   copySourceTree,
   regressionGraphTestName,
   runActualMeasureGraph,
   runActualRegressionImportGraph,
+  runFixtureBootstrapAdmission,
+  runFixtureOptimizerComparison,
   testScratch,
 } from './pr-regression-bootstrap-fixtures.ts';
 
@@ -532,10 +534,11 @@ function registerWorkflowAndMeasureTests(): void {
   test('actual pre-import recovery regression graph never loads a rejected optimizer', async t => {
     for (const optimizer of ['marker', 'absent'] as const) {
       const rejected = await sourceFixture(t, 'none', optimizer);
-      const bootstrap = await import(pathToFileURL(join(rejected.root, 'scripts/ci/pr-regression-bootstrap.ts')).href) as {
-        admitAndImportOptimizer: typeof admitAndImportOptimizer;
-      };
-      await assert.rejects(bootstrap.admitAndImportOptimizer(rejected.root), optimizer);
+      const admission = runFixtureBootstrapAdmission(rejected.root, rejected.env);
+      assert.equal(admission.status, 24, `${optimizer}: ${admission.stdout}\n${admission.stderr}`);
+      assert.equal(admission.signal, null, optimizer);
+      const rejection = JSON.parse(admission.stdout) as { rejected?: string };
+      assert.ok(typeof rejection.rejected === 'string' && rejection.rejected.length > 0, optimizer);
       await assert.rejects(readFile(join(rejected.evidence, 'optimizer-import-marker')), optimizer);
 
       const fixture = await actualMeasureFixture(t, { optimizer });
@@ -731,16 +734,10 @@ export function registerPrRegressionBootstrapTests(): void {
 
   test('additional optimizer integration observation runs only after independent admission', async t => {
     const fixture = await sourceFixture(t, 'none', 'valid');
-    const bootstrap = await import(pathToFileURL(join(fixture.root, 'scripts/ci/pr-regression-bootstrap.ts')).href) as {
-      admitAndImportOptimizer: typeof admitAndImportOptimizer;
-    };
-    const compare = await bootstrap.admitAndImportOptimizer(fixture.root);
-    const base = { version: 1, digestScheme: 'sha256', inputs: [
-      { path: 'root.ts', type: 'file', mode: '100644', membership: 'closed', content: 'a'.repeat(64) },
-      { path: 'body.ts', type: 'file', mode: '100644', membership: 'structural', content: '1'.repeat(64) },
-    ] };
-    const head = { ...base, inputs: [base.inputs[0]!, { ...base.inputs[1]!, content: '2'.repeat(64) }] };
-    assert.deepEqual(compare(base, head, ['body.ts']), { status: 'compatible-inputs', changedContentPaths: ['body.ts'] });
+    const observation = runFixtureOptimizerComparison(fixture.root, fixture.env);
+    assert.equal(observation.status, 0, `${observation.stdout}\n${observation.stderr}`);
+    assert.deepEqual(JSON.parse(observation.stdout),
+      { status: 'compatible-inputs', changedContentPaths: ['body.ts'] });
   });
 
   test('bootstrap/helper/config/lock/fixture/installed drift and structural changes select FULL', async t => {
