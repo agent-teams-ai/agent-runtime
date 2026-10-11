@@ -53,17 +53,18 @@ async function fixture() {
       await put(`${base}/native/rename-no-replace.c`, '// synthetic TEST native source identity');
     }
     if (id !== 'agent-execution' && id !== 'embedded-runtime') {
-      for (const pattern of originalPackages.find(p => p.root === base)!.test.split(' ').slice(3)) {
+      for (const pattern of originalPackages.find(p => p.root === base)!.test.split(' ').slice(3).filter(arg => !arg.startsWith('--'))) {
         const file = pattern.replaceAll('*', 'example');
         await put(`${base}/${file}`, "import test from 'node:test'; test('first identity', () => {}); test('second identity', () => {}); for (const name of ['repeat', 'repeat']) { test(name, () => {}); } test('skip', {skip:true}, () => {});\n");
       }
     }
     if (id === 'embedded-runtime') {
       await put(`${base}/tests/second.test.ts`, "import test from 'node:test'; test('second actual process', () => {});");
+      await put(`${base}/tests/third.test.ts`, "import test from 'node:test'; test('third actual process', () => {});");
       await put(`${base}/scripts/adoption-test-reporter.mjs`, await readFile(new URL('../../packages/apps/embedded-runtime/scripts/adoption-test-reporter.mjs', import.meta.url), 'utf8'));
       const runner = await readFile(new URL('../../packages/apps/embedded-runtime/scripts/run-package-tests.mjs', import.meta.url), 'utf8');
       await put(`${base}/scripts/run-package-tests.mjs`, runner.replace(/export const testProcesses = (\[[\s\S]*?\n\]);/u,
-        'export const testProcesses = [\n  ["--test", "--test-concurrency=1", "tests/example.test.ts"],\n  ["--experimental-test-module-mocks", "--test", "tests/second.test.ts"]\n];'));
+        'export const testProcesses = [\n  ["--test", "--test-concurrency=1", "tests/example.test.ts"],\n  ["--experimental-test-module-mocks", "--test", "tests/second.test.ts"],\n  ["--test", "--test-concurrency=1", "--test-force-exit", "tests/third.test.ts"]\n];'));
 
     }
   }
@@ -102,7 +103,7 @@ async function packageReports(root: string, expected: ExpectedEvidence, requeste
         join(root, packageRoots[id]), env, join(logs, `${shard}-2`))
       : await runCommand('pnpm', ['--filter', `@agent-teams/${id}`, 'run', 'test'], root,
         id === 'embedded-runtime' ? embeddedEnv : { ...env, NODE_OPTIONS: `--test-reporter=${reporter}` }, join(logs, `${shard}-2`)));
-    assert.equal(commandExit(commands[2]!, id === 'embedded-runtime' ? 2 : 1, undefined, plans, Object.keys(expected.inputs).map(file => join(root, file))), 0, `producer ${shard}`);
+    assert.equal(commandExit(commands[2]!, id === 'embedded-runtime' ? 3 : 1, undefined, plans, Object.keys(expected.inputs).map(file => join(root, file))), 0, `producer ${shard}`);
     receipts.push({ schemaVersion: 3, target: 'linux-x64', workflow: expected.workflow, nativeBuild: null, embeddedProcesses: id === 'embedded-runtime' ? JSON.parse(await readFile(join(capture, 'processes.json'), 'utf8')) : null, requestedShard: shard, packageName: `@agent-teams/${id}`,
       sourceSha: expected.sha, sourceTree: expected.inputTree, checkoutRoot: root, selection,
       platform: 'linux', arch: 'x64', uid: process.getuid?.() ?? null, node: 'v26.11.1', execPath: process.execPath, pnpm: '11.18.0',
@@ -173,7 +174,7 @@ test('source-derived full coverage preserves all eight runners and old root/type
   assertFanoutEvidence(expected, packages.toReversed(), phases.toReversed());
   if (process.env.CI_FOCUSED_EVIDENCE_DIR) { await writeFile(join(process.env.CI_FOCUSED_EVIDENCE_DIR, 'synthetic-fanout-processes.json'), JSON.stringify({ scope: 'actual disposable TEST commands; no product qualification', expected, packages, phases }, null, 2)); }
   const embedded = packages.find(report => report.packageName === '@agent-teams/embedded-runtime')!;
-  assert.equal(embedded.commands[2]!.observation.summaries.length, 2);
+  assert.equal(embedded.commands[2]!.observation.summaries.length, 3);
   assert.ok(embedded.commands[2]!.observation.events.some(event => event.title === 'second actual process' && event.name === undefined));
   assert.deepEqual(packages.slice(0, 3).flatMap(report => report.selection?.files ?? []).toSorted(), expected.universe);
   const reject = async (name: string, change: (p: PackageReceipt[], r: ReturnType<typeof phaseReports>) => void) => {
@@ -196,11 +197,11 @@ test('source-derived full coverage preserves all eight runners and old root/type
     const observation = p[6]!.commands[2]!.observation;
     const first = observation.events.filter(e => String(e.suite).endsWith('/tests/example.test.ts')); assert.ok(first.length);
     observation.events = [...first, ...structuredClone(first)]; observation.summaries[1] = structuredClone(observation.summaries[0]!);
-    assert.equal(commandExit(p[6]!.commands[2]!, 2), 1);
+    assert.equal(commandExit(p[6]!.commands[2]!, 3), 1);
   });
   await reject('ER duplicate process envelope', p => {
     const observation = p[6]!.commands[2]!.observation; observation.streams[1] = structuredClone(observation.streams[0]!);
-    assert.equal(commandExit(p[6]!.commands[2]!, 2), 1);
+    assert.equal(commandExit(p[6]!.commands[2]!, 3), 1);
   });
   await reject('missing matrix report', p => p.pop());
   await reject('duplicate package report', p => { p[7] = p[6]!; });

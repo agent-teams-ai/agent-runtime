@@ -22,8 +22,8 @@ const clean = 'node -e "const fs=require(\'node:fs\'); for (const path of [\'dis
 // Independent source-reviewed whole-suite inventory. Script drift requires review.
 export const packages = [
   { name: '@agent-teams/agent-execution', root: 'packages/contexts/agent-execution', build: `${build} && node scripts/copy-runtime-assets.mjs`, test: 'node --test --test-concurrency=1 tests/features/runtime-installation-discovery/*.test.ts tests/features/contained-agent-turn/*.test.ts tests/features/contained-agent-turn/contained-turn-live-canary-lifecycle.test.mjs tests/package/*.test.ts', processes: 1 },
-  { name: '@agent-teams/embedded-runtime', root: 'packages/apps/embedded-runtime', build, test: 'node scripts/run-package-tests.mjs', processes: 2 },
-  { name: '@agent-teams/filesystem-custody', root: 'packages/platform/filesystem-custody', build: `${build} && node scripts/build-native-helper.mjs`, test: 'node --test --test-concurrency=1 tests/features/stable-filesystem-custody/stable-path-custody.test.ts tests/features/stable-filesystem-custody/stable-directory-process-lock.test.ts tests/features/stable-filesystem-custody/host-descriptors.test.mjs tests/features/stable-filesystem-custody/darwin-acquisition-guard.test.mjs tests/features/stable-filesystem-custody/host-errno.test.mjs tests/package/curated-assembly-surface.test.ts', processes: 1 },
+  { name: '@agent-teams/embedded-runtime', root: 'packages/apps/embedded-runtime', build, test: 'node scripts/run-package-tests.mjs', processes: 3 },
+  { name: '@agent-teams/filesystem-custody', root: 'packages/platform/filesystem-custody', build: `${build} && node scripts/build-native-helper.mjs`, test: 'node --test --test-concurrency=1 --test-force-exit tests/features/stable-filesystem-custody/stable-path-custody.test.ts tests/features/stable-filesystem-custody/stable-directory-process-lock.test.ts tests/features/stable-filesystem-custody/host-descriptors.test.mjs tests/features/stable-filesystem-custody/darwin-acquisition-guard.test.mjs tests/features/stable-filesystem-custody/host-errno.test.mjs tests/package/curated-assembly-surface.test.ts tests/package/handle-guard-coverage.test.ts', processes: 1 },
   { name: '@agent-teams/provider-access', root: 'packages/contexts/provider-access', build, test: 'node --test --test-concurrency=1 tests/features/contained-turn-access/*.test.ts', processes: 1 },
   { name: '@agent-teams/runtime-configuration', root: 'packages/contexts/runtime-configuration', build, test: 'node --test --test-concurrency=1 tests/features/codex-configuration-inspection/codex-configuration-inspection.test.ts tests/features/codex-configuration-inspection/codex-application-boundary.test.ts tests/features/codex-configuration-inspection/semantic-boundary.test.ts tests/features/claude-code-configuration-inspection/claude-code-contract.test.ts tests/features/claude-code-configuration-inspection/claude-code-configuration-inspection.test.ts tests/features/claude-code-configuration-inspection/claude-code-vocabulary-parity.test.ts tests/features/claude-code-configuration-inspection/claude-code-configuration-source-reader.test.ts tests/package/claude-code-contract-custody.test.ts tests/package/curated-assembly-surface.test.ts', processes: 1 },
   { name: '@agent-teams/runtime-security', root: 'packages/contexts/runtime-security', build, test: 'node --test --test-concurrency=1 tests/features/*/*.test.ts tests/package/*.test.ts', processes: 1 },
@@ -251,25 +251,26 @@ export async function packageStreamPlans(root: string, shard: Shard, selection: 
     const literal = /export const testProcesses = (\[[\s\S]*?\n\]);/u.exec(source)?.[1];
     assert.ok(literal, 'explicit original ER testProcesses required');
     const processes: unknown = json(literal);
-    assert.ok(Array.isArray(processes) && processes.length === 2 && processes.every(args => Array.isArray(args) && args.every(arg => typeof arg === 'string')));
+    assert.ok(Array.isArray(processes) && processes.length === 3 && processes.every(args => Array.isArray(args) && args.every(arg => typeof arg === 'string')));
     argvs = (processes as string[][]).map(args => ['--test-reporter=./scripts/adoption-test-reporter.mjs', ...args]);
   } else {
     const manifest = object(json(await readFile(join(cwd, 'package.json'), 'utf8')));
     const script = object(manifest.scripts).test; assert.equal(script, shard.package.test);
     const args = String(script).split(' '); assert.deepEqual(args.slice(0, 3), executionPrefix);
-    const files: string[] = [];
-    for (const pattern of args.slice(3)) {
+    // Flags that follow the fixed prefix (for example --test-force-exit) stay in the argv; the rest are file patterns.
+    const flags = args.slice(3).filter(arg => arg.startsWith('--')), files: string[] = [];
+    for (const pattern of args.slice(3).filter(arg => !arg.startsWith('--'))) {
       const matches: string[] = [];
       for await (const file of glob(pattern, { cwd })) { if (!file.split('/').some(part => part.startsWith('.'))) { matches.push(file); } }
       assert.ok(matches.length > 0, 'unmatched original package pattern'); files.push(...matches.toSorted());
     }
-    argvs = [[...args.slice(1, 3), ...files]];
+    argvs = [[...args.slice(1, 3), ...flags, ...files]];
   }
   return argvs.map(argv => ({ executable: process.execPath, argv, cwd, files: argv.filter(arg => !arg.startsWith('--')).map(file => join(cwd, file)) }));
 }
 export function embeddedObserverEnv(env: NodeJS.ProcessEnv, capture: string, plans: readonly StreamPlan[]): NodeJS.ProcessEnv {
   assert.ok(!env.NODE_OPTIONS, 'caller Node options unsupported');
-  assert.equal(plans.length, 2, 'two original ER plans required');
+  assert.equal(plans.length, 3, 'three original ER plans required');
   return { ...env, AE_ADOPTION_CAPTURE_DIR: capture, CI_ER_PROCESS_PLANS: JSON.stringify(plans) };
 }
 function validateCapturedStream(stream: CapturedStream, index: number, plan?: StreamPlan, sourceFiles?: readonly string[]): Observation {
@@ -433,8 +434,8 @@ async function performPackageCommands(context: PackageRunContext, commands: Pack
     report.commands.push(result);
     if (index === 2 && selected.name === '@agent-teams/embedded-runtime') {
       report.embeddedProcesses = json(await readFile(join(embeddedCapture, 'processes.json'), 'utf8')) as Record<string, unknown>[];
-      assert.equal(result.observation.streams.length, 2, 'both actual Embedded Runtime Node process observers required');
-      assert.equal(new Set(result.observation.streams.map(p => p.node.pid)).size, 2, 'distinct Node PIDs required');
+      assert.equal(result.observation.streams.length, 3, 'all actual Embedded Runtime Node process observers required');
+      assert.equal(new Set(result.observation.streams.map(p => p.node.pid)).size, 3, 'distinct Node PIDs required');
     }
     if (index === 2 && report.nativeBuild) { assert.equal(hash(await readFile(join(root, nativeOutput))), report.nativeBuild.sha256, 'native output drift during tests'); }
     report.after = await snapshotScripts(root); report.sourceAfter = await snapshotSource(root);

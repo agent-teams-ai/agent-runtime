@@ -5,7 +5,8 @@ import {spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
 import {syncBuiltinESMExports} from "node:module";
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { after } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
 import {mkdtemp, realpath, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -72,6 +73,9 @@ for (const boundary of ["retirement", "capture"] as const) {
 
 import {AgentRuntimeHostCreationError} from '../../dist/composition.js';
 
+// Count handles before this file opens any.
+const handles = guardHandles();
+
 // Regression: partial creation with journal debt had no surviving cleanup
 // holder; an unsafe repeated close could then be reported as recovered.
 test('ordinary creation failure retains terminal journal uncertainty', async t => {
@@ -126,3 +130,6 @@ test('public failed journal initialization retains private cleanup-only truth', 
   assert.equal(closes, 1); assert.equal(connections, 0); assert.equal(ended, 0);
   assert.equal(JSON.stringify(failure), projection);
 });
+
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());
