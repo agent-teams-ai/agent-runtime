@@ -6,9 +6,10 @@ import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { readScripts } from './inventory.ts';
 import { groups } from './policy.ts';
+import { commandInventory } from './script-routing.ts';
 import type { Group } from './policy.ts';
 import { assertCmsComposite, captureCmsComposite, cmsBinding, cmsContract, cmsDirectCommand, cmsMandatoryCommand,
-  createTestResultCollector, isExecutedTestLeaf, mandatoryRunnerSummary } from './measure.ts';
+  authoritativeNodeEventEnvironment, createTestResultCollector, isExecutedTestLeaf, mandatoryRunnerSummary } from './measure.ts';
 import type { NodeSummary, TestResult } from './measure.ts';
 import { classifyPrRegressions, currentPrInput, installationFingerprint, regressionCommands } from './pr-regression-inputs.ts';
 import type { LeafInventoryComparator, PrInput, PrPlan, RegressionId } from './pr-regression-inputs.ts';
@@ -77,29 +78,38 @@ export async function observeRegressionProcess(command: string, root: string, en
   }
   const serialCommand = foundation ? foundationCommand : command;
   const tokens = serialCommand.split(' '), executable = tokens.shift(); assert.ok(executable);
-  const directNodeTest = executable === 'node' && tokens[0] === '--test';
   const file = executable === 'node' ? process.execPath : executable === 'pnpm' ? 'pnpm' : resolvePath(root, 'node_modules/.bin', executable);
-  const args = directNodeTest ? [...tokens.slice(0, 1), `--test-reporter=${fileURLToPath(new URL('./measure.ts', import.meta.url))}`, ...tokens.slice(1)] : tokens;
-  const childEnv = { ...env }; delete childEnv.NODE_TEST_CONTEXT;
+  const args = tokens;
+  const scripts = await readScripts(join(root, 'package.json'));
+  const pnpmScript = /^pnpm ([\w:-]+)$/u.exec(serialCommand)?.[1];
+  const commands = pnpmScript ? commandInventory(scripts, pnpmScript) : [{ script: command, command: serialCommand }];
+  const childEnv = authoritativeNodeEventEnvironment(commands, env);
+  delete childEnv.NODE_TEST_CONTEXT;
   if (foundation) {
     // Serial PR FULL and sampled execution never inherit the non-PR shard route.
     for (const key of ['FOUNDATION_FIXTURE_PROTOCOL', 'FOUNDATION_FIXTURE_INDEX', 'FOUNDATION_FIXTURE_COUNT']) {delete childEnv[key];}
   }
   const child = spawn(file, args, { cwd: root, env: childEnv, stdio: ['ignore', 'pipe', 'inherit'] });
   const execution: Execution = { code: null, signal: null, tests: [], mandatory: [], nodeSummaries: [] };
+  const eventTests: TestResult[] = [], textTests: TestResult[] = [];
   const observe = createTestResultCollector();
   const lines = createInterface({ input: child.stdout });
   lines.on('line', line => {
     process.stderr.write(`CI_NODE_CHILD_DIAGNOSTIC ${line}\n`);
-    const result = directNodeTest && line.startsWith('CI_NODE_EVENT ') ? JSON.parse(line.slice(14)) as TestResult : observe(line);
-    if (result) {execution.tests.push(result);}
-    if (directNodeTest && line.startsWith('CI_NODE_SUMMARY ')) {execution.nodeSummaries!.push(JSON.parse(line.slice(16)) as NodeSummary);}
+    if (line.startsWith('CI_NODE_EVENT ')) {
+      eventTests.push(JSON.parse(line.slice(14)) as TestResult);
+    } else {
+      const result = observe(line);
+      if (result) {textTests.push(result);}
+    }
+    if (line.startsWith('CI_NODE_SUMMARY ')) {execution.nodeSummaries!.push(JSON.parse(line.slice(16)) as NodeSummary);}
     const summary = mandatoryRunnerSummary(line); if (summary) {execution.mandatory.push(summary);}
   });
   await new Promise<void>((resolve, reject) => {
     child.once('error', reject);
     child.once('close', (code, signal) => { execution.code = code; execution.signal = signal; resolve(); });
   });
+  execution.tests.push(...(eventTests.length > 0 ? eventTests : textTests));
   return execution;
 }
 
@@ -117,6 +127,9 @@ export function assertPrObligations(expected: readonly Obligation[], observed: r
       assert.equal(item.disposition, 'executed');
       assert.ok(!declaration.regression || !deferred.includes(declaration.regression), 'wrong disposition');
       assert.equal(item.execution.code, 0, 'failed or missing command'); assert.equal(item.execution.signal, null, 'cancelled command');
+      if (/node --test|agent-teams-node-test/u.test(item.command)) {
+        assert.ok(item.execution.tests.every(result => result.bodyless !== undefined), 'text-only test evidence');
+      }
       assert.ok(item.execution.tests.every(result =>
         result.status !== 'failed' && result.status !== 'cancelled' && result.bodyless !== true),
       'failed, cancelled or file-only test');
@@ -173,11 +186,23 @@ export async function runPrRegressions(group: Group, output: string, compareLeaf
       report.obligations.push({ ...item, disposition: 'deferred-unchanged-regression-inputs', tests: [] });
     } else if (item.id === 'cms-direct') {
       const cms = await captureCmsComposite();
-      // The existing pin contract remains authoritative for BOTH processes.
-      assertCmsComposite(cms, await cmsBinding(), cms.direct.tests, JSON.parse(await readFile(cmsContract, 'utf8')));
+      const mandatoryItem = expected.find(value => value.id === 'cms-mandatory')!;
+      const directExecution: Execution = { ...cms.direct, mandatory: [] };
+      report.obligations.push({ ...item, disposition: 'executed', execution: directExecution });
+      await save();
+      if (cms.direct.code !== 0 || cms.direct.signal !== null) {
+        throw new PrRegressionProcessFailure({ code: cms.direct.code, signal: cms.direct.signal }, item);
+      }
       assert.ok(cms.mandatory);
-      report.obligations.push({ ...item, disposition: 'executed', execution: { ...cms.direct, mandatory: [] } },
-        { ...expected.find(value => value.id === 'cms-mandatory')!, disposition: 'executed', execution: { ...cms.mandatory, tests: [], mandatory: cms.mandatory.summaries } });
+      const mandatoryExecution: Execution = { ...cms.mandatory, tests: [], mandatory: cms.mandatory.summaries };
+      report.obligations.push({ ...mandatoryItem, disposition: 'executed', execution: mandatoryExecution });
+      await save();
+      if (cms.mandatory.code !== 0 || cms.mandatory.signal !== null) {
+        throw new PrRegressionProcessFailure({ code: cms.mandatory.code, signal: cms.mandatory.signal }, mandatoryItem);
+      }
+      // Process outcomes are persisted first; the existing pin contract remains
+      // authoritative for BOTH processes after real failures can propagate.
+      assertCmsComposite(cms, await cmsBinding(), cms.direct.tests, JSON.parse(await readFile(cmsContract, 'utf8')));
     } else if (item.id !== 'cms-mandatory') {
       // currentPrInput already observes the frozen installation before this lane.
       // The final observation rejects drift across the entire execution.

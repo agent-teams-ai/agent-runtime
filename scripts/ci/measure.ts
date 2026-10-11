@@ -13,7 +13,7 @@ import type { TestEvent } from 'node:test/reporters';
 import type { Command, Scripts } from './script-routing.ts';
 
 export interface TestResult { suite: string; name: string; ancestry: string[]; depth: number; status: string; kind?: 'suite' | 'test';
-  bodyless?: true }
+  bodyless?: boolean }
 export const cmsFile = 'scripts/architecture/check-cms-pin.test.mjs';
 export const cmsContract = 'architecture/foundation/mandatory-node-tests.json';
 export const cmsDirectCommand = `node --test ${cmsFile}`;
@@ -23,7 +23,7 @@ export type InputAdmission = { path: string; status: 'available'; digest: string
   | { path: string; status: 'unavailable'; reason: 'missing' | 'unreadable' };
 
 export function isExecutedTestLeaf(result: TestResult): boolean {
-  return result.kind === 'test' && result.status === 'passed' && result.bodyless !== true;
+  return result.kind === 'test' && result.status === 'passed' && result.bodyless === false;
 }
 
 // Public reporting starts retain parent ancestry; execution enqueue order can interleave unrelated tests.
@@ -45,7 +45,7 @@ export function createNodeEventCollector() {
     assert.ok(ancestry, `missing Node reporting identity: ${data.name}`);
     return { suite, name: data.name, ancestry, depth: data.nesting, kind: event.data.details.type ?? 'test',
       status: event.data.skip ? 'skip' : event.data.todo ? 'todo' : event.type === 'test:pass' ? 'passed' : 'failed',
-      ...('entryFile' in data ? {} : { bodyless: true as const }) };
+      bodyless: !('entryFile' in data) };
   };
 }
 
@@ -151,13 +151,12 @@ export function assertCmsComposite(cms: CmsComposite, binding: Record<string, st
   assert.deepEqual(phaseTests.filter(test => test.suite === cmsFile), observed, 'CMS phase identity binding');
 }
 
-async function cmsProcess(command: string, direct: boolean) {
+async function cmsProcess(command: string) {
   const before = await cmsBinding();
   const tests: TestResult[] = [], summaries: string[] = [], nodeSummaries: NodeSummary[] = [];
   const observe = createTestResultCollector();
-  const env = { ...process.env };
+  const env = authoritativeNodeEventEnvironment([{ script: command, command }]);
   delete env.NODE_TEST_CONTEXT;
-  if (direct) { env.NODE_OPTIONS = `${env.NODE_OPTIONS ?? ''} --test-reporter=${fileURLToPath(import.meta.url)}`.trim(); }
   const executable = command.startsWith('node ') ? process.execPath : resolvePath('node_modules/.bin/agent-teams-node-test');
   const args = command.startsWith('node ') ? command.split(' ').slice(1) : ['--contract', cmsContract, '--', cmsFile];
   const child = spawn(executable, args, { env, stdio: ['ignore', 'pipe', 'inherit'] });
@@ -181,8 +180,8 @@ async function cmsProcess(command: string, direct: boolean) {
 }
 export async function captureCmsComposite(): Promise<CmsComposite> {
   const contract: { exceptions: unknown[] } = JSON.parse(await readFile(cmsContract, 'utf8'));
-  const direct = await cmsProcess(cmsDirectCommand, true);
-  const mandatory = direct.code === 0 && direct.signal === null ? await cmsProcess(cmsMandatoryCommand, false) : null;
+  const direct = await cmsProcess(cmsDirectCommand);
+  const mandatory = direct.code === 0 && direct.signal === null ? await cmsProcess(cmsMandatoryCommand) : null;
   return { phase: 'test:consumer-modules', exceptions: contract.exceptions,
     direct: { command: direct.command, code: direct.code, signal: direct.signal, timedOut: direct.timedOut,
       before: direct.before, after: direct.after, tests: direct.tests, summaries: direct.nodeSummaries },
@@ -317,15 +316,58 @@ export function mandatoryRunnerSummary(line: string): string | undefined {
   return /^Mandatory Node tests: [1-9][0-9]* required identities completed or exactly excepted$/u.exec(line)?.[0];
 }
 
+interface NodeTestReporterRoute { reporters: number; destinations: number }
+
+function nodeTestReporterRoute(command: string): NodeTestReporterRoute | undefined {
+  const words = command.split(/\s+/u);
+  if (words[0] !== 'node' || !words.includes('--test')) { return undefined; }
+  let reporters = 0, destinations = 0;
+  for (let index = 1; index < words.length; index += 1) {
+    const word = words[index]!;
+    if (word === '--test-reporter' || word.startsWith('--test-reporter=')) {
+      reporters += 1;
+      if (word === '--test-reporter') { index += 1; }
+    } else if (word === '--test-reporter-destination' || word.startsWith('--test-reporter-destination=')) {
+      destinations += 1;
+      if (word === '--test-reporter-destination') { index += 1; }
+    }
+  }
+  assert.ok(reporters === destinations || destinations === 0, `unsupported Node reporter graph: ${command}`);
+  return { reporters, destinations };
+}
+
+export function authoritativeNodeEventEnvironment(commands: readonly Command[],
+  environment: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const routes = commands.map(command => nodeTestReporterRoute(command.command)).filter(route => route !== undefined);
+  if (routes.length === 0) { return { ...environment }; }
+  assert.ok(!/(?:^|\s)--test-reporter(?:=|\s)/u.test(environment.NODE_OPTIONS ?? ''),
+    'inherited Node reporter options are unsupported');
+  const unpaired = routes.filter(route => route.destinations === 0 && route.reporters > 0);
+  if (unpaired.length > 0) {
+    assert.ok(routes.every(route => route.reporters === unpaired[0]!.reporters && route.destinations === 0),
+      'mixed explicit Node reporter graphs are unsupported');
+  }
+  const destinations = unpaired.length > 0 ? unpaired[0]!.reporters + 1 : 1;
+  const options = [`--test-reporter=${fileURLToPath(import.meta.url)}`,
+    ...Array.from({ length: destinations }, () => '--test-reporter-destination=stdout')].join(' ');
+  return { ...environment, NODE_OPTIONS: `${environment.NODE_OPTIONS ?? ''} ${options}`.trim() };
+}
+
 export function assertPhaseTestExecution(phase: { script: string; commands: readonly Command[];
   tests: readonly TestResult[]; unqualifiedRunners: readonly string[] }): void {
-  if (phase.commands.some(command => /(?:node --test|agent-teams-node-test|\brun test\b)/u.test(command.command))
+  const nodeTests = phase.commands.filter(command => nodeTestReporterRoute(command.command) !== undefined);
+  if (nodeTests.length > 0 || phase.commands.some(command => /(?:agent-teams-node-test|\brun test\b)/u.test(command.command))
     || /^(?:test(?::|$)|quality:native$)/u.test(phase.script)) {
     assert.ok(phase.tests.every(result => result.status !== 'failed' && result.status !== 'cancelled' && result.bodyless !== true),
       `${phase.script} emitted file-only test evidence`);
+    if (nodeTests.length > 0) {
+      assert.ok(phase.tests.every(result => result.bodyless !== undefined), `${phase.script} emitted text-only test evidence`);
+    }
+    const identities = phase.tests.map(result => JSON.stringify([result.suite, result.ancestry, result.name, result.kind]));
+    assert.equal(new Set(identities).size, identities.length, `${phase.script} emitted duplicate test identity`);
     assert.ok(phase.tests.some(isExecutedTestLeaf)
       || phase.unqualifiedRunners.some(summary => mandatoryRunnerSummary(summary)),
-      `${phase.script} emitted no executed test leaf`);
+      `${phase.script} emitted no test execution`);
   }
 }
 
@@ -345,7 +387,7 @@ async function runPhase(script: string, scripts: Scripts) {
   if (script === 'test:consumer-modules') {
     assert.deepEqual(commandInventory(scripts, script).map(command => command.command), ['node --test scripts/architecture/check-consumer-module-standard.test.mjs', cmsDirectCommand, cmsMandatoryCommand], 'CMS process commands');
     const started = new Date().toISOString(), start = performance.now();
-    const fixtures = await cmsProcess('node --test scripts/architecture/check-consumer-module-standard.test.mjs', false);
+    const fixtures = await cmsProcess('node --test scripts/architecture/check-consumer-module-standard.test.mjs');
     const cms = fixtures.code === 0 && fixtures.signal === null ? await captureCmsComposite() : undefined;
     const outcome = cms?.mandatory ?? cms?.direct ?? fixtures;
     return { script, commands: commandInventory(scripts, script), started, ended: new Date().toISOString(),
@@ -355,17 +397,22 @@ async function runPhase(script: string, scripts: Scripts) {
   const started = new Date().toISOString();
   const start = performance.now();
   const tests: TestResult[] = [];
+  const eventTests: TestResult[] = [], textTests: TestResult[] = [];
   const observe = createTestResultCollector();
   const unqualifiedRunners: string[] = [];
   console.log(`::group::pnpm ${script}`);
-  const child = spawn('pnpm', ['run', script], { stdio: ['ignore', 'pipe', 'inherit'], env: process.env });
+  const commands = commandInventory(scripts, script);
+  const childEnv = authoritativeNodeEventEnvironment(commands);
+  const child = spawn('pnpm', ['run', script], { stdio: ['ignore', 'pipe', 'inherit'], env: childEnv });
   const lines = createInterface({ input: child.stdout });
   lines.on('line', line => {
     console.log(line);
-    const result = line.startsWith('CI_NODE_EVENT ')
-      ? JSON.parse(line.slice(14)) as TestResult
-      : observe(line);
-    if (result) { tests.push(result); }
+    if (line.startsWith('CI_NODE_EVENT ')) {
+      eventTests.push(JSON.parse(line.slice(14)) as TestResult);
+    } else {
+      const result = observe(line);
+      if (result) { textTests.push(result); }
+    }
     const summary = mandatoryRunnerSummary(line);
     if (summary) { unqualifiedRunners.push(summary); }
   });
@@ -373,6 +420,7 @@ async function runPhase(script: string, scripts: Scripts) {
     child.once('error', reject);
     child.once('close', (code, signal) => resolve({ code, signal }));
   });
+  tests.push(...(eventTests.length > 0 ? eventTests : textTests));
   console.log('::endgroup::');
   return { script, commands: commandInventory(scripts, script), started, ended: new Date().toISOString(),
     wallMs: performance.now() - start, ...outcome, tests, unqualifiedRunners };

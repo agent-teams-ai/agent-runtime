@@ -30,8 +30,7 @@ export type MeasureLeafOutcome = { kind: 'blocking'; receipt: string } | { kind:
   | { kind: 'skip-only' } | { kind: 'suite-skip-only' } | { kind: 'empty-suite' } | { kind: 'conditional-skip' }
   | { kind: 'real-leaf-name' };
 export type SampledFailure = 'exit-23' | 'signal' | 'evidence';
-export interface MeasurePhaseFixtureOptions { child?: MeasureChildOutcome; leaf?: MeasureLeafOutcome;
-  phaseOrder?: readonly string[]; sourceComplete?: boolean }
+export interface MeasurePhaseFixtureOptions { child?: MeasureChildOutcome; leaf?: MeasureLeafOutcome; phaseOrder?: readonly string[]; reporter?: 'default' | 'tap' | 'spec'; sourceComplete?: boolean }
 
 export const testScratch = (prefix: string): Promise<string> => mkdtemp(join(tmpdir(), prefix));
 
@@ -332,10 +331,11 @@ export async function configureMeasurePhaseFixture(fixture: ActualMeasureFixture
   const manifestPath = join(fixture.root, 'package.json');
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as { scripts: Record<string, string> };
   const phaseOrder = options.phaseOrder ?? ['lint', 'check:node-compat', 'typecheck:ci', 'test:ci'];
+  const reporter = options.reporter && options.reporter !== 'default' ? ` --test-reporter=${options.reporter}` : '';
   for (const phase of phaseOrder) {
     manifest.scripts[phase] = options.leaf?.kind === 'blocking' || options.leaf?.kind === 'mixed'
-      ? `node --test --test-reporter=./scripts/ci/measure.ts ${relative(fixture.root, passingLeaf)} ${relative(fixture.root, leaf)}`
-      : options.leaf ? `node --test --test-reporter=./scripts/ci/measure.ts ${relative(fixture.root, leaf)}`
+      ? `node --test${reporter} ${relative(fixture.root, passingLeaf)} ${relative(fixture.root, leaf)}`
+      : options.leaf ? `node --test${reporter} ${relative(fixture.root, leaf)}`
       : phase === 'test:ci' ? `node ${relative(fixture.root, child)}` : 'node -e ""';
   }
   manifest.scripts['check:ci:quick'] = phaseOrder.map(phase => `pnpm ${phase}`).join(' && ');

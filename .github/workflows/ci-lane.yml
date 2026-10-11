@@ -99,6 +99,45 @@ jobs:
         # workflow authenticity.
         run: |
           set -euo pipefail
+          sanitize_node_options() {
+            local input=${1-} output= word name value
+            local -a words
+            read -r -a words <<<"$input"
+            local index=0
+            while [ "$index" -lt "${#words[@]}" ]; do
+              word=${words[index]#\"}
+              word=${word%\"}
+              word=${word#\'}
+              word=${word%\'}
+              name=${word%%=*}
+              name=${name//_/-}
+              case "$name" in
+                --max-old-space-size|--max-semi-space-size|--stack-size)
+                  if [[ "$word" == *=* ]]; then
+                    value=${word#*=}
+                  else
+                    value=${words[index + 1]:-}
+                  fi
+                  value=${value#\"}
+                  value=${value%\"}
+                  value=${value#\'}
+                  value=${value%\'}
+                  if [[ "$value" =~ ^[0-9]+$ ]]; then
+                    output="${output:+$output }${words[index]}"
+                    if [[ "$word" != *=* ]]; then
+                      output="$output ${words[index + 1]}"
+                      index=$((index + 1))
+                    fi
+                  fi
+                  ;;
+              esac
+              index=$((index + 1))
+            done
+            printf '%s' "$output"
+          }
+          NODE_OPTIONS=$(sanitize_node_options "${NODE_OPTIONS:-}")
+          if [ -n "${NODE_OPTIONS:-}" ]; then export NODE_OPTIONS; else unset NODE_OPTIONS; fi
+          unset FOUNDATION_FIXTURE_PROTOCOL FOUNDATION_FIXTURE_INDEX FOUNDATION_FIXTURE_COUNT
           bootstrap=scripts/ci/pr-regression-bootstrap.ts
           bootstrap_entry() {
             local revision=$1 entry mode kind blob path
@@ -122,7 +161,6 @@ jobs:
           head_blob=${head_entry#* }
           if [ -z "$base_entry" ] || [ -z "$head_entry" ] || [ "$base_entry" != "$head_entry" ] \
             || [ "$checkout_blob" != "$head_blob" ] || [ "$checkout_mode" != "$head_mode" ]; then
-            unset FOUNDATION_FIXTURE_PROTOCOL FOUNDATION_FIXTURE_INDEX FOUNDATION_FIXTURE_COUNT
             node scripts/ci/measure.ts "$PR_REGRESSION_GROUP"
             exit $?
           fi

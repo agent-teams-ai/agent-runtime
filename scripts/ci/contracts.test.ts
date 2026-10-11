@@ -9,7 +9,7 @@ import { assertAggregate, assertFullInventory, assertRevision, productPhases, re
 import { commandInventory, routedScripts } from './script-routing.ts';
 import type { Scripts } from './script-routing.ts';
 import { readScripts } from './inventory.ts';
-import { assertCmsComposite, captureCmsComposite, cmsBinding, cmsContract, cmsFile, inputPaths, assertPhaseTestExecution, createTestResultCollector, mandatoryRunnerSummary, tapResult, toolchainKeys } from './measure.ts';
+import { assertCmsComposite, authoritativeNodeEventEnvironment, captureCmsComposite, cmsBinding, cmsContract, cmsFile, inputPaths, assertPhaseTestExecution, createTestResultCollector, mandatoryRunnerSummary, tapResult, toolchainKeys } from './measure.ts';
 import { object as workflowObject, schedulingForEvent, validateBenchmark, validateWorkflow } from './conformance.ts';
 import type { SchedulingEvent } from './conformance.ts';
 import { compare } from './compare.ts';
@@ -18,6 +18,7 @@ import { registerCmsPinReviewTests } from './cms-pin-review.test.ts';
 import { registerNightlyContractTests } from './nightly-contract.test.ts';
 import { registerFoundationFixtureShardingTests } from './foundation-fixture-sharding.test.ts';
 import { registerPrRegressionBootstrapTests } from './pr-regression-bootstrap.test.ts';
+import { actualMeasureFixture, configureMeasurePhaseFixture, runActualBootstrapFullRecovery } from './pr-regression-bootstrap-fixtures.ts';
 import { registerPrRegressionTests } from './pr-regression-inputs.test.ts';
 import { assertNamespaceNativeQualification, assertNamespaceQualificationWorkflow } from './namespace-qualification-contract.ts';
 
@@ -324,6 +325,80 @@ test('measurement observes real Node test identities including failure and skip'
   assert.equal(spec.status, 1);
   const reported = spec.stdout.split('\n').flatMap(line => { const result = tapResult(line); return result ? [[result.name, result.status]] : []; });
   for (const identity of observed) { assert.ok(reported.some(row => JSON.stringify(row) === JSON.stringify(identity)), `missing spec identity: ${JSON.stringify(identity)}`); }
+});
+
+test('authoritative phase execution rejects failed, cancelled and duplicate leaves', () => {
+  const base = { suite: 'ordinary.test.ts', name: 'ordinary leaf', ancestry: [], depth: 0, kind: 'test' as const, bodyless: false };
+  assert.throws(() => authoritativeNodeEventEnvironment([
+    { script: 'plain', command: 'node --test plain.test.ts' },
+    { script: 'explicit', command: 'node --test --test-reporter=tap explicit.test.ts' },
+  ]), /mixed explicit Node reporter graphs are unsupported/u);
+  assert.throws(() => authoritativeNodeEventEnvironment(
+    [{ script: 'explicit', command: 'node --test explicit.test.ts' }], { NODE_OPTIONS: '--test-reporter=tap' },
+  ), /inherited Node reporter options are unsupported/u);
+  assert.throws(() => assertPhaseTestExecution({
+    script: 'test:ordinary', commands: [{ script: 'test:ordinary', command: 'node --test ordinary.test.ts' }],
+    tests: [{ ...base, status: 'passed', bodyless: undefined }], unqualifiedRunners: [],
+  }), /text-only test evidence/u);
+  assert.throws(() => assertPhaseTestExecution({
+    script: 'test:ordinary', commands: [{ script: 'test:ordinary', command: 'node --test ordinary.test.ts' }],
+    tests: [{ ...base, status: 'failed' }], unqualifiedRunners: [],
+  }), /file-only test evidence/u);
+  assert.throws(() => assertPhaseTestExecution({
+    script: 'test:ordinary', commands: [{ script: 'test:ordinary', command: 'node --test ordinary.test.ts' }],
+    tests: [{ ...base, status: 'cancelled' }], unqualifiedRunners: [],
+  }), /file-only test evidence/u);
+  assert.throws(() => assertPhaseTestExecution({
+    script: 'test:ordinary', commands: [{ script: 'test:ordinary', command: 'node --test ordinary.test.ts' }],
+    tests: [{ ...base, status: 'passed' }, { ...base, status: 'passed' }], unqualifiedRunners: [],
+  }), /duplicate test identity/u);
+});
+
+test('actual FULL default, TAP and spec retain authoritative Node execution', async t => {
+  const fixture = await actualMeasureFixture(t);
+  const cases = [
+    { name: 'bodyless file alone', leaf: { kind: 'no-body' } as const, code: 1,
+      expected: [['scripts/ci/disposable-measure-leaf.test.ts', 'passed', 'test', true]] },
+    { name: 'bodyless file mixed with real pass', leaf: { kind: 'mixed' } as const, code: 1,
+      expected: [['scripts/ci/disposable-measure-leaf.test.ts', 'passed', 'test', true],
+        ['genuine mixed passing leaf', 'passed', 'test', false]] },
+    { name: 'real filename-like leaf', leaf: { kind: 'real-leaf-name' } as const, code: 0,
+      expected: [['genuine passed module.ts', 'passed', 'test', false]] },
+    { name: 'conditional skip with real pass', leaf: { kind: 'conditional-skip' } as const, code: 0,
+      expected: [['genuine passed recovery leaf', 'passed', 'test', false],
+        ['conditional skipped leaf', 'skip', 'test', false]] },
+  ];
+  for (const testReporter of ['default', 'tap', 'spec'] as const) {
+    for (const scenario of cases) {
+      await configureMeasurePhaseFixture(fixture, {
+        leaf: scenario.leaf, phaseOrder: ['test:ci'], reporter: testReporter,
+      });
+      const manifest = JSON.parse(await readFile(join(fixture.root, 'package.json'), 'utf8')) as {
+        scripts: Record<string, string>;
+      };
+      const files = scenario.leaf.kind === 'mixed'
+        ? 'scripts/ci/disposable-measure-passing.test.ts scripts/ci/disposable-measure-leaf.test.ts'
+        : 'scripts/ci/disposable-measure-leaf.test.ts';
+      const reporter = testReporter === 'default' ? '' : ` --test-reporter=${testReporter}`;
+      assert.equal(manifest.scripts['test:ci'], `node --test${reporter} ${files}`);
+      const run = runActualBootstrapFullRecovery(fixture,
+        scenario.leaf.kind === 'conditional-skip' ? { TEST_CONDITIONAL_SKIP: '1' } : {});
+      assert.equal(run.status, scenario.code, `${scenario.name}/${testReporter}: ${run.stdout}\n${run.stderr}`);
+      assert.equal(run.signal, null, scenario.name);
+      if (testReporter === 'tap') { assert.match(run.stdout, /TAP version 13/u); }
+      if (testReporter === 'spec') { assert.match(run.stdout, /✔/u); }
+      const report = JSON.parse(await readFile(join(fixture.evidence, 'check-ci-quick.json'), 'utf8')) as {
+        receiptReuseAllowed: boolean;
+        phases: Array<{ tests: Array<{ name: string; status: string; kind?: 'suite' | 'test'; bodyless?: boolean }> }>;
+      };
+      assert.equal(report.receiptReuseAllowed, scenario.code === 0, scenario.name);
+      assert.deepEqual(
+        report.phases[0]?.tests.map(result => [result.name, result.status, result.kind, result.bodyless === true]).toSorted(),
+        scenario.expected.toSorted(),
+        `${scenario.name}/${testReporter}`,
+      );
+    }
+  }
 });
 
 
