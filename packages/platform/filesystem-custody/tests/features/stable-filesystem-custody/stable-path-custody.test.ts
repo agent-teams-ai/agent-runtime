@@ -20,7 +20,8 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
 import { promisify } from "node:util";
 
 import {
@@ -33,6 +34,9 @@ import {
   resolveStableDirectoryMutationCapability,
   StableDirectoryPublicationAmbiguousResidueError,
 } from "../../../dist/composition.js";
+
+// Count handles before this file opens any.
+const handles = guardHandles();
 
 const execFile = promisify(execFileCallback);
 const publicationCrashWorker = fileURLToPath(new URL(
@@ -805,3 +809,6 @@ test("rejects a path under an unrelated sibling boundary", async t => {
   );
   assert.equal(dirname(path), twin);
 });
+
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());

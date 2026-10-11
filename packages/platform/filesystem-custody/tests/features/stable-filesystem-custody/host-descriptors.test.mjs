@@ -4,8 +4,12 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { constants as osConstants, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import nodeTest from "node:test";
+import nodeTest, { after } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
 import { hasDarwinHostDescriptors, openNativeHostRoot, decodeHostNameBytes } from "../../../dist/features/stable-filesystem-custody/adapters/outbound/filesystem/host-descriptor.js";
+
+// Count handles before this file opens any.
+const handles = guardHandles();
 
 const loaded = { exports: {} };
 process.dlopen(loaded, fileURLToPath(new URL("../../../dist/rename-no-replace.node", import.meta.url)));
@@ -211,9 +215,9 @@ test("Host quarantine captures symlink and FIFO own identities without opening t
     const before = await lstat(join(path, name), { bigint: true });
     assert.throws(() => native.hostOpen(handle, name, 0), /not a regular file/);
     assert.equal(native.hostQuarantine(handle, name, handle, `saved-${name}`), 0);
-    const after = await lstat(join(path, `saved-${name}`), { bigint: true });
-    assert.equal(after.ino, before.ino);
-    assert.equal(after.mode, before.mode);
+    const saved = await lstat(join(path, `saved-${name}`), { bigint: true });
+    assert.equal(saved.ino, before.ino);
+    assert.equal(saved.mode, before.mode);
   }
   assert.equal(await readlink(join(path, "saved-link")), "target");
   assert.equal(await readFile(join(path, "target"), "utf8"), "untouched");
@@ -271,3 +275,6 @@ test("Host quarantine uses pinned parents after directory name replacement", asy
 });
 
 const check = code => error => error.code === code && error.errno === osConstants.errno[code];
+
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());
