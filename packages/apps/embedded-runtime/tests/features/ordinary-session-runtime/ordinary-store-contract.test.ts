@@ -7,6 +7,7 @@ const handles = guardHandles();
 
 runContractSuite(ordinaryStoreSuite,
   {name: "in-memory", declaration: inMemoryOrdinaryStoreDeclaration, create: () => createInMemoryOrdinaryOperationStore()},
-  test);
+  // Wrapped so the cases register from this file, not from the conformance package (CI checks the registration site).
+  (name, body) => test(name, body));
 
 after(() => handles.check());

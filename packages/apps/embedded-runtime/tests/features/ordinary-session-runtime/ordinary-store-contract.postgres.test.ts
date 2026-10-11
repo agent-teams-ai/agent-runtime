@@ -10,6 +10,7 @@ const handles = guardHandles();
 const connectionString = process.env.ORDINARY_TEST_POSTGRES_URL;
 
 // A pool discards clients after a failed query and closes their sockets without awaiting them; `release` waits for those too.
+// The wait has no sleep; in CI the runner's per-test timeout and AbortSignal.timeout bound it.
 const ownedPool = (config: PoolConfig): {readonly pool: Pool; readonly release: () => Promise<void>} => {
   const pool = new Pool({connectionString, connectionTimeoutMillis: 5000, ...config});
   const connections: Promise<void>[] = [];

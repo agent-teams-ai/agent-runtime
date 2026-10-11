@@ -1,5 +1,5 @@
 import {createHash, randomUUID} from "node:crypto";
-import {containedTurnCommandFingerprint, type OrdinaryOperation, type OrdinaryOperationStore, type OrdinaryReceipt, type OrdinaryReceiptOf} from "@agent-teams/agent-execution/composition";
+import {containedTurnCommandFingerprint, ORDINARY_PROFILE, type OrdinaryOperation, type OrdinaryOperationStore, type OrdinaryReceipt, type OrdinaryReceiptOf} from "@agent-teams/agent-execution/composition";
 import {declareModule} from "@get-modular/assembly";
 import {OrdinaryStore} from "../../../../dist/composition/ordinary-runtime-assembly.js";
 
@@ -56,8 +56,7 @@ export function createInMemoryOrdinaryOperationStore(): OrdinaryOperationStore {
         if (prior === undefined) {throw new Error("ordinary acceptance disappeared");}
         return prior.fingerprint === fingerprint ? {kind: "duplicate", operation: prior} : {kind: "conflict"};
       }
-      const operation: OrdinaryOperation = {schemaVersion: 3, executionProfile: "user-session-v1", effectClass: "ordinary_user_session_effect",
-        capabilityManifestRevision: "ordinary-codex-macos-arm64-0.153.4-v1", operationId: `ordinary:${randomUUID()}`, attemptId: `attempt:${randomUUID()}`,
+      const operation: OrdinaryOperation = {schemaVersion: 3, ...ORDINARY_PROFILE, operationId: `ordinary:${randomUUID()}`, attemptId: `attempt:${randomUUID()}`,
         effectId: `effect:${randomUUID()}`, commandId: input.commandId, fingerprint, scope: {...input.scope}, input: structuredClone(input),
         preparation: null, revision: 0, status: "accepted", cancellationRequested: false, output: [], receipts: []};
       commands.set(commandKey, operation.operationId);
