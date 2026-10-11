@@ -23,6 +23,12 @@ export default async function* reporter(source) {
       occurrences.set(key, ordinal);
       stack.push({file: path(d.file), line: d.line, column: d.column,
         title: d.name, ancestry, ordinal, segment: [...site, ordinal]});
+    } else if (type === "test:fail" && stack.length === 0 && d.nesting === 0) {
+      // A failing file-level after hook (for example a leaked handle found by guardHandles) is reported
+      // against the file with no matching test:start. Surface its error instead of failing the pairing.
+      const cause = d.details.error?.cause ?? d.details.error;
+      yield JSON.stringify({kind: "failure", file: d.file ? path(d.file) : null,
+        error: [cause?.code, cause?.message ?? String(cause)].filter(Boolean).join(": ")}) + "\n";
     } else if (type === "test:pass" || type === "test:fail") {
       const event = stack.pop();
       assert.equal(event?.title, d.name); assert.equal(stack.length, d.nesting);
