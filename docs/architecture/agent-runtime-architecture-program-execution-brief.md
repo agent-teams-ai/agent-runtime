@@ -21,8 +21,8 @@ git clone https://github.com/agent-teams-ai/agent-runtime.git   # full history, 
 cd agent-runtime
 git log -1 --format='%H %cd'
 git diff --stat aca6cbe7..origin/main -- scripts/ci scripts/docs architecture package.json pnpm-workspace.yaml .github/workflows 'packages/*/*/package.json'
-node --version            # must print v24.21.0
-cat .node-version         # 24.21.0
+node --version            # must print v26.11.1
+cat .node-version         # 26.11.1
 node -p "require('./package.json').packageManager"   # pnpm@11.18.0
 grep -n 'df9260b0' scripts/ci/conformance.ts scripts/ci/full-contract.json
 grep -n "fixed six roots" scripts/ci/package-execution.ts
@@ -43,7 +43,7 @@ Also check, per card:
 - every `file:line` the card cites still points at the same code;
 - for ACCESS-AUTH-FILE and ACCESS-REFRESH-GUARD: the latest stable `openai/codex` release (`gh release list -R openai/codex --exclude-pre-releases --limit 3`) and whether `codex-rs/login/src/auth/storage.rs`, `codex-rs/login/src/token_data.rs`, `codex-rs/login/src/auth/manager.rs` (`should_refresh_proactively` and its constants) and `codex-rs/app-server/src/request_processors/account_processor.rs` changed since `rust-v0.161.0`.
 
-If the default `node` on PATH is not 24.21.0 (a newer system build is common), put the Node 24.21.0 bin directory first on PATH for every command; shell state may not persist between commands, so prefix each one.
+The owner migration of 2026-10-11 selects Node 26.11.1 as the active default. Put its bin directory first on PATH for every command; shell state may not persist between commands, so prefix each one. Invoke the retained Node 24 Corepack JavaScript with the selected Node executable and use a job-owned pnpm shim. Keep Node 24.21.0 as an explicit compatibility lane.
 
 ## 2. Goal
 

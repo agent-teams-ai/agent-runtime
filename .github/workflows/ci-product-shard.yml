@@ -51,6 +51,12 @@ jobs:
           fi
           test "$(git rev-parse "$object^{commit}")" = "$object"
           git fsck --connectivity-only --no-reflogs "$object"
+      - name: Setup Node 24 Corepack source
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.21.0
+          package-manager-cache: false
+
       - name: Setup pinned Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
@@ -59,8 +65,16 @@ jobs:
         run: node scripts/ci/gate.ts revision
       - name: Enable pinned pnpm
         run: |
-          corepack enable
-          corepack install --global pnpm@11.18.0
+          selectedNode="$(node -p 'process.execPath')"
+          corepackJs="$RUNNER_TOOL_CACHE/node/24.21.0/$(node -p 'process.arch')/lib/node_modules/corepack/dist/corepack.js"
+          test -f "$corepackJs"
+          export COREPACK_HOME="$RUNNER_TEMP/node-toolchain/corepack"
+          mkdir -p "$RUNNER_TEMP/node-toolchain/bin" "$COREPACK_HOME"
+          printf '#!/bin/sh\nexec "%s" "%s" pnpm "$@"\n' "$selectedNode" "$corepackJs" > "$RUNNER_TEMP/node-toolchain/bin/pnpm"
+          chmod 755 "$RUNNER_TEMP/node-toolchain/bin/pnpm"
+          printf '%s\n' "$RUNNER_TEMP/node-toolchain/bin" >> "$GITHUB_PATH"
+          printf 'COREPACK_HOME=%s\n' "$COREPACK_HOME" >> "$GITHUB_ENV"
+          "$selectedNode" "$corepackJs" pnpm --version
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Bind disposable evidence paths

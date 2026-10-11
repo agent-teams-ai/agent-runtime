@@ -100,7 +100,7 @@ export async function readProductSource(root: string, tracked: readonly string[]
   }
   const manifests = Object.fromEntries(['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.node-version',
     ...roots.map(base => `${base}/package.json`)].toSorted().map(path => [path, inputs[path]!]));
-  assert.equal((await readFile(join(root, '.node-version'), 'utf8')).trim(), '24.21.0', 'pinned Node drift');
+  assert.equal((await readFile(join(root, '.node-version'), 'utf8')).trim(), '26.11.1', 'pinned Node drift');
   const scripts: Scripts = object(JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).scripts) as Scripts;
   const baseline: { scripts: Scripts } = JSON.parse(await readFile(join(root, 'scripts/ci/full-contract.json'), 'utf8'));
   for (const name of ['product:check', 'product:build', ...phaseScripts.flat()]) {
@@ -277,10 +277,10 @@ function assertReceiptPlatform(report: Record<string, unknown>, expected: Expect
     assert.ok(Number.isSafeInteger(report.uid) && Number(report.uid) > 0, 'non-root Mac execution required');
     assert.match(String(image.os), /^macos15(?:-arm64)?$/u, 'macos-15 image family required');
     assert.match(String(image.version), /^[0-9]{8}\.[0-9]{4}(?:\.[0-9]+)?$/u, 'explicit current image version required');
-    assert.match(String(report.execPath), /^\/Users\/runner\/hostedtoolcache\/node\/24\.21\.0\/arm64\/bin\/node$/u, 'pinned Mac Node toolcache required');
+    assert.match(String(report.execPath), /^\/Users\/runner\/hostedtoolcache\/node\/26\.11\.1\/arm64\/bin\/node$/u, 'pinned Mac Node toolcache required');
     assertNativeEvidence(report, expected);
   } else { assert.equal(report.nativeBuild, null); }
-  assert.equal(report.node, 'v24.21.0'); assert.equal(report.pnpm, '11.18.0');
+  assert.equal(report.node, 'v26.11.1'); assert.equal(report.pnpm, '11.18.0');
   if (!mac) { assert.equal(report.execPath, expected.nodeExecutable); }
 }
 function assertEmbeddedProcesses(report: Record<string, unknown>, observation: Record<string, unknown>, id: PackageId): void {
@@ -383,7 +383,7 @@ export function assertFanoutEvidence(expected: ExpectedEvidence, packages: reado
   assert.deepEqual(phaseReports.map(report => report.entry).toSorted(), [...phaseEntries].toSorted(), 'missing/duplicate product phase');
   for (const report of phaseReports) {
     assert.equal(report.sha, expected.sha); assert.equal(report.inputTree, expected.inputTree);
-    assert.equal(report.platform, 'linux'); assert.equal(report.node, 'v24.21.0'); assert.equal(report.pnpm, '11.18.0');
+    assert.equal(report.platform, 'linux'); assert.equal(report.node, 'v26.11.1'); assert.equal(report.pnpm, '11.18.0');
     assert.equal(report.arm, 'production'); assert.equal(object(report.runnerImage).arch, 'X64');
     assert.deepEqual(report.digests, expected.measureDigests, 'measure input drift');
     const index = phaseEntries.indexOf(report.entry as typeof phaseEntries[number]);

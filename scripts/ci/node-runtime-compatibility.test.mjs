@@ -10,12 +10,12 @@ import {types} from "node:util";
 const root = new URL("../../", import.meta.url);
 const read = async path => (await import("node:fs/promises")).readFile(new URL(path, root), "utf8");
 
-test("production default and pinned custody image remain Node 24", async () => {
-  assert.equal((await read(".node-version")).trim(), "24.21.0");
+test("Node 26 default and custody image preserve Node 24 historical evidence", async () => {
+  assert.equal((await read(".node-version")).trim(), "26.11.1");
   const manifest = JSON.parse(await read("package.json"));
   assert.equal(manifest.engines.node, ">=24.21.0 <25 || >=26.10.0 <27");
   const dockerfile = await read("packages/contexts/agent-execution/scripts/docker-custody-init/Dockerfile");
-  assert.match(dockerfile, /^FROM node@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS base$/mu);
+  assert.match(dockerfile, /^FROM node@sha256:86f07bc9c5dce4578cf37e5a418b7bfc7f817cda25cde66e2b66e95ed86c4567 AS base$/mu);
   const evidence = await read("docs/spikes/linux-nonroot-containment-egress-results.md");
   assert.match(evidence, /node:24\.18-bookworm-slim/u);
   assert.match(evidence, /sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d/u);

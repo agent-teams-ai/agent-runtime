@@ -42,7 +42,7 @@ export function compare(serial: readonly Receipt[], parallel: readonly Receipt[]
     assert.deepEqual(sorted(receipt.inventory), sorted(commandInventory(consumerScripts, receipt.entry)), 'full consumer phase inventory');
     assert.deepEqual(Object.keys(receipt.digests).toSorted(), [...inputPaths].toSorted());
     assert.ok(Object.values(receipt.digests).every(value => /^[a-f0-9]{64}$/u.test(value)), 'invalid input digest');
-    assert.equal(receipt.node, 'v24.21.0', 'pinned Node');
+    assert.equal(receipt.node, 'v26.11.1', 'pinned Node');
     assert.equal(receipt.pnpm, '11.18.0', 'pinned pnpm');
     assert.deepEqual(Object.keys(receipt.runnerImage).toSorted(), ['arch', 'os', 'version']);
     assert.ok(Object.values(receipt.runnerImage).every(value => typeof value === 'string' && value.length > 0 && value !== 'unobserved'), 'missing runner image evidence');

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../../../../../", import.meta.url));
 const entry = "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/docker/init/node-docker-custody-init-main.ts";
-const base = "node@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d";
+const base = "node@sha256:86f07bc9c5dce4578cf37e5a418b7bfc7f817cda25cde66e2b66e95ed86c4567";
 const version = "1.3.11";
 const help = `Usage: node packages/contexts/agent-execution/scripts/docker-custody-init/build.mjs --output /absolute/new-directory
 Builds only the current production init JavaScript and copies its Dockerfile.

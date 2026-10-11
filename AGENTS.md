@@ -61,8 +61,10 @@ or adding a baseline:
 
 Verification workflow:
 
-- Tooling uses the pinned Node 24.21.0+ patch in `.node-version` and pnpm
-  11.18.0. Keep Node 26 inactive and historical runtime receipts unchanged.
+- Tooling defaults to pinned Node 26.11.1 in `.node-version` and pnpm
+  11.18.0. Retain explicit Node 24.21.0 compatibility coverage and historical
+  runtime receipts unchanged. Node 26 uses Node 24 Corepack JavaScript via the
+  selected Node executable and a job-owned pnpm shim; no global installation.
 - `test:consumer-modules` uses installed `agent-teams-node-test` for the
   exact CMS pin identities and selected entry file in the current
   Foundation adoption. `quality:adoption` rejects selection drift; preserve
