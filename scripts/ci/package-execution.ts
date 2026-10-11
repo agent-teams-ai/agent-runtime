@@ -257,13 +257,14 @@ export async function packageStreamPlans(root: string, shard: Shard, selection: 
     const manifest = object(json(await readFile(join(cwd, 'package.json'), 'utf8')));
     const script = object(manifest.scripts).test; assert.equal(script, shard.package.test);
     const args = String(script).split(' '); assert.deepEqual(args.slice(0, 3), executionPrefix);
-    const files: string[] = [];
-    for (const pattern of args.slice(3)) {
+    // Flags that follow the fixed prefix (for example --test-force-exit) stay in the argv; the rest are file patterns.
+    const flags = args.slice(3).filter(arg => arg.startsWith('--')), files: string[] = [];
+    for (const pattern of args.slice(3).filter(arg => !arg.startsWith('--'))) {
       const matches: string[] = [];
       for await (const file of glob(pattern, { cwd })) { if (!file.split('/').some(part => part.startsWith('.'))) { matches.push(file); } }
       assert.ok(matches.length > 0, 'unmatched original package pattern'); files.push(...matches.toSorted());
     }
-    argvs = [[...args.slice(1, 3), ...files]];
+    argvs = [[...args.slice(1, 3), ...flags, ...files]];
   }
   return argvs.map(argv => ({ executable: process.execPath, argv, cwd, files: argv.filter(arg => !arg.startsWith('--')).map(file => join(cwd, file)) }));
 }

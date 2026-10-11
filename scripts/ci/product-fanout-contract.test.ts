@@ -53,7 +53,7 @@ async function fixture() {
       await put(`${base}/native/rename-no-replace.c`, '// synthetic TEST native source identity');
     }
     if (id !== 'agent-execution' && id !== 'embedded-runtime') {
-      for (const pattern of originalPackages.find(p => p.root === base)!.test.split(' ').slice(3)) {
+      for (const pattern of originalPackages.find(p => p.root === base)!.test.split(' ').slice(3).filter(arg => !arg.startsWith('--'))) {
         const file = pattern.replaceAll('*', 'example');
         await put(`${base}/${file}`, "import test from 'node:test'; test('first identity', () => {}); test('second identity', () => {}); for (const name of ['repeat', 'repeat']) { test(name, () => {}); } test('skip', {skip:true}, () => {});\n");
       }
