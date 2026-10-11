@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { writeSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve as resolvePath } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -91,7 +90,7 @@ export async function observeRegressionProcess(command: string, root: string, en
   const observe = createTestResultCollector();
   const lines = createInterface({ input: child.stdout });
   lines.on('line', line => {
-    writeSync(2, `CI_NODE_CHILD_DIAGNOSTIC ${line}\n`);
+    process.stderr.write(`CI_NODE_CHILD_DIAGNOSTIC ${line}\n`);
     const result = directNodeTest && line.startsWith('CI_NODE_EVENT ') ? JSON.parse(line.slice(14)) as TestResult : observe(line);
     if (result) {execution.tests.push(result);}
     if (directNodeTest && line.startsWith('CI_NODE_SUMMARY ')) {execution.nodeSummaries!.push(JSON.parse(line.slice(16)) as NodeSummary);}
