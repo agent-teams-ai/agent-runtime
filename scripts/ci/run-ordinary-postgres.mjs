@@ -4,13 +4,15 @@ import {fileURLToPath, pathToFileURL} from "node:url";
 
 const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 const requiredTests = [
-  ["agent-execution", "contained-agent-turn/ordinary-core-postgres.test.ts",
+  ["packages/contexts/agent-execution/tests/features/contained-agent-turn/ordinary-core-postgres.test.ts",
     "disposable PostgreSQL ordinary namespace: concurrent accept and claim, durable restart and scope isolation"],
-  ["runtime-security", "contained-turn-dispatch-authority/ordinary-security-postgres.test.ts",
+  ["packages/contexts/runtime-security/tests/features/contained-turn-dispatch-authority/ordinary-security-postgres.test.ts",
     "ordinary security durable consumed identity, unknown-commit readback, settlement and no persisted secrets"],
-  ["provider-access", "contained-turn-access/ordinary-pa-postgres.test.ts",
+  ["packages/contexts/provider-access/tests/features/contained-turn-access/ordinary-pa-postgres.test.ts",
     "ordinary PA PostgreSQL grants, counters, retirement and original rendering authority"],
-].map(([owner, suffix, name]) => ({file: resolve(repositoryRoot, `packages/contexts/${owner}/tests/features/${suffix}`), name}));
+  ["packages/apps/embedded-runtime/tests/features/ordinary-session-runtime/ordinary-store-contract.postgres.test.ts",
+    "ordinary operation store contract suite against PostgreSQL"],
+].map(([path, name]) => ({file: resolve(repositoryRoot, path), name}));
 
 // This gate is deliberately limited to a fresh local test cluster. Generic package
 // tests may omit PostgreSQL, but this mandatory CI entrypoint must never skip it.
@@ -63,7 +65,7 @@ export const runOrdinaryPostgres = async ({environment = process.env, runTests =
   if (failed || !completed || seen.size !== requiredTests.length) {
     throw new Error(`Ordinary PostgreSQL gate incomplete: ${seen.size}/${requiredTests.length} required tests passed without skips`);
   }
-  write("Ordinary PostgreSQL gate: all 3 required integration tests passed without skips\n");
+  write(`Ordinary PostgreSQL gate: all ${requiredTests.length} required integration tests passed without skips\n`);
 };
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
