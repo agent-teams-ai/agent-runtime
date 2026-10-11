@@ -9,7 +9,7 @@ const runtimeRef = "75cbecab131d74021677fcd1fb21962994d306b8";
 const checkoutRef = "d23441a48e516b6c34aea4fa41551a30e30af803";
 const setupNodeRef = "249970729cb0ef3589644e2896645e5dc5ba9c38";
 const expectedWorkflowSha256 =
-  "0997a60c648fcb66e341d011a94ea2721585af9b1611c7e07445c372f0ac5008";
+  "336a904791d2e84164b44b2342aa5acc6d63cff36aac71cbce80a8c6fc8b8843";
 const workflow = await readFile(
   resolve(repositoryRoot, ".github/workflows/reviewrouter-interaction.yml"),
   "utf8",
