@@ -463,6 +463,11 @@ legacy conversion and shared checker extraction require separate scope.`;
 
 // Additive ADR-0090 scope and graph rejecting evidence remains in the canonical gate.
 import {profile as ordinaryScopeProfile} from './check-ordinary-feature-scope.test.mjs';
+import {entryPoints as moduleEntryPoints} from './module-dependency-casts.test.mjs'; // Registers the dependency-record cast tests in this gate.
+
+test('the dependency-record cast check covers the Host and the ordinary feature entry points', () => {
+  for (const name of ['createAgentRuntimeHost', 'createOrdinaryTurnFeature']) {assert.ok(moduleEntryPoints.includes(name), name);}
+});
 
 test('renumbered ordinary decisions retain both immutable pre-merge byte sets', async () => {
   for (const [path, expected] of [

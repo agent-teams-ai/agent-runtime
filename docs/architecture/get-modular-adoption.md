@@ -1194,10 +1194,26 @@ the `outstandingWork` of the review, which stay as the evidence of the pin step.
 | Host rule: one deadline at the root (escalate, then abandon) | outstanding | outstanding by decision of 2026-10-04: release of the resource owners keeps today's behavior without a deadline; added when an owner's release can block without its own bound, or on owner request; prepared values grace 5000 ms, abandon 5000 ms | none yet |
 | Host rule: `order: "concurrent"` only for independent peers | met: Provider Access grants | met: Provider Access grants | AR-2 |
 | Errors identified by code | met (no Get Modular error is compared with `instanceof`) | met | AR-1c, AR-2 |
-| Testing 1 and 2: named module factories, typed fakes | factories met for the ordinary feature; fakes this train touches are typed, but package test files are not type-checked yet; remaining work tracked in issue #189 | factories met for the ordinary feature; fakes this train touches are typed, but package test files are not type-checked yet; remaining work tracked in issue #189 | AR-1b, AR-1c; rest per #189 |
+| Testing 1 and 2: named module factories, typed fakes | met for passive-setup and ordinary module tests: type-checked through the root include; an AST check rejects type-erasing casts on dependency records at the factory call and one const step; records built inside fixtures are covered by type-checking only | met for passive-setup and ordinary module tests: type-checked through the root include; an AST check rejects type-erasing casts on dependency records at the factory call and one const step; records built inside fixtures are covered by type-checking only | AR-1b, AR-1c, issue #189 |
 | Testing 3: contract suites | outstanding | outstanding; covered by issue #189 brief 07 after AR-2 (planning decision 2026-10-04): one suite for `agent-runtime/ordinary/store`, owned by the ordinary feature, run against an in-memory fake and the PostgreSQL store, moved unchanged into STORE-2-core as its compatibility suite (never copied or imported from embedded-runtime); every other contract recorded as "no second implementation" | #189 brief 07 |
 | Testing 4: `isolate` | met for one scoped owner module (provider) | met for one scoped owner module | AR-1c |
 | Testing 5: roots as functions of Assembly, one `smoke` per root | met for the passive and ordinary profiles | met for the passive and ordinary profiles | AR-1b, AR-1c |
 | Testing 6: independent binding oracle | met: literal compiled-plan oracle | met | AR-1b |
 | Testing 7 and 8: `guardHandles`, close every scope, no sleeps | 8 met for new tests; 7 not adopted in this train, tracked in issue #189 | 8 met for new tests; 7 not adopted in this train, tracked in issue #189 | AR-1c; 7 per #189 |
 | Optional dynamic Host lifecycle candidate | not adopted | not adopted | none |
+
+### Module test enforcement
+
+The test files that build Get Modular modules of the passive-setup and ordinary compositions are listed one by one in
+the root `tsconfig.json` `include`, so `pnpm typecheck` compares every fake with its contract. A module dependency
+record is the `dependencies` value of an `isolate` call, the first argument of a module entry point, or an expression
+checked with `satisfies FactoryDependencies<...>` or declared with that type. The adoption gate
+(`pnpm test:get-modular-adoption`) runs `scripts/architecture/module-dependency-casts.mjs` and fails on `as never`,
+`as any`, `as unknown as`, `as any as`, `as never as`, `<never>` and `<any>` on such a record. A cast that feeds a
+deliberately invalid input stays when the line of the cast or the line above carries `// hostile-input: <reason>`. The
+list of entry points is `MODULE_ENTRY_POINTS` in that script; the check fails on a name that no longer exists, so add the
+factory of a new module there. Contained-turn test files are out of this scope.
+
+The check reads a dependency record at the factory call and through one `const` step. It does not follow records that a
+fixture builds and a test passes on as `f.dependencies` (for example `ordinary-core.test.ts` and
+`ordinary-host-ownership.fixture.ts`); type-checking those files through the root `include` is what covers them.

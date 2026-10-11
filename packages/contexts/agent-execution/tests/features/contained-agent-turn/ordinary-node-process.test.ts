@@ -7,6 +7,7 @@ import {createNodeOrdinaryProcess} from "../../../dist/features/contained-agent-
 import {openOrdinaryChannel} from "../../../dist/features/contained-agent-turn/adapters/outbound/ordinary-channel/ordinary-byte-channel.js";
 import {OrdinaryJsonLineFraming} from "../../../dist/features/contained-agent-turn/adapters/outbound/ordinary-codex/ordinary-framing.js";
 import type {OrdinaryTransport} from "../../../dist/features/contained-agent-turn/application/ordinary-ports.js";
+import {createMockChild, mockProcessUid} from "./ordinary-mock-child-test-support.ts";
 
 const binding = {operationId: "operation:synthetic", attemptId: "attempt:synthetic", executionProfile: "user-session-v1", capabilityManifestRevision: "ordinary-codex-macos-arm64-0.153.4-v1"} as const;
 /** The consumer side of the channel: one framing pass over the bytes, as the Codex binding does it. */
@@ -102,13 +103,10 @@ test("Linux ordinary reservation refuses before preparing a provider launch", {s
 test("bounded close rejection retries observed group closure and memoizes success without spawning", async t => {
   const childProcess = await import("node:child_process");
   const {syncBuiltinESMExports} = await import("node:module");
-  const {PassThrough} = await import("node:stream");
-  const child = new childProcess.ChildProcess();
-  child.pid = 424242;
-  child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+  const child = createMockChild();
   const originalPlatform = Object.getOwnPropertyDescriptor(process, "platform")!;
   Object.defineProperty(process, "platform", {...originalPlatform, value: "darwin"});
-  t.mock.method(process, "getuid", () => 1000);
+  mockProcessUid(t);
   let empty = false; let spawns = 0;
   t.mock.method(childProcess.default, "spawn", () => {spawns += 1; return child;});
   t.mock.method(process, "kill", (_pid: number, signal?: NodeJS.Signals | number) => {
@@ -137,13 +135,10 @@ test("bounded close rejection retries observed group closure and memoizes succes
 test("timed out close cannot certify a discarded fragment after late EOF", async t => {
   const childProcess = await import("node:child_process");
   const {syncBuiltinESMExports} = await import("node:module");
-  const {PassThrough} = await import("node:stream");
-  const child = new childProcess.ChildProcess();
-  child.pid = 424242;
-  child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+  const child = createMockChild();
   const originalPlatform = Object.getOwnPropertyDescriptor(process, "platform")!;
   Object.defineProperty(process, "platform", {...originalPlatform, value: "darwin"});
-  t.mock.method(process, "getuid", () => 1000);
+  mockProcessUid(t);
   let empty = false; let spawns = 0;
   t.mock.method(childProcess.default, "spawn", () => {spawns += 1; return child;});
   t.mock.method(process, "kill", (_pid: number, signal?: NodeJS.Signals | number) => {
@@ -177,7 +172,7 @@ for (const boundary of ["cancelled", "journal", "spawn"] as const) {
     const {syncBuiltinESMExports} = await import("node:module");
     const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
     Object.defineProperty(process, "platform", {...platform, value: "darwin"});
-    t.mock.method(process, "getuid", () => 1000);
+    mockProcessUid(t);
     let spawns = 0;
     t.mock.method(childProcess.default, "spawn", () => {spawns += 1; throw new Error("TEST spawn boundary unknown");});
     syncBuiltinESMExports();
@@ -203,13 +198,10 @@ for (const overflow of ['chunk', 'line', 'partial', 'stderr'] as const) {
   test(`discarded ${overflow} output permanently prevents drain certification`, async t => {
     const childProcess = await import('node:child_process');
     const {syncBuiltinESMExports} = await import('node:module');
-    const {PassThrough} = await import('node:stream');
-    const child = new childProcess.ChildProcess();
-    child.pid = 424242;
-    child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+    const child = createMockChild();
     const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
     Object.defineProperty(process, 'platform', {...platform, value: 'darwin'});
-    t.mock.method(process, 'getuid', () => 1000);
+    mockProcessUid(t);
     t.mock.method(childProcess.default, 'spawn', () => child);
     t.mock.method(process, 'kill', () => {throw Object.assign(new Error('TEST group absent'), {code: 'ESRCH'});});
     syncBuiltinESMExports();
@@ -235,13 +227,10 @@ for (const overflow of ['chunk', 'line', 'partial', 'stderr'] as const) {
 async function mockedProcess(t: import("node:test").TestContext) {
   const childProcess = await import("node:child_process");
   const {syncBuiltinESMExports} = await import("node:module");
-  const {PassThrough} = await import("node:stream");
-  const child = new childProcess.ChildProcess();
-  child.pid = 424242;
-  child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+  const child = createMockChild();
   const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
   Object.defineProperty(process, "platform", {...platform, value: "darwin"});
-  t.mock.method(process, "getuid", () => 1000);
+  mockProcessUid(t);
   const observed = {spawns: 0, signals: [] as (string | number | undefined)[]};
   t.mock.method(childProcess.default, "spawn", () => {observed.spawns += 1; return child;});
   t.mock.method(process, "kill", (_pid: number, signal?: string | number) => {observed.signals.push(signal); throw Object.assign(new Error("TEST group absent"), {code: "ESRCH"});});

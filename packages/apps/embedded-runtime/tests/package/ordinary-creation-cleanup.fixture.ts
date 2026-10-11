@@ -78,7 +78,7 @@ async function fixture(t: test.TestContext) {
   const options = {execution: {provider: 'codex' as const, executablePath: join(root, 'absent-TEST'), authSourceDirectory: root, privateRoot: root, evidenceRoot: root, sourceDirectory: root, workspaceRoot: root, artifactRoot: root, sourceRevision: 'TEST'}, storage: {pool}, scope: {tenantId: 'test', projectId: 'TEST'}};
   return {options, assertBorrowed() {assert.equal(ended, 0); assert.equal(connected, released);},
     assertJournalOpen() {assert.equal(journalCloses, 0); assert.ok(journalFd !== undefined); fs.writeSync(journalFd, '{"kind":"TEST retained"}\n'); fs.fsyncSync(journalFd);},
-    assertJournalClosed() {assert.equal(journalCloses, 1); assert.ok(journalFd !== undefined); assert.throws(() => fs.fstatSync(journalFd), /EBADF/);},
+    assertJournalClosed() {assert.equal(journalCloses, 1); const fd = journalFd; assert.ok(fd !== undefined); assert.throws(() => fs.fstatSync(fd), /EBADF/);},
   };
 }
 
@@ -119,7 +119,7 @@ test('nested failed creation recovers inner feature before outer owners and skip
   };
   const controller = new AbortController(); let failure!: InstanceType<typeof AgentRuntimeHostCreationError>;
   await assert.rejects(createOrdinaryAgentRuntimeHost({...f.options, signal: controller.signal}, (signal, ordinary) =>
-    createRuntimeSetupAttempt({signal}, createRuntimeSetupFactories, {completeRoot: async () => {
+    createRuntimeSetupAttempt(signal === undefined ? {} : {signal}, createRuntimeSetupFactories, {completeRoot: async () => {
       controller.abort(); throw new Error('TEST nested primary');
     }}, ordinary)), error => {
       f.assertJournalOpen(); assert.equal(securityDisposals, 0); assert.equal(paDisposals, 0);
@@ -151,7 +151,8 @@ test('nested failed creation recovers inner feature before outer owners and skip
 // Real Assembly path with the public constructor: ordinary options over real directories and an in-memory pool.
 async function publicHost(t: test.TestContext) {
   const f = await fixture(t);
-  const dirs = Object.fromEntries(['auth', 'private', 'evidence', 'source', 'workspace', 'artifact'].map(name => [name, join(f.options.execution.evidenceRoot, name)]));
+  const base = f.options.execution.evidenceRoot;
+  const dirs = {auth: join(base, 'auth'), private: join(base, 'private'), evidence: join(base, 'evidence'), source: join(base, 'source'), workspace: join(base, 'workspace'), artifact: join(base, 'artifact')};
   for (const path of Object.values(dirs)) {await mkdir(path, {mode: 0o700});}
   const execution = {...f.options.execution, authSourceDirectory: dirs.auth, privateRoot: dirs.private, evidenceRoot: dirs.evidence, sourceDirectory: dirs.source, workspaceRoot: dirs.workspace, artifactRoot: dirs.artifact};
   const {createAgentRuntimeHost} = await import('../../dist/composition.js');

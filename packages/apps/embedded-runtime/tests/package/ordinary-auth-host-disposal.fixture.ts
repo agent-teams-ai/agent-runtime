@@ -16,11 +16,13 @@ test('real Host retains the real auth capture after indeterminate helper cleanup
     async prepareAuthFiles() {return {home: '/TEST/private', sourceIdentity: 'TEST-source', async check() {}, async retain() {retained += 1;}, cleanup: forbidden};},
     authHelperArguments: () => [],
   }});
-  const child = new childProcess.ChildProcess(); child.pid = 424242;
-  child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+  const child = new childProcess.ChildProcess();
+  // The typings make pid read-only; a real child receives it from spawn.
+  Object.defineProperty(child, 'pid', {value: 424242, configurable: true});
+  Object.assign(child, {stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough()});
   let spawns = 0, signals = 0, gone = false;
   t.mock.method(childProcess, 'spawn', () => {spawns += 1; return child;});
-  t.mock.method(process, 'kill', (_pid, signal) => {
+  t.mock.method(process, 'kill', (_pid: number, signal?: NodeJS.Signals | number) => {
     assert.equal(_pid, -424242);
     if (signal !== 0) {signals += 1;}
     if (gone) {throw Object.assign(new Error('TEST absent group'), {code: 'ESRCH'});}
@@ -33,7 +35,7 @@ test('real Host retains the real auth capture after indeterminate helper cleanup
   const {createOrdinaryCodexAuthCapture} = await import(new URL('../../../../contexts/provider-access/dist/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-capture.js', import.meta.url).href);
   const {createPostgresOrdinaryProviderAccessOwner} = await import(new URL('../../../../contexts/provider-access/dist/composition.js', import.meta.url).href);
   const capture = createOrdinaryCodexAuthCapture({operationRef: 'TEST-operation', executable: '/TEST/absent', sourceDirectory: '/TEST/source', privateRoot: '/TEST/private', generation: 1, signal: new AbortController().signal, deadline: performance.now() + 20000,
-    record: observation => {if (observation.outcome === 'started') {throw new Error('TEST journal failure');}},
+    record: (observation: {readonly outcome?: string}) => {if (observation.outcome === 'started') {throw new Error('TEST journal failure');}},
   });
   const owner = createPostgresOrdinaryProviderAccessOwner({pool: {connect: forbidden}, registerSecrets: () => true});
   const host = createAgentRuntimeHost({
