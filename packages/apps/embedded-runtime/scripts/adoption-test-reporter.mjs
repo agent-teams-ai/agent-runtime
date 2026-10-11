@@ -3,6 +3,15 @@ import { relative, resolve } from "node:path";
 
 const skipReason = skip => skip ? (typeof skip === "string" ? skip : "registration skip option evaluated true") : null;
 
+// A failing file-level after hook (for example a leaked handle found by guardHandles) is reported against
+// the file with no matching test:start, so it cannot take part in the start/finish pairing.
+const isUnpairedFailure = (type, d, stack) => type === "test:fail" && stack.length === 0 && d.nesting === 0;
+const fileFailure = (d, path) => {
+  const cause = d.details.error?.cause ?? d.details.error;
+  const error = [cause?.code, cause?.message ?? String(cause)].filter(Boolean).join(": ");
+  return JSON.stringify({kind: "failure", file: d.file ? path(d.file) : null, error}) + "\n";
+};
+
 // Node 24's ordered start/pass/fail stream preserves ancestry even for concurrent tests.
 // Per-file summaries bind helper registrations to the explicit manifest input suite.
 export default async function* reporter(source) {
@@ -23,12 +32,8 @@ export default async function* reporter(source) {
       occurrences.set(key, ordinal);
       stack.push({file: path(d.file), line: d.line, column: d.column,
         title: d.name, ancestry, ordinal, segment: [...site, ordinal]});
-    } else if (type === "test:fail" && stack.length === 0 && d.nesting === 0) {
-      // A failing file-level after hook (for example a leaked handle found by guardHandles) is reported
-      // against the file with no matching test:start. Surface its error instead of failing the pairing.
-      const cause = d.details.error?.cause ?? d.details.error;
-      yield JSON.stringify({kind: "failure", file: d.file ? path(d.file) : null,
-        error: [cause?.code, cause?.message ?? String(cause)].filter(Boolean).join(": ")}) + "\n";
+    } else if (isUnpairedFailure(type, d, stack)) {
+      yield fileFailure(d, path);
     } else if (type === "test:pass" || type === "test:fail") {
       const event = stack.pop();
       assert.equal(event?.title, d.name); assert.equal(stack.length, d.nesting);
