@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
-import { test } from "node:test";
+import { after, test } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
 
 import { createNodeOpaqueReferenceDigest } from "../../../dist/composition/opaque-reference-digest.js";
+
+// Count handles before this file opens any.
+const handles = guardHandles();
 
 test("matches the direct HMAC-SHA256 hex digest for the same key and material", () => {
   const digest = createNodeOpaqueReferenceDigest();
@@ -32,3 +36,6 @@ test("returns a frozen adapter with no ambient state between instances", () => {
   const key = new Uint8Array(32).fill(4);
   assert.equal(first.hex(key, "same"), second.hex(key, "same"));
 });
+
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());

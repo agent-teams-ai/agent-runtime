@@ -2170,6 +2170,7 @@ boundaries:
     - '@agent-teams/runtime-security'
     - '@agentclientprotocol/sdk'
     - '@anthropic-ai/claude-agent-sdk'
+    - '@get-modular/conformance'
     - '@opencode-ai/plugin'
     - '@types/node'
     - '@types/pg'
