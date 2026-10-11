@@ -192,6 +192,13 @@ test('ER reporter surfaces a failing file-level after hook, which node:test repo
   assert.equal(records.at(-1)?.kind, 'end');
 });
 
+test('the Filesystem Custody stream plan keeps the force-exit flag in the original argv', async () => {
+  const [plan, ...rest] = await packageStreamPlans(resolve('.'), selectShard('filesystem-custody'), null);
+  assert.equal(rest.length, 0);
+  assert.deepEqual(plan!.argv.slice(0, 3), ['--test', '--test-concurrency=1', '--test-force-exit']);
+  assert.ok(plan!.files.length > 0 && plan!.files.every(file => !file.includes('--')));
+});
+
 }
 export function registerPackageExecutionTests(): void {
   registerEmbeddedCaptureTests();

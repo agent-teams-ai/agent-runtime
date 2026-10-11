@@ -58,7 +58,7 @@ export function observeEmbeddedProcesses(plans: readonly Plan[], capture: string
       assert.ok(Number.isSafeInteger(record.runnerPid) && Number(record.runnerPid) > 0);
       assert.notEqual(record.actualPid, record.runnerPid);
       assert.notEqual(record.actualPid, commandPid, 'original child cannot be its command process');
-      assert.equal(record.runnerPid, (records[0] as Record<string, unknown>).runnerPid, 'both original streams require one actual runner');
+      assert.equal(record.runnerPid, (records[0] as Record<string, unknown>).runnerPid, 'all original streams require one actual runner');
       assert.ok(!pids.has(Number(record.actualPid)), 'duplicate spawn PID'); pids.add(Number(record.actualPid));
       assert.equal(record.actualExecutable, plan.executable); assert.equal(record.actualCwd, plan.cwd);
       assert.deepEqual(record.argv, plan.argv);
@@ -121,7 +121,7 @@ export function assertCapturedIdentity(stream: CapturedStream, commandPid: numbe
         const identity = object(JSON.parse(stream.identity!));
         assert.equal(identity.mechanism, 'spawnSync-return-v1');
         assert.equal(identity.runnerPid, stream.original.runnerPid);
-        assert.equal(identity.runnerPid, runnerPid, 'both original streams require one actual runner');
+        assert.equal(identity.runnerPid, runnerPid, 'all original streams require one actual runner');
         assert.equal(identity.pid, stream.original.actualPid);
         assert.equal(identity.executable, stream.original.actualExecutable);
         assert.equal(identity.cwd, stream.original.actualCwd);

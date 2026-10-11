@@ -397,13 +397,13 @@ Per-attempt archives retain failures. Both targets use execution receipt schema
 three; Linux retains its full package, root, typed and native obligations.
 The Embedded Runtime launcher now has three test processes; the third is the guarded
 force-exit process described in "Handle guards in tests". The disabled L0 v2 evidence
-lane still binds two processes, so restoring it must account for the third. Four of its
-tests fail because of that and stay failing until the lane is restored (it is not part of
-`pnpm check`): "complete receipts require both entire manifest processes", "original argv
-lists and accepted authority tests are preserved with the journal feature regression",
-"reviewed platform predicates still refer to exact registration sites" and "the actual
-launcher records all four stages and both full test processes in a disposable synthetic
-package".
+lane still binds two processes, so restoring it must account for the third. The lane is
+not part of `pnpm check`. The third process adds one failure ("the actual launcher records
+all four stages and both full test processes in a disposable synthetic package") and
+changes the cause of three that already fail on main: "complete receipts require both
+entire manifest processes", "original argv lists and accepted authority tests are
+preserved with the journal feature regression" and "reviewed platform predicates still
+refer to exact registration sites".
 The source census rejects ignored root/experiment inputs and symlink ancestry.
 Each observed test stream binds its raw PID, cwd, argv, completed file universe,
 registration location, ancestry and ordinal to the original package source;
