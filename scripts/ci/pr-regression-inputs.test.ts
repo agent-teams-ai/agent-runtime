@@ -3,12 +3,13 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { chmod, cp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import test, { after } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parse } from 'yaml';
 import { classifyPrRegressions, supportedPrEnvironment, installationFingerprint } from './pr-regression-inputs.ts';
 import type { LeafInventoryComparator } from './pr-regression-inputs.ts';
 import { assertPrObligations, foundationNegativeTests, observeRegressionProcess, prObligations } from './pr-regression-command.ts';
 import type { Execution, Obligation, ObservedObligation } from './pr-regression-command.ts';
+import { assertPhaseTestExecution, createTestResultCollector, type TestResult } from './measure.ts';
 import { validatePrFoundationRoute } from './conformance.ts';
 import { admitPublishedComparator, createRetainedSourceCheckout, fixtureOwnerEnvironment, installNodeModulesFixture, testScratch } from './pr-regression-bootstrap-fixtures.ts';
 
@@ -82,6 +83,41 @@ async function fixture(t: test.TestContext) {
     environment: trusted, runtime: facts, installation: '1'.repeat(64), ...overrides }, comparator);
   const body = async (path: string) => writeFile(join(root, path), `${await readFile(join(root, path), 'utf8')}\n// Disposable TEST body mutation\n`);
   return { root, base, git, freeze, plan, body, event };
+}
+
+async function assertNestedDiagnosticsStayOutOfParentEvidence(t: test.TestContext, env: NodeJS.ProcessEnv): Promise<void> {
+  const streamRoot = await testScratch('ar-pr-stream-TEST-'); t.after(() => rm(streamRoot, { recursive: true, force: true }));
+  const childFile = join(streamRoot, 'observed.test.ts');
+  const outerFile = join(streamRoot, 'outer.test.mts');
+  await writeFile(childFile, "import test from 'node:test';\n"
+    + "test('failed', () => { throw Error('TEST failure'); });\n"
+    + "test('skipped', { skip: true }, () => {});\n"
+    + "test('todo', { todo: true }, () => {});\n"
+    + "test('cancelled', { timeout: 20 }, async () => await new Promise(() => {}));\n"
+    + "test('duplicate identity', () => {});\n"
+    + "test('duplicate identity', () => {});\n");
+  const commandModule = pathToFileURL(join(repository, 'scripts/ci/pr-regression-command.ts')).href;
+  await writeFile(outerFile, `import assert from 'node:assert/strict';\n`
+    + `import test from 'node:test';\n`
+    + `import { observeRegressionProcess } from ${JSON.stringify(commandModule)};\n`
+    + `test('passing parent', async () => {\n`
+    + `  const execution = await observeRegressionProcess('node --test observed.test.ts', process.cwd(), { ...process.env });\n`
+    + `  assert.equal(execution.code, 1);\n`
+    + `  assert.equal(execution.tests.filter(result => result.status === 'failed').length, 2);\n`
+    + `  assert.deepEqual(execution.tests.map(result => result.name).toSorted(),\n`
+    + `    ['cancelled', 'duplicate identity', 'duplicate identity', 'failed', 'skipped', 'todo'].toSorted());\n`
+    + `});\n`);
+  const outer = spawnSync(process.execPath, ['--test', outerFile], { cwd: streamRoot, env, encoding: 'utf8' });
+  assert.equal(outer.status, 0, `${outer.stdout}\n${outer.stderr}`);
+  assert.doesNotMatch(outer.stdout, /^\s*CI_NODE_EVENT /mu, 'nested diagnostics leaked into parent evidence');
+  assert.match(`${outer.stdout}\n${outer.stderr}`, /CI_NODE_CHILD_DIAGNOSTIC CI_NODE_EVENT /u, 'nested diagnostics lost their bounded channel');
+  const observe = createTestResultCollector();
+  const parentTests = outer.stdout.split('\n').flatMap(line => {
+    const result = line.startsWith('CI_NODE_EVENT ') ? JSON.parse(line.slice(14)) as TestResult : observe(line);
+    return result ? [result] : [];
+  });
+  assert.equal(parentTests.some(result => ['failed', 'skipped', 'todo', 'cancelled'].includes(result.name)), false);
+  assertPhaseTestExecution({ script: 'test:ci', commands: [], tests: parentTests, unqualifiedRunners: [] });
 }
 
 export function registerPrRegressionTests(): void {
@@ -320,6 +356,7 @@ export function registerPrRegressionTests(): void {
     assert.equal(duplicate.code, 0, 'Node permits duplicate names; the PR obligation contract rejects them');
     assert.throws(() => assertPrObligations([{ id: 'real', command }], [{ ...proof, execution: duplicate }], []));
     assert.throws(() => assertPrObligations([{ id: 'real', command }], [{ id: 'real', command, disposition: 'deferred-unchanged-regression-inputs', tests: [] }], []));
+    await assertNestedDiagnosticsStayOutOfParentEvidence(t, env);
     const unsupported = spawnSync(process.execPath, [join(repository, 'scripts/ci/pr-regression-command.ts')], { env, encoding: 'utf8' });
     assert.notEqual(unsupported.status, 0);
     assert.match(unsupported.stderr, /pre-import source admission/u);

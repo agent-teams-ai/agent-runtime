@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { writeSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve as resolvePath } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -8,13 +9,21 @@ import { readScripts } from './inventory.ts';
 import { groups } from './policy.ts';
 import type { Group } from './policy.ts';
 import { assertCmsComposite, captureCmsComposite, cmsBinding, cmsContract, cmsDirectCommand, cmsMandatoryCommand,
-  createTestResultCollector, mandatoryRunnerSummary } from './measure.ts';
+  createTestResultCollector, isExecutedTestLeaf, mandatoryRunnerSummary } from './measure.ts';
 import type { NodeSummary, TestResult } from './measure.ts';
 import { classifyPrRegressions, currentPrInput, installationFingerprint, regressionCommands } from './pr-regression-inputs.ts';
 import type { LeafInventoryComparator, PrInput, PrPlan, RegressionId } from './pr-regression-inputs.ts';
 
 export interface Execution { code: number | null; signal: string | null; tests: TestResult[]; mandatory: string[]; nodeSummaries?: NodeSummary[] }
 export interface Obligation { id: string; command: string; regression?: RegressionId }
+export class PrRegressionProcessFailure extends Error {
+  readonly outcome: Pick<Execution, 'code' | 'signal'>;
+  constructor(outcome: Pick<Execution, 'code' | 'signal'>, obligation: Obligation) {
+    super(`sampled process failed: ${obligation.id}`);
+    this.name = 'PrRegressionProcessFailure';
+    this.outcome = outcome;
+  }
+}
 export type ObservedObligation = Obligation & (
   { disposition: 'executed'; execution: Execution }
   | { disposition: 'deferred-unchanged-regression-inputs'; tests: [] }
@@ -59,7 +68,8 @@ function assertFoundationNegativeExecution(execution: Execution, required: reado
 }
 
 // Fixed commands come from the reviewed script inventory, never an event payload.
-// This observes real stdout and exit/signal; deferrals never enter this function.
+// This observes real stdout and exit/signal; child diagnostics stay on stderr so
+// expected nested negatives cannot become parent execution evidence.
 export async function observeRegressionProcess(command: string, root: string, env: NodeJS.ProcessEnv): Promise<Execution> {
   const foundation = command === regressionCommands['foundation-negative'];
   if (foundation) {
@@ -81,7 +91,7 @@ export async function observeRegressionProcess(command: string, root: string, en
   const observe = createTestResultCollector();
   const lines = createInterface({ input: child.stdout });
   lines.on('line', line => {
-    console.log(line);
+    writeSync(2, `CI_NODE_CHILD_DIAGNOSTIC ${line}\n`);
     const result = directNodeTest && line.startsWith('CI_NODE_EVENT ') ? JSON.parse(line.slice(14)) as TestResult : observe(line);
     if (result) {execution.tests.push(result);}
     if (directNodeTest && line.startsWith('CI_NODE_SUMMARY ')) {execution.nodeSummaries!.push(JSON.parse(line.slice(16)) as NodeSummary);}
@@ -108,7 +118,9 @@ export function assertPrObligations(expected: readonly Obligation[], observed: r
       assert.equal(item.disposition, 'executed');
       assert.ok(!declaration.regression || !deferred.includes(declaration.regression), 'wrong disposition');
       assert.equal(item.execution.code, 0, 'failed or missing command'); assert.equal(item.execution.signal, null, 'cancelled command');
-      assert.ok(item.execution.tests.every(result => result.status === 'passed'), 'failed, skipped, todo or cancelled test');
+      assert.ok(item.execution.tests.every(result =>
+        result.status !== 'failed' && result.status !== 'cancelled' && result.bodyless !== true),
+      'failed, cancelled or file-only test');
       if (declaration.regression === 'foundation-negative') {assertFoundationNegativeExecution(item.execution, foundationRequired);}
       // Pretty CLI output lacks source sites and can forward repeated fixture
       // names. Enforce identity uniqueness for actual public Node events only.
@@ -117,7 +129,8 @@ export function assertPrObligations(expected: readonly Obligation[], observed: r
         assert.equal(new Set(identities).size, identities.length, 'duplicate observed test identity');
       }
       if (/node --test|agent-teams-node-test/u.test(item.command) || /^pnpm (?:test:|foundation:boundaries:negative|docs:qualification:(?:serial|portable))/u.test(item.command)) {
-        assert.ok(item.execution.tests.length > 0 || item.execution.mandatory.length === 1, 'no observed test execution');
+        assert.ok(item.execution.tests.some(isExecutedTestLeaf) || item.execution.mandatory.length === 1,
+          'no executed test leaf');
       }
     }
   }
@@ -172,6 +185,9 @@ export async function runPrRegressions(group: Group, output: string, compareLeaf
       const execution = await observeRegressionProcess(item.command, root, process.env);
       report.obligations.push({ ...item, disposition: 'executed', execution });
       await save();
+      if (execution.code !== 0 || execution.signal !== null) {
+        throw new PrRegressionProcessFailure({ code: execution.code, signal: execution.signal }, item);
+      }
       assertPrObligations(expected.slice(0, report.obligations.length), report.obligations, plan.deferred, foundationRequired);
     }
     await save();

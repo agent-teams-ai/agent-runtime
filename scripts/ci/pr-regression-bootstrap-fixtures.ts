@@ -23,29 +23,22 @@ export interface ActualMeasureFixtureOptions {
   missing?: ActualMeasureMissingFile;
 }
 
-export interface ActualMeasureFixture {
-  root: string;
-  evidence: string;
-  env: NodeJS.ProcessEnv;
-}
+export interface ActualMeasureFixture { root: string; evidence: string; env: NodeJS.ProcessEnv }
 
 export type MeasureChildOutcome = { kind: 'exit'; code: number } | { kind: 'signal'; signal: NodeJS.Signals } | { kind: 'success' };
-export interface MeasurePhaseFixtureOptions {
-  child: MeasureChildOutcome;
-  phaseOrder?: readonly string[];
-  sourceComplete?: boolean;
-}
+export type MeasureLeafOutcome = { kind: 'blocking'; receipt: string } | { kind: 'mixed' } | { kind: 'no-body' }
+  | { kind: 'skip-only' } | { kind: 'suite-skip-only' } | { kind: 'empty-suite' } | { kind: 'conditional-skip' }
+  | { kind: 'real-leaf-name' };
+export type SampledFailure = 'exit-23' | 'signal' | 'evidence';
+export interface MeasurePhaseFixtureOptions { child?: MeasureChildOutcome; leaf?: MeasureLeafOutcome;
+  phaseOrder?: readonly string[]; sourceComplete?: boolean }
 
 export const testScratch = (prefix: string): Promise<string> => mkdtemp(join(tmpdir(), prefix));
 
 export const fixtureOwnerEnvironment = (environment: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv => ({
   ...environment,
-  GIT_CONFIG_NOSYSTEM: '1',
-  GIT_CONFIG_GLOBAL: '/dev/null',
-  GIT_AUTHOR_NAME: fixtureOwner.name,
-  GIT_AUTHOR_EMAIL: fixtureOwner.email,
-  GIT_COMMITTER_NAME: fixtureOwner.name,
-  GIT_COMMITTER_EMAIL: fixtureOwner.email,
+  GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_AUTHOR_NAME: fixtureOwner.name,
+  GIT_AUTHOR_EMAIL: fixtureOwner.email, GIT_COMMITTER_NAME: fixtureOwner.name, GIT_COMMITTER_EMAIL: fixtureOwner.email,
 });
 
 export function fixtureExecutionEnvironment(temporary: string,
@@ -218,6 +211,15 @@ export function runActualMeasureGraph(fixture: ActualMeasureFixture): SpawnSyncR
   return spawnSync(process.execPath, ['scripts/ci/measure.ts', 'check:ci:quick'], { cwd: fixture.root, env, encoding: 'utf8' });
 }
 
+export function runActualBootstrapFullRecovery(fixture: ActualMeasureFixture,
+  overrides: NodeJS.ProcessEnv = {}): SpawnSyncReturns<string> {
+  const env: NodeJS.ProcessEnv = { ...fixture.env, ...overrides };
+  delete env.NODE_TEST_CONTEXT;
+  return spawnSync(process.execPath,
+    [join(fixture.root, 'scripts/ci/pr-regression-bootstrap.ts'), 'quick'],
+    { cwd: fixture.root, env, encoding: 'utf8' });
+}
+
 interface MeasureFailureReport {
   sourceComplete: boolean;
   phases: Array<{ script: string; code: number | null; signal: NodeJS.Signals | null; tests: Array<{ name: string }> }>;
@@ -275,23 +277,225 @@ export async function assertMeasureFailureHandling(t: TestContext): Promise<void
   assert.deepEqual(successfulReport.phases[0]?.tests, []);
 }
 
+async function writeMeasureLeaf(leaf: string, passingLeaf: string,
+  outcome: MeasureLeafOutcome | undefined): Promise<void> {
+  if (outcome?.kind === 'blocking') {
+    await writeFile(passingLeaf, "import test from 'node:test';\ntest('real passing recovery leaf', () => {});\n");
+    await writeFile(leaf, `import assert from 'node:assert/strict';\n`
+      + `import { writeFileSync } from 'node:fs';\n`
+      + `import test from 'node:test';\n`
+      + `test('real blocking recovery leaf', () => {\n`
+      + `  writeFileSync(${JSON.stringify(outcome.receipt)}, JSON.stringify({\n`
+      + `    NODE_OPTIONS: process.env.NODE_OPTIONS ?? null,\n`
+      + `    TEST_PNPM_STORE_DIR: process.env.TEST_PNPM_STORE_DIR ?? null,\n`
+      + `    pnpm_config_store_dir: process.env.pnpm_config_store_dir ?? null,\n`
+      + `    NODE_COMPILE_CACHE: process.env.NODE_COMPILE_CACHE ?? null,\n`
+      + `  }));\n`
+      + `  assert.equal(process.env.NODE_OPTIONS, '--max-old-space-size=32');\n`
+      + `  assert.ok(process.env.TEST_PNPM_STORE_DIR);\n`
+      + `  assert.equal(process.env.pnpm_config_store_dir, process.env.TEST_PNPM_STORE_DIR);\n`
+      + `  assert.ok(process.env.NODE_COMPILE_CACHE);\n`
+      + `  throw Error('TEST blocking recovery leaf');\n`
+      + `});\n`);
+  } else if (outcome?.kind === 'mixed') {
+    await writeFile(passingLeaf, "import test from 'node:test';\ntest('genuine mixed passing leaf', () => {});\n");
+    await writeFile(leaf, 'export const bodyless = true;\n');
+  } else if (outcome?.kind === 'skip-only') {
+    await writeFile(leaf, "import { test } from 'node:test';\ntest.skip('genuine skipped leaf', () => { throw Error('skipped body executed'); });\n");
+  } else if (outcome?.kind === 'suite-skip-only') {
+    await writeFile(leaf, "import { describe, test } from 'node:test';\ndescribe('genuine suite containing only skipped leaves', () => { test.skip('genuine skipped leaf', () => { throw Error('skipped body executed'); }); });\n");
+  } else if (outcome?.kind === 'empty-suite') {
+    await writeFile(leaf, "import { describe } from 'node:test';\ndescribe('empty suite', () => {});\n");
+  } else if (outcome?.kind === 'conditional-skip') {
+    await writeFile(leaf, "import { test } from 'node:test';\n"
+      + "test('genuine passed recovery leaf', () => {});\n"
+      + "test('conditional skipped leaf', { skip: process.env.TEST_CONDITIONAL_SKIP === '1' }, () => {});\n");
+  } else if (outcome?.kind === 'real-leaf-name') {
+    await writeFile(leaf, "import assert from 'node:assert/strict';\nimport test from 'node:test';\n"
+      + "test('genuine passed module.ts', () => assert.equal(2 + 2, 4));\n");
+  } else if (outcome) {
+    await writeFile(leaf, 'export const bodyless = true;\n');
+  }
+}
+
 export async function configureMeasurePhaseFixture(fixture: ActualMeasureFixture,
   options: MeasurePhaseFixtureOptions): Promise<void> {
   const child = join(fixture.root, 'scripts/ci/disposable-measure-child.ts');
-  const source = options.child.kind === 'exit' ? `process.exitCode = ${options.child.code};\n`
-    : options.child.kind === 'signal'
+  const source = options.child?.kind === 'exit' ? `process.exitCode = ${options.child.code};\n`
+    : options.child?.kind === 'signal'
       ? `process.kill(process.ppid, ${JSON.stringify(options.child.signal)});\nprocess.kill(process.pid, ${JSON.stringify(options.child.signal)});\n`
       : 'process.exitCode = 0;\n';
   await writeFile(child, source);
+  const leaf = join(fixture.root, 'scripts/ci/disposable-measure-leaf.test.ts');
+  const passingLeaf = join(fixture.root, 'scripts/ci/disposable-measure-passing.test.ts');
+  await writeMeasureLeaf(leaf, passingLeaf, options.leaf);
   const manifestPath = join(fixture.root, 'package.json');
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as { scripts: Record<string, string> };
   const phaseOrder = options.phaseOrder ?? ['lint', 'check:node-compat', 'typecheck:ci', 'test:ci'];
   for (const phase of phaseOrder) {
-    manifest.scripts[phase] = phase === 'test:ci' ? `node ${relative(fixture.root, child)}` : 'node -e ""';
+    manifest.scripts[phase] = options.leaf?.kind === 'blocking' || options.leaf?.kind === 'mixed'
+      ? `node --test --test-reporter=./scripts/ci/measure.ts ${relative(fixture.root, passingLeaf)} ${relative(fixture.root, leaf)}`
+      : options.leaf ? `node --test --test-reporter=./scripts/ci/measure.ts ${relative(fixture.root, leaf)}`
+      : phase === 'test:ci' ? `node ${relative(fixture.root, child)}` : 'node -e ""';
   }
   manifest.scripts['check:ci:quick'] = phaseOrder.map(phase => `pnpm ${phase}`).join(' && ');
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   if (options.sourceComplete === false) {await rm(join(fixture.root, 'scripts/ci/pr-regression-bootstrap.ts'));}
+}
+
+export async function assertIndependentFullExecutionEvidence(t: TestContext): Promise<void> {
+  const fixture = await actualMeasureFixture(t);
+  const store = fixture.env.TEST_PNPM_STORE_DIR ?? join(fixture.root, 'genuine-store');
+  const expectedContext = { NODE_OPTIONS: '--max-old-space-size=32', TEST_PNPM_STORE_DIR: store, pnpm_config_store_dir: store, NODE_COMPILE_CACHE: join(fixture.root, 'node-compile-cache') };
+  const startupReceipt = join(fixture.evidence, 'startup-blocking.json'), startupMarker = join(fixture.evidence, 'startup-helper-marker');
+  const startupHelper = join(fixture.root, 'scripts/ci/pr-regression-environment.ts');
+  await configureMeasurePhaseFixture(fixture, { leaf: { kind: 'blocking', receipt: startupReceipt }, phaseOrder: ['test:ci'] });
+  await writeFile(startupHelper, "import { writeFileSync } from 'node:fs';\nexport function independentFullEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv { return env; }\n"
+    + `writeFileSync(${JSON.stringify(startupMarker)}, 'executed\\n'); process.exit(0);\n`);
+  const startup = runActualBootstrapFullRecovery(fixture, expectedContext);
+  assert.equal(startup.status, 1, `${startup.stdout}\n${startup.stderr}`);
+  await assert.rejects(readFile(startupMarker), 'pre-admission helper marker executed');
+  assert.deepEqual(JSON.parse(await readFile(startupReceipt, 'utf8')), expectedContext);
+  await rm(startupHelper);
+  const loader = join(fixture.root, 'empty-test-loader.mjs'), registerLoader = join(fixture.root, 'register-empty-test-loader.mjs'), registerRequire = join(fixture.root, 'register-empty-test-loader.cjs');
+  await Promise.all([
+    writeFile(loader,
+      "export async function load(url, context, nextLoad) { if (url.endsWith('/disposable-measure-leaf.test.ts')) return { format: 'module', shortCircuit: true, source: 'export {};' }; return nextLoad(url, context); }\n"),
+    writeFile(registerLoader,
+      "import { register } from 'node:module'; register('./empty-test-loader.mjs', import.meta.url);\n"),
+    writeFile(registerRequire,
+      "const { register } = require('node:module'); register('./empty-test-loader.mjs', require('node:url').pathToFileURL(__filename));\n"),
+  ]);
+  const suppressors = [
+    ['inherited test filters', '--max-old-space-size=32 --test-name-pattern=^never$ --test-skip-pattern=.*'],
+    ['normalized name filter', '--max-old-space-size=32 --test_name_pattern=^never$'],
+    ['normalized skip filter', '--max-old-space-size=32 --test_skip_pattern=.*'],
+    ['test shard', '--max-old-space-size=32 --test-shard=1/2'],
+    ['normalized test shard', '--max-old-space-size=32 --test_shard=1/2'],
+    ['test only', '--max-old-space-size=32 --test-only'],
+    ['normalized test only', '--max-old-space-size=32 --test_only'],
+    ['import preload', `--max-old-space-size=32 --import=${registerLoader}`],
+    ['require preload', `--max-old-space-size=32 --require=${registerRequire}`],
+    ['short require preload', `--max-old-space-size=32 -r ${registerRequire}`],
+    ['loader preload', `--max-old-space-size=32 --loader=${loader}`],
+    ['experimental loader preload', `--max-old-space-size=32 --experimental-loader=${loader}`],
+    ['separated preloads', `--max-old-space-size=32 --import ${registerLoader} --require ${registerRequire}`],
+  ] as const;
+  for (const [name, nodeOptions] of suppressors) {
+    const receipt = join(fixture.evidence, `${name.replaceAll(' ', '-')}.json`);
+    await configureMeasurePhaseFixture(fixture, {
+      leaf: { kind: 'blocking', receipt },
+      phaseOrder: ['test:ci'],
+    });
+    const run = runActualBootstrapFullRecovery(fixture, {
+      ...expectedContext,
+      NODE_OPTIONS: nodeOptions,
+    });
+    assert.equal(run.status, 1, `${name}: ${run.stdout}\n${run.stderr}`);
+    assert.equal(run.signal, null, name);
+    assert.deepEqual(JSON.parse(await readFile(receipt, 'utf8')), expectedContext, name);
+    const report = await measureReport(fixture);
+    assert.equal(report.receiptReuseAllowed, false, name);
+    const identities = new Set(report.phases[0]?.tests.map(result => JSON.stringify([result.name, result.status])));
+    assert.deepEqual(
+      [...identities].map(identity => JSON.parse(identity) as [string, string]).toSorted(),
+      [['real blocking recovery leaf', 'failed'], ['real passing recovery leaf', 'passed']].toSorted(),
+      name,
+    );
+  }
+
+  await configureMeasurePhaseFixture(fixture, { leaf: { kind: 'no-body' }, phaseOrder: ['test:ci'] });
+  const fileOnly = runActualBootstrapFullRecovery(fixture, expectedContext);
+  assert.equal(fileOnly.status, 1, `${fileOnly.stdout}\n${fileOnly.stderr}`);
+  assert.equal(fileOnly.signal, null);
+  const fileOnlyReport = await measureReport(fixture);
+  assert.equal(fileOnlyReport.phases[0]?.tests[0]?.name.endsWith('disposable-measure-leaf.test.ts'), true);
+  assert.equal(fileOnlyReport.phases[0]?.tests[0]?.bodyless, true);
+  assert.equal(fileOnlyReport.receiptReuseAllowed, false);
+
+  await configureMeasurePhaseFixture(fixture, { leaf: { kind: 'mixed' }, phaseOrder: ['test:ci'] });
+  const mixed = runActualBootstrapFullRecovery(fixture, expectedContext);
+  assert.equal(mixed.status, 1, `${mixed.stdout}\n${mixed.stderr}`);
+  assert.equal(mixed.signal, null);
+  const mixedReport = await measureReport(fixture);
+  assert.equal(mixedReport.sourceComplete, true);
+  assert.equal(mixedReport.receiptReuseAllowed, false);
+  assert.deepEqual(
+    mixedReport.phases[0]?.tests.map(result => [result.name, result.status, result.bodyless === true]),
+    [
+      ['scripts/ci/disposable-measure-leaf.test.ts', 'passed', true],
+      ['genuine mixed passing leaf', 'passed', false],
+    ],
+  );
+}
+
+export type SampledRecoveryRun = { result: SpawnSyncReturns<string>; evidence: string };
+
+export async function assertSampledFailureRecovery(
+  invoke: (failure: SampledFailure) => Promise<SampledRecoveryRun>,
+  bodyPath: string,
+): Promise<void> {
+  for (const sampledFailure of ['exit-23', 'signal', 'evidence'] as const) {
+    const run = await invoke(sampledFailure);
+    const expected = sampledFailure === 'exit-23'
+      ? { status: 23, signal: null }
+      : sampledFailure === 'signal'
+        ? { status: null, signal: 'SIGKILL' }
+        : { status: 1, signal: null };
+    assert.equal(run.result.status, expected.status, run.result.stderr);
+    assert.equal(run.result.signal, expected.signal);
+    const sampled = JSON.parse(await readFile(join(run.evidence, 'pr-quick.json'), 'utf8')) as {
+      plan: { mode: string; changed: string[] };
+      obligations: Array<{
+        id: string;
+        execution?: {
+          code: number | null;
+          signal: string | null;
+          tests: Array<{ name: string; kind?: 'suite' | 'test'; bodyless?: boolean }>;
+        };
+      }>;
+    };
+    assert.equal(sampled.plan.mode, 'affected-pr');
+    assert.deepEqual(sampled.plan.changed, [bodyPath]);
+    const last = sampled.obligations.at(-1);
+    const code = sampledFailure === 'exit-23' ? 23 : sampledFailure === 'evidence' ? 0 : null;
+    const signal = sampledFailure === 'signal' ? 'SIGKILL' : null;
+    assert.equal(last?.id, 'ci-conformance');
+    assert.equal(last?.execution?.code, code);
+    assert.equal(last?.execution?.signal, signal);
+    const full = await measureReport(run);
+    assert.deepEqual(
+      full.phases.map(phase => [phase.script, phase.code, phase.signal]),
+      [
+        ['lint', 0, null],
+        ['check:node-compat', 0, null],
+        ['typecheck:ci', 0, null],
+        ['test:ci', 0, null],
+      ],
+    );
+    assert.ok(full.phases.flatMap(phase => phase.tests).some(result =>
+      result.name === 'actual FULL recovery pass'
+      && result.status === 'passed'
+      && result.kind === 'test'
+      && result.bodyless !== true),
+    `${sampledFailure}: FULL omitted its real successful test identity`);
+    assert.equal(full.receiptReuseAllowed, true);
+  }
+}
+
+interface ObservedMeasureReport {
+  sourceComplete: boolean;
+  receiptReuseAllowed: boolean;
+  phases: Array<{
+    script: string;
+    code: number | null;
+    signal: string | null;
+    tests: Array<{ name: string; status: string; kind?: 'suite' | 'test'; bodyless?: boolean }>;
+  }>;
+}
+
+async function measureReport(fixture: { evidence: string }): Promise<ObservedMeasureReport> {
+  return JSON.parse(await readFile(join(fixture.evidence, 'check-ci-quick.json'), 'utf8'));
 }
 
 function fixtureBootstrapProbe(root: string, environment: NodeJS.ProcessEnv, source: string): SpawnSyncReturns<string> {

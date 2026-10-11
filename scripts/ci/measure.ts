@@ -12,7 +12,8 @@ import { commandInventory } from './script-routing.ts';
 import type { TestEvent } from 'node:test/reporters';
 import type { Command, Scripts } from './script-routing.ts';
 
-export interface TestResult { suite: string; name: string; ancestry: string[]; depth: number; status: string; kind?: 'suite' | 'test' }
+export interface TestResult { suite: string; name: string; ancestry: string[]; depth: number; status: string; kind?: 'suite' | 'test';
+  bodyless?: true }
 export const cmsFile = 'scripts/architecture/check-cms-pin.test.mjs';
 export const cmsContract = 'architecture/foundation/mandatory-node-tests.json';
 export const cmsDirectCommand = `node --test ${cmsFile}`;
@@ -20,6 +21,10 @@ export const cmsMandatoryCommand = `agent-teams-node-test --contract ${cmsContra
 export type NodeSummary = Pick<Extract<TestEvent, { type: 'test:summary' }>['data'], 'counts' | 'success'>;
 export type InputAdmission = { path: string; status: 'available'; digest: string }
   | { path: string; status: 'unavailable'; reason: 'missing' | 'unreadable' };
+
+export function isExecutedTestLeaf(result: TestResult): boolean {
+  return result.kind === 'test' && result.status === 'passed' && result.bodyless !== true;
+}
 
 // Public reporting starts retain parent ancestry; execution enqueue order can interleave unrelated tests.
 export function createNodeEventCollector() {
@@ -39,7 +44,8 @@ export function createNodeEventCollector() {
     const ancestry = identities.get(key);
     assert.ok(ancestry, `missing Node reporting identity: ${data.name}`);
     return { suite, name: data.name, ancestry, depth: data.nesting, kind: event.data.details.type ?? 'test',
-      status: event.data.skip ? 'skip' : event.data.todo ? 'todo' : event.type === 'test:pass' ? 'passed' : 'failed' };
+      status: event.data.skip ? 'skip' : event.data.todo ? 'todo' : event.type === 'test:pass' ? 'passed' : 'failed',
+      ...('entryFile' in data ? {} : { bodyless: true as const }) };
   };
 }
 
@@ -47,6 +53,10 @@ export function createNodeEventCollector() {
 export default async function* nodeEventReporter(source: AsyncIterable<TestEvent>): AsyncGenerator<string> {
   const observe = createNodeEventCollector();
   for await (const event of source) {
+    if (event.type === 'test:stdout' || event.type === 'test:stderr') {
+      process.stderr.write(event.data.message);
+      continue;
+    }
     const result = observe(event);
     if (result) { yield `CI_NODE_EVENT ${JSON.stringify(result)}\n`; }
     if (event.type === 'test:summary' && event.data.file === undefined) {
@@ -193,26 +203,69 @@ export function tapResult(line: string): TestResult | undefined {
     status: spec[5]?.toLowerCase() ?? (spec[3] === '✔' ? 'passed' : spec[3] === '✖' ? 'failed' : 'skip') };
 }
 
+function assignPendingType(pendingResults: Map<string, TestResult>, suite: string, type: 'suite' | 'test'): void {
+  const pending = pendingResults.get(suite);
+  if (!pending) { return; }
+  pending.kind = type;
+  pendingResults.delete(suite);
+}
+
+function observedKind(result: TestResult, possibleSuites: Map<string, string>, suite: string, depth: number): 'suite' | 'test' {
+  return result.kind ?? (possibleSuites.has(JSON.stringify([suite, depth, result.name])) ? 'suite' : 'test');
+}
+
 // One collector per process; pnpm's package prefixes isolate multiplexed suites.
 // TAP emits parent headings before children and parent results after children.
 export function createTestResultCollector(): (line: string) => TestResult | undefined {
   const stacks = new Map<string, Array<{ depth: number; name: string }>>();
+  const possibleSuites = new Map<string, string>();
+  const pendingResults = new Map<string, TestResult>();
+  const observedResults = new Map<string, TestResult[]>();
+  const summaryCounts = new Map<string, { tests?: number; suites?: number }>();
+  const applySummary = (suite: string, key: 'tests' | 'suites', value: number): void => {
+    const counts = summaryCounts.get(suite) ?? {};
+    counts[key] = value;
+    summaryCounts.set(suite, counts);
+    if (counts.tests === 0 && counts.suites !== undefined && counts.suites > 0) {
+      for (const result of observedResults.get(suite) ?? []) { result.kind = 'suite'; }
+    }
+  };
   return line => {
     const prefix = /^(.*?) (?:test|check): (.*)$/u.exec(line);
     const suite = prefix?.[1] ?? 'root';
     const body = prefix?.[2] ?? line;
+    const summary = /^\s*ℹ (tests|suites) (\d+)$/u.exec(body);
+    if (summary) {
+      applySummary(suite, summary[1] as 'tests' | 'suites', Number(summary[2]));
+      return;
+    }
     const heading = /^(\s*)(?:# Subtest: |▶ )(.*)$/u.exec(body);
+    const type = /^\s*type: '(suite|test)'$/u.exec(body);
+    if (type) {
+      assignPendingType(pendingResults, suite, type[1] as 'suite' | 'test');
+      return;
+    }
     const result = tapResult(line);
     if (!heading && !result) { return; }
     const depth = heading ? (heading[1] ?? '').length : result?.depth ?? 0;
     const parents = (stacks.get(suite) ?? []).filter(frame => frame.depth < depth);
     if (heading) {
       stacks.set(suite, [...parents, { depth, name: heading[2] ?? '' }]);
+      possibleSuites.set(JSON.stringify([suite, depth, heading[2] ?? '']), heading[2] ?? '');
       return;
     }
     assert.ok(result);
     stacks.set(suite, parents);
-    return { ...result, ancestry: parents.map(frame => frame.name) };
+    const observed: TestResult = {
+      ...result,
+      ancestry: parents.map(frame => frame.name),
+      kind: observedKind(result, possibleSuites, suite, depth),
+    };
+    const observedForSuite = observedResults.get(suite) ?? [];
+    observedForSuite.push(observed);
+    observedResults.set(suite, observedForSuite);
+    pendingResults.set(suite, observed);
+    return observed;
   };
 }
 
@@ -268,8 +321,11 @@ export function assertPhaseTestExecution(phase: { script: string; commands: read
   tests: readonly TestResult[]; unqualifiedRunners: readonly string[] }): void {
   if (phase.commands.some(command => /(?:node --test|agent-teams-node-test|\brun test\b)/u.test(command.command))
     || /^(?:test(?::|$)|quality:native$)/u.test(phase.script)) {
-    assert.ok(phase.tests.length > 0 || phase.unqualifiedRunners.some(summary => mandatoryRunnerSummary(summary)),
-      `${phase.script} emitted no test execution evidence`);
+    assert.ok(phase.tests.every(result => result.status !== 'failed' && result.status !== 'cancelled' && result.bodyless !== true),
+      `${phase.script} emitted file-only test evidence`);
+    assert.ok(phase.tests.some(isExecutedTestLeaf)
+      || phase.unqualifiedRunners.some(summary => mandatoryRunnerSummary(summary)),
+      `${phase.script} emitted no executed test leaf`);
   }
 }
 
@@ -306,7 +362,9 @@ async function runPhase(script: string, scripts: Scripts) {
   const lines = createInterface({ input: child.stdout });
   lines.on('line', line => {
     console.log(line);
-    const result = observe(line);
+    const result = line.startsWith('CI_NODE_EVENT ')
+      ? JSON.parse(line.slice(14)) as TestResult
+      : observe(line);
     if (result) { tests.push(result); }
     const summary = mandatoryRunnerSummary(line);
     if (summary) { unqualifiedRunners.push(summary); }
@@ -360,7 +418,7 @@ export async function measure(entry: string, output: string): Promise<ProcessOut
     toolchain: observedToolchain(entry),
     cachePolicy: 'no Actions dependency or build cache', digests, inputAdmission,
     sourceComplete, sourceDisposition: sourceComplete ? 'source-complete' as const : 'blocking-source-incomplete' as const,
-    receiptReuseAllowed: sourceComplete, inventory: commandInventory(scripts, entry),
+    receiptReuseAllowed: false, inventory: commandInventory(scripts, entry),
     phases: [] as Awaited<ReturnType<typeof runPhase>>[] };
   await mkdir(output, { recursive: true });
   const save = () => writeFile(join(output, `${entry.replaceAll(':', '-')}.json`), `${JSON.stringify(report, null, 2)}\n`);
@@ -369,6 +427,8 @@ export async function measure(entry: string, output: string): Promise<ProcessOut
     report.phases.push(phase);
     await save();
   });
+  report.receiptReuseAllowed = sourceComplete && observedFailure === undefined;
+  await save();
   return observedFailure ?? { code: sourceComplete ? 0 : 1, signal: null };
 }
 

@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { lstat, open, readFile, readdir, readlink, realpath } from 'node:fs/promises';
 import { dirname, extname, join, relative, resolve as resolvePath, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import type { PrInput } from './pr-regression-inputs.ts';
 
 const packageName = '@agent-teams/ci-input-proof';
 const packageVersion = '0.1.0';
@@ -20,65 +21,40 @@ const publishedPackage = {
   archiveSha256: '463da396e04acb4fbe19ddff7a4e88e576b1834faa49eeed7334a5ebf4a4f0a3',
   directoryMode: 0o755,
   files: {
-    'CHANGELOG.md': { digest: '7659580d7da0fe6601e7fd9090bbd466056bca3f6c83f34041c67eb738b36b4c', mode: 0o644 },
-    'LICENSE': { digest: 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4', mode: 0o644 },
-    'README.md': { digest: '69d9924e046b9061847ab48bc830a1582f6b28822a819cc0da8d44bafff25196', mode: 0o644 },
-    'dist/features/input-comparison/application/compare-leaf-inventories.d.ts': { digest: 'a36d5140341daa691cf718b7a9ec19ac319cd5f26fdd5abaa6978897daf5a3ec', mode: 0o644 },
-    'dist/features/input-comparison/application/compare-leaf-inventories.d.ts.map': { digest: '793914a89fff6db521db675f53e0755bec6cb1e1b4ac0a7d4c49c4ffe18db8f8', mode: 0o644 },
-    'dist/features/input-comparison/application/compare-leaf-inventories.js': { digest: 'd7ef5d81d988531a9cf8fddfd2f1e9582eb153fffac405bdfaa5774b18dd17ee', mode: 0o644 },
-    'dist/features/input-comparison/application/compare-leaf-inventories.js.map': { digest: '512ca3deb0c754bf08913e6e4eb4c3eb4b4c28437061a9a6e77eb0a2f4c892c3', mode: 0o644 },
-    'dist/index.d.ts': { digest: '4812320d2fd19162084c78db8402b23ede3ffa838ee2c051709348f9a1142412', mode: 0o644 },
-    'dist/index.d.ts.map': { digest: '09602ae7e769956a924f2163beafb2452c55ee67e93bb060e654ce8c6d911948', mode: 0o644 },
-    'dist/index.js': { digest: 'ffbd3ebad0cc8596888a9c7b94d2048f88c946e72f055f59d485291cc3d68ab0', mode: 0o644 },
-    'dist/index.js.map': { digest: '2416200c4f896cb6da1c524d7514beb3291a4e77470ca692a2737dda6db71cb2', mode: 0o644 },
-    'package.json': { digest: 'eaefcb0451b322108fc6dc6d4aa90fd94a92606c9d25b6146b0d4fa1adae5ffd', mode: 0o644 },
+    'CHANGELOG.md': { digest: '7659580d7da0fe6601e7fd9090bbd466056bca3f6c83f34041c67eb738b36b4c', mode: 0o644 }, 'LICENSE': { digest: 'c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4', mode: 0o644 },
+    'README.md': { digest: '69d9924e046b9061847ab48bc830a1582f6b28822a819cc0da8d44bafff25196', mode: 0o644 }, 'dist/features/input-comparison/application/compare-leaf-inventories.d.ts': { digest: 'a36d5140341daa691cf718b7a9ec19ac319cd5f26fdd5abaa6978897daf5a3ec', mode: 0o644 },
+    'dist/features/input-comparison/application/compare-leaf-inventories.d.ts.map': { digest: '793914a89fff6db521db675f53e0755bec6cb1e1b4ac0a7d4c49c4ffe18db8f8', mode: 0o644 }, 'dist/features/input-comparison/application/compare-leaf-inventories.js': { digest: 'd7ef5d81d988531a9cf8fddfd2f1e9582eb153fffac405bdfaa5774b18dd17ee', mode: 0o644 },
+    'dist/features/input-comparison/application/compare-leaf-inventories.js.map': { digest: '512ca3deb0c754bf08913e6e4eb4c3eb4b4c28437061a9a6e77eb0a2f4c892c3', mode: 0o644 }, 'dist/index.d.ts': { digest: '4812320d2fd19162084c78db8402b23ede3ffa838ee2c051709348f9a1142412', mode: 0o644 },
+    'dist/index.d.ts.map': { digest: '09602ae7e769956a924f2163beafb2452c55ee67e93bb060e654ce8c6d911948', mode: 0o644 }, 'dist/index.js': { digest: 'ffbd3ebad0cc8596888a9c7b94d2048f88c946e72f055f59d485291cc3d68ab0', mode: 0o644 },
+    'dist/index.js.map': { digest: '2416200c4f896cb6da1c524d7514beb3291a4e77470ca692a2737dda6db71cb2', mode: 0o644 }, 'package.json': { digest: 'eaefcb0451b322108fc6dc6d4aa90fd94a92606c9d25b6146b0d4fa1adae5ffd', mode: 0o644 },
   },
 } as const;
 
 const controlPaths = [
-  '.github/workflows/ci-foundation-route.yml',
-  '.github/workflows/ci-pr-regressions.yml',
-  '.github/workflows/ci-lane.yml',
-  '.github/workflows/ci.yml',
-  'architecture/foundation/ci-pr-regressions.json',
-  'architecture/foundation/source-dependencies.yaml',
-  'package.json',
-  'pnpm-lock.yaml',
-  'pnpm-workspace.yaml',
-  'scripts/ci/contracts.test.ts',
-  'scripts/ci/conformance.ts',
-  'scripts/ci/measure.ts',
-  'scripts/ci/pr-regression-bootstrap.ts',
-  'scripts/ci/pr-regression-bootstrap.test.ts',
-  'scripts/ci/pr-regression-command.ts',
-  'scripts/ci/pr-regression-inputs.ts',
-  'scripts/ci/pr-regression-inputs.test.ts',
-  'scripts/docs/consumer-migration.test.mjs',
-  'scripts/sdk-growth-source/fixtures',
+  '.github/workflows/ci-foundation-route.yml', '.github/workflows/ci-pr-regressions.yml', '.github/workflows/ci-lane.yml', '.github/workflows/ci.yml',
+  'architecture/foundation/ci-pr-regressions.json', 'architecture/foundation/source-dependencies.yaml', 'package.json', 'pnpm-lock.yaml',
+  'pnpm-workspace.yaml', 'scripts/ci/contracts.test.ts', 'scripts/ci/conformance.ts', 'scripts/ci/measure.ts',
+  'scripts/ci/pr-regression-bootstrap.ts', 'scripts/ci/pr-regression-bootstrap.test.ts', 'scripts/ci/pr-regression-command.ts', 'scripts/ci/pr-regression-inputs.ts',
+  'scripts/ci/pr-regression-inputs.test.ts', 'scripts/docs/consumer-migration.test.mjs', 'scripts/sdk-growth-source/fixtures',
 ] as const;
 
-const packageRoots = ['packages/apps/embedded-runtime', 'packages/contexts/agent-execution',
-  'packages/contexts/provider-access', 'packages/contexts/runtime-configuration', 'packages/contexts/runtime-security',
-  'packages/platform/filesystem-custody'] as const;
+const packageRoots = ['packages/apps/embedded-runtime', 'packages/contexts/agent-execution', 'packages/contexts/provider-access',
+  'packages/contexts/runtime-configuration', 'packages/contexts/runtime-security', 'packages/platform/filesystem-custody'] as const;
 
 interface Leaf { path: string; mode: string; type: string; oid: string }
 interface SourceSnapshot { tree: string; leaves: Leaf[] }
 interface InstalledEntry { path: string; kind: 'file' | 'directory' | 'link'; mode: number; digest?: string; target?: string }
-type InventoryRelation = { status: 'compatible-inputs'; changedContentPaths: readonly string[] }
-  | { status: 'rejected'; reason: 'malformed-inventory' | 'unsupported-version' | 'unsupported-scheme' | 'scheme-mismatch'
-    | 'duplicate-input' | 'incomplete-inputs' | 'invalid-content-permission' | 'input-structure-changed'
-    | 'closed-input-changed' | 'exceeded-limit' };
+type InventoryRelation = { status: 'compatible-inputs'; changedContentPaths: readonly string[] } |
+  { status: 'rejected'; reason: 'malformed-inventory' | 'unsupported-version' | 'unsupported-scheme' | 'scheme-mismatch' | 'duplicate-input' | 'incomplete-inputs' | 'invalid-content-permission' | 'input-structure-changed' | 'closed-input-changed' | 'exceeded-limit' };
 type InventoryComparator = (base: unknown, head: unknown, structuralPaths: readonly string[]) => InventoryRelation;
 
 const sha256 = (bytes: string | Buffer) => createHash('sha256').update(bytes).digest('hex');
 const within = (path: string, root: string) => path.startsWith(`${root}/`);
 const object = (value: unknown): Record<string, unknown> => {
-  assert.ok(value !== null && typeof value === 'object' && !Array.isArray(value));
-  return value as Record<string, unknown>;
+  assert.ok(value !== null && typeof value === 'object' && !Array.isArray(value)); return value as Record<string, unknown>;
 };
 function exportValues(value: unknown): string[] {
-  return typeof value === 'string' ? [value]
-    : value !== null && typeof value === 'object' ? Object.values(value).flatMap(exportValues) : [];
+  return typeof value === 'string' ? [value] : value !== null && typeof value === 'object' ? Object.values(value).flatMap(exportValues) : [];
 }
 
 interface JsonCursor { index: number }
@@ -94,18 +70,15 @@ function parseJsonString(source: string, cursor: JsonCursor): JsonStringToken {
   while (cursor.index < source.length) {
     const code = source.charCodeAt(cursor.index++);
     if (code === 0x22) {
-      const raw = source.slice(start, cursor.index);
-      return { raw, value: JSON.parse(raw) as string };
+      const raw = source.slice(start, cursor.index); return { raw, value: JSON.parse(raw) as string };
     }
     if (code !== 0x5c) {
-      assert.ok(code >= 0x20, 'installed metadata string contains an unescaped control character');
-      continue;
+      assert.ok(code >= 0x20, 'installed metadata string contains an unescaped control character'); continue;
     }
     assert.ok(cursor.index < source.length, 'installed metadata string escape is incomplete');
     const escape = source[cursor.index++]!;
     if (escape !== 'u') {
-      assert.ok('"\\/bfnrt'.includes(escape), 'installed metadata string escape is invalid');
-      continue;
+      assert.ok('"\\/bfnrt'.includes(escape), 'installed metadata string escape is invalid'); continue;
     }
     assert.ok(cursor.index + 4 <= source.length, 'installed metadata Unicode escape is incomplete');
     for (const digit of source.slice(cursor.index, cursor.index + 4)) {
@@ -125,8 +98,7 @@ function scanJsonValue(source: string, cursor: JsonCursor, keys: JsonStringToken
   if (value === '[') {scanJsonArray(source, cursor, keys); return;}
   if (value === '"') {parseJsonString(source, cursor); return;}
   const start = cursor.index;
-  while (cursor.index < source.length && !',]}'.includes(source[cursor.index]!)
-    && ![0x09, 0x0a, 0x0d, 0x20].includes(source.charCodeAt(cursor.index))) {cursor.index++;}
+  while (cursor.index < source.length && !',]}'.includes(source[cursor.index]!) && ![0x09, 0x0a, 0x0d, 0x20].includes(source.charCodeAt(cursor.index))) {cursor.index++;}
   assert.ok(cursor.index > start, 'installed metadata value is empty');
 }
 
@@ -135,13 +107,9 @@ function scanJsonObject(source: string, cursor: JsonCursor, keys: JsonStringToke
   skipJsonWhitespace(source, cursor);
   if (source[cursor.index] === '}') {cursor.index++; return;}
   while (true) {
-    skipJsonWhitespace(source, cursor);
-    keys.push(parseJsonString(source, cursor));
-    skipJsonWhitespace(source, cursor);
-    assert.equal(source[cursor.index], ':', 'installed metadata property separator');
-    cursor.index++;
-    scanJsonValue(source, cursor, keys);
-    skipJsonWhitespace(source, cursor);
+    skipJsonWhitespace(source, cursor); keys.push(parseJsonString(source, cursor)); skipJsonWhitespace(source, cursor);
+    assert.equal(source[cursor.index], ':', 'installed metadata property separator'); cursor.index++;
+    scanJsonValue(source, cursor, keys); skipJsonWhitespace(source, cursor);
     const separator = source[cursor.index];
     assert.ok(separator === ',' || separator === '}', 'installed metadata object is incomplete');
     cursor.index++;
@@ -154,8 +122,7 @@ function scanJsonArray(source: string, cursor: JsonCursor, keys: JsonStringToken
   skipJsonWhitespace(source, cursor);
   if (source[cursor.index] === ']') {cursor.index++; return;}
   while (true) {
-    scanJsonValue(source, cursor, keys);
-    skipJsonWhitespace(source, cursor);
+    scanJsonValue(source, cursor, keys); skipJsonWhitespace(source, cursor);
     const separator = source[cursor.index];
     assert.ok(separator === ',' || separator === ']', 'installed metadata array is incomplete');
     cursor.index++;
@@ -173,8 +140,7 @@ function jsonObjectKeys(source: string): JsonStringToken[] {
 
 export function parseInstallationMetadata(bytes: Buffer): { packageManager: string; virtualStoreDir: string } {
   assert.ok(bytes.byteLength <= installationMetadataMaxBytes, 'installed metadata exceeds bounded parse');
-  const source = bytes.toString('utf8');
-  assert.equal(Buffer.byteLength(source, 'utf8'), bytes.byteLength, 'installed metadata is not UTF-8');
+  const source = bytes.toString('utf8'); assert.equal(Buffer.byteLength(source, 'utf8'), bytes.byteLength, 'installed metadata is not UTF-8');
   const sourceKeys = jsonObjectKeys(source);
   const identityKeys = (name: 'packageManager' | 'virtualStoreDir' | 'virtualStoreOnly'): readonly string[] =>
     sourceKeys.filter(key => key.value === name).map(key => key.raw);
@@ -186,15 +152,13 @@ export function parseInstallationMetadata(bytes: Buffer): { packageManager: stri
   assert.ok(virtualStoreOnlyKeys.length <= 1, 'installed virtual-store-only key drift');
   assert.equal(packageManagerKeys[0], '"packageManager"', 'installed pnpm identity key spelling drift');
   assert.equal(virtualStoreDirKeys[0], '"virtualStoreDir"', 'installed store layout key spelling drift');
-  assert.ok(virtualStoreOnlyKeys.length === 0 || virtualStoreOnlyKeys[0] === '"virtualStoreOnly"',
-    'installed virtual-store-only key spelling drift');
+  assert.ok(virtualStoreOnlyKeys.length === 0 || virtualStoreOnlyKeys[0] === '"virtualStoreOnly"', 'installed virtual-store-only key spelling drift');
   const parsed: unknown = JSON.parse(source);
   assert.ok(parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed), 'installed metadata is not a JSON object');
   const metadata = parsed as Record<string, unknown>;
   assert.equal(metadata.packageManager, expectedPackageManager, 'installed pnpm identity drift');
   assert.equal(metadata.virtualStoreDir, expectedVirtualStoreDir, 'installed store layout drift');
-  assert.ok(metadata.virtualStoreOnly === undefined || metadata.virtualStoreOnly === false,
-    'installed virtual-store-only layout cannot admit the optimizer');
+  assert.ok(metadata.virtualStoreOnly === undefined || metadata.virtualStoreOnly === false, 'installed virtual-store-only layout cannot admit the optimizer');
   return { packageManager: expectedPackageManager, virtualStoreDir: expectedVirtualStoreDir };
 }
 
@@ -210,8 +174,7 @@ function canonicalJson(value: unknown): string {
 }
 
 function installationStateDigest(bytes: Buffer): string {
-  const state = object(JSON.parse(bytes.toString('utf8')));
-  assert.equal(typeof state.lastValidatedTimestamp, 'number', 'installed workspace state timestamp');
+  const state = object(JSON.parse(bytes.toString('utf8'))); assert.equal(typeof state.lastValidatedTimestamp, 'number', 'installed workspace state timestamp');
   const { lastValidatedTimestamp: volatileTimestamp, ...stable } = state;
   assert.ok(Number.isFinite(volatileTimestamp), 'installed workspace state timestamp');
   return sha256(canonicalJson(stable));
@@ -239,10 +202,57 @@ function git(root: string, args: readonly string[], input?: Buffer): Buffer {
   return execFileSync('git', [...args], { cwd: root, input, maxBuffer: 32 * 1024 * 1024 });
 }
 
-function spawnStatus(child: ReturnType<typeof spawn>): Promise<number | null> {
+interface ProcessOutcome { code: number | null; signal: string | null }
+
+const retainedNodeOptions = new Set([
+  '--max-old-space-size',
+  '--max-semi-space-size',
+  '--stack-size',
+]);
+
+function sanitizedNodeOptions(value: string): string | undefined {
+  const words = value.match(/\S+/gu) ?? [];
+  const retained: string[] = [];
+  for (let index = 0; index < words.length; index++) {
+    const word = words[index]!.replace(/^(['"])(.*)\1$/u, '$2');
+    const separator = word.indexOf('=');
+    const name = (separator === -1 ? word : word.slice(0, separator)).replaceAll('_', '-');
+    if (!retainedNodeOptions.has(name)) {
+      continue;
+    }
+    const hasValue = separator !== -1;
+    const candidate = (hasValue ? word.slice(separator + 1) : words[index + 1] ?? '')
+      .replace(/^(['"])(.*)\1$/u, '$2');
+    if (candidate && /^\d+$/u.test(candidate)) {
+      retained.push(words[index]!);
+      if (!hasValue) {
+        retained.push(words[++index]!);
+      }
+    }
+  }
+  return retained.length > 0 ? retained.join(' ') : undefined;
+}
+
+function independentFullEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const fullEnv = { ...env };
+  for (const key of ['FOUNDATION_FIXTURE_PROTOCOL', 'FOUNDATION_FIXTURE_INDEX', 'FOUNDATION_FIXTURE_COUNT']) {
+    delete fullEnv[key];
+  }
+  const nodeOptions = fullEnv.NODE_OPTIONS === undefined
+    ? undefined
+    : sanitizedNodeOptions(fullEnv.NODE_OPTIONS);
+  if (nodeOptions === undefined) {
+    delete fullEnv.NODE_OPTIONS;
+  } else {
+    fullEnv.NODE_OPTIONS = nodeOptions;
+  }
+  return fullEnv;
+}
+
+function spawnStatus(child: ReturnType<typeof spawn>): Promise<ProcessOutcome> {
   return new Promise((resolve, reject) => {
     child.once('error', reject);
-    child.once('close', resolve);
+    child.once('close', (code, signal) => resolve({ code, signal }));
   });
 }
 
@@ -464,14 +474,12 @@ export async function admitAndImportOptimizer(root = process.cwd(),
   return comparator.compareLeafInventories;
 }
 
-async function runFull(group: Group, root: string, env: NodeJS.ProcessEnv): Promise<number> {
-  const fullEnv = { ...env };
-  for (const key of ['FOUNDATION_FIXTURE_PROTOCOL', 'FOUNDATION_FIXTURE_INDEX', 'FOUNDATION_FIXTURE_COUNT']) {delete fullEnv[key];}
-  const child = spawn(process.execPath, ['scripts/ci/measure.ts', `check:ci:${group}`], { cwd: root, env: fullEnv, stdio: ['ignore', 'inherit', 'inherit'] });
-  return (await spawnStatus(child)) ?? 1;
+async function runFull(group: Group, root: string, env: NodeJS.ProcessEnv): Promise<ProcessOutcome> {
+  return spawnStatus(spawn(process.execPath, ['scripts/ci/measure.ts', `check:ci:${group}`],
+    { cwd: root, env: independentFullEnvironment(env), stdio: ['ignore', 'inherit', 'inherit'] }));
 }
 
-export async function runBootstrap(group: Group, root = process.cwd(), env: NodeJS.ProcessEnv = process.env): Promise<number> {
+export async function runBootstrap(group: Group, root = process.cwd(), env: NodeJS.ProcessEnv = process.env): Promise<ProcessOutcome> {
   assert.ok(groups.includes(group), 'known PR group');
   const base = env.EXPECTED_BASE_REVISION ?? '', head = env.EXPECTED_REVISION ?? '';
   let admitted: Awaited<ReturnType<typeof bindInstallation>> | undefined;
@@ -486,29 +494,42 @@ export async function runBootstrap(group: Group, root = process.cwd(), env: Node
   } catch {
     return runFull(group, root, env);
   }
+  let sampled: { execute: () => Promise<void>; failure: (error: unknown) => ProcessOutcome } | undefined;
   try {
     const compare = await admitAndImportOptimizer(root, admitted);
-    const inputModule = await import('./pr-regression-inputs.ts') as
-      { currentPrInput: (root: string, env: NodeJS.ProcessEnv) => Promise<unknown>; classifyPrRegressions: (root: string, input: unknown, compare: InventoryComparator) => Promise<{ mode: 'full' | 'affected-pr' }> };
-    const commandModule = await import('./pr-regression-command.ts') as
-      { runPrRegressions: (group: Group, output: string, compare: InventoryComparator, input: unknown) => Promise<void> };
+    const inputModule = await import('./pr-regression-inputs.ts') as { currentPrInput: (root: string, env: NodeJS.ProcessEnv) => Promise<PrInput>; classifyPrRegressions: (root: string, input: PrInput, compare: InventoryComparator) => Promise<{ mode: 'full' | 'affected-pr' }> };
+    const commandModule = await import('./pr-regression-command.ts') as typeof import('./pr-regression-command.ts');
     const input = await inputModule.currentPrInput(root, env);
     const plan = await inputModule.classifyPrRegressions(root, input, compare);
-    const afterImport = await bindInstallation(root);
-    assert.equal(afterImport.digest, admitted.digest, 'installed optimizer/control source drift before execution');
-    if (plan.mode === 'full') {return runFull(group, root, env);}
-    await commandModule.runPrRegressions(group, env.CI_EVIDENCE_DIR ?? 'tmp/root-export-evidence/pr-regressions', compare, input);
-    const beforeLeaves = snapshot(root, env.EXPECTED_BASE_REVISION!), headLeaves = snapshot(root, env.EXPECTED_REVISION!);
-    assert.ok(!changedControlPath(beforeLeaves.leaves, headLeaves.leaves), 'source drift during sampled execution');
-    await assertCheckout(root, env.EXPECTED_REVISION!, headLeaves.leaves);
-    assert.equal((await bindInstallation(root)).digest, admitted.digest, 'installed drift during sampled execution');
-    return 0;
+    assert.equal((await bindInstallation(root)).digest, admitted.digest, 'installed optimizer/control source drift before execution');
+    if (plan.mode === 'full') {
+      return runFull(group, root, env);
+    }
+    sampled = {
+      execute: async () => {
+        await commandModule.runPrRegressions(group, env.CI_EVIDENCE_DIR ?? 'tmp/root-export-evidence/pr-regressions', compare, input);
+        const beforeLeaves = snapshot(root, env.EXPECTED_BASE_REVISION!), headLeaves = snapshot(root, env.EXPECTED_REVISION!);
+        assert.ok(!changedControlPath(beforeLeaves.leaves, headLeaves.leaves), 'source drift during sampled execution');
+        await assertCheckout(root, env.EXPECTED_REVISION!, headLeaves.leaves);
+        assert.equal((await bindInstallation(root)).digest, admitted.digest, 'installed drift during sampled execution');
+      },
+      failure: error => error instanceof commandModule.PrRegressionProcessFailure
+        ? { code: error.outcome.code, signal: error.outcome.signal } : { code: 1, signal: null },
+    };
   } catch {
     return runFull(group, root, env);
+  }
+  try {
+    await sampled.execute();
+    return { code: 0, signal: null };
+  } catch (error) {
+    const sampledFailure = sampled.failure(error);
+    await runFull(group, root, env);
+    return sampledFailure;
   }
 }
 
 if (process.argv[1] && resolvePath(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const group = process.argv[2]?.replace('check:ci:', '') as Group | undefined;
-  process.exitCode = await runBootstrap(group ?? ('unknown' as Group));
+  const group = process.argv[2]?.replace('check:ci:', '') as Group | undefined, outcome = await runBootstrap(group ?? ('unknown' as Group));
+  if (outcome.signal) {process.kill(process.pid, outcome.signal as NodeJS.Signals);} else {process.exitCode = outcome.code ?? 1;}
 }

@@ -9,6 +9,9 @@ import { installationMetadataMaxBytes, parseInstallationMetadata } from './pr-re
 import {
   actualMeasureFixture,
   assertMeasureFailureHandling,
+  assertIndependentFullExecutionEvidence,
+  assertSampledFailureRecovery,
+  configureMeasurePhaseFixture,
   createRetainedSourceCheckout,
   fixtureOwnerEnvironment,
   fixtureExecutionEnvironment,
@@ -20,15 +23,35 @@ import {
   runActualRegressionImportGraph,
   runFixtureBootstrapAdmission,
   runFixtureOptimizerComparison,
+  runActualBootstrapFullRecovery,
+  type SampledFailure,
   testScratch,
 } from './pr-regression-bootstrap-fixtures.ts';
 
 const repository = fileURLToPath(new URL('../../', import.meta.url));
-const bodyPath = 'packages/contexts/runtime-configuration/src/features/bootstrap-body.ts';
+export const bodyPath = 'packages/contexts/runtime-configuration/src/features/bootstrap-body.ts';
 const fixturePath = 'scripts/sdk-growth-source/fixtures/pr-regression-bootstrap.txt';
-type Mutation = 'none' | 'body' | 'bootstrap' | 'helper' | 'config' | 'lock' | 'fixture' | 'installed' | 'add' | 'delete' | 'mode' | 'symlink'
-  | 'worktree-file' | 'worktree-link' | 'incomplete-census' | 'push-tuple' | 'base-tuple' | 'merge-tuple';
+type Mutation = 'none' | 'body' | 'bootstrap' | 'helper' | 'config' | 'lock' | 'fixture' | 'installed' | 'add' | 'delete' | 'mode' | 'symlink' | 'worktree-file' | 'worktree-link' | 'incomplete-census' | 'push-tuple' | 'base-tuple' | 'merge-tuple';
 type Optimizer = 'valid' | 'absent' | 'manifest' | 'marker' | 'mode' | 'special-mode' | 'extra' | 'foreign-link';
+
+async function assertSkippedOnlyExecutionEvidence(t: test.TestContext): Promise<void> {
+  for (const grouped of [false, true] as const) {
+    const fixture = await actualMeasureFixture(t);
+    await configureMeasurePhaseFixture(fixture, { leaf: grouped ? { kind: 'suite-skip-only' } : { kind: 'skip-only' }, phaseOrder: ['test:ci'] });
+    const run = runActualBootstrapFullRecovery(fixture, { NODE_OPTIONS: '--max-old-space-size=32' });
+    assert.equal(run.status, 1, `${grouped}: ${run.stdout}\n${run.stderr}`);
+    assert.equal(run.signal, null, String(grouped));
+    const report = JSON.parse(await readFile(join(fixture.evidence, 'check-ci-quick.json'), 'utf8')) as { sourceComplete: boolean; receiptReuseAllowed: boolean; phases: Array<{ tests: Array<{ name: string; status: string; kind?: 'suite' | 'test'; bodyless?: boolean }> }> };
+    assert.equal(report.sourceComplete, true, String(grouped));
+    assert.equal(report.receiptReuseAllowed, false, String(grouped));
+    assert.deepEqual(
+      report.phases[0]?.tests.map(result => [result.name, result.status, result.kind, result.bodyless === true]),
+      grouped ? [['genuine skipped leaf', 'skip', 'test', false], ['genuine suite containing only skipped leaves', 'passed', 'suite', false]]
+        : [['genuine skipped leaf', 'skip', 'test', false]],
+      String(grouped),
+    );
+  }
+}
 type ModulesMetadata = 'real' | 'yaml' | 'wrong-manager' | 'wrong-layout' | 'malformed' | 'oversized' | 'duplicate-identity'
   | 'escaped-identity-shadow' | 'duplicate-layout' | 'escaped-layout' | 'duplicate-nested-identity' | 'duplicate-nested-layout'
   | 'virtual-store-only' | 'escaped-virtual-store-only-shadow' | 'symlink';
@@ -318,7 +341,8 @@ async function invoke(t: test.TestContext, mutation: Mutation = 'body', optimize
 }
 
 interface InstalledOptions { mutation?: 'body' | 'bootstrap'; optimizer?: 'valid' | 'absent' | 'malformed' | 'foreign-link';
-  badCandidate?: boolean; stateMutation?: 'timestamp' | 'settings'; fullExit?: number; group?: 'quick' | 'foundation'; foundationFailure?: boolean }
+  badCandidate?: boolean; stateMutation?: 'timestamp' | 'settings'; fullExit?: number; group?: 'quick' | 'foundation';
+  foundationFailure?: boolean; sampledFailure?: SampledFailure }
 
 async function installedSourceFixture(t: test.TestContext, options: InstalledOptions = {}) {
   const root = await testScratch('ar-pr-operational-TEST-');
@@ -342,7 +366,9 @@ async function installedSourceFixture(t: test.TestContext, options: InstalledOpt
     for (const name of ['lint', 'check:node-compat', 'typecheck:ci', 'test:ci']) {
       manifest.scripts[name] = 'node scripts/ci/test-phase.ts';
     }
-    manifest.scripts['test:ci'] = 'node --test scripts/ci/contracts.test.ts';
+    manifest.scripts['test:ci'] = options.sampledFailure
+      ? 'node --test scripts/ci/full-pass.test.ts && node scripts/ci/conformance.ts'
+      : 'node --test scripts/ci/contracts.test.ts';
     manifest.scripts['check:ci:quick'] = 'pnpm lint && pnpm check:node-compat && pnpm typecheck:ci && pnpm test:ci';
   } else {
     manifest.scripts['foundation:boundaries:negative'] =
@@ -353,10 +379,14 @@ async function installedSourceFixture(t: test.TestContext, options: InstalledOpt
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   await writeFile(join(root, 'scripts/ci/test-phase.ts'),
     `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(join(evidence, 'phase-ran'))}, 'phase\\n');\nprocess.exitCode = Number(process.env.TEST_FULL_EXIT ?? '0');\n`);
-  await writeFile(join(root, 'scripts/ci/contracts.test.ts'),
-    "import test from 'node:test';\ntest('operational CI selftest', () => {});\n");
-  await writeFile(join(root, 'scripts/ci/conformance.ts'),
-    `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(join(evidence, 'conformance-ran'))}, 'conformance\\n');\nprocess.exitCode = Number(process.env.TEST_FULL_EXIT ?? '0');\n`);
+  await writeFile(join(root, 'scripts/ci/contracts.test.ts'), "import test from 'node:test';\ntest('operational CI selftest', () => {});\n");
+  await writeFile(join(root, 'scripts/ci/full-pass.test.ts'),
+    "import test from 'node:test';\ntest('actual FULL recovery pass', () => {});\n");
+  const outcomeMarker = join(evidence, 'sampled-outcome-ran'), outcome = options.sampledFailure === 'exit-23' ? 'process.exitCode = 23;' : "process.kill(process.pid, 'SIGKILL');";
+  const conformance = options.sampledFailure === 'exit-23' || options.sampledFailure === 'signal'
+    ? `import { existsSync, writeFileSync } from 'node:fs';const marker=${JSON.stringify(outcomeMarker)};if(!existsSync(marker)){writeFileSync(marker,${JSON.stringify(options.sampledFailure)}+'\\n');${outcome}}`
+    : options.sampledFailure === 'evidence' ? `import { appendFileSync, existsSync, writeFileSync } from 'node:fs';const marker=${JSON.stringify(join(evidence, 'sampled-evidence-ran'))};if(!existsSync(marker)){appendFileSync(${JSON.stringify(join(root, 'scripts/ci/full-pass.test.ts'))},'\\n// Disposable TEST sampled execution drift\\n');writeFileSync(marker,'evidence\\n')}writeFileSync(${JSON.stringify(join(evidence, 'conformance-ran'))},'conformance\\n')` : `import { writeFileSync } from 'node:fs';writeFileSync(${JSON.stringify(join(evidence, 'conformance-ran'))},'conformance\\n');process.exitCode=Number(process.env.TEST_FULL_EXIT??'0');`;
+  await writeFile(join(root, 'scripts/ci/conformance.ts'), conformance);
   await installNodeModulesFixture(root, options.optimizer === 'absent' ? 'absent' : 'linked', temporary);
 
   const optimizerStore = join(root, 'node_modules/.pnpm/@agent-teams+ci-input-proof@0.1.0/node_modules/@agent-teams/ci-input-proof');
@@ -442,7 +472,7 @@ async function installedSourceFixture(t: test.TestContext, options: InstalledOpt
   return { root, evidence, env, group: options.group ?? 'quick' as const };
 }
 
-async function invokeInstalled(t: test.TestContext, options: InstalledOptions = {}) {
+export async function invokeInstalled(t: test.TestContext, options: InstalledOptions = {}) {
   const fixture = await installedSourceFixture(t, options);
   const result = spawnSync(process.execPath, [join(fixture.root, 'scripts/ci/pr-regression-bootstrap.ts'), fixture.group],
     { cwd: fixture.root, env: fixture.env, encoding: 'utf8' });
@@ -775,13 +805,41 @@ export function registerPrRegressionBootstrapTests(): void {
     }
   });
 
+  test('independent FULL removes execution suppressors and rejects file-only evidence', async t => {
+    await assertIndependentFullExecutionEvidence(t);
+  });
+
+  test('zero executed leaves reject skip-only and empty-suite recovery', async t => {
+    await assertSkippedOnlyExecutionEvidence(t);
+  });
+
+  test('Node execution qualification uses real event shape rather than filename suffixes', async t => {
+    const cases = [
+      { name: 'empty suite', leaf: { kind: 'empty-suite' } as const, code: 1, expected: [['empty suite', 'passed', 'suite', false]] },
+      { name: 'real filename-like leaf', leaf: { kind: 'real-leaf-name' } as const, code: 0, expected: [['genuine passed module.ts', 'passed', 'test', false]] },
+      { name: 'conditional skip with real pass', leaf: { kind: 'conditional-skip' } as const, code: 0, expected: [['genuine passed recovery leaf', 'passed', 'test', false], ['conditional skipped leaf', 'skip', 'test', false]] },
+    ];
+    for (const scenario of cases) {
+      const fixture = await actualMeasureFixture(t);
+      await configureMeasurePhaseFixture(fixture, { leaf: scenario.leaf, phaseOrder: ['test:ci'] });
+      const run = runActualBootstrapFullRecovery(fixture, scenario.leaf.kind === 'conditional-skip' ? { TEST_CONDITIONAL_SKIP: '1' } : {});
+      assert.equal(run.status, scenario.code, `${scenario.name}: ${run.stdout}\n${run.stderr}`);
+      assert.equal(run.signal, null, scenario.name);
+      const report = JSON.parse(await readFile(join(fixture.evidence, 'check-ci-quick.json'), 'utf8')) as { receiptReuseAllowed: boolean; phases: Array<{ tests: Array<{ name: string; status: string; kind?: 'suite' | 'test'; bodyless?: boolean }> }> };
+      assert.equal(report.receiptReuseAllowed, scenario.code === 0, scenario.name);
+      assert.deepEqual(report.phases[0]?.tests.map(result => [result.name, result.status, result.kind, result.bodyless === true]).toSorted(), scenario.expected.toSorted(), scenario.name);
+    }
+  });
+
+  test('sampled execution failure survives a successful independent FULL', async t => {
+    await assertSampledFailureRecovery(sampledFailure => invokeInstalled(t, { mutation: 'body', sampledFailure }), bodyPath);
+  });
+
   test('FULL is the independent existing command and its failure remains hard', async t => {
     await assertMeasureFailureHandling(t);
     const run = await invokeInstalled(t, { mutation: 'bootstrap', fullExit: 23 });
     assert.equal(run.result.status, 23, run.result.stderr);
-    const report = JSON.parse(await readFile(join(run.evidence, 'check-ci-quick.json'), 'utf8')) as {
-      phases: Array<{ script: string; code: number | null; signal: string | null }>;
-    };
+    const report = JSON.parse(await readFile(join(run.evidence, 'check-ci-quick.json'), 'utf8')) as { phases: Array<{ script: string; code: number | null; signal: string | null }> };
     assert.equal(report.phases[0]?.script, 'lint');
     assert.equal(report.phases[0]?.code, 23);
     assert.equal(report.phases[0]?.signal, null);
