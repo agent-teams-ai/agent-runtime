@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import test from "node:test";
+import test, { after } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
 import { setTimeout as delay } from "node:timers/promises";
 
 import {
@@ -13,6 +14,9 @@ import {
   createDefaultAgentRuntimeHost,
   type BuildCodexSetupViewDependencies,
 } from "../../dist/composition.js";
+
+// Count handles before this file opens any.
+const handles = guardHandles();
 
 const isDeeplyFrozen = (value: unknown): boolean => {
   if (typeof value !== "object" || value === null) {
@@ -643,3 +647,6 @@ test("product installation references are stable within and isolated across trus
   assert.notEqual(first.installations[0]?.installationRef, otherScope.installations[0]?.installationRef);
   assert.doesNotMatch(JSON.stringify(first), /context-internal-file-identity/u);
 });
+
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());

@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import test from "node:test";
+import test, { after } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
 import { fileURLToPath } from "node:url";
+
+// Count handles before this file opens any.
+const handles = guardHandles();
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -235,3 +239,6 @@ test("private default composition is async and synchronous leaf is internal", as
   const ordinary = await readDeclarationClosure(join(packageRoot, "dist", "index.d.ts"));
   assert.doesNotMatch(ordinary, /@get-modular|CapabilityContract|FactoryHandle/u);
 });
+
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());

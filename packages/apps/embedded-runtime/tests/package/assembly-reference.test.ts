@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { after } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
 import { outcomeNormalizer, registerPassiveSetupScenarios, createDirectReferenceHost } from "../helpers/assembly-direct-reference.ts";
+
+// Count handles before this file opens any.
+const handles = guardHandles();
 
 registerPassiveSetupScenarios("direct reference", async () => createDirectReferenceHost());
 
@@ -98,3 +102,6 @@ test("Claude keyed source ordering retains semantic values and ordering relation
     assert.throws(() => assert.deepEqual(outcomeNormalizer()(left), outcomeNormalizer()(changed)));
   }
 });
+
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());

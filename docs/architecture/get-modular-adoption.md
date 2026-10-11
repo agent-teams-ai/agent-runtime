@@ -529,7 +529,10 @@ Setup input closure to exactly two receipts: Linux x64 and Darwin arm64, both us
 Node `v24.18.0` and pnpm `11.18.0`. The two original explicit Node test argv lists
 are retained in the package-local `scripts/run-package-tests.mjs`; ordinary
 package checks and capture share that launcher. It runs clean, typecheck, build
-and both test processes, stopping on failure. No test subset or alternative
+and its test processes, stopping on failure. The launcher now has three test
+processes (the third is the guarded force-exit process described in "Handle
+guards in tests"); restoring the disabled L0 v2 evidence lane must account for
+the third. No test subset or alternative
 legacy capture path can satisfy that historical validator.
 
 Each receipt retains job/run identity, observed target and tools, start/end times,
@@ -1199,5 +1202,36 @@ the `outstandingWork` of the review, which stay as the evidence of the pin step.
 | Testing 4: `isolate` | met for one scoped owner module (provider) | met for one scoped owner module | AR-1c |
 | Testing 5: roots as functions of Assembly, one `smoke` per root | met for the passive and ordinary profiles | met for the passive and ordinary profiles | AR-1b, AR-1c |
 | Testing 6: independent binding oracle | met: literal compiled-plan oracle | met | AR-1b |
-| Testing 7 and 8: `guardHandles`, close every scope, no sleeps | 8 met for new tests; 7 not adopted in this train, tracked in issue #189 | 8 met for new tests; 7 not adopted in this train, tracked in issue #189 | AR-1c; 7 per #189 |
+| Testing 7 and 8: `guardHandles`, close every scope, no sleeps | 7 met for the Embedded Runtime guarded process and Filesystem Custody; Agent Execution, Provider Access and Runtime Security adopt with the library packages of the program plan; 8 met for new tests | 7 met for the Embedded Runtime guarded process and Filesystem Custody; Agent Execution, Provider Access and Runtime Security adopt with the library packages of the program plan; 8 met for new tests | AR-1c; 7 by issue #189 |
 | Optional dynamic Host lifecycle candidate | not adopted | not adopted | none |
+
+## Handle guards in tests
+
+Testing norm 7 is applied per test file. A file in a guarded process counts
+handles before it opens any and checks them as its last top-level statement:
+
+```ts
+import test, { after } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
+// ...other imports...
+
+const handles = guardHandles();
+
+// ...tests...
+
+after(() => handles.check());
+```
+
+`node:test` runs file-level `after` hooks in registration order, so the guard is
+written in the file and not in an `--import` preload, which would run before the
+file's own cleanup and report false leaks.
+
+`--test-force-exit` is added only to a test process in which every file checks its
+handles last: it makes a leak fail with `conformance.handles.leaked` and ends the
+process instead of hanging, but it would hide a leak in an unguarded file. Two
+coverage tests enforce the rule: `handle-guard-coverage.test.ts` in Embedded
+Runtime for the third launcher process, and the same file in Filesystem Custody
+for its whole `test` command. A leak a guard finds is fixed, not allowed.
+Agent Execution, Provider Access and Runtime Security run hundreds of contained-turn
+files in one command each, so they adopt guards together with the library packages
+of the program plan.

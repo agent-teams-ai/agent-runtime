@@ -4,17 +4,19 @@ import { assemblyFor } from "@get-modular/assembly";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
 import { createDefaultAgentRuntimeHost, AgentRuntimeHostCreationError } from "../../dist/composition.js";
 import { createRuntimeSetupAttempt } from "../../dist/composition/default-agent-runtime-host.js";
 import { bindRuntimeSetup, runtimeSetupDeclarations, runtimeSetupProfile, createRuntimeSetupFactories, type RuntimeSetupCapabilities } from "../../dist/composition/runtime-setup-assembly.js";
 import { createExactParityHost, fixtureScope, registerPassiveSetupScenarios } from "../helpers/assembly-direct-reference.ts";
 
+const handles = guardHandles();
+
 registerPassiveSetupScenarios("Assembly", () => createDefaultAgentRuntimeHost());
 
 const deferred = <T>() => {
-  let resolve!: (value: T) => void;
-  let reject!: (cause: unknown) => void;
+  let resolve!: (value: T) => void; let reject!: (cause: unknown) => void;
   const promise = new Promise<T>((_resolve, _reject) => { resolve = _resolve; reject = _reject; });
   return { promise, resolve, reject };
 };
@@ -32,8 +34,7 @@ test("already cancelled bootstrap performs zero product work", async () => {
 
 test("hostile genuine signal accessor at preflight rejects safely without product work", async () => {
   const controller = new AbortController();
-  let reasonReads = 0;
-  let calls = 0;
+  let reasonReads = 0; let calls = 0;
   const getterCause = { secret: "test-fixture-literal" };
   Object.defineProperty(controller.signal, "aborted", { get() { throw getterCause; } });
   Object.defineProperty(controller.signal, "reason", { get() { reasonReads += 1; throw "TEST-reason-secret"; } });
@@ -841,3 +842,5 @@ test("independent oracle rejects a materialized wrong-platform planner binding",
 test("failed creation retains single-flight cleanup recovery and primary projection", {timeout: 5_000}, failedCreationRecovery);
 
 test("failed creation preserves terminal cleanup uncertainty across recovery observations", {timeout: 5_000}, terminalCreationCleanupUncertainty);
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());

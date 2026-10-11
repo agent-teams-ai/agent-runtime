@@ -1,11 +1,15 @@
 import { createAgentRuntimeHost } from "../../dist/composition/agent-runtime-host.js";
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { after } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
 
 import {
   createClaudeCodeSetupInspectionPlanner,
   createCodexSetupInspectionPlanner,
 } from "../../dist/composition.js";
+
+// Count handles before this file opens any.
+const handles = guardHandles();
 
 const unavailable = (): never => {
   throw new Error("unsupported capability must not be invoked");
@@ -189,3 +193,6 @@ test("captured planner method retains its receiver after caller mutation", async
   }
   assert.equal(planner.calls, 2);
 });
+
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());

@@ -4,8 +4,12 @@ import {mkdtemp, realpath, rm} from 'node:fs/promises';
 import {syncBuiltinESMExports} from 'node:module';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import test from 'node:test';
+import test, { after } from 'node:test';
+import { guardHandles } from "@get-modular/conformance";
 import {createOrdinaryObservationJournal} from '../../../dist/features/ordinary-session-runtime/adapters/ordinary-observation-journal.js';
+
+// Count handles before this file opens any.
+const handles = guardHandles();
 
 // Regression: closed=true before closeSync made a second close falsely succeed
 // and allowed the Host to forget debt; retrying the raw fd can close another file.
@@ -79,3 +83,5 @@ for (const boundary of ['file', 'directory', 'directory-close'] as const) {
   });
 }
 
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());

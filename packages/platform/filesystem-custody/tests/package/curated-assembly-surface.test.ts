@@ -2,8 +2,12 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
-import test from "node:test";
+import test, { after } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
 import { fileURLToPath } from "node:url";
+
+// Count handles before this file opens any.
+const handles = guardHandles();
 
 const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
 const nativeArtifact = "dist/rename-no-replace.node";
@@ -66,3 +70,6 @@ test("the public entry exposes only portable contracts while composition carries
     assert.equal(typeof composition[name] === "function", true, `composition must export ${name}`);
   }
 });
+
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());

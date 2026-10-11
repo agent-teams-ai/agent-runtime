@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { after } from "node:test";
 import {mkdtemp, realpath, mkdir, readdir, readFile, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -7,13 +7,16 @@ import {parseSync} from "oxc-parser";
 import {Pool} from "pg";
 import {compileComposition} from "@get-modular/core";
 import {assemblyFor} from "@get-modular/assembly";
-import {isolate, smoke} from "@get-modular/conformance";
+import {guardHandles, isolate, smoke} from "@get-modular/conformance";
 import {createScope, type Resources} from "@get-modular/resources";
 import {createAgentRuntimeHost} from "../../dist/composition.js";
 import {runtimeOrdinarySetupDeclarations, runtimeOrdinarySetupProfile, runtimeSetupDeclarations, runtimeSetupProfile, bindRuntimeSetup, composeRuntimeSetup, createRuntimeSetupFactories, type RuntimeSetupCapabilities} from "../../dist/composition/runtime-setup-assembly.js";
 import type {AgentRuntimeHost} from "../../dist/composition/agent-runtime-host.js";
 import {createOrdinaryModuleFactories, ordinaryProviderDeclaration, ordinaryRuntimeDeclarations, type OrdinaryRuntimeCapabilities, type OrdinaryRuntimeFactories} from "../../dist/composition/ordinary-runtime-assembly.js";
 import {copyObservation} from "../../dist/composition/contained-turn-runtime-validation.js";
+
+// Count handles before this file opens any.
+const handles = guardHandles();
 
 test("ordinary active graph has independent exact seven-port parity and passive profile remains separate", async () => {
   const expected = {"operation-store": "agent-runtime/ordinary/store/postgres", security: "agent-runtime/ordinary/security/postgres", "provider-access": "agent-runtime/ordinary/provider-access/postgres", workspace: "agent-runtime/ordinary/workspace/node", artifacts: "agent-runtime/ordinary/artifacts/node", process: "agent-runtime/ordinary/process/node", provider: "agent-runtime/ordinary/provider/codex"};
@@ -277,3 +280,6 @@ test("ordinary Host factory types are read from the contract descriptors", async
   const handWritten = source.replace(derived, 'workspace(): Promise<OrdinaryTurnDependencies["workspace"]>;');
   assert.ok(factoryTypeReferences(handWritten).includes("OrdinaryTurnDependencies"), "a hand-written type must be rejected");
 });
+
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());

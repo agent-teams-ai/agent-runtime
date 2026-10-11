@@ -4,7 +4,11 @@ import { spawnSync, execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
+
+// Count handles before this file opens any.
+const handles = guardHandles();
 
 test("actual Darwin binding installs only in fresh disposable children and denies raw device opens", {
   skip: process.platform !== "darwin", timeout: 90000,
@@ -39,3 +43,6 @@ test("Linux exposes no Darwin guard authority and initializer leaves shared acqu
   const root = loaded.exports.hostRoot();
   loaded.exports.hostClose(root);
 });
+
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());
