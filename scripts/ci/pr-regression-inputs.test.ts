@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmod, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { chmod, cp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import test from 'node:test';
+import test, { after } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import { classifyPrRegressions, supportedPrEnvironment, installationFingerprint } from './pr-regression-inputs.ts';
+import type { LeafInventoryComparator } from './pr-regression-inputs.ts';
 import { assertPrObligations, foundationNegativeTests, observeRegressionProcess, prObligations } from './pr-regression-command.ts';
 import type { Execution, Obligation, ObservedObligation } from './pr-regression-command.ts';
 import { validatePrFoundationRoute } from './conformance.ts';
+import { admitPublishedComparator, createRetainedSourceCheckout, fixtureOwnerEnvironment, installNodeModulesFixture, testScratch } from './pr-regression-bootstrap-fixtures.ts';
 
 const repository = fileURLToPath(new URL('../../', import.meta.url));
 const rc = 'packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/adapters/outbound/codex-configuration-semantic-classifier-v1.ts';
@@ -41,21 +42,30 @@ const trusted = {
   PR_REGRESSION_FROZEN_INSTALL: 'verified',
 };
 const facts = { node: 'v24.21.0', pnpm: '11.18.0', platform: 'linux', arch: 'x64', glibc: '2.39', execArgv: [] as string[] };
+let sourceTemplate: Promise<string> | undefined;
+
+async function createSourceTemplate(): Promise<string> {
+  const root = await testScratch('ar-pr-regressions-source-TEST-');
+  await createRetainedSourceCheckout(root);
+  return root;
+}
+
+function sourceTemplateRoot(): Promise<string> {
+  sourceTemplate ??= createSourceTemplate();
+  return sourceTemplate;
+}
+
+after(async () => {
+  if (sourceTemplate) {await rm(await sourceTemplate, { recursive: true, force: true });}
+});
 
 async function fixture(t: test.TestContext) {
-  const root = await mkdtemp(join(tmpdir(), 'ar-pr-regressions-TEST-'));
+  const root = await testScratch('ar-pr-regressions-TEST-');
   t.after(() => rm(root, { recursive: true, force: true }));
-  const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 'TEST', GIT_AUTHOR_EMAIL: 'test@example.invalid',
-    GIT_COMMITTER_NAME: 'TEST', GIT_COMMITTER_EMAIL: 'test@example.invalid' };
+  const comparator = await admitPublishedComparator();
+  const env = fixtureOwnerEnvironment();
   const git = (...args: string[]) => execFileSync('git', args, { cwd: root, env, encoding: 'utf8' }).trim();
-  git('clone', '--quiet', '--shared', repository, '.');
-  // Seed the new common policy at both immutable TEST revisions. First adoption
-  // is tested separately; these fixtures model the next package-only PR.
-  for (const path of ['package.json', 'pnpm-lock.yaml', 'architecture/foundation/ci-pr-regressions.json', 'architecture/foundation/source-dependencies.yaml',
-    'scripts/ci/pr-regression-inputs.ts', 'scripts/ci/pr-regression-inputs.test.ts', 'scripts/ci/pr-regression-command.ts', 'scripts/ci/conformance.ts',
-    '.github/workflows/ci-foundation-route.yml', '.github/workflows/ci-pr-regressions.yml']) {
-    await cp(join(repository, path), join(root, path));
-  }
+  git('clone', '--quiet', '--shared', await sourceTemplateRoot(), '.');
   const freeze = () => {
     git('add', '-A');
     const tree = git('write-tree');
@@ -69,13 +79,23 @@ async function fixture(t: test.TestContext) {
     pull_request: { number: 211, base: { sha: base, ref: 'main', repo: { full_name: 'agent-teams-ai/agent-runtime' } },
       head: { sha: head, repo: { full_name: 'agent-teams-ai/agent-runtime', fork: false } } } });
   const plan = (head: string, overrides = {}) => classifyPrRegressions(root, { base, head, event: event(head),
-    environment: trusted, runtime: facts, installation: '1'.repeat(64), ...overrides });
+    environment: trusted, runtime: facts, installation: '1'.repeat(64), ...overrides }, comparator);
   const body = async (path: string) => writeFile(join(root, path), `${await readFile(join(root, path), 'utf8')}\n// Disposable TEST body mutation\n`);
   return { root, base, git, freeze, plan, body, event };
 }
 
 export function registerPrRegressionTests(): void {
   registerFoundationPrExecutionTests();
+  test('the injected pure comparator relation does not grant sampling authority', async () => {
+    const comparator = await admitPublishedComparator();
+    const base = { version: 1, digestScheme: 'sha256', inputs: [
+      { path: 'root.ts', type: 'file', mode: '100644', membership: 'closed', content: 'a'.repeat(64) },
+      { path: 'body.ts', type: 'file', mode: '100644', membership: 'structural', content: '1'.repeat(64) },
+    ] } as Parameters<LeafInventoryComparator>[0];
+    const head = { ...base, inputs: [base.inputs[0]!, { ...base.inputs[1]!, content: '2'.repeat(64) }] } as Parameters<LeafInventoryComparator>[0];
+    assert.deepEqual(comparator(base, head, ['body.ts']), { status: 'compatible-inputs', changedContentPaths: ['body.ts'] });
+    assert.deepEqual(comparator(base, head, []), { status: 'rejected', reason: 'closed-input-changed' });
+  });
   test('real immutable RC and ER body snapshots defer whole regressions with their independent closures', async t => {
     const f = await fixture(t);
     await f.body(rc);
@@ -98,6 +118,24 @@ export function registerPrRegressionTests(): void {
     assert.equal(result.mode, 'affected-pr');
     assert.deepEqual(result.run, []);
     assert.ok(result.deferred.includes('ci-selftests'));
+  });
+  test('validated policy reaches the closed universe census in both immutable snapshots', async t => {
+    const fixtureState = await fixture(t);
+    fixtureState.git('reset', '--quiet', '--hard', fixtureState.base);
+    const policyPath = 'architecture/foundation/ci-pr-regressions.json';
+    const policy = JSON.parse(await readFile(join(fixtureState.root, policyPath), 'utf8')) as {
+      foundationAnchors: string[]; docsBodyAnchors: string[];
+    };
+    policy.foundationAnchors[policy.foundationAnchors.length - 1] = 'packages/contexts/runtime-configuration/src/missing-regression-input.ts';
+    await writeFile(join(fixtureState.root, policyPath), `${JSON.stringify(policy, null, 2)}\n`);
+    const invalidBase = fixtureState.freeze();
+    await fixtureState.body(rc);
+    const invalidHead = fixtureState.freeze();
+    const event = fixtureState.event(invalidHead);
+    event.pull_request.base.sha = invalidBase;
+    const result = await fixtureState.plan(invalidHead, { base: invalidBase, event });
+    assert.equal(result.mode, 'full');
+    assert.match(result.reason, /missing regression input/u);
   });
   test('every one of the sixteen actual Foundation body anchors runs the entire negative obligation', async t => {
     const f = await fixture(t);
@@ -214,7 +252,7 @@ export function registerPrRegressionTests(): void {
   // process. New: observe the actual standalone process and reject its failure.
   test('actual current conformance remains blocking when the CI selftests defer', async t => {
     const f = await fixture(t);
-    await symlink(join(repository, 'node_modules'), join(f.root, 'node_modules'));
+    await installNodeModulesFixture(f.root, 'linked', f.root);
     const obligation = prObligations('quick').find(item => item.id === 'ci-conformance');
     assert.deepEqual(obligation, { id: 'ci-conformance', command: 'node scripts/ci/conformance.ts' });
     assert.ok(obligation);
@@ -227,7 +265,7 @@ export function registerPrRegressionTests(): void {
     assert.throws(() => assertPrObligations([obligation], [{ ...obligation, disposition: 'executed', execution: failed }], ['ci-selftests']));
   });
   test('the actual Foundation routing aggregate rejects failed, skipped, cancelled, missing and duplicate routes', async t => {
-    const root = await mkdtemp(join(tmpdir(), 'ar-pr-route-TEST-')); t.after(() => rm(root, { recursive: true, force: true }));
+    const root = await testScratch('ar-pr-route-TEST-'); t.after(() => rm(root, { recursive: true, force: true }));
     const route = parse(await readFile(join(repository, '.github/workflows/ci-foundation-route.yml'), 'utf8')) as {
       jobs: { aggregate: { steps: Array<{ run: string }> } } };
     const pr = parse(await readFile(join(repository, '.github/workflows/ci-pr-regressions.yml'), 'utf8'));
@@ -251,7 +289,7 @@ export function registerPrRegressionTests(): void {
     assert.deepEqual(prObligations('docs').map(item => item.id), ['docs:protocol:check', 'docs:qualification:typecheck', 'docs:qualification:serial', 'docs-portable']);
   });
   test('current installed executable bytes, link targets and modes are actually fingerprinted', async t => {
-    const root = await mkdtemp(join(tmpdir(), 'ar-pr-installed-TEST-')); t.after(() => rm(root, { recursive: true, force: true }));
+    const root = await testScratch('ar-pr-installed-TEST-'); t.after(() => rm(root, { recursive: true, force: true }));
     await mkdir(join(root, 'node_modules/.pnpm/tool/node_modules/tool'), { recursive: true });
     const file = join(root, 'node_modules/.pnpm/tool/node_modules/tool/run.mts'); await writeFile(file, 'export {};\n');
     const before = await installationFingerprint(root);
@@ -262,7 +300,7 @@ export function registerPrRegressionTests(): void {
     await assert.rejects(installationFingerprint(root));
   });
   test('actual failed, skipped, todo and cancelled Node execution and duplicate obligations cannot green a PR receipt', async t => {
-    const root = await mkdtemp(join(tmpdir(), 'ar-pr-execution-TEST-')); t.after(() => rm(root, { recursive: true, force: true }));
+    const root = await testScratch('ar-pr-execution-TEST-'); t.after(() => rm(root, { recursive: true, force: true }));
     const file = join(root, 'observed.test.ts');
     const command = `node --test ${file}`;
     const env = { ...process.env }; delete env.NODE_TEST_CONTEXT;
@@ -282,13 +320,14 @@ export function registerPrRegressionTests(): void {
     assert.equal(duplicate.code, 0, 'Node permits duplicate names; the PR obligation contract rejects them');
     assert.throws(() => assertPrObligations([{ id: 'real', command }], [{ ...proof, execution: duplicate }], []));
     assert.throws(() => assertPrObligations([{ id: 'real', command }], [{ id: 'real', command, disposition: 'deferred-unchanged-regression-inputs', tests: [] }], []));
-    const unsupported = spawnSync(process.execPath, [join(repository, 'scripts/ci/pr-regression-command.ts'), 'unknown'], { env, encoding: 'utf8' });
+    const unsupported = spawnSync(process.execPath, [join(repository, 'scripts/ci/pr-regression-command.ts')], { env, encoding: 'utf8' });
     assert.notEqual(unsupported.status, 0);
+    assert.match(unsupported.stderr, /pre-import source admission/u);
   });
 }
 
 async function foundationExecutionFixture(t: test.TestContext): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'ar-pr-foundation-execution-TEST-'));
+  const root = await testScratch('ar-pr-foundation-execution-TEST-');
   t.after(() => rm(root, { recursive: true, force: true }));
   const files = ['scripts/architecture/source-dependency-adapter-boundaries.test.mjs',
     'scripts/docs/runtime-builtin-permissions.test.mjs', 'scripts/ci/run-ordinary-postgres.test.mjs'];
@@ -317,7 +356,7 @@ async function foundationExecutionFixture(t: test.TestContext): Promise<string> 
 }
 
 test('CLI forwarding of repeated fixture names preserves success and still rejects a failed child', async t => {
-  const root = await mkdtemp(join(tmpdir(), 'ar-cli-forwarding-TEST-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const root = await testScratch('ar-cli-forwarding-TEST-'); t.after(() => rm(root, { recursive: true, force: true }));
   const file = join(root, 'repeated.test.ts'), wrapper = join(root, 'forward.mts');
   await writeFile(file, "import test from 'node:test'; test('repeat', () => {}); test('repeat', () => {});\n");
   await writeFile(wrapper, "import {spawnSync} from 'node:child_process';\n"
@@ -394,7 +433,7 @@ function registerFoundationPrExecutionTests(): void {
 
     // Missing/duplicate source registrations must fail the independent census.
     // A source-name mutant with the right count must reject the unchanged proof.
-    const root = await mkdtemp(join(tmpdir(), 'ar-pr-originals-TEST-')); t.after(() => rm(root, { recursive: true, force: true }));
+    const root = await testScratch('ar-pr-originals-TEST-'); t.after(() => rm(root, { recursive: true, force: true }));
     const originalFiles = new Set(required.filter(item => item.depth === 0).map(item => item.suite));
     for (const suite of originalFiles) {
       await mkdir(join(root, dirname(suite)), { recursive: true }); await cp(join(executionRoot, suite), join(root, suite));
@@ -418,3 +457,5 @@ function registerFoundationPrExecutionTests(): void {
     await assert.rejects(observeRegressionProcess(expected[0]!.command, f.root, process.env), /original three-file Foundation command drift/u);
   });
 }
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {registerPrRegressionTests();}

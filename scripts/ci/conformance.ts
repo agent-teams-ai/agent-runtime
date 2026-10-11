@@ -171,7 +171,7 @@ function validateReusableLane(reusable: unknown): void {
     run: 'set -euo pipefail\n# Failed/unavailable integrity keeps sampling FULL; no past pass is used.\nif pnpm store status; then\n  echo \'PR_REGRESSION_FROZEN_INSTALL=verified\' >> "$GITHUB_ENV"\nfi\n' });
   assert.deepEqual(commands[pr], { name: 'Execute current-source PR obligations and whole regression decisions', if: '${{ inputs.regressions }}',
     env: { EXPECTED_REVISION: '${{ inputs.revision }}', EXPECTED_BASE_REVISION: '${{ inputs.base-revision }}', CI_EVIDENCE_DIR: '${{ runner.temp }}/ci-evidence', PR_REGRESSION_GROUP: '${{ inputs.script }}' },
-    run: 'node scripts/ci/pr-regression-command.ts "$PR_REGRESSION_GROUP"' });
+    run: 'set -euo pipefail\nbootstrap=scripts/ci/pr-regression-bootstrap.ts\nbootstrap_entry() {\n  local revision=$1 entry mode kind blob path\n  entry=$(git ls-tree "$revision" -- "$bootstrap") || return 1\n  [ "$(printf \'%s\\n\' "$entry" | wc -l)" -eq 1 ] || return 1\n  read -r mode kind blob path <<<"$entry"\n  [ "$kind" = blob ] && [ "$path" = "$bootstrap" ] || return 1\n  printf \'%s %s\\n\' "$mode" "$blob"\n}\nbase_entry=$(bootstrap_entry "$EXPECTED_BASE_REVISION") || true\nhead_entry=$(bootstrap_entry "$EXPECTED_REVISION") || true\ncheckout_blob=$(git hash-object --no-filters -- "$bootstrap" 2>/dev/null) || checkout_blob=\ncheckout_mode=\nif [ -f "$bootstrap" ] && [ ! -L "$bootstrap" ]; then\n  case "$(stat -c \'%a\' -- "$bootstrap" 2>/dev/null || true)" in\n    644) checkout_mode=100644 ;;\n    755) checkout_mode=100755 ;;\n  esac\nfi\nhead_mode=${head_entry%% *}\nhead_blob=${head_entry#* }\nif [ -z "$base_entry" ] || [ -z "$head_entry" ] || [ "$base_entry" != "$head_entry" ] \\\n  || [ "$checkout_blob" != "$head_blob" ] || [ "$checkout_mode" != "$head_mode" ]; then\n  unset FOUNDATION_FIXTURE_PROTOCOL FOUNDATION_FIXTURE_INDEX FOUNDATION_FIXTURE_COUNT\n  node scripts/ci/measure.ts "$PR_REGRESSION_GROUP"\n  exit $?\nfi\nnode scripts/ci/pr-regression-bootstrap.ts "$PR_REGRESSION_GROUP"\n' });
 }
 
 export function validatePrFoundationRoute(route: unknown, pr: unknown): void {
@@ -286,7 +286,7 @@ export async function conformance(root: string): Promise<void> {
   }
   const currentManifest = JSON.parse(await read('package.json'));
   for (const key of ['engines', 'packageManager', 'dependencies']) { assert.deepEqual(currentManifest[key], originalManifest[key], `current-main ${key}`); }
-  assert.deepEqual(currentManifest.devDependencies, { ...originalManifest.devDependencies, '@agent-teams/ci-input-proof': '0.1.0-rc.0' }, 'current-main devDependencies retain the baseline plus the exact shared comparator');
+  assert.deepEqual(currentManifest.devDependencies, { ...originalManifest.devDependencies, '@agent-teams/ci-input-proof': '0.1.0' }, 'current-main devDependencies retain the baseline plus the exact shared comparator');
   assert.deepEqual(baseline.scripts, originalManifest.scripts, 'original current-main scripts');
   assert.deepEqual(baseline.inventory, commandInventory(baseline.scripts, 'check'), 'original current-main leaf inventory');
   const originalPolicy = execFileSync('git', ['show', `${baseline.baseCommit}:architecture/foundation/source-dependencies.yaml`], { cwd: root });

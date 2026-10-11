@@ -133,25 +133,58 @@ stay required. Common, unknown, structural, environment or installation drift
 merge group, manual and reusable full calls retain
 the original complete commands; local full/fast commands retain their meaning.
 
-The leaf relation now uses the public `@agent-teams/ci-input-proof@0.1.0-rc.0`
+The leaf relation now uses the public `@agent-teams/ci-input-proof@0.1.0`
 root API as a fixed development dependency inside the existing CI tooling
 feature. `tooling.ci-full-gate` admits only that exact package name; no new
-composition node or lifecycle owner is introduced. The consumer still owns
-complete Git B/H collection, ordinary-body permissions, checkout and installed
-graph observations, scope selection and independent executed-test obligations.
-The kernel compares Git-object SHA-1 leaves and returns changed paths; it does
-not authenticate snapshots or authorize deferral or merge. Manifest, lockfile,
-helper and policy changes remain closed inputs and select FULL.
+composition node, runtime graph node, dynamic Host or lifecycle owner is
+introduced. The finite dependency upgrade keeps filesystem, source and
+installation admission and execution in the consumer's existing adapter; the
+library receives only materialized inventories for comparison. The CI route invokes
+`scripts/ci/pr-regression-bootstrap.ts`, a narrow consumer-owned admission and
+FULL-recovery entrypoint. Before it dynamically imports the candidate collector,
+the bootstrap binds the exact published 0.1.0 registry SRI, archive SHA-256 and
+complete file SHA-256 census, resolves the normal pnpm public link to its exact
+stable virtual-store package, and requires the executable import closure to match
+the independently pinned source.
+A changed or malformed optimizer, source tuple, checkout or installation selects
+the existing `node scripts/ci/measure.ts check:ci:*` FULL command. FULL runs
+independently of unavailable optimizer or import-time candidate policy, and its
+failure remains hard.
+
+The consumer still owns complete Git B/H collection, ordinary-body permissions,
+checkout and installed graph observations, scope selection and independent
+executed-test obligations. The kernel compares Git-object SHA-1 leaves and
+returns changed paths; it does not authenticate snapshots, accept candidate
+declarations, or authorize deferral or merge. Manifest, lockfile, helper, policy,
+fixture and bootstrap changes remain closed inputs and select FULL. The direct
+`pr-regression-command.ts` library entry remains non-executable at its CLI guard;
+static imports cannot be retroactively admitted, so CI never calls it directly.
+
+On GitHub Free, the workflow and bootstrap bytes are bounded by the direct CI
+caller and unchanged B/H source gate, but GitHub does not provide an independent
+external workflow-source trust root. This route therefore proves pre-import
+source admission and independent FULL recovery; it does not falsely certify
+external workflow authenticity or reuse an authenticated old PASS.
 
 Kernel ceilings and stricter path validation may conservatively select FULL.
-A classifier rejection uses the existing FULL route; an unavailable static
-package import can fail CI before classification and must never become a green
-omission. This adoption removes the local comparison loop without introducing
-new omission rules, historical evidence reuse or an independent current-H
-producer. Pin the exact RC and its lockfile integrity rather than `latest`.
+A classifier rejection uses the existing FULL route; an unavailable or malformed
+package is rejected before import and must never become a green omission. This
+adoption removes the local comparison loop without introducing new omission
+rules, historical evidence reuse or an independent current-H producer. Pin the
+exact stable version, its lockfile integrity and its published source census
+rather than `latest`.
 Historical manifest and policy evidence stays immutable; current conformance
 permits only the exact comparator dependency in addition to that baseline.
-The RC adoption itself makes no claim about Windows critical-path latency.
+The 0.1.0 migration replaces only the current dependency pin and authenticated
+byte anchors. The 0.1.0-rc.0 predecessor facts and earlier receipts remain bound
+to their original source and package versions and are not stable PASS evidence.
+Supplied root qualification passed 11 process/public-type/provenance cases for
+the actual stable archive at SHA-256
+`463da396e04acb4fbe19ddff7a4e88e576b1834faa49eeed7334a5ebf4a4f0a3` and signed
+source `517b4136a604c60e47e9ec16bff9e64b6ad6de8b`; it does not replace the
+consumer bootstrap qualification. This source checkpoint does not relabel the
+current RC installation as stable qualification. The stable adoption itself
+makes no claim about Windows critical-path latency.
 
 ## Maintainability budgets
 
@@ -255,14 +288,18 @@ unreadable declared inputs and explicitly governed generated directories cannot
 be made invisible to obtain a pass. The public typed route retains the default
 unknown-assertion bridge gate; there is no blanket opt-out.
 
-The current Consumer Module Standard pin remains document commit
+The retained 9c722cef predecessor pin was document commit
 `9c722ceff4ede307d06d7a4b63fdebe615f54c53`, SHA-256
-`33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd`.
-The reviewed upstream snapshot `a01a129d39fe6574dba39e6187bb03ef6bcf9945`
-has identical bytes. The retained ac49bb33-to-9c722cef review adds only the
-ADR-0029 relation and optional dynamic Host candidate guidance; it does not
-expand Agent Runtime composition. Both current profiles already carry this pin.
-No accepted ADR or retained standard bytes change.
+`33b41d5babf0a431c97e8e596a56e6ec1557ba1a0b26d39bf23e13d9a19e1fbd`;
+the ac49bb33-to-9c722cef review added only the ADR-0029 relation and optional
+dynamic Host candidate guidance. The current retained pin is document commit
+`81063add7de50ffe2b91cc74bf7271b298624c21`, SHA-256
+`49d08b6d1762e94308157fb59b3aa82ac1630c91f529f6efcd4915dfffee7ba7`,
+as recorded by both current profiles. Root compared the current upstream
+document at `d6127e2d3f499b91b220a222fc3672d29dff1ab2` with that retained pin
+and found identical full-guidance bytes. This finite dependency upgrade performs
+no moving-pin migration, expands no Agent Runtime composition and changes no
+accepted ADR or retained standard bytes.
 
 SDK enrollment remains `pending-authority-qualification` with
 `releaseEligible: false`. Its current `installedTooling` source record selects 1.7.2

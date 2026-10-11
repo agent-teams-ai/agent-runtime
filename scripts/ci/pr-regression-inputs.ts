@@ -3,8 +3,8 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { lstat, readFile, readdir, readlink, realpath } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
-import { compareLeafInventories } from '@agent-teams/ci-input-proof';
 import { parse } from 'yaml';
+import type { ComparisonResult, LeafInventory } from '@agent-teams/ci-input-proof';
 
 export const regressionIds = ['foundation-negative', 'fms', 'cms-regression', 'ci-selftests', 'docs-portable'] as const;
 export type RegressionId = typeof regressionIds[number];
@@ -13,18 +13,20 @@ export const packageRoots = ['packages/apps/embedded-runtime', 'packages/context
   'packages/platform/filesystem-custody'] as const;
 export const policyPath = 'architecture/foundation/ci-pr-regressions.json';
 const schedulingClosure = [policyPath, 'scripts/ci/pr-regression-inputs.ts', 'scripts/ci/pr-regression-inputs.test.ts',
-  'scripts/ci/pr-regression-command.ts', '.github/workflows/ci-foundation-route.yml', '.github/workflows/ci-pr-regressions.yml'];
+  'scripts/ci/pr-regression-command.ts', 'scripts/ci/pr-regression-bootstrap.ts', 'scripts/ci/pr-regression-bootstrap.test.ts',
+  'scripts/ci/pr-regression-bootstrap-fixtures.ts',
+  '.github/workflows/ci-foundation-route.yml', '.github/workflows/ci-pr-regressions.yml'];
 interface Policy {
   schemaVersion: number; packageRoots: string[]; foundationAnchors: string[]; cmsBodyRoots: string[]; docsBodyAnchors: string[];
   regressions: Record<RegressionId, string>;
 }
-const policy: Policy = JSON.parse(await readFile(new URL('../../architecture/foundation/ci-pr-regressions.json', import.meta.url), 'utf8'));
-assert.equal(policy.schemaVersion, 1);
-assert.deepEqual(policy.packageRoots, packageRoots);
-assert.equal(policy.foundationAnchors.length, 16);
-assert.equal(new Set(policy.foundationAnchors).size, 16);
-assert.deepEqual(Object.keys(policy.regressions), regressionIds);
-export const regressionCommands = policy.regressions;
+export const regressionCommands = {
+  'foundation-negative': 'pnpm foundation:boundaries:negative',
+  fms: 'pnpm test:feature-modules',
+  'cms-regression': 'node --test scripts/architecture/check-consumer-module-standard.test.mjs',
+  'ci-selftests': 'node --test scripts/ci/contracts.test.ts',
+  'docs-portable': 'pnpm docs:qualification:portable',
+} as const satisfies Record<RegressionId, string>;
 export interface RuntimeFacts { node: string; pnpm: string; platform: string; arch: string; glibc: string; execArgv: string[] }
 export interface PrInput {
   base: string; head: string; event: unknown; environment: NodeJS.ProcessEnv; runtime: RuntimeFacts; installation?: string;
@@ -35,6 +37,7 @@ export interface PrPlan {
   reason: string; installation?: string; scopes?: Record<string, string>;
 }
 interface Leaf { path: string; mode: string; type: string; oid: string }
+export type LeafInventoryComparator = (base: LeafInventory, head: LeafInventory, structuralPaths: readonly string[]) => ComparisonResult;
 const sha256 = (bytes: string | Buffer) => createHash('sha256').update(bytes).digest('hex');
 const object = (value: unknown): Record<string, unknown> => {
   assert.ok(value !== null && typeof value === 'object' && !Array.isArray(value), 'event object');
@@ -100,6 +103,13 @@ async function verifyCheckout(root: string, head: string, leaves: Leaf[]): Promi
     const parts = leaf.path.split('/');
     for (let i = 1; i < parts.length; i++) {directories.add(parts.slice(0, i).join('/'));}
     const stat = await lstat(join(root, leaf.path));
+    if (leaf.mode === '120000') {
+      assert.ok(leaf.type === 'blob' && stat.isSymbolicLink(), 'unsupported source kind');
+      const bytes = Buffer.from(await readlink(join(root, leaf.path)));
+      const oid = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+      assert.equal(oid, leaf.oid, 'actual checkout link target differs from H');
+      continue;
+    }
     assert.ok(leaf.type === 'blob' && ['100644', '100755'].includes(leaf.mode) && stat.isFile(), 'unsupported source kind');
     assert.equal((stat.mode & 0o111) !== 0, leaf.mode === '100755', 'checkout executable mode');
     const bytes = await readFile(join(root, leaf.path));
@@ -129,29 +139,47 @@ function ordinaryBody(path: string): boolean {
     && /\.(?:[cm]?[jt]s)$/u.test(path)
     && !/(?:^|\/)(?:AGENTS|CLAUDE|GEMINI|package|tsconfig|[^/]*profile|[^/]*config)\.(?:md|json|ya?ml)$/iu.test(path);
 }
-function assertUniverse(leaves: Leaf[]): void {
+function assertUniverse(leaves: Leaf[], policy: Policy): void {
   const manifests = leaves.filter(leaf => leaf.path === 'package.json' || leaf.path.endsWith('/package.json')).map(leaf => leaf.path).toSorted();
   assert.deepEqual(manifests, ['package.json', ...packageRoots.map(root => `${root}/package.json`)].toSorted(), 'fixed six roots / nested marker');
   for (const anchor of [...policy.foundationAnchors, ...policy.docsBodyAnchors, ...schedulingClosure]) {assert.ok(leaves.some(leaf => leaf.path === anchor && leaf.type === 'blob' && leaf.mode === '100644'), 'missing regression input');}
 }
 const scopeDigest = (leaves: Leaf[], select: (leaf: Leaf) => boolean) => sha256(JSON.stringify(leaves.filter(select)));
-const leafInventory = (leaves: readonly Leaf[]) => ({ version: 1, digestScheme: 'git-object-sha1',
-  inputs: leaves.map(leaf => ({ path: leaf.path,
-    type: leaf.type === 'blob' ? (leaf.mode === '120000' ? 'symlink' : 'file') : 'gitlink',
-    mode: leaf.mode, membership: ordinaryBody(leaf.path) ? 'structural' : 'closed', content: leaf.oid })),
+const leafInventory = (leaves: readonly Leaf[]): LeafInventory => ({ version: 1, digestScheme: 'git-object-sha1',
+  inputs: leaves.map(leaf => {
+    const membership = ordinaryBody(leaf.path) ? 'structural' : 'closed';
+    if (leaf.type === 'blob' && (leaf.mode === '100644' || leaf.mode === '100755')) {
+      return { path: leaf.path, type: 'file', mode: leaf.mode, membership, content: leaf.oid };
+    }
+    if (leaf.type === 'blob' && leaf.mode === '120000') {
+      return { path: leaf.path, type: 'symlink', mode: leaf.mode, membership, content: leaf.oid };
+    }
+    if (leaf.type === 'commit' && leaf.mode === '160000') {
+      return { path: leaf.path, type: 'gitlink', mode: leaf.mode, membership, content: leaf.oid };
+    }
+    throw new Error('public inventory mode');
+  }),
 });
 
-export async function classifyPrRegressions(root: string, input: PrInput): Promise<PrPlan> {
+export async function classifyPrRegressions(root: string, input: PrInput, compareLeafInventories: LeafInventoryComparator): Promise<PrPlan> {
   const full: PrPlan = { protocol: 'pr-regression-sampling/1', mode: 'full', base: input.base, head: input.head,
     changed: [], run: [...regressionIds], deferred: [], reason: 'uncertain inputs', installation: input.installation };
   try {
+    const policy: Policy = JSON.parse(await readFile(join(root, policyPath), 'utf8'));
+    assert.equal(policy.schemaVersion, 1);
+    assert.deepEqual(policy.packageRoots, packageRoots);
+    assert.equal(policy.foundationAnchors.length, 16);
+    assert.equal(new Set(policy.foundationAnchors).size, 16);
+    assert.deepEqual(Object.keys(policy.regressions), regressionIds);
+    assert.deepEqual(policy.regressions, regressionCommands, 'regression command policy drift');
     validateEvent(input);
     const base = snapshot(root, input.base), head = snapshot(root, input.head);
     full.baseTree = base.tree; full.headTree = head.tree;
-    assertUniverse(base.leaves); assertUniverse(head.leaves);
+    assertUniverse(base.leaves, policy); assertUniverse(head.leaves, policy);
     const relation = compareLeafInventories(leafInventory(base.leaves), leafInventory(head.leaves),
       base.leaves.filter(leaf => ordinaryBody(leaf.path)).map(leaf => leaf.path));
     if (relation.status === 'rejected') {throw new Error(`input comparison rejected: ${relation.reason}`);}
+    assert.equal(relation.status, 'compatible-inputs', 'unsupported public comparator relation');
     const contentChanges = new Set(relation.changedContentPaths);
     // Preserve the consumer's Git inventory order; the kernel owns comparison only.
     full.changed = head.leaves.filter(leaf => contentChanges.has(leaf.path)).map(leaf => leaf.path);
@@ -214,6 +242,8 @@ export async function currentPrInput(root: string, env: NodeJS.ProcessEnv): Prom
     assert.deepEqual(parse(await readFile(join(root, 'pnpm-lock.yaml'), 'utf8')), parse(await readFile(join(root, 'node_modules/.pnpm/lock.yaml'), 'utf8')), 'installed lock drift');
     const modules = object(parse(await readFile(join(root, 'node_modules/.modules.yaml'), 'utf8')));
     assert.equal(modules.packageManager, 'pnpm@11.18.0'); assert.equal(modules.virtualStoreDir, '.pnpm');
+    assert.ok(modules.virtualStoreOnly === undefined || modules.virtualStoreOnly === false,
+      'installed virtual-store-only layout cannot admit the optimizer');
     input.installation = await installationFingerprint(root);
   } catch { /* Absence, stale installation or unsupported ambient always select FULL. */ }
   return input;

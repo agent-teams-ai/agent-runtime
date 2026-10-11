@@ -3096,6 +3096,9 @@ boundaries:
   - scripts/ci/product-fanout-contract.test.ts
   - scripts/ci/product-test-observation.ts
   - scripts/ci/er-process-observer.ts
+  - scripts/ci/pr-regression-bootstrap.ts
+  - scripts/ci/pr-regression-bootstrap-fixtures.ts
+  - scripts/ci/pr-regression-bootstrap.test.ts
   - scripts/ci/pr-regression-inputs.ts
   - scripts/ci/pr-regression-inputs.test.ts
   - scripts/ci/pr-regression-command.ts
